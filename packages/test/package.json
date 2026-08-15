@@ -5,12 +5,27 @@
   "license": "MIT",
   "type": "module",
   "engines": { "node": ">=22" },
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./reporter": { "types": "./dist/reporter.d.ts", "import": "./dist/reporter.js" },
+    "./config": { "types": "./dist/config.d.ts", "import": "./dist/config.js" }
+  },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/reporter.ts src/config.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@termwright/driver": "workspace:*", "@termwright/trace": "workspace:*", "yaml": "^2.5.0" }
+  "dependencies": {
+    "@termwright/driver": "workspace:*",
+    "@termwright/protocol": "workspace:*",
+    "@termwright/trace": "workspace:*",
+    "yaml": "^2.5.0"
+  },
+  "peerDependencies": {
+    "vitest": "^3.2.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.0"
+  }
 }
