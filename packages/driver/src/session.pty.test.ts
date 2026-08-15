@@ -313,6 +313,35 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     expect(await terminal.getByTestId('reject').semanticState()).toMatchObject({ focused: true });
   });
 
+  it('keeps working when the adapter publishes no bounds at all', async () => {
+    // Legal state, not a broken adapter: class-B/C frameworks never have
+    // trustworthy coordinates, and Ink drops them whenever a <Static> region
+    // shifts the live region by an amount it cannot observe.
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { TERMWRIGHT_FIXTURE_NO_BOUNDS: '1' },
+    });
+    await terminal.waitForText('Permission required');
+
+    const approve = terminal.getByRole('button', { name: 'Approve' });
+    const target = await approve.resolve();
+    expect(target.semantic).toBe(true);
+    expect(target.rect).toBeNull();
+    expect(await approve.count()).toBe(1);
+    expect(await approve.textContent()).toBe('Approve');
+    expect(await approve.semanticState()).toMatchObject({ focused: true });
+    expect(await approve.boundingBox()).toBeNull();
+
+    const error = await approve.click().catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('unsupported-action');
+    expect((error as TermwrightError).diagnostics.suggestion).toContain('press()');
+
+    // Keyboard activation still reaches the focused node.
+    const receipt = await approve.activate();
+    expect(receipt.strategy).toBe('focus-enter');
+    await terminal.waitForText('ACTIVATED approve');
+  });
+
   it('activates the focused node with the keyboard and reports the strategy', async () => {
     const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
     await terminal.waitForText('Permission required');

@@ -12,6 +12,9 @@ import { encodeFrame, encodeMarker } from '@termwright/protocol';
 
 const endpoint = process.env['TERMWRIGHT_ENDPOINT'];
 const token = process.env['TERMWRIGHT_TOKEN'];
+// Class-B/C adapters — and Ink itself when a <Static> region is present —
+// publish role+name nodes without trustworthy coordinates. Legal, not an error.
+const withoutBounds = process.env['TERMWRIGHT_FIXTURE_NO_BOUNDS'] === '1';
 
 let sessionId = null;
 let revision = 0;
@@ -70,11 +73,19 @@ function tree() {
   };
 }
 
+function stripBounds(snapshot) {
+  return {
+    ...snapshot,
+    nodes: snapshot.nodes.map(({ bounds, ...node }) => node),
+  };
+}
+
 function publish() {
   revision += 1;
   draw();
   if (socket === null || sessionId === null) return;
-  socket.write(encodeFrame({ type: 'snapshot', snapshot: tree() }, 1024 * 1024));
+  const snapshot = withoutBounds ? stripBounds(tree()) : tree();
+  socket.write(encodeFrame({ type: 'snapshot', snapshot }, 1024 * 1024));
   socket.write(encodeFrame({ type: 'revision-commit', revision }, 1024 * 1024));
   // The marker commits the render: it must follow the last byte of the frame.
   process.stdout.write(encodeMarker(token, sessionId, revision));

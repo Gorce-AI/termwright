@@ -46,6 +46,19 @@ describe('RevisionPairing', () => {
     expect(pairing.revision).toBe(2);
   });
 
+  it('pairs by revision number, not by successor', () => {
+    // Adapters may skip revisions: frames produced before the handshake, or
+    // superseded mid-flight, are dropped at the source.
+    const { pairing, published } = createPairing();
+    pairing.offerSnapshot(snapshot(1));
+    pairing.offerMarker(1, 1);
+    pairing.offerSnapshot(snapshot(7));
+    pairing.offerMarker(7, 4);
+
+    expect(published.map((entry) => entry.snapshot.revision)).toEqual([1, 7]);
+    expect(pairing.revision).toBe(7);
+  });
+
   it('drops superseded incomplete revisions with a diagnostic', () => {
     const { pairing, published, diagnostics } = createPairing();
     pairing.offerSnapshot(snapshot(1));

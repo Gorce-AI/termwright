@@ -6,6 +6,7 @@
 import { connect, type Socket } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_LIMITS, encodeFrame, type SemanticSnapshot } from '@termwright/protocol';
+import type { ProtocolViolationError } from './errors.js';
 import { SemanticChannel, type SemanticAttachment } from './semantic.js';
 
 const SESSION_ID = 'session-under-test';
@@ -16,7 +17,7 @@ interface Harness {
   snapshots: SemanticSnapshot[];
   attachments: SemanticAttachment[];
   diagnostics: string[];
-  violations: string[];
+  violations: ProtocolViolationError[];
 }
 
 const open: { channel: SemanticChannel; sockets: Socket[] }[] = [];
@@ -33,7 +34,7 @@ async function createChannel(): Promise<Harness> {
   const snapshots: SemanticSnapshot[] = [];
   const attachments: SemanticAttachment[] = [];
   const diagnostics: string[] = [];
-  const violations: string[] = [];
+  const violations: ProtocolViolationError[] = [];
   const channel = await SemanticChannel.listen({
     sessionId: SESSION_ID,
     token: TOKEN,
@@ -43,7 +44,7 @@ async function createChannel(): Promise<Harness> {
       onCommit: () => {},
       onAttach: (attachment) => attachments.push(attachment),
       onDiagnostic: (message) => diagnostics.push(message),
-      onProtocolViolation: (detail) => violations.push(detail),
+      onProtocolViolation: (error) => violations.push(error),
     },
   });
   open.push({ channel, sockets: [] });
@@ -166,7 +167,7 @@ describe('SemanticChannel', () => {
     expect(error['code']).toBe('bad-token');
     await client.closed;
     expect(harness.attachments).toHaveLength(0);
-    expect(harness.violations.join('\n')).toContain('token');
+    expect(harness.violations.map((error) => error.message).join('\n')).toContain('token');
   });
 
   it('rejects an unsupported protocol version', async () => {
@@ -216,7 +217,32 @@ describe('SemanticChannel', () => {
     const error = await client.next();
     expect(error['code']).toBe('malformed');
     await client.closed;
-    expect(harness.violations.join('\n')).toMatch(/framing/u);
+    expect(harness.violations.map((error) => error.message).join('\n')).toMatch(/framing/u);
+
+    // The protocol's own ProtocolViolation is wrapped in the driver's typed
+    // error, and its machine-readable reason survives into the suggestion.
+    const wrapped = harness.violations.at(-1);
+    expect(wrapped?.code).toBe('protocol-violation');
+    expect(wrapped?.diagnostics.suggestion).toContain('frame-oversized');
+  });
+
+  it('accepts a snapshot in which no node has bounds', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+    client.send(hello());
+    await client.next();
+
+    client.send({
+      type: 'snapshot',
+      snapshot: snapshot({
+        nodes: [
+          { id: 'n1', role: 'dialog', name: 'Permission' },
+          { id: 'n2', parentId: 'n1', role: 'button', name: 'Approve' },
+        ],
+      }),
+    });
+    await expect.poll(() => harness.snapshots.length).toBe(1);
+    expect(harness.snapshots[0]?.nodes.every((node) => node.bounds === undefined)).toBe(true);
   });
 
   it('rejects a snapshot with an unknown role', async () => {

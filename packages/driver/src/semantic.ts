@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import {
   ADAPTER_CAPABILITIES,
+  ProtocolViolation,
   createFrameDecoder,
   encodeFrame,
   parseAdapterMessage,
@@ -33,6 +34,7 @@ import {
   type ProtocolLimits,
   type SemanticSnapshot,
 } from '@termwright/protocol';
+import { ProtocolViolationError } from './errors.js';
 import { tokenMatches } from './internal/token.js';
 
 /** Everything the driver learns from a successful handshake. */
@@ -53,8 +55,13 @@ export interface SemanticChannelHooks {
   onAttach(attachment: SemanticAttachment): void;
   /** Non-fatal channel diagnostics (dropped revisions, rejected frames…). */
   onDiagnostic(message: string): void;
-  /** The channel failed and was closed; the session stays on its last tree. */
-  onProtocolViolation(detail: string): void;
+  /**
+   * The channel failed and was closed; the session stays on its last tree.
+   * `@termwright/protocol` fails closed with its own `ProtocolViolation`; the
+   * driver owns the boundary, so the error handed over here is always the
+   * driver's typed {@link ProtocolViolationError}.
+   */
+  onProtocolViolation(error: ProtocolViolationError): void;
 }
 
 /** Construction options for {@link SemanticChannel}. */
@@ -160,7 +167,10 @@ export class SemanticChannel {
       try {
         frames = decoder.push(chunk);
       } catch (error) {
-        this.#fail(socket, 'malformed', `framing: ${errorDetail(error)}`);
+        // The protocol decoder is permanently poisoned after any violation, so
+        // the connection goes with it rather than resynchronising on an offset
+        // an attacker chose.
+        this.#fail(socket, 'malformed', `framing: ${errorDetail(error)}`, violationCode(error));
         return;
       }
       for (const frame of frames) {
@@ -243,7 +253,12 @@ export class SemanticChannel {
         this.#fail(socket, 'malformed', 'duplicate hello');
         return false;
       case 'error':
-        this.#options.hooks.onProtocolViolation(`adapter reported an error: ${message.message}`);
+        this.#options.hooks.onProtocolViolation(
+          new ProtocolViolationError(`the adapter reported a protocol error: ${message.message}`, {
+            semanticTree: this.#attachment !== null,
+            suggestion: `adapter error code: ${message.code}`,
+          }),
+        );
         socket.destroy();
         this.#attached = null;
         return false;
@@ -270,14 +285,30 @@ export class SemanticChannel {
     this.#send(socket, error);
   }
 
-  #fail(socket: Socket, code: ErrorCode | 'bad-version' | 'limit-exceeded', detail: string): void {
+  #fail(
+    socket: Socket,
+    code: ErrorCode | 'bad-version' | 'limit-exceeded',
+    detail: string,
+    violation?: string,
+  ): void {
     this.#sendError(socket, code as ErrorCode, detail);
     socket.destroy();
     if (this.#attached === socket) this.#attached = null;
-    this.#options.hooks.onProtocolViolation(detail);
+    this.#options.hooks.onProtocolViolation(
+      new ProtocolViolationError(`the semantic channel was closed: ${detail}`, {
+        semanticTree: this.#attachment !== null,
+        suggestion: `wire error ${code}${violation === undefined ? '' : ` (${violation})`}; ` +
+          'the adapter must be fixed — the session keeps its last accepted tree and stops updating it',
+      }),
+    );
   }
 }
 
 function errorDetail(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** The machine-readable reason `@termwright/protocol` failed closed with. */
+function violationCode(error: unknown): string | undefined {
+  return error instanceof ProtocolViolation ? error.code : undefined;
 }

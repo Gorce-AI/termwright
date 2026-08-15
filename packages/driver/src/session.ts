@@ -37,6 +37,7 @@ import {
 } from '@termwright/protocol';
 import {
   HistoryTruncatedError,
+  ProtocolViolationError,
   ProcessExitedError,
   SessionClosedError,
   TimeoutError,
@@ -159,7 +160,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   readonly #pairing: RevisionPairing;
   readonly #diagnosticsLog: string[] = [];
   readonly #changeWaiters = new Set<ChangeWaiter>();
-  readonly #startedAt = Date.now();
+  readonly #startedAt = performance.now();
 
   #channel: SemanticChannel | null = null;
   #pty: PtyProcess | null = null;
@@ -172,6 +173,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #exitStatus: ExitStatus | null = null;
   #resolveExit: ((status: ExitStatus) => void) | null = null;
   #lastOutputAt = Date.now();
+  #violation: ProtocolViolationError | null = null;
   #selectionRange: { start: { row: number; column: number }; end: { row: number; column: number } } | null = null;
 
   constructor(options: LaunchTerminalOptions) {
@@ -209,8 +211,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         onSnapshot: (snapshot) => this.#pairing.offerSnapshot(snapshot),
         onCommit: () => {},
         onDiagnostic: (message) => this.#diagnostic(message),
-        onProtocolViolation: (detail) => {
-          this.#diagnostic(`protocol violation: ${detail}`);
+        onProtocolViolation: (error) => {
+          this.#violation = error;
+          this.#diagnostic(error.message);
           this.#settle();
         },
       },
@@ -509,6 +512,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#attachment !== null;
   }
 
+  semanticViolation(): ProtocolViolationError | null {
+    return this.#violation;
+  }
+
   semanticRevision(): number {
     return this.#pairing.revision;
   }
@@ -596,8 +603,13 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   // -------------------------------------------------------------------------
   // Internals
 
+  /**
+   * Milliseconds since the session started, from a monotonic clock: event
+   * timestamps never jump backwards when the wall clock is adjusted, and never
+   * reset for the life of the session (trace depends on this).
+   */
   #now(): number {
-    return Date.now() - this.#startedAt;
+    return performance.now() - this.#startedAt;
   }
 
   #diagnostic(message: string): void {

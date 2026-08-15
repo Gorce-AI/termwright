@@ -22,6 +22,7 @@ import type {
 import {
   AmbiguousLocatorError,
   StaleSnapshotError,
+  TermwrightError,
   TimeoutError,
   UnsupportedActionError,
 } from './errors.js';
@@ -39,6 +40,8 @@ export interface LocatorContext {
   semanticIndex(): SemanticIndex | null;
   /** True once an adapter completed the handshake, even before its first tree. */
   semanticAttached(): boolean;
+  /** The error that closed the semantic channel, if one did. */
+  semanticViolation(): TermwrightError | null;
   semanticRevision(): number;
   screenRevision(): number;
   rows(): readonly CapturedRow[];
@@ -280,7 +283,7 @@ export class LocatorImpl implements Locator {
   }
 
   async activate(opts?: WaitOptions): Promise<ActivateReceipt> {
-    const target = await this.#actionTarget('activate', opts);
+    const target = await this.#actionTarget('activate', opts, false);
     const node = target.semantic ? this.#node(target) : null;
     const focused = node?.state?.focused === true;
 
@@ -334,8 +337,14 @@ export class LocatorImpl implements Locator {
     await this.#ctx.sendInput(concatBytes(events.map((event) => encodeMouse(event, modes))), 'mouse');
   }
 
-  /** Resolves and runs the pre-flight checks shared by every physical action. */
-  async #actionTarget(action: string, opts?: WaitOptions): Promise<ResolvedTarget> {
+  /**
+   * Resolves and runs the pre-flight checks shared by every physical action.
+   *
+   * @param needsBounds - whether the action must land on a cell. Keyboard-only
+   * paths (`press`, `type`, and `activate` on an already-focused node) work on
+   * trees that carry no coordinates at all, which is a legal adapter state.
+   */
+  async #actionTarget(action: string, opts?: WaitOptions, needsBounds = true): Promise<ResolvedTarget> {
     const target = await this.resolve(opts);
     if (target.semantic) {
       const node = this.#node(target);
@@ -352,7 +361,7 @@ export class LocatorImpl implements Locator {
         );
       }
     }
-    if (target.rect === null && action !== 'press' && action !== 'type') {
+    if (target.rect === null && needsBounds) {
       throw new UnsupportedActionError(
         `${action}() needs bounds, but ${this.description} was published without them`,
         this.#ctx.diagnostics({
@@ -463,6 +472,10 @@ export class LocatorImpl implements Locator {
   #evaluateSemantic(query: SemanticQuery, scope: ResolvedTarget | null): ResolvedTarget[] {
     const index = this.#ctx.semanticIndex();
     if (index === null) {
+      // A channel that died before publishing anything is reported as what it
+      // was — a protocol violation — instead of a generic missing tree.
+      const violation = this.#ctx.semanticViolation();
+      if (violation !== null) throw violation;
       // An attached adapter whose first tree is still in flight is a wait, not
       // an error: the caller's deadline decides.
       if (this.#ctx.semanticAttached()) return [];

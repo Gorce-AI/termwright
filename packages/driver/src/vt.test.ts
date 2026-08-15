@@ -59,6 +59,21 @@ describe('VtScreen', () => {
     expect(captureRows(screen)[0]?.text).toBe('beforeafter');
   });
 
+  it('sees a marker that follows a synchronized-output block', async () => {
+    // Byte order adapters actually emit (verified against @termwright/ink):
+    // BSU, the frame, ESU, and only then the render-commit marker.
+    const screen = createVt();
+    const seen: MarkerSighting[] = [];
+    screen.onMarker((marker) => seen.push(marker));
+
+    await screen.write(`\x1b[?2026hframe body\x1b[?2026l${encodeMarker('token', 'session', 11)}`);
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.screenRevision).toBe(1);
+    expect(captureRows(screen)[0]?.text).toBe('frame body');
+    expect(screen.modes().synchronizedOutput).toBe(false);
+  });
+
   it('tracks mouse encoding, which Terminal.modes does not report', async () => {
     const screen = createVt();
     expect(screen.modes().mouseEncoding).toBe('default');
