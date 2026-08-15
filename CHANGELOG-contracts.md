@@ -145,3 +145,10 @@
   is deliberately NOT redacted (a faithful screen record) — consumers must
   treat crash reports like screenshots when storing/transmitting;
   recentInputs records paste only as size.
+- 2026-08-16 (soak finding, BINDING evolution rule): `limits` in hello-ack is
+  ADDITIVE — receivers (all protocol clients) MUST ignore unknown keys in the
+  `limits` object (tolerant reader). Known keys stay strictly typed. Closed
+  sets (message types, roles, actions, state fields) remain strict — those
+  are behavioral. Adding a ProtocolLimits key is NOT a breaking change;
+  removing/retyping one is. Reference schema and py/go/rust clients updated
+  accordingly; test vectors gain an unknown-limit-key acceptance case.
