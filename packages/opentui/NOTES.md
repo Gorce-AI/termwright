@@ -36,8 +36,12 @@ OpenTUI native FFI is not available for this runtime yet
   `@opentui/core`. If OpenTUI renames `screenX` or drops `getChildren`,
   `pnpm typecheck` fails there rather than a user's build failing later.
 - Behaviour is checked by `src/conformance.test.ts`, which runs a real OpenTUI
-  app under `bun` in a real pty. It skips with a message when `bun` is absent.
-  **CI must install Bun for this lane to mean anything.**
+  app under `bun` in a real pty. It skips with a reason when `bun` is absent or
+  `dist/` has not been built — the right default on a developer machine.
+  **CI must install Bun and set `TERMWRIGHT_REQUIRE_CONFORMANCE=1`**, which
+  turns those skips into failures: a lane whose whole purpose is this suite
+  must not go green having run none of it. The `opentui` job in
+  `.github/workflows/ci.yml` installs Bun and builds first.
 
 When OpenTUI ships a Node backend (or Node ships `node:ffi`), nothing in this
 package changes — the conformance test simply stops needing the `bun` binary.
