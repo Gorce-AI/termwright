@@ -97,19 +97,26 @@ jobs:
       - run: pnpm --filter @termwright/conformance run conformance
 
   clients:
-    name: clients (${{ matrix.client }})
+    name: clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        client: [python, go, rust]
+        # The Python client declares >=3.9, so the floor is tested, not assumed.
+        include:
+          - client: python
+            python: '3.9'
+          - client: python
+            python: '3.12'
+          - client: go
+          - client: rust
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         if: matrix.client == 'python'
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python }}
           cache: pip
 
       - uses: actions/setup-go@v5
