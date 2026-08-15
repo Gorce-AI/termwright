@@ -49,6 +49,22 @@ export interface ReportTestResult {
   readonly visual?: VisualDiffInput;
   /** Overrides the semantic diff derived from the trace. */
   readonly semantic?: SemanticDiffInput;
+  /**
+   * Rendered frames to embed as images, e.g. PNGs from
+   * `@termwright/screenshot`. The report never rasterises anything itself —
+   * that would drag a native renderer into every test run — so the caller
+   * renders the frames it wants and passes the bytes here.
+   */
+  readonly screenshots?: readonly ReportScreenshot[];
+}
+
+/** One image embedded in a test's section of the report. */
+export interface ReportScreenshot {
+  readonly label: string;
+  /** Raw image bytes; inlined as a `data:` URI. */
+  readonly image: Uint8Array;
+  /** Defaults to `'image/png'`. */
+  readonly mediaType?: string;
 }
 
 /** Options for {@link generateHtmlReport}. */
@@ -310,6 +326,9 @@ function renderSection(section: TestSection): string {
   }
   if (section.semantic !== null) parts.push(renderSemantic(section.semantic));
   if (section.visual !== null) parts.push(renderVisual(section.visual));
+  if (result.screenshots !== undefined && result.screenshots.length > 0) {
+    parts.push(renderScreenshots(result.screenshots));
+  }
   if (section.cast !== null) parts.push(renderPlayer(result.id, section.cast, section.failingStep));
   if (section.castNote !== null) {
     parts.push(`<p class="tw-note">${escapeHtml(section.castNote)}</p>`);
@@ -366,6 +385,26 @@ function renderVisual(visual: NonNullable<TestSection['visual']>): string {
     <div class="tw-visual">
       ${column(visual.before, visual.labels[0])}
       ${column(visual.after, visual.labels[1])}
+    </div>
+  </section>`;
+}
+
+function renderScreenshots(screenshots: readonly ReportScreenshot[]): string {
+  const figures = screenshots
+    .map((shot) => {
+      const mediaType = shot.mediaType ?? 'image/png';
+      const encoded = Buffer.from(shot.image).toString('base64');
+      return `<figure class="tw-shot"><figcaption>${escapeHtml(
+        shot.label,
+      )}</figcaption><img alt="${escapeHtml(
+        shot.label,
+      )}" src="data:${mediaType};base64,${encoded}"></figure>`;
+    })
+    .join('\n      ');
+  return `<section class="tw-block">
+    <h3>Screenshots</h3>
+    <div class="tw-shots">
+      ${figures}
     </div>
   </section>`;
 }
@@ -494,6 +533,10 @@ summary { cursor:pointer; display:flex; gap:12px; align-items:baseline; flex-wra
 .tw-grid { background:#141414; border:1px solid var(--line); border-radius:6px; padding:8px; overflow-x:auto; font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace; font-size:12px; line-height:1.25; white-space:pre; }
 .tw-row { min-height:1.25em; }
 .tw-row-changed { background:rgba(241,76,76,.16); box-shadow:inset 2px 0 0 var(--fail); }
+.tw-shots { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; }
+.tw-shot { margin:0; }
+.tw-shot figcaption { color:var(--muted); font-size:12px; margin-bottom:4px; }
+.tw-shot img { max-width:100%; border:1px solid var(--line); border-radius:6px; display:block; }
 .tw-steps { border-collapse:collapse; font-size:13px; }
 .tw-steps th, .tw-steps td { text-align:left; padding:3px 14px 3px 0; border-bottom:1px solid var(--line); }
 .tw-step-failed td:nth-child(2) { color:var(--fail); }

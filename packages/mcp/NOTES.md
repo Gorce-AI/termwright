@@ -106,16 +106,58 @@ before, when the driver merged `process.env` unconditionally. Nothing about the
 environment — and nothing about the session token, which only the driver ever
 sees — appears in a tool result, in the compact snapshot or in a log line.
 
+## The replay tools reuse the live projections
+
+`trace.frame_at` prints the compact ref format over reconstructed screen text and
+`trace.diff` returns changed rows plus changed subtrees — the same shapes
+`terminal.snapshot` and `terminal.capture_since` produce. That is the point: an
+agent that learned the live loop can read a replay without learning a second
+format, and `diff.ts` has one implementation serving both.
+
+Reconstruction itself is entirely `@termwright/trace`: `stateAt()` yields the
+cast prefix, the viewport after every resize, and the nearest semantic record;
+`renderAnsiToHtml()` replays that prefix through the same headless emulator the
+HTML report uses. This package parses no asciicast and drives no terminal.
+
+One asymmetry worth knowing: on a live session the header revision is the
+*screen* revision, while a reconstructed frame has no screen-revision counter, so
+it carries the *semantic* revision (0 when the recording had no tree). Refs in a
+frame are `nX@<semanticRevision>` either way, which is what makes them
+comparable across the two worlds.
+
+## Trace handles are evicted, not refused
+
+`TraceStore` keeps at most 8 archives open per session and refuses one above
+128 MB. At the ceiling it closes the least recently used reader instead of
+failing the call, and reports the evicted handle in the result: an agent can
+always re-open a path, but it cannot recover from a server wedged on stale
+readers. A handle that was evicted fails as `no-session` with a suggestion that
+says so.
+
+There is deliberately no `trace.close`. The tool surface an agent has to learn
+stays smaller, and session teardown closes every reader through
+`closeSessionStores()`.
+
+## Two stores per session
+
+A session now owns terminals *and* trace archives (`SessionStores`). The registry
+builds both and disposes both, so an HTTP `DELETE` or a dropped stdio connection
+releases file handles as reliably as it kills children. `ToolContext` carries the
+two stores rather than one, which is why the field is `terminals` and not
+`store`.
+
 ## Screenshots
 
 `terminal.snapshot { variant: "full" }` writes the complete dump — text, ANSI and
 `screen.html()` — to `<tmp>/termwright-mcp/<session>/<terminal>/snapshot-N.json`
 and returns only refs plus the path. That is the whole picture story for 1.0.
 
-**TODO (1.0+):** real `ImageContent` (PNG) needs a rasteriser. Headless Chromium
-is not acceptable in this package's dependencies; the candidates are a small
-ANSI→PNG renderer or handing the HTML to `@termwright/trace`'s report renderer.
-Until then no tool returns `ImageContent`.
+`trace.frame_at` and `trace.diff` accept `screenshot: true` and fail it with
+`unsupported-action` naming `@termwright/screenshot` (task #18, in flight). The
+flag is rejected rather than ignored on purpose: an agent must never believe it
+received an image it did not get. When the package lands, the two call sites in
+`trace-tools.ts: rejectScreenshot()` become the render call, and `ImageContent`
+joins the existing text content — no schema change for the callers.
 
 ## Session ownership
 

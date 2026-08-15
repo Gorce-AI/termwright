@@ -44,12 +44,14 @@ testIf('opens the settings form and saves it', async ({ terminal, step }) => {
   // An action, unlike a matcher, does not poll for the tree.
   await app.waitForStable();
 
+  await expect(app.getByRole('button', { name: 'Save' })).not.toBeVisible();
+
   await step('open Settings from the menu', async () => {
     await app.press('ArrowDown Enter');
-    // The form lives on a tview page that was hidden until now, and the
-    // adapter publishes a hidden page's widgets all the same. So this waits on
-    // the screen, which is the oracle that knows what was painted.
-    await app.waitForText('Name');
+    // The form sits on a tview page that was hidden until now. Its widgets
+    // were in the tree the whole time, carrying `hidden`, so this asserts what
+    // the test means — the form is on screen — rather than that it exists.
+    await expect(app.getByRole('textbox', { name: 'Name' })).toBeVisible();
   });
 
   await app.type('release');

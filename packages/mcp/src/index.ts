@@ -70,7 +70,14 @@ export {
 } from './server.js';
 export type { HttpServeOptions, HttpServerHandle, RunningServer, ServeOptions } from './server.js';
 
-export { MCP_LIMITS, SessionRegistry, TerminalStore } from './sessions.js';
+export {
+  MCP_LIMITS,
+  SessionRegistry,
+  TerminalStore,
+  closeSessionStores,
+  createSessionStores,
+} from './sessions.js';
+export type { SessionStores } from './sessions.js';
 export type {
   LaunchRequest,
   RegisteredSession,
@@ -79,8 +86,14 @@ export type {
   TerminalStoreOptions,
 } from './sessions.js';
 
-export { TOOLS, toolByName } from './tools.js';
-export type { ToolContext, ToolDefinition, ToolOutcome } from './tools.js';
+export { TOOLS, toolByName } from './registry.js';
+export { TERMINAL_TOOLS } from './tools.js';
+export { TRACE_TOOLS } from './trace-tools.js';
+export { defineTool } from './tool-kit.js';
+export type { ToolContext, ToolDefinition, ToolOutcome } from './tool-kit.js';
+
+export { TRACE_LIMITS, TraceStore } from './traces.js';
+export type { OpenTrace, TraceStoreOptions } from './traces.js';
 
 export { buildLocator, textOrRegExp } from './targets.js';
 export type { TargetInput } from './targets.js';

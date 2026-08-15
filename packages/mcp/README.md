@@ -74,14 +74,44 @@ transport exists.
 `terminal.launch`, `capabilities`, `snapshot`, `capture_since`, `query`,
 `click`, `double_click`, `press`, `type`, `paste`, `write_raw`, `drag`, `wheel`,
 `resize`, `signal`, `scrollback`, `select_cells`, `copy_selection`, `wait_for`,
-`close` — the surface CONTRACTS.md §MCP defines. Every one carries an
-`inputSchema` and an `outputSchema` and returns `structuredContent`.
+`close` — the surface CONTRACTS.md §MCP defines — plus `trace.open`,
+`trace.overview`, `trace.frame_at` and `trace.diff` for recorded sessions. Every
+one carries an `inputSchema` and an `outputSchema` and returns
+`structuredContent`.
 
 Targeting, in precedence order: `ref`, `selector` (the CSS dialect
 `dialog button#approve:focused`), `testId`, `role` (+ `name`), `label`, `text`.
 Any name or text may be written as `/pattern/flags` to match as a regular
 expression. Locators are strict: more than one match fails with
 `ambiguous-locator` unless you pass `nth`.
+
+## Replaying a recorded failure
+
+A failing run leaves a `.twtrace` archive; the `trace.*` tools read it with the
+same vocabulary as a live session.
+
+```jsonc
+// trace.open      { "path": "out/login.twtrace" }  -> handle tr1 + what was recorded
+// trace.overview  { "traceId": "tr1" }             -> steps, markers, exit, which step failed
+// trace.frame_at  { "traceId": "tr1", "stepIndex": 1 }
+Terminal tr1 40x6 revision 2
+semanticTree: available
+dialog "Permission" ref=n1@2 modal
+  button "Approve" ref=n2@2 disabled
+visible text:
+…
+// trace.diff      { "traceId": "tr1", "fromMs": 0, "toMs": 3000 }  -> changed rows + subtrees
+```
+
+Reconstruction is `@termwright/trace`'s: `stateAt()` returns the cast prefix and
+the nearest semantic snapshot, and the prefix is replayed through the same
+headless emulator the HTML report uses. A moment is named by `timeMs`,
+`stepIndex` or `marker` — exactly one of them.
+
+Archives are per session, capped at 8 open and 128 MB each; at the ceiling the
+coldest handle is closed and named in the result, and re-opening a path always
+works. `screenshot: true` is accepted but fails with `unsupported-action` until
+`@termwright/screenshot` lands — it never silently returns text instead.
 
 ## Refs and revisions
 

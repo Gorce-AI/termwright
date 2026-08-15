@@ -2,10 +2,10 @@
 # Update with `vitest -u` or TERMWRIGHT_UPDATE_SNAPSHOTS=changed.
 "publishes the menu as a semantic tree 1": |
   - region:
-      - region "Settings":
-          - textbox "Name"
-          - button "Save"
-          - button "Cancel"
+      - region "Settings" [hidden]:
+          - textbox "Name" [hidden]
+          - button "Save" [hidden]
+          - button "Cancel" [hidden]
       - region:
           - list "Menu" [focused]:
               - listitem "New file" [selected]

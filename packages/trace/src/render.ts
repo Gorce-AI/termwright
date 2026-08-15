@@ -10,11 +10,8 @@
  * session actually rendered.
  */
 
-import { createRequire } from 'node:module';
-import type { IBufferCell, Terminal as TerminalType } from '@xterm/headless';
-
-const require = createRequire(import.meta.url);
-const { Terminal } = require('@xterm/headless') as typeof import('@xterm/headless');
+import type { IBufferCell } from '@xterm/headless';
+import { createTerminal, writeToTerminal } from './vt.js';
 
 /** Options for {@link renderAnsiToHtml}. */
 export interface RenderOptions {
@@ -71,14 +68,9 @@ export async function renderAnsiToHtml(
   const foreground = options.foreground ?? DEFAULT_FOREGROUND;
   const background = options.background ?? DEFAULT_BACKGROUND;
 
-  const terminal: TerminalType = new Terminal({
-    cols: columns,
-    rows,
-    allowProposedApi: true,
-    scrollback: 0,
-  });
+  const terminal = createTerminal(columns, rows);
   try {
-    await write(terminal, ansi);
+    await writeToTerminal(terminal, ansi);
     const buffer = terminal.buffer.active;
     const lines: RenderedRow[] = [];
     for (let row = 0; row < rows; row += 1) {

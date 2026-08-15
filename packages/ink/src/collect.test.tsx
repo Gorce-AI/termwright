@@ -1,8 +1,10 @@
 import { useRef } from 'react';
-import { Box, Static, Text, type DOMElement, type Instance } from 'ink';
+import { Box, Static, Text, render, type DOMElement, type Instance } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_LIMITS, type SemanticSnapshot } from '@termwright/protocol';
+import { DEFAULT_LIMITS, validateSnapshot, type SemanticSnapshot } from '@termwright/protocol';
 import { semanticRender, useSemantic } from './index.js';
+import { SnapshotCollector } from './collect.js';
+import { SemanticRegistry } from './registry.js';
 import { startFakeDriver, type FakeDriver, type FakeDriverOptions } from './testing/fake-driver.js';
 import { createFakeStdout } from './testing/fake-stdout.js';
 
@@ -150,6 +152,59 @@ describe('snapshot collection', () => {
         expect(ids.has(target)).toBe(true);
       }
     }
+  });
+
+  /**
+   * Collect straight off a mounted tree, bypassing the socket.
+   *
+   * Anything that travels through the channel is JSON-encoded, and that
+   * destroys object identity — so a snapshot with two nodes sharing one array
+   * validates perfectly on the driver's side while being invalid in memory.
+   * In-process consumers (`@termwright/ink-testing`, conformance, `get-tree`
+   * responses) see the real object, so it has to be valid there too.
+   */
+  function collectInMemory(element: React.ReactNode): SemanticSnapshot {
+    const probe: { current: DOMElement | null } = { current: null };
+    const app = render(
+      <>
+        <Box ref={probe} display="none" />
+        {element}
+      </>,
+      { stdout: createFakeStdout(), interactive: true, patchConsole: false },
+    );
+    openApps.push(app);
+
+    const root = probe.current?.parentNode;
+    if (root === undefined) throw new Error('probe did not attach to a root');
+
+    return new SnapshotCollector(new SemanticRegistry(), DEFAULT_LIMITS).collect(root, {
+      sessionId: 's1',
+      revision: 1,
+      columns: 80,
+      rows: 24,
+      includeBounds: true,
+    });
+  }
+
+  it('never lets two nodes share one actions array', () => {
+    const snapshot = collectInMemory(
+      <Box flexDirection="column">
+        <Box aria-role="button">
+          <Text>one</Text>
+        </Box>
+        <Box aria-role="button">
+          <Text>two</Text>
+        </Box>
+      </Box>,
+    );
+
+    const buttons = snapshot.nodes.filter((node) => node.role === 'button');
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0]?.actions).toEqual(buttons[1]?.actions);
+    expect(buttons[0]?.actions).not.toBe(buttons[1]?.actions);
+
+    const result = validateSnapshot(snapshot, DEFAULT_LIMITS);
+    expect(result.ok ? null : result.detail).toBeNull();
   });
 
   it('stops at the negotiated node ceiling instead of growing without bound', async () => {

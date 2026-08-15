@@ -14,7 +14,7 @@ import type { ErrorKind } from './errors.js';
 import { SEMANTIC_ROLES, SIGNALS } from './model.js';
 import { STATE_NAMES } from './schemas.js';
 import { MCP_LIMITS } from './sessions.js';
-import { TOOLS } from './tools.js';
+import { TOOLS } from './registry.js';
 import { AGENT_CONTEXT_VERSION, SERVER_NAME, SERVER_VERSION } from './version.js';
 
 /** JSON Schema for one tool's input or output. */

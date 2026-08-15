@@ -6,9 +6,11 @@ import { buildAgentContext, buildUsage } from './agent-context.js';
 import { buildAgentSkill } from './agent-skill.js';
 import { EXIT_CODES, exitCodeFor } from './errors.js';
 import { runCli } from './cli.js';
-import { TOOLS } from './tools.js';
+import { TOOLS } from './registry.js';
+import { TERMINAL_TOOLS } from './tools.js';
+import { TRACE_TOOLS } from './trace-tools.js';
 
-/** The tool names CONTRACTS.md §MCP requires. */
+/** The live-terminal tool names CONTRACTS.md §MCP requires. */
 const CONTRACT_TOOLS = [
   'terminal.launch',
   'terminal.capabilities',
@@ -32,9 +34,20 @@ const CONTRACT_TOOLS = [
   'terminal.close',
 ];
 
+/** The replay tools, added for agent-driven failure analysis (task #17). */
+const REPLAY_TOOLS = ['trace.open', 'trace.overview', 'trace.frame_at', 'trace.diff'];
+
+/** Everything the server registers, in registration order. */
+const ALL_TOOLS = [...CONTRACT_TOOLS, ...REPLAY_TOOLS];
+
 describe('the tool surface', () => {
-  it('is exactly the one CONTRACTS.md §MCP lists', () => {
-    expect(TOOLS.map((tool) => tool.name)).toEqual(CONTRACT_TOOLS);
+  it('covers exactly the live tools CONTRACTS.md §MCP lists', () => {
+    expect(TERMINAL_TOOLS.map((tool) => tool.name)).toEqual(CONTRACT_TOOLS);
+  });
+
+  it('adds the replay tools after them, without disturbing the contract order', () => {
+    expect(TRACE_TOOLS.map((tool) => tool.name)).toEqual(REPLAY_TOOLS);
+    expect(TOOLS.map((tool) => tool.name)).toEqual(ALL_TOOLS);
   });
 
   it('gives every tool an input and an output schema', () => {
@@ -50,7 +63,7 @@ describe('agent-context', () => {
   const context = buildAgentContext();
 
   it('is generated from the live schemas, not hand-written', () => {
-    expect(context.tools.map((tool) => tool.name)).toEqual(CONTRACT_TOOLS);
+    expect(context.tools.map((tool) => tool.name)).toEqual(ALL_TOOLS);
     const snapshot = context.tools.find((tool) => tool.name === 'terminal.snapshot');
     const properties = snapshot?.inputSchema['properties'] as Record<string, unknown>;
     expect(Object.keys(properties)).toContain('variant');
@@ -102,7 +115,7 @@ describe('the CLI', () => {
     const sink = collect();
     expect(await runCli(['agent-context'], sink.io)).toBe(EXIT_CODES.ok);
     const parsed = JSON.parse(sink.out.join('\n')) as { tools: { name: string }[] };
-    expect(parsed.tools).toHaveLength(CONTRACT_TOOLS.length);
+    expect(parsed.tools).toHaveLength(ALL_TOOLS.length);
   });
 
   it('exits 2 on unknown arguments, and carries a kind under --json', async () => {
@@ -148,7 +161,7 @@ describe('the agent-skill package', () => {
 
   it('documents every tool and its parameters in the reference', () => {
     const reference = files[1]?.contents ?? '';
-    for (const name of CONTRACT_TOOLS) expect(reference).toContain(`## ${name}`);
+    for (const name of ALL_TOOLS) expect(reference).toContain(`## ${name}`);
     expect(reference).toContain('`cursor`: integer — revision returned by an earlier snapshot');
   });
 

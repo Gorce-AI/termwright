@@ -4,17 +4,43 @@
   "description": "umbrella package + CLI: ui, codegen, mcp, agent-context, usage, skill",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./test": { "types": "./dist/test.d.ts", "import": "./dist/test.js" },
-    "./ink": { "types": "./dist/ink.d.ts", "import": "./dist/ink.js" },
-    "./cli": { "types": "./dist/cli.d.ts", "import": "./dist/cli.js" }
+  "engines": {
+    "node": ">=22"
   },
-  "bin": { "termwright": "./dist/bin.js" },
-  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./test": {
+      "types": "./dist/test.d.ts",
+      "import": "./dist/test.js"
+    },
+    "./ink": {
+      "types": "./dist/ink.d.ts",
+      "import": "./dist/ink.js"
+    },
+    "./reporter": {
+      "types": "./dist/reporter.d.ts",
+      "import": "./dist/reporter.js"
+    },
+    "./ui-reporter": {
+      "types": "./dist/ui-reporter.d.ts",
+      "import": "./dist/ui-reporter.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "bin": {
+    "termwright": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsup src/index.ts src/test.ts src/ink.ts src/cli.ts src/bin.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/test.ts src/ink.ts src/reporter.ts src/ui-reporter.ts src/cli.ts src/bin.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -29,7 +55,9 @@
     "vitest": ">=3.2.0"
   },
   "peerDependenciesMeta": {
-    "vitest": { "optional": true }
+    "vitest": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "vitest": "^3.2.0"

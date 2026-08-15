@@ -12,7 +12,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildAgentContext, buildUsage } from './agent-context.js';
 import type { JsonSchema } from './agent-context.js';
-import { TOOLS } from './tools.js';
+import { TOOLS } from './registry.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
 
 /** One file of the emitted package, keyed by its path inside the directory. */
@@ -94,6 +94,20 @@ function renderSkillMarkdown(): string {
     'be written `/pattern/flags` to match as a regular expression. Locators are strict — more than one',
     'match fails with `ambiguous-locator` and lists the candidates; pass `nth` to disambiguate, or use',
     '`terminal.query` first to see what matches.',
+    '',
+    '## Investigating a recorded failure',
+    '',
+    'A failing test run leaves a `.twtrace` archive. Replay it with the same vocabulary:',
+    '',
+    '1. `trace.open { path }` — validates the archive, returns a handle and what was recorded.',
+    '2. `trace.overview { traceId }` — steps with status and timing, markers, exit, which step failed.',
+    '3. `trace.frame_at { traceId, stepIndex | timeMs | marker }` — the screen at that moment, rebuilt,',
+    '   with the semantic tree of the nearest revision. Reads exactly like a live snapshot.',
+    '4. `trace.diff { traceId, fromMs, toMs }` — what moved between two moments.',
+    '',
+    'Start at the failed step from `trace.overview`, reconstruct it, then diff against a moment before',
+    'it to see what changed. Handles are per session and the coldest is evicted at the ceiling — if one',
+    'stops resolving, call `trace.open` again.',
     '',
     '## When a call fails',
     '',

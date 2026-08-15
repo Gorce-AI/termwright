@@ -12,11 +12,12 @@
  * is generated from the same objects.
  */
 import { z } from 'zod';
+import { defineTool } from './tool-kit.js';
+import type { ToolContext, ToolDefinition, ToolOutcome } from './tool-kit.js';
 import { formatCompactSnapshot, refEntries, toRefEntry } from './format.js';
 import type { RefEntry } from './format.js';
 import { diffRows, diffSemantic } from './diff.js';
 import { usageError } from './errors.js';
-import type { ToolAnnotations } from './sdk-facade.js';
 import {
   buttonSchema,
   cellPosition,
@@ -33,58 +34,9 @@ import {
   terminalId,
   timeoutMs,
 } from './schemas.js';
-import type { TerminalEntry, TerminalStore } from './sessions.js';
+import type { TerminalEntry } from './sessions.js';
 import { buildLocator, hasTarget, textOrRegExp } from './targets.js';
 import type { TargetInput } from './targets.js';
-
-/** What a tool handler is given besides its arguments. */
-export interface ToolContext {
-  readonly store: TerminalStore;
-}
-
-/** A handler's result: the text block an agent reads, plus the structured data. */
-export interface ToolOutcome<T> {
-  readonly text: string;
-  readonly data: T;
-}
-
-/** A registered tool, in the form both the server and `agent-context` consume. */
-export interface ToolDefinition {
-  readonly name: string;
-  readonly title: string;
-  readonly description: string;
-  readonly inputSchema: Record<string, z.ZodType>;
-  readonly outputSchema: Record<string, z.ZodType>;
-  readonly annotations: ToolAnnotations;
-  /**
-   * Args are typed `never` in the erased form so that any concrete handler is
-   * assignable; the server passes the values zod already validated.
-   */
-  readonly handler: (context: ToolContext, args: never) => Promise<ToolOutcome<Record<string, unknown>>>;
-}
-
-function defineTool<I extends Record<string, z.ZodType>, O extends Record<string, z.ZodType>>(definition: {
-  readonly name: string;
-  readonly title: string;
-  readonly description: string;
-  readonly inputSchema: I;
-  readonly outputSchema: O;
-  readonly annotations?: ToolAnnotations;
-  readonly handler: (
-    context: ToolContext,
-    args: z.output<z.ZodObject<I>>,
-  ) => Promise<ToolOutcome<z.output<z.ZodObject<O>>>>;
-}): ToolDefinition {
-  return {
-    name: definition.name,
-    title: definition.title,
-    description: definition.description,
-    inputSchema: definition.inputSchema,
-    outputSchema: definition.outputSchema,
-    annotations: definition.annotations ?? {},
-    handler: definition.handler as ToolDefinition['handler'],
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Shared projections
@@ -145,7 +97,7 @@ function capture(
   readonly revision: number;
   readonly semanticRevision: number | null;
 } {
-  const record = context.store.record(entry);
+  const record = context.terminals.record(entry);
   return {
     rows: record.rows,
     refs: record.semantic === null ? [] : refEntries(record.semantic),
@@ -237,7 +189,7 @@ const launch = defineTool({
   },
   annotations: { openWorldHint: true },
   handler: async (context, args) => {
-    const entry = await context.store.launch(args);
+    const entry = await context.terminals.launch(args);
     await settleSemantics(entry);
     const capabilities = entry.harness.capabilities();
     const screen = entry.harness.screen();
@@ -279,7 +231,7 @@ const capabilities = defineTool({
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     await settleSemantics(entry);
     const caps = entry.harness.capabilities();
     const screen = entry.harness.screen();
@@ -340,7 +292,7 @@ const snapshot = defineTool({
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     await settleSemantics(entry);
     const state = capture(context, entry);
     const screen = entry.harness.screen();
@@ -353,7 +305,7 @@ const snapshot = defineTool({
     });
     let dumpPath: string | undefined;
     if (full) {
-      dumpPath = await context.store.writeDump(
+      dumpPath = await context.terminals.writeDump(
         entry,
         `snapshot-${screen.revision}.json`,
         `${JSON.stringify(
@@ -428,10 +380,10 @@ const captureSince = defineTool({
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     await settleSemantics(entry);
-    const before = context.store.baseline(entry, args.cursor);
-    const after = context.store.record(entry);
+    const before = context.terminals.baseline(entry, args.cursor);
+    const after = context.terminals.record(entry);
     const rowLimit = args.maxRows ?? 200;
     const subtreeLimit = args.maxSubtrees ?? 100;
     const changedRows = diffRows(before.rows, after.rows).slice(0, rowLimit);
@@ -493,7 +445,7 @@ const query = defineTool({
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     await settleSemantics(entry);
     const locator = locatorFor(entry, args);
     const limit = args.limit ?? 20;
@@ -553,7 +505,7 @@ function pointerTool(name: 'terminal.click' | 'terminal.double_click'): ToolDefi
     },
     outputSchema: { ...receiptFields, ref: z.string() },
     handler: async (context, args) => {
-      const entry = context.store.get(args.terminal);
+      const entry = context.terminals.get(args.terminal);
       const locator = locatorFor(entry, args);
       const target = await locator.resolve(optionalTimeout(args.timeout));
       const options = {
@@ -586,7 +538,7 @@ const press = defineTool({
   },
   outputSchema: { ...receiptFields, ref: z.string().optional() },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     if (hasTarget(args)) {
       const locator = locatorFor(entry, args);
       const target = await locator.resolve(optionalTimeout(args.timeout));
@@ -611,7 +563,7 @@ const type = defineTool({
   },
   outputSchema: { ...receiptFields, ref: z.string().optional() },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     if (hasTarget(args)) {
       const locator = locatorFor(entry, args);
       const target = await locator.resolve(optionalTimeout(args.timeout));
@@ -632,7 +584,7 @@ const paste = defineTool({
   inputSchema: { terminal: terminalId, text: z.string() },
   outputSchema: receiptFields,
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     await entry.harness.paste(args.text);
     return { text: `pasted ${args.text.length} characters`, data: receipt(entry) };
   },
@@ -651,7 +603,7 @@ const writeRaw = defineTool({
   },
   outputSchema: { ...receiptFields, bytes: z.number().int() },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     const bytes =
       args.encoding === 'base64' ? new Uint8Array(Buffer.from(args.data, 'base64')) : args.data;
     await entry.harness.write(bytes);
@@ -676,7 +628,7 @@ const drag = defineTool({
   },
   outputSchema: receiptFields,
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     const source = locatorFor(entry, args);
     if (args.toTarget !== undefined) {
       await source.dragTo(locatorFor(entry, args.toTarget), optionalTimeout(args.timeout));
@@ -705,7 +657,7 @@ const wheel = defineTool({
   },
   outputSchema: receiptFields,
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     await locatorFor(entry, args).wheel({
       deltaY: args.deltaY,
       ...(args.deltaX === undefined ? {} : { deltaX: args.deltaX }),
@@ -725,7 +677,7 @@ const resize = defineTool({
   },
   outputSchema: { ...receiptFields, columns: z.number().int(), rows: z.number().int() },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     await entry.harness.resize({ columns: args.columns, rows: args.rows });
     return {
       text: `resized to ${args.columns}x${args.rows}`,
@@ -744,7 +696,7 @@ const signal = defineTool({
   outputSchema: receiptFields,
   annotations: { destructiveHint: true },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     await entry.harness.signal(args.signal);
     return { text: `sent SIG${args.signal}`, data: receipt(entry) };
   },
@@ -774,7 +726,7 @@ const scrollback = defineTool({
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     const api = entry.harness.scrollback;
     if (args.move !== undefined) api.move({ lines: args.move });
     const wantsText = args.from !== undefined || args.to !== undefined || args.search === undefined;
@@ -816,7 +768,7 @@ const selectCells = defineTool({
   inputSchema: { terminal: terminalId, start: cellPosition, end: cellPosition },
   outputSchema: receiptFields,
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     entry.harness.selection.selectCells({ start: args.start, end: args.end });
     return {
       text: `selected (${args.start.row},${args.start.column})-(${args.end.row},${args.end.column})`,
@@ -833,7 +785,7 @@ const copySelection = defineTool({
   outputSchema: { terminal: z.string(), text: z.string() },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     const text = entry.harness.selection.copy();
     if (args.clear === true) entry.harness.selection.clear();
     return { text, data: { terminal: entry.id, text } };
@@ -863,7 +815,7 @@ const waitFor = defineTool({
     exit: exitSchema.optional(),
   },
   handler: async (context, args) => {
-    const entry = context.store.get(args.terminal);
+    const entry = context.terminals.get(args.terminal);
     const timeout = optionalTimeout(args.timeout);
     switch (args.wait) {
       case 'text': {
@@ -920,7 +872,7 @@ const close = defineTool({
   outputSchema: { ok: z.literal(true), terminal: z.string(), exit: exitSchema.nullable() },
   annotations: { idempotentHint: true },
   handler: async (context, args) => {
-    const entry = await context.store.close(args.terminal);
+    const entry = await context.terminals.close(args.terminal);
     return {
       text: `closed ${entry.id}`,
       data: { ok: true as const, terminal: entry.id, exit: entry.exit },
@@ -928,8 +880,8 @@ const close = defineTool({
   },
 });
 
-/** Every tool this server exposes, in the order CONTRACTS.md §MCP lists them. */
-export const TOOLS: readonly ToolDefinition[] = Object.freeze([
+/** The live-terminal tools, in the order CONTRACTS.md §MCP lists them. */
+export const TERMINAL_TOOLS: readonly ToolDefinition[] = Object.freeze([
   launch,
   capabilities,
   snapshot,
@@ -952,9 +904,5 @@ export const TOOLS: readonly ToolDefinition[] = Object.freeze([
   close,
 ]);
 
-/** Convenience lookup used by the server and by tests. */
-export function toolByName(name: string): ToolDefinition | undefined {
-  return TOOLS.find((tool) => tool.name === name);
-}
-
 export { stateFilter, targetShape, toRefEntry };
+export type { ToolContext, ToolDefinition, ToolOutcome };

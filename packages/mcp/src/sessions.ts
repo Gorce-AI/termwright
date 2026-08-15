@@ -18,6 +18,7 @@ import { McpError, noSessionError, usageError } from './errors.js';
 import { definedOnly } from './objects.js';
 import type { Loose } from './objects.js';
 import type { SemanticSnapshot } from './model.js';
+import { TraceStore } from './traces.js';
 
 /**
  * Ceilings for the MCP layer. The session counts come from
@@ -245,10 +246,38 @@ export class TerminalStore {
   }
 }
 
-/** A registered MCP session: its key, its terminals, and its disposer. */
+/**
+ * Everything one MCP session owns: the terminals it launched and the trace
+ * archives it opened. Both are disposed together when the session goes away.
+ */
+export interface SessionStores {
+  readonly terminals: TerminalStore;
+  readonly traces: TraceStore;
+}
+
+/** Builds the stores for a session key. */
+export function createSessionStores(options: {
+  readonly sessionKey: string;
+  readonly storageDir?: string | undefined;
+}): SessionStores {
+  return {
+    terminals: new TerminalStore({
+      sessionKey: options.sessionKey,
+      ...(options.storageDir === undefined ? {} : { storageDir: options.storageDir }),
+    }),
+    traces: new TraceStore(),
+  };
+}
+
+/** Closes both stores of a session. */
+export async function closeSessionStores(stores: SessionStores): Promise<void> {
+  await Promise.all([stores.terminals.closeAll(), stores.traces.closeAll()]);
+}
+
+/** A registered MCP session: its key, its stores, and its disposer. */
 export interface RegisteredSession<T> {
   readonly key: string;
-  readonly store: TerminalStore;
+  readonly stores: SessionStores;
   readonly attachment: T;
 }
 
@@ -275,8 +304,8 @@ export class SessionRegistry<T> {
     return this.#sessions.size >= this.#maxSessions;
   }
 
-  /** Creates a session and its store; throws `capacity` at the ceiling. */
-  create(key: string, attach: (store: TerminalStore) => T): RegisteredSession<T> {
+  /** Creates a session and its stores; throws `capacity` at the ceiling. */
+  create(key: string, attach: (stores: SessionStores) => T): RegisteredSession<T> {
     if (this.#sessions.has(key)) throw usageError(`session ${key} already exists`);
     if (this.atCapacity) {
       throw new McpError(
@@ -285,11 +314,8 @@ export class SessionRegistry<T> {
         'close an existing session (DELETE with its Mcp-Session-Id) and retry',
       );
     }
-    const store = new TerminalStore({
-      sessionKey: key,
-      ...(this.#storageDir === undefined ? {} : { storageDir: this.#storageDir }),
-    });
-    const session: RegisteredSession<T> = { key, store, attachment: attach(store) };
+    const stores = createSessionStores({ sessionKey: key, storageDir: this.#storageDir });
+    const session: RegisteredSession<T> = { key, stores, attachment: attach(stores) };
     this.#sessions.set(key, session);
     return session;
   }
@@ -303,7 +329,7 @@ export class SessionRegistry<T> {
     const session = this.#sessions.get(key);
     if (session === undefined) return;
     this.#sessions.delete(key);
-    await session.store.closeAll();
+    await closeSessionStores(session.stores);
   }
 
   /** Closes every session. */

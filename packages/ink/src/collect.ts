@@ -152,7 +152,13 @@ export class SnapshotCollector {
       ...(meta?.value === undefined ? {} : { value: this.#clamp(meta.value) }),
       ...(options.includeBounds ? withBounds(node) : {}),
       ...(state === undefined ? {} : { state }),
-      ...(actions === undefined ? {} : { actions }),
+      // Copied, never referenced. `defaultActionsForRole` hands out one shared
+      // frozen array per role, and an author can just as easily hoist a single
+      // `actions` const across many `useSemantic` calls. Either way two nodes
+      // would point at the same array, and the protocol's DTO projection
+      // rejects any value reachable more than once ("value is reachable more
+      // than once at $.nodes[N].actions").
+      ...(actions === undefined ? {} : { actions: [...actions] }),
       ...(meta?.testId === undefined ? {} : { testId: this.#clamp(meta.testId) }),
     };
   }

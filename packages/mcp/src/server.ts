@@ -19,9 +19,10 @@ import {
   isInitializeRequest,
 } from './sdk-facade.js';
 import type { CallToolResult, Transport } from './sdk-facade.js';
-import { SessionRegistry, TerminalStore } from './sessions.js';
-import { TOOLS } from './tools.js';
-import type { ToolContext } from './tools.js';
+import { SessionRegistry, closeSessionStores, createSessionStores } from './sessions.js';
+import type { SessionStores } from './sessions.js';
+import { TOOLS } from './registry.js';
+import type { ToolContext } from './tool-kit.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
 
 /** Server-level instructions shown to hosts that surface them. */
@@ -60,12 +61,12 @@ function errorResult(error: unknown): CallToolResult {
 }
 
 /** Registers every tool from {@link TOOLS} on a fresh `McpServer`. */
-export function createTermwrightMcpServer(store: TerminalStore): McpServer {
+export function createTermwrightMcpServer(stores: SessionStores): McpServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
   );
-  const context: ToolContext = { store };
+  const context: ToolContext = { terminals: stores.terminals, traces: stores.traces };
 
   for (const tool of TOOLS) {
     server.registerTool(
@@ -93,7 +94,7 @@ export function createTermwrightMcpServer(store: TerminalStore): McpServer {
 /** A running server plus the handle needed to shut it down. */
 export interface RunningServer {
   readonly server: McpServer;
-  readonly store: TerminalStore;
+  readonly stores: SessionStores;
   close(): Promise<void>;
 }
 
@@ -105,14 +106,14 @@ export interface ServeOptions {
 }
 
 /** Connects a server to a transport and returns its lifecycle handle. */
-async function connect(store: TerminalStore, transport: Transport): Promise<RunningServer> {
-  const server = createTermwrightMcpServer(store);
+async function connect(stores: SessionStores, transport: Transport): Promise<RunningServer> {
+  const server = createTermwrightMcpServer(stores);
   await connectTransport(server, transport);
   return {
     server,
-    store,
+    stores,
     close: async (): Promise<void> => {
-      await store.closeAll();
+      await closeSessionStores(stores);
       await server.close();
     },
   };
@@ -120,11 +121,8 @@ async function connect(store: TerminalStore, transport: Transport): Promise<Runn
 
 /** Serves the tools over stdio — the transport an MCP host spawns. */
 export async function serveStdio(options: ServeOptions = {}): Promise<RunningServer> {
-  const store = new TerminalStore({
-    sessionKey: 'stdio',
-    ...(options.storageDir === undefined ? {} : { storageDir: options.storageDir }),
-  });
-  return connect(store, new StdioServerTransport());
+  const stores = createSessionStores({ sessionKey: 'stdio', storageDir: options.storageDir });
+  return connect(stores, new StdioServerTransport());
 }
 
 /**
@@ -135,11 +133,11 @@ export async function serveInMemory(
   options: ServeOptions & { readonly sessionKey?: string } = {},
 ): Promise<RunningServer & { readonly clientTransport: Transport }> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const store = new TerminalStore({
+  const stores = createSessionStores({
     sessionKey: options.sessionKey ?? 'in-memory',
-    ...(options.storageDir === undefined ? {} : { storageDir: options.storageDir }),
+    storageDir: options.storageDir,
   });
-  const running = await connect(store, serverTransport);
+  const running = await connect(stores, serverTransport);
   return { ...running, clientTransport };
 }
 
@@ -231,11 +229,11 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
         }
 
         const newKey = randomUUID();
-        const session = registry.create(newKey, (store) => {
+        const session = registry.create(newKey, (stores) => {
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => newKey,
           });
-          const server = createTermwrightMcpServer(store);
+          const server = createTermwrightMcpServer(stores);
           transport.onclose = (): void => {
             void registry.delete(newKey);
           };
