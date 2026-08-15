@@ -120,6 +120,23 @@ describe('matchSemanticSnapshot', () => {
     expect(result.mismatch?.reason).toMatch(/no nodes exist at this level/u);
   });
 
+  it('scopes matching to the inside of a node, excluding the node itself', () => {
+    const patterns = parseSemanticSnapshot(['- button "Approve" [focused]', '- button "Reject"'].join('\n'));
+    expect(
+      matchSemanticSnapshot(patterns, permissionDialog(), { rootId: 'n1', includeRoot: false }).ok,
+    ).toBe(true);
+    // The same pattern anchored at the roots does not match: the dialog is in
+    // the way, which is exactly what scoping is for.
+    expect(matchSemanticSnapshot(patterns, permissionDialog()).ok).toBe(false);
+  });
+
+  it('reports an empty level when scoping into a node with no children', () => {
+    const patterns = parseSemanticSnapshot('- button "Approve"');
+    const result = matchSemanticSnapshot(patterns, permissionDialog(), { rootId: 'n3', includeRoot: false });
+    expect(result.ok).toBe(false);
+    expect(result.mismatch?.reason).toMatch(/no nodes exist at this level/u);
+  });
+
   it('scopes matching to a subtree', () => {
     const result = matchSemanticSnapshot(parseSemanticSnapshot('- button "Approve" [focused]'), permissionDialog(), {
       rootId: 'n3',

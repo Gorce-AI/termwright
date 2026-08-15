@@ -59,6 +59,29 @@ on a laptop cannot change what CI sees. `test.step()` works too; the `step`
 fixture is the form to prefer under `test.concurrent`, since it is bound to its
 own test rather than to the most recently started one.
 
+### Skipping when there is no PTY
+
+Sandboxed CI, slim containers and installs without the native prebuild cannot
+open a pseudo-terminal, and a suite that reports that as a failure is a suite
+people switch off. The preset ships the probe so no project has to write it:
+
+```ts
+import { describe } from 'vitest';
+import { ptyAvailable, test, expect } from '@termwright/test';
+
+const pty = await ptyAvailable();
+
+describe.skipIf(!pty)('the app', () => {
+  test('starts', async ({ terminal }) => {
+    const app = await terminal.launch({ command: ['node', 'app.js'] });
+    await expect(app).toHaveText('ready');
+  });
+});
+```
+
+The result is memoized, and `TERMWRIGHT_SKIP_PTY=1` forces it to `false` when
+you want to skip these suites deliberately.
+
 ## Matchers
 
 All of them are asynchronous — `await expect(...)` — and the locator ones poll
@@ -70,7 +93,7 @@ until the `expect` timeout class runs out.
 | `toBeFocused()` | locator |
 | `toHaveState({ disabled: true })` | locator; asserts only the keys you list |
 | `toHaveText('Save' \| /Sav/)` | locator (exact, whitespace-normalized) or terminal (substring of the grid) |
-| `toMatchSemanticSnapshot(expected?)` | terminal or `SemanticSnapshot` |
+| `toMatchSemanticSnapshot(expected?, { within })` | terminal or `SemanticSnapshot` |
 | `toMatchCellSnapshot(expected?)` | terminal or `ScreenSnapshot` |
 
 Retrying is what makes them safe right after a *screen* wait. `waitForText()`
@@ -111,8 +134,6 @@ The format is normative in [`/CONTRACTS.md`](../../CONTRACTS.md) §YAML snapshot
     - button /Rej.*/
 ```
 
-- **Partial by default.** Omitted children are don't-care, and unlisted siblings
-  are allowed. Listed children must keep their relative order.
 - **Names** are compared after whitespace normalization, may be a `/regex/`, and
   may be omitted to match any name.
 - **`[flags]`** assert only what they list. `!focused` asserts the opposite,
@@ -122,6 +143,54 @@ The format is normative in [`/CONTRACTS.md`](../../CONTRACTS.md) §YAML snapshot
 - `'* "Save"'` matches any role. It has to be quoted — a bare `*` opens a YAML
   alias.
 - A name containing `#` is written quoted, so the file stays valid YAML.
+
+### Two comparison modes, by source
+
+| Source | How it is compared |
+|---|---|
+| **inline pattern** — the argument you write in the test | partial: omitted children are don't-care, unlisted siblings are allowed, flags assert only what they list. Listed children keep their relative order. |
+| **stored file** — written into `__snapshots__` | strict: the full serialized tree, exact flags. A node or state the app *grew* fails, which is the whole point of checking in a snapshot. |
+
+So an inline pattern is an assertion about the part you care about, and a file
+snapshot is a fence around the whole tree. Reach for a pattern in a test about
+one behaviour, and for a file when you want to be told about any change at all.
+
+### Patterns start at the root — scope with `within`
+
+Matching is anchored at the tree's roots, and Ink, Textual and OpenTUI apps are
+rooted at `application`. A pattern that starts at your dialog therefore does not
+match:
+
+```yaml
+# Does not match an Ink app: the root is `application`, not `dialog`.
+- dialog "Permission" [modal]:
+    - button "Approve" [focused]
+```
+
+Either spell out the path from the root:
+
+```yaml
+- application:
+    - dialog "Permission" [modal]:
+        - button "Approve" [focused]
+```
+
+…or, usually better, scope to the container and assert what is inside it:
+
+```ts
+await expect(app).toMatchSemanticSnapshot(
+  `
+    - button "Approve" [focused]
+    - button /^Rej/
+  `,
+  { within: app.getByRole('dialog') },
+);
+```
+
+`within` takes a locator, excludes the node itself from the pattern, and is
+re-resolved on every attempt — a re-render that mints new node ids does not
+invalidate the scope. Use `{ rootId }` instead when you want the node itself to
+be the top level of the snapshot.
 
 Semantic and cell snapshots are separate oracles on purpose: a semantic snapshot
 can pass on a blank screen, because the adapter publishes a tree nobody painted.
@@ -151,9 +220,9 @@ resolved as:
 | `TERMWRIGHT_UPDATE_SNAPSHOTS=missing`, or a plain run | write missing; a mismatch fails |
 | `TERMWRIGHT_UPDATE_SNAPSHOTS=none`, or `--update=none` | never write; a missing snapshot fails |
 
-`config.updateSnapshots` overrides all of it. Note that updating a *semantic*
-snapshot replaces the stored pattern with the full serialized tree — any regex
-or partial matching you hand-wrote is rewritten, so review the diff.
+`config.updateSnapshots` overrides all of it. Because a stored snapshot is
+compared strictly, `changed` rewrites it on any textual difference — review the
+diff the way you would review the code that caused it.
 
 ## Configuration
 
@@ -218,6 +287,6 @@ module registers matchers on `expect` as a side effect.
 pnpm build && pnpm typecheck && pnpm test
 ```
 
-The end-to-end suite drives the driver's semantic fixture over a real PTY and is
-skipped automatically where no pseudo-terminal can be opened
+The end-to-end suite drives the driver's semantic fixture over a real PTY and
+guards itself with the same `ptyAvailable()` this package exports
 (`TERMWRIGHT_SKIP_PTY=1` skips it explicitly).

@@ -16,6 +16,7 @@ interface FakeLocatorState {
   visible?: boolean;
   state?: SemanticState | null;
   text?: string;
+  ref?: string;
   resolveError?: unknown;
 }
 
@@ -37,7 +38,8 @@ function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("but
     async resolve() {
       const error = read().resolveError;
       if (error !== undefined) throw error;
-      return { ref: 'n1@1', revision: 1, semantic: true, rect: null };
+      const ref = read().ref ?? 'n1@1';
+      return { ref, revision: 1, semantic: ref.startsWith('n'), rect: null };
     },
   };
   return locator as unknown as Locator;
@@ -205,6 +207,49 @@ describe('toMatchSemanticSnapshot', () => {
     }).rejects.toThrow(/published no semantic tree/u);
   });
 
+  it('scopes the pattern to the inside of a locator', async () => {
+    const harness = fakeHarness(() => ({ tree: permissionDialog() }));
+    const dialog = fakeLocator(() => ({ ref: 'n1@1' }), 'getByRole("dialog")');
+    await expect(harness).toMatchSemanticSnapshot(
+      ['- button "Approve" [focused]', '- button "Reject"'].join('\n'),
+      { within: dialog },
+    );
+  });
+
+  it('re-resolves the scope on every attempt', async () => {
+    const movesAt = Date.now() + 80;
+    const harness = fakeHarness(() => ({ tree: permissionDialog() }));
+    // Resolves to the focused button first, to the dialog once the app settles.
+    const moving = fakeLocator(() => ({ ref: Date.now() >= movesAt ? 'n1@1' : 'n3@1' }), 'getByTestId("scope")');
+    await expect(harness).toMatchSemanticSnapshot('- button "Approve" [focused]', { within: moving });
+  });
+
+  it('names the scope in the failure header', async () => {
+    const harness = fakeHarness(() => ({ tree: permissionDialog() }));
+    const dialog = fakeLocator(() => ({ ref: 'n1@1' }), 'getByRole("dialog")');
+    await expect(async () => {
+      await expect(harness).toMatchSemanticSnapshot('- button "Deny"', { within: dialog, timeout: 50 });
+    }).rejects.toThrow(/expect\(semantic tree within getByRole\("dialog"\)\)\.toMatchSemanticSnapshot\(\)/u);
+  });
+
+  it('refuses a scope that is not a semantic node', async () => {
+    const harness = fakeHarness(() => ({ tree: permissionDialog() }));
+    const region = fakeLocator(() => ({ ref: 'grid:1,2,9,1@4' }), 'getByText("Approve")');
+    await expect(async () => {
+      await expect(harness).toMatchSemanticSnapshot('- button "Approve"', { within: region });
+    }).rejects.toThrow(/needs a semantic locator[\s\S]*resolved to grid:1,2,9,1@4/u);
+  });
+
+  it('refuses to scope twice', async () => {
+    const harness = fakeHarness(() => ({ tree: permissionDialog() }));
+    await expect(async () => {
+      await expect(harness).toMatchSemanticSnapshot('- button "Approve"', {
+        within: fakeLocator(() => ({ ref: 'n1@1' })),
+        rootId: 'n1',
+      });
+    }).rejects.toThrow(/either \{ within \} or \{ rootId \}, not both/u);
+  });
+
   it('supports negation with an inline pattern', async () => {
     await expect(permissionDialog()).not.toMatchSemanticSnapshot('- alert "Boom"');
   });
@@ -255,7 +300,7 @@ describe('external snapshots', () => {
     configureTermwright({ timeouts: { expect: 100 }, snapshotDir: dir, updateSnapshots: 'none' });
     await expect(async () => {
       await expect(harness).toMatchSemanticSnapshot();
-    }).rejects.toThrow(/name is "second"/u);
+    }).rejects.toThrow(/differs from the stored snapshot[\s\S]*/u);
 
     beginSnapshotScope();
     configureTermwright({ timeouts: { expect: 100 }, snapshotDir: dir, updateSnapshots: 'changed' });
@@ -273,6 +318,39 @@ describe('external snapshots', () => {
     await expect(harness).toMatchSemanticSnapshot();
     const stored = readFileSync(join(dir, 'matchers.test.ts.tw-semantic.yaml'), 'utf8');
     expect(stored).toContain('- dialog "Permission" [modal]:');
+  });
+
+  it('compares a stored snapshot strictly: a new node fails', async () => {
+    const state = {
+      tree: snapshot([node('n1', 'dialog', 'Permission'), node('n2', 'button', 'Approve', { parentId: 'n1' })]),
+    };
+    const harness = fakeHarness(() => state);
+    await expect(harness).toMatchSemanticSnapshot();
+
+    // The app grew a node. A partial match would still pass here, which is
+    // exactly what a stored snapshot must not do (CONTRACTS.md §YAML).
+    state.tree = snapshot([
+      node('n1', 'dialog', 'Permission'),
+      node('n2', 'button', 'Approve', { parentId: 'n1' }),
+      node('n3', 'button', 'Reject', { parentId: 'n1' }),
+    ]);
+    beginSnapshotScope();
+    configureTermwright({
+      timeouts: { expect: 100 },
+      snapshotDir: directories[directories.length - 1] as string,
+      updateSnapshots: 'none',
+    });
+    await expect(async () => {
+      await expect(harness).toMatchSemanticSnapshot();
+    }).rejects.toThrow(/Received:[\s\S]*button "Reject"[\s\S]*differs from the stored snapshot/u);
+  });
+
+  it('keeps an inline pattern partial: a new node is fine', async () => {
+    const harness = fakeHarness(() => ({ tree: permissionDialog() }));
+    await expect(harness).toMatchSemanticSnapshot(`
+      - dialog "Permission":
+          - button "Approve"
+    `);
   });
 
   it('gives each assertion in a test its own key', async () => {

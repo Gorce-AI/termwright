@@ -69,6 +69,18 @@ describe('serializeSemanticSnapshot', () => {
     );
   });
 
+  it('serializes what is inside a node when the root is excluded', () => {
+    expect(serializeSemanticSnapshot(permissionDialog(), { rootId: 'n1', includeRoot: false })).toBe(
+      [
+        '- text "Allow bash to run?"',
+        '- button "Approve" [focused]',
+        '- button "Reject"',
+        '',
+      ].join('\n'),
+    );
+    expect(serializeSemanticSnapshot(permissionDialog(), { rootId: 'n3', includeRoot: false })).toBe('');
+  });
+
   it('serializes a subtree when a root is named', () => {
     expect(serializeSemanticSnapshot(permissionDialog(), { rootId: 'n3' })).toBe(
       '- button "Approve" [focused]\n',

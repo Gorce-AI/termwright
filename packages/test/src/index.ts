@@ -74,9 +74,11 @@ export {
 
 export {
   serializeSemanticSnapshot,
+  childIndex,
   describeNode,
   describeState,
   normalizeName,
+  topLevel,
   ALL_STATE_KEYS,
   STABLE_STATE_KEYS,
   type SerializeOptions,
@@ -99,6 +101,8 @@ export {
 } from './yaml-match.js';
 
 export { serializeScreen, type CellSnapshotOptions } from './cells.js';
+
+export { ptyAvailable, resetPtyProbe } from './pty-available.js';
 
 export {
   beginSnapshotScope,

@@ -12,8 +12,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect } from 'vitest';
-import { createNodePtyBackend } from '@termwright/driver';
-import { configureTermwright, test } from './index.js';
+import { configureTermwright, ptyAvailable, test } from './index.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'driver', 'test-fixtures');
 const OUTPUT = mkdtempSync(join(tmpdir(), 'tw-preset-'));
@@ -27,23 +26,8 @@ configureTermwright({
   command: [process.execPath, join(FIXTURES, 'semantic-app.mjs')],
 });
 
-function ptyAvailable(): boolean {
-  if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
-  try {
-    const pty = createNodePtyBackend().spawn({
-      command: [process.execPath, '-e', 'process.exit(0)'],
-      env: { PATH: process.env['PATH'] ?? '' },
-      columns: 20,
-      rows: 4,
-    });
-    pty.dispose();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const available = ptyAvailable();
+// The preset's own probe, used the way a user's suite would use it.
+const available = await ptyAvailable();
 
 afterAll(() => {
   rmSync(OUTPUT, { recursive: true, force: true });
@@ -83,6 +67,18 @@ describe.skipIf(!available)('the preset against a real PTY', () => {
     });
 
     await expect(app).toMatchCellSnapshot();
+  });
+
+  test('scopes a pattern to the inside of a locator', { timeout: 30_000 }, async ({ terminal }) => {
+    const app = await terminal.launch();
+    await app.waitForText('Permission required');
+
+    // No `application` or `dialog` line to restate: the scope is the dialog,
+    // and the pattern is what a reader cares about inside it.
+    await expect(app).toMatchSemanticSnapshot(
+      ['- button "Approve" [focused]', '- button /^Rej/'].join('\n'),
+      { within: app.getByRole('dialog') },
+    );
   });
 
   test('isolates each test with its own directory and session', { timeout: 30_000 }, async ({ terminal, termwright }) => {

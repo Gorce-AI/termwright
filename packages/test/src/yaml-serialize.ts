@@ -31,6 +31,12 @@ export interface SerializeOptions {
   readonly indent?: number;
   /** Serialize this node and its descendants instead of the whole tree. */
   readonly rootId?: string;
+  /**
+   * With `rootId`, whether that node is itself the top level (default) or only
+   * the parent of it — `false` serializes what is *inside* the node, which is
+   * what scoping to a container is normally for.
+   */
+  readonly includeRoot?: boolean;
   /** Drop nodes carrying `state.hidden`. Default false. */
   readonly skipHidden?: boolean;
 }
@@ -80,10 +86,7 @@ export function serializeSemanticSnapshot(
   const indent = options.indent ?? 4;
   const keys = stateKeys(options.states ?? 'stable');
   const children = childIndex(snapshot);
-  const roots =
-    options.rootId === undefined
-      ? snapshot.nodes.filter((node) => snapshot.rootIds.includes(node.id))
-      : snapshot.nodes.filter((node) => node.id === options.rootId);
+  const roots = topLevel(snapshot, children, options.rootId, options.includeRoot);
 
   const lines: string[] = [];
   const emit = (nodes: readonly SemanticNode[], depth: number): void => {
@@ -140,13 +143,23 @@ export function normalizeName(name: string): string {
   return name.replace(/\s+/gu, ' ').trim();
 }
 
-function stateKeys(selection: StateSelection): readonly (keyof SemanticState)[] {
-  if (selection === 'stable') return STABLE_STATE_KEYS;
-  if (selection === 'all') return ALL_STATE_KEYS;
-  return selection;
+/**
+ * The nodes a snapshot starts at: the tree's roots, a named node, or that
+ * node's children when the caller scoped *into* it.
+ */
+export function topLevel(
+  snapshot: SemanticSnapshot,
+  children: ReadonlyMap<string, SemanticNode[]>,
+  rootId: string | undefined,
+  includeRoot = true,
+): readonly SemanticNode[] {
+  if (rootId === undefined) return snapshot.nodes.filter((node) => snapshot.rootIds.includes(node.id));
+  if (!includeRoot) return children.get(rootId) ?? [];
+  return snapshot.nodes.filter((node) => node.id === rootId);
 }
 
-function childIndex(snapshot: SemanticSnapshot): Map<string, SemanticNode[]> {
+/** Indexes nodes by their parent, preserving the order the adapter published. */
+export function childIndex(snapshot: SemanticSnapshot): Map<string, SemanticNode[]> {
   const children = new Map<string, SemanticNode[]>();
   for (const node of snapshot.nodes) {
     if (node.parentId === undefined) continue;
@@ -155,6 +168,12 @@ function childIndex(snapshot: SemanticSnapshot): Map<string, SemanticNode[]> {
     else bucket.push(node);
   }
   return children;
+}
+
+function stateKeys(selection: StateSelection): readonly (keyof SemanticState)[] {
+  if (selection === 'stable') return STABLE_STATE_KEYS;
+  if (selection === 'all') return ALL_STATE_KEYS;
+  return selection;
 }
 
 /**

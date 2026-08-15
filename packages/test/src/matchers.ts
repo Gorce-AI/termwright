@@ -9,11 +9,16 @@
  */
 
 import { expect } from 'vitest';
-import type { Locator, ScreenSnapshot, TerminalHarness } from '@termwright/driver';
+import { parseRef, type Locator, type ScreenSnapshot, type TerminalHarness } from '@termwright/driver';
 import type { SemanticSnapshot, SemanticState } from '@termwright/protocol';
 import { getTermwrightConfig } from './config.js';
 import { serializeScreen, type CellSnapshotOptions } from './cells.js';
-import { serializeSemanticSnapshot, normalizeName, type StateSelection } from './yaml-serialize.js';
+import {
+  serializeSemanticSnapshot,
+  normalizeName,
+  type SerializeOptions,
+  type StateSelection,
+} from './yaml-serialize.js';
 import { parseSemanticSnapshot } from './yaml-pattern.js';
 import { matchSemanticSnapshot } from './yaml-match.js';
 import {
@@ -47,7 +52,17 @@ export interface CellSnapshotMatcherOptions extends PollOptions, CellSnapshotOpt
 
 /** Options for {@link TermwrightMatchers.toMatchSemanticSnapshot}. */
 export interface SemanticSnapshotMatcherOptions extends PollOptions {
-  /** Snapshot this node's subtree instead of the whole tree. */
+  /**
+   * Match the pattern against what is *inside* this locator.
+   *
+   * The node itself is not part of the pattern, so a test can assert a dialog's
+   * contents without restating the application and region nodes above it — the
+   * usual shape for Ink and Textual apps, whose tree is rooted at
+   * `application`. Re-resolved on every attempt, so a re-render that mints new
+   * node ids does not invalidate the scope.
+   */
+  readonly within?: Locator;
+  /** Snapshot this node's subtree, the node included. Mutually exclusive with `within`. */
   readonly rootId?: string;
   /** Which state flags a written snapshot records. Default `stable`. */
   readonly states?: StateSelection;
@@ -242,11 +257,34 @@ async function toMatchSemanticSnapshot(
   options: SemanticSnapshotMatcherOptions = {},
 ): Promise<MatcherResult> {
   const tree = asTreeSource(received, 'toMatchSemanticSnapshot');
-  const serializeOptions = {
-    ...(options.states === undefined ? {} : { states: options.states }),
-    ...(options.rootId === undefined ? {} : { rootId: options.rootId }),
+  if (options.within !== undefined && options.rootId !== undefined) {
+    throw new TypeError('toMatchSemanticSnapshot takes either { within } or { rootId }, not both');
+  }
+  const timeout = options.timeout ?? getTermwrightConfig().timeouts.expect;
+
+  /** Resolves the scope afresh, so a re-render between attempts is harmless. */
+  const scope = async (): Promise<{ rootId?: string; includeRoot?: boolean }> => {
+    if (options.within === undefined) {
+      return options.rootId === undefined ? {} : { rootId: options.rootId };
+    }
+    const target = await options.within.resolve({ timeout });
+    const ref = parseRef(target.ref);
+    if (ref === null || ref.kind !== 'node') {
+      throw new TypeError(
+        `toMatchSemanticSnapshot({ within }) needs a semantic locator, but ` +
+          `${options.within.description} resolved to ${target.ref}, which is a screen region. ` +
+          'Scope with a role or test id published by the adapter.',
+      );
+    }
+    return { rootId: ref.nodeId, includeRoot: false };
   };
-  const serialize = (): string => {
+
+  const view = (scoped: { rootId?: string; includeRoot?: boolean }): SerializeOptions => ({
+    ...(options.states === undefined ? {} : { states: options.states }),
+    ...scoped,
+  });
+
+  const snapshotOf = (): SemanticSnapshot => {
     const snapshot = tree();
     if (snapshot === null) {
       throw new TypeError(
@@ -254,26 +292,44 @@ async function toMatchSemanticSnapshot(
           'Assert with toMatchCellSnapshot, or check that the adapter completed its handshake.',
       );
     }
-    return serializeSemanticSnapshot(snapshot, serializeOptions);
+    return snapshot;
   };
+
   return snapshotAssertion(this, {
     matcher: 'toMatchSemanticSnapshot',
     kind: 'semantic',
     options,
     inline: expected,
+    target:
+      options.within === undefined
+        ? 'semantic tree'
+        : `semantic tree within ${options.within.description}`,
     // `capabilities().semanticTree` is true from the handshake, but the tree
     // itself only becomes observable once a snapshot and its render-commit
     // marker have been paired — a screen wait can land in that gap.
     ready: () => tree() !== null,
-    serialize,
-    compare: (stored) => {
-      const patterns = parseSemanticSnapshot(stored);
+    serialize: async () => {
+      const scoped = await scope();
+      return serializeSemanticSnapshot(snapshotOf(), view(scoped));
+    },
+    compare: async (stored) => {
       const snapshot = tree();
       if (snapshot === null) return { ok: false, actual: '', reason: 'this session published no semantic tree' };
-      const result = matchSemanticSnapshot(patterns, snapshot, {
-        ...(options.rootId === undefined ? {} : { rootId: options.rootId }),
-      });
-      const actual = serializeSemanticSnapshot(snapshot, serializeOptions);
+      const scoped = await scope();
+      const actual = serializeSemanticSnapshot(snapshot, view(scoped));
+
+      // Two comparison modes, by source (CONTRACTS.md §YAML snapshots). A
+      // stored file holds the full serialized tree, so it is compared
+      // strictly: a node or state the app grew must fail, which partial
+      // matching could never do.
+      if (expected === undefined) {
+        return actual.trimEnd() === stored.trimEnd()
+          ? { ok: true, actual }
+          : { ok: false, actual, reason: 'the semantic tree differs from the stored snapshot' };
+      }
+
+      const patterns = parseSemanticSnapshot(stored);
+      const result = matchSemanticSnapshot(patterns, snapshot, scoped);
       if (result.ok) return { ok: true, actual };
       const mismatch = result.mismatch;
       return {
@@ -382,10 +438,13 @@ interface SnapshotAssertion {
   readonly kind: SnapshotKind;
   readonly options: PollOptions;
   readonly inline: string | undefined;
+  /** Subject shown in the failure header. Defaults to the snapshot kind. */
+  readonly target?: string;
   /** Whether the subject can be serialized yet. Absent means always. */
   ready?(): boolean;
-  serialize(): string;
-  compare(stored: string): Comparison;
+  /** Async because a scoped snapshot resolves its locator per attempt. */
+  serialize(): string | Promise<string>;
+  compare(stored: string): Comparison | Promise<Comparison>;
 }
 
 async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): Promise<MatcherResult> {
@@ -405,25 +464,26 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
     await settle(spec, Date.now() + timeout);
     const mode = updateMode(state);
     const place = location ?? snapshotLocation(state, spec.kind, config.snapshotDir);
+    const produced = await spec.serialize();
     if (mode === 'none') {
       return {
         pass: false,
         message: () =>
           `${spec.matcher}: no stored snapshot for ${JSON.stringify(place.key)}.\n` +
           `Run with \`vitest -u\` (or TERMWRIGHT_UPDATE_SNAPSHOTS=missing) to write ${place.file}.\n\n` +
-          spec.serialize(),
+          produced,
       };
     }
-    writeSnapshot(place.file, place.key, spec.serialize());
+    writeSnapshot(place.file, place.key, produced);
     recordAssert({ api: spec.matcher, ok: true, selector: place.key }, testKey(state));
     return { pass: true, message: () => `${spec.matcher}: snapshot written` };
   }
 
   const deadline = Date.now() + timeout;
-  let comparison = spec.compare(stored);
+  let comparison = await spec.compare(stored);
   while (comparison.ok === isNot && Date.now() < deadline) {
     await delay(POLL_INTERVAL_MS);
-    comparison = spec.compare(stored);
+    comparison = await spec.compare(stored);
   }
 
   const mode = updateMode(state);
@@ -451,7 +511,7 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
     message: () =>
       report({
         matcher: spec.matcher,
-        target: spec.kind === 'semantic' ? 'semantic tree' : 'screen',
+        target: spec.target ?? (spec.kind === 'semantic' ? 'semantic tree' : 'screen'),
         isNot: isNot,
         expected: stored.trimEnd(),
         received: comparison.actual.trimEnd(),

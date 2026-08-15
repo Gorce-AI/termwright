@@ -8,7 +8,7 @@
  */
 
 import type { SemanticNode, SemanticSnapshot, SemanticState } from '@termwright/protocol';
-import { describeNode, normalizeName } from './yaml-serialize.js';
+import { childIndex, describeNode, normalizeName, topLevel } from './yaml-serialize.js';
 import type { FlagAssertion, NodePattern } from './yaml-pattern.js';
 
 /** Where and why a snapshot failed to match. */
@@ -31,6 +31,12 @@ export interface SnapshotMatchResult {
 export interface MatchOptions {
   /** Match against this node's subtree instead of the roots. */
   readonly rootId?: string;
+  /**
+   * With `rootId`, whether that node is itself the top level (default) or only
+   * the parent of it — `false` matches the pattern against what is *inside*
+   * the node, which is what `{ within }` scoping means.
+   */
+  readonly includeRoot?: boolean;
   /**
    * Ceiling on node comparisons. Guards the backtracking search against
    * pathological patterns. Default 50 000.
@@ -62,10 +68,7 @@ export function matchSemanticSnapshot(
   options: MatchOptions = {},
 ): SnapshotMatchResult {
   const children = childIndex(snapshot);
-  const roots =
-    options.rootId === undefined
-      ? snapshot.nodes.filter((node) => snapshot.rootIds.includes(node.id))
-      : snapshot.nodes.filter((node) => node.id === options.rootId);
+  const roots = topLevel(snapshot, children, options.rootId, options.includeRoot);
   const state = { budget: options.maxComparisons ?? 50_000 };
   return matchLevel(patterns, roots, children, '', state);
 }
@@ -216,15 +219,4 @@ function score(failure: NodeFailure): number {
   if (failure.reason.startsWith('name')) return 1;
   if (failure.reason.startsWith('flag')) return 2;
   return 3;
-}
-
-function childIndex(snapshot: SemanticSnapshot): Map<string, SemanticNode[]> {
-  const children = new Map<string, SemanticNode[]>();
-  for (const node of snapshot.nodes) {
-    if (node.parentId === undefined) continue;
-    const bucket = children.get(node.parentId);
-    if (bucket === undefined) children.set(node.parentId, [node]);
-    else bucket.push(node);
-  }
-  return children;
 }
