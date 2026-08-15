@@ -136,6 +136,10 @@ The git index is shared between concurrently working agents. Therefore:
    file aside, don't rewind the tree.
 3. Never `--amend` and never rewrite history: check `git log -1` before you
    commit; if HEAD is not yours, that's fine — just commit your paths.
+   Practice notes: `--only` SKIPS untracked files — `git add <new files>`
+   first, then `git commit --only <paths>`. And `git checkout <ref> -- <paths>`
+   writes to the shared INDEX, not just the working tree — check the first
+   column of `git status --short` before committing.
 4. Root files (pnpm-lock.yaml, CONTRACTS.md, workspace config) are committed
    by the coordinator only; report needed changes instead of committing them.
 
