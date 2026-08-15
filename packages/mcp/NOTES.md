@@ -87,9 +87,13 @@ zod enum. `model.ts: SEMANTIC_ROLES` restates it, guarded by
 missing member — if the protocol adds a role. `MCP_LIMITS` in `sessions.ts`
 restates `DEFAULT_LIMITS.maxSessions` for the same reason, without that guard.
 
-**Open:** if the driver re-exported the protocol values it uses (or `mcp` were
-allowed a type-only protocol dependency, as `trace` was granted), both restated
-lists could be deleted. Worth raising with the driver owner.
+**Open:** CHANGELOG-contracts.md (2026-08-15, "mcp landed") now allows this
+package to depend on `@termwright/protocol` for constants and types, which would
+delete both restated lists. Taking it up needs a `pnpm install`, and that rewrites
+the root `pnpm-lock.yaml` — a file outside this package. Left for whoever lands
+the dependency bump; the change here is then `model.ts` re-exporting protocol's
+`SEMANTIC_ROLES` and `sessions.ts` importing `DEFAULT_LIMITS`, with
+`ROLES_ARE_COMPLETE` deleted.
 
 ## Environment handling
 
@@ -107,6 +111,14 @@ driver to accept "replace the environment" semantics.
 **TODO (needs driver):** an explicit `envMode: 'inherit' | 'replace'` on
 `LaunchOptions`, so an agent-facing server can actually withhold the operator's
 environment from an untrusted child.
+
+## The `skill` package is generated, not written
+
+`agent-skill.ts` renders `SKILL.md`, `reference.md` and `agent-context.json` from
+the same zod schemas the tools register, so a parameter that changes changes the
+distributed skill in the same commit. The prose in `SKILL.md` is the only
+hand-written part, and it is deliberately short: what the loop is, how to read a
+snapshot, which revision is which, and what to do per error kind.
 
 ## Screenshots
 

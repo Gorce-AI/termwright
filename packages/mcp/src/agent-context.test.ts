@@ -1,5 +1,9 @@
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildAgentContext, buildUsage } from './agent-context.js';
+import { buildAgentSkill } from './agent-skill.js';
 import { EXIT_CODES, exitCodeFor } from './errors.js';
 import { runCli } from './cli.js';
 import { TOOLS } from './tools.js';
@@ -125,5 +129,45 @@ describe('the CLI', () => {
 describe('usage output', () => {
   it('fits on one screen', () => {
     expect(buildUsage().split('\n').length).toBeLessThanOrEqual(30);
+  });
+});
+
+describe('the agent-skill package', () => {
+  const files = buildAgentSkill();
+
+  it('emits SKILL.md, a reference and the machine-readable context', () => {
+    expect(files.map((file) => file.path)).toEqual(['SKILL.md', 'reference.md', 'agent-context.json']);
+  });
+
+  it('gives SKILL.md the frontmatter a host matches on', () => {
+    const skill = files[0]?.contents ?? '';
+    expect(skill.startsWith('---\nname: termwright\ndescription: ')).toBe(true);
+    expect(skill).toContain('stale-snapshot');
+    expect(skill).toContain('terminal.capture_since');
+  });
+
+  it('documents every tool and its parameters in the reference', () => {
+    const reference = files[1]?.contents ?? '';
+    for (const name of CONTRACT_TOOLS) expect(reference).toContain(`## ${name}`);
+    expect(reference).toContain('`cursor`: integer — revision returned by an earlier snapshot');
+  });
+
+  it('ships the same agent-context the CLI prints', () => {
+    expect(JSON.parse(files[2]?.contents ?? '{}')).toEqual(JSON.parse(JSON.stringify(buildAgentContext())));
+  });
+
+  it('writes the package to a directory on request', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-skill-'));
+    const sink = { out: (): void => {}, err: (): void => {} };
+    expect(await runCli(['skill', '--out', directory], sink)).toBe(EXIT_CODES.ok);
+    expect(await readFile(join(directory, 'SKILL.md'), 'utf8')).toContain('name: termwright');
+    expect(JSON.parse(await readFile(join(directory, 'agent-context.json'), 'utf8')).v).toBe(1);
+  });
+
+  it('prints the package to stdout when no directory is given', async () => {
+    const out: string[] = [];
+    const code = await runCli(['skill'], { out: (text) => out.push(text), err: () => {} });
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(out.join('\n')).toContain('=== SKILL.md');
   });
 });

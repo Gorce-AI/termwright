@@ -117,14 +117,18 @@ termwright-mcp                 # serve over stdio
 termwright-mcp --http --port N # serve Streamable HTTP on /mcp
 termwright-mcp agent-context   # versioned JSON: every tool, param, enum, exit code
 termwright-mcp usage           # one-screen cheat sheet
+termwright-mcp skill --out DIR # emit an agent-skill package (SKILL.md + reference)
 termwright-mcp --json …        # machine-readable errors carrying `kind`
 ```
 
 Exit codes: 0 ok / 1 assertion / 2 usage / 3 no-session / 4 ipc / 5 internal.
 
-`agent-context` is generated from the live zod schemas, so it cannot drift from
-the tools. The umbrella `termwright` CLI imports `buildAgentContext()` and
-`buildUsage()` rather than spawning this binary.
+`agent-context` and the `skill` package are generated from the live zod schemas,
+so neither can drift from the tools. `skill` writes `SKILL.md` (what an agent
+reads), `reference.md` (every tool and parameter) and `agent-context.json`; with
+no `--out` it prints them instead. The umbrella `termwright` CLI imports
+`buildAgentContext()`, `buildUsage()` and `buildAgentSkill()` rather than
+spawning this binary.
 
 ## Testing this package
 

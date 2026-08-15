@@ -18,6 +18,9 @@
 export { buildAgentContext, buildUsage } from './agent-context.js';
 export type { AgentContext, AgentContextTool, JsonSchema } from './agent-context.js';
 
+export { buildAgentSkill, writeAgentSkill } from './agent-skill.js';
+export type { SkillFile } from './agent-skill.js';
+
 export { runCli, main } from './cli.js';
 export type { CliIo } from './cli.js';
 

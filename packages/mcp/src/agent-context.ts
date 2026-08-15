@@ -113,6 +113,7 @@ export function buildUsage(): string {
     '  termwright-mcp --http --port 7333  serve Streamable HTTP on /mcp, multi-session',
     '  termwright-mcp agent-context       versioned JSON: tools, params, enums, exit codes',
     '  termwright-mcp usage               this page',
+    '  termwright-mcp skill --out DIR     emit an agent-skill package (SKILL.md + reference)',
     '  global: --json (machine-readable errors with a kind), --version, --help',
     '',
     'typical loop',

@@ -10,6 +10,7 @@
  * generators it calls rather than spawning this binary.
  */
 import { buildAgentContext, buildUsage } from './agent-context.js';
+import { buildAgentSkill, writeAgentSkill } from './agent-skill.js';
 import { EXIT_CODES, exitCodeFor, toErrorPayload, usageError } from './errors.js';
 import { serveHttp, serveStdio } from './server.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
@@ -26,11 +27,13 @@ const defaultIo: CliIo = {
 };
 
 interface ParsedArgs {
-  readonly command: 'serve' | 'agent-context' | 'usage' | 'help' | 'version';
+  readonly command: 'serve' | 'agent-context' | 'usage' | 'skill' | 'help' | 'version';
   readonly json: boolean;
   readonly http: boolean;
   readonly port: number | undefined;
   readonly host: string | undefined;
+  /** Destination directory for `skill`; without it the package goes to stdout. */
+  readonly out: string | undefined;
 }
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -39,6 +42,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let http = false;
   let port: number | undefined;
   let host: string | undefined;
+  let out: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] ?? '';
@@ -63,6 +67,11 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         if (host === undefined) throw usageError('--host needs a value');
         index += 1;
         break;
+      case '--out':
+        out = argv[index + 1];
+        if (out === undefined) throw usageError('--out needs a directory');
+        index += 1;
+        break;
       case '--help':
       case '-h':
         command = 'help';
@@ -81,6 +90,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case 'usage':
         command = 'usage';
         break;
+      case 'skill':
+        command = 'skill';
+        break;
       default:
         throw usageError(
           `unknown argument ${JSON.stringify(arg)}`,
@@ -88,7 +100,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         );
     }
   }
-  return { command, json, http, port, host };
+  return { command, json, http, port, host, out };
 }
 
 /**
@@ -112,6 +124,20 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo): Pr
       case 'agent-context':
         io.out(JSON.stringify(buildAgentContext(), null, json ? 0 : 2));
         return EXIT_CODES.ok;
+      case 'skill': {
+        if (args.out === undefined) {
+          const files = buildAgentSkill();
+          io.out(
+            json
+              ? JSON.stringify(Object.fromEntries(files.map((file) => [file.path, file.contents])))
+              : files.map((file) => `=== ${file.path}\n${file.contents}`).join('\n'),
+          );
+          return EXIT_CODES.ok;
+        }
+        const written = await writeAgentSkill(args.out);
+        io.out(json ? JSON.stringify({ written }) : written.join('\n'));
+        return EXIT_CODES.ok;
+      }
       case 'serve': {
         if (args.http) {
           const handle = await serveHttp({
