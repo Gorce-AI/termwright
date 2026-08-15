@@ -4,9 +4,19 @@
   "description": "generic/semantic/adversarial fixtures + adapter contract tests",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist", "src/fixtures"],
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/fixtures"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
@@ -16,7 +26,8 @@
   },
   "dependencies": {
     "@termwright/driver": "workspace:*",
-    "@termwright/protocol": "workspace:*"
+    "@termwright/protocol": "workspace:*",
+    "@xterm/headless": "^6.0.0"
   },
   "devDependencies": {
     "@termwright/ink": "workspace:*",
@@ -28,6 +39,8 @@
     "vitest": ">=3.2.0"
   },
   "peerDependenciesMeta": {
-    "vitest": { "optional": true }
+    "vitest": {
+      "optional": true
+    }
   }
 }

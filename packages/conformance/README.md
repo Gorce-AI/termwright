@@ -39,6 +39,23 @@ await runAdapterConformance({
 });
 ```
 
+Two requirements the registration has to respect, because the suite exercises
+the app rather than mocking it: `interaction.input` is sent **more than once**,
+so pick something whose repetition is harmless; and `quit.input` must work from
+**any** state that repetition can reach — a key that quits only while one widget
+has focus is not a quit input.
+
+Pass `requires` to declare the toolchain the adapter needs. When the probe
+fails, the whole registration skips and the reason appears in the block's name,
+exactly as a missing pseudo-terminal does:
+
+```ts
+requires: {
+  probe: ['python3', '-c', 'import termwright, textual'],
+  label: 'python3 with termwright and textual installed',
+},
+```
+
 It checks the five obligations an adapter has:
 
 | Obligation | What is asserted |
@@ -87,16 +104,21 @@ pnpm --filter @termwright/conformance test:hostile    # adversarial suite, 128 M
 ```
 
 ```
-area                        spec     result      tests    time
-generic fallback            §20.1    pass        10/10    2.1s
-semantic matrix             §20.2    pass        12/12    4.6s
-component harness           §20.2a   pass        9/9      3.0s
-hostile peer                §20.3    pass        25/25    14.6s
-interaction                 §20.4    pass        12/12    2.5s
-readiness + env             §5.3     pass        10/10    2.2s
-adapter contract            §7       pass        7/7      1.2s
-hostile peer @ 128 MB heap  §10      pass        25/25    14.7s
+area                        spec     result         tests    time
+generic fallback            §20.1    pass           10/10    2.0s
+semantic matrix             §20.2    pass           12/12    4.5s
+component harness           §20.2a   pass           9/9      3.1s
+hostile peer                §20.3    pass           25/25    14.5s
+interaction                 §20.4    pass           12/12    2.6s
+readiness + env             §5.3     pass           10/10    2.2s
+adapter contract (ink)      §7       pass           7/7      1.3s
+adapter contract (py/go)    §7       pass, 8 skip   6/14     0.6s
+hostile peer @ 128 MB heap  §10      pass           25/25    14.4s
 ```
+
+A partly-skipped area is reported as such rather than as a clean pass: the
+language adapters skip their whole registration when the toolchain is absent,
+and a matrix that hid it would claim coverage the machine never produced.
 
 Sessions launch with the driver's secret-safe `envMode: 'replace'` default, so
 a fixture only sees the documented allowlist plus what a suite declares.

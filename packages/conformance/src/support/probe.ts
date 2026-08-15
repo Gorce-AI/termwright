@@ -10,7 +10,12 @@
  * makes the §4.3 ordering contract (snapshot → commit → marker-after-frame)
  * observable at all.
  *
- * It is not a second driver: it never renders, never locates and never acts.
+ * It does emulate a terminal, because it has to: an adapter is free to draw by
+ * positioning each run of cells (tview does), so the text a user sees exists
+ * only on a rendered grid and never as contiguous bytes on the wire. Waiting
+ * for text therefore reads the grid, while marker offsets read the byte stream.
+ *
+ * It is still not a second driver: it never locates and never acts.
  */
 import { createServer, type Server, type Socket } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -33,6 +38,7 @@ import {
   type AdapterToDriverMessage,
   type HelloAckMessage,
 } from '@termwright/protocol';
+import { Terminal } from '@xterm/headless';
 import { createNodePtyBackend, type PtyProcess } from '@termwright/driver';
 import { environment } from './pty.js';
 
@@ -79,7 +85,10 @@ export interface ProbeObservation {
   readonly faults: readonly RecordedFault[];
   readonly connections: number;
   readonly stdout: Uint8Array;
+  /** Raw bytes decoded as UTF-8: what was written, in order, escapes included. */
   readonly text: string;
+  /** The visible grid, one row per line — what a user would actually see. */
+  readonly screen: string;
 }
 
 const MARKER_PATTERN = /\x1bP(twm;[0-9]+;[A-Za-z0-9_-]+)\x1b\\/gu;
@@ -103,6 +112,7 @@ export class AdapterProbe {
   readonly #server: Server | null;
   readonly #directory: string | null;
   readonly #pty: PtyProcess;
+  readonly #terminal: Terminal;
   readonly #startedAt = performance.now();
   readonly #messages: RecordedMessage[] = [];
   readonly #markers: RecordedMarker[] = [];
@@ -121,12 +131,19 @@ export class AdapterProbe {
     server: Server | null,
     directory: string | null,
     pty: PtyProcess,
+    size: { readonly columns: number; readonly rows: number },
   ) {
     this.sessionId = identity.sessionId;
     this.token = identity.token;
     this.#server = server;
     this.#directory = directory;
     this.#pty = pty;
+    this.#terminal = new Terminal({
+      cols: size.columns,
+      rows: size.rows,
+      allowProposedApi: true,
+      scrollback: 1_000,
+    });
   }
 
   /** Creates the endpoint (unless dormant), then spawns the fixture. */
@@ -170,15 +187,16 @@ export class AdapterProbe {
       env[ENV_PROTOCOL] = String(PROTOCOL_VERSION);
     }
 
+    const size = { columns: options.columns ?? 80, rows: options.rows ?? 24 };
     const pty = createNodePtyBackend().spawn({
       command: command.command,
       ...(command.cwd === undefined ? {} : { cwd: command.cwd }),
       env,
-      columns: options.columns ?? 80,
-      rows: options.rows ?? 24,
+      columns: size.columns,
+      rows: size.rows,
     });
 
-    const probe = new AdapterProbe({ sessionId, token }, server, directory, pty);
+    const probe = new AdapterProbe({ sessionId, token }, server, directory, pty, size);
 
     pty.onData((data) => probe.#onData(data));
     pty.onExit((status) => {
@@ -197,7 +215,18 @@ export class AdapterProbe {
       connections: this.#connections,
       stdout: this.#stdout(),
       text: this.#text,
+      screen: this.screenText(),
     };
+  }
+
+  /** The visible grid as text, trailing whitespace trimmed per row. */
+  screenText(): string {
+    const buffer = this.#terminal.buffer.active;
+    const rows: string[] = [];
+    for (let row = 0; row < this.#terminal.rows; row += 1) {
+      rows.push(buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '');
+    }
+    return rows.join('\n');
   }
 
   /** The child's exit status, or `null` while it is still running. */
@@ -211,15 +240,22 @@ export class AdapterProbe {
     await Promise.resolve();
   }
 
-  /** Resolves once `needle` appears in everything the child has written. */
+  /**
+   * Resolves once `needle` appears on the rendered grid.
+   *
+   * Matching the byte stream instead would only work for adapters that happen
+   * to write their text contiguously: a framework that positions each run of
+   * cells never emits `focus: reject` as those twelve bytes in a row.
+   */
   async waitForText(needle: string | RegExp, timeoutMs = 10_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-      if (needle instanceof RegExp ? needle.test(this.#text) : this.#text.includes(needle)) return;
+      const screen = this.screenText();
+      if (needle instanceof RegExp ? needle.test(screen) : screen.includes(needle)) return;
       if (Date.now() >= deadline) {
         throw new Error(
-          `adapter conformance: ${String(needle)} never appeared in the fixture's output\n` +
-            `last 400 bytes: ${JSON.stringify(this.#text.slice(-400))}`,
+          `adapter conformance: ${String(needle)} never appeared on the fixture's screen\n` +
+            `screen was:\n${screen}`,
         );
       }
       await delay(20);
@@ -258,6 +294,7 @@ export class AdapterProbe {
     this.#stopped = true;
     this.#socket?.destroy();
     this.#pty.dispose();
+    this.#terminal.dispose();
     if (this.#server !== null) await new Promise<void>((resolve) => this.#server?.close(() => resolve()));
     if (this.#directory !== null) await rm(this.#directory, { recursive: true, force: true }).catch(() => {});
   }
@@ -279,6 +316,7 @@ export class AdapterProbe {
     this.#chunks.push(data);
     this.#bytes += data.length;
     this.#text += Buffer.from(data).toString('utf8');
+    this.#terminal.write(data);
     this.#scanMarkers();
   }
 

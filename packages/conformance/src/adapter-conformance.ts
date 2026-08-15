@@ -15,7 +15,7 @@
 import { ADAPTER_CAPABILITIES, validateSnapshot, DEFAULT_LIMITS } from '@termwright/protocol';
 import type { SemanticSnapshot } from '@termwright/protocol';
 import { AdapterProbe, MARKER_TEXT_PREFIX, type AdapterCommand, type ProbeObservation } from './support/probe.js';
-import { ptyAvailable } from './support/pty.js';
+import { commandAvailable, ptyAvailable } from './support/pty.js';
 
 /** How to start, drive and stop the adapter under test. */
 export interface AdapterConformanceOptions {
@@ -32,9 +32,22 @@ export interface AdapterConformanceOptions {
   baseline?(): AdapterCommand;
   /** Text that proves the first frame reached the terminal. */
   readonly ready: string | RegExp;
-  /** An input that changes the screen, and the text that proves it landed. */
+  /**
+   * An input that changes the screen, and the text that proves it landed.
+   *
+   * The suite sends it **more than once** — a dormant run, a run that has to
+   * produce a second revision, and a run after the channel was cut all need a
+   * render. Pick something whose repetition is harmless.
+   */
   readonly interaction: { readonly input: string; readonly expect: string | RegExp };
-  /** An input that makes the application exit, and the status it exits with. */
+  /**
+   * An input that makes the application exit, and the status it exits with.
+   *
+   * It must work from **any** state repeated `interaction` can reach. A key
+   * that quits only while a particular widget has focus is not a quit input:
+   * the tview example's documented `q` types into its text field once focus has
+   * cycled that far, so its registration uses Ctrl+C instead.
+   */
   readonly quit: { readonly input: string; readonly exitCode?: number };
   readonly columns?: number;
   readonly rows?: number;
@@ -42,6 +55,18 @@ export interface AdapterConformanceOptions {
   readonly expectAbsoluteBounds?: boolean;
   /** How long the handshake may take. Default 10 s. */
   readonly timeoutMs?: number;
+  /**
+   * A command that must succeed before this adapter can be certified here —
+   * its interpreter, or a build step that produces the binary `spawn` runs.
+   * When it fails the whole suite skips and the reason is in the block's name,
+   * exactly as a missing pseudo-terminal does.
+   */
+  readonly requires?: {
+    readonly probe: readonly string[];
+    readonly label: string;
+    readonly cwd?: string;
+    readonly timeoutMs?: number;
+  };
 }
 
 const snapshotsOf = (observation: ProbeObservation): SemanticSnapshot[] =>
@@ -73,12 +98,24 @@ const snapshotsOf = (observation: ProbeObservation): SemanticSnapshot[] =>
 export async function runAdapterConformance(options: AdapterConformanceOptions): Promise<void> {
   const { afterAll, beforeAll, describe, expect, it } = await import('vitest');
   const timeout = options.timeoutMs ?? 10_000;
+  const toolchain =
+    options.requires === undefined ||
+    commandAvailable(options.requires.probe, {
+      ...(options.requires.cwd === undefined ? {} : { cwd: options.requires.cwd }),
+      ...(options.requires.timeoutMs === undefined ? {} : { timeoutMs: options.requires.timeoutMs }),
+    });
   const probeOptions = {
     ...(options.columns === undefined ? {} : { columns: options.columns }),
     ...(options.rows === undefined ? {} : { rows: options.rows }),
   };
 
-  describe.skipIf(!ptyAvailable())(`adapter conformance: ${options.name}`, { timeout: timeout * 4 }, () => {
+  const title = !ptyAvailable()
+    ? `adapter conformance: ${options.name} (skipped: no pseudo-terminal here)`
+    : toolchain
+      ? `adapter conformance: ${options.name}`
+      : `adapter conformance: ${options.name} (skipped: ${options.requires?.label ?? 'toolchain'} unavailable)`;
+
+  describe.skipIf(!ptyAvailable() || !toolchain)(title, { timeout: timeout * 4 }, () => {
     describe('the dormant rule', () => {
       it('opens nothing and emits no marker without an endpoint', async () => {
         const probe = await AdapterProbe.start(options.spawn(), { ...probeOptions, instrument: false });

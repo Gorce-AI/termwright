@@ -46,7 +46,8 @@ const SUITES = [
   ['src/suites/adversarial.test.ts', 'hostile peer', '§20.3'],
   ['src/suites/interaction.test.ts', 'interaction', '§20.4'],
   ['src/suites/ready.test.ts', 'readiness + env', '§5.3'],
-  ['src/suites/ink-adapter.test.ts', 'adapter contract', '§7'],
+  ['src/suites/ink-adapter.test.ts', 'adapter contract (ink)', '§7'],
+  ['src/suites/language-adapters.test.ts', 'adapter contract (py/go)', '§7'],
 ];
 
 function run(args) {
@@ -88,7 +89,10 @@ function verdict(entry) {
   if (entry === undefined) return 'not run';
   if (entry.failed > 0) return `FAIL (${entry.failed})`;
   if (entry.passed === 0) return 'skipped';
-  return 'pass';
+  // A partly-skipped area is not a clean pass: the language adapters skip
+  // whole registrations when their toolchain is absent, and a matrix that
+  // hid that would claim coverage this machine never produced.
+  return entry.skipped > 0 ? `pass, ${entry.skipped} skip` : 'pass';
 }
 
 function pad(text, width) {
@@ -122,15 +126,15 @@ rows.push({
 
 const width = Math.max(...rows.map((row) => row.area.length), 4);
 process.stdout.write('\ntermwright conformance matrix\n');
-process.stdout.write(`${'-'.repeat(width + 34)}\n`);
-process.stdout.write(`${pad('area', width)}  ${pad('spec', 7)}  ${pad('result', 10)}  ${pad('tests', 7)}  time\n`);
+process.stdout.write(`${'-'.repeat(width + 37)}\n`);
+process.stdout.write(`${pad('area', width)}  ${pad('spec', 7)}  ${pad('result', 13)}  ${pad('tests', 7)}  time\n`);
 for (const row of rows) {
   process.stdout.write(
-    `${pad(row.area, width)}  ${pad(row.section, 7)}  ${pad(row.verdict, 10)}  ` +
+    `${pad(row.area, width)}  ${pad(row.section, 7)}  ${pad(row.verdict, 13)}  ` +
       `${pad(`${row.passed}/${row.tests}`, 7)}  ${row.seconds}s\n`,
   );
 }
-process.stdout.write(`${'-'.repeat(width + 34)}\n`);
+process.stdout.write(`${'-'.repeat(width + 37)}\n`);
 
 const failed = rows.some((row) => row.verdict.startsWith('FAIL'));
 const skipped = rows.every((row) => row.verdict === 'skipped');

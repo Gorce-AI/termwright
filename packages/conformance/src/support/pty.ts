@@ -7,6 +7,7 @@
  * than fail, because "this machine cannot open a terminal" is not a conformance
  * result. Set `TERMWRIGHT_SKIP_PTY=1` to skip them explicitly.
  */
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +24,14 @@ import { launchTerminal, createNodePtyBackend, type LaunchOptions, type Terminal
  */
 export function fixturePath(name: string): string {
   return join(packageRoot(), 'src', 'fixtures', name);
+}
+
+/**
+ * Absolute path inside the repository, for suites that reach outside this
+ * package — the language clients live in `clients/`, not in `packages/`.
+ */
+export function repositoryPath(...segments: readonly string[]): string {
+  return join(packageRoot(), '..', '..', ...segments);
 }
 
 let cachedRoot: string | null = null;
@@ -150,6 +159,55 @@ export function createSessionPool(): SessionPool {
       }
     },
   };
+}
+
+/**
+ * Whether a toolchain command succeeds here.
+ *
+ * Used to decide, at collection time, whether an adapter written in another
+ * language can be certified on this machine at all. A missing interpreter is
+ * not a conformance result, so the suite skips and says why — the same rule as
+ * a missing pseudo-terminal.
+ *
+ * @param command - argv to run; exit status 0 counts as available.
+ * @returns `false` when the command is missing, fails, or exceeds `timeoutMs`.
+ *
+ * @example
+ * ```ts
+ * commandAvailable(['python3', '-c', 'import textual']);
+ * ```
+ */
+export function commandAvailable(
+  command: readonly string[],
+  options: { readonly cwd?: string; readonly timeoutMs?: number } = {},
+): boolean {
+  const [binary, ...args] = command;
+  if (binary === undefined) return false;
+  const printable = command.join(' ');
+  try {
+    const result = spawnSync(binary, args, {
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      timeout: options.timeoutMs ?? 120_000,
+      encoding: 'utf8',
+      env: environment(),
+    });
+    if (result.status === 0) return true;
+    // A skipped suite has to say *why* it skipped, or a probe that broke looks
+    // exactly like a toolchain that was never installed.
+    const reason =
+      result.error?.message ??
+      (result.signal === null ? `exit ${String(result.status)}` : `signal ${result.signal}`);
+    process.stderr.write(
+      `conformance: probe \`${printable}\` failed (${reason})\n` +
+        `${(result.stderr ?? '').trim().split('\n').slice(-3).join('\n')}\n`,
+    );
+    return false;
+  } catch (error) {
+    process.stderr.write(
+      `conformance: probe \`${printable}\` could not run: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return false;
+  }
 }
 
 /** Catch helper: awaits a rejection and returns the error, typed. */

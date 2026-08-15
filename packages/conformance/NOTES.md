@@ -52,8 +52,28 @@ to be levelled — the two kinds of wait claim different things:
 `ready.test.ts` pins both halves in one test, so anyone tempted to align them
 has to delete an assertion that explains itself.
 
+## Open findings
+
+1. **`clients/README.md` documents a quit key that is state-dependent.** The
+   tview example's table says `q`, exit 0 — true only while focus has not
+   cycled onto the reason field, where `q` types normally (`main.go`:
+   `event.Rune() == 'q' && current != 2`). Since the contract suite sends the
+   interaction more than once, that registration uses Ctrl+C, which tview
+   handles unconditionally. Worth correcting in the clients table, or the next
+   person wiring an adapter up will hit the same ten-second timeout.
+
 ## Deliberate choices
 
+- **The probe emulates a terminal, and matches text on the rendered grid.** It
+  first matched the byte stream, which works only for adapters that write their
+  text contiguously — Ink does, tview does not: it positions each run of cells,
+  so `focus: reject` never appears as those twelve bytes in a row. Marker
+  offsets still read the raw stream, where they belong. Without this, the suite
+  would have silently required adapters to draw the way Ink draws.
+- **The number of interactions is part of the contract.** The suite sends
+  `interaction.input` more than once, so a registration whose quit key only
+  works from the starting state fails ten seconds later with no clue why. Both
+  facts are now stated in the option's TSDoc rather than assumed.
 - **`AdapterProbe` re-implements a minimal driver.** Adapter conformance is
   about wire ordering, which `@termwright/driver` correctly hides. The probe
   parses with the protocol package's own `parseAdapterMessage`, so it validates
