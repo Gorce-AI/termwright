@@ -31,3 +31,15 @@
   tool errors ride in `_meta["io.termwright/error"]` (SDK clients validate
   structuredContent against outputSchema even for isError — documented
   deviation from "structuredContent everywhere").
+- 2026-08-15 (test landed): `test` MAY depend on `@termwright/protocol` at
+  runtime for `SEMANTIC_ROLES`/`SemanticState` (same relaxation as `mcp`; the
+  YAML snapshot parser validates roles and flags against the closed sets
+  instead of forking them). §YAML additions, all backwards compatible with the
+  documented format: `!flag` negates, `flag=value` compares (`checked=mixed`,
+  `level=2`), `'* "Name"'` matches any role (must be quoted — a bare `*` is a
+  YAML alias), listed children must keep their relative order while unlisted
+  siblings are allowed, names are compared whitespace-normalized, and a head
+  containing `#` is emitted single-quoted. Snapshot files live in
+  `__snapshots__/<test file>.tw-{semantic,cells}.yaml`; the `all|changed|
+  missing|none` modes come from `TERMWRIGHT_UPDATE_SNAPSHOTS`, falling back to
+  Vitest's `--update` (`-u` → `changed`, plain run → `missing`).
