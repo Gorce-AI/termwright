@@ -235,6 +235,9 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       fontkit:
         specifier: ^2.0.4
         version: 2.0.4
