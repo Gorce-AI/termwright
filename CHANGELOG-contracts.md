@@ -87,3 +87,19 @@
 - 2026-08-16: task #17 approved — `mcp` MAY depend on `@termwright/trace` for
   trace.* replay tools; new package `@termwright/screenshot` (SVG + resvg PNG,
   no Chromium) owned alongside trace.
+- 2026-08-16 (opentui + umbrella landed): no contract changes; two
+  clarifications adapter authors need. (1) `validateSnapshot`'s DTO projection
+  rejects a snapshot in which **any value is reachable twice** ("value is
+  reachable more than once at $.nodes[N].actions"). A role→actions table that
+  hands out one shared frozen array therefore fails validation as soon as two
+  nodes share a role; every adapter must copy such arrays per node.
+  `@termwright/opentui` does; `@termwright/ink` looks to have the same latent
+  bug, untriggered only because its tests never put two same-role nodes in one
+  snapshot. (2) `maxDepth` bounds the DTO projector's *object nesting*, not just
+  semantic tree depth, so it cannot be tightened below what a snapshot object
+  itself needs (~5) when testing truncation.
+  The umbrella `termwright` CLI adds no taxonomy of its own: it imports
+  `EXIT_CODES` / `exitCodeFor` / `toErrorPayload` / `buildAgentContext` /
+  `buildUsage` / `buildAgentSkill` / `runCli` from `@termwright/mcp`, and
+  `termwright mcp <args>` forwards verbatim. Its one added rule is that a
+  failing test run under `termwright ui` exits 1 (assertion), not 5.
