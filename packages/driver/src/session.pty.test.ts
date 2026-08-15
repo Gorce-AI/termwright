@@ -204,6 +204,149 @@ describe.skipIf(!ptyAvailable())('session events and emulator-side APIs', { time
   });
 });
 
+describe.skipIf(!ptyAvailable())('the child environment', { timeout: 20_000 }, () => {
+  it('does not hand the test runner’s secrets to the child by default', async () => {
+    process.env['TERMWRIGHT_FIXTURE_SECRET'] = 'leaked';
+    try {
+      const terminal = await launch('env-app.mjs');
+      await terminal.waitForText('ENV DONE');
+      const text = terminal.screen().text();
+      expect(text).toContain('ENV TERMWRIGHT_FIXTURE_SECRET=<unset>');
+      // The allowlist keeps what a program needs to run at all.
+      expect(text).toContain('ENV PATH=<set>');
+    } finally {
+      delete process.env['TERMWRIGHT_FIXTURE_SECRET'];
+    }
+  });
+
+  it('passes the whole environment through when asked explicitly', async () => {
+    process.env['TERMWRIGHT_FIXTURE_SECRET'] = 'shared-on-purpose';
+    try {
+      const terminal = await launch('env-app.mjs', { envMode: 'inherit' });
+      await terminal.waitForText('ENV DONE');
+      expect(terminal.screen().text()).toContain('ENV TERMWRIGHT_FIXTURE_SECRET=shared-on-purpose');
+    } finally {
+      delete process.env['TERMWRIGHT_FIXTURE_SECRET'];
+    }
+  });
+
+  it('always passes explicit env entries, in either mode', async () => {
+    const terminal = await launch('env-app.mjs', { env: { TERMWRIGHT_FIXTURE_EXPLICIT: 'yes' } });
+    await terminal.waitForText('ENV DONE');
+    expect(terminal.screen().text()).toContain('ENV TERMWRIGHT_FIXTURE_EXPLICIT=yes');
+  });
+});
+
+describe.skipIf(!ptyAvailable())('waitForReady', { timeout: 20_000 }, () => {
+  it('uses OSC 133 prompt marks when the program emits them', async () => {
+    const terminal = await launch('prompt-app.mjs');
+    await terminal.waitForReady();
+    expect(terminal.screen().text()).toContain('$');
+
+    const strategy = terminal.diagnostics().findLast((entry) => entry.code === 'ready-strategy');
+    expect(strategy?.detail).toContain('shell integration');
+
+    // While a command runs, readiness is false again until D arrives.
+    await terminal.press('x');
+    await terminal.waitForText('working');
+    await terminal.waitForReady();
+    expect(terminal.diagnostics().filter((entry) => entry.code === 'ready-strategy')).toHaveLength(2);
+  });
+
+  it('falls back to a settled screen, and says so', async () => {
+    const terminal = await launch('echo-app.mjs');
+    await terminal.waitForReady();
+
+    const strategy = terminal.diagnostics().findLast((entry) => entry.code === 'ready-strategy');
+    expect(strategy?.detail).toContain('heuristic');
+  });
+
+  it('times out while a command is still running', async () => {
+    const terminal = await launch('scroll-app.mjs', { rows: 8 });
+    await terminal.waitForText('line 1');
+    const error = await terminal
+      .waitForReady({ timeout: 10 })
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('timeout');
+  });
+});
+
+describe.skipIf(!ptyAvailable())('session diagnostics', { timeout: 20_000 }, () => {
+  it('records why a generic session stayed generic, and emits it', async () => {
+    const terminal = await launch('echo-app.mjs', { semanticNegotiationMs: 60 });
+    const events: string[] = [];
+    terminal.events.on('diagnostic', (entry) => events.push(entry.code));
+
+    await terminal.waitForText('READY');
+    await expect
+      .poll(() => terminal.diagnostics().some((entry) => entry.code === 'negotiation-timeout'))
+      .toBe(true);
+
+    const entry = terminal.diagnostics().find((item) => item.code === 'negotiation-timeout');
+    expect(entry?.detail).toContain('generic session');
+    expect(entry?.timeMs).toBeGreaterThanOrEqual(0);
+    expect(events).toContain('negotiation-timeout');
+  });
+
+  it('records the handshake and the advisory revision-commit', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    await terminal.getByTestId('approve').resolve();
+
+    const codes = terminal.diagnostics().map((entry) => entry.code);
+    expect(codes).toContain('adapter-attached');
+    expect(codes).toContain('revision-commit');
+
+    const commit = terminal.diagnostics().find((entry) => entry.code === 'revision-commit');
+    expect(commit?.revision).toBe(1);
+    expect(commit?.detail).toContain('render marker');
+  });
+});
+
+describe.skipIf(!ptyAvailable())('locatorForRef', { timeout: 20_000 }, () => {
+  it('round-trips a semantic ref by identity', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    const approve = await terminal.getByTestId('approve').resolve();
+
+    const locator = terminal.locatorForRef(approve.ref);
+    expect(locator.description).toContain(approve.ref);
+    const again = await locator.resolve();
+    expect(again.ref).toBe(approve.ref);
+    expect(await locator.textContent()).toBe('Approve');
+  });
+
+  it('raises stale-snapshot once the revision it was minted at is gone', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    const reject = await terminal.getByTestId('reject').resolve();
+
+    await terminal.press('Tab');
+    await expect
+      .poll(() => terminal.semanticTree()?.revision ?? 0)
+      .toBeGreaterThan(reject.revision);
+
+    const error = await terminal
+      .locatorForRef(reject.ref)
+      .resolve()
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('stale-snapshot');
+    expect((error as TermwrightError).diagnostics.suggestion).toContain('fresh refs');
+  });
+
+  it('round-trips a grid ref and rejects nonsense', async () => {
+    const terminal = await launch('echo-app.mjs');
+    await terminal.waitForText('READY');
+    const ready = await terminal.getByText('READY').resolve();
+    expect(ready.semantic).toBe(false);
+
+    const again = await terminal.locatorForRef(ready.ref).resolve();
+    expect(again.rect).toEqual(ready.rect);
+
+    const error = await Promise.resolve()
+      .then(() => terminal.locatorForRef('not-a-ref!'))
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('unsupported-action');
+  });
+});
+
 describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_000 }, () => {
   it('sends an SGR mouse report the child can decode', async () => {
     const terminal = await launch('mouse-app.mjs');

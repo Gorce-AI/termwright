@@ -41,6 +41,22 @@ interface MutableModes {
   cursorShape: CursorInfo['shape'] | undefined;
 }
 
+/**
+ * Shell-integration state derived from OSC 133 prompt marks, the de-facto
+ * standard (VS Code, iTerm2, WezTerm, kitty, fish, starship) for telling a
+ * terminal where a prompt begins and when a command finished.
+ */
+export interface ShellIntegration {
+  /** True once the program emitted any OSC 133 mark. */
+  readonly supported: boolean;
+  /** True when the last mark says a prompt is waiting for input. */
+  readonly ready: boolean;
+  /** The last mark seen: `'A'` prompt, `'B'` input, `'C'` command, `'D'` done. */
+  readonly lastMark: string | null;
+  /** Exit status reported by an `OSC 133 ; D ; <code>` mark, when it carried one. */
+  readonly lastExitCode: number | null;
+}
+
 /** A DCS marker payload observed during a write, tagged with its revision. */
 export interface MarkerSighting {
   /** Raw payload between DCS and ST, e.g. `twm;7;AAAA…`. */
@@ -66,6 +82,10 @@ export class VtScreen {
     mouseEncoding: 'default',
     cursorVisible: true,
     cursorShape: undefined,
+  };
+  #shell: { lastMark: string | null; lastExitCode: number | null } = {
+    lastMark: null,
+    lastExitCode: null,
   };
 
   readonly #revisionListeners = new Set<(revision: number) => void>();
@@ -176,6 +196,17 @@ export class VtScreen {
     });
   }
 
+  /** Prompt state as reported by OSC 133, if the program reports it at all. */
+  shellIntegration(): ShellIntegration {
+    return Object.freeze({
+      supported: this.#shell.lastMark !== null,
+      // Anything but a running command means the shell is back at a prompt.
+      ready: this.#shell.lastMark !== null && this.#shell.lastMark !== 'C',
+      lastMark: this.#shell.lastMark,
+      lastExitCode: this.#shell.lastExitCode,
+    });
+  }
+
   /** ANSI serialization of the visible grid (addon-serialize). */
   serializeAnsi(scrollback = 0): string {
     return this.#serialize.serialize({ scrollback });
@@ -242,6 +273,22 @@ export class VtScreen {
       const raw = p[0];
       const style = Array.isArray(raw) ? raw[0] : raw;
       this.#modes.cursorShape = cursorShapeFromDecscusr(style ?? 0);
+      return false;
+    });
+
+    // OSC 133 — shell integration prompt marks. The payload is `A`, `B`, `C`
+    // or `D`, optionally followed by `;`-separated arguments (`D;1` carries an
+    // exit code). Not handled exclusively: the sequence has no visible effect.
+    parser.registerOscHandler(133, (data: string) => {
+      const mark = data[0];
+      if (mark !== undefined && 'ABCD'.includes(mark)) {
+        this.#shell.lastMark = mark;
+        if (mark === 'D') {
+          const argument = data.split(';')[1];
+          const code = argument === undefined ? Number.NaN : Number(argument);
+          this.#shell.lastExitCode = Number.isInteger(code) ? code : null;
+        }
+      }
       return false;
     });
 

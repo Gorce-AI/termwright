@@ -22,6 +22,7 @@ import { randomBytes } from 'node:crypto';
 import {
   ADAPTER_CAPABILITIES,
   ProtocolViolation,
+  type ProtocolViolationCode,
   createFrameDecoder,
   encodeFrame,
   parseAdapterMessage,
@@ -34,6 +35,7 @@ import {
   type ProtocolLimits,
   type SemanticSnapshot,
 } from '@termwright/protocol';
+import type { DiagnosticCode } from './api.js';
 import { ProtocolViolationError } from './errors.js';
 import { tokenMatches } from './internal/token.js';
 
@@ -49,12 +51,20 @@ export interface SemanticAttachment {
 export interface SemanticChannelHooks {
   /** A validated snapshot arrived (not yet paired with a render marker). */
   onSnapshot(snapshot: SemanticSnapshot): void;
-  /** The adapter announced that revision N was committed. */
+  /**
+   * An advisory `revision-commit` arrived.
+   *
+   * Pairing authority is the snapshot plus the DCS render marker (design
+   * §4.3): the marker *is* the commit, because only it is ordered against the
+   * bytes of the render. This message says the adapter believes it committed
+   * revision N; it never publishes a revision on its own, and an adapter that
+   * sends commits without markers publishes nothing.
+   */
   onCommit(revision: number): void;
   /** The handshake completed; the session is semantic from here on. */
   onAttach(attachment: SemanticAttachment): void;
-  /** Non-fatal channel diagnostics (dropped revisions, rejected frames…). */
-  onDiagnostic(message: string): void;
+  /** Non-fatal channel diagnostics (negotiation, disconnects, advisory commits). */
+  onDiagnostic(code: DiagnosticCode, detail: string, revision?: number): void;
   /**
    * The channel failed and was closed; the session stays on its last tree.
    * `@termwright/protocol` fails closed with its own `ProtocolViolation`; the
@@ -78,6 +88,28 @@ const MARKER_CAPABILITY: AdapterCapability = 'render-revisions';
 const CAPABILITY_SET: ReadonlySet<string> = new Set(ADAPTER_CAPABILITIES);
 
 type ErrorCode = ProtocolErrorMessage['code'];
+
+/**
+ * Wire classification of the protocol's machine-readable violation codes.
+ *
+ * The decoder projects a frame body while decoding it, so ceiling breaches
+ * (depth, frame size) surface as thrown violations rather than as a parser
+ * result. Mapping them to `malformed` would tell an adapter author that their
+ * JSON is broken when the real problem is that their tree is too deep, so the
+ * ceilings are classified as `limit-exceeded` here — the same code
+ * `parseAdapterMessage` uses when the identical breach takes the other path.
+ */
+const WIRE_CODE_BY_VIOLATION: Readonly<Partial<Record<ProtocolViolationCode, ErrorCode>>> =
+  Object.freeze({
+    'frame-oversized': 'limit-exceeded',
+    'dto-depth': 'limit-exceeded',
+  });
+
+/** Wire code for a decoder failure; anything not a ceiling breach is malformed. */
+function wireCodeFor(error: unknown): ErrorCode {
+  if (!(error instanceof ProtocolViolation)) return 'malformed';
+  return WIRE_CODE_BY_VIOLATION[error.code] ?? 'malformed';
+}
 
 /**
  * The listening endpoint plus the single attached adapter connection.
@@ -105,7 +137,7 @@ export class SemanticChannel {
     this.#options = options;
     server.on('connection', (socket) => this.#handleConnection(socket));
     server.on('error', (error) => {
-      options.hooks.onDiagnostic(`semantic endpoint error: ${String(error)}`);
+      options.hooks.onDiagnostic('endpoint-error', `semantic endpoint error: ${String(error)}`);
     });
   }
 
@@ -170,7 +202,7 @@ export class SemanticChannel {
         // The protocol decoder is permanently poisoned after any violation, so
         // the connection goes with it rather than resynchronising on an offset
         // an attacker chose.
-        this.#fail(socket, 'malformed', `framing: ${errorDetail(error)}`, violationCode(error));
+        this.#fail(socket, wireCodeFor(error), `framing: ${errorDetail(error)}`, violationCode(error));
         return;
       }
       for (const frame of frames) {
@@ -196,7 +228,7 @@ export class SemanticChannel {
     socket.on('close', () => {
       if (this.#attached === socket) {
         this.#attached = null;
-        this.#options.hooks.onDiagnostic('semantic adapter disconnected');
+        this.#options.hooks.onDiagnostic('adapter-disconnected', 'the semantic adapter disconnected');
       }
     });
   }
@@ -229,6 +261,7 @@ export class SemanticChannel {
     this.#options.hooks.onAttach(this.#attachment);
     if (!markerEnabled) {
       this.#options.hooks.onDiagnostic(
+        'adapter-capability',
         `adapter ${hello.adapter.name} did not announce the '${MARKER_CAPABILITY}' capability: ` +
           'semantic revisions are published on arrival instead of being paired with a render',
       );
@@ -264,7 +297,10 @@ export class SemanticChannel {
         return false;
       case 'get-tree-result':
         // v1 subscribes to pushed snapshots; a response without a request is noise.
-        this.#options.hooks.onDiagnostic('ignoring unsolicited get-tree-result');
+        this.#options.hooks.onDiagnostic(
+          'adapter-capability',
+          'ignoring an unsolicited get-tree-result: this driver subscribes to pushed snapshots',
+        );
         return true;
       default:
         this.#fail(socket, 'malformed', 'unknown message type');
@@ -276,7 +312,7 @@ export class SemanticChannel {
     try {
       socket.write(encodeFrame(message, this.#options.limits.maxFrameBytes));
     } catch (error) {
-      this.#options.hooks.onDiagnostic(`failed to send frame: ${errorDetail(error)}`);
+      this.#options.hooks.onDiagnostic('endpoint-error', `failed to send frame: ${errorDetail(error)}`);
     }
   }
 

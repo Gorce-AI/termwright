@@ -28,10 +28,24 @@ export interface RecordingOptions {
   readonly idleTimeLimit?: number;
 }
 
+/**
+ * How the child's environment is built.
+ *
+ * - `'replace'` (default, secret-safe): only a documented allowlist of
+ *   variables the child genuinely needs (PATH, HOME, LANG, LC_ALL, SHELL,
+ *   TMPDIR, USER, TERM) plus everything in {@link LaunchOptions.env};
+ * - `'inherit'`: the parent's full environment, plus {@link LaunchOptions.env}.
+ *
+ * The termwright handshake variables are injected in both modes.
+ */
+export type EnvMode = 'inherit' | 'replace';
+
 export interface LaunchOptions {
   readonly command: readonly string[];
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
+  /** Defaults to `'replace'`: a test process's secrets are not the child's. */
+  readonly envMode?: EnvMode;
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
   readonly semanticNegotiationMs?: number; // default 250
@@ -60,6 +74,13 @@ export interface TerminalHarness {
   getByTestId(testId: string): Locator;
   /** Textual-style CSS dialect: 'dialog button.primary:focused', '#id'. */
   locator(selector: string): Locator;
+  /**
+   * Rebuilds a locator from a ref minted by {@link ResolvedTarget.ref}
+   * (`'n8@42'` for a semantic node, `'grid:r,c,w,h@7'` for a grid match).
+   * The ref stays bound to its revision: resolving it after that revision was
+   * superseded raises `stale-snapshot`.
+   */
+  locatorForRef(ref: string): Locator;
 
   // Raw input (always through the PTY)
   press(keys: string): Promise<void>; // 'Control+A', 'Escape', 'Enter'
@@ -76,6 +97,12 @@ export interface TerminalHarness {
   waitForRender(opts: { after: number } & WaitOptions): Promise<void>;
   waitForStable(opts?: { frames?: number } & WaitOptions): Promise<void>;
   waitForIdle(opts?: WaitOptions): Promise<void>;
+  /**
+   * Waits until the program is ready for input: shell-integration prompt
+   * marks (OSC 133) when the program emits them, otherwise a settled-screen
+   * heuristic. Which one was used is reported as a `diagnostic` event.
+   */
+  waitForReady(opts?: WaitOptions): Promise<void>;
   waitForExit(opts?: WaitOptions): Promise<ExitStatus>;
   title(): string;
   waitForTitle(text: string | RegExp, opts?: WaitOptions): Promise<void>;
@@ -86,6 +113,13 @@ export interface TerminalHarness {
 
   // Recording / trace hooks (consumed by @termwright/trace and @termwright/ui)
   readonly events: SessionEvents;
+
+  /**
+   * Bounded, oldest-first log of what the session decided behind the scenes:
+   * dropped or superseded revisions, unverified markers, adapter negotiation,
+   * protocol violations. The same entries are emitted as `diagnostic` events.
+   */
+  diagnostics(): readonly SessionDiagnostic[];
 
   /** Idempotent; bounded physical cleanup. Never sends signals implicitly. */
   close(): Promise<void>;
@@ -193,6 +227,9 @@ export interface WaitOptions {
 }
 
 export interface Locator {
+  /** Human-readable form of the query, as it appears in error messages. */
+  readonly description: string;
+
   within(parent: Locator): Locator;
   first(): Locator;
   nth(index: number): Locator;
@@ -248,8 +285,50 @@ export interface SessionEvents {
   on<E extends keyof SessionEventMap>(event: E, cb: (payload: SessionEventMap[E]) => void): () => void;
 }
 
+/**
+ * Closed set of session diagnostic codes. Adding a code is a contract change:
+ * conformance suites assert on them.
+ */
+export type DiagnosticCode =
+  /** No adapter completed the handshake within the negotiation window. */
+  | 'negotiation-timeout'
+  /** An adapter completed the handshake. */
+  | 'adapter-attached'
+  /** The adapter's connection went away. */
+  | 'adapter-disconnected'
+  /** The adapter cannot do something the driver would have used. */
+  | 'adapter-capability'
+  /** An advisory `revision-commit` arrived (pairing still needs the marker). */
+  | 'revision-commit'
+  /** An incomplete revision was dropped because a newer one was published. */
+  | 'revision-superseded'
+  /** Half a revision was dropped because its partner never arrived. */
+  | 'revision-expired'
+  /** A revision was dropped: already published, or too many were in flight. */
+  | 'revision-dropped'
+  /** A DCS marker arrived whose MAC did not verify; ordinary output cannot forge one. */
+  | 'marker-unverified'
+  /** The semantic channel was closed on a protocol violation. */
+  | 'protocol-violation'
+  /** The endpoint itself failed (listen/accept/write). */
+  | 'endpoint-error'
+  /** A `SessionEvents` listener threw; the session continued. */
+  | 'listener-error'
+  /** Which strategy `waitForReady` used, and what it observed. */
+  | 'ready-strategy';
+
+/** One entry of the session diagnostics log. */
+export interface SessionDiagnostic {
+  readonly code: DiagnosticCode;
+  readonly detail: string;
+  /** The semantic revision the entry is about, when it is about one. */
+  readonly revision?: number;
+  readonly timeMs: number;
+}
+
 export interface SessionEventMap {
   output: { readonly data: Uint8Array; readonly timeMs: number };
+  diagnostic: SessionDiagnostic;
   input: { readonly data: Uint8Array; readonly timeMs: number; readonly kind: 'key' | 'mouse' | 'paste' | 'raw' };
   resize: { readonly columns: number; readonly rows: number; readonly timeMs: number };
   'screen-revision': { readonly revision: number; readonly timeMs: number };

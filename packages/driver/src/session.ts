@@ -8,6 +8,9 @@
 import { randomUUID } from 'node:crypto';
 import type {
   CellSnapshot,
+  DiagnosticCode,
+  EnvMode,
+  SessionDiagnostic,
   ExitStatus,
   ErrorDiagnostics,
   LaunchOptions,
@@ -55,7 +58,9 @@ import { SemanticChannel, type SemanticAttachment } from './semantic.js';
 import {
   gridQuery,
   labelQuery,
+  parseRef,
   parseSelector,
+  refQuery,
   roleQuery,
   textMatcher,
   textQuery,
@@ -84,11 +89,17 @@ const TIMEOUT_ENV: Readonly<Record<keyof TimeoutClasses, string>> = Object.freez
 /** Quiet window used by `waitForStable`, per requested frame. */
 const STABLE_FRAME_MS = 50;
 
+/** Quiet window the `waitForReady` fallback treats as "settled into a prompt". */
+const READY_QUIET_MS = 150;
+
 /** Quiet window that counts as idle output. */
 const IDLE_QUIET_MS = 100;
 
 /** How long a half-paired semantic revision is kept before it is dropped. */
 const PAIRING_TIMEOUT_MS = 1_000;
+
+/** Bounded diagnostics log: a flooding adapter cannot grow it without bound. */
+const MAX_DIAGNOSTICS = 200;
 
 /** Upper bound on how long `close()` waits for the child to hang up. */
 const CLOSE_GRACE_MS = 2_000;
@@ -158,7 +169,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   readonly #backend: PtyBackend;
   readonly #token = generateToken();
   readonly #pairing: RevisionPairing;
-  readonly #diagnosticsLog: string[] = [];
+  readonly #diagnosticsLog: SessionDiagnostic[] = [];
   readonly #changeWaiters = new Set<ChangeWaiter>();
   readonly #startedAt = performance.now();
 
@@ -179,7 +190,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   constructor(options: LaunchTerminalOptions) {
     this.#options = options;
     this.timeouts = resolveTimeouts(options.timeouts);
-    this.#emitter = new SessionEventEmitter((error) => this.#diagnostic(`event listener threw: ${String(error)}`));
+    this.#emitter = new SessionEventEmitter((error) =>
+      this.#diagnostic('listener-error', `a session event listener threw: ${String(error)}`),
+    );
     this.events = this.#emitter;
     this.#backend = options.backend ?? createNodePtyBackend();
     this.#vt = new VtScreen({
@@ -191,7 +204,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       maxPending: DEFAULT_LIMITS.maxQueuedFrames,
       pairingTimeoutMs: PAIRING_TIMEOUT_MS,
       onPublish: (paired) => this.#publishSemantic(paired.snapshot),
-      onDiagnostic: (message) => this.#diagnostic(message),
+      onDiagnostic: (code, detail, revision) => this.#diagnostic(code, detail, revision),
     });
     this.exit = new Promise<ExitStatus>((resolve) => {
       this.#resolveExit = resolve;
@@ -209,11 +222,16 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       hooks: {
         onAttach: (attachment) => this.#onAttach(attachment),
         onSnapshot: (snapshot) => this.#pairing.offerSnapshot(snapshot),
-        onCommit: () => {},
-        onDiagnostic: (message) => this.#diagnostic(message),
+        onCommit: (revision) =>
+          this.#diagnostic(
+            'revision-commit',
+            `the adapter reported committing revision ${revision}; pairing still waits for its render marker`,
+            revision,
+          ),
+        onDiagnostic: (code, detail, revision) => this.#diagnostic(code, detail, revision),
         onProtocolViolation: (error) => {
           this.#violation = error;
-          this.#diagnostic(error.message);
+          this.#diagnostic('protocol-violation', error.message);
           this.#settle();
         },
       },
@@ -226,17 +244,16 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#vt.onMarker((marker) => {
       const verified = verifyMarkerPayload(marker.payload, this.#token, this.sessionId);
       if (verified === null) {
-        this.#diagnostic('ignoring a render marker whose MAC did not verify');
+        this.#diagnostic(
+          'marker-unverified',
+          'ignoring a render marker whose MAC did not verify: ordinary output cannot forge one',
+        );
         return;
       }
       this.#pairing.offerMarker(verified.revision, marker.screenRevision);
     });
 
-    const env: Record<string, string> = {};
-    for (const [key, value] of Object.entries(process.env)) {
-      if (value !== undefined) env[key] = value;
-    }
-    Object.assign(env, this.#options.env ?? {});
+    const env = buildChildEnv(this.#options.envMode ?? 'replace', this.#options.env);
     env[ENV_ENDPOINT] = this.#channel.endpoint;
     env[ENV_TOKEN] = this.#token;
     env[ENV_PROTOCOL] = String(PROTOCOL_VERSION);
@@ -260,6 +277,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#negotiationTimer = setTimeout(() => {
       if (this.#attachment === null) {
         this.#diagnostic(
+          'negotiation-timeout',
           `no adapter completed the handshake within ${negotiationMs} ms; continuing as a generic session`,
         );
       }
@@ -334,6 +352,21 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return new LocatorImpl(this, parseSelector(selector));
   }
 
+  locatorForRef(ref: string): Locator {
+    const parsed = parseRef(ref);
+    if (parsed === null) {
+      throw new UnsupportedActionError(
+        `ref ${JSON.stringify(ref)} is not a termwright ref`,
+        this.errorDiagnostics({
+          suggestion: "refs look like 'n8@42' (semantic node) or 'grid:1,2,9,1@7' (grid match)",
+        }),
+      );
+    }
+    // A ref identifies one node, so it is resolved by identity rather than by
+    // re-querying role+name — two buttons with the same name stay distinct.
+    return new LocatorImpl(this, refQuery(parsed));
+  }
+
   // -------------------------------------------------------------------------
   // Input
 
@@ -402,7 +435,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           `text ${text instanceof RegExp ? String(text) : JSON.stringify(text)} never appeared on screen`,
-          this.diagnostics({ suggestion: 'check the screen excerpt below for the text the program actually printed' }),
+          this.errorDiagnostics({ suggestion: 'check the screen excerpt below for the text the program actually printed' }),
         );
       }
       this.#assertAlive('waitForText');
@@ -416,7 +449,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           `no render after revision ${opts.after} (still at ${this.#vt.revision})`,
-          this.diagnostics(),
+          this.errorDiagnostics(),
         );
       }
       this.#assertAlive('waitForRender');
@@ -437,7 +470,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           `the screen never settled for ${quiet} ms`,
-          this.diagnostics({
+          this.errorDiagnostics({
             suggestion: 'raise the timeout, or assert on a concrete locator instead of waiting for silence',
           }),
         );
@@ -453,10 +486,47 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           `the program kept writing output for ${opts?.timeout ?? this.timeouts.idle} ms`,
-          this.diagnostics(),
+          this.errorDiagnostics(),
         );
       }
       await this.waitForChange(Math.min(deadline, Date.now() + (IDLE_QUIET_MS - since)));
+    }
+  }
+
+  async waitForReady(opts?: WaitOptions): Promise<void> {
+    this.assertOpen();
+    const deadline = Date.now() + (opts?.timeout ?? this.timeouts.ready);
+    for (;;) {
+      const shell = this.#vt.shellIntegration();
+      if (shell.supported) {
+        if (shell.ready) {
+          this.#diagnostic(
+            'ready-strategy',
+            `ready from shell integration: last OSC 133 mark was ${String(shell.lastMark)}`,
+          );
+          return;
+        }
+      } else if (Date.now() - this.#lastOutputAt >= READY_QUIET_MS && this.#vt.revision > 0) {
+        // No shell integration: the honest fallback is "the program stopped
+        // writing", which is a heuristic and is reported as one.
+        this.#diagnostic(
+          'ready-strategy',
+          `ready from the settled-screen heuristic: no output for ${READY_QUIET_MS} ms and no OSC 133 marks were seen`,
+        );
+        return;
+      }
+      if (Date.now() >= deadline) {
+        throw new TimeoutError(
+          shell.supported
+            ? `the shell reported a running command (last OSC 133 mark ${String(shell.lastMark)}) and never returned to a prompt`
+            : `the program never settled into a prompt within ${opts?.timeout ?? this.timeouts.ready} ms`,
+          this.errorDiagnostics({
+            suggestion: 'wait for a concrete locator or text instead, or raise the ready timeout',
+          }),
+        );
+      }
+      this.#assertAlive('waitForReady');
+      await this.waitForChange(Math.min(deadline, Date.now() + READY_QUIET_MS));
     }
   }
 
@@ -468,7 +538,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           `the program was still running after ${opts?.timeout ?? this.timeouts.exit} ms`,
-          this.diagnostics({ suggestion: 'send signal("INT") or signal("TERM") before awaiting exit' }),
+          this.errorDiagnostics({ suggestion: 'send signal("INT") or signal("TERM") before awaiting exit' }),
         );
       }
       await this.waitForChange(deadline);
@@ -488,7 +558,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           `the window title never matched (last title: ${JSON.stringify(title)})`,
-          this.diagnostics(),
+          this.errorDiagnostics(),
         );
       }
       this.#assertAlive('waitForTitle');
@@ -556,7 +626,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     if (this.#exitStatus !== null) {
       throw new ProcessExitedError(
         `cannot send input: the program exited with code ${String(this.#exitStatus.code)}`,
-        this.diagnostics(),
+        this.errorDiagnostics(),
       );
     }
     this.#pty?.write(data);
@@ -564,7 +634,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     await Promise.resolve();
   }
 
-  diagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics {
+  /** Public, bounded diagnostics log (oldest first). */
+  diagnostics(): readonly SessionDiagnostic[] {
+    return Object.freeze([...this.#diagnosticsLog]);
+  }
+
+  errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics {
     return {
       semanticTree: this.#attachment !== null,
       screenExcerpt: screenExcerpt(this.#vt),
@@ -612,13 +687,28 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return performance.now() - this.#startedAt;
   }
 
-  #diagnostic(message: string): void {
-    this.#diagnosticsLog.push(message);
-    if (this.#diagnosticsLog.length > 200) this.#diagnosticsLog.shift();
+  /**
+   * Records one diagnostic and publishes it. The log is bounded and
+   * oldest-first: a flooding adapter cannot grow it without bound.
+   */
+  #diagnostic(code: DiagnosticCode, detail: string, revision?: number): void {
+    const entry: SessionDiagnostic = {
+      code,
+      detail,
+      ...(revision !== undefined ? { revision } : {}),
+      timeMs: this.#now(),
+    };
+    this.#diagnosticsLog.push(Object.freeze(entry));
+    if (this.#diagnosticsLog.length > MAX_DIAGNOSTICS) this.#diagnosticsLog.shift();
+    this.#emitter.emit('diagnostic', entry);
   }
 
   #onAttach(attachment: SemanticAttachment): void {
     this.#attachment = attachment;
+    this.#diagnostic(
+      'adapter-attached',
+      `adapter ${attachment.adapter.name}@${attachment.adapter.version} attached with capabilities [${attachment.capabilities.join(', ')}]`,
+    );
     this.#pairing.setMarkerEnabled(attachment.markerEnabled);
     this.#settle();
   }
@@ -655,7 +745,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     throw new ProcessExitedError(
       `${operation} cannot make progress: the program exited with code ${String(this.#exitStatus.code)}` +
         (this.#exitStatus.signal === null ? '' : ` (signal ${this.#exitStatus.signal})`),
-      this.diagnostics(),
+      this.errorDiagnostics(),
     );
   }
 
@@ -667,7 +757,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     if (!this.modes().focusReporting) {
       throw new UnsupportedActionError(
         `the program has not enabled focus reporting, so ${focused ? 'focus' : 'blur'}() has nothing to deliver`,
-        this.diagnostics({ suggestion: 'the application under test must enable CSI ? 1004 h' }),
+        this.errorDiagnostics({ suggestion: 'the application under test must enable CSI ? 1004 h' }),
       );
     }
     await this.sendInput(encodeFocus(focused), 'raw');
@@ -705,7 +795,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         if (from < floor) {
           throw new HistoryTruncatedError(
             `scrollback line ${from} was evicted; the oldest retained line is ${floor}`,
-            session.diagnostics({ suggestion: 'raise scrollbackLines when launching the session' }),
+            session.errorDiagnostics({ suggestion: 'raise scrollbackLines when launching the session' }),
           );
         }
         const lines: string[] = [];
@@ -764,6 +854,31 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       },
     });
   }
+}
+
+/**
+ * Variables a child genuinely needs to run under `envMode: 'replace'`.
+ * Deliberately short: the tokens, cloud credentials and CI secrets sitting in a
+ * test runner's environment are not the application under test's business.
+ * Kept in sync with `@termwright/mcp`, which applies the same allowlist.
+ */
+const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'SHELL', 'TMPDIR', 'USER', 'TERM'] as const;
+
+/** Builds the child environment; the handshake variables are added afterwards. */
+function buildChildEnv(mode: EnvMode, overrides: Readonly<Record<string, string>> | undefined): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (mode === 'inherit') {
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined) env[key] = value;
+    }
+  } else {
+    for (const key of SAFE_ENV_KEYS) {
+      const value = process.env[key];
+      if (value !== undefined) env[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(overrides ?? {})) env[key] = value;
+  return env;
 }
 
 function delay(ms: number): Promise<void> {

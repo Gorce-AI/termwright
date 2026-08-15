@@ -22,6 +22,8 @@ export type {
   CellAttributes,
   CellColor,
   CellSnapshot,
+  DiagnosticCode,
+  EnvMode,
   ErrorDiagnostics,
   ExitStatus,
   LaunchOptions,
@@ -34,6 +36,7 @@ export type {
   ScrollbackApi,
   SelectionApi,
   SessionCapabilities,
+  SessionDiagnostic,
   SessionEventMap,
   SessionEvents,
   TerminalHarness,
@@ -71,10 +74,13 @@ export {
 export { encodeKeys, encodePaste, encodeText, type KeyEncodingModes } from './keys.js';
 export { encodeMouse, type MouseButton, type MouseEvent } from './mouse.js';
 export {
+  parseRef,
   parseSelector,
   textMatcher,
   type GenericQuery,
   type LocatorQuery,
+  type ParsedRef,
+  type RefQuery,
   type SemanticQuery,
   type SemanticStep,
   type StylePredicates,

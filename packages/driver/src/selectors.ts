@@ -9,7 +9,7 @@
  *   exists (or when style predicates are requested), yielding rectangles and
  *   never inventing roles.
  */
-import type { SemanticRole, SemanticState } from '@termwright/protocol';
+import type { Rect, SemanticRole, SemanticState } from '@termwright/protocol';
 import type { CellAttributes } from './api.js';
 import { UnsupportedActionError } from './errors.js';
 
@@ -57,8 +57,64 @@ export interface GenericQuery {
   readonly description: string;
 }
 
+/** A ref parsed back into the thing it identifies. */
+export type ParsedRef =
+  | { readonly kind: 'node'; readonly nodeId: string; readonly revision: number }
+  | { readonly kind: 'rect'; readonly rect: Rect; readonly revision: number };
+
+/**
+ * A query that names one already-identified target. Unlike a re-query by role
+ * and name, a ref stays unambiguous when two nodes look alike.
+ */
+export interface RefQuery {
+  readonly kind: 'ref';
+  readonly ref: ParsedRef;
+  readonly description: string;
+}
+
 /** Anything a {@link Locator} can be built from. */
-export type LocatorQuery = SemanticQuery | GenericQuery;
+export type LocatorQuery = SemanticQuery | GenericQuery | RefQuery;
+
+/** Matches `grid:{row},{column},{width},{height}@{screenRevision}`. */
+const GRID_REF = /^grid:(\d+),(\d+),(\d+),(\d+)@(\d+)$/u;
+
+/** Matches `{nodeId}@{semanticRevision}`; node ids never contain '@'. */
+const NODE_REF = /^([^@\s]+)@(\d+)$/u;
+
+/**
+ * Parses a ref minted by `ResolvedTarget.ref`. Returns `null` for anything
+ * that is not a ref — callers turn that into a typed error with context.
+ */
+export function parseRef(ref: string): ParsedRef | null {
+  const grid = GRID_REF.exec(ref);
+  if (grid !== null) {
+    const [, row, column, width, height, revision] = grid;
+    return {
+      kind: 'rect',
+      rect: Object.freeze({
+        row: Number(row),
+        column: Number(column),
+        width: Number(width),
+        height: Number(height),
+      }),
+      revision: Number(revision),
+    };
+  }
+  const node = NODE_REF.exec(ref);
+  if (node === null) return null;
+  const [, nodeId, revision] = node;
+  if (nodeId === undefined || nodeId.startsWith('grid:')) return null;
+  return { kind: 'node', nodeId, revision: Number(revision) };
+}
+
+/** Builds the query behind `locatorForRef`. */
+export function refQuery(ref: ParsedRef): RefQuery {
+  const description =
+    ref.kind === 'node'
+      ? `locatorForRef(${JSON.stringify(`${ref.nodeId}@${ref.revision}`)})`
+      : `locatorForRef(${JSON.stringify(`grid:${ref.rect.row},${ref.rect.column},${ref.rect.width},${ref.rect.height}@${ref.revision}`)})`;
+  return { kind: 'ref', ref, description };
+}
 
 const ROLES: ReadonlySet<string> = new Set<SemanticRole>([
   'application',

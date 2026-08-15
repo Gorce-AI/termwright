@@ -13,6 +13,7 @@
  * diagnostic rather than silently forgetting it.
  */
 import type { SemanticSnapshot } from '@termwright/protocol';
+import type { DiagnosticCode } from './api.js';
 
 /** A published, fully paired revision. */
 export interface PairedRevision {
@@ -28,7 +29,7 @@ export interface PairingOptions {
   /** Publishes a fully paired revision. */
   onPublish(paired: PairedRevision): void;
   /** Reports dropped, superseded or expired halves. */
-  onDiagnostic(message: string): void;
+  onDiagnostic(code: DiagnosticCode, detail: string, revision: number): void;
 }
 
 interface PendingSnapshot {
@@ -83,7 +84,9 @@ export class RevisionPairing {
     if (this.#disposed) return;
     if (snapshot.revision <= this.revision) {
       this.#options.onDiagnostic(
+        'revision-dropped',
         `dropping semantic revision ${snapshot.revision}: revision ${this.revision} is already published`,
+        snapshot.revision,
       );
       return;
     }
@@ -109,7 +112,9 @@ export class RevisionPairing {
     if (this.#disposed) return;
     if (revision <= this.revision) {
       this.#options.onDiagnostic(
+        'revision-dropped',
         `dropping render marker ${revision}: revision ${this.revision} is already published`,
+        revision,
       );
       return;
     }
@@ -148,7 +153,9 @@ export class RevisionPairing {
       clearTimeout(pending.timer);
       this.#snapshots.delete(pendingRevision);
       this.#options.onDiagnostic(
+        'revision-superseded',
         `semantic revision ${pendingRevision} superseded by ${revision} before its render marker arrived`,
+        pendingRevision,
       );
     }
     for (const [pendingRevision, marker] of this.#markers) {
@@ -156,7 +163,9 @@ export class RevisionPairing {
       clearTimeout(marker.timer);
       this.#markers.delete(pendingRevision);
       this.#options.onDiagnostic(
+        'revision-superseded',
         `render marker ${pendingRevision} superseded by ${revision} before its tree arrived`,
+        pendingRevision,
       );
     }
   }
@@ -170,7 +179,9 @@ export class RevisionPairing {
       if (evicted !== undefined) clearTimeout((evicted as { timer: NodeJS.Timeout }).timer);
       store.delete(oldest.value);
       this.#options.onDiagnostic(
+        'revision-dropped',
         `dropped pending ${half} for revision ${oldest.value}: more than ${this.#options.maxPending} revisions in flight`,
+        oldest.value,
       );
     }
   }
@@ -180,7 +191,9 @@ export class RevisionPairing {
       const store = half === 'tree' ? this.#snapshots : this.#markers;
       if (!store.delete(revision)) return;
       this.#options.onDiagnostic(
+        'revision-expired',
         `revision ${revision} dropped: its ${half === 'tree' ? 'render marker' : 'tree'} did not arrive within ${this.#options.pairingTimeoutMs} ms`,
+        revision,
       );
     }, this.#options.pairingTimeoutMs);
     timer.unref?.();

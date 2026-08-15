@@ -49,6 +49,10 @@ if (terminal.capabilities().semanticTree) {
   await terminal.locator('dialog button#reject').click();
 }
 
+// A ref can be turned back into a locator; it stays bound to its revision.
+const target = await terminal.getByRole('button').first().resolve();
+await terminal.locatorForRef(target.ref).click();
+
 // Keyboard, paste and resize honor the modes the child actually enabled.
 await terminal.press('Control+K Control+U');
 await terminal.paste('multi\nline');
@@ -87,6 +91,30 @@ await terminal.close();
 - **Dormant by default.** The endpoint and token are injected as
   `TERMWRIGHT_ENDPOINT` / `TERMWRIGHT_TOKEN` / `TERMWRIGHT_PROTOCOL`; without
   them a conforming adapter opens nothing and the run is byte-identical.
+
+## The child's environment
+
+`envMode` defaults to `'replace'`: the child gets `PATH`, `HOME`, `LANG`,
+`LC_ALL`, `SHELL`, `TMPDIR`, `USER`, `TERM`, whatever you pass in `env`, and the
+termwright handshake variables — nothing else. The tokens and cloud credentials
+in a test runner's environment are not the application under test's business.
+Pass `envMode: 'inherit'` when the program really needs the full environment.
+
+## Waiting for a prompt
+
+`waitForReady()` prefers OSC 133 shell-integration marks (`A` prompt start,
+`B` input start, `C` command start, `D` finished) — the same marks VS Code,
+iTerm2, WezTerm and fish already emit. When a program emits none, it falls back
+to "the screen settled", which is a heuristic and is reported as one: every call
+records a `ready-strategy` entry saying which path it took.
+
+## Diagnostics
+
+`terminal.diagnostics()` returns the bounded, oldest-first log of what the
+session decided on its own — negotiation timeouts, superseded or expired
+revisions, unverified markers, advisory `revision-commit` messages, protocol
+violations. The same entries arrive live as `diagnostic` session events, so a
+conformance suite can assert on failure modes directly instead of inferring them.
 
 ## Timeout classes
 

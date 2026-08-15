@@ -21,7 +21,7 @@ function createPairing(markerEnabled = true) {
     maxPending: 3,
     pairingTimeoutMs: 50,
     onPublish: (paired) => published.push(paired),
-    onDiagnostic: (message) => diagnostics.push(message),
+    onDiagnostic: (code, detail, revision) => diagnostics.push(`${code} r${revision}: ${detail}`),
   });
   pairing.setMarkerEnabled(markerEnabled);
   return { pairing, published, diagnostics };

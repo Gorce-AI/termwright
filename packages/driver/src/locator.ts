@@ -30,7 +30,7 @@ import { encodeKeys, encodeText } from './keys.js';
 import { concatBytes, encodeMouse, type MouseButton, type MouseEvent } from './mouse.js';
 import { matchGrid, matchSemantic, textInRect, type SemanticIndex } from './matching.js';
 import type { CapturedRow } from './screen.js';
-import type { GenericQuery, LocatorQuery, SemanticQuery } from './selectors.js';
+import type { GenericQuery, LocatorQuery, RefQuery, SemanticQuery } from './selectors.js';
 
 /** Everything a locator needs from its session. */
 export interface LocatorContext {
@@ -49,7 +49,7 @@ export interface LocatorContext {
   /** Resolves when a screen or semantic revision is published, or the deadline passes. */
   waitForChange(deadline: number): Promise<void>;
   sendInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): Promise<void>;
-  diagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics;
+  errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics;
   assertOpen(): void;
 }
 
@@ -145,7 +145,7 @@ export class LocatorImpl implements Locator {
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           `locator ${this.description} matched ${matches.length} nodes; expected exactly one`,
-          this.#ctx.diagnostics({
+          this.#ctx.errorDiagnostics({
             candidates: matches.slice(0, MAX_CANDIDATES),
             suggestion:
               matches.length === 0
@@ -175,7 +175,7 @@ export class LocatorImpl implements Locator {
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           `locator ${this.description} did not become ${wanted} in time`,
-          this.#ctx.diagnostics({ candidates: matches.slice(0, MAX_CANDIDATES) }),
+          this.#ctx.errorDiagnostics({ candidates: matches.slice(0, MAX_CANDIDATES) }),
         );
       }
       await this.#ctx.waitForChange(deadline);
@@ -234,7 +234,7 @@ export class LocatorImpl implements Locator {
 
   async dragTo(target: Locator, opts?: WaitOptions): Promise<void> {
     if (!(target instanceof LocatorImpl)) {
-      throw new UnsupportedActionError('dragTo() requires a locator created by this harness', this.#ctx.diagnostics());
+      throw new UnsupportedActionError('dragTo() requires a locator created by this harness', this.#ctx.errorDiagnostics());
     }
     const from = this.#center(await this.#actionTarget('dragTo', opts));
     const to = this.#center(await target.#actionTarget('dragTo', opts));
@@ -305,7 +305,7 @@ export class LocatorImpl implements Locator {
 
     throw new UnsupportedActionError(
       `activate() cannot reach ${this.description}: the node is not focused and mouse input is unavailable`,
-      this.#ctx.diagnostics({
+      this.#ctx.errorDiagnostics({
         candidates: [target],
         suggestion:
           'move focus with press() first, or run the application under test with mouse reporting enabled',
@@ -351,20 +351,20 @@ export class LocatorImpl implements Locator {
       if (node.state?.disabled === true) {
         throw new UnsupportedActionError(
           `${action}() refused: ${this.description} is disabled`,
-          this.#ctx.diagnostics({ candidates: [target] }),
+          this.#ctx.errorDiagnostics({ candidates: [target] }),
         );
       }
       if (node.state?.hidden === true) {
         throw new UnsupportedActionError(
           `${action}() refused: ${this.description} is hidden`,
-          this.#ctx.diagnostics({ candidates: [target] }),
+          this.#ctx.errorDiagnostics({ candidates: [target] }),
         );
       }
     }
     if (target.rect === null && needsBounds) {
       throw new UnsupportedActionError(
         `${action}() needs bounds, but ${this.description} was published without them`,
-        this.#ctx.diagnostics({
+        this.#ctx.errorDiagnostics({
           candidates: [target],
           suggestion:
             'the adapter did not announce the bounds capability; drive this node with press()/type() instead',
@@ -374,7 +374,7 @@ export class LocatorImpl implements Locator {
     if (target.rect !== null && !this.#inViewport(target.rect)) {
       throw new UnsupportedActionError(
         `${action}() refused: ${this.description} lies outside the viewport`,
-        this.#ctx.diagnostics({ candidates: [target] }),
+        this.#ctx.errorDiagnostics({ candidates: [target] }),
       );
     }
     return target;
@@ -391,7 +391,7 @@ export class LocatorImpl implements Locator {
     if (node.state?.disabled === true) {
       throw new UnsupportedActionError(
         `${action}() refused: ${this.description} is disabled`,
-        this.#ctx.diagnostics({ candidates: [target] }),
+        this.#ctx.errorDiagnostics({ candidates: [target] }),
       );
     }
     if (this.#ctx.modes().mouseTracking !== 'none' && target.rect !== null) {
@@ -400,7 +400,7 @@ export class LocatorImpl implements Locator {
     }
     throw new UnsupportedActionError(
       `${action}() refused: ${this.description} is not focused and cannot be focused physically`,
-      this.#ctx.diagnostics({
+      this.#ctx.errorDiagnostics({
         candidates: [target],
         suggestion: 'move focus with harness.press() (Tab, arrows) before typing into this node',
       }),
@@ -412,7 +412,7 @@ export class LocatorImpl implements Locator {
     if (rect === null) {
       throw new UnsupportedActionError(
         `${this.description} has no bounds, so it has no clickable cell`,
-        this.#ctx.diagnostics({ candidates: [target] }),
+        this.#ctx.errorDiagnostics({ candidates: [target] }),
       );
     }
     if (position !== undefined) {
@@ -449,7 +449,7 @@ export class LocatorImpl implements Locator {
     if (node === undefined) {
       throw new StaleSnapshotError(
         `ref ${target.ref} no longer exists at semantic revision ${this.#ctx.semanticRevision()}`,
-        this.#ctx.diagnostics({
+        this.#ctx.errorDiagnostics({
           suggestion: 're-resolve the locator; refs are bound to the revision they were taken at',
         }),
       );
@@ -466,7 +466,59 @@ export class LocatorImpl implements Locator {
 
   #evaluate(scope: ResolvedTarget | null): ResolvedTarget[] {
     if (this.#query.kind === 'semantic') return this.#evaluateSemantic(this.#query, scope);
+    if (this.#query.kind === 'ref') return this.#evaluateRef(this.#query);
     return this.#evaluateGeneric(this.#query, scope);
+  }
+
+  /**
+   * Resolves a ref by identity. A ref is bound to the revision it was minted
+   * at, so a moved-on screen is a stale-snapshot error rather than a silent
+   * re-query that might land on a different node.
+   */
+  #evaluateRef(query: RefQuery): ResolvedTarget[] {
+    const ref = query.ref;
+    if (ref.kind === 'rect') {
+      const live = this.#ctx.screenRevision();
+      if (live !== ref.revision) {
+        throw new StaleSnapshotError(
+          `${query.description} was minted at screen revision ${ref.revision}; the live revision is ${live}`,
+          this.#ctx.errorDiagnostics({
+            suggestion: 'take a fresh screen() snapshot and use the refs it mints',
+          }),
+        );
+      }
+      return [rectTarget(ref.rect, live)];
+    }
+
+    const index = this.#ctx.semanticIndex();
+    if (index === null) {
+      const violation = this.#ctx.semanticViolation();
+      if (violation !== null) throw violation;
+      if (this.#ctx.semanticAttached()) return [];
+      throw new UnsupportedActionError(
+        `${query.description} needs a semantic tree, but this session has none`,
+        this.#ctx.errorDiagnostics({
+          suggestion: 'target by text or by grid coordinates in a generic session',
+        }),
+      );
+    }
+    const live = index.snapshot.revision;
+    if (live !== ref.revision) {
+      throw new StaleSnapshotError(
+        `${query.description} was minted at semantic revision ${ref.revision}; the live revision is ${live}`,
+        this.#ctx.errorDiagnostics({
+          suggestion: 're-read semanticTree() or re-resolve the locator and use the fresh refs',
+        }),
+      );
+    }
+    const node = index.node(ref.nodeId);
+    if (node === undefined) {
+      throw new StaleSnapshotError(
+        `${query.description} no longer exists at semantic revision ${live}`,
+        this.#ctx.errorDiagnostics({ suggestion: 're-resolve the locator and use the fresh refs' }),
+      );
+    }
+    return [nodeTarget(node, live)];
   }
 
   #evaluateSemantic(query: SemanticQuery, scope: ResolvedTarget | null): ResolvedTarget[] {
@@ -481,7 +533,7 @@ export class LocatorImpl implements Locator {
       if (this.#ctx.semanticAttached()) return [];
       throw new UnsupportedActionError(
         `locator ${this.description} needs a semantic tree, but this session has none`,
-        this.#ctx.diagnostics({
+        this.#ctx.errorDiagnostics({
           suggestion:
             'use getByText()/screen() for uninstrumented programs, or run one that ships a termwright adapter',
         }),
@@ -490,7 +542,7 @@ export class LocatorImpl implements Locator {
     if (scope !== null && !scope.semantic) {
       throw new UnsupportedActionError(
         `within() cannot scope a semantic locator to a grid match`,
-        this.#ctx.diagnostics(),
+        this.#ctx.errorDiagnostics(),
       );
     }
     const scopeId = scope === null ? undefined : (scope.ref.split('@')[0] ?? undefined);
@@ -512,7 +564,7 @@ export class LocatorImpl implements Locator {
       throw new AmbiguousLocatorError(
         `locator ${this.description} matched ${matches.length} nodes in strict mode`,
         matches.slice(0, MAX_CANDIDATES),
-        this.#ctx.diagnostics({
+        this.#ctx.errorDiagnostics({
           suggestion: 'narrow the locator with within(), a name option, or select one with first()/nth()',
         }),
       );

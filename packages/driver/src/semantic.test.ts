@@ -43,7 +43,7 @@ async function createChannel(): Promise<Harness> {
       onSnapshot: (snapshot) => snapshots.push(snapshot),
       onCommit: () => {},
       onAttach: (attachment) => attachments.push(attachment),
-      onDiagnostic: (message) => diagnostics.push(message),
+      onDiagnostic: (code, detail) => diagnostics.push(`${code}: ${detail}`),
       onProtocolViolation: (error) => violations.push(error),
     },
   });
@@ -214,8 +214,10 @@ describe('SemanticChannel', () => {
     header.writeUInt32BE(DEFAULT_LIMITS.maxFrameBytes + 1, 0);
     client.sendRaw(header);
 
+    // A ceiling breach is 'limit-exceeded', not 'malformed': an adapter author
+    // must be able to tell "your frame is too big" from "your JSON is broken".
     const error = await client.next();
-    expect(error['code']).toBe('malformed');
+    expect(error['code']).toBe('limit-exceeded');
     await client.closed;
     expect(harness.violations.map((error) => error.message).join('\n')).toMatch(/framing/u);
 
