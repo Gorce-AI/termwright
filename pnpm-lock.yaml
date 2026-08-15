@@ -238,6 +238,13 @@ importers:
       fontkit:
         specifier: ^2.0.4
         version: 2.0.4
+    devDependencies:
+      '@types/fontkit':
+        specifier: ^2.0.9
+        version: 2.0.9
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(yaml@2.9.0)
 
   packages/termwright-cli:
     dependencies:
@@ -1591,6 +1598,9 @@ packages:
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
+
+  '@types/fontkit@2.0.9':
+    resolution: {integrity: sha512-qNYerFky3muCmZPq+R+B3cUDRA5OONw/oh6aGGFxx2LOBz6yu8eamKusrhkHnC6rc2fm76+G9z9QoWSB2SaQaw==}
 
   '@types/hast@3.0.5':
     resolution: {integrity: sha512-rp/ezSWaD1m44dPKICGhiskI13nVr7qTloFwDa/IYkhhf5nzwP+zIQcIJh3WIFSBOy/H1PzB40jPjMDksN4F+g==}
@@ -5035,6 +5045,10 @@ snapshots:
       '@types/estree': 1.0.9
 
   '@types/estree@1.0.9': {}
+
+  '@types/fontkit@2.0.9':
+    dependencies:
+      '@types/node': 22.20.1
 
   '@types/hast@3.0.5':
     dependencies:
