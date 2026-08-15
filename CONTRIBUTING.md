@@ -72,6 +72,15 @@ A package change is done when:
    the package's `NOTES.md`);
 5. the package README covers purpose, install and a usage example.
 
+### One extra obligation for adapters
+
+An adapter needs at least one test calling `validateSnapshot` on a snapshot its
+collector built **in memory**, with no serialization in between. Framing is
+`JSON.stringify`, which erases reference identity, so a test that only inspects
+what arrived over the socket cannot see aliasing — two nodes sharing one
+`actions` array pass on the wire and are rejected in-process by `mountInk` or a
+`getTree` response. Both shipped adapters learned this from a real bug.
+
 ## Two habits that matter more than they look
 
 **Never wait by sleeping.** Every wait is driven by a screen revision, a

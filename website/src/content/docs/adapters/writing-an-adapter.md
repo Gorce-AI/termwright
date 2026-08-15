@@ -57,6 +57,39 @@ point `parentId` at the nearest *published* ancestor and push ancestors first.
 **`bounds` is optional.** Publish it only where it is trustworthy. A snapshot
 with no bounds at all is valid, and consumers treat it as a normal state.
 
+#### Validate the tree you built, not the one that came back
+
+At least one test must call `validateSnapshot` on a snapshot your collector
+built **in memory**, with no serialization in between. A suite that only checks
+what the driver received over the socket is blind to an entire class of bug.
+
+The reason is aliasing. `validateSnapshot` rejects a snapshot in which any value
+is reachable twice, and there are two easy ways to produce one: a role table
+that hands the same frozen `actions` array to every node of that role, and an
+application author who reuses one array across two annotations. Framing is
+`JSON.stringify`, which has no concept of reference identity — so the wire looks
+perfectly clean while the in-process consumers (`mountInk`, a `getTree`
+response) get an object the validator throws out.
+
+```ts
+import {DEFAULT_LIMITS, validateSnapshot} from '@termwright/protocol';
+
+it('gives each node its own actions array, whatever the source', () => {
+  // Built here, validated here: no encodeFrame in between, or the aliasing
+  // this test exists to catch is copied away before the assertion runs.
+  const snapshot = collect(root, registry);
+
+  expect(validateSnapshot(snapshot, DEFAULT_LIMITS)).toMatchObject({ok: true});
+
+  const [first, second] = snapshot.nodes.filter((node) => node.role === 'button');
+  expect(first?.actions).toEqual(second?.actions);
+  expect(first?.actions).not.toBe(second?.actions);  // equal, never the same array
+});
+```
+
+Copy at the node-construction site, so neither source of aliasing can reach a
+snapshot. Both shipped adapters learned this the hard way.
+
 ### 4. Ordering: snapshot, commit, marker
 
 Per revision, in this order: the snapshot frame, the `revision-commit`, then the
