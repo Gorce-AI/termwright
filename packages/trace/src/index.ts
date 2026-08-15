@@ -84,6 +84,13 @@ export {
 export { openTrace, type TraceReader, type TraceState } from './reader.js';
 
 export {
+  frameAt,
+  frameFromAnsi,
+  type FrameOptions,
+  type TraceFrame,
+} from './frame.js';
+
+export {
   openArchive,
   packTrace,
   unpackTrace,
@@ -114,6 +121,7 @@ export {
   resetPlayerAssetCache,
   type ReportOptions,
   type ReportResult,
+  type ReportScreenshot,
   type ReportTestResult,
   type SemanticDiffInput,
   type VisualDiffInput,

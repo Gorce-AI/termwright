@@ -29,6 +29,9 @@ Changing a normative file requires: update it first, note the change in
 - `mcp` depends on `driver` + MCP SDK behind `src/sdk-facade.ts` (may also import constants/types from `protocol`). No session logic of its own.
 - `trace` depends on `driver` types only (consumes `SessionEvents`) and may
   type-import from `protocol` (it stores `SemanticSnapshot` verbatim).
+- `screenshot` depends on `driver` types only (consumes `CellSnapshot`) and may
+  type-import from `protocol` (`CursorInfo`). Never on `trace` — the trace
+  reader produces frames for it, not the other way round.
 - `ui` depends on `trace` + `driver`. Talks to Vitest only via our own event protocol.
 - `conformance` may depend on everything; nothing depends on it.
 

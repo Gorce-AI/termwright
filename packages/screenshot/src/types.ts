@@ -1,0 +1,107 @@
+/**
+ * Public shapes of `@termwright/screenshot`.
+ *
+ * The renderer takes a **cell grid**, not a pixel buffer and not a string of
+ * ANSI: layout comes from the grid (column × cell width), never from font
+ * metrics, so a screenshot of a screen with emoji, CJK or Nerd Font icons lines
+ * up exactly the way the terminal laid it out.
+ */
+
+import type { CellSnapshot } from '@termwright/driver';
+import type { CursorInfo } from '@termwright/protocol';
+
+/**
+ * The slice of the driver's `ScreenSnapshot` a screenshot needs.
+ *
+ * A real `ScreenSnapshot` satisfies it structurally, and so does the frame
+ * `frameAt()` in `@termwright/trace` reconstructs from a recording.
+ */
+export interface ScreenFrame {
+  readonly columns: number;
+  readonly rows: number;
+  readonly cursor?: CursorInfo;
+  cell(row: number, column: number): CellSnapshot;
+}
+
+/** Colours used for cells that do not carry an explicit colour. */
+export interface ScreenshotTheme {
+  readonly background: string;
+  readonly foreground: string;
+  readonly cursor: string;
+  /** The 16 ANSI colours. Indices 16–255 are derived from the xterm cube. */
+  readonly ansi: readonly string[];
+}
+
+/** How glyphs are put into the SVG. */
+export type GlyphMode =
+  /** Embed outlines as `<path>`; fall back to `<text>` per character. */
+  | 'outline'
+  /** Always emit `<text>`; the renderer supplies the font. */
+  | 'text';
+
+/** Font selection for {@link renderSvg}. */
+export interface FontOptions {
+  /**
+   * Font files to embed outlines from, in priority order. The first file
+   * containing a given character wins; characters missing from all of them fall
+   * back to `<text>`.
+   */
+  readonly files?: readonly string[];
+  /**
+   * Look for a platform monospace font when {@link FontOptions.files} is empty
+   * or yields nothing. Default `true`.
+   */
+  readonly system?: boolean;
+  /** `font-family` used by `<text>` runs. Default a monospace stack. */
+  readonly family?: string;
+}
+
+/** Options shared by SVG and PNG rendering. */
+export interface ScreenshotOptions {
+  readonly theme?: ScreenshotTheme;
+  readonly font?: FontOptions;
+  /** Em size in SVG user units. Default 16. */
+  readonly fontSize?: number;
+  /** Cell advance. Default: the embedded font's advance, else `0.6 × fontSize`. */
+  readonly cellWidth?: number;
+  /** Cell height. Default `1.2 × fontSize`. */
+  readonly lineHeight?: number;
+  /** Padding around the grid, in user units. Default 8. */
+  readonly padding?: number;
+  /** Draw the cursor when `frame.cursor.visible`. Default `true`. */
+  readonly cursor?: boolean;
+  /** `'outline'` (default) embeds glyph outlines; `'text'` never does. */
+  readonly glyphs?: GlyphMode;
+}
+
+/** Result of {@link renderSvg}. */
+export interface ScreenshotSvg {
+  readonly svg: string;
+  readonly width: number;
+  readonly height: number;
+  /**
+   * `true` when every character was drawn from an embedded outline, so the SVG
+   * renders identically everywhere with no fonts installed.
+   */
+  readonly selfContained: boolean;
+  /** Characters that had to fall back to `<text>`, deduplicated and sorted. */
+  readonly fallbackCharacters: readonly string[];
+  /** Font files whose outlines were embedded, in the order they were used. */
+  readonly fontsUsed: readonly string[];
+}
+
+/** Options for {@link renderPng}. */
+export interface PngOptions extends ScreenshotOptions {
+  /** Pixel density multiplier. Default 1; use 2 for retina-sharp thumbnails. */
+  readonly scale?: number;
+}
+
+/** Result of {@link renderPng}. */
+export interface ScreenshotPng {
+  readonly png: Uint8Array;
+  /** Pixel dimensions, i.e. SVG units × `scale`. */
+  readonly width: number;
+  readonly height: number;
+  readonly selfContained: boolean;
+  readonly fallbackCharacters: readonly string[];
+}

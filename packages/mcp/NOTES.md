@@ -64,17 +64,15 @@ payload structured in `_meta["io.termwright/error"]`
 optional so one schema covers both shapes — would have gutted the output schemas
 that make the tools legible in the first place.
 
-## `capture_since` diffs locally instead of depending on `@termwright/trace`
+## `diff.ts` stays local, now that `@termwright/trace` is a dependency
 
-CONTRACTS.md §Dependency rules allow this package `driver` + the MCP SDK, and
-nothing in the dependency graph lets `mcp` reach `trace`. The diff needed here is
-also a different thing from a trace concern: changed screen rows plus the
-*minimal changed subtree roots* rendered in the compact ref format, capped for an
-agent's context window. `diff.ts` is ~120 lines with its own tests.
-
-If `@termwright/trace` ever exports a `diffSemanticSnapshots` with the same
-"minimal roots" semantics and the dependency rules are relaxed, swapping is a
-one-import change in `diff.ts`.
+The dependency rule that once forced this (mcp could not reach trace) is gone —
+the replay tools import the trace reader. `diff.ts` stays anyway, because trace's
+`diffSemanticSnapshots` answers a different question: it reports every changed
+node for the HTML report, while an agent needs the *minimal changed subtree
+roots* rendered in the compact ref format and capped for a context window. One
+implementation now serves both the live `capture_since` and `trace.diff`, which
+is what keeps those two tools reading identically.
 
 ## One source of truth for the closed sets
 
@@ -145,6 +143,15 @@ builds both and disposes both, so an HTTP `DELETE` or a dropped stdio connection
 releases file handles as reliably as it kills children. `ToolContext` carries the
 two stores rather than one, which is why the field is `terminals` and not
 `store`.
+
+## The `skill` package is generated, not written
+
+`agent-skill.ts` renders `SKILL.md`, `reference.md` and `agent-context.json` from
+the same zod schemas the tools register, so a parameter that changes changes the
+distributed skill in the same commit. The prose in `SKILL.md` is the only
+hand-written part, and it is deliberately short: what the loop is, how to read a
+snapshot, which revision is which, what to do per error kind, and how a replay
+investigation runs.
 
 ## Screenshots
 

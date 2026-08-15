@@ -112,12 +112,6 @@ export function changedRows(
   return changed;
 }
 
-function write(terminal: TerminalType, data: string): Promise<void> {
-  return new Promise((resolve) => {
-    terminal.write(data, resolve);
-  });
-}
-
 interface CellStyle {
   readonly fg: string;
   readonly bg: string;

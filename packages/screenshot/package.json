@@ -1,0 +1,34 @@
+{
+  "name": "@termwright/screenshot",
+  "version": "0.1.0",
+  "description": "terminal screenshots: cell grid to self-contained SVG (embedded glyph outlines) and PNG via resvg, no Chromium",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@termwright/driver": "workspace:*",
+    "@termwright/protocol": "workspace:*",
+    "fontkit": "^2.0.4"
+  },
+  "devDependencies": {
+    "@types/fontkit": "^2.0.9",
+    "vitest": "^3.2.0"
+  }
+}

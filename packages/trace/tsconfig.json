@@ -2,13 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
+    "rootDir": "src",
     "noEmit": true,
-    "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@termwright/driver": ["../driver/src/index.ts"],
-      "@termwright/protocol": ["../protocol/src/index.ts"]
-    }
+    "types": ["node"]
   },
   "include": ["src"]
 }

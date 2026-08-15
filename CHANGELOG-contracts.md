@@ -127,3 +127,12 @@
   REJECTED (wire 'internal' + diagnostic) — §4.1 "late hello never flips a
   selected mode" is now enforced, with the grace as the explicit tolerance.
   api.ts gains LaunchOptions.debug?: boolean (TERMWRIGHT_DEBUG=1|all).
+- 2026-08-16 (screenshot landed): `@termwright/screenshot` depends on `driver`
+  types + `protocol` type-imports (`CursorInfo`), never on `trace`. §Trace gains
+  a reader-side helper: `frameAt(reader, timeMs)` / `frameFromAnsi(ansi, opts)`
+  return a `TraceFrame` — a structural subset of `ScreenSnapshot` (columns,
+  rows, cursor, `cell()`, `line()`, `text()`, plus `timeMs`/`semanticRevision`)
+  with no `revision`/`modes`/`buffer`, because a recording stores output, not
+  emulator state. `ReportTestResult` gains `screenshots?: {label, image,
+  mediaType?}[]`, inlined as data URIs; the report never rasterises anything
+  itself, so no native renderer enters the default test-run dependency tree.

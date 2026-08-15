@@ -174,6 +174,50 @@ describe('generateHtmlReport', () => {
     expect(html).not.toContain('<script type="application/json"');
   });
 
+  it('inlines caller-supplied screenshots as data URIs', async () => {
+    const root = await workspace();
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02]);
+    const { html } = await generateHtmlReport({
+      outFile: join(root, 'report.html'),
+      embedPlayer: false,
+      results: [
+        {
+          id: 't1',
+          title: 'renders the dialog',
+          status: 'failed',
+          screenshots: [{ label: 'at failure', image: png }],
+        },
+      ],
+    });
+
+    expect(html).toContain('<h3>Screenshots</h3>');
+    expect(html).toContain('<figcaption>at failure</figcaption>');
+    expect(html).toContain(`src="data:image/png;base64,${Buffer.from(png).toString('base64')}"`);
+  });
+
+  it('honours a screenshot media type other than PNG', async () => {
+    const root = await workspace();
+    const { html } = await generateHtmlReport({
+      outFile: join(root, 'report.html'),
+      embedPlayer: false,
+      results: [
+        {
+          id: 't1',
+          title: 'svg shot',
+          status: 'failed',
+          screenshots: [
+            {
+              label: 'vector',
+              image: new TextEncoder().encode('<svg/>'),
+              mediaType: 'image/svg+xml',
+            },
+          ],
+        },
+      ],
+    });
+    expect(html).toContain('src="data:image/svg+xml;base64,');
+  });
+
   it('degrades gracefully when the trace is missing', async () => {
     const root = await workspace();
     const { html } = await generateHtmlReport({
