@@ -47,6 +47,8 @@ function packageRoot(): string {
 export const CONFORMANCE_FIXTURES = Object.freeze({
   /** Uninstrumented app: proves the generic fallback (§20.1). */
   generic: () => fixturePath('generic-app.mjs'),
+  /** Shell-shaped app emitting OSC 133 marks; `--marks=off` suppresses them. */
+  prompt: () => fixturePath('prompt-app.mjs'),
   /** Instrumented Ink app covering the semantic matrix (§20.2). */
   semanticInk: () => fixturePath('semantic-ink-app.mjs'),
   /** Hostile wire peer; takes a scenario name as its first argument (§20.3). */
@@ -126,7 +128,10 @@ export function createSessionPool(): SessionPool {
         command: [process.execPath, fixture, ...args],
         columns: 80,
         rows: 24,
-        env: environment(),
+        // No `env` and no `envMode`: the suites run against the secret-safe
+        // 'replace' default, which is what a user gets. Forwarding the runner's
+        // whole environment here would quietly make every suite an 'inherit'
+        // test and leave the default uncovered.
         // Conformance runs start a fresh Node process, a pseudo-terminal and a
         // socket per test. On a loaded CI box the defaults are tight enough
         // that machine load, not the implementation, decides the result.

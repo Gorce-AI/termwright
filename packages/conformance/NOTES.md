@@ -1,36 +1,44 @@
 # @termwright/conformance — implementation notes
 
 Deliberate deviations, findings about other packages, and the traps that cost
-time here. Verified against the driver, protocol and Ink adapter as of
-2026-08-15.
+time here. Verified against the driver (f78174f), protocol and Ink adapter as of
+2026-08-16.
 
-## Findings in other packages (not fixed here)
+## Findings reported and fixed (driver f78174f)
 
-1. **A depth-limit breach is reported as `malformed`, not `limit-exceeded`.**
-   `parseAdapterMessage` classifies a `dto-depth` violation as `limit-exceeded`,
-   but `createFrameDecoder` projects the frame body first (`framing.ts`
-   `decodeBody` → `projectDto`), so the violation is thrown out of
-   `decoder.push`. The driver's `SemanticChannel` catch-all maps every framing
-   fault to `malformed` and keeps the machine-readable code only in the
-   suggestion text. An adapter author debugging by error code therefore cannot
-   tell a nesting overflow from a syntax error. `too-many-nodes` takes the other
-   path and does report `limit-exceeded`, so the taxonomy is inconsistent within
-   the same session. Pinned in `adversarial.test.ts` as the current behaviour.
+All three findings this package raised in its first round are closed. Kept here
+because the suites that caught them are still the regression tests for them.
 
-2. **`revision-commit` is accepted and discarded.** `session.ts` installs
-   `onCommit: () => {}`; pairing is driven entirely by snapshot + DCS marker. An
-   adapter that announces `render-revisions` and sends commits but no marker
-   publishes nothing at all, and the only trace is a diagnostic that no public
-   API exposes. Correct per §4.3 (the marker is the commit), but the message
-   then has no consumer — worth either using it as a fallback commit signal or
-   documenting it as advisory.
+1. **Wire taxonomy for ceiling breaches** — was `malformed` for anything thrown
+   out of the frame decoder, so a nesting overflow was indistinguishable from a
+   syntax error. Now an explicit table: `frame-oversized` and `dto-depth` map to
+   `limit-exceeded`, structural violations stay `malformed`. Pinned by the
+   `REJECTED` table in `adversarial.test.ts`, which covers both sides of the
+   split on purpose.
+2. **`revision-commit` was discarded** — now advisory *and* recorded, so the
+   `tree-without-marker` case asserts directly that the driver saw the
+   announcement for revision 4 and still refused to publish it without a marker.
+3. **Channel diagnostics were unreachable** — `harness.diagnostics()` and the
+   `diagnostic` event landed with a closed `DiagnosticCode` set. Every
+   adversarial assertion that used to be indirect is now direct: superseded and
+   expired revisions, evictions under flood, unverified markers, negotiation
+   timeout, adapter attach/disconnect.
 
-3. **Channel diagnostics are unreachable.** `TerminalSession` keeps a bounded
-   `#diagnosticsLog` of exactly the things a conformance suite wants to assert
-   (dropped revisions, superseded halves, unverified markers) and never exposes
-   it. Every adversarial assertion here is therefore indirect: the tree stayed
-   at revision N, the peer received wire error X. A read-only accessor or a
-   `diagnostic` session event would make the failure modes directly testable.
+## Open findings
+
+1. **`waitForReady` resolves for a program that has exited.** When the last
+   OSC 133 mark says a prompt is waiting and the process then exits,
+   `waitForReady` returns ready, while `waitForText` on the same session throws
+   `process-exited`. The other waits call `#assertAlive` before their deadline
+   check; `waitForReady` reaches its ready branch first. Pinned as observed in
+   `ready.test.ts` ("still reports readiness from the last prompt of an exited
+   program") with a note that the expectation flips when the waits align.
+2. **`SessionDiagnostic` carries no machine-readable wire code.** A
+   `protocol-violation` entry has the human explanation in `detail`, so a suite
+   asserting *which* wire error closed the channel still has to read it off the
+   adapter's own output. An optional `wireCode` field would close the last
+   indirect assertion in the adversarial suite. Minor: the taxonomy itself is
+   now correct and is asserted at the peer.
 
 ## Deliberate choices
 
@@ -56,6 +64,11 @@ time here. Verified against the driver, protocol and Ink adapter as of
   bounds the fixture measured with `measureElement`, so a passing hit-test proves
   the driver aimed at the cell the *application* believes the widget occupies.
   Asserting "something changed" would pass on an off-by-one.
+- **The suites run under `envMode: 'replace'`.** The session pool passes no
+  `env` at all, so every suite exercises the secret-safe default a user gets.
+  Forwarding the runner's environment (which is what the pool did before the
+  option existed) would quietly turn every suite into an `'inherit'` test and
+  leave the default uncovered. `ready.test.ts` covers both modes explicitly.
 - **`runAdapterConformance` is async.** `vitest` is imported dynamically so the
   package remains importable from a plain script that only wants fixture paths
   or the probe. Callers `await` it at the top level of the test file.
@@ -75,6 +88,13 @@ time here. Verified against the driver, protocol and Ink adapter as of
 - **`AdapterProbe.waitForText` sees cumulative output**, not a rendered screen:
   anything the app printed once matches forever. Proving that an app is *still*
   rendering uses growth in output length, not a text match.
+- **`waitForReady` can return before the command it should wait for starts.**
+  Between `press('Enter')` and the shell's `OSC 133 C`, the last mark still says
+  "prompt waiting", so a `waitForReady` issued immediately after a keystroke
+  resolves against the *previous* prompt. The prompt fixture prints
+  `RUNNING <command>` at command start so the suite can wait for the command to
+  be observably running first; a user hits the same race and needs the same
+  answer.
 - **A ZWJ cluster's width is disputed.** Yoga (Ink) and `@xterm/addon-unicode11`
   disagree on `👩‍👩‍👧`, which shifts every row below it inside a bordered box.
   The semantic fixture keeps the sequence in a plain row where the disagreement

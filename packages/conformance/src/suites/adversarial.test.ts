@@ -11,7 +11,7 @@
  * space capped at 128 MB, so exhaustion cases cannot pass on a roomy heap.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import type { TerminalHarness } from '@termwright/driver';
+import type { SessionDiagnostic, TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
 import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from '../support/pty.js';
 
@@ -35,6 +35,16 @@ async function fire(terminal: TerminalHarness): Promise<void> {
   await terminal.waitForStable({ frames: 4 }).catch(() => undefined);
 }
 
+/** The diagnostic codes the session recorded, oldest first. */
+function codes(terminal: TerminalHarness): readonly string[] {
+  return terminal.diagnostics().map((entry) => entry.code);
+}
+
+/** The entries recorded under one code. */
+function entriesFor(terminal: TerminalHarness, code: string): readonly SessionDiagnostic[] {
+  return terminal.diagnostics().filter((entry) => entry.code === code);
+}
+
 /** The session must still be alive and must still exit on request, exactly. */
 async function expectSurvives(terminal: TerminalHarness): Promise<void> {
   expect(terminal.screen().text()).toContain('PEER START');
@@ -47,14 +57,15 @@ afterEach(sessions.closeAll);
 /**
  * Wire faults the driver must reject, with the error code it reports back.
  *
- * `deep-nesting` is a depth-ceiling breach and is classified `limit-exceeded`
- * by `parseAdapterMessage`, but the frame decoder projects first and the driver
- * maps every framing fault to `malformed`. The expectation below records what
- * the implementation does today; see NOTES.md.
+ * The split is the taxonomy an adapter author debugs against: a breach of a
+ * declared ceiling is `limit-exceeded`, a breach of the structure is
+ * `malformed`. Both ceiling cases below are thrown out of the frame decoder
+ * rather than the message parser, so they are also the regression test for the
+ * driver classifying decoder faults instead of lumping them together.
  */
 const REJECTED: readonly { readonly scenario: string; readonly wireError: string }[] = [
   { scenario: 'duplicate-hello', wireError: 'malformed' },
-  { scenario: 'oversized-frame', wireError: 'malformed' },
+  { scenario: 'oversized-frame', wireError: 'limit-exceeded' },
   { scenario: 'not-json', wireError: 'malformed' },
   { scenario: 'unknown-message', wireError: 'malformed' },
   { scenario: 'cycle', wireError: 'malformed' },
@@ -62,7 +73,7 @@ const REJECTED: readonly { readonly scenario: string; readonly wireError: string
   { scenario: 'impossible-bounds', wireError: 'malformed' },
   { scenario: 'hostile-unicode', wireError: 'malformed' },
   { scenario: 'foreign-session', wireError: 'malformed' },
-  { scenario: 'deep-nesting', wireError: 'malformed' },
+  { scenario: 'deep-nesting', wireError: 'limit-exceeded' },
   { scenario: 'too-many-nodes', wireError: 'limit-exceeded' },
 ];
 
@@ -78,6 +89,15 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(terminal.semanticTree()?.revision).toBe(1);
     expect(await terminal.getByRole('button').textContent()).toBe('Peer');
     expect(terminal.capabilities().semanticTree).toBe(true);
+
+    // The session says why it closed the channel, in its own log.
+    expect(codes(terminal)).toContain('adapter-attached');
+    const violation = entriesFor(terminal, 'protocol-violation')[0];
+    expect(violation, `no protocol-violation recorded for ${scenario}`).toBeDefined();
+    expect(violation?.detail).toContain('the semantic channel was closed');
+    // The wire code itself is asserted above, where it is observable: the
+    // diagnostic entry carries the human explanation, not the taxonomy code.
+    expect(violation?.timeMs).toBeGreaterThan(0);
     await expectSurvives(terminal);
   });
 
@@ -90,6 +110,8 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
 
     const error = (await rejection(terminal.getByRole('button').resolve({ timeout: 500 }))) as TermwrightError;
     expect(error.code).toBe('protocol-violation');
+    // A refused handshake never attached, so nothing may claim it did.
+    expect(codes(terminal)).not.toContain('adapter-attached');
     // Grid locators keep working: a refused adapter is a generic session, not
     // a broken one.
     expect(await terminal.getByText('PEER START').count()).toBe(1);
@@ -118,6 +140,9 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(terminal.screen().text()).not.toContain('PEER GOT ERROR');
     expect(terminal.screen().text()).not.toContain('PEER SOCKET CLOSED');
     expect(terminal.semanticTree()?.revision).toBe(1);
+    // Buffered, not acted on and not complained about: half a frame is neither
+    // a violation nor a revision.
+    expect(codes(terminal)).not.toContain('protocol-violation');
     await expectSurvives(terminal);
   });
 
@@ -140,15 +165,22 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await terminal.waitForStable({ frames: 4 }).catch(() => undefined);
     expect(terminal.semanticTree()?.revision).toBe(3);
     expect(await terminal.getByRole('button').textContent()).toBe('Third');
+
+    const dropped = entriesFor(terminal, 'revision-dropped');
+    expect(dropped.map((entry) => entry.revision)).toContain(2);
+    expect(dropped[0]?.detail).toContain('already published');
     await expectSurvives(terminal);
   });
 
   it('publishes nothing for a marker without a tree', async () => {
     const terminal = await arm('marker-without-tree');
     await fire(terminal);
-    await terminal.waitForStable({ frames: 4 }).catch(() => undefined);
+    await expect.poll(() => codes(terminal)).toContain('revision-expired');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
+    // The unpaired half names itself, so a half-published revision cannot be
+    // mistaken for one that was never sent.
+    expect(entriesFor(terminal, 'revision-expired').map((entry) => entry.revision)).toContain(5);
     await expectSurvives(terminal);
   });
 
@@ -156,18 +188,27 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const terminal = await arm('tree-without-marker');
     await fire(terminal);
     // The unpaired half expires; the driver keeps the last complete revision.
-    await terminal.waitForStable({ frames: 4 }).catch(() => undefined);
+    await expect.poll(() => codes(terminal)).toContain('revision-expired');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
+    expect(entriesFor(terminal, 'revision-expired').map((entry) => entry.revision)).toContain(4);
+
+    // `revision-commit` is advisory: the peer announced revision 4 and the
+    // driver recorded the announcement, but only a marker commits a render.
+    const advisory = entriesFor(terminal, 'revision-commit');
+    expect(advisory.map((entry) => entry.revision)).toContain(4);
+    expect(terminal.semanticTree()?.revision).not.toBe(4);
     await expectSurvives(terminal);
   });
 
   it('ignores a marker minted for another session', async () => {
     const terminal = await arm('foreign-marker');
     await fire(terminal);
-    await terminal.waitForStable({ frames: 4 }).catch(() => undefined);
+    await expect.poll(() => codes(terminal)).toContain('marker-unverified');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
+    // Rejected, and invisible: a forged marker is still consumed by the parser
+    // rather than printed into the grid.
     expect(terminal.screen().text()).not.toContain('twm;');
     await expectSurvives(terminal);
   });
@@ -198,6 +239,14 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const truncated = await rejection(Promise.resolve().then(() => terminal.scrollback.text({ from: 0 })));
     expect((truncated as TermwrightError).code).toBe('history-truncated');
     expect(terminal.screen().text().length).toBeGreaterThan(0);
+
+    // 99 trees with no markers behind them: the pairing ceiling has to evict,
+    // and has to say which revisions it evicted rather than leaking them.
+    const dropped = entriesFor(terminal, 'revision-dropped');
+    expect(dropped.length).toBeGreaterThan(0);
+    expect(dropped.some((entry) => entry.detail.includes('in flight'))).toBe(true);
+    expect(terminal.diagnostics().length).toBeLessThanOrEqual(200);
+
     // The banner has scrolled off by design here, so survival is judged by the
     // session still taking input and exiting cleanly.
     await terminal.press('q');
@@ -212,6 +261,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(terminal.semanticTree()?.revision).toBe(1);
     expect(terminal.capabilities().semanticTree).toBe(true);
     expect(await terminal.getByRole('button').textContent()).toBe('Peer');
+    await expect.poll(() => codes(terminal)).toContain('adapter-disconnected');
     await expectSurvives(terminal);
   });
 

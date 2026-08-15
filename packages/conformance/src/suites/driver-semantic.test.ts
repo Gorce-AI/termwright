@@ -188,7 +188,39 @@ describe.skipIf(!ptyAvailable())('a semantic session', () => {
     await expect.poll(() => terminal.getByTestId('dialog-approve').count()).toBe(0);
     const gone = (await rejection(terminal.getByTestId('dialog-approve').resolve({ timeout: 400 }))) as TermwrightError;
     expect(gone.code).toBe('timeout');
-    expect(dialogRef.ref).toMatch(/@\d+$/u);
+
+    // Rebuilt from the ref, the same disappearance is a stale snapshot rather
+    // than a locator that matched nothing — the ref names a specific node at a
+    // specific revision, so the driver can tell "gone" from "never there".
+    const stale = (await rejection(terminal.locatorForRef(dialogRef.ref).resolve({ timeout: 400 }))) as TermwrightError;
+    expect(stale.code).toBe('stale-snapshot');
+  });
+
+  it('rebuilds a locator from a ref by identity, not by name', async () => {
+    const terminal = await launch();
+
+    // Two buttons are called 'Save'; a ref has to survive that.
+    const sidebar = await terminal
+      .getByRole('button', { name: 'Save' })
+      .within(terminal.getByTestId('sidebar'))
+      .resolve();
+    const rebuilt = terminal.locatorForRef(sidebar.ref);
+
+    expect((await rebuilt.resolve()).ref).toBe(sidebar.ref);
+    expect(await rebuilt.textContent()).toBe('Save');
+    expect((await rebuilt.boundingBox())?.column).toBe(0);
+    expect(rebuilt.description).toContain(sidebar.ref.split('@')[0] ?? '');
+
+    // The other 'Save' is a different node, and its ref says so.
+    const content = await terminal.getByTestId('save-main').resolve();
+    expect(content.ref).not.toBe(sidebar.ref);
+    expect((await terminal.locatorForRef(content.ref).boundingBox())?.column).toBe(24);
+
+    // A ref taken from a grid match works the same way. `occurrence` forces
+    // grid matching even here, where a semantic tree is available.
+    const grid = await terminal.getByText('log line 1', { occurrence: 1 }).resolve();
+    expect(grid.ref).toMatch(/^grid:/u);
+    expect(await terminal.locatorForRef(grid.ref).textContent()).toContain('log line 1');
   });
 
   it('pairs every published tree with the frame it describes', async () => {

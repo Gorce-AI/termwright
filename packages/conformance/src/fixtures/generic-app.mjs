@@ -62,6 +62,10 @@ function draw() {
   out(`activated: ${activated}\r\n`);
   if (alternate) out('ALT SCREEN\r\n');
   for (const event of events) out(`ev: ${event}\r\n`);
+  // Printed last on purpose: an extra row above the event log would move every
+  // coordinate the suites assert on. Reports whether a variable set in the test
+  // process reached the child, which is what `envMode` decides.
+  out(`env: ${process.env['CONFORMANCE_ECHO'] ?? 'unset'}\r\n`);
   if (unicode) out('U: \u{1F600} \u{1F469}\u200D\u{1F469}\u200D\u{1F467} e\u0301 \u65E5\u672C\u8A9E ok\r\n');
   if (wide) out(`W: ${'0123456789'.repeat(12)} END\r\n`);
 }

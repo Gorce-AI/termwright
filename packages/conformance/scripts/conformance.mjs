@@ -24,6 +24,7 @@ const SUITES = [
   ['src/suites/component.test.ts', 'component harness', '§20.2a'],
   ['src/suites/adversarial.test.ts', 'hostile peer', '§20.3'],
   ['src/suites/interaction.test.ts', 'interaction', '§20.4'],
+  ['src/suites/ready.test.ts', 'readiness + env', '§5.3'],
   ['src/suites/ink-adapter.test.ts', 'adapter contract', '§7'],
 ];
 

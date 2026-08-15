@@ -34,6 +34,12 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     expect(terminal.capabilities().adapter).toBeUndefined();
     expect(terminal.semanticTree()).toBeNull();
     expect(elapsed).toBeLessThan(5_000);
+
+    // The fallback is a decision, and the session records it as one.
+    const timeout = terminal.diagnostics().find((entry) => entry.code === 'negotiation-timeout');
+    expect(timeout).toBeDefined();
+    expect(timeout?.detail).toContain('250');
+    expect(terminal.diagnostics().map((entry) => entry.code)).not.toContain('adapter-attached');
   });
 
   it('never invents a role for a grid match', async () => {
