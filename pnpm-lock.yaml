@@ -251,12 +251,22 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
+      '@termwright/ink-testing':
+        specifier: workspace:*
+        version: link:../ink-testing
       '@termwright/mcp':
         specifier: workspace:*
         version: link:../mcp
+      '@termwright/test':
+        specifier: workspace:*
+        version: link:../test
       '@termwright/ui':
         specifier: workspace:*
         version: link:../ui
+    devDependencies:
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(yaml@2.9.0)
 
   packages/test:
     dependencies:
