@@ -1,0 +1,10 @@
+# @termwright/test snapshots — generated, but review them like test source.
+# Update with `vitest -u` or TERMWRIGHT_UPDATE_SNAPSHOTS=changed.
+"stores and compares the whole tree 1": |
+  - application:
+      - text "stored"
+      - button "Approve" [focused]:
+          - text "Approve"
+      - textbox "Message":
+          - text ">"
+      - text "pressed 0"

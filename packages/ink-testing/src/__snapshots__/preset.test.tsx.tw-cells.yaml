@@ -1,0 +1,11 @@
+# @termwright/test snapshots — generated, but review them like test source.
+# Update with `vitest -u` or TERMWRIGHT_UPDATE_SNAPSHOTS=changed.
+"stores a cell snapshot of the painted screen 1": |
+  ┌─ 44×10 ────────────────────────────────────┐
+  │cells                                       │
+  │╭──────────────────────────────────────────╮│
+  ││ Approve                                  ││
+  │╰──────────────────────────────────────────╯│
+  │>                                           │
+  │pressed 0                                   │
+  └────────────────────────────────────────────┘

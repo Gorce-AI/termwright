@@ -119,6 +119,31 @@ instead.
   `applyOnlcr` — the pty stand-in, exported for adapters other than Ink.
 - `encodeFixturePayload`, `assertJsonProps` — the fixture boundary.
 
+## With the Vitest preset
+
+The harness a mount returns is the driver's own, so
+[`@termwright/test`](../test) works on it unchanged — including the matchers
+that poll, which is what lets an assertion follow physical input with no wait in
+between:
+
+```ts
+import {expect, test} from '@termwright/test';
+
+test('moves focus on Tab', async () => {
+  const harness = await mountInk(<Form />, {columns: 44, rows: 10});
+  await harness.press('Tab');
+
+  await expect(harness.getByRole('textbox', {name: 'Message'})).toBeFocused();
+  await expect(harness).toMatchSemanticSnapshot();
+
+  await harness.close();
+});
+```
+
+This is also the only way to reach those matchers where no pseudo-terminal is
+available — a sandboxed container, or a machine where the native pty binding
+failed to build.
+
 ## Isolation
 
 A mount leaves nothing behind in the process that hosts it: no

@@ -113,8 +113,32 @@ click. What is not identical:
   instances by stdout stream, and a second app on the same wires is not
   something it supports.
 
+## The preset test (`src/preset.test.tsx`)
+
+`@termwright/test` is a **dev-only** dependency here; nothing in `src/index.ts`
+imports it and the runtime dependency graph in CONTRACTS is unchanged. It exists
+because a mount is the only way to exercise the preset's matchers where no
+pseudo-terminal is available — a sandboxed container, a Windows runner without
+ConPTY, a machine where the native pty binding failed to build. Every other
+preset test needs a real pty.
+
+It works without any adaptation: the matchers duck-type on `screen()` and
+`semanticTree()`, which is exactly what `mountInk` returns, and the preset's
+`termwright` fixture is `auto: true`, so snapshot scoping is wired up by
+importing `test` from the preset rather than from Vitest.
+
+The stored snapshots in `src/__snapshots__/` are assertions, not artifacts —
+review them like source.
+
 ## Open threads
 
+- `api.ts` has grown `locatorForRef`, `waitForReady`, `diagnostics()` and
+  `envMode` ahead of the driver's implementation. `InkHarnessImpl` forwards
+  `TerminalHarness` member by member, so it will stop compiling the moment those
+  land — by design, but it means one small follow-up here: three forwards, plus
+  deciding what `envMode` means for a mount (the in-process app reads the
+  runner's own `process.env` regardless, so `'replace'` cannot be honoured the
+  way a child process honours it).
 - Windows is untested. `@lydell/node-pty` covers the fixture path and the
   in-process path has no platform surface at all, but neither has been exercised
   on a ConPTY host.
