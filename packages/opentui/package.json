@@ -1,7 +1,7 @@
 {
   "name": "@termwright/opentui",
   "version": "0.1.0",
-  "description": "OpenTUI semantic adapter",
+  "description": "OpenTUI semantic adapter (role convention, screenX/screenY bounds, frame-commit marker)",
   "license": "MIT",
   "type": "module",
   "engines": { "node": ">=22" },
@@ -10,7 +10,15 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:conformance": "vitest run src/conformance.test.ts"
   },
-  "dependencies": { "@termwright/protocol": "workspace:*" }
+  "dependencies": { "@termwright/protocol": "workspace:*" },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.0"
+  },
+  "devDependencies": {
+    "@opentui/core": "^0.5.3",
+    "@termwright/conformance": "workspace:*"
+  }
 }
