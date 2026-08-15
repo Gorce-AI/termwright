@@ -21,8 +21,10 @@ testIf('publishes the menu as a semantic tree', async ({ terminal }) => {
   await app.waitForText('New file');
   await app.waitForStable();
 
-  expect(app.capabilities().semanticTree).toBe(true);
+  // The matcher polls, so it is what waits for the handshake; the plain read
+  // of the capability is only safe once a tree has actually arrived.
   await expect(app).toMatchSemanticSnapshot();
+  expect(app.capabilities().semanticTree).toBe(true);
   await expect(app).toMatchCellSnapshot();
 });
 

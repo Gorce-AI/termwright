@@ -25,8 +25,10 @@ testIf('publishes the notebook as a semantic tree', async ({ terminal }) => {
   await app.waitForText('write the release notes');
   await app.waitForStable();
 
-  expect(app.capabilities().semanticTree).toBe(true);
+  // The matcher polls, so it is what waits for the handshake; the plain read
+  // of the capability is only safe once a tree has actually arrived.
   await expect(app).toMatchSemanticSnapshot();
+  expect(app.capabilities().semanticTree).toBe(true);
 });
 
 testIf('adds a note from the input field', async ({ terminal, step }) => {

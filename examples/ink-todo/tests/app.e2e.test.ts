@@ -18,10 +18,12 @@ describeIf('starts on the list it was seeded with', async ({ terminal }) => {
   // diagnostic log says which of the two strategies was used.
   await app.waitForReady();
 
-  expect(app.capabilities().semanticTree).toBe(true);
-
   // Written to __snapshots__/app.e2e.test.ts.tw-semantic.yaml on first run.
+  // It goes first because it polls: being ready means the screen settled, not
+  // that the adapter finished its handshake, so this is what proves the
+  // instrumentation is live — and the plain read below is safe after it.
   await expect(app).toMatchSemanticSnapshot();
+  expect(app.capabilities().semanticTree).toBe(true);
   // A semantic snapshot can pass on a blank screen: the tree is published by
   // the adapter, not read off the terminal. The cell snapshot is the second
   // oracle that says something was actually painted.
@@ -31,6 +33,11 @@ describeIf('starts on the list it was seeded with', async ({ terminal }) => {
 describeIf('filters the list by what is typed into the filter box', async ({ terminal, step }) => {
   const app = await terminal.launch();
   await app.waitForReady();
+  // Ready means the screen settled, not that the tree for it arrived. An
+  // *action* resolves its locator once and fails outright when there is no
+  // tree yet — only matchers poll through that gap — so a test that acts
+  // before it asserts waits for the frame and its tree to be paired.
+  await app.waitForStable();
 
   await step('focus the filter with the mouse', async () => {
     // A real SGR mouse report. The driver refuses to send one unless the
@@ -52,6 +59,7 @@ describeIf('filters the list by what is typed into the filter box', async ({ ter
 describeIf('asks for confirmation before removing a todo', async ({ terminal, step }) => {
   const app = await terminal.launch();
   await app.waitForReady();
+  await app.waitForStable();
 
   await app.press('ArrowDown');
   await expect(app.getByRole('listitem', { name: 'record a demo' })).toHaveState({ selected: true });
@@ -82,9 +90,9 @@ describeIf('asks for confirmation before removing a todo', async ({ terminal, st
 
   await step('open it again and confirm', async () => {
     await app.getByRole('button', { name: 'Remove' }).click();
-    // Two buttons on screen are called neither Delete nor Cancel, but scoping
-    // to the dialog is the habit worth keeping: it survives the day someone
-    // adds a Delete button to the toolbar.
+    // Scoping a destructive action to its dialog is the habit worth keeping:
+    // it still works the day someone adds a Delete button to the toolbar, and
+    // an unscoped locator would start failing as ambiguous instead.
     await app.locator('dialog button#confirm').click();
   });
 
