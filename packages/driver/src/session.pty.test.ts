@@ -122,6 +122,88 @@ describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout:
   });
 });
 
+describe.skipIf(!ptyAvailable())('session events and emulator-side APIs', { timeout: 20_000 }, () => {
+  it('emits output, input, resize, revision and exit events', async () => {
+    const terminal = await launch('echo-app.mjs');
+    const seen: string[] = [];
+    for (const event of ['output', 'input', 'resize', 'screen-revision', 'exit'] as const) {
+      terminal.events.on(event, () => {
+        if (!seen.includes(event)) seen.push(event);
+      });
+    }
+
+    await terminal.waitForText('READY');
+    await terminal.press('a');
+    await terminal.resize({ columns: 50, rows: 12 });
+    await terminal.press('q');
+    await terminal.waitForExit();
+
+    expect(seen.sort()).toEqual(['exit', 'input', 'output', 'resize', 'screen-revision']);
+  });
+
+  it('stops delivering events after unsubscribing', async () => {
+    const terminal = await launch('echo-app.mjs');
+    let count = 0;
+    const off = terminal.events.on('screen-revision', () => {
+      count += 1;
+    });
+    await terminal.waitForText('READY');
+    off();
+    const afterUnsubscribe = count;
+    await terminal.press('a');
+    await terminal.waitForText('KEY:61');
+    expect(count).toBe(afterUnsubscribe);
+  });
+
+  it('waits for renders, stability and idleness without sleeping', async () => {
+    const terminal = await launch('scroll-app.mjs', { rows: 8 });
+    await terminal.waitForText('DONE');
+    await terminal.waitForIdle();
+    await terminal.waitForStable({ frames: 1 });
+
+    const before = terminal.screen().revision;
+    await terminal.press('p');
+    await terminal.waitForRender({ after: before });
+    expect(terminal.screen().revision).toBeGreaterThan(before);
+  });
+
+  it('exposes scrollback with an explicit retained floor', async () => {
+    const terminal = await launch('scroll-app.mjs', { rows: 8, scrollbackLines: 20 });
+    await terminal.waitForText('DONE');
+    await terminal.waitForIdle();
+
+    expect(terminal.scrollback.length).toBeGreaterThan(0);
+    expect(terminal.scrollback.retainedFloor).toBeGreaterThan(0);
+    const hits = terminal.scrollback.search('line 55');
+    expect(hits).toHaveLength(1);
+
+    const error = await Promise.resolve()
+      .then(() => terminal.scrollback.text({ from: 0 }))
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('history-truncated');
+  });
+
+  it('copies an emulator-side cell selection without sending input', async () => {
+    const terminal = await launch('echo-app.mjs');
+    await terminal.waitForText('READY');
+
+    terminal.selection.selectCells({ start: { row: 0, column: 0 }, end: { row: 0, column: 4 } });
+    expect(terminal.selection.copy()).toBe('READY');
+    terminal.selection.clear();
+    expect(terminal.selection.copy()).toBe('');
+  });
+
+  it('refuses to act on a closed harness', async () => {
+    const terminal = await launch('echo-app.mjs');
+    await terminal.waitForText('READY');
+    await terminal.close();
+    await terminal.close(); // idempotent
+
+    const error = await terminal.press('a').catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('session-closed');
+  });
+});
+
 describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_000 }, () => {
   it('sends an SGR mouse report the child can decode', async () => {
     const terminal = await launch('mouse-app.mjs');
