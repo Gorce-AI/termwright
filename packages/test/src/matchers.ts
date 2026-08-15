@@ -386,25 +386,29 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
   const isNot = negated(state);
   const config = getTermwrightConfig();
   const timeout = spec.options.timeout ?? config.timeouts.expect;
-  const stored = spec.inline ?? loadStoredSnapshot(state, spec.kind, config.snapshotDir);
+  // Allocated once per assertion: asking twice would consume two snapshot keys.
+  const location =
+    spec.inline === undefined ? snapshotLocation(state, spec.kind, config.snapshotDir) : undefined;
+  const stored =
+    spec.inline ?? (location === undefined ? undefined : readSnapshot(location.file, location.key));
 
   if (stored === undefined) {
     if (isNot) {
       throw new TypeError(`${spec.matcher} cannot be negated without an inline expected snapshot`);
     }
     const mode = updateMode(state);
-    const location = snapshotLocation(state, spec.kind, config.snapshotDir);
+    const place = location ?? snapshotLocation(state, spec.kind, config.snapshotDir);
     if (mode === 'none') {
       return {
         pass: false,
         message: () =>
-          `${spec.matcher}: no stored snapshot for ${JSON.stringify(location.key)}.\n` +
-          `Run with \`vitest -u\` (or TERMWRIGHT_UPDATE_SNAPSHOTS=missing) to write ${location.file}.\n\n` +
+          `${spec.matcher}: no stored snapshot for ${JSON.stringify(place.key)}.\n` +
+          `Run with \`vitest -u\` (or TERMWRIGHT_UPDATE_SNAPSHOTS=missing) to write ${place.file}.\n\n` +
           spec.serialize(),
       };
     }
-    writeSnapshot(location.file, location.key, spec.serialize());
-    recordAssert({ api: spec.matcher, ok: true, selector: location.key }, testKey(state));
+    writeSnapshot(place.file, place.key, spec.serialize());
+    recordAssert({ api: spec.matcher, ok: true, selector: place.key }, testKey(state));
     return { pass: true, message: () => `${spec.matcher}: snapshot written` };
   }
 
@@ -416,8 +420,7 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
   }
 
   const mode = updateMode(state);
-  if (spec.inline === undefined && !isNot) {
-    const location = snapshotLocation(state, spec.kind, config.snapshotDir);
+  if (location !== undefined && !isNot) {
     if (mode === 'all' || (mode === 'changed' && !comparison.ok)) {
       writeSnapshot(location.file, location.key, comparison.actual);
       recordAssert({ api: spec.matcher, ok: true, selector: location.key }, testKey(state));
@@ -452,24 +455,14 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
   };
 }
 
-function loadStoredSnapshot(state: MatcherState, kind: SnapshotKind, dir: string): string | undefined {
-  const location = snapshotLocation(state, kind, dir);
-  return readSnapshot(location.file, location.key);
-}
-
 interface SnapshotLocation {
   readonly file: string;
   readonly key: string;
 }
 
-const locations = new WeakMap<object, Map<string, SnapshotLocation>>();
-
 /**
- * Resolves — once per assertion — which file and key back this snapshot.
- *
- * The key is allocated on first use and memoized on the matcher state, so the
- * write path and the failure message agree on the key even though both ask for
- * it.
+ * Which file and key back this snapshot. Every call allocates the next key for
+ * the test, so callers resolve it once per assertion.
  */
 function snapshotLocation(state: MatcherState, kind: SnapshotKind, dir: string): SnapshotLocation {
   const testPath = state.testPath;
@@ -479,19 +472,10 @@ function snapshotLocation(state: MatcherState, kind: SnapshotKind, dir: string):
       'external snapshots need Vitest test context; pass the expected snapshot inline when asserting outside a test',
     );
   }
-  let perState = locations.get(state as object);
-  if (perState === undefined) {
-    perState = new Map();
-    locations.set(state as object, perState);
-  }
-  const cached = perState.get(kind);
-  if (cached !== undefined) return cached;
-  const location: SnapshotLocation = {
+  return {
     file: snapshotFilePath(testPath, kind, dir),
     key: nextSnapshotKey(`${testPath}::${testName}`, testName, kind),
   };
-  perState.set(kind, location);
-  return location;
 }
 
 function updateMode(state: MatcherState): ReturnType<typeof resolveUpdateMode> {

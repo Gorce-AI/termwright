@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -258,6 +258,22 @@ describe('external snapshots', () => {
     beginSnapshotScope();
     configureTermwright({ timeouts: { expect: 100 }, snapshotDir: dir, updateSnapshots: 'none' });
     await expect(harness).toMatchSemanticSnapshot();
+  });
+
+  it('gives each assertion in a test its own key', async () => {
+    const dir = directories[directories.length - 1] as string;
+    const state = { tree: snapshot([node('n1', 'text', 'first')]) };
+    const harness = fakeHarness(() => state);
+    await expect(harness).toMatchSemanticSnapshot();
+    state.tree = snapshot([node('n1', 'text', 'second')]);
+    await expect(harness).toMatchSemanticSnapshot();
+
+    const file = join(dir, 'matchers.test.ts.tw-semantic.yaml');
+    const stored = readFileSync(file, 'utf8');
+    expect(stored).toContain('own key 1');
+    expect(stored).toContain('own key 2');
+    expect(stored).toContain('- text "first"');
+    expect(stored).toContain('- text "second"');
   });
 
   it('refuses to negate an external snapshot', async () => {
