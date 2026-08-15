@@ -1,0 +1,61 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+# One deployment at a time; never cancel a running one half-way.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.4.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - uses: actions/configure-pages@v5
+
+      - run: pnpm install --frozen-lockfile
+
+      # `base` in astro.config.mjs is '/termwright', matching
+      # https://gorce-ai.github.io/termwright/.
+      # TODO(custom domain): when a custom domain is configured, drop `base`
+      # there, set `site` to the domain, and add website/public/CNAME.
+      - run: pnpm --filter @termwright/website run build
+
+      - name: Check internal links resolve inside the base path
+        run: pnpm --filter @termwright/website run check:links
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

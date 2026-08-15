@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    name: npm (changesets)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the version PR / tags
+      pull-requests: write
+      id-token: write # npm provenance
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.4.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm -r --filter './packages/*' run typecheck
+      - run: pnpm -r --filter './packages/*' run test
+
+      # Opens (or updates) the "Version Packages" PR when changesets are
+      # pending; publishes when that PR has been merged.
+      - id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+          publish: pnpm changeset publish
+          commit: 'chore(release): version packages'
+          title: 'chore(release): version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'
+
+  pypi:
+    name: PyPI (termwright)
+    needs: npm
+    if: needs.npm.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the distribution
+        working-directory: clients/python
+        run: |
+          pip install build
+          python -m build
+
+      - name: Run the test suite against the built package
+        working-directory: clients/python
+        run: |
+          pip install -e ".[dev]"
+          pytest
+
+      # TODO(secrets): configure PyPI Trusted Publishing for gorce-ai/termwright
+      # (project `termwright`, workflow `release.yml`, environment `pypi`), then
+      # remove this guard. Until then the job builds and tests but does not push.
+      - name: Publish
+        if: vars.PYPI_TRUSTED_PUBLISHING == 'configured'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: clients/python/dist
+
+  crates:
+    name: crates.io (termwright-protocol)
+    needs: npm
+    if: needs.npm.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    env:
+      # Job-level so the publish step's `if` can read it: a step cannot see the
+      # env it declares for itself.
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Test and package
+        working-directory: clients/rust
+        run: |
+          cargo test
+          cargo package --allow-dirty
+
+      # TODO(secrets): add CARGO_REGISTRY_TOKEN to the repository secrets, then
+      # this step starts publishing. It is a no-op while the secret is unset.
+      - name: Publish
+        if: env.CARGO_REGISTRY_TOKEN != ''
+        working-directory: clients/rust
+        run: cargo publish
+
+  go:
+    name: Go module tag
+    needs: npm
+    if: needs.npm.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: clients/go/go.sum
+
+      - working-directory: clients/go
+        run: go test ./...
+
+      # A Go module is published by tagging, and the tag for a module in a
+      # subdirectory is `clients/go/vX.Y.Z`. Tagging is intentionally manual
+      # until the first coordinated 1.0 release; this job is the gate that the
+      # module is green at the commit being tagged.
+      - name: Reminder
+        run: echo "clients/go is green — tag it as clients/go/vX.Y.Z to publish."

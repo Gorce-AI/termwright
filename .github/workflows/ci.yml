@@ -1,0 +1,216 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Keep the pnpm store inside the workspace so actions/setup-node can cache it.
+  PNPM_VERSION: '9.4.0'
+
+jobs:
+  build:
+    name: build ${{ matrix.os }} / node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install test (the native pty binding resolves on this platform)
+        shell: bash
+        run: pnpm --filter @termwright/driver exec node -e "import('@lydell/node-pty').then(m => { if (typeof m.spawn !== 'function') process.exit(1); console.log('pty backend loaded'); })"
+
+      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm -r --filter './packages/*' run typecheck
+      - run: pnpm -r --filter './packages/*' run test
+
+  hostile:
+    name: hostile input (128 MiB heap)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+
+      # Each of these pins the worker's old-space to 128 MiB, so a resource
+      # exhaustion case fails closed instead of passing on a large default heap.
+      - run: pnpm --filter @termwright/protocol run test:hostile
+      - run: pnpm --filter @termwright/conformance run test:hostile
+      - run: pnpm --filter @termwright/ui run test
+
+  conformance:
+    name: conformance ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+
+      # The matrix reports its own skips: a run where every suite skipped says
+      # so rather than reporting success.
+      - run: pnpm --filter @termwright/conformance run conformance
+
+  clients:
+    name: clients (${{ matrix.client }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        client: [python, go, rust]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        if: matrix.client == 'python'
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - uses: actions/setup-go@v5
+        if: matrix.client == 'go'
+        with:
+          go-version: '1.23'
+          cache-dependency-path: clients/go/go.sum
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.client == 'rust'
+
+      # The toolchain is installed by the step above, so a missing one is a
+      # setup failure rather than a reason to skip: no continue-on-error here.
+      - name: Verify the toolchain is present
+        run: |
+          case "${{ matrix.client }}" in
+            python) python --version ;;
+            go)     go version ;;
+            rust)   cargo --version ;;
+          esac
+
+      - name: Python tests
+        if: matrix.client == 'python'
+        working-directory: clients/python
+        run: |
+          pip install -e ".[dev]"
+          pytest
+
+      - name: Go tests
+        if: matrix.client == 'go'
+        working-directory: clients/go
+        run: go test ./...
+
+      - name: Rust tests
+        if: matrix.client == 'rust'
+        working-directory: clients/rust
+        run: cargo test
+
+  vectors:
+    name: cross-language vectors are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @termwright/protocol run build
+
+      # The generator re-runs every expectation through the reference
+      # implementation, so a stale or hand-edited vector shows up as a diff.
+      - run: node clients/test-vectors/generate.mjs
+      - name: Fail if the committed vectors drifted
+        run: git diff --exit-code -- clients/test-vectors
+
+  examples:
+    name: examples (dogfooding)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: examples/tview-menu/go.sum
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+
+      - name: Install the Python client for the Textual example
+        run: pip install -e "clients/python[textual]"
+
+      - run: pnpm -r --filter './examples/*' run test
+
+      - name: Upload failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: example-termwright-reports
+          path: examples/*/termwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+  website:
+    name: website builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @termwright/website run build
+      - run: pnpm --filter @termwright/website run check:links

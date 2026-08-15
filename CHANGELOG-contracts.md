@@ -84,3 +84,6 @@
   `output`/`semantic` messages are produced by whoever owns the session
   (`attachSession(hub, harness)`); the Vitest bridge alone cannot emit them from
   a worker process and emits `step` messages post-hoc from the test's trace.
+- 2026-08-16: task #17 approved — `mcp` MAY depend on `@termwright/trace` for
+  trace.* replay tools; new package `@termwright/screenshot` (SVG + resvg PNG,
+  no Chromium) owned alongside trace.

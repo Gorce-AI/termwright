@@ -1,0 +1,83 @@
+---
+title: termwright
+description: Playwright for the terminal — real PTY observation plus an application-published semantic tree, for tests, agents and an interactive runner.
+template: splash
+hero:
+  tagline: "Playwright for the terminal. A real pseudo-terminal and a standards-grade VT emulator observe any program exactly; an application-published <strong>semantic tree</strong> gives you <code>getByRole('button', { name: 'Approve' })</code> instead of scraping the screen."
+  actions:
+    - text: Get started
+      link: getting-started/
+      icon: right-arrow
+    - text: Why not tmux?
+      link: guides/why-not-tmux/
+      variant: minimal
+    - text: GitHub
+      link: https://github.com/gorce-ai/termwright
+      icon: external
+      variant: minimal
+---
+
+import {Card, CardGrid} from '@astrojs/starlight/components';
+
+## Ten lines, one real terminal
+
+```ts
+import {expect, test} from '@termwright/test';
+
+test('asks before running a command', async ({terminal}) => {
+  const app = await terminal.launch({command: ['node', 'agent.js']});
+  await app.waitForText('Permission required');
+
+  await app.getByRole('button', {name: 'Approve'}).activate();
+
+  await expect(app.getByRole('dialog')).not.toBeVisible();
+  await expect(app).toHaveText('running: ls -la');
+});
+```
+
+Every action goes through the pseudo-terminal: a click is a real mouse report, a
+keystroke is real bytes. There is no callback back-channel into the application,
+so a test that passes is evidence the program works.
+
+## Three things nobody else has
+
+<CardGrid>
+<Card title="Semantic YAML snapshots" icon="document">
+The accessibility tree of a terminal app, serialized as reviewable YAML. A snapshot breaks when meaning changes, not when whitespace does, and it matches partially — children you omit are don't-care.
+
+```yaml
+- dialog "Permission" [modal]:
+    - button "Approve" [focused]
+    - button /Rej.*/
+```
+</Card>
+<Card title="Failure forensics" icon="magnifier">
+A self-contained HTML report: side-by-side visual diff, a semantic diff in plain sentences (`button "Submit" state changed to disabled`), and an embedded recording positioned on the failing step. Recording is on by default.
+</Card>
+<Card title="Incremental diffs for agents" icon="seti:robot">
+`terminal.capture_since { cursor }` returns the rows **and the semantic subtrees** that changed since a revision, so an agent stops burning context re-reading a screen it has already seen.
+</Card>
+</CardGrid>
+
+## One driver, three consumers
+
+<CardGrid>
+<Card title="Tests" icon="approve-check">
+A Vitest preset: fixtures, matchers that poll, semantic and cell snapshots, flaky classification, HTML report. [Getting started →](getting-started/)
+</Card>
+<Card title="Agents" icon="puzzle">
+An MCP server over the same public driver API — compact ref snapshots, incremental capture, a generated `agent-context`. [MCP guide →](guides/mcp/)
+</Card>
+<Card title="An interactive runner" icon="laptop">
+Live terminal, semantic inspector, a timeline you can scrub, and a recorder that writes the test for you. [Runner UI →](guides/runner-ui/)
+</Card>
+</CardGrid>
+
+## Honest about what it cannot see
+
+A program without a termwright adapter is still fully testable — text, cells,
+colors, modes, scrollback, mouse, paste, resize — and every diagnostic says
+`semanticTree: false` rather than inventing roles. Frameworks that compose
+strings instead of retaining a widget tree degrade to that generic mode on
+purpose, and the [adapter overview](adapters/) says which is which before you
+adopt anything.

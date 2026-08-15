@@ -5,3 +5,6 @@ coverage/
 .DS_Store
 *.twtrace/
 .vitest-cache/
+
+# Astro's generated types and content cache for website/
+.astro/
