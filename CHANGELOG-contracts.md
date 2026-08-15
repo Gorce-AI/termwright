@@ -43,3 +43,11 @@
   `__snapshots__/<test file>.tw-{semantic,cells}.yaml`; the `all|changed|
   missing|none` modes come from `TERMWRIGHT_UPDATE_SNAPSHOTS`, falling back to
   Vitest's `--update` (`-u` → `changed`, plain run → `missing`).
+- 2026-08-15 (conformance findings): (1) depth-ceiling violations must map to
+  wire 'limit-exceeded' (not 'malformed') — driver maps ProtocolViolation
+  machine codes onto the wire taxonomy explicitly. (2) `revision-commit` is
+  ADVISORY in v1: pairing authority is snapshot+DCS marker (§4.3); the driver
+  records commits in diagnostics only. (3) api.ts extension approved:
+  SessionEventMap gains `diagnostic` events and the harness exposes a bounded
+  read-only channel-diagnostics log (dropped/superseded revisions, unverified
+  markers, pairing expiries).
