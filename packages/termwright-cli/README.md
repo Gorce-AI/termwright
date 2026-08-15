@@ -42,6 +42,27 @@ text and cells.
 | `termwright` | `launchTerminal`, locators, actions, waits, the error taxonomy |
 | `termwright/test` | the Vitest preset: `test`, `expect`, matchers, YAML snapshots |
 | `termwright/ink` | `mountInk`, `launchInkFixture` for Ink component tests |
+| `termwright/reporter` | the trace reporter, for `vitest.config.ts` |
+| `termwright/ui-reporter` | the runner's live bridge, for `vitest.config.ts` |
+
+Everything a project needs is reachable from this one package, config included —
+so `termwright` in `devDependencies` is the whole install:
+
+```ts
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+import TermwrightReporter from 'termwright/reporter';
+import TermwrightUiReporter from 'termwright/ui-reporter';
+
+export default defineConfig({
+  test: { reporters: ['default', new TermwrightReporter(), new TermwrightUiReporter()] },
+});
+```
+
+The two reporters are independent and compose: one writes `.twtrace` archives,
+the other streams a live run to `termwright ui`. The UI one does nothing when
+`TERMWRIGHT_UI_URL` is unset, so it is safe to leave configured in a repository
+whose runs are mostly headless.
 
 `termwright` on its own has no test-runner dependency, so a script or a
 `node:test` file can use it:
@@ -79,16 +100,8 @@ runner arguments after `--`:
 termwright ui -- src/login.test.ts --reporter=dot
 ```
 
-For the live panes to fill in, add the reporter:
-
-```ts
-// vitest.config.ts
-import TermwrightUiReporter from '@termwright/ui/reporter';
-export default defineConfig({ test: { reporters: ['default', new TermwrightUiReporter()] } });
-```
-
-It does nothing when `TERMWRIGHT_UI_URL` is unset, so it is safe to leave in a
-repository whose runs are mostly headless.
+For the live panes to fill in, configure `termwright/ui-reporter` as shown
+above.
 
 `termwright mcp` forwards every argument to `@termwright/mcp` untouched, so
 `termwright mcp --http --port 7333` and `termwright-mcp --http --port 7333` are

@@ -12,6 +12,8 @@ ink-testing". They are all here, but on three entry points rather than one:
 | `termwright` | `@termwright/driver` |
 | `termwright/test` | `@termwright/test` |
 | `termwright/ink` | `@termwright/ink-testing` |
+| `termwright/reporter` | `@termwright/test/reporter` |
+| `termwright/ui-reporter` | `@termwright/ui/reporter` |
 
 A single barrel would have been worse, and specifically: `@termwright/test`
 imports Vitest and **registers matchers as a side effect of being imported**. Put
@@ -22,6 +24,17 @@ a dependency of both a test suite and a shipped tool.
 
 `termwright/cli` is exported too, so a repository can build its own wrapper
 around `runCli` without shelling out.
+
+The two reporter subpaths exist because a `vitest.config.ts` must be writable
+from the umbrella alone. Pointing a config at `@termwright/test/reporter`
+resolves only where the package manager hoists transitive dependencies; under
+pnpm's default layout a project whose devDependency is `termwright` cannot see
+it. They are separate entries rather than members of `termwright/test` because
+a config file runs before the test runner exists and must not import a module
+that registers matchers.
+
+`export *` does not re-export a default, and a Vitest config imports these by
+default. `exports.test.ts` constructs both defaults for that reason.
 
 ## The CLI delegates rather than reimplements
 
