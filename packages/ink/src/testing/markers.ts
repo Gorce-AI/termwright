@@ -6,10 +6,18 @@
  * marker for revision N follows the last byte of revision N's frame.
  */
 
-import { verifyMarkerPayload } from '@termwright/protocol';
+import { MARKER_DCS_PREFIX, verifyMarkerPayload } from '@termwright/protocol';
 
-/** `ESC P twm;<revision>;<mac> ESC \` — the payload is captured. */
-const MARKER_PATTERN = /\u001bP(twm;[^\u001b]*)\u001b\\/gu;
+/**
+ * `ESC P twm;<revision>;<mac> ESC \`, with the payload captured.
+ *
+ * The payload includes the DCS final byte (`t`, the first character of
+ * {@link MARKER_DCS_PREFIX}), because that is what `verifyMarkerPayload`
+ * expects. A VT parser hands it over separately — see the protocol README.
+ */
+function markerPattern(): RegExp {
+  return new RegExp(`\\u001bP(${MARKER_DCS_PREFIX}[^\\u001b]*)\\u001b\\\\`, 'gu');
+}
 
 /** One verified marker and its byte offset in the stream. */
 export interface FoundMarker {
@@ -25,7 +33,7 @@ export interface FoundMarker {
  */
 export function markersIn(output: string, token: string, sessionId: string): FoundMarker[] {
   const found: FoundMarker[] = [];
-  for (const match of output.matchAll(MARKER_PATTERN)) {
+  for (const match of output.matchAll(markerPattern())) {
     const marker = verifyMarkerPayload(match[1] as string, token, sessionId);
     if (marker !== null) found.push({ index: match.index, revision: marker.revision });
   }
@@ -34,5 +42,5 @@ export function markersIn(output: string, token: string, sessionId: string): Fou
 
 /** The stream with every marker sequence removed, for byte-identity comparisons. */
 export function stripMarkers(output: string): string {
-  return output.replaceAll(MARKER_PATTERN, '');
+  return output.replaceAll(markerPattern(), '');
 }

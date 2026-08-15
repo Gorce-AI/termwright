@@ -79,6 +79,27 @@ already queued and nothing more, which is exactly the guarantee the marker needs
 - **Node ids** are `n1`, `n2`, … assigned on first sight and held in a `WeakMap`,
   so they stay stable across revisions for as long as an element is mounted.
 
+## Validator invariants the collector must keep
+
+`validateSnapshot` enforces three rules that are stricter than the design prose,
+and all three are satisfied by construction:
+
+- **Parentless nodes must appear in `rootIds`.** The collector emits exactly one
+  parentless node — Ink's root, published as `application` — and it is the sole
+  entry in `rootIds`.
+- **`labelledBy` / `describedBy` must resolve inside the snapshot.** Neither is
+  emitted at all; Ink has no relation vocabulary to derive them from.
+- **Unknown node properties are rejected, not ignored.** Every field is built
+  from the protocol's own `SemanticNode` shape via conditional spreads, so an
+  absent value is an absent key rather than an explicit `undefined`.
+
+The subtle case is truncation: when the walk stops at `maxNodes`, children are
+never emitted after their parent was dropped, because `parentId` always points
+at the nearest *published* ancestor and ancestors are pushed first.
+`collect.test.tsx` asserts the relation invariants for both a full tree and a
+truncated one, and the fake driver runs `parseAdapterMessage` over every frame,
+so the whole suite exercises real validation rather than a mock of it.
+
 ## Gotchas for future maintainers
 
 - **`rerender` must re-apply the provider.** `Instance.rerender` replaces the

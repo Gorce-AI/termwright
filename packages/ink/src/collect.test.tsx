@@ -120,6 +120,38 @@ describe('snapshot collection', () => {
     expect(button?.name).toHaveLength(16);
   });
 
+  it.each([
+    ['a normal tree', DEFAULT_LIMITS],
+    ['a tree truncated at the node ceiling', { ...DEFAULT_LIMITS, maxNodes: 4 }],
+  ])('satisfies the validator relation invariants for %s', async (_name, limits) => {
+    const snapshot = await firstSnapshot(
+      <Box flexDirection="column">
+        {Array.from({ length: 12 }, (_, index) => (
+          <Box key={index}>
+            <Annotated name={`item ${index}`} />
+          </Box>
+        ))}
+      </Box>,
+      { limits },
+    );
+
+    const ids = new Set(snapshot.nodes.map((node) => node.id));
+    const parentless = snapshot.nodes.filter((node) => node.parentId === undefined);
+
+    // Every node without a parent is a declared root, and vice versa.
+    expect(parentless.map((node) => node.id).sort()).toEqual([...snapshot.rootIds].sort());
+    // No parent reference dangles, even when truncation cut the walk short.
+    for (const node of snapshot.nodes) {
+      if (node.parentId !== undefined) expect(ids.has(node.parentId)).toBe(true);
+    }
+    // Relations, when present, stay inside the snapshot.
+    for (const node of snapshot.nodes) {
+      for (const target of [...(node.labelledBy ?? []), ...(node.describedBy ?? [])]) {
+        expect(ids.has(target)).toBe(true);
+      }
+    }
+  });
+
   it('stops at the negotiated node ceiling instead of growing without bound', async () => {
     const snapshot = await firstSnapshot(
       <Box flexDirection="column">

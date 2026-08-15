@@ -16,6 +16,7 @@ import {
   createFrameDecoder,
   encodeFrame,
   parseAdapterMessage,
+  generateToken,
   DEFAULT_LIMITS,
   PROTOCOL_ID,
   type AdapterToDriverMessage,
@@ -63,7 +64,7 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
     process.platform === 'win32'
       ? `\\\\.\\pipe\\termwright-ink-${randomBytes(8).toString('hex')}`
       : join(directory, 'semantic.sock');
-  const token = randomBytes(32).toString('base64url');
+  const token = generateToken();
   const sessionId = options.sessionId ?? 's1';
   const limits = options.limits ?? DEFAULT_LIMITS;
 
