@@ -1,4 +1,5 @@
 export * from './env.js';
+export * from './errors.js';
 export * from './roles.js';
 export * from './limits.js';
 export * from './tree.js';

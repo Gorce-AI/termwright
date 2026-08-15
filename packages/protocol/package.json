@@ -15,7 +15,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:hostile": "vitest run --config vitest.hostile.config.ts"
   },
   "dependencies": {
     "zod": "^4.0.0"
