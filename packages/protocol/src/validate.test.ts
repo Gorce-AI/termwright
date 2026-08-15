@@ -61,6 +61,24 @@ describe('validateSnapshot — happy path', () => {
     expect(codeOf(snapshot)).toBe('ok');
   });
 
+  // An Ink tree containing <Static> shifts the live region by an amount the
+  // adapter cannot observe from inside the process, so it drops bounds
+  // wholesale. A snapshot with no bounds anywhere is a legal class-A state,
+  // not a degraded one — consumers must not treat it as an adapter fault.
+  it('accepts a snapshot where no node carries bounds at all', () => {
+    const snapshot = baseSnapshot();
+    for (const node of snapshot['nodes'] as Record<string, unknown>[]) {
+      delete node['bounds'];
+    }
+    expect(codeOf(snapshot)).toBe('ok');
+  });
+
+  it('accepts a snapshot where only some nodes carry bounds', () => {
+    const snapshot = baseSnapshot();
+    delete (snapshot['nodes'] as Record<string, unknown>[])[0]!['bounds'];
+    expect(codeOf(snapshot)).toBe('ok');
+  });
+
   it('accepts an offscreen node when it is marked hidden', () => {
     const snapshot = baseSnapshot();
     const node = (snapshot['nodes'] as Record<string, unknown>[])[1]!;

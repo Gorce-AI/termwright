@@ -119,6 +119,13 @@ both sides pass to the HMAC as the key. Never decode it to bytes first. Use
   Unknown properties are rejected, not ignored. Checks run cheapest-first, so
   a snapshot over the byte ceiling is rejected before any per-node work.
 
+`bounds` is optional per node, and a snapshot carrying **no bounds at all** is
+valid. Class-B/C frameworks publish role+name nodes without trustworthy
+coordinates, and even a class-A adapter drops bounds wholesale when it cannot
+observe its own offset (Ink does this when the tree contains `<Static>`).
+Consumers must treat a bounds-free snapshot as a normal state, not a fault, and
+fall back to their non-geometric path.
+
 Two invariants are stricter than the prose spec strictly requires, and are
 called out here because adapters must satisfy them: every node without a
 `parentId` must appear in `rootIds`, and `labelledBy`/`describedBy` must
