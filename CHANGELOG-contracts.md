@@ -152,3 +152,12 @@
   are behavioral. Adding a ProtocolLimits key is NOT a breaking change;
   removing/retyping one is. Reference schema and py/go/rust clients updated
   accordingly; test vectors gain an unknown-limit-key acceptance case.
+- 2026-08-16 (crash in trace): §Trace — `meta.json` gains `crash?`, mirroring
+  the driver's `CrashReport` but carrying `castOffset` and storing
+  `lastSemanticRevision` instead of the tree (resolved via
+  `TraceReader.crashSemantic()`); `events.jsonl` gains a `crash` kind carrying
+  the exit, screen-tail row count and revision only. `crash` fires before
+  `exit`, and `exit` only after the emulator drains, so the stored screen tail
+  is the screen the recording ends on. `meta.crash.screenTail` is NOT redacted
+  (driver's wording is binding): every consumer that displays it repeats the
+  warning — the HTML report shows it as a banner above the tail.

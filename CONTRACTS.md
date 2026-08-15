@@ -49,13 +49,20 @@ package boundaries must be `TermwrightError` subclasses. All I/O bounded per
 A directory (zipped for transport) containing:
 
 - `meta.json` — `{ v: 1, sessionId, command, columns, rows, startedAt,
-  platform, semanticTree: boolean, exit?: {code, signal} }`
+  platform, semanticTree: boolean, exit?: {code, signal},
+  crash?: {t, castOffset, exit, screenTail, lastSemanticRevision,
+  recentInputs, diagnosticsTail} }`. `crash` mirrors the driver's
+  `CrashReport` with two changes: it carries `castOffset`, and it stores the
+  last semantic *revision* instead of the tree (the tree is already in
+  `semantics.jsonl`). **`screenTail` is verbatim terminal output and is never
+  redacted** — an archive carrying a crash must be treated like a screenshot;
+  consumers that display it must repeat that warning.
 - `session.cast` — asciicast **v3**; markers array entries map to test steps:
   label = step title. Recording includes all PTY output; `Hide()/Show()`
   windows excluded at write time.
 - `events.jsonl` — one JSON object per line:
   `{ t: <ms>, castOffset: <ms>, kind: 'input'|'resize'|'step-start'|'step-end'|
-     'action'|'assert', ... }` where `action` carries
+     'action'|'assert'|'crash', ... }` where `action` carries
   `{ api, selector?, ref?, ok, error? }`. `castOffset` positions the event on
   the (idle-trimmed, hide-window-adjusted) recording timeline; readers fall
   back to `t` when absent.
