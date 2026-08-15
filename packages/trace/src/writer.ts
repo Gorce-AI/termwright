@@ -18,6 +18,7 @@ import {
   type SemanticRecord,
   type StepStatus,
   type TraceEvent,
+  type TraceCrash,
   type TraceExit,
   type TraceMeta,
 } from './types.js';
@@ -166,6 +167,7 @@ export function createTraceWriter(
   let finalized = false;
   let disposed = false;
   let exit: TraceExit | undefined;
+  let crash: TraceCrash | undefined;
   let columns = options.columns ?? 100;
   let rows = options.rows ?? 30;
   let lastResize: { columns: number; rows: number } | null = null;
@@ -267,6 +269,34 @@ export function createTraceWriter(
       const wall = driverTime(status.timeMs);
       exit = { code: status.code, signal: status.signal };
       pushCast(wall, 'x', String(status.code ?? ''));
+    }),
+  );
+
+  unsubscribers.push(
+    // `crash` arrives just before `exit`, and `exit` only after the emulator
+    // has drained — so the screen tail in the report is the screen the archive
+    // ends on, and both land at their own timestamps on the same clock.
+    session.events.on('crash', (report) => {
+      const wall = driverTime(report.timeMs);
+      const lastSemanticRevision = report.lastSemanticTree?.revision ?? null;
+      crash = {
+        t: wall,
+        // Rewritten with the real value in writeArchive; the wall clock is the
+        // only timeline that exists before the hide/trim transforms run.
+        castOffset: wall,
+        exit: { code: report.exit.code, signal: report.exit.signal },
+        screenTail: [...report.screenTail],
+        lastSemanticRevision,
+        recentInputs: [...report.recentInputs],
+        diagnosticsTail: [...report.diagnosticsTail],
+      };
+      traceEvents.push({
+        t: wall,
+        kind: 'crash',
+        exit: crash.exit,
+        screenTailLines: crash.screenTail.length,
+        lastSemanticRevision,
+      });
     }),
   );
 
@@ -391,6 +421,7 @@ export function createTraceWriter(
         hiddenWindows,
         idleTimeLimit: finalizeOptions.idleTimeLimit,
         header: buildHeader(),
+        crash,
         meta: {
           v: TRACE_VERSION,
           sessionId: session.sessionId,
@@ -448,7 +479,9 @@ interface WriteArchiveInput {
   readonly hiddenWindows: readonly HiddenWindow[];
   readonly idleTimeLimit: number | undefined;
   readonly header: CastHeader;
-  readonly meta: Omit<TraceMeta, 'idleTimeLimit' | 'durationMs'>;
+  /** Its `castOffset` is still the wall-clock time; the timeline fixes it up. */
+  readonly crash: TraceCrash | undefined;
+  readonly meta: Omit<TraceMeta, 'idleTimeLimit' | 'durationMs' | 'crash'>;
 }
 
 /** Applies the timeline transforms and writes the four archive files. */
@@ -503,6 +536,9 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
       ? { idleTimeLimit: input.idleTimeLimit }
       : {}),
     durationMs: round(timeline.durationMs),
+    ...(input.crash === undefined
+      ? {}
+      : { crash: { ...input.crash, castOffset: round(timeline.mapWall(input.crash.t)) } }),
   };
 
   await mkdir(input.dir, { recursive: true });

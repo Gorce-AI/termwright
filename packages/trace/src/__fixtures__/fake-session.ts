@@ -4,7 +4,12 @@
  */
 
 import type { SemanticNode, SemanticSnapshot } from '@termwright/protocol';
-import type { SessionEventMap, SessionEvents } from '@termwright/driver';
+import type {
+  CrashReport,
+  ExitStatus,
+  SessionEventMap,
+  SessionEvents,
+} from '@termwright/driver';
 import type { TraceSource } from '../writer.js';
 
 type Listener = (payload: never) => void;
@@ -85,6 +90,26 @@ export class FakeSession implements TraceSource {
 
   exit(code: number | null, signal: string | null = null): void {
     this.#emit('exit', { code, signal, timeMs: this.clock });
+  }
+
+  /**
+   * Emits a crash report, then the exit that follows it — the driver's order,
+   * where `crash` lands before `exit` and `exit` only after the emulator has
+   * drained.
+   */
+  crash(report: Partial<CrashReport> & { exit?: ExitStatus } = {}): void {
+    const exit: ExitStatus = report.exit ?? { code: null, signal: 'SIGSEGV' };
+    this.#emit('crash', {
+      exit,
+      screenTail: report.screenTail ?? ['panic: runtime error', 'goroutine 1 [running]:'],
+      lastSemanticTree: report.lastSemanticTree ?? this.#tree,
+      recentInputs: report.recentInputs ?? [
+        { timeMs: this.clock - 20, kind: 'key', bytes: 1, preview: 'q' },
+      ],
+      diagnosticsTail: report.diagnosticsTail ?? [],
+      timeMs: report.timeMs ?? this.clock,
+    });
+    this.#emit('exit', { ...exit, timeMs: this.clock });
   }
 }
 

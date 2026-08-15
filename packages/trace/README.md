@@ -9,9 +9,9 @@ An archive is a directory (zippable for transport) holding four files:
 
 | File | Content |
 |---|---|
-| `meta.json` | session id, command, viewport, platform, exit status |
+| `meta.json` | session id, command, viewport, platform, exit status, crash |
 | `session.cast` | asciicast **v3**; `test.step()` titles become markers |
-| `events.jsonl` | inputs, resizes, steps, locator actions, assertions |
+| `events.jsonl` | inputs, resizes, steps, locator actions, assertions, crash |
 | `semantics.jsonl` | one semantic tree per revision, with its cast offset |
 
 The layout is normative in [`/CONTRACTS.md`](../../CONTRACTS.md) §Trace. Nothing
@@ -89,8 +89,33 @@ semantic changes as sentences, and embeds an asciinema player positioned on the
 failing step's marker. Callers with their own before/after screens or trees (a
 snapshot mismatch, say) can pass them directly via `visual` and `semantic`.
 
+**`frameAt(trace, timeMs)`** — replays the recording's output prefix back into a
+cell grid shaped like the driver's `ScreenSnapshot`, so a recorded moment can be
+inspected cell by cell or handed to `@termwright/screenshot`.
+
 **`packTrace(dir, file)` / `unpackTrace(file, dir)`** — zip an archive for CI
 artifact upload and read it back.
+
+## When the program dies on its own
+
+If the driver reports a crash — a signal, or a non-zero exit nobody asked for —
+the writer stores it in `meta.crash` and marks the moment in `events.jsonl`. The
+report grows a **Crash** panel above the diffs: how it died, the screen it died
+on, the last inputs, and the session diagnostics. `trace.crashSemantic()`
+resolves the tree that was current at the time out of `semantics.jsonl`.
+
+```ts
+const trace = await openTrace('out/server.twtrace');
+if (trace.meta.crash) {
+  console.error(trace.meta.crash.screenTail.join('\n'));
+}
+```
+
+**`meta.crash.screenTail` is not redacted.** It is what the terminal showed,
+verbatim — whatever the program or the tty's echo displayed is in there, secrets
+included. Treat an archive carrying a crash like a screenshot when you store it,
+upload it as a CI artifact or forward it. Pasted input is the one exception: its
+size is recorded, never its contents.
 
 ## Development
 

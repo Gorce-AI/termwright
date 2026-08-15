@@ -122,3 +122,35 @@ would need an explicit epoch marker in the event payload.
   line and caches only a small index of semantic records (time, revision, cast
   offset) — never the snapshots themselves. `semanticAt()` re-streams to fetch
   the one snapshot it needs.
+
+## Crash reports
+
+The driver emits `crash` just before `exit`, and `exit` only after the emulator
+has drained — so by the time the archive closes, the screen tail in the report
+is the screen the recording ends on. Both events are timestamped on the same
+clock as everything else, so the crash gets a `castOffset` through the ordinary
+wall→cast mapping and a player can seek to it.
+
+Two things are stored differently from the driver's `CrashReport`:
+
+- **`castOffset` is added.** The report is a moment on the timeline, and the
+  timeline the UI scrubs is the trimmed one.
+- **The semantic tree is replaced by its revision.** `semantics.jsonl` already
+  holds every tree; copying one into `meta.json` would duplicate an unbounded
+  payload in the one file every consumer parses eagerly.
+  `TraceReader.crashSemantic()` resolves it.
+
+`events.jsonl` gets a `crash` line carrying only the exit, the screen-tail row
+count and the revision — enough to see *that* it happened while scanning the
+log, without putting a screen tail on a line in a file meant to be streamed.
+
+### `screenTail` is not redacted, and the report says so
+
+The driver's TSDoc is explicit that the tail is verbatim terminal output,
+secrets included. That warning has to survive the trip into the artifact,
+because the artifact is the thing that gets uploaded to CI and linked in a bug
+report — so the same caveat is repeated in `TraceCrash`'s TSDoc, in the
+package README, and as a visible banner above the `<pre>` in the HTML report.
+Pasted input is the one thing that is never included: `CrashInput` reports a
+paste's size and omits its preview, and the report renders that as
+"not recorded" rather than silently showing an empty cell.

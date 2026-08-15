@@ -14,6 +14,7 @@
  * TypeScript.
  */
 
+import type { CrashInput, SessionDiagnostic } from '@termwright/driver';
 import type { SemanticSnapshot } from '@termwright/protocol';
 
 /** Current archive version. Readers reject anything else. */
@@ -55,6 +56,46 @@ export interface TraceMeta {
   readonly idleTimeLimit?: number;
   /** Total cast duration in milliseconds after hide/trim transforms. */
   readonly durationMs?: number;
+  /**
+   * Present when the recorded program died unexpectedly — a signal, or a
+   * non-zero exit nobody asked for. Absent for a clean exit and for a session
+   * the harness closed or signalled itself.
+   */
+  readonly crash?: TraceCrash;
+}
+
+/**
+ * What the session knew when the program died, as stored in `meta.json`.
+ *
+ * A near-verbatim copy of the driver's `CrashReport`, with two deliberate
+ * differences: it carries `castOffset` so a player can seek to the moment, and
+ * it stores the last semantic *revision* rather than the tree itself — the tree
+ * is already in `semantics.jsonl`, and `TraceReader.crashSemantic()` fetches it.
+ */
+export interface TraceCrash {
+  /** Wall-clock offset from the start of recording, in milliseconds. */
+  readonly t: number;
+  /** Position on the cast timeline, in milliseconds. */
+  readonly castOffset: number;
+  readonly exit: TraceExit;
+  /**
+   * Last lines of scrollback plus the visible grid, oldest first.
+   *
+   * **Not redacted.** This is what the terminal showed, verbatim: whatever the
+   * program or the tty's echo displayed is here, secrets included. A `.twtrace`
+   * carrying a crash should be treated like a screenshot when it is stored,
+   * uploaded as a CI artifact or forwarded.
+   */
+  readonly screenTail: readonly string[];
+  /**
+   * Revision of the last fully paired semantic tree, or `null`. Look the tree
+   * itself up in `semantics.jsonl` via {@link TraceReader.crashSemantic}.
+   */
+  readonly lastSemanticRevision: number | null;
+  /** The most recent inputs, oldest first. Paste contents are never included. */
+  readonly recentInputs: readonly CrashInput[];
+  /** Tail of the session diagnostics log. */
+  readonly diagnosticsTail: readonly SessionDiagnostic[];
 }
 
 /** Kind discriminator of {@link TraceEvent}. */
@@ -64,7 +105,8 @@ export type TraceEventKind =
   | 'step-start'
   | 'step-end'
   | 'action'
-  | 'assert';
+  | 'assert'
+  | 'crash';
 
 /** Terminal state of a recorded test step. */
 export type StepStatus = 'passed' | 'failed' | 'skipped';
@@ -138,6 +180,21 @@ export interface AssertEvent extends TraceEventBase {
   readonly stepId?: string;
 }
 
+/**
+ * The program died unexpectedly.
+ *
+ * Marks *when* on the timeline; the forensic detail lives in
+ * {@link TraceMeta.crash}, so a reader scanning the event log does not have to
+ * carry a screen tail on every line.
+ */
+export interface CrashEvent extends TraceEventBase {
+  readonly kind: 'crash';
+  readonly exit: TraceExit;
+  /** Number of rows captured in `meta.crash.screenTail`. */
+  readonly screenTailLines: number;
+  readonly lastSemanticRevision: number | null;
+}
+
 /** One line of `events.jsonl`. */
 export type TraceEvent =
   | InputEvent
@@ -145,7 +202,8 @@ export type TraceEvent =
   | StepStartEvent
   | StepEndEvent
   | ActionEvent
-  | AssertEvent;
+  | AssertEvent
+  | CrashEvent;
 
 /** One line of `semantics.jsonl`. */
 export interface SemanticRecord {

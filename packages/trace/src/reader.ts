@@ -57,6 +57,12 @@ export interface TraceReader {
   steps(): Promise<readonly StepSummary[]>;
   /** The newest semantic record at or before `castOffsetMs`. */
   semanticAt(castOffsetMs: number): Promise<SemanticRecord | null>;
+  /**
+   * The semantic tree the crash report points at, or `null` when the session
+   * did not crash or had no tree. `meta.crash` stores only the revision, so
+   * the snapshot is not duplicated between `meta.json` and `semantics.jsonl`.
+   */
+  crashSemantic(): Promise<SemanticRecord | null>;
   /** Everything the UI needs to render one point in time. */
   stateAt(timeMs: number): Promise<TraceState>;
   close(): Promise<void>;
@@ -221,6 +227,15 @@ class ArchiveReader implements TraceReader {
     for await (const record of this.semantics()) {
       if (line === candidate.line) return record;
       line += 1;
+    }
+    return null;
+  }
+
+  async crashSemantic(): Promise<SemanticRecord | null> {
+    const revision = this.meta.crash?.lastSemanticRevision;
+    if (revision === undefined || revision === null) return null;
+    for await (const record of this.semantics()) {
+      if (record.revision === revision) return record;
     }
     return null;
   }

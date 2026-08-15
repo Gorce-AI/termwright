@@ -15,7 +15,7 @@ import type { SemanticSnapshot } from '@termwright/protocol';
 import { openTrace, type TraceReader, type TraceState } from './reader.js';
 import { changedRows, escapeHtml, renderAnsiToHtml, type RenderedScreen } from './render.js';
 import { diffSemanticSnapshots, type SemanticDiff } from './semantic-diff.js';
-import type { StepStatus, StepSummary } from './types.js';
+import type { StepStatus, StepSummary, TraceCrash } from './types.js';
 
 /** Explicit before/after screens, when the caller already has them. */
 export interface VisualDiffInput {
@@ -132,6 +132,7 @@ interface TestSection {
   readonly failingStep: StepSummary | null;
   readonly visual: { before: RenderedScreen; after: RenderedScreen; labels: [string, string] } | null;
   readonly semantic: SemanticDiff | null;
+  readonly crash: TraceCrash | null;
   readonly cast: string | null;
   readonly castNote: string | null;
 }
@@ -146,6 +147,7 @@ async function buildSection(
     failingStep: null,
     visual: null,
     semantic: null,
+    crash: null,
     cast: null,
     castNote: null,
   };
@@ -176,7 +178,16 @@ async function buildSection(
     const semantic = buildSemantic(result, before, after);
     const { cast, castNote } = await loadCast(trace, options);
 
-    return { result, steps, failingStep, visual, semantic, cast, castNote };
+    return {
+      result,
+      steps,
+      failingStep,
+      visual,
+      semantic,
+      crash: trace?.meta.crash ?? null,
+      cast,
+      castNote,
+    };
   } finally {
     await trace?.close();
   }
@@ -324,6 +335,7 @@ function renderSection(section: TestSection): string {
       )}</strong> at ${formatMs(section.failingStep.castOffset)}</p>`,
     );
   }
+  if (section.crash !== null) parts.push(renderCrash(section.crash));
   if (section.semantic !== null) parts.push(renderSemantic(section.semantic));
   if (section.visual !== null) parts.push(renderVisual(section.visual));
   if (result.screenshots !== undefined && result.screenshots.length > 0) {
@@ -386,6 +398,76 @@ function renderVisual(visual: NonNullable<TestSection['visual']>): string {
       ${column(visual.before, visual.labels[0])}
       ${column(visual.after, visual.labels[1])}
     </div>
+  </section>`;
+}
+
+/**
+ * The crash panel: how the program died, and what the terminal showed as it
+ * went. Rendered above the diffs, because when a program dies on its own the
+ * stack trace it printed is the answer and everything else is context.
+ */
+function renderCrash(crash: TraceCrash): string {
+  const cause =
+    crash.exit.signal === null
+      ? `exit code ${String(crash.exit.code ?? 'unknown')}`
+      : `signal ${crash.exit.signal}`;
+
+  const parts: string[] = [
+    `<p class="tw-crash-head">The program died on its own: <strong>${escapeHtml(
+      cause,
+    )}</strong> at ${formatMs(crash.castOffset)}.</p>`,
+  ];
+
+  if (crash.screenTail.length > 0) {
+    parts.push(
+      `<h4>Screen at the end</h4>`,
+      `<p class="tw-warn">Not redacted — this is what the terminal showed, verbatim, secrets included. Treat this report like a screenshot when storing or forwarding it.</p>`,
+      `<pre class="tw-crash-screen">${escapeHtml(crash.screenTail.join('\n'))}</pre>`,
+    );
+  }
+
+  if (crash.recentInputs.length > 0) {
+    const rows = crash.recentInputs
+      .map(
+        (input) =>
+          `<tr><td>${formatMs(input.timeMs)}</td><td>${escapeHtml(input.kind)}</td><td>${
+            input.bytes
+          } B</td><td>${
+            input.preview === undefined
+              ? '<span class="tw-note">not recorded</span>'
+              : `<code>${escapeHtml(input.preview)}</code>`
+          }</td></tr>`,
+      )
+      .join('\n      ');
+    parts.push(
+      `<h4>Last inputs before the end</h4>`,
+      `<table class="tw-steps"><thead><tr><th>at</th><th>kind</th><th>size</th><th>sent</th></tr></thead><tbody>
+      ${rows}
+    </tbody></table>`,
+    );
+  }
+
+  if (crash.diagnosticsTail.length > 0) {
+    const items = crash.diagnosticsTail
+      .map(
+        (entry) =>
+          `<li><code>${escapeHtml(entry.code)}</code> ${escapeHtml(entry.detail)}${
+            entry.revision === undefined ? '' : ` <span class="tw-note">rev ${entry.revision}</span>`
+          }</li>`,
+      )
+      .join('\n      ');
+    parts.push(`<h4>Session diagnostics</h4><ul class="tw-sentences">\n      ${items}\n    </ul>`);
+  }
+
+  if (crash.lastSemanticRevision !== null) {
+    parts.push(
+      `<p class="tw-note">Last semantic revision: ${crash.lastSemanticRevision} (the tree is in <code>semantics.jsonl</code>).</p>`,
+    );
+  }
+
+  return `<section class="tw-block tw-crash">
+    <h3>Crash</h3>
+    ${parts.join('\n    ')}
   </section>`;
 }
 
@@ -533,6 +615,10 @@ summary { cursor:pointer; display:flex; gap:12px; align-items:baseline; flex-wra
 .tw-grid { background:#141414; border:1px solid var(--line); border-radius:6px; padding:8px; overflow-x:auto; font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace; font-size:12px; line-height:1.25; white-space:pre; }
 .tw-row { min-height:1.25em; }
 .tw-row-changed { background:rgba(241,76,76,.16); box-shadow:inset 2px 0 0 var(--fail); }
+.tw-crash h4 { margin:14px 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+.tw-crash-head { margin:0; }
+.tw-warn { margin:6px 0; padding:6px 10px; border-radius:6px; font-size:12px; color:#ffd8a8; background:rgba(200,163,74,.12); border:1px solid rgba(200,163,74,.4); }
+.tw-crash-screen { background:#141414; border:1px solid var(--line); border-radius:6px; padding:8px; overflow-x:auto; font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace; font-size:12px; line-height:1.3; white-space:pre; margin:0; }
 .tw-shots { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; }
 .tw-shot { margin:0; }
 .tw-shot figcaption { color:var(--muted); font-size:12px; margin-bottom:4px; }
