@@ -6,9 +6,10 @@
   "type": "module",
   "engines": { "node": ">=22" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "bin": { "termwright-mcp": "./dist/bin.js" },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/bin.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
