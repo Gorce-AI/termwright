@@ -1,0 +1,16 @@
+{
+  "name": "@termwright/ink-testing",
+  "version": "0.1.0",
+  "description": "mountInk (in-process) + launchInkFixture (real PTY) over TerminalHarness",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "@termwright/driver": "workspace:*", "@termwright/ink": "workspace:*", "@termwright/protocol": "workspace:*" }
+}

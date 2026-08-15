@@ -1,0 +1,16 @@
+{
+  "name": "termwright",
+  "version": "0.1.0",
+  "description": "umbrella CLI: ui, codegen, agent-context, usage, skill",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "@termwright/driver": "workspace:*", "@termwright/ui": "workspace:*", "@termwright/mcp": "workspace:*" }
+}

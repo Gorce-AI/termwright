@@ -1,0 +1,16 @@
+{
+  "name": "@termwright/opentui",
+  "version": "0.1.0",
+  "description": "OpenTUI semantic adapter",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "@termwright/protocol": "workspace:*" }
+}

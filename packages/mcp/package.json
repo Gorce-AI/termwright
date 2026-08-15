@@ -1,0 +1,16 @@
+{
+  "name": "@termwright/mcp",
+  "version": "0.1.0",
+  "description": "thin MCP server over the public driver API",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "@termwright/driver": "workspace:*", "@modelcontextprotocol/sdk": "^1.30.0", "zod": "^4.0.0" }
+}

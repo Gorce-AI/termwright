@@ -1,0 +1,16 @@
+{
+  "name": "@termwright/test",
+  "version": "0.1.0",
+  "description": "Vitest preset: fixtures, matchers, semantic YAML snapshots, trace reporter",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "@termwright/driver": "workspace:*", "@termwright/trace": "workspace:*", "yaml": "^2.5.0" }
+}
