@@ -60,11 +60,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
-      # Each of these pins the worker's old-space to 128 MiB, so a resource
-      # exhaustion case fails closed instead of passing on a large default heap.
+      # These pin the worker's old-space to 128 MiB, so a resource-exhaustion
+      # case fails closed instead of passing on a large default heap.
       - run: pnpm --filter @termwright/protocol run test:hostile
       - run: pnpm --filter @termwright/conformance run test:hostile
-      - run: pnpm --filter @termwright/ui run test
+
+      # @termwright/ui has no hostile-specific vitest config: its suite states
+      # the 128 MiB cap as a CI obligation, so CI is where the cap is applied.
+      # Vitest workers inherit NODE_OPTIONS, which is what actually bounds them.
+      - name: '@termwright/ui hostile suite'
+        env:
+          NODE_OPTIONS: '--max-old-space-size=128'
+        run: pnpm --filter @termwright/ui exec vitest run src/hostile.test.ts
 
   conformance:
     name: conformance ${{ matrix.os }}
