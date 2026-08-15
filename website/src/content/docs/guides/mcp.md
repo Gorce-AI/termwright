@@ -133,10 +133,45 @@ Exit codes are a closed taxonomy an agent can branch on:
 | 4 | ipc failure |
 | 5 | internal error |
 
+## Replaying a trace
+
+An agent does not only drive live terminals: the most useful thing to hand it
+after a CI failure is the [recording](../traces/). Four read-only tools open a
+`.twtrace` archive and read it the same way a live session is read.
+
+```jsonc
+// trace.open       {"path": "artifacts/login.twtrace"}  -> { traceId: "tr1", meta, steps }
+// trace.overview   {"traceId": "tr1"}                   -> steps, markers, failedSteps, exit
+// trace.frame_at   {"traceId": "tr1", "stepIndex": 2}   -> the screen and tree at that moment
+// trace.diff       {"traceId": "tr1", "fromMs": 800, "toMs": 1400}
+```
+
+- **`trace.open`** validates the archive and returns a handle plus the recorded
+  command, viewport, duration, exit status, and whether the session published a
+  semantic tree. Every replay investigation starts here.
+- **`trace.overview`** is the shape of the recording: each step with status and
+  timing, the cast markers, which step failed. This is how an agent picks the
+  moment worth reconstructing instead of scanning the whole session.
+- **`trace.frame_at`** rebuilds the screen at a moment — named by `timeMs`,
+  `stepIndex` or `marker` — by replaying the recording into a headless emulator,
+  and pairs it with the semantic tree of the nearest revision at or before it.
+  The result reads exactly like a live `terminal.snapshot`, refs included.
+- **`trace.diff`** reconstructs two moments and reports what moved: changed rows
+  and changed semantic subtrees, in the same shape as `capture_since` on a live
+  session.
+
+Because the output shapes match the live tools, an agent needs no second mental
+model for post-mortems — the same "snapshot, find the ref, ask what changed"
+loop works on a recording from a machine it has never seen.
+
 ## Screenshots
 
 `terminal.snapshot {variant: "full"}` writes the complete dump — text, ANSI and
 the HTML rendering — to a file under the system temporary directory and returns
-only refs plus the path. That is the whole picture story for 1.0: no tool
-returns `ImageContent`, because a real PNG needs a rasteriser and headless
-Chromium is not an acceptable dependency here.
+only refs plus the path.
+
+No tool returns `ImageContent` yet. `trace.frame_at` and `trace.diff` accept a
+`screenshot` flag, and passing it today fails with `unsupported-action` and says
+why rather than silently ignoring it: PNG rendering waits on
+`@termwright/screenshot`. Headless Chromium is not an acceptable dependency
+here, which is what made this a separate package rather than a quick win.
