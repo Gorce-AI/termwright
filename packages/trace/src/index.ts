@@ -121,6 +121,7 @@ export {
 export {
   generateHtmlReport,
   resetPlayerAssetCache,
+  type ReportCrash,
   type ReportOptions,
   type ReportResult,
   type ReportScreenshot,

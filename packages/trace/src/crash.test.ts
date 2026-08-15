@@ -259,3 +259,87 @@ describe('crash in the HTML report', () => {
     expect(html).not.toContain('Not redacted');
   });
 });
+
+describe('a crash supplied without a trace', () => {
+  it('renders the panel from ReportTestResult.crash alone', async () => {
+    const root = await workspace();
+    const { html } = await generateHtmlReport({
+      outFile: join(root, 'report.html'),
+      embedPlayer: false,
+      results: [
+        {
+          id: 't1',
+          title: 'no recording kept',
+          status: 'failed',
+          crash: {
+            exit: { code: null, signal: 'SIGKILL' },
+            timeMs: 4_200,
+            screenTail: ['Killed'],
+            recentInputs: [{ timeMs: 4_100, kind: 'paste', bytes: 12 }],
+            diagnostics: [{ code: 'endpoint-error', detail: 'socket gone', timeMs: 4_150 }],
+            lastSemanticRevision: 9,
+          },
+        },
+      ],
+    });
+
+    expect(html).toContain('<strong>signal SIGKILL</strong>');
+    expect(html).toContain('at 4.20s');
+    expect(html).toContain('Killed');
+    expect(html).toContain('Not redacted');
+    expect(html).toContain('not recorded');
+    expect(html).toContain('socket gone');
+    expect(html).toContain('Last semantic revision: 9');
+  });
+
+  it('lets a supplied crash win over the one in the trace', async () => {
+    const root = await workspace();
+    const dir = join(root, 'both.twtrace');
+    await recordCrash(dir);
+
+    const { html } = await generateHtmlReport({
+      outFile: join(root, 'report.html'),
+      embedPlayer: false,
+      results: [
+        {
+          id: 't1',
+          title: 'both',
+          status: 'failed',
+          tracePath: dir,
+          crash: {
+            exit: { code: 3, signal: null },
+            timeMs: 1,
+            screenTail: ['supplied by the caller'],
+          },
+        },
+      ],
+    });
+
+    expect(html).toContain('supplied by the caller');
+    expect(html).toContain('<strong>exit code 3</strong>');
+    expect(html).not.toContain('goroutine 1 [running]:');
+  });
+
+  it('tolerates a crash with only the required fields', async () => {
+    const root = await workspace();
+    const { html } = await generateHtmlReport({
+      outFile: join(root, 'report.html'),
+      embedPlayer: false,
+      results: [
+        {
+          id: 't1',
+          title: 'bare',
+          status: 'failed',
+          crash: { exit: { code: 1, signal: null }, timeMs: 0, screenTail: [] },
+        },
+      ],
+    });
+
+    expect(html).toContain('<h3>Crash</h3>');
+    expect(html).toContain('<strong>exit code 1</strong>');
+    // No tail, no inputs, no diagnostics: the panel is just the cause line.
+    expect(html).not.toContain('Screen at the end');
+    expect(html).not.toContain('Last inputs before the end');
+    expect(html).not.toContain('Not redacted');
+  });
+});

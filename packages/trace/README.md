@@ -111,6 +111,16 @@ if (trace.meta.crash) {
 }
 ```
 
+When there is no archive to carry the crash — recording off, or
+`retain-on-failure` discarding it — pass one straight to the report instead:
+
+```ts
+results: [{ id: 't1', title: 'login', status: 'failed', crash: harnessCrash }]
+```
+
+`ReportCrash` is structural and JSON-safe, so it survives a trip through a
+Vitest worker's `task.meta`. A supplied crash wins over the trace's.
+
 **`meta.crash.screenTail` is not redacted.** It is what the terminal showed,
 verbatim — whatever the program or the tty's echo displayed is in there, secrets
 included. Treat an archive carrying a crash like a screenshot when you store it,

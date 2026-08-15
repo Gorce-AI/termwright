@@ -56,6 +56,49 @@ export interface ReportTestResult {
    * renders the frames it wants and passes the bytes here.
    */
   readonly screenshots?: readonly ReportScreenshot[];
+  /**
+   * Overrides the crash panel derived from the trace.
+   *
+   * Only needed when the caller has a crash report but no trace to carry it —
+   * recording turned off, or `retain-on-failure` discarding the archive. When a
+   * trace is present its `meta.crash` is used, and this field wins over it.
+   */
+  readonly crash?: ReportCrash;
+}
+
+/**
+ * A crash handed straight to the report.
+ *
+ * Structural and JSON-safe on purpose: the Vitest preset moves this through
+ * `task.meta` from a worker to the main process, so it must survive
+ * `JSON.parse` without needing types from `@termwright/driver`. `code` is
+ * therefore a plain string here, while the archive's own {@link TraceCrash}
+ * keeps the driver's closed `DiagnosticCode` — that one is written from typed
+ * data and never round-trips through a worker boundary.
+ */
+export interface ReportCrash {
+  readonly exit: { readonly code: number | null; readonly signal: string | null };
+  /** Milliseconds since session start. */
+  readonly timeMs: number;
+  /**
+   * Terminal output around the death, oldest first, already bounded by the
+   * caller. **Not redacted** — see {@link TraceCrash.screenTail}.
+   */
+  readonly screenTail: readonly string[];
+  readonly recentInputs?: readonly {
+    readonly timeMs: number;
+    readonly kind: 'key' | 'mouse' | 'paste' | 'raw';
+    readonly bytes: number;
+    /** Omitted for pastes, whose contents are never recorded. */
+    readonly preview?: string;
+  }[];
+  readonly diagnostics?: readonly {
+    readonly code: string;
+    readonly detail: string;
+    readonly timeMs: number;
+    readonly revision?: number;
+  }[];
+  readonly lastSemanticRevision?: number | null;
 }
 
 /** One image embedded in a test's section of the report. */
@@ -335,7 +378,13 @@ function renderSection(section: TestSection): string {
       )}</strong> at ${formatMs(section.failingStep.castOffset)}</p>`,
     );
   }
-  if (section.crash !== null) parts.push(renderCrash(section.crash));
+  const crash =
+    result.crash !== undefined
+      ? panelFromResult(result.crash)
+      : section.crash === null
+        ? null
+        : panelFromTrace(section.crash);
+  if (crash !== null) parts.push(renderCrash(crash));
   if (section.semantic !== null) parts.push(renderSemantic(section.semantic));
   if (section.visual !== null) parts.push(renderVisual(section.visual));
   if (result.screenshots !== undefined && result.screenshots.length > 0) {
@@ -406,7 +455,50 @@ function renderVisual(visual: NonNullable<TestSection['visual']>): string {
  * went. Rendered above the diffs, because when a program dies on its own the
  * stack trace it printed is the answer and everything else is context.
  */
-function renderCrash(crash: TraceCrash): string {
+interface CrashPanel {
+  readonly exit: { readonly code: number | null; readonly signal: string | null };
+  /** Where to say it happened: the cast offset when known, else wall clock. */
+  readonly atMs: number;
+  readonly screenTail: readonly string[];
+  readonly recentInputs: readonly {
+    readonly timeMs: number;
+    readonly kind: string;
+    readonly bytes: number;
+    readonly preview?: string;
+  }[];
+  readonly diagnostics: readonly {
+    readonly code: string;
+    readonly detail: string;
+    readonly revision?: number;
+  }[];
+  readonly lastSemanticRevision: number | null;
+}
+
+/** The archive's crash, positioned on the cast timeline. */
+function panelFromTrace(crash: TraceCrash): CrashPanel {
+  return {
+    exit: crash.exit,
+    atMs: crash.castOffset,
+    screenTail: crash.screenTail,
+    recentInputs: crash.recentInputs,
+    diagnostics: crash.diagnosticsTail,
+    lastSemanticRevision: crash.lastSemanticRevision,
+  };
+}
+
+/** A caller-supplied crash, which only knows wall-clock time. */
+function panelFromResult(crash: ReportCrash): CrashPanel {
+  return {
+    exit: crash.exit,
+    atMs: crash.timeMs,
+    screenTail: crash.screenTail,
+    recentInputs: crash.recentInputs ?? [],
+    diagnostics: crash.diagnostics ?? [],
+    lastSemanticRevision: crash.lastSemanticRevision ?? null,
+  };
+}
+
+function renderCrash(crash: CrashPanel): string {
   const cause =
     crash.exit.signal === null
       ? `exit code ${String(crash.exit.code ?? 'unknown')}`
@@ -415,7 +507,7 @@ function renderCrash(crash: TraceCrash): string {
   const parts: string[] = [
     `<p class="tw-crash-head">The program died on its own: <strong>${escapeHtml(
       cause,
-    )}</strong> at ${formatMs(crash.castOffset)}.</p>`,
+    )}</strong> at ${formatMs(crash.atMs)}.</p>`,
   ];
 
   if (crash.screenTail.length > 0) {
@@ -447,8 +539,8 @@ function renderCrash(crash: TraceCrash): string {
     );
   }
 
-  if (crash.diagnosticsTail.length > 0) {
-    const items = crash.diagnosticsTail
+  if (crash.diagnostics.length > 0) {
+    const items = crash.diagnostics
       .map(
         (entry) =>
           `<li><code>${escapeHtml(entry.code)}</code> ${escapeHtml(entry.detail)}${
