@@ -7,7 +7,10 @@ Contract the conformance suite drives it by:
 
 * ``Permission required`` proves the first frame reached the terminal
 * ``tab`` moves focus, and ``Reject`` becomes the focused button
-* ``q`` quits with exit code 0
+* ``ctrl+q`` quits with exit code 0 from any focus position
+
+Quitting is bound to ctrl+q rather than ``q``, which the reason field would
+swallow, and rather than ctrl+c, which Textual 8 binds to copy.
 """
 
 from __future__ import annotations

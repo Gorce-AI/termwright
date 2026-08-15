@@ -57,8 +57,14 @@ app built for it:
 
 | Adapter | Example | Ready text | Interaction | Quit |
 |---|---|---|---|---|
-| Textual | `python/examples/permission_app.py` | `Permission required` | `\t` → `focus: reject` | `q`, exit 0 |
-| tview | `go/examples/permission/` | `Permission required` | `\t` → `focus: reject` | `q`, exit 0 |
+| Textual | `python/examples/permission_app.py` | `Permission required` | `\t` → `focus: reject` | `\x11` (Ctrl+Q), exit 0 |
+| tview | `go/examples/permission/` | `Permission required` | `\t` → `focus: reject` | `\x03` (Ctrl+C), exit 0 |
+
+The quit keys differ per framework, and neither is `q`: both examples carry a
+text field, and once it holds the focus a printable key is typed into it rather
+than acted on. There is no shared control key either — Textual 8 binds Ctrl+C
+to copy and quits on Ctrl+Q, while tview quits on Ctrl+C and ignores Ctrl+Q.
+Both were measured under a PTY from every focus position.
 
 ```ts
 await runAdapterConformance({

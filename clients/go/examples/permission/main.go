@@ -8,7 +8,10 @@
 //
 //   - "Permission required" proves the first frame reached the terminal
 //   - Tab moves focus, and the status line becomes "focus: reject"
-//   - "q" quits with exit code 0
+//   - Ctrl+C quits with exit code 0 from any focus position
+//
+// Quitting is bound to Ctrl+C rather than "q", which the reason field would
+// swallow once it holds the focus.
 package main
 
 import (
