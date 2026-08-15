@@ -13,3 +13,14 @@
 - 2026-08-15: snapshot validation is stricter than the origin-spec prose:
   parentless nodes must appear in `rootIds`; `labelledBy`/`describedBy`
   targets must exist in the same snapshot.
+- 2026-08-15 (driver landed): `launchTerminal` accepts `LaunchTerminalOptions`
+  (superset: + `backend?: PtyBackend`, injectable for mountInk). `recording`
+  option is accepted and ignored by the driver — recording belongs to
+  `@termwright/trace` via `SessionEvents`. `capabilities().semanticTree` is
+  true from successful handshake (not first tree); semantic locators wait when
+  no tree arrived yet, `unsupported-action` only in settled-generic sessions.
+  `close()` hangs up the PTY (SIGHUP/TerminateProcess) as part of physical
+  cleanup; destructive signals remain explicit. `.class` CSS-dialect semantics
+  provisional (matches testId/name token) pending protocol-level classes.
+- 2026-08-15: `waitForReady` (shell prompt) missing from api.ts — deferred
+  addition before 1.0 (timeout class 'ready' already defined).
