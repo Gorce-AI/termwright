@@ -4,6 +4,7 @@
  * CONTRACTS.md and notifying all package owners.
  */
 import type {
+  ProtocolErrorMessage,
   Rect,
   SemanticRole,
   SemanticSnapshot,
@@ -323,6 +324,11 @@ export interface SessionDiagnostic {
   readonly detail: string;
   /** The semantic revision the entry is about, when it is about one. */
   readonly revision?: number;
+  /**
+   * For `protocol-violation`: the wire error code sent to the adapter, so a
+   * caller can tell *which* failure closed the channel without parsing prose.
+   */
+  readonly wireCode?: ProtocolErrorMessage['code'];
   readonly timeMs: number;
 }
 

@@ -18,6 +18,7 @@ interface Harness {
   attachments: SemanticAttachment[];
   diagnostics: string[];
   violations: ProtocolViolationError[];
+  wireCodes: string[];
 }
 
 const open: { channel: SemanticChannel; sockets: Socket[] }[] = [];
@@ -35,6 +36,7 @@ async function createChannel(): Promise<Harness> {
   const attachments: SemanticAttachment[] = [];
   const diagnostics: string[] = [];
   const violations: ProtocolViolationError[] = [];
+  const wireCodes: string[] = [];
   const channel = await SemanticChannel.listen({
     sessionId: SESSION_ID,
     token: TOKEN,
@@ -44,11 +46,14 @@ async function createChannel(): Promise<Harness> {
       onCommit: () => {},
       onAttach: (attachment) => attachments.push(attachment),
       onDiagnostic: (code, detail) => diagnostics.push(`${code}: ${detail}`),
-      onProtocolViolation: (error) => violations.push(error),
+      onProtocolViolation: (error, wireCode) => {
+        violations.push(error);
+        wireCodes.push(wireCode);
+      },
     },
   });
   open.push({ channel, sockets: [] });
-  return { channel, snapshots, attachments, diagnostics, violations };
+  return { channel, snapshots, attachments, diagnostics, violations, wireCodes };
 }
 
 interface Client {
@@ -226,6 +231,7 @@ describe('SemanticChannel', () => {
     const wrapped = harness.violations.at(-1);
     expect(wrapped?.code).toBe('protocol-violation');
     expect(wrapped?.diagnostics.suggestion).toContain('frame-oversized');
+    expect(harness.wireCodes.at(-1)).toBe('limit-exceeded');
   });
 
   it('accepts a snapshot in which no node has bounds', async () => {

@@ -150,6 +150,12 @@ export async function launchTerminal(options: LaunchTerminalOptions): Promise<Te
   return session;
 }
 
+/** What a diagnostic entry is about, beyond its message. */
+interface DiagnosticContext {
+  readonly revision?: number | undefined;
+  readonly wireCode?: SessionDiagnostic['wireCode'];
+}
+
 interface ChangeWaiter {
   resolve(): void;
   timer: NodeJS.Timeout;
@@ -204,7 +210,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       maxPending: DEFAULT_LIMITS.maxQueuedFrames,
       pairingTimeoutMs: PAIRING_TIMEOUT_MS,
       onPublish: (paired) => this.#publishSemantic(paired.snapshot),
-      onDiagnostic: (code, detail, revision) => this.#diagnostic(code, detail, revision),
+      onDiagnostic: (code, detail, revision) => this.#diagnostic(code, detail, { revision }),
     });
     this.exit = new Promise<ExitStatus>((resolve) => {
       this.#resolveExit = resolve;
@@ -226,12 +232,13 @@ class TerminalSession implements TerminalHarness, LocatorContext {
           this.#diagnostic(
             'revision-commit',
             `the adapter reported committing revision ${revision}; pairing still waits for its render marker`,
-            revision,
+            { revision },
           ),
-        onDiagnostic: (code, detail, revision) => this.#diagnostic(code, detail, revision),
-        onProtocolViolation: (error) => {
+        onDiagnostic: (code, detail, revision) =>
+          this.#diagnostic(code, detail, revision === undefined ? undefined : { revision }),
+        onProtocolViolation: (error, wireCode) => {
           this.#violation = error;
-          this.#diagnostic('protocol-violation', error.message);
+          this.#diagnostic('protocol-violation', error.message, { wireCode });
           this.#settle();
         },
       },
@@ -497,6 +504,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.assertOpen();
     const deadline = Date.now() + (opts?.timeout ?? this.timeouts.ready);
     for (;;) {
+      // Liveness is checked before readiness, unlike waitForText and friends.
+      // Those assert an observation of the past — text that was printed stays
+      // printed after the program exits — while readiness is a claim about the
+      // future: a dead program cannot accept the input this call promises.
+      this.#assertAlive('waitForReady');
       const shell = this.#vt.shellIntegration();
       if (shell.supported) {
         if (shell.ready) {
@@ -525,7 +537,6 @@ class TerminalSession implements TerminalHarness, LocatorContext {
           }),
         );
       }
-      this.#assertAlive('waitForReady');
       await this.waitForChange(Math.min(deadline, Date.now() + READY_QUIET_MS));
     }
   }
@@ -691,11 +702,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
    * Records one diagnostic and publishes it. The log is bounded and
    * oldest-first: a flooding adapter cannot grow it without bound.
    */
-  #diagnostic(code: DiagnosticCode, detail: string, revision?: number): void {
+  #diagnostic(code: DiagnosticCode, detail: string, about?: DiagnosticContext): void {
     const entry: SessionDiagnostic = {
       code,
       detail,
-      ...(revision !== undefined ? { revision } : {}),
+      ...(about?.revision !== undefined ? { revision: about.revision } : {}),
+      ...(about?.wireCode !== undefined ? { wireCode: about.wireCode } : {}),
       timeMs: this.#now(),
     };
     this.#diagnosticsLog.push(Object.freeze(entry));

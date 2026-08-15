@@ -39,6 +39,22 @@ function ptyAvailable(): boolean {
 
 const sessions: TerminalHarness[] = [];
 
+/** Launches a fixture with extra argv, for fixtures that take flags. */
+async function launchWith(
+  argv: readonly string[],
+  options: Record<string, unknown> = {},
+): Promise<TerminalHarness> {
+  const [fixture, ...rest] = argv;
+  const terminal = await launchTerminal({
+    command: [process.execPath, join(FIXTURES, fixture ?? ''), ...rest],
+    columns: 60,
+    rows: 10,
+    ...options,
+  });
+  sessions.push(terminal);
+  return terminal;
+}
+
 async function launch(fixture: string, options: Record<string, unknown> = {}): Promise<TerminalHarness> {
   const terminal = await launchTerminal({
     command: [process.execPath, join(FIXTURES, fixture)],
@@ -261,13 +277,32 @@ describe.skipIf(!ptyAvailable())('waitForReady', { timeout: 20_000 }, () => {
     expect(strategy?.detail).toContain('heuristic');
   });
 
+  it('does not call an exited program ready, even with a prompt on screen', async () => {
+    // Readiness is a claim about the future: the prompt is still visible, but
+    // nothing can accept the input this call promises.
+    const terminal = await launchWith(['prompt-app.mjs', '--exit-after-prompt']);
+    await terminal.waitForExit();
+    expect(terminal.screen().text()).toContain('$');
+
+    const error = await terminal.waitForReady().catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('process-exited');
+    // A past observation, by contrast, stays true after the exit.
+    await terminal.waitForText('booting');
+  });
+
   it('times out while a command is still running', async () => {
-    const terminal = await launch('scroll-app.mjs', { rows: 8 });
-    await terminal.waitForText('line 1');
+    const terminal = await launch('prompt-app.mjs');
+    await terminal.waitForReady();
+
+    // The fixture marks the command as started (C) and only finishes it 120 ms
+    // later, so this deadline lands squarely inside the running command.
+    await terminal.press('x');
+    await terminal.waitForText('working');
     const error = await terminal
-      .waitForReady({ timeout: 10 })
+      .waitForReady({ timeout: 20 })
       .catch((cause: unknown) => cause as TermwrightError);
     expect((error as TermwrightError).code).toBe('timeout');
+    expect((error as TermwrightError).message).toContain('running command');
   });
 });
 
@@ -286,6 +321,22 @@ describe.skipIf(!ptyAvailable())('session diagnostics', { timeout: 20_000 }, () 
     expect(entry?.detail).toContain('generic session');
     expect(entry?.timeMs).toBeGreaterThanOrEqual(0);
     expect(events).toContain('negotiation-timeout');
+  });
+
+  it('records which wire error closed the channel', async () => {
+    const terminal = await launch('hostile-app.mjs', { semanticNegotiationMs: 5_000 });
+    await terminal.waitForText('HOSTILE READY');
+
+    await expect
+      .poll(() => terminal.diagnostics().some((entry) => entry.code === 'protocol-violation'), {
+        timeout: 5_000,
+      })
+      .toBe(true);
+
+    const violation = terminal.diagnostics().find((entry) => entry.code === 'protocol-violation');
+    // A ceiling breach, not a syntax error — readable without parsing prose.
+    expect(violation?.wireCode).toBe('limit-exceeded');
+    expect(violation?.detail).toContain('framing');
   });
 
   it('records the handshake and the advisory revision-commit', async () => {

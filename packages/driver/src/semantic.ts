@@ -71,7 +71,7 @@ export interface SemanticChannelHooks {
    * driver owns the boundary, so the error handed over here is always the
    * driver's typed {@link ProtocolViolationError}.
    */
-  onProtocolViolation(error: ProtocolViolationError): void;
+  onProtocolViolation(error: ProtocolViolationError, wireCode: ProtocolErrorMessage['code']): void;
 }
 
 /** Construction options for {@link SemanticChannel}. */
@@ -291,6 +291,7 @@ export class SemanticChannel {
             semanticTree: this.#attachment !== null,
             suggestion: `adapter error code: ${message.code}`,
           }),
+          message.code,
         );
         socket.destroy();
         this.#attached = null;
@@ -330,12 +331,14 @@ export class SemanticChannel {
     this.#sendError(socket, code as ErrorCode, detail);
     socket.destroy();
     if (this.#attached === socket) this.#attached = null;
+    const wireCode = code as ErrorCode;
     this.#options.hooks.onProtocolViolation(
       new ProtocolViolationError(`the semantic channel was closed: ${detail}`, {
         semanticTree: this.#attachment !== null,
         suggestion: `wire error ${code}${violation === undefined ? '' : ` (${violation})`}; ` +
           'the adapter must be fixed — the session keeps its last accepted tree and stops updating it',
       }),
+      wireCode,
     );
   }
 }

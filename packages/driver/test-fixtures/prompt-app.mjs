@@ -6,10 +6,15 @@
  */
 const OSC = (payload) => process.stdout.write(`\x1b]133;${payload}\x07`);
 
+// `--exit-after-prompt` leaves a prompt on screen and then exits, so a test
+// can tell "a prompt is visible" apart from "the program can take input".
+const exitAfterPrompt = process.argv.includes('--exit-after-prompt');
+
 function prompt() {
   OSC('A');
   process.stdout.write('$ ');
   OSC('B');
+  if (exitAfterPrompt) process.exit(0);
 }
 
 // A slow start: the prompt only appears after the banner, so a test that
