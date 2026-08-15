@@ -64,3 +64,7 @@
   advisory, recorded as 'revision-commit' diagnostic.
 - 2026-08-15: textbox textContent returns `value` whenever defined (including
   ''), falling back to `name` only when value is undefined.
+- 2026-08-16: SessionDiagnostic gains optional `wireCode?` on
+  'protocol-violation' entries (approved; closes the last indirect
+  conformance assertion). `waitForReady` must check process liveness before
+  reporting readiness (consistent with other waits).
