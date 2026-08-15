@@ -71,3 +71,16 @@
 - 2026-08-16: DiagnosticCode 'ready-strategy' is REPLACED by two codes:
   'ready-shell-integration' and 'ready-settled-screen' (fact vs heuristic must
   be distinguishable by code, not prose). Closed-set size: 14.
+- 2026-08-16 (ui landed): `ui` may **type-import** from `protocol`
+  (`SemanticSnapshot` passes through the UI verbatim), same relaxation as
+  `trace`; it stays a dev dependency, no runtime import. `§UI events` is
+  implemented exactly as written — the runner's extra needs (session list,
+  `stateAt` for time travel, recorder codegen) are HTTP routes under `/api/`,
+  not new message types. Clarifications used by the implementation, all within
+  the contract's wording: `step` carries optional `stepId`/`t`/`status` (nested
+  steps pair up, offsets are cast-timeline milliseconds), `pick` carries an
+  optional `enabled` flag so pick mode can be turned off, and `run-start`
+  carries `mode` (`live` | `post-mortem` | `record`) plus `startedAt`. Live
+  `output`/`semantic` messages are produced by whoever owns the session
+  (`attachSession(hub, harness)`); the Vitest bridge alone cannot emit them from
+  a worker process and emits `step` messages post-hoc from the test's trace.
