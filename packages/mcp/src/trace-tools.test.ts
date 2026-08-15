@@ -5,7 +5,7 @@
  * hand-driven session, so the tests exercise the same archive layout a failing
  * test run produces — no hand-written meta.json, no stubbed reader.
  */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -454,5 +454,66 @@ describe('PNG screenshots of a reconstructed frame', () => {
 
     expect(frame.content.every((part) => part.type === 'text')).toBe(true);
     expect(frame.data['screenshot']).toBeUndefined();
+  });
+});
+
+describe('a crash recorded in the archive', () => {
+  /** Writes a crash section into meta.json the way the trace writer will. */
+  async function withCrashMeta(path: string): Promise<string> {
+    const metaPath = join(path, 'meta.json');
+    const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
+    meta['crash'] = {
+      exit: { code: 9, signal: null },
+      timeMs: 2_500,
+      screenTail: ['Traceback (most recent call last):', '  RuntimeError: boom'],
+      recentInputs: [{ timeMs: 2_400, kind: 'key', bytes: 1, preview: '\\r' }],
+      diagnostics: [{ code: 'pairing-timeout', detail: 'no marker for revision 3', timeMs: 2_450 }],
+      lastSemanticRevision: 2,
+    };
+    await writeFile(metaPath, JSON.stringify(meta), 'utf8');
+    return path;
+  }
+
+  it('shows the crash section in the overview, structured and readable', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await withCrashMeta(await recordSample()) });
+    const overview = await call('trace.overview', { traceId: data['traceId'] });
+
+    expect(overview.isError, overview.text).toBe(false);
+    const crash = overview.data['crash'] as {
+      exit: { code: number };
+      screenTail: string[];
+      lastSemanticRevision: number;
+    };
+    expect(crash.exit.code).toBe(9);
+    expect(crash.screenTail).toContain('  RuntimeError: boom');
+    expect(crash.lastSemanticRevision).toBe(2);
+    expect(overview.text).toContain('crash: the program exited on its own');
+    expect(overview.text).toContain('RuntimeError: boom');
+    expect(overview.text).toContain('diagnostic pairing-timeout');
+  });
+
+  it('says nothing about crashes for a recording that carries none', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await recordSample() });
+    const overview = await call('trace.overview', { traceId: data['traceId'] });
+
+    expect(overview.data['crash']).toBeUndefined();
+    expect(overview.text).not.toContain('crash:');
+  });
+
+  it('ignores a crash section it cannot make sense of, rather than failing the call', async () => {
+    const path = await recordSample();
+    const metaPath = join(path, 'meta.json');
+    const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
+    meta['crash'] = { exit: 'not-an-object' };
+    await writeFile(metaPath, JSON.stringify(meta), 'utf8');
+
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path });
+    const overview = await call('trace.overview', { traceId: data['traceId'] });
+
+    expect(overview.isError, overview.text).toBe(false);
+    expect(overview.data['crash']).toBeUndefined();
   });
 });

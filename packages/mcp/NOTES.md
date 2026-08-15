@@ -182,6 +182,33 @@ Three deliberate choices:
 `trace.diff` deliberately has no screenshot flag: it spans two moments, and an
 image of "the difference" would be an invention. Ask for the two frames.
 
+## Crash reporting happens in one place
+
+`server.ts: withCrashContext()` attaches the crash to *any* failed tool call
+whose arguments name a terminal whose child died. Doing it there rather than in
+each acting tool means one code path instead of fifteen, and the server is the
+only layer that sees both the raw arguments and every thrown error. The
+underlying failure keeps its own kind — a `timeout` stays a `timeout` — with the
+crash alongside, because rewriting the kind would hide which call actually
+failed.
+
+The success paths are separate: `terminal.capabilities` and `terminal.snapshot`
+read `crashReport()` directly, since nothing throws when you inspect a session
+whose program has already exited. Without that, the honest-but-useless answer to
+"what is going on" is a session that simply reports itself closed.
+
+`crash.ts` bounds the report (40 tail lines, 500 characters each, 10 inputs, 10
+diagnostics) and marks the tail as sensitive in the schema description, in the
+README and in `SKILL.md`. The driver already omits previews for pastes, which
+routinely carry secrets; everything else in the tail is verbatim, so the only
+honest thing to do is tell the agent it is holding something screenshot-shaped.
+
+`trace.overview` reads `meta.crash` structurally (`crashOfMeta()`), so it works
+before and after `@termwright/trace` types the field — a malformed section is
+ignored rather than failing the call. Format agreed with that package's owner:
+the driver's `CrashReport` minus the semantic tree, which already lives verbatim
+in `semantics.jsonl`, plus `lastSemanticRevision` to reach it.
+
 ## Session ownership
 
 `SessionRegistry` maps a session key (`stdio`, `in-memory`, or an

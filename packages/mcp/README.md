@@ -147,6 +147,28 @@ that changed. Cursors the server never handed out fail with `history-truncated`
 Programs without a termwright adapter report `semanticTree: unavailable`. There
 are no invented roles: target them by text.
 
+## Crashes
+
+When a child dies on its own, the driver records what the session knew and this
+server surfaces it three ways: attached to whatever call failed next,
+in `terminal.capabilities` and `terminal.snapshot` instead of a bare closed
+session, and in `trace.overview` for a recording whose `meta.json` carries one.
+
+```
+crash: the program exited on its own — code=7 signal=null at 812ms
+last input: key "\r"
+screen tail:
+Error: boom
+  at thing (app.js:3:9)
+```
+
+That matters because a locator which never resolved because the program is gone
+otherwise reports a plain `timeout`, and an agent reading a timeout waits longer.
+
+The screen tail is **unredacted** — it is what the terminal displayed, secrets
+included. It is bounded (40 lines, 500 characters each) and never logged, but
+treat it like a screenshot when storing or forwarding a result.
+
 ## Errors
 
 Failures come back as tool results with `isError` set. The text content reads

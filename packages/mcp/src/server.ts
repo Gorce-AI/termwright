@@ -9,6 +9,7 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { CrashContextError, describeCrash } from './crash.js';
 import { renderErrorPayload, toErrorPayload } from './errors.js';
 import {
   InMemoryTransport,
@@ -47,6 +48,24 @@ function successResult(outcome: ToolOutcome<Record<string, unknown>>): CallToolR
     ],
     structuredContent: outcome.data,
   };
+}
+
+/**
+ * Attaches the crash report when the failure happened against a terminal whose
+ * program died on its own.
+ *
+ * This lives here, once, rather than in every acting tool: the server is the
+ * only place that sees both the raw arguments (which name the terminal) and
+ * every thrown error. Without it a locator that never resolved because the
+ * child was gone reports a bare `timeout`, which tells an agent to wait longer
+ * — precisely the wrong move.
+ */
+function withCrashContext(context: ToolContext, args: unknown, error: unknown): unknown {
+  if (error instanceof CrashContextError) return error;
+  const id = (args as { terminal?: unknown } | null)?.terminal;
+  if (typeof id !== 'string') return error;
+  const report = context.terminals.find(id)?.harness.crashReport();
+  return report === undefined || report === null ? error : new CrashContextError(error, describeCrash(report));
 }
 
 /** `_meta` key carrying the structured error payload of a failed tool call. */
@@ -92,7 +111,7 @@ export function createTermwrightMcpServer(stores: SessionStores): McpServer {
         try {
           return successResult(await tool.handler(context, args as never));
         } catch (error) {
-          return errorResult(error);
+          return errorResult(withCrashContext(context, args, error));
         }
       },
     );

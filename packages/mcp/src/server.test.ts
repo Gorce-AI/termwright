@@ -40,7 +40,14 @@ interface ToolResult {
   readonly content: readonly { type: string; data?: string; mimeType?: string }[];
   readonly data: Record<string, unknown>;
   /** Structured failure payload, carried in `_meta` (see server.ts). */
-  readonly error: { kind: string; suggestion?: string; candidates?: string[] } | undefined;
+  readonly error:
+    | {
+        kind: string;
+        suggestion?: string;
+        candidates?: string[];
+        crash?: { exit: { code: number | null }; screenTail: string[] };
+      }
+    | undefined;
 }
 
 const running: RunningServer[] = [];
@@ -223,6 +230,67 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
 
     const plain = await call('terminal.snapshot', { terminal });
     expect(plain.content.every((part) => part.type === 'text')).toBe(true);
+  });
+
+  it('reports a crash from capabilities and snapshot instead of a bare closed session', async () => {
+    const { call } = await connectSession();
+    // A program that prints a panic and dies on its own — nobody asked it to.
+    const launched = await call('terminal.launch', {
+      command: [
+        process.execPath,
+        '-e',
+        'process.stdout.write("Error: boom\\r\\n  at thing (app.js:3:9)\\r\\n"); process.exit(7)',
+      ],
+      columns: 60,
+      rows: 10,
+    });
+    const terminal = launched.data['terminal'] as string;
+    await call('terminal.wait_for', { terminal, wait: 'exit', timeout: 10_000 });
+
+    const caps = await call('terminal.capabilities', { terminal });
+    expect(caps.isError, caps.text).toBe(false);
+    const crash = caps.data['crash'] as { exit: { code: number }; screenTail: string[] };
+    expect(crash.exit.code).toBe(7);
+    expect(crash.screenTail.join('\n')).toContain('Error: boom');
+    expect(caps.text).toContain('crash: the program exited on its own');
+    expect(caps.text).toContain('screen tail:');
+
+    const shot = await call('terminal.snapshot', { terminal });
+    expect((shot.data['crash'] as { exit: { code: number } }).exit.code).toBe(7);
+  });
+
+  it('hands an action that failed because the program died the crash behind it', async () => {
+    const { call } = await connectSession();
+    const launched = await call('terminal.launch', {
+      command: [process.execPath, '-e', 'process.stdout.write("dying\\r\\n"); process.exit(4)'],
+      columns: 40,
+      rows: 6,
+    });
+    const terminal = launched.data['terminal'] as string;
+    await call('terminal.wait_for', { terminal, wait: 'exit', timeout: 10_000 });
+
+    // Without the crash this reads as a plain timeout, which would tell an
+    // agent to wait longer for a program that is never coming back.
+    const result = await call('terminal.wait_for', {
+      terminal,
+      wait: 'text',
+      text: 'never appears',
+      timeout: 500,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.error?.crash).toBeDefined();
+    expect(result.error?.crash?.exit.code).toBe(4);
+    expect(result.text).toContain('crash: the program exited on its own');
+    expect(result.text).toContain('dying');
+  });
+
+  it('leaves a healthy session crash-free', async () => {
+    const { call } = await connectSession();
+    const terminal = await launchSemantic(call);
+    const caps = await call('terminal.capabilities', { terminal });
+    expect(caps.data['crash']).toBeUndefined();
+    expect(caps.text).not.toContain('crash:');
   });
 
   it('keeps one session’s terminals invisible to another', async () => {

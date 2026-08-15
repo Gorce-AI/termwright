@@ -8,6 +8,8 @@
  * terminal handles, and internal faults.
  */
 import { TermwrightError } from '@termwright/driver';
+import { CrashContextError, renderCrash } from './crash.js';
+import type { CrashProjection } from './crash.js';
 
 /** Kinds an agent can branch on. Superset of `TermwrightErrorCode`. */
 export type ErrorKind =
@@ -87,6 +89,11 @@ export interface ErrorPayload {
   readonly semanticTree?: boolean;
   readonly candidates?: readonly string[];
   readonly screenExcerpt?: string;
+  /**
+   * What the session knew when the program died, when the failure happened
+   * around a crash. Its `screenTail` is unredacted — see `crash.ts`.
+   */
+  readonly crash?: CrashProjection;
 }
 
 const MAX_CANDIDATES = 10;
@@ -98,6 +105,10 @@ const MAX_EXCERPT_CHARS = 2_000;
  * they are what lets an agent fix its own next call. Stack traces are dropped.
  */
 export function toErrorPayload(error: unknown): ErrorPayload {
+  if (error instanceof CrashContextError) {
+    // The underlying failure keeps its kind and message; the crash rides along.
+    return { ...toErrorPayload(error.cause), crash: error.crash };
+  }
   if (error instanceof TermwrightError) {
     const diagnostics = error.diagnostics;
     const candidates = diagnostics.candidates?.slice(0, MAX_CANDIDATES).map((candidate) => {
@@ -135,5 +146,6 @@ export function renderErrorPayload(payload: ErrorPayload): string {
     parts.push(`candidates:\n${payload.candidates.map((candidate) => `  - ${candidate}`).join('\n')}`);
   }
   if (payload.screenExcerpt !== undefined) parts.push(`screen:\n${payload.screenExcerpt}`);
+  if (payload.crash !== undefined) parts.push(renderCrash(payload.crash));
   return parts.join('\n');
 }

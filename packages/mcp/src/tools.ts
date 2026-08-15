@@ -18,6 +18,7 @@ import { describeImage, screenshotSchema } from './screenshot-schema.js';
 import type { ToolContext, ToolDefinition, ToolOutcome } from './tool-kit.js';
 import { formatCompactSnapshot, refEntries, toRefEntry } from './format.js';
 import type { RefEntry } from './format.js';
+import { crashSchema, describeCrash, renderCrash } from './crash.js';
 import { diffRows, diffSemantic } from './diff.js';
 import { usageError } from './errors.js';
 import {
@@ -130,6 +131,12 @@ function locatorFor(entry: TerminalEntry, args: TargetInput) {
   return buildLocator(entry.harness, args);
 }
 
+/** The crash the driver recorded for this terminal, if the child died on its own. */
+function crashOf(entry: TerminalEntry): ReturnType<typeof describeCrash> | undefined {
+  const report = entry.harness.crashReport();
+  return report === null ? undefined : describeCrash(report);
+}
+
 /** `{ ok: true }` receipt fields shared by the acting tools. */
 const receiptFields = {
   ok: z.literal(true),
@@ -230,12 +237,14 @@ const capabilities = defineTool({
     adapter: z.object({ name: z.string(), version: z.string() }).optional(),
     capabilities: z.array(z.string()),
     platform: z.string(),
+    crash: crashSchema.optional(),
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
     const entry = context.terminals.get(args.terminal);
     await settleSemantics(entry);
     const caps = entry.harness.capabilities();
+    const crash = crashOf(entry);
     const screen = entry.harness.screen();
     const semantic = entry.harness.semanticTree();
     return {
@@ -244,7 +253,8 @@ const capabilities = defineTool({
         `semanticTree: ${caps.semanticTree ? 'available' : 'unavailable'}\n` +
         `adapter: ${caps.adapter === undefined ? 'none' : `${caps.adapter.name} ${caps.adapter.version}`}\n` +
         `capabilities: ${caps.capabilities.join(', ') || 'none'}\n` +
-        `platform: ${caps.platform}`,
+        `platform: ${caps.platform}` +
+        (crash === undefined ? '' : `\n${renderCrash(crash)}`),
       data: {
         terminal: entry.id,
         revision: screen.revision,
@@ -255,6 +265,7 @@ const capabilities = defineTool({
         ...(caps.adapter === undefined ? {} : { adapter: caps.adapter }),
         capabilities: [...caps.capabilities],
         platform: caps.platform,
+        ...(crash === undefined ? {} : { crash }),
       },
     };
   },
@@ -303,6 +314,7 @@ const snapshot = defineTool({
     compact: z.string(),
     dumpPath: z.string().optional(),
     screenshot: screenshotSchema.optional(),
+    crash: crashSchema.optional(),
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
@@ -338,15 +350,21 @@ const snapshot = defineTool({
         )}\n`,
       );
     }
+    const crash = crashOf(entry);
     const image =
       args.screenshot === true
         ? renderScreenshot(screen, {
+
             scale: args.screenshotScale,
             theme: args.screenshotTheme,
           })
         : undefined;
+    const trailer = [
+      ...(dumpPath === undefined ? [] : [`full dump: ${dumpPath}`]),
+      ...(crash === undefined ? [] : [renderCrash(crash)]),
+    ];
     return {
-      text: dumpPath === undefined ? compact : `${compact}\nfull dump: ${dumpPath}`,
+      text: trailer.length === 0 ? compact : `${compact}\n${trailer.join('\n')}`,
       ...(image === undefined ? {} : { images: [image] }),
       data: {
         terminal: entry.id,
@@ -368,6 +386,7 @@ const snapshot = defineTool({
         compact,
         ...(dumpPath === undefined ? {} : { dumpPath }),
         ...(image === undefined ? {} : { screenshot: describeImage(image) }),
+        ...(crash === undefined ? {} : { crash }),
       },
     };
   },

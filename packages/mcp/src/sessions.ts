@@ -163,6 +163,11 @@ export class TerminalStore {
     return entry;
   }
 
+  /** Looks up a handle without throwing; for callers that tolerate absence. */
+  find(id: string): TerminalEntry | undefined {
+    return this.#terminals.get(id);
+  }
+
   /** Looks up a handle; unknown or closed handles are a `no-session` failure. */
   get(id: string): TerminalEntry {
     const entry = this.#terminals.get(id);

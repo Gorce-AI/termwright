@@ -14,6 +14,8 @@
 import { z } from 'zod';
 import { frameFromAnsi } from '@termwright/trace';
 import type { StepSummary, TraceFrame, TraceMeta, TraceReader } from '@termwright/trace';
+import { crashSchema, renderCrash } from './crash.js';
+import type { CrashProjection } from './crash.js';
 import { diffRows, diffSemantic } from './diff.js';
 import { usageError } from './errors.js';
 import { formatCompactSnapshot, refEntries } from './format.js';
@@ -54,6 +56,28 @@ const metaSchema = z.object({
   truncated: z.boolean().optional(),
   exit: z.object({ code: z.number().int().nullable(), signal: z.string().nullable() }).optional(),
 });
+
+/**
+ * The crash section of `meta.json`, when the recording carries one.
+ *
+ * `@termwright/trace` is adding the typed field (format agreed with its owner:
+ * the driver's `CrashReport` minus the semantic tree, which already lives in
+ * `semantics.jsonl`, plus `lastSemanticRevision`). Reading it structurally keeps
+ * this tool working before and after that lands; the cast goes away once
+ * `TraceMeta.crash` is typed upstream.
+ */
+function crashOfMeta(meta: TraceMeta): CrashProjection | undefined {
+  const raw = (meta as TraceMeta & { crash?: unknown }).crash;
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const parsed = crashSchema.safeParse({
+    screenTailTruncated: false,
+    lastSemanticRevision: null,
+    recentInputs: [],
+    diagnostics: [],
+    ...raw,
+  });
+  return parsed.success ? parsed.data : undefined;
+}
 
 function projectMeta(meta: TraceMeta): z.output<typeof metaSchema> {
   return {
@@ -264,6 +288,7 @@ const overview = defineTool({
     steps: z.array(stepSchema),
     failedSteps: z.array(stepSchema),
     markers: z.array(z.object({ timeMs: z.number(), label: z.string() })),
+    crash: crashSchema.optional(),
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
@@ -295,6 +320,8 @@ const overview = defineTool({
     if (markers.length > 0) {
       lines.push(`markers: ${markers.map((marker) => `${marker.timeMs}ms ${marker.label}`).join(', ')}`);
     }
+    const crash = crashOfMeta(meta);
+    if (crash !== undefined) lines.push(renderCrash(crash));
 
     return {
       text: lines.join('\n'),
@@ -307,6 +334,7 @@ const overview = defineTool({
         steps,
         failedSteps,
         markers,
+        ...(crash === undefined ? {} : { crash }),
       },
     };
   },
