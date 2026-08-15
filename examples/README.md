@@ -108,3 +108,6 @@ integration.
 - **A click needs the frame to hold still.** Matchers only read the tree, but a
   click aims at coordinates. After anything animated — a modal fading in —
   `waitForStable()` before clicking.
+
+[`NOTES.md`](NOTES.md) has the rest: why each example is shaped the way it is,
+and the traps that cost time while writing them.

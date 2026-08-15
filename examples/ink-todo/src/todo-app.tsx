@@ -26,7 +26,13 @@ const INITIAL: readonly Todo[] = [
 ];
 
 type Focus = 'filter' | 'list' | 'add' | 'remove';
-const FOCUS_ORDER: readonly Focus[] = ['filter', 'list', 'add', 'remove'];
+/** Where Tab goes from each widget. Total, so the ring needs no bounds check. */
+const NEXT_FOCUS: Record<Focus, Focus> = {
+  filter: 'list',
+  list: 'add',
+  add: 'remove',
+  remove: 'filter',
+};
 
 export function TodoApp() {
   const filterRef = useRef<DOMElement>(null);
@@ -115,7 +121,7 @@ export function TodoApp() {
       }
 
       if (key.tab) {
-        setFocus((from) => FOCUS_ORDER[(FOCUS_ORDER.indexOf(from) + 1) % FOCUS_ORDER.length] as Focus);
+        setFocus((from) => NEXT_FOCUS[from]);
         return;
       }
       if (key.return) {
