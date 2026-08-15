@@ -51,3 +51,16 @@
   SessionEventMap gains `diagnostic` events and the harness exposes a bounded
   read-only channel-diagnostics log (dropped/superseded revisions, unverified
   markers, pairing expiries).
+- 2026-08-15 (driver round 2, f78174f): api.ts gains — `diagnostic` event +
+  `harness.diagnostics()` with CLOSED DiagnosticCode set (13 values; adding one
+  is a contract change), `waitForReady` (OSC 133 preferred, settled-screen
+  fallback, strategy reported via 'ready-strategy' diagnostic),
+  `locatorForRef(ref)` (identity-based, semantic `nX@rev` and grid
+  `grid:r,c,w,h@rev` refs, stale checked at resolve), `Locator.description`,
+  and `envMode` — BREAKING DEFAULT: 'replace' (allowlist PATH/HOME/LANG/
+  LC_ALL/SHELL/TMPDIR/USER/TERM + explicit env + handshake vars; matches mcp
+  SAFE_ENV_KEYS). Ceiling violations (frame-oversized, dto-depth) map to wire
+  'limit-exceeded'; structural violations stay 'malformed'. revision-commit is
+  advisory, recorded as 'revision-commit' diagnostic.
+- 2026-08-15: textbox textContent returns `value` whenever defined (including
+  ''), falling back to `name` only when value is undefined.
