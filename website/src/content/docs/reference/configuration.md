@@ -32,20 +32,27 @@ configureTermwright(config);
 ```ts
 // vitest.config.ts
 import {defineConfig} from 'vitest/config';
-import TermwrightReporter from '@termwright/test/reporter';
+import TermwrightReporter from 'termwright/reporter';
+import TermwrightUiReporter from 'termwright/ui-reporter';
 
 export default defineConfig({
   test: {
     setupFiles: ['./vitest.setup.ts'],
     retry: 2,
-    reporters: ['default', new TermwrightReporter()],
+    reporters: ['default', new TermwrightReporter(), new TermwrightUiReporter()],
   },
 });
 ```
 
-Import the reporter from `@termwright/test/reporter`, never from the package
-root: `vitest.config.ts` is loaded before the test runner exists, and the root
-module registers matchers on `expect` as a side effect.
+The two reporters are independent and compose: one writes `.twtrace` archives,
+the other streams a live run to [`termwright ui`](../../guides/runner-ui/) and
+does nothing when `TERMWRIGHT_UI_URL` is unset.
+
+Import them from their own subpaths, never from a package root:
+`vitest.config.ts` is loaded before the test runner exists, and the root modules
+register matchers on `expect` as a side effect. Using the individual packages
+rather than the umbrella, the same imports are `@termwright/test/reporter` and
+`@termwright/ui/reporter`.
 
 ## Profiles and deterministic colour
 

@@ -73,8 +73,6 @@ await expect(app).toMatchSemanticSnapshot(`
 The rules, normative in [`CONTRACTS.md`](https://github.com/gorce-ai/termwright/blob/main/CONTRACTS.md)
 §YAML snapshots:
 
-- **Partial by default.** Omitted children are don't-care and unlisted siblings
-  are allowed. Listed children must keep their relative order.
 - **Names** are compared after whitespace normalization, may be written as
   `/regex/`, and may be omitted entirely to match any name.
 - **`[flags]`** assert only what they list. `!focused` asserts the opposite,
@@ -84,6 +82,26 @@ The rules, normative in [`CONTRACTS.md`](https://github.com/gorce-ai/termwright/
 - `'* "Save"'` matches any role — and it has to be quoted, because a bare `*`
   opens a YAML alias.
 - A name containing `#` is written quoted, so the file stays valid YAML.
+
+### The two comparison modes
+
+This is the part to internalise, because the same YAML means different things
+depending on where it lives:
+
+| Source | Mode |
+|---|---|
+| **Inline** — the pattern you pass to the matcher | **partial**: omitted children are don't-care, unlisted siblings are allowed, and `[flags]` assert only what they list |
+| **Stored** — the file generated in `__snapshots__` | **strict**: the full tree with exact flags. Any difference fails, including a node or a state that is merely *new* |
+
+Both modes are useful, and the choice is the interesting decision in a test.
+An inline pattern says "this much must be true" and survives the app growing
+around it. A stored snapshot says "nothing changed at all" and is the one that
+catches the state you did not think to assert on — at the cost of failing every
+time the screen legitimately gains a node.
+
+Because the stored form is strict, update mode `changed` rewrites it on any
+textual difference. Review those diffs like source; that file *is* the
+assertion.
 
 ## Cell snapshots, and why both
 

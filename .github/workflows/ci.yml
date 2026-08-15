@@ -76,6 +76,9 @@ jobs:
   conformance:
     name: conformance ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # Every suite here spawns a process, a pty and a socket per test, so this
+    # lane is minutes rather than seconds. The default 360 would hide a hang.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -89,12 +92,74 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
+
+      # The adapter-contract rows for Textual and tview drive real apps as
+      # subprocesses. Without these toolchains those rows skip, and a skipped
+      # certification is not a certification.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: clients/go/go.sum
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
-      # The matrix reports its own skips: a run where every suite skipped says
-      # so rather than reporting success.
-      - run: pnpm --filter @termwright/conformance run conformance
+      - name: Install the Python client (Textual adapter row)
+        run: pip install -e "clients/python[dev]"
+
+      # Exits 0/1. Where no pty can be opened it skips everything and says so;
+      # ubuntu and macOS have one, and Windows is the row to watch for ConPTY.
+      # bash + pipefail on every OS: piping through `tee` in PowerShell would
+      # report the pipe's status, turning a failed matrix into a green step.
+      - name: Run the conformance matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @termwright/conformance run conformance | tee conformance-matrix.txt
+
+      # Partial skips are reported as "pass, N skip", which is exactly the thing
+      # that disappears in a green checkmark unless it is written down.
+      - name: Publish the matrix to the job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Conformance matrix — ${{ matrix.os }}"
+            echo
+            echo '```'
+            cat conformance-matrix.txt 2>/dev/null || echo "(the matrix produced no output)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  opentui:
+    name: opentui adapter contract (Bun)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      # OpenTUI loads its native Zig library through bun:ffi, so this suite
+      # cannot run under Node at all. Without Bun on PATH it skips itself, and
+      # CI would claim adapter coverage it does not have.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - run: bun --version
+      - run: pnpm --filter @termwright/opentui run test:conformance
 
   clients:
     name: clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})

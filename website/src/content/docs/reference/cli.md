@@ -14,18 +14,49 @@ need, so a test file needs one import rather than three:
 
 | Import | What it gives you |
 |---|---|
-| `termwright` | the driver's public API (`launchTerminal`, `TermwrightError`, the types) |
-| `termwright/test` | the Vitest preset — `test`, `expect`, the `terminal` fixture, the matchers |
+| `termwright` | the driver's public API (`launchTerminal`, locators, actions, waits, the error taxonomy) |
+| `termwright/test` | the Vitest preset — `test`, `expect`, the `terminal` fixture, the matchers, YAML snapshots |
 | `termwright/ink` | `mountInk` and `launchInkFixture` |
+| `termwright/reporter` | the trace reporter, for `vitest.config.ts` |
+| `termwright/ui-reporter` | the runner's live bridge, for `vitest.config.ts` |
 | `termwright/cli` | the CLI as a library, for scripts that wrap it |
 
-Importing `termwright/test` registers the matchers on `expect` as a side effect,
-which is exactly why it is a separate entry point — see
-[Configuration](../configuration/) for the `vitest.config.ts` caveat about the
-reporter.
+Everything a project needs is reachable from this one package, config included,
+so `termwright` in `devDependencies` is the whole install:
 
-The individual packages (`@termwright/driver`, `@termwright/test`, …) stay
-installable on their own; the umbrella is a convenience, not a requirement.
+```ts
+// vitest.config.ts
+import {defineConfig} from 'vitest/config';
+import TermwrightReporter from 'termwright/reporter';
+import TermwrightUiReporter from 'termwright/ui-reporter';
+
+export default defineConfig({
+  test: {reporters: ['default', new TermwrightReporter(), new TermwrightUiReporter()]},
+});
+```
+
+The two reporters are independent and compose: one writes `.twtrace` archives,
+the other streams a live run to `termwright ui`. The UI one does nothing when
+`TERMWRIGHT_UI_URL` is unset, so it is safe to leave configured in a repository
+whose runs are mostly headless.
+
+The reporters have their own entry points because `vitest.config.ts` is loaded
+before the test runner exists, while `termwright/test` registers matchers on
+`expect` as a side effect. The individual packages
+(`@termwright/driver`, `@termwright/test`, …) stay installable on their own; the
+umbrella is a convenience, not a requirement.
+
+`termwright` itself has no test-runner dependency, so a plain script or a
+`node:test` file can use it:
+
+```ts
+import {launchTerminal} from 'termwright';
+
+const app = await launchTerminal({command: ['htop']});
+await app.waitForText('CPU');
+console.log(app.screen().text());
+await app.close();
+```
 
 ## Commands
 
@@ -39,7 +70,7 @@ termwright agent-context | usage | skill [--out <dir>]
 
 | Command | What it does |
 |---|---|
-| `ui` | opens the [runner](../../guides/runner-ui/): live terminal, semantic inspector, timeline. With no flags it starts Vitest in watch mode and points it at the runner; `--trace` opens a `.twtrace` archive instead; `--record` drives a program you name and writes the test. |
+| `ui` | opens the [runner](../../guides/runner-ui/): live terminal, semantic inspector, timeline. With no flags it starts your project's own Vitest in watch mode and points it at the runner through `TERMWRIGHT_UI_URL`; `--no-watch` opens the runner without starting a suite; `--trace` opens a `.twtrace` archive instead; `--record` drives a program you name and writes the test. Runner arguments go after `--`: `termwright ui -- src/login.test.ts --reporter=dot`. |
 | `codegen` | `ui --record`, for when recording is the whole point. |
 | `mcp` | serves the [MCP tools](../../guides/mcp/); every argument is forwarded to `@termwright/mcp` untouched. |
 | `agent-context` | versioned JSON describing every tool, parameter and exit code. |

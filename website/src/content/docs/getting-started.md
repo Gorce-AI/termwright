@@ -45,9 +45,21 @@ test('asks before running a command', async ({terminal}) => {
 });
 ```
 
-```sh
-npx vitest run
+```json
+// package.json
+{
+  "scripts": {"test": "vitest run"}
+}
 ```
+
+```sh
+npm test
+```
+
+Run the suite through a script rather than `npx`. In a workspace, `npx` will
+happily fetch a *different* Vitest than the one your tests were written
+against — a script, `pnpm exec` or `node_modules/.bin` always resolves the
+local one.
 
 The `terminal` fixture launches as many sessions as the test needs and closes
 all of them on teardown. Each test gets a fresh temporary directory as its
@@ -163,7 +175,7 @@ with a visual diff, a semantic diff and the recording:
 ```ts
 // vitest.config.ts
 import {defineConfig} from 'vitest/config';
-import TermwrightReporter from '@termwright/test/reporter';
+import TermwrightReporter from 'termwright/reporter';
 
 export default defineConfig({
   test: {
@@ -174,13 +186,10 @@ export default defineConfig({
 });
 ```
 
-Two things about that import. It must be `@termwright/test/reporter`, never the
-package root: `vitest.config.ts` is loaded before the test runner exists, and
-the root module registers matchers on `expect` as a side effect. And if you
-installed only the `termwright` umbrella, add `@termwright/test` to your
-devDependencies as well — the umbrella has no reporter subpath yet, and a
-transitive dependency is not importable under pnpm's default node_modules
-layout.
+Import the reporter from its own subpath, never from a package root:
+`vitest.config.ts` is loaded before the test runner exists, and the root modules
+register matchers on `expect` as a side effect. Using the individual packages
+instead of the umbrella, the same import is `@termwright/test/reporter`.
 
 ## Where to go next
 

@@ -145,5 +145,5 @@ variable:
 ```ts
 await app.getByRole('button').click({timeout: 15_000});
 await terminal.launch({command, timeouts: {action: 15_000}});
-// TERMWRIGHT_TIMEOUT_ACTION=15000 npx vitest run
+// TERMWRIGHT_TIMEOUT_ACTION=15000 npm test
 ```

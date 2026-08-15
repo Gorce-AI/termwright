@@ -28,12 +28,15 @@ Live mode needs the reporter in the test process:
 
 ```ts
 // vitest.config.ts
-import TermwrightUiReporter from '@termwright/ui/reporter';
+import TermwrightUiReporter from 'termwright/ui-reporter';
 
 export default defineConfig({
   test: {reporters: ['default', new TermwrightUiReporter()]},
 });
 ```
+
+(`@termwright/ui/reporter` is the same reporter, for projects using the
+individual packages rather than the umbrella.)
 
 It publishes to `process.env.TERMWRIGHT_UI_URL` and does nothing at all when
 that variable is unset — safe to leave configured in a repository whose runs are
