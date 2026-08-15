@@ -45,9 +45,15 @@ function entriesFor(terminal: TerminalHarness, code: string): readonly SessionDi
   return terminal.diagnostics().filter((entry) => entry.code === code);
 }
 
-/** The session must still be alive and must still exit on request, exactly. */
+/**
+ * The session must still be alive and must still exit on request, exactly.
+ *
+ * Judged by the exit status alone: it proves the session was still taking input
+ * and still owned the child. Asserting on screen content here would instead
+ * depend on where the peer's output happened to be — under a flood the banner
+ * has scrolled away, and the newest line races the exit it announces.
+ */
 async function expectSurvives(terminal: TerminalHarness): Promise<void> {
-  expect(terminal.screen().text()).toContain('PEER START');
   await terminal.press('q');
   expect(await terminal.waitForExit()).toEqual({ code: 0, signal: null });
 }
@@ -94,8 +100,9 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(codes(terminal)).toContain('adapter-attached');
     const violation = entriesFor(terminal, 'protocol-violation')[0];
     expect(violation, `no protocol-violation recorded for ${scenario}`).toBeDefined();
-    // The wire code itself is asserted above, where it is observable: the
-    // diagnostic entry carries the human explanation, not the taxonomy code.
+    // Both ends of the same contract: the driver recorded which wire error it
+    // chose, and the adapter received that exact code.
+    expect(violation?.wireCode).toBe(wireError);
     expect(violation?.timeMs).toBeGreaterThan(0);
     await expectSurvives(terminal);
   });
@@ -109,6 +116,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
 
     const error = (await rejection(terminal.getByRole('button').resolve({ timeout: 500 }))) as TermwrightError;
     expect(error.code).toBe('protocol-violation');
+    expect(entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-token');
     // A refused handshake never attached, so nothing may claim it did.
     expect(codes(terminal)).not.toContain('adapter-attached');
     // Grid locators keep working: a refused adapter is a generic session, not
@@ -121,6 +129,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const terminal = await arm('bad-version');
     await terminal.waitForText('PEER GOT ERROR bad-version');
     expect(terminal.capabilities().semanticTree).toBe(false);
+    expect(entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-version');
     await expectSurvives(terminal);
   });
 
@@ -238,8 +247,6 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(terminal.scrollback.retainedFloor).toBeGreaterThan(0);
     const truncated = await rejection(Promise.resolve().then(() => terminal.scrollback.text({ from: 0 })));
     expect((truncated as TermwrightError).code).toBe('history-truncated');
-    expect(terminal.screen().text().length).toBeGreaterThan(0);
-
     // 99 trees with no markers behind them: the pairing ceiling has to evict,
     // and has to say which revisions it evicted rather than leaking them.
     const dropped = entriesFor(terminal, 'revision-dropped');
@@ -248,11 +255,20 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(dropped.length).toBeGreaterThan(0);
     expect(dropped.map((entry) => entry.revision ?? 0).some((revision) => revision > 1)).toBe(true);
     expect(terminal.diagnostics().length).toBeLessThanOrEqual(200);
+    await expectSurvives(terminal);
+  });
 
-    // The banner has scrolled off by design here, so survival is judged by the
-    // session still taking input and exiting cleanly.
-    await terminal.press('q');
-    expect(await terminal.waitForExit()).toEqual({ code: 0, signal: null });
+  it('surfaces the code an adapter reports at us, not one of its own', async () => {
+    const terminal = await arm('peer-error');
+    await fire(terminal);
+    await expect.poll(() => codes(terminal)).toContain('protocol-violation');
+
+    // The peer chose 'internal'; the driver must not relabel it.
+    const violation = entriesFor(terminal, 'protocol-violation')[0];
+    expect(violation?.wireCode).toBe('internal');
+    expect(violation?.detail).toContain('the adapter gave up');
+    expect(terminal.semanticTree()?.revision).toBe(1);
+    await expectSurvives(terminal);
   });
 
   it('keeps the session usable after the peer disconnects mid-render', async () => {

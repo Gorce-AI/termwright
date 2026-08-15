@@ -208,6 +208,11 @@ const SCENARIOS = {
     }
     send(tree(2, nodes));
   },
+  'peer-error': () => {
+    // The other direction: the adapter reports a protocol error at us. The
+    // driver must surface the code the peer chose, not one of its own.
+    socket.write(frame({ type: 'error', code: 'internal', message: 'the adapter gave up' }));
+  },
   'foreign-marker': () => {
     // A marker MAC bound to a different session must not commit anything here.
     socket.write(frame({ type: 'snapshot', snapshot: tree(2, validNodes('Forged')) }));

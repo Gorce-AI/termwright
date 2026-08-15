@@ -11,15 +11,18 @@
  * child is handed before it can be ready at all.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import type { SessionDiagnostic, TerminalHarness } from '@termwright/driver';
+import type { DiagnosticCode, TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
 import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from '../support/pty.js';
 
 const sessions = createSessionPool();
 
-/** The last readiness decision the session recorded. */
-function lastStrategy(terminal: TerminalHarness): SessionDiagnostic | undefined {
-  return terminal.diagnostics().findLast((entry) => entry.code === 'ready-strategy');
+/** Readiness decisions the session recorded, in order. */
+function strategies(terminal: TerminalHarness): readonly DiagnosticCode[] {
+  return terminal
+    .diagnostics()
+    .map((entry) => entry.code)
+    .filter((code) => code === 'ready-shell-integration' || code === 'ready-settled-screen');
 }
 
 const prompt = (args: readonly string[] = []) =>
@@ -33,11 +36,9 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     await terminal.waitForReady();
 
     expect(terminal.screen().text()).toContain('PROMPT APP');
-    // Both strategies share the `ready-strategy` code, so which one ran is only
-    // legible in `detail`. That is the one place these suites read prose
-    // instead of a code, and it is why the driver was asked for the entry at
-    // all — see NOTES.md.
-    expect(lastStrategy(terminal)?.detail).toContain('shell integration');
+    // A fact and a guess are different outcomes and carry different codes, so
+    // "which strategy decided this" is assertable without matching prose.
+    expect(strategies(terminal)).toEqual(['ready-shell-integration']);
   });
 
   it('waits out a running command instead of returning between marks', async () => {
@@ -53,9 +54,7 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     await terminal.waitForReady();
     expect(terminal.screen().text()).toContain('ran hello');
 
-    const strategies = terminal.diagnostics().filter((entry) => entry.code === 'ready-strategy');
-    expect(strategies).toHaveLength(2);
-    expect(strategies.every((entry) => entry.detail.includes('shell integration'))).toBe(true);
+    expect(strategies(terminal)).toEqual(['ready-shell-integration', 'ready-shell-integration']);
   });
 
   it('reports a command that never finished as a timeout, not as readiness', async () => {
@@ -79,9 +78,7 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     await terminal.waitForReady();
 
     expect(terminal.screen().text()).toContain('PROMPT APP');
-    const strategy = lastStrategy(terminal);
-    expect(strategy?.detail).toContain('settled-screen heuristic');
-    expect(strategy?.detail).not.toContain('shell integration');
+    expect(strategies(terminal)).toEqual(['ready-settled-screen']);
   });
 
   it('is available to an uninstrumented program with no prompt at all', async () => {
@@ -89,26 +86,26 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     await terminal.waitForReady();
 
     expect(terminal.screen().text()).toContain('GENERIC READY');
-    expect(lastStrategy(terminal)?.detail).toContain('settled-screen heuristic');
+    expect(strategies(terminal)).toEqual(['ready-settled-screen']);
   });
 
-  it('still reports readiness from the last prompt of an exited program', async () => {
+  it('refuses to call a dead program ready, even with a prompt still on screen', async () => {
     const terminal = await prompt();
     await terminal.waitForReady();
     await terminal.type('quit');
     await terminal.press('Enter');
     await terminal.waitForExit();
 
-    // Pinned as observed, not as desired. The last OSC 133 mark still says a
-    // prompt is waiting, so `waitForReady` resolves for a process that can no
-    // longer take input — while `waitForText` on the same session throws
-    // `process-exited`. Reported to the driver as an inconsistency between the
-    // waits; this expectation flips when they align.
-    await terminal.waitForReady();
-    expect(lastStrategy(terminal)?.detail).toContain('shell integration');
-
-    const error = (await rejection(terminal.waitForText('never printed', { timeout: 200 }))) as TermwrightError;
+    // The last OSC 133 mark still says a prompt is waiting, and the prompt is
+    // still on the grid — but readiness is a claim about the *future*: that the
+    // program will accept input. A dead one will not, so this must fail rather
+    // than hand back a promise the next press() would break.
+    const error = (await rejection(terminal.waitForReady({ timeout: 500 }))) as TermwrightError;
     expect(error.code).toBe('process-exited');
+
+    // The waits that assert an *observation* keep working after exit, on
+    // purpose: what was printed stays printed. The split is deliberate.
+    await terminal.waitForText('PROMPT APP');
   });
 });
 

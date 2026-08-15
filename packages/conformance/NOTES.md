@@ -4,10 +4,12 @@ Deliberate deviations, findings about other packages, and the traps that cost
 time here. Verified against the driver (f78174f), protocol and Ink adapter as of
 2026-08-16.
 
-## Findings reported and fixed (driver f78174f)
+## Findings reported and fixed
 
-All three findings this package raised in its first round are closed. Kept here
-because the suites that caught them are still the regression tests for them.
+Every finding this package raised is closed. Kept here because the suites that
+caught them are the regression tests for them.
+
+Round 1 (driver f78174f):
 
 1. **Wire taxonomy for ceiling breaches** — was `malformed` for anything thrown
    out of the frame decoder, so a nesting overflow was indistinguishable from a
@@ -19,35 +21,36 @@ because the suites that caught them are still the regression tests for them.
    `tree-without-marker` case asserts directly that the driver saw the
    announcement for revision 4 and still refused to publish it without a marker.
 3. **Channel diagnostics were unreachable** — `harness.diagnostics()` and the
-   `diagnostic` event landed with a closed `DiagnosticCode` set. Every
-   adversarial assertion that used to be indirect is now direct: superseded and
-   expired revisions, evictions under flood, unverified markers, negotiation
-   timeout, adapter attach/disconnect.
+   `diagnostic` event landed with a closed `DiagnosticCode` set.
 
-## Open findings
+Round 2 (driver 0e1b0fe, contract note 2d09049):
 
-1. **`waitForReady` resolves for a program that has exited.** When the last
-   OSC 133 mark says a prompt is waiting and the process then exits,
-   `waitForReady` returns ready, while `waitForText` on the same session throws
-   `process-exited`. The other waits call `#assertAlive` before their deadline
-   check; `waitForReady` reaches its ready branch first. Pinned as observed in
-   `ready.test.ts` ("still reports readiness from the last prompt of an exited
-   program") with a note that the expectation flips when the waits align.
-2. **`ready-strategy` conflates the two outcomes it exists to distinguish.**
-   One code covers both "shell integration said so" and "the screen went
-   quiet", which are a fact and a guess respectively — the whole reason the
-   entry is worth having. Telling them apart therefore requires matching prose
-   in `detail`, and that is the only place these suites read a string instead of
-   a code. Either two codes (`ready-shell-integration`, `ready-settled-screen`)
-   or a `strategy` field would close it. Same shape as the `revision-dropped`
-   case, where "already published" and "too many in flight" share a code and are
-   told apart by the revision number instead.
-3. **`SessionDiagnostic` carries no machine-readable wire code.** A
-   `protocol-violation` entry has the human explanation in `detail`, so a suite
-   asserting *which* wire error closed the channel still has to read it off the
-   adapter's own output. An optional `wireCode` field would close the last
-   indirect assertion in the adversarial suite. Minor: the taxonomy itself is
-   now correct and is asserted at the peer.
+4. **`waitForReady` called a dead program ready** — fixed; see the liveness
+   split below, which is a deliberate distinction and must not be "harmonised"
+   away later.
+5. **`SessionDiagnostic` carried no machine-readable wire code** — `wireCode?`
+   now accompanies `protocol-violation` entries, so the adversarial suite reads
+   the taxonomy from the driver instead of from the peer's own output. Both ends
+   are still asserted: the driver recorded the code it chose, and the adapter
+   received that exact code.
+6. **`ready-strategy` conflated a fact with a guess** — replaced by
+   `ready-shell-integration` and `ready-settled-screen`. With that, no assertion
+   in this package matches diagnostic prose; every one is on a code.
+
+## The liveness split (do not "fix" this)
+
+`waitForText`, `waitForTitle` and `waitForRender` keep succeeding after the
+child has exited. `waitForReady` does not. That is not an inconsistency waiting
+to be levelled — the two kinds of wait claim different things:
+
+- an **observation** wait asserts something about the past: text that was
+  printed stays printed, and a program's death does not retract it;
+- a **readiness** wait asserts something about the future — that the program
+  will accept input — and a dead program will not honour it. Returning success
+  there is a promise the next `press()` breaks with `process-exited`.
+
+`ready.test.ts` pins both halves in one test, so anyone tempted to align them
+has to delete an assertion that explains itself.
 
 ## Deliberate choices
 
@@ -78,6 +81,12 @@ because the suites that caught them are still the regression tests for them.
   Forwarding the runner's environment (which is what the pool did before the
   option existed) would quietly turn every suite into an `'inherit'` test and
   leave the default uncovered. `ready.test.ts` covers both modes explicitly.
+- **Survival is judged by the exit status, not by screen content.** The
+  adversarial suite's `expectSurvives` presses `q` and asserts the exit code.
+  Asserting on the screen would depend on where the peer's output happened to
+  be: under a flood the banner has scrolled off the grid, and the newest line
+  races the exit it announces. Each test asserts on the tree or the screen
+  before it gets there, where the content is stable.
 - **`runAdapterConformance` is async.** `vitest` is imported dynamically so the
   package remains importable from a plain script that only wants fixture paths
   or the probe. Callers `await` it at the top level of the test file.
@@ -97,6 +106,12 @@ because the suites that caught them are still the regression tests for them.
 - **`AdapterProbe.waitForText` sees cumulative output**, not a rendered screen:
   anything the app printed once matches forever. Proving that an app is *still*
   rendering uses growth in output length, not a text match.
+- **Text that can scroll off is not a safe thing to wait for.** A pseudo-
+  terminal may deliver a program's whole output in one chunk, so a `waitForText`
+  on an early line passes or fails depending on how the write was split. Every
+  wait here targets either the newest line or a full-frame repaint; the
+  scrollback test waits on `SCROLL DONE`, which the fixture prints last on
+  purpose.
 - **`waitForReady` can return before the command it should wait for starts.**
   Between `press('Enter')` and the shell's `OSC 133 C`, the last mark still says
   "prompt waiting", so a `waitForReady` issued immediately after a keystroke

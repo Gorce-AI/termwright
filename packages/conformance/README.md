@@ -91,11 +91,11 @@ area                        spec     result      tests    time
 generic fallback            §20.1    pass        10/10    2.1s
 semantic matrix             §20.2    pass        12/12    4.6s
 component harness           §20.2a   pass        9/9      3.0s
-hostile peer                §20.3    pass        24/24    14.5s
+hostile peer                §20.3    pass        25/25    14.6s
 interaction                 §20.4    pass        12/12    2.5s
-readiness + env             §5.3     pass        9/9      2.3s
+readiness + env             §5.3     pass        10/10    2.2s
 adapter contract            §7       pass        7/7      1.2s
-hostile peer @ 128 MB heap  §10      pass        24/24    14.6s
+hostile peer @ 128 MB heap  §10      pass        25/25    14.7s
 ```
 
 Sessions launch with the driver's secret-safe `envMode: 'replace'` default, so
