@@ -136,3 +136,12 @@
   emulator state. `ReportTestResult` gains `screenshots?: {label, image,
   mediaType?}[]`, inlined as data URIs; the report never rasterises anything
   itself, so no native renderer enters the default test-run dependency tree.
+- 2026-08-16 (crash report, driver 0d02ab2): api.ts gains `crashReport()`,
+  `crash` event (emitted just before `exit`), crash summary in
+  'process-exited' diagnostics. "Unexpected" = signal or code!=0 without a
+  harness-initiated close()/signal(). `exit` is now published only after the
+  VT queue drains (<=250 ms) — waitForExit resolves on a complete screen.
+  waitForReady counts OSC 133 B or D as readiness (A/C are not). screenTail
+  is deliberately NOT redacted (a faithful screen record) — consumers must
+  treat crash reports like screenshots when storing/transmitting;
+  recentInputs records paste only as size.
