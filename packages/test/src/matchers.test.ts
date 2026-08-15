@@ -192,6 +192,12 @@ describe('toMatchSemanticSnapshot', () => {
     }).rejects.toThrow(/reason: "dialog \\"Denied\\"" — closest candidate: name is "Permission"/u);
   });
 
+  it('waits out the gap before the first tree is observable', async () => {
+    const arrivesAt = Date.now() + 80;
+    const harness = fakeHarness(() => ({ tree: Date.now() >= arrivesAt ? permissionDialog() : null }));
+    await expect(harness).toMatchSemanticSnapshot('- dialog "Permission"');
+  });
+
   it('explains a session that published no tree', async () => {
     const harness = fakeHarness(() => ({ tree: null }));
     await expect(async () => {
@@ -258,6 +264,15 @@ describe('external snapshots', () => {
     beginSnapshotScope();
     configureTermwright({ timeouts: { expect: 100 }, snapshotDir: dir, updateSnapshots: 'none' });
     await expect(harness).toMatchSemanticSnapshot();
+  });
+
+  it('waits for the first tree before writing a new snapshot', async () => {
+    const dir = directories[directories.length - 1] as string;
+    const arrivesAt = Date.now() + 80;
+    const harness = fakeHarness(() => ({ tree: Date.now() >= arrivesAt ? permissionDialog() : null }));
+    await expect(harness).toMatchSemanticSnapshot();
+    const stored = readFileSync(join(dir, 'matchers.test.ts.tw-semantic.yaml'), 'utf8');
+    expect(stored).toContain('- dialog "Permission" [modal]:');
   });
 
   it('gives each assertion in a test its own key', async () => {

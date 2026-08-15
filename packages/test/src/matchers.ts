@@ -261,6 +261,10 @@ async function toMatchSemanticSnapshot(
     kind: 'semantic',
     options,
     inline: expected,
+    // `capabilities().semanticTree` is true from the handshake, but the tree
+    // itself only becomes observable once a snapshot and its render-commit
+    // marker have been paired — a screen wait can land in that gap.
+    ready: () => tree() !== null,
     serialize,
     compare: (stored) => {
       const patterns = parseSemanticSnapshot(stored);
@@ -378,6 +382,8 @@ interface SnapshotAssertion {
   readonly kind: SnapshotKind;
   readonly options: PollOptions;
   readonly inline: string | undefined;
+  /** Whether the subject can be serialized yet. Absent means always. */
+  ready?(): boolean;
   serialize(): string;
   compare(stored: string): Comparison;
 }
@@ -396,6 +402,7 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
     if (isNot) {
       throw new TypeError(`${spec.matcher} cannot be negated without an inline expected snapshot`);
     }
+    await settle(spec, Date.now() + timeout);
     const mode = updateMode(state);
     const place = location ?? snapshotLocation(state, spec.kind, config.snapshotDir);
     if (mode === 'none') {
@@ -453,6 +460,20 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
         block: true,
       }),
   };
+}
+
+/**
+ * Waits for the subject to become serializable.
+ *
+ * Only the write path needs this: comparing already re-probes, but writing a
+ * new snapshot happens once, and doing it in the gap before the first semantic
+ * tree arrives would store an error instead of a tree.
+ */
+async function settle(spec: SnapshotAssertion, deadline: number): Promise<void> {
+  if (spec.ready === undefined) return;
+  while (!spec.ready() && Date.now() < deadline) {
+    await delay(POLL_INTERVAL_MS);
+  }
 }
 
 interface SnapshotLocation {

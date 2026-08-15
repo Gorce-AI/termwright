@@ -52,6 +52,9 @@ afterAll(() => {
 describe.skipIf(!available)('the preset against a real PTY', { timeout: 30_000 }, () => {
   test('asserts the semantic tree, the screen and the effect of an action', async ({ terminal, step }) => {
     const app = await terminal.launch();
+    // A screen wait: the tree for this frame is paired with its render-commit
+    // marker slightly later, so every semantic assertion below is landing in
+    // that gap on purpose. They pass because the matchers re-probe.
     await app.waitForText('Permission required');
     expect(app.capabilities().semanticTree).toBe(true);
 

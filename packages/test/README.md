@@ -73,6 +73,14 @@ until the `expect` timeout class runs out.
 | `toMatchSemanticSnapshot(expected?)` | terminal or `SemanticSnapshot` |
 | `toMatchCellSnapshot(expected?)` | terminal or `ScreenSnapshot` |
 
+Retrying is what makes them safe right after a *screen* wait. `waitForText()`
+returns when the grid shows the text, but the semantic tree for that frame only
+becomes observable once its render-commit marker has been paired — including the
+first tree after the handshake, where `semanticTree()` is still `null` while
+`capabilities().semanticTree` is already true. Every tree-reading matcher polls
+through that gap, and a snapshot being written for the first time waits for a
+tree rather than storing the absence of one.
+
 A failure reads like the driver's own errors: what was expected, what was
 observed, the timeout that elapsed, the candidate nodes and an excerpt of the
 screen.
