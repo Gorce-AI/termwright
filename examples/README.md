@@ -85,9 +85,13 @@ integration.
 
 - **Let the assertion be the wait.** Every locator matcher re-probes until the
   application publishes the tree for the frame your input caused, so
-  `press()` followed straight by `expect(...)` is correct and sleep-free. The
-  exception is a *spy*: a callback that renders nothing produces no frame to
-  wait for, so poll it (`vi.waitFor`).
+  `press()` followed straight by `expect(...)` is correct and sleep-free. Two
+  things do not poll, and both bite under load: an **action**, which resolves
+  its locator once and fails outright if no tree has arrived yet, and a
+  **spy**, which renders nothing and so produces no frame to wait for. Settle
+  first (`waitForStable()`) before the first action of a test; poll a spy with
+  `vi.waitFor`. `waitForReady()` is not enough on its own — it means the screen
+  went quiet, not that the adapter finished its handshake.
 - **Scope destructive locators.** `dialog button#confirm` keeps working the day
   someone adds a second Delete button to the toolbar; `getByRole('button',
   {name: 'Delete'})` starts failing as ambiguous.
