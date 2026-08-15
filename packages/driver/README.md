@@ -110,6 +110,25 @@ not by prose: a diagnostic entry of `ready-shell-integration` means the program
 said it was at a prompt, `ready-settled-screen` means the driver guessed from
 silence.
 
+## Seeing what the driver is doing
+
+`TERMWRIGHT_DEBUG=1` (or `debug: true` when launching) streams a live log to
+stderr — the terminal equivalent of Playwright's `DEBUG=pw:api`:
+
+```
+  tw:api  [c87be6be]   0.229s getByRole("button", {"name":"Approve"}) → getByRole("button", name=~"Approve")
+  tw:api  [c87be6be]   0.229s locator.click() started
+  tw:sem  [c87be6be]   0.251s semantic revision 1 published (tree and marker paired)
+  tw:api  [c87be6be]   0.253s locator.click() succeeded in 24 ms
+  tw:wait [c87be6be]   0.455s locator.resolve({"timeout":200}) failed after 202 ms: TimeoutError [timeout]: …
+```
+
+Categories are `api` (calls), `wait` (what was awaited, how long, how it ended),
+`vt` and `sem` (revisions), `diag` (diagnostics). `TERMWRIGHT_DEBUG=all` adds
+`io` lines with the raw PTY traffic. The session token is never printed, and
+`paste`/`write` payloads are logged by size only. Switched off, nothing is
+wrapped and no listener is registered.
+
 ## Diagnostics
 
 `terminal.diagnostics()` returns the bounded, oldest-first log of what the

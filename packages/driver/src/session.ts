@@ -46,6 +46,7 @@ import {
   TimeoutError,
   UnsupportedActionError,
 } from './errors.js';
+import { DebugLog, debugMode, formatBytes, instrument } from './debug.js';
 import { SessionEventEmitter } from './events.js';
 import { encodeFocus, encodeKeys, encodePaste, encodeText } from './keys.js';
 import { LocatorImpl, type LocatorContext } from './locator.js';
@@ -98,6 +99,17 @@ const IDLE_QUIET_MS = 100;
 /** How long a half-paired semantic revision is kept before it is dropped. */
 const PAIRING_TIMEOUT_MS = 1_000;
 
+/**
+ * How long after the negotiation window a late adapter is still accepted.
+ *
+ * The window bounds when a session starts *behaving* generically; this grace
+ * bounds when that becomes *final*. Without it, a child that needs longer than
+ * the window to boot — routine under a loaded machine running suites in
+ * parallel — is locked out of its own session while the caller still has
+ * seconds of budget left.
+ */
+const LATE_ATTACH_GRACE_MS = 2_000;
+
 /** Bounded diagnostics log: a flooding adapter cannot grow it without bound. */
 const MAX_DIAGNOSTICS = 200;
 
@@ -147,7 +159,8 @@ export async function launchTerminal(options: LaunchTerminalOptions): Promise<Te
   }
   const session = new TerminalSession(options);
   await session.start();
-  return session;
+  const log = session.debugLog;
+  return log === null ? session : instrument<TerminalHarness>(session, log, 'harness');
 }
 
 /** What a diagnostic entry is about, beyond its message. */
@@ -191,6 +204,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #resolveExit: ((status: ExitStatus) => void) | null = null;
   #lastOutputAt = Date.now();
   #violation: ProtocolViolationError | null = null;
+  #debug: DebugLog | null = null;
+  /** When the generic verdict becomes final; null while semantics are still possible. */
+  #genericDefiniteAt: number | null = null;
+  #graceTimer: NodeJS.Timeout | null = null;
   #selectionRange: { start: { row: number; column: number }; end: { row: number; column: number } } | null = null;
 
   constructor(options: LaunchTerminalOptions) {
@@ -217,6 +234,17 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
     this.scrollback = this.#createScrollbackApi();
     this.selection = this.#createSelectionApi();
+
+    const mode = debugMode(options.debug);
+    if (mode !== 'off') {
+      this.#debug = new DebugLog(this.sessionId, () => this.#now(), mode);
+      this.#installDebugListeners();
+    }
+  }
+
+  /** The debug log, when one is enabled; `launchTerminal` instruments with it. */
+  get debugLog(): DebugLog | null {
+    return this.#debug;
   }
 
   /** Creates the endpoint, spawns the child and starts the negotiation window. */
@@ -225,6 +253,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       sessionId: this.sessionId,
       token: this.#token,
       limits: DEFAULT_LIMITS,
+      acceptHello: () => this.semanticPossible(),
       hooks: {
         onAttach: (attachment) => this.#onAttach(attachment),
         onSnapshot: (snapshot) => this.#pairing.offerSnapshot(snapshot),
@@ -285,8 +314,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (this.#attachment === null) {
         this.#diagnostic(
           'negotiation-timeout',
-          `no adapter completed the handshake within ${negotiationMs} ms; continuing as a generic session`,
+          `no adapter completed the handshake within ${negotiationMs} ms; continuing as a generic session, ` +
+            `but still accepting a late adapter for ${LATE_ATTACH_GRACE_MS} ms`,
         );
+        this.#startLateAttachGrace();
       }
       this.#settle();
     }, negotiationMs);
@@ -593,6 +624,17 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#attachment !== null;
   }
 
+  /**
+   * True while a semantic tree may still arrive: an adapter is attached, the
+   * negotiation window is open, or the late-attach grace has not expired.
+   * Semantic locators wait while this holds and only fail once it does not.
+   */
+  semanticPossible(): boolean {
+    if (this.#attachment !== null) return true;
+    if (this.#genericDefiniteAt === null) return true;
+    return Date.now() < this.#genericDefiniteAt;
+  }
+
   semanticViolation(): ProtocolViolationError | null {
     return this.#violation;
   }
@@ -671,6 +713,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     if (this.#closed) return;
     this.#closed = true;
     if (this.#negotiationTimer !== null) clearTimeout(this.#negotiationTimer);
+    if (this.#graceTimer !== null) clearTimeout(this.#graceTimer);
     this.#settle();
     this.#pairing.dispose();
     // Releasing the pty hangs the terminal up, exactly like closing a terminal
@@ -702,6 +745,29 @@ class TerminalSession implements TerminalHarness, LocatorContext {
    * Records one diagnostic and publishes it. The log is bounded and
    * oldest-first: a flooding adapter cannot grow it without bound.
    */
+  /**
+   * Mirrors the session's observable life into the debug log. Registered only
+   * when debugging is on, so an ordinary session pays nothing.
+   */
+  #installDebugListeners(): void {
+    const log = this.#debug;
+    if (log === null) return;
+    log.line('api', `launch ${JSON.stringify(this.#options.command.join(' '))} ` +
+      `${this.#vt.columns}x${this.#vt.rows} envMode=${this.#options.envMode ?? 'replace'}`);
+    this.#emitter.on('screen-revision', ({ revision }) => log.line('vt', `screen revision ${revision}`));
+    this.#emitter.on('semantic-revision', ({ revision }) =>
+      log.line('sem', `semantic revision ${revision} published (tree and marker paired)`),
+    );
+    this.#emitter.on('diagnostic', (entry) => log.diagnostic(entry));
+    this.#emitter.on('exit', ({ code, signal }) =>
+      log.line('api', `exited code=${String(code)} signal=${String(signal)}`),
+    );
+    if (log.logsIo) {
+      this.#emitter.on('output', ({ data }) => log.line('io', `out ${formatBytes(data)}`));
+      this.#emitter.on('input', ({ data, kind }) => log.line('io', `in  ${kind} ${formatBytes(data)}`));
+    }
+  }
+
   #diagnostic(code: DiagnosticCode, detail: string, about?: DiagnosticContext): void {
     const entry: SessionDiagnostic = {
       code,
@@ -715,11 +781,33 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#emitter.emit('diagnostic', entry);
   }
 
+  #startLateAttachGrace(): void {
+    this.#genericDefiniteAt = Date.now() + LATE_ATTACH_GRACE_MS;
+    this.#graceTimer = setTimeout(() => {
+      this.#graceTimer = null;
+      if (this.#attachment !== null) return;
+      this.#diagnostic(
+        'negotiation-timeout',
+        'the late-attach grace expired: this session is generic for good, and semantic locators now fail immediately',
+      );
+      // Wake the waiters so a pending locator reports the verdict at once.
+      this.#notifyChange();
+    }, LATE_ATTACH_GRACE_MS);
+    this.#graceTimer.unref?.();
+  }
+
   #onAttach(attachment: SemanticAttachment): void {
+    const late = this.#settled;
     this.#attachment = attachment;
+    this.#genericDefiniteAt = null;
+    if (this.#graceTimer !== null) {
+      clearTimeout(this.#graceTimer);
+      this.#graceTimer = null;
+    }
     this.#diagnostic(
       'adapter-attached',
-      `adapter ${attachment.adapter.name}@${attachment.adapter.version} attached with capabilities [${attachment.capabilities.join(', ')}]`,
+      `adapter ${attachment.adapter.name}@${attachment.adapter.version} attached with capabilities [${attachment.capabilities.join(', ')}]` +
+        (late ? ' (after the negotiation window, inside the late-attach grace)' : ''),
     );
     this.#pairing.setMarkerEnabled(attachment.markerEnabled);
     this.#settle();

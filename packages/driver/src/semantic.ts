@@ -79,6 +79,12 @@ export interface SemanticChannelOptions {
   readonly sessionId: string;
   readonly token: string;
   readonly limits: ProtocolLimits;
+  /**
+   * Guard for design §4.1: a late hello never flips an already selected mode.
+   * The session decides when the mode is final (negotiation window plus a
+   * bounded late-attach grace); until then a slow child is still welcome.
+   */
+  acceptHello(): boolean;
   readonly hooks: SemanticChannelHooks;
 }
 
@@ -234,6 +240,19 @@ export class SemanticChannel {
   }
 
   #handleHello(socket: Socket, hello: HelloMessage): boolean {
+    if (!this.#options.acceptHello()) {
+      this.#sendError(
+        socket,
+        'internal',
+        'the negotiation window has closed; this session already settled as generic',
+      );
+      socket.destroy();
+      this.#options.hooks.onDiagnostic(
+        'adapter-capability',
+        `refusing a hello from ${hello.adapter.name}: the session settled as generic before it connected`,
+      );
+      return false;
+    }
     if (!tokenMatches(this.#options.token, hello.token)) {
       this.#fail(socket, 'bad-token', 'handshake token mismatch');
       return false;

@@ -26,6 +26,7 @@ import {
   TimeoutError,
   UnsupportedActionError,
 } from './errors.js';
+import { unwrap } from './debug.js';
 import { encodeKeys, encodeText } from './keys.js';
 import { concatBytes, encodeMouse, type MouseButton, type MouseEvent } from './mouse.js';
 import { matchGrid, matchSemantic, textInRect, type SemanticIndex } from './matching.js';
@@ -40,6 +41,8 @@ export interface LocatorContext {
   semanticIndex(): SemanticIndex | null;
   /** True once an adapter completed the handshake, even before its first tree. */
   semanticAttached(): boolean;
+  /** True while a semantic tree may still arrive (negotiation or grace open). */
+  semanticPossible(): boolean;
   /** The error that closed the semantic channel, if one did. */
   semanticViolation(): TermwrightError | null;
   semanticRevision(): number;
@@ -105,12 +108,15 @@ export class LocatorImpl implements Locator {
   }
 
   within(parent: Locator): Locator {
-    if (!(parent instanceof LocatorImpl)) {
+    // A debug-instrumented locator is a Proxy; the raw object is what may be
+    // stored and later reached into.
+    const raw = unwrap(parent);
+    if (!(raw instanceof LocatorImpl)) {
       throw new UnsupportedActionError('within() requires a locator created by this harness', {
         semanticTree: this.#ctx.semanticAttached(),
       });
     }
-    return new LocatorImpl(this.#ctx, this.#query, { ...this.#state, parent });
+    return new LocatorImpl(this.#ctx, this.#query, { ...this.#state, parent: raw });
   }
 
   first(): Locator {
@@ -236,11 +242,12 @@ export class LocatorImpl implements Locator {
   }
 
   async dragTo(target: Locator, opts?: WaitOptions): Promise<void> {
-    if (!(target instanceof LocatorImpl)) {
+    const raw = unwrap(target);
+    if (!(raw instanceof LocatorImpl)) {
       throw new UnsupportedActionError('dragTo() requires a locator created by this harness', this.#ctx.errorDiagnostics());
     }
     const from = this.#center(await this.#actionTarget('dragTo', opts));
-    const to = this.#center(await target.#actionTarget('dragTo', opts));
+    const to = this.#center(await raw.#actionTarget('dragTo', opts));
     await this.drag({ from, to });
   }
 
@@ -497,7 +504,7 @@ export class LocatorImpl implements Locator {
     if (index === null) {
       const violation = this.#ctx.semanticViolation();
       if (violation !== null) throw violation;
-      if (this.#ctx.semanticAttached()) return [];
+      if (this.#ctx.semanticPossible()) return [];
       throw new UnsupportedActionError(
         `${query.description} needs a semantic tree, but this session has none`,
         this.#ctx.errorDiagnostics({
@@ -531,9 +538,10 @@ export class LocatorImpl implements Locator {
       // was — a protocol violation — instead of a generic missing tree.
       const violation = this.#ctx.semanticViolation();
       if (violation !== null) throw violation;
-      // An attached adapter whose first tree is still in flight is a wait, not
-      // an error: the caller's deadline decides.
-      if (this.#ctx.semanticAttached()) return [];
+      // A tree that may still arrive is a wait, not an error: an attached
+      // adapter whose first tree is in flight, or a child still booting inside
+      // the late-attach grace. The caller's deadline decides.
+      if (this.#ctx.semanticPossible()) return [];
       throw new UnsupportedActionError(
         `locator ${this.description} needs a semantic tree, but this session has none`,
         this.#ctx.errorDiagnostics({

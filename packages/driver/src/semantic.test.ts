@@ -31,7 +31,7 @@ afterEach(async () => {
   }
 });
 
-async function createChannel(): Promise<Harness> {
+async function createChannel(accepting = true): Promise<Harness> {
   const snapshots: SemanticSnapshot[] = [];
   const attachments: SemanticAttachment[] = [];
   const diagnostics: string[] = [];
@@ -41,6 +41,7 @@ async function createChannel(): Promise<Harness> {
     sessionId: SESSION_ID,
     token: TOKEN,
     limits: DEFAULT_LIMITS,
+    acceptHello: () => accepting,
     hooks: {
       onSnapshot: (snapshot) => snapshots.push(snapshot),
       onCommit: () => {},
@@ -279,6 +280,19 @@ describe('SemanticChannel', () => {
     const error = await client.next();
     expect(error['code']).toBe('malformed');
     expect(harness.snapshots).toHaveLength(0);
+  });
+
+  it('refuses a hello once the session has settled as generic', async () => {
+    // Design §4.1: a late hello never flips an already selected mode.
+    const harness = await createChannel(false);
+    const client = await connectClient(harness.channel);
+
+    client.send(hello());
+    const error = await client.next();
+    expect(error['code']).toBe('internal');
+    await client.closed;
+    expect(harness.attachments).toHaveLength(0);
+    expect(harness.diagnostics.join('\n')).toContain('settled as generic');
   });
 
   it('removes the endpoint on close', async () => {

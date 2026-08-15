@@ -220,6 +220,58 @@ describe.skipIf(!ptyAvailable())('session events and emulator-side APIs', { time
   });
 });
 
+describe.skipIf(!ptyAvailable())('the debug log', { timeout: 20_000 }, () => {
+  it('narrates the session to stderr without leaking the session token', async () => {
+    const lines: string[] = [];
+    const restore = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+      lines.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+
+    try {
+      const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000, debug: true });
+      await terminal.waitForText('Permission required');
+      await terminal.getByRole('button', { name: 'Approve' }).click();
+      await terminal.paste('correct horse battery staple');
+    } finally {
+      process.stderr.write = restore;
+    }
+
+    const output = lines.join('');
+    expect(output).toContain('tw:wait');
+    expect(output).toContain('waitForText("Permission required") succeeded in');
+    expect(output).toContain('getByRole("button"');
+    expect(output).toContain('locator.click() succeeded in');
+    expect(output).toContain('semantic revision 1 published');
+    expect(output).toContain('adapter-attached');
+
+    // Secrets stay out: the pasted payload by size only, and no 256-bit token.
+    expect(output).not.toContain('correct horse');
+    expect(output).toContain('paste(<28 chars>)');
+    expect(output).not.toMatch(/[A-Za-z0-9_-]{43}/u);
+  });
+
+  it('stays silent when it is off', async () => {
+    const lines: string[] = [];
+    const restore = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+      lines.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+
+    try {
+      const terminal = await launch('echo-app.mjs');
+      await terminal.waitForText('READY');
+      await terminal.press('a');
+    } finally {
+      process.stderr.write = restore;
+    }
+
+    expect(lines.join('')).not.toContain('tw:');
+  });
+});
+
 describe.skipIf(!ptyAvailable())('the child environment', { timeout: 20_000 }, () => {
   it('does not hand the test runner’s secrets to the child by default', async () => {
     process.env['TERMWRIGHT_FIXTURE_SECRET'] = 'leaked';
@@ -510,6 +562,50 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
       .poll(() => terminal.semanticTree()?.revision ?? 0, { timeout: 5_000 })
       .toBeGreaterThan(before);
     expect(await terminal.getByTestId('reject').semanticState()).toMatchObject({ focused: true });
+  });
+
+  it('waits for an adapter that misses the negotiation window', async () => {
+    // The canonical example shape: wait for text, then act on a role. Under
+    // load a child routinely needs longer to boot than the negotiation window,
+    // and the caller still has seconds of budget left.
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 50,
+      env: { TERMWRIGHT_FIXTURE_HELLO_DELAY: '400' },
+    });
+    await terminal.waitForText('Permission required');
+
+    await terminal.getByRole('button', { name: 'Reject' }).click();
+    await terminal.waitForText('CLICKED reject');
+    expect(terminal.capabilities().semanticTree).toBe(true);
+
+    const attached = terminal.diagnostics().find((entry) => entry.code === 'adapter-attached');
+    expect(attached?.detail).toContain('late-attach grace');
+  });
+
+  it('still refuses semantic locators once the session is generic for good', async () => {
+    const terminal = await launch('echo-app.mjs', { semanticNegotiationMs: 30 });
+    await terminal.waitForText('READY');
+
+    // Inside the grace the locator waits rather than failing…
+    const early = await terminal
+      .getByTestId('nothing')
+      .resolve({ timeout: 50 })
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect((early as TermwrightError).code).toBe('timeout');
+
+    // …and once the verdict is final it fails immediately, with a message that
+    // names the real problem instead of a bare timeout.
+    await expect
+      .poll(
+        () =>
+          terminal
+            .getByTestId('nothing')
+            .resolve({ timeout: 50 })
+            .then(() => 'resolved')
+            .catch((cause: unknown) => (cause as TermwrightError).code),
+        { timeout: 6_000 },
+      )
+      .toBe('unsupported-action');
   });
 
   it('reports an empty published value as empty text, not as the label', async () => {

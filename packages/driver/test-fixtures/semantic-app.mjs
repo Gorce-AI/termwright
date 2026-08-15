@@ -15,6 +15,10 @@ const token = process.env['TERMWRIGHT_TOKEN'];
 // Class-B/C adapters — and Ink itself when a <Static> region is present —
 // publish role+name nodes without trustworthy coordinates. Legal, not an error.
 const withoutBounds = process.env['TERMWRIGHT_FIXTURE_NO_BOUNDS'] === '1';
+// Simulates a child that is slow to reach its handshake — routine on a loaded
+// machine running suites in parallel, where node's own startup outruns the
+// negotiation window.
+const helloDelay = Number(process.env['TERMWRIGHT_FIXTURE_HELLO_DELAY'] ?? '0');
 
 let sessionId = null;
 let revision = 0;
@@ -153,7 +157,8 @@ if (endpoint === undefined || token === undefined) {
   draw();
 } else {
   socket = connect(endpoint, () => {
-    socket.write(
+    const sendHello = () =>
+      socket.write(
       encodeFrame(
         {
           type: 'hello',
@@ -165,6 +170,8 @@ if (endpoint === undefined || token === undefined) {
         1024 * 1024,
       ),
     );
+    if (helloDelay > 0) setTimeout(sendHello, helloDelay);
+    else sendHello();
   });
   let pending = Buffer.alloc(0);
   socket.on('data', (chunk) => {

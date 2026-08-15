@@ -47,6 +47,11 @@ export interface LaunchOptions {
   readonly env?: Readonly<Record<string, string>>;
   /** Defaults to `'replace'`: a test process's secrets are not the child's. */
   readonly envMode?: EnvMode;
+  /**
+   * Streams a live log of API calls, waits, revisions and diagnostics to
+   * stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
+   */
+  readonly debug?: boolean;
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
   readonly semanticNegotiationMs?: number; // default 250

@@ -48,6 +48,7 @@ export type {
 } from './api.js';
 
 export { launchTerminal, type LaunchTerminalOptions } from './session.js';
+export { debugMode, type DebugCategory } from './debug.js';
 
 export {
   AmbiguousLocatorError,
