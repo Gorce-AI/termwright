@@ -126,6 +126,19 @@ Rules: node = `- role "name" [state,flags]` with children nested; name may be a
 Serializer+matcher live in `@termwright/test`; format shared with docs and UI
 inspector copy-paste.
 
+## Git hygiene in this shared tree (binding for every agent)
+
+The git index is shared between concurrently working agents. Therefore:
+1. Commit ONLY with explicit paths: `git commit --only <your-paths> -m ...`
+   (never bare `git commit`, never `-a`, never `git add -A` without paths).
+2. Never `git stash`, `git checkout`, `git reset` on the whole tree — your
+   own paths only. To test "is my new test red without my fix", copy the
+   file aside, don't rewind the tree.
+3. Never `--amend` and never rewrite history: check `git log -1` before you
+   commit; if HEAD is not yours, that's fine — just commit your paths.
+4. Root files (pnpm-lock.yaml, CONTRACTS.md, workspace config) are committed
+   by the coordinator only; report needed changes instead of committing them.
+
 ## Definition of done (every package)
 
 1. `pnpm build && pnpm typecheck && pnpm test` green in the package.
