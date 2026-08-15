@@ -6,11 +6,28 @@
   "type": "module",
   "engines": { "node": ">=22" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
+  "files": ["dist", "src/fixtures"],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:hostile": "vitest run --config vitest.hostile.config.ts src/suites/adversarial.test.ts",
+    "conformance": "node scripts/conformance.mjs"
   },
-  "dependencies": { "@termwright/driver": "workspace:*", "@termwright/protocol": "workspace:*" }
+  "dependencies": {
+    "@termwright/driver": "workspace:*",
+    "@termwright/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@termwright/ink": "workspace:*",
+    "@types/react": "^19.2.18",
+    "ink": "^7.1.1",
+    "react": "^19.2.8"
+  },
+  "peerDependencies": {
+    "vitest": ">=3.2.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": { "optional": true }
+  }
 }
