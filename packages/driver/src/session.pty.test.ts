@@ -214,6 +214,39 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
     await terminal.waitForText('MOUSE press b=0');
     await terminal.waitForText('MOUSE release b=0');
   });
+
+  it('sends wheel reports and right-button clicks', async () => {
+    const terminal = await launch('mouse-app.mjs');
+    await terminal.waitForText('MOUSE ON');
+
+    await terminal.getByText('MOUSE ON').wheel({ deltaY: 1 });
+    await terminal.waitForText('MOUSE press b=65');
+
+    await terminal.getByText('MOUSE ON').click({ button: 'right' });
+    await terminal.waitForText('MOUSE press b=2');
+  });
+
+  it('refuses a drag when the child only asked for click reporting', async () => {
+    const terminal = await launch('mouse-app.mjs');
+    await terminal.waitForText('MOUSE ON');
+    expect(terminal.screen().modes.mouseTracking).toBe('vt200');
+
+    const error = await terminal
+      .getByText('MOUSE ON')
+      .drag({ from: { row: 0, column: 0 }, to: { row: 1, column: 4 } })
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('unsupported-action');
+    expect((error as TermwrightError).diagnostics.suggestion).toContain('1002');
+  });
+
+  it('refuses focus reports the child never asked for', async () => {
+    const terminal = await launch('mouse-app.mjs');
+    await terminal.waitForText('MOUSE ON');
+
+    const error = await terminal.focus().catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('unsupported-action');
+    expect((error as TermwrightError).diagnostics.suggestion).toContain('1004');
+  });
 });
 
 describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout: 20_000 }, () => {
