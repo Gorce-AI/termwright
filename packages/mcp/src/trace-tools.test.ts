@@ -138,9 +138,17 @@ async function recordSample(): Promise<string> {
   return path;
 }
 
+interface ContentPart {
+  readonly type: string;
+  readonly text?: string;
+  readonly data?: string;
+  readonly mimeType?: string;
+}
+
 interface ToolResult {
   readonly isError: boolean;
   readonly text: string;
+  readonly content: readonly ContentPart[];
   readonly data: Record<string, unknown>;
   readonly error: { kind: string; suggestion?: string } | undefined;
 }
@@ -153,12 +161,13 @@ async function connectSession(): Promise<(name: string, args?: Record<string, un
   return async (name, args = {}): Promise<ToolResult> => {
     const result = (await client.callTool({ name, arguments: args })) as {
       isError?: boolean;
-      content?: { type: string; text?: string }[];
+      content?: ContentPart[];
       structuredContent?: Record<string, unknown>;
       _meta?: Record<string, unknown>;
     };
     return {
       isError: result.isError === true,
+      content: result.content ?? [],
       text: (result.content ?? []).map((part) => part.text ?? '').join('\n'),
       data: result.structuredContent ?? {},
       error: result._meta?.[ERROR_META_KEY] as ToolResult['error'],
@@ -296,19 +305,18 @@ describe('trace failures an agent has to handle', () => {
     expect(result.error?.suggestion).toContain('trace.open');
   });
 
-  it('says plainly that PNG screenshots are not available yet', async () => {
+  it('rejects a screenshot scale outside the supported range', async () => {
     const call = await connectSession();
     const { data } = await call('trace.open', { path: await recordSample() });
     const result = await call('trace.frame_at', {
       traceId: data['traceId'],
       stepIndex: 0,
       screenshot: true,
+      screenshotScale: 9,
     });
 
+    // zod bounds the parameter before the renderer ever sees it.
     expect(result.isError).toBe(true);
-    expect(result.error?.kind).toBe('unsupported-action');
-    expect(result.text).toContain('@termwright/screenshot');
-    expect(result.error?.suggestion).toContain('omit screenshot');
   });
 
   it('keeps one session’s traces invisible to another', async () => {
@@ -361,5 +369,90 @@ describe('the trace store', () => {
     expect(trace.reader.container).toBe('zip');
     expect((await trace.reader.steps()).length).toBe(2);
     await store.closeAll();
+  });
+});
+
+describe('PNG screenshots of a reconstructed frame', () => {
+  /** PNG signature: an agent gets real bytes, not a placeholder. */
+  const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47];
+
+  it('attaches an ImageContent alongside the text, never instead of it', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await recordSample() });
+    const frame = await call('trace.frame_at', {
+      traceId: data['traceId'],
+      stepIndex: 1,
+      screenshot: true,
+    });
+
+    expect(frame.isError, frame.text).toBe(false);
+    // The text projection survives: an agent that cannot see images loses nothing.
+    expect(frame.text).toContain('semanticTree: available');
+    expect(frame.text).toContain('Permission required');
+
+    const image = frame.content.find((part) => part.type === 'image');
+    expect(image?.mimeType).toBe('image/png');
+    const bytes = Buffer.from(image?.data ?? '', 'base64');
+    expect([...bytes.subarray(0, 4)]).toEqual(PNG_MAGIC);
+    expect(bytes.byteLength).toBeGreaterThan(100);
+
+    const described = frame.data['screenshot'] as {
+      width: number;
+      height: number;
+      mimeType: string;
+      selfContained: boolean;
+    };
+    expect(described.mimeType).toBe('image/png');
+    expect(described.width).toBeGreaterThan(0);
+    expect(described.height).toBeGreaterThan(0);
+    expect(typeof described.selfContained).toBe('boolean');
+  });
+
+  it('scales the image on request', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await recordSample() });
+    const traceId = data['traceId'];
+
+    const single = await call('trace.frame_at', { traceId, stepIndex: 1, screenshot: true });
+    const double = await call('trace.frame_at', {
+      traceId,
+      stepIndex: 1,
+      screenshot: true,
+      screenshotScale: 2,
+    });
+
+    const at = (result: ToolResult): number => (result.data['screenshot'] as { width: number }).width;
+    // Each size is rounded from the fractional SVG width, so 2x is within a pixel.
+    expect(at(double)).toBeGreaterThanOrEqual(at(single) * 2 - 2);
+    expect(at(double)).toBeLessThanOrEqual(at(single) * 2 + 2);
+  });
+
+  it('renders a light theme when asked', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await recordSample() });
+    const dark = await call('trace.frame_at', {
+      traceId: data['traceId'],
+      stepIndex: 1,
+      screenshot: true,
+    });
+    const light = await call('trace.frame_at', {
+      traceId: data['traceId'],
+      stepIndex: 1,
+      screenshot: true,
+      screenshotTheme: 'light',
+    });
+
+    const bytes = (result: ToolResult): Buffer =>
+      Buffer.from(result.content.find((part) => part.type === 'image')?.data ?? '', 'base64');
+    expect(bytes(light).equals(bytes(dark))).toBe(false);
+  });
+
+  it('leaves the frame image-free unless it was asked for', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await recordSample() });
+    const frame = await call('trace.frame_at', { traceId: data['traceId'], stepIndex: 1 });
+
+    expect(frame.content.every((part) => part.type === 'text')).toBe(true);
+    expect(frame.data['screenshot']).toBeUndefined();
   });
 });

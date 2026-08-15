@@ -110,8 +110,26 @@ headless emulator the HTML report uses. A moment is named by `timeMs`,
 
 Archives are per session, capped at 8 open and 128 MB each; at the ceiling the
 coldest handle is closed and named in the result, and re-opening a path always
-works. `screenshot: true` is accepted but fails with `unsupported-action` until
-`@termwright/screenshot` lands — it never silently returns text instead.
+works.
+
+## Screenshots
+
+`terminal.snapshot` and `trace.frame_at` take `screenshot: true` and attach a PNG
+as `ImageContent`, rendered by `@termwright/screenshot` — a cell grid becomes an
+SVG with the glyph outlines embedded and resvg rasterises it, so there is no
+browser in the loop and no dependency on the agent's machine having the right
+font.
+
+```jsonc
+{ "terminal": "t1", "screenshot": true, "screenshotScale": 2, "screenshotTheme": "light" }
+```
+
+The image is always *additional*: the compact tree and the screen text are in the
+same result, so an agent that cannot see pictures loses nothing.
+`structuredContent.screenshot` carries the size and `selfContained` — false when
+a character had no embedded outline and fell back to a font the viewer may not
+have. PNGs above 3 MB are refused with `capacity` rather than blowing a context
+window; lower `screenshotScale` or resize the terminal.
 
 ## Refs and revisions
 

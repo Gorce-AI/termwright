@@ -37,6 +37,7 @@ function ptyAvailable(): boolean {
 interface ToolResult {
   readonly isError: boolean;
   readonly text: string;
+  readonly content: readonly { type: string; data?: string; mimeType?: string }[];
   readonly data: Record<string, unknown>;
   /** Structured failure payload, carried in `_meta` (see server.ts). */
   readonly error: { kind: string; suggestion?: string; candidates?: string[] } | undefined;
@@ -57,7 +58,7 @@ async function connectSession(storageDir?: string): Promise<{
     call: async (name, args = {}): Promise<ToolResult> => {
       const result = (await client.callTool({ name, arguments: args })) as {
         isError?: boolean;
-        content?: { type: string; text?: string }[];
+        content?: { type: string; text?: string; data?: string; mimeType?: string }[];
         structuredContent?: Record<string, unknown>;
         _meta?: Record<string, unknown>;
       };
@@ -67,6 +68,7 @@ async function connectSession(storageDir?: string): Promise<{
         .join('\n');
       return {
         isError: result.isError === true,
+        content: result.content ?? [],
         text,
         data: result.structuredContent ?? {},
         error: result._meta?.[ERROR_META_KEY] as ToolResult['error'],
@@ -199,6 +201,28 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(dump.html).toContain('<');
     const names = (dump.semantic?.nodes ?? []).map((node) => (node as { name?: string }).name);
     expect(names).toEqual(expect.arrayContaining(['Permission', 'Approve', 'Reject']));
+  });
+
+  it('attaches a PNG of the live screen when asked, keeping the text intact', async () => {
+    const { call } = await connectSession();
+    const terminal = await launchSemantic(call);
+    await call('terminal.wait_for', { terminal, wait: 'text', text: 'Permission required' });
+
+    const shot = await call('terminal.snapshot', { terminal, screenshot: true });
+    expect(shot.isError, shot.text).toBe(false);
+    expect(shot.text).toContain('semanticTree: available');
+
+    const image = shot.content.find((part) => part.type === 'image');
+    expect(image?.mimeType).toBe('image/png');
+    const bytes = Buffer.from(image?.data ?? '', 'base64');
+    expect([...bytes.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+
+    const described = shot.data['screenshot'] as { width: number; height: number };
+    expect(described.width).toBeGreaterThan(0);
+    expect(described.height).toBeGreaterThan(0);
+
+    const plain = await call('terminal.snapshot', { terminal });
+    expect(plain.content.every((part) => part.type === 'text')).toBe(true);
   });
 
   it('keeps one session’s terminals invisible to another', async () => {

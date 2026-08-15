@@ -22,7 +22,7 @@ import type { CallToolResult, Transport } from './sdk-facade.js';
 import { SessionRegistry, closeSessionStores, createSessionStores } from './sessions.js';
 import type { SessionStores } from './sessions.js';
 import { TOOLS } from './registry.js';
-import type { ToolContext } from './tool-kit.js';
+import type { ToolContext, ToolOutcome } from './tool-kit.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
 
 /** Server-level instructions shown to hosts that surface them. */
@@ -35,8 +35,18 @@ const INSTRUCTIONS =
   'them by text instead of by role.';
 
 /** Builds the `CallToolResult` for a successful handler outcome. */
-function successResult(text: string, data: Record<string, unknown>): CallToolResult {
-  return { content: [{ type: 'text', text }], structuredContent: data };
+function successResult(outcome: ToolOutcome<Record<string, unknown>>): CallToolResult {
+  return {
+    content: [
+      { type: 'text', text: outcome.text },
+      ...(outcome.images ?? []).map((image) => ({
+        type: 'image' as const,
+        data: image.data,
+        mimeType: image.mimeType,
+      })),
+    ],
+    structuredContent: outcome.data,
+  };
 }
 
 /** `_meta` key carrying the structured error payload of a failed tool call. */
@@ -80,8 +90,7 @@ export function createTermwrightMcpServer(stores: SessionStores): McpServer {
       },
       async (args: unknown): Promise<CallToolResult> => {
         try {
-          const outcome = await tool.handler(context, args as never);
-          return successResult(outcome.text, outcome.data);
+          return successResult(await tool.handler(context, args as never));
         } catch (error) {
           return errorResult(error);
         }

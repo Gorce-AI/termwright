@@ -155,16 +155,32 @@ investigation runs.
 
 ## Screenshots
 
-`terminal.snapshot { variant: "full" }` writes the complete dump — text, ANSI and
-`screen.html()` — to `<tmp>/termwright-mcp/<session>/<terminal>/snapshot-N.json`
-and returns only refs plus the path. That is the whole picture story for 1.0.
+`terminal.snapshot` and `trace.frame_at` accept `screenshot: true` and attach a
+PNG as `ImageContent`. `@termwright/screenshot` does the rendering; this package
+only decides when an image is worth sending (`screenshots.ts`).
 
-`trace.frame_at` and `trace.diff` accept `screenshot: true` and fail it with
-`unsupported-action` naming `@termwright/screenshot` (task #18, in flight). The
-flag is rejected rather than ignored on purpose: an agent must never believe it
-received an image it did not get. When the package lands, the two call sites in
-`trace-tools.ts: rejectScreenshot()` become the render call, and `ImageContent`
-joins the existing text content — no schema change for the callers.
+Both worlds feed the renderer the same shape. A live `harness.screen()` is
+already a `ScreenFrame`, and `frameFromAnsi()` from `@termwright/trace` gives one
+for a recorded moment — which is why `trace.frame_at` now reconstructs through
+that instead of `renderAnsiToHtml`: one call yields the cell grid for the picture
+*and* the text for the compact snapshot, rather than replaying the recording
+twice into two different representations.
+
+Three deliberate choices:
+
+- the image never replaces text. Both go in the same result, so an agent with no
+  vision loses nothing by the flag being on, and a screenshot is never the only
+  place an answer lives;
+- `structuredContent.screenshot` reports size plus `selfContained`. A `false`
+  there means some character fell back to `<text>` and will only render where a
+  suitable font exists — worth knowing before an agent concludes anything from
+  pixels;
+- PNGs above 3 MB fail with `capacity`. Base64 inflates a result by a third, and
+  an image that large is likelier to blow a context window than to answer a
+  question. `SCREENSHOT_LIMITS` in `screenshots.ts` holds the ceiling.
+
+`trace.diff` deliberately has no screenshot flag: it spans two moments, and an
+image of "the difference" would be an invention. Ask for the two frames.
 
 ## Session ownership
 

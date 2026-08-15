@@ -12,13 +12,15 @@
  * parses asciicast or drives a terminal.
  */
 import { z } from 'zod';
-import { renderAnsiToHtml } from '@termwright/trace';
-import type { StepSummary, TraceMeta, TraceReader } from '@termwright/trace';
+import { frameFromAnsi } from '@termwright/trace';
+import type { StepSummary, TraceFrame, TraceMeta, TraceReader } from '@termwright/trace';
 import { diffRows, diffSemantic } from './diff.js';
-import { McpError, usageError } from './errors.js';
+import { usageError } from './errors.js';
 import { formatCompactSnapshot, refEntries } from './format.js';
 import type { SemanticSnapshot } from './model.js';
 import { refEntrySchema, semanticTreeState } from './schemas.js';
+import { describeImage, screenshotSchema } from './screenshot-schema.js';
+import { renderScreenshot } from './screenshots.js';
 import { defineTool } from './tool-kit.js';
 import type { ToolDefinition } from './tool-kit.js';
 import { TRACE_LIMITS } from './traces.js';
@@ -26,24 +28,19 @@ import type { OpenTrace } from './traces.js';
 
 const traceId = z.string().min(1).describe('trace handle returned by trace.open, e.g. "tr1"');
 
-const screenshotFlag = z
-  .boolean()
-  .optional()
-  .describe('attach a PNG of the frame (not available yet; see the error it returns)');
-
-/**
- * PNG rendering waits on `@termwright/screenshot`. Asking for it fails loudly
- * rather than silently returning text, so an agent is never left believing it
- * received an image.
- */
-function rejectScreenshot(requested: boolean | undefined): void {
-  if (requested !== true) return;
-  throw new McpError(
-    'unsupported-action',
-    'PNG screenshots are not available yet: @termwright/screenshot has not landed',
-    'omit screenshot — the frame already returns reconstructed screen text and the compact tree',
-  );
-}
+const screenshotShape = {
+  screenshot: z
+    .boolean()
+    .optional()
+    .describe('also attach a PNG of the reconstructed frame, rendered without a browser'),
+  screenshotScale: z
+    .number()
+    .min(0.1)
+    .max(3)
+    .optional()
+    .describe('pixel density of the PNG; default 1, 2 is retina-sharp'),
+  screenshotTheme: z.enum(['dark', 'light']).optional().describe('PNG background; default dark'),
+} as const;
 
 const metaSchema = z.object({
   sessionId: z.string(),
@@ -106,8 +103,16 @@ async function markersOf(reader: TraceReader): Promise<readonly { timeMs: number
   return markers;
 }
 
-/** One reconstructed moment: screen text plus the semantic tree that paired with it. */
+/**
+ * One reconstructed moment: the cell grid, the semantic tree that paired with
+ * it, and the step it fell inside.
+ *
+ * The grid comes from `frameFromAnsi()`, so it is a `ScreenFrame` — the same
+ * shape a live `harness.screen()` has. That is what lets one screenshot
+ * renderer serve both worlds.
+ */
 interface Frame {
+  readonly grid: TraceFrame;
   readonly timeMs: number;
   readonly columns: number;
   readonly rows: number;
@@ -118,16 +123,21 @@ interface Frame {
 }
 
 async function frameAt(trace: OpenTrace, timeMs: number): Promise<Frame> {
+  // One reconstruction serves both halves: `stateAt` for the cast prefix and the
+  // nearest semantic record, `frameFromAnsi` to replay that prefix into cells.
   const state = await trace.reader.stateAt(timeMs);
-  const screen = await renderAnsiToHtml(state.castPrefix, {
+  const grid = await frameFromAnsi(state.castPrefix, {
     columns: state.columns,
     rows: state.rows,
+    timeMs: state.timeMs,
+    semanticRevision: state.nearestSemanticRevision,
   });
   return {
+    grid,
     timeMs: state.timeMs,
     columns: state.columns,
     rows: state.rows,
-    lines: screen.text.split('\n'),
+    lines: grid.text().split('\n'),
     semantic: (state.nearestSemantic?.snapshot as SemanticSnapshot | undefined) ?? null,
     semanticRevision: state.nearestSemanticRevision,
     step: state.step,
@@ -315,7 +325,7 @@ const frame = defineTool({
     stepIndex: z.number().int().min(0).optional().describe('step index from trace.overview'),
     marker: z.string().optional().describe('cast marker label from trace.overview'),
     maxRows: z.number().int().min(1).max(10_000).optional(),
-    screenshot: screenshotFlag,
+    ...screenshotShape,
   },
   outputSchema: {
     traceId: z.string(),
@@ -327,17 +337,25 @@ const frame = defineTool({
     step: stepSchema.partial().nullable(),
     refs: z.array(refEntrySchema),
     compact: z.string(),
+    screenshot: screenshotSchema.optional(),
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
-    rejectScreenshot(args.screenshot);
     const trace = context.traces.get(args.traceId);
     const at = await resolveTime(trace, args);
     const reconstructed = await frameAt(trace, at);
     const compact = renderFrame(trace, reconstructed, args.maxRows);
     const step = reconstructed.step;
+    const image =
+      args.screenshot === true
+        ? renderScreenshot(reconstructed.grid, {
+            scale: args.screenshotScale,
+            theme: args.screenshotTheme,
+          })
+        : undefined;
     return {
       text: compact,
+      ...(image === undefined ? {} : { images: [image] }),
       data: {
         traceId: trace.id,
         timeMs: reconstructed.timeMs,
@@ -351,6 +369,7 @@ const frame = defineTool({
             ? []
             : refEntries(reconstructed.semantic).map((entry) => ({ ...entry, flags: [...entry.flags] })),
         compact,
+        ...(image === undefined ? {} : { screenshot: describeImage(image) }),
       },
     };
   },
@@ -368,7 +387,6 @@ const diff = defineTool({
     toMs: z.number().min(0),
     maxRows: z.number().int().min(1).max(10_000).optional(),
     maxSubtrees: z.number().int().min(1).max(1_000).optional(),
-    screenshot: screenshotFlag,
   },
   outputSchema: {
     traceId: z.string(),
@@ -389,7 +407,6 @@ const diff = defineTool({
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
-    rejectScreenshot(args.screenshot);
     if (args.toMs < args.fromMs) {
       throw usageError('toMs must not precede fromMs', 'swap the two, or read trace.overview for the timeline');
     }

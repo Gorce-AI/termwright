@@ -13,6 +13,8 @@
  */
 import { z } from 'zod';
 import { defineTool } from './tool-kit.js';
+import { renderScreenshot } from './screenshots.js';
+import { describeImage, screenshotSchema } from './screenshot-schema.js';
 import type { ToolContext, ToolDefinition, ToolOutcome } from './tool-kit.js';
 import { formatCompactSnapshot, refEntries, toRefEntry } from './format.js';
 import type { RefEntry } from './format.js';
@@ -272,6 +274,17 @@ const snapshot = defineTool({
     maxNodes: z.number().int().min(1).max(5_000).optional(),
     maxRows: z.number().int().min(1).max(10_000).optional(),
     includeText: z.boolean().optional().describe('include the visible grid text (default true)'),
+    screenshot: z
+      .boolean()
+      .optional()
+      .describe('also attach a PNG of the screen, rendered without a browser'),
+    screenshotScale: z
+      .number()
+      .min(0.1)
+      .max(3)
+      .optional()
+      .describe('pixel density of the PNG; default 1, 2 is retina-sharp'),
+    screenshotTheme: z.enum(['dark', 'light']).optional().describe('PNG background; default dark'),
   },
   outputSchema: {
     ...semanticFields,
@@ -289,6 +302,7 @@ const snapshot = defineTool({
     refs: z.array(refEntrySchema),
     compact: z.string(),
     dumpPath: z.string().optional(),
+    screenshot: screenshotSchema.optional(),
   },
   annotations: { readOnlyHint: true },
   handler: async (context, args) => {
@@ -324,8 +338,16 @@ const snapshot = defineTool({
         )}\n`,
       );
     }
+    const image =
+      args.screenshot === true
+        ? renderScreenshot(screen, {
+            scale: args.screenshotScale,
+            theme: args.screenshotTheme,
+          })
+        : undefined;
     return {
       text: dumpPath === undefined ? compact : `${compact}\nfull dump: ${dumpPath}`,
+      ...(image === undefined ? {} : { images: [image] }),
       data: {
         terminal: entry.id,
         revision: screen.revision,
@@ -345,6 +367,7 @@ const snapshot = defineTool({
         refs: state.refs.map((entry) => ({ ...entry, flags: [...entry.flags] })),
         compact,
         ...(dumpPath === undefined ? {} : { dumpPath }),
+        ...(image === undefined ? {} : { screenshot: describeImage(image) }),
       },
     };
   },

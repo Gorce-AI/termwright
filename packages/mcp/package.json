@@ -29,6 +29,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.0.0",
     "@termwright/protocol": "workspace:*",
+    "@termwright/screenshot": "workspace:*",
     "@termwright/trace": "workspace:*"
   }
 }

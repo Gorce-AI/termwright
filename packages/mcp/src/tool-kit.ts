@@ -10,6 +10,7 @@
 import type { z } from 'zod';
 import type { ToolAnnotations } from './sdk-facade.js';
 import type { TerminalStore } from './sessions.js';
+import type { ScreenshotImage } from './screenshots.js';
 import type { TraceStore } from './traces.js';
 
 /** What a tool handler is given besides its arguments: the session's stores. */
@@ -22,6 +23,12 @@ export interface ToolContext {
 export interface ToolOutcome<T> {
   readonly text: string;
   readonly data: T;
+  /**
+   * Images attached to the result as `ImageContent`, when the caller asked for
+   * one. Text and structured data are never replaced by an image — an agent
+   * that cannot see pictures loses nothing.
+   */
+  readonly images?: readonly ScreenshotImage[];
 }
 
 /** A registered tool, in the form both the server and `agent-context` consume. */

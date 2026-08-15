@@ -92,6 +92,9 @@ export { TRACE_TOOLS } from './trace-tools.js';
 export { defineTool } from './tool-kit.js';
 export type { ToolContext, ToolDefinition, ToolOutcome } from './tool-kit.js';
 
+export { SCREENSHOT_LIMITS, renderScreenshot } from './screenshots.js';
+export type { ScreenshotImage, ScreenshotRequest } from './screenshots.js';
+
 export { TRACE_LIMITS, TraceStore } from './traces.js';
 export type { OpenTrace, TraceStoreOptions } from './traces.js';
 
