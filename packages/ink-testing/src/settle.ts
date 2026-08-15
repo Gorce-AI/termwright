@@ -42,21 +42,63 @@ export async function commitFrame(
 }
 
 /**
- * Resolves once the application has committed its first frame, so that locators
- * can run without a preliminary wait in every test.
+ * Resolves once the application is actually on screen and described, so that
+ * locators can run without a preliminary wait in every test.
  *
- * A mount that produces no output at all — a component rendering `null` before
- * any state arrives — still settles: the adapter publishes a tree for the empty
- * frame.
+ * "First frame" means two independent things, and waiting for either alone is a
+ * race that only shows up on a loaded machine:
+ *
+ * - **Painted.** The emulator has processed output from the application. This
+ *   is what a screen assertion and every coordinate depend on.
+ * - **Described.** A semantic tree exists for it. This is what a locator
+ *   depends on.
+ *
+ * The adapter publishes its first tree as soon as the handshake completes,
+ * which is a socket round-trip — under load it can land well before Ink's
+ * first frame has travelled through the pty. Settling on the tree alone then
+ * hands back a harness over a blank screen, and the failure reads as "the
+ * component rendered nothing" rather than "the harness returned too early".
  */
 export async function waitForFirstFrame(
   harness: TerminalHarness,
   opts?: SettleOptions,
 ): Promise<void> {
-  if ((harness.semanticTree()?.revision ?? -1) < 0) {
-    await nextFrame(harness, -1, harness.screen().revision, opts);
+  const deadline = Date.now() + (opts?.timeout ?? DEFAULT_SETTLE_TIMEOUT_MS);
+
+  if (harness.screen().revision === 0) {
+    await harness.waitForRender({ after: 0, timeout: remaining(deadline) });
   }
-  await quiesce(harness, opts);
+
+  if (harness.semanticTree() === null) {
+    // A session whose adapter never attaches is a generic session, which is a
+    // legitimate outcome rather than a failure — the grid locators still work.
+    // Bounded so that case costs a grace period, not the whole timeout.
+    await waitForTree(harness, Math.min(remaining(deadline), TREE_GRACE_MS));
+  }
+
+  await quiesce(harness, { timeout: remaining(deadline) });
+}
+
+/** How long a painted frame waits for the tree that describes it. */
+const TREE_GRACE_MS = 1_000;
+
+function remaining(deadline: number): number {
+  return Math.max(1, deadline - Date.now());
+}
+
+/** Resolves when a tree arrives, or when the grace period expires. */
+function waitForTree(harness: TerminalHarness, timeout: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const finish = (): void => {
+      clearTimeout(timer);
+      unsubscribe();
+      resolve();
+    };
+    const timer = setTimeout(finish, timeout);
+    timer.unref?.();
+    const unsubscribe = harness.events.on('semantic-revision', finish);
+    if (harness.semanticTree() !== null) finish();
+  });
 }
 
 /**

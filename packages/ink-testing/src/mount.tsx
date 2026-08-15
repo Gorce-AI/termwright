@@ -150,7 +150,7 @@ const MOUNT_MAX_FPS = 1_000;
  * const harness = await mountInk(<Approve onPress={onPress} />, { columns: 40, rows: 10 });
  * await harness.getByRole('button', { name: 'Approve' }).click();
  * await harness.waitForText('approved');
- * expect(onPress).toHaveBeenCalledOnce();
+ * await vi.waitFor(() => expect(onPress).toHaveBeenCalledOnce());
  * await harness.close();
  * ```
  */

@@ -6,13 +6,19 @@ behind one interface.
 ```tsx
 const harness = await mountInk(<Approve onApprove={spy} />);
 await harness.getByRole('button', {name: 'Approve'}).click();
-expect(spy).toHaveBeenCalledOnce();
+await vi.waitFor(() => expect(spy).toHaveBeenCalledOnce());
 ```
 
 That click is a mouse report on the component's stdin — the same bytes a
 terminal sends when a user clicks that cell. Nothing here calls into your
 component directly, so a test that passes is evidence the component works, not
 evidence its props were wired to the test.
+
+It also means the spy is not observed the moment `click()` resolves: the bytes
+have been written, but the component has not read them yet. Every wait this
+package offers is driven by *frames*, and a callback that changes nothing on
+screen produces no frame to wait for — so assert on the spy through
+`vi.waitFor`, which polls the spy itself.
 
 ## Install
 
@@ -55,7 +61,7 @@ test('approves on click', async () => {
 
   await harness.getByRole('button', {name: 'Approve'}).click();
   await harness.waitForText('approved');
-  expect(onApprove).toHaveBeenCalledOnce();
+  await vi.waitFor(() => expect(onApprove).toHaveBeenCalledOnce());
 
   await harness.rerender(<Approve onApprove={onApprove} disabled />);
   await expect(harness.getByRole('button', {name: 'Approve'}).click()).rejects.toThrow();
