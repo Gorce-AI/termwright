@@ -114,9 +114,14 @@ versioned JSON generated from the zod schemas.
 ```
 
 Rules: node = `- role "name" [state,flags]` with children nested; name may be a
-`/regex/`; omitted name matches any; omitted children = don't-care (partial
-matching); `[state]` flags only assert listed flags. Serializer+matcher live in
-`@termwright/test`; format shared with docs and UI inspector copy-paste.
+`/regex/`; omitted name matches any. TWO comparison modes, by source:
+- **inline pattern** (argument to the matcher): partial — omitted children =
+  don't-care, `[state]` flags assert only what they list;
+- **stored file snapshot** (generated into `__snapshots__`): STRICT — full
+  tree, exact flags; any difference (including a NEW node or state) fails,
+  and update mode `changed` rewrites on any textual difference.
+Serializer+matcher live in `@termwright/test`; format shared with docs and UI
+inspector copy-paste.
 
 ## Definition of done (every package)
 

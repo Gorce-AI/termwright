@@ -103,3 +103,7 @@
   `buildUsage` / `buildAgentSkill` / `runCli` from `@termwright/mcp`, and
   `termwright mcp <args>` forwards verbatim. Its one added rule is that a
   failing test run under `termwright ui` exits 1 (assertion), not 5.
+- 2026-08-16 (examples finding): stored semantic snapshot FILES are compared
+  STRICTLY (full tree, exact flags; new nodes/states fail; `changed` rewrites
+  on any textual diff). Inline patterns remain partial. Previously file
+  snapshots silently used partial matching and could never fail on additions.
