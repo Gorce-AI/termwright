@@ -456,6 +456,23 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     expect(await terminal.getByTestId('reject').semanticState()).toMatchObject({ focused: true });
   });
 
+  it('reports an empty published value as empty text, not as the label', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    const input = terminal.getByTestId('name-input');
+    await input.resolve();
+
+    // The textbox publishes value: '' — an empty input has no text, and
+    // falling back to its label would make an empty-text assertion impossible.
+    expect(await input.textContent()).toBe('');
+
+    await terminal.press('a');
+    await terminal.waitForText('name: [a]');
+    await expect.poll(() => input.textContent()).toBe('a');
+
+    // A node without a value still falls back to its name.
+    expect(await terminal.getByTestId('approve').textContent()).toBe('Approve');
+  });
+
   it('keeps working when the adapter publishes no bounds at all', async () => {
     // Legal state, not a broken adapter: class-B/C frameworks never have
     // trustworthy coordinates, and Ink drops them whenever a <Static> region

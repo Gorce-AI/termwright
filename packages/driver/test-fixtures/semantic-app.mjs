@@ -21,6 +21,7 @@ let revision = 0;
 let focused = 'approve';
 let socket = null;
 let lastEvent = 'none';
+let typed = '';
 
 function draw() {
   process.stdout.write('\x1b[2J\x1b[H');
@@ -28,6 +29,7 @@ function draw() {
   const approve = focused === 'approve' ? '[Approve]' : ' Approve ';
   const reject = focused === 'reject' ? '[Reject]' : ' Reject ';
   process.stdout.write(`  ${approve}   ${reject}\r\n`);
+  process.stdout.write(`name: [${typed}]\r\n`);
   // The status line lives inside the frame so it survives the next repaint.
   process.stdout.write(`last: ${lastEvent}\r\n`);
 }
@@ -58,6 +60,17 @@ function tree() {
         bounds: { row: 1, column: 2, width: 9, height: 1 },
         state: { focused: focused === 'approve' },
         actions: ['focus', 'activate'],
+      },
+      {
+        id: 'n4',
+        parentId: 'n1',
+        role: 'textbox',
+        name: 'Your name',
+        testId: 'name-input',
+        value: typed,
+        bounds: { row: 2, column: 6, width: 20, height: 1 },
+        state: { focused: false },
+        actions: ['focus', 'setValue'],
       },
       {
         id: 'n3',
@@ -118,6 +131,11 @@ process.stdin.on('data', (chunk) => {
   }
   if (text === '\r' || text === ' ') {
     lastEvent = `ACTIVATED ${focused}`;
+    publish();
+    return;
+  }
+  if (/^[a-z]$/u.test(text) && text !== 'q') {
+    typed += text;
     publish();
     return;
   }

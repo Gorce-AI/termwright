@@ -205,7 +205,10 @@ export class LocatorImpl implements Locator {
     const target = await this.resolve();
     if (target.semantic) {
       const node = this.#node(target);
-      return node.value !== undefined && node.value.length > 0 ? node.value : node.name;
+      // A published value wins even when it is empty: an empty textbox has no
+      // text, and reporting its label instead would make `toHaveText('')`
+      // unsatisfiable. The name is a fallback for nodes that carry no value.
+      return node.value ?? node.name;
     }
     return target.rect === null ? '' : textInRect(this.#ctx.rows(), target.rect);
   }
