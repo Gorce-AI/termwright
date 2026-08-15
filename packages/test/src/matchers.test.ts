@@ -345,6 +345,25 @@ describe('external snapshots', () => {
     }).rejects.toThrow(/Received:[\s\S]*button "Reject"[\s\S]*differs from the stored snapshot/u);
   });
 
+  it('compares a stored snapshot strictly: a new state fails', async () => {
+    const state = { tree: snapshot([node('n1', 'button', 'Approve')]) };
+    const harness = fakeHarness(() => state);
+    await expect(harness).toMatchSemanticSnapshot();
+
+    // Same nodes, same names — only a flag appeared. The stored oracle exists
+    // to catch exactly this.
+    state.tree = snapshot([node('n1', 'button', 'Approve', { state: { focused: true } })]);
+    beginSnapshotScope();
+    configureTermwright({
+      timeouts: { expect: 100 },
+      snapshotDir: directories[directories.length - 1] as string,
+      updateSnapshots: 'none',
+    });
+    await expect(async () => {
+      await expect(harness).toMatchSemanticSnapshot();
+    }).rejects.toThrow(/Expected:[\s\S]*- button "Approve"[\s\S]*Received:[\s\S]*\[focused\][\s\S]*differs from the stored snapshot/u);
+  });
+
   it('keeps an inline pattern partial: a new node is fine', async () => {
     const harness = fakeHarness(() => ({ tree: permissionDialog() }));
     await expect(harness).toMatchSemanticSnapshot(`
