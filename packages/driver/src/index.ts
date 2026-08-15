@@ -22,6 +22,8 @@ export type {
   CellAttributes,
   CellColor,
   CellSnapshot,
+  CrashInput,
+  CrashReport,
   DiagnosticCode,
   EnvMode,
   ErrorDiagnostics,

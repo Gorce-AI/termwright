@@ -127,6 +127,13 @@ export interface TerminalHarness {
    */
   diagnostics(): readonly SessionDiagnostic[];
 
+  /**
+   * What the session knew when the program died unexpectedly, or `null` — for a
+   * live session, a clean exit, or one the harness asked for via `close()` or
+   * `signal()`. Available as soon as the `exit` event fires.
+   */
+  crashReport(): CrashReport | null;
+
   /** Idempotent; bounded physical cleanup. Never sends signals implicitly. */
   close(): Promise<void>;
   readonly exit: Promise<ExitStatus>;
@@ -325,6 +332,46 @@ export type DiagnosticCode =
   /** `waitForReady` fell back to "the screen settled": a heuristic. */
   | 'ready-settled-screen';
 
+/** One remembered input, as it appears in a {@link CrashReport}. */
+export interface CrashInput {
+  readonly timeMs: number;
+  readonly kind: 'key' | 'mouse' | 'paste' | 'raw';
+  readonly bytes: number;
+  /**
+   * Escaped, truncated preview of what was sent. Omitted for pastes, which
+   * routinely carry secrets — their size is reported instead.
+   */
+  readonly preview?: string;
+}
+
+/**
+ * What the session knew at the moment a program died unexpectedly.
+ *
+ * "Unexpectedly" means the child exited on a signal, or with a non-zero code,
+ * without the harness being asked for it: neither `close()` nor an explicit
+ * `signal()` produces a report.
+ */
+export interface CrashReport {
+  readonly exit: ExitStatus;
+  /**
+   * Last lines of scrollback plus the visible grid, oldest first, with trailing
+   * blank lines trimmed — where a stack trace or a panic message ends up.
+   *
+   * This is what the terminal showed, verbatim and unscrubbed: whatever the
+   * program (or the tty's echo) displayed is here, secrets included. Treat a
+   * crash report like a screenshot when storing or forwarding it.
+   */
+  readonly screenTail: readonly string[];
+  /** Last fully paired semantic revision, when the session had one. */
+  readonly lastSemanticTree: SemanticSnapshot | null;
+  /** The most recent inputs, oldest first — what was sent just before the end. */
+  readonly recentInputs: readonly CrashInput[];
+  /** Tail of the session diagnostics log. */
+  readonly diagnosticsTail: readonly SessionDiagnostic[];
+  /** Milliseconds since session start, on the same clock as every event. */
+  readonly timeMs: number;
+}
+
 /** One entry of the session diagnostics log. */
 export interface SessionDiagnostic {
   readonly code: DiagnosticCode;
@@ -347,6 +394,11 @@ export interface SessionEventMap {
   'screen-revision': { readonly revision: number; readonly timeMs: number };
   'semantic-revision': { readonly revision: number; readonly timeMs: number };
   exit: ExitStatus & { readonly timeMs: number };
+  /**
+   * The child died unexpectedly. Emitted before `exit`, so a listener reacting
+   * to the exit can already read {@link TerminalHarness.crashReport}.
+   */
+  crash: CrashReport;
 }
 
 // ---------------------------------------------------------------------------

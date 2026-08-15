@@ -129,6 +129,29 @@ Categories are `api` (calls), `wait` (what was awaited, how long, how it ended),
 `paste`/`write` payloads are logged by size only. Switched off, nothing is
 wrapped and no listener is registered.
 
+## When the program dies on its own
+
+A child that exits on a signal, or with a non-zero code, without the harness
+asking for it leaves a `CrashReport`:
+
+```ts
+const status = await terminal.waitForExit();
+const report = terminal.crashReport(); // null for a clean exit, close() or signal()
+console.log(report?.screenTail.join('\n')); // the stack trace or panic
+console.log(report?.recentInputs);          // what was sent just before
+console.log(report?.lastSemanticTree);      // the last paired revision, if any
+```
+
+It is also delivered as a `crash` event (emitted just before `exit`), and any
+wait that can no longer make progress fails with `process-exited` carrying a
+short excerpt of the same tail.
+
+The exit is published only after the dying output has been parsed, so the trace
+is in the report rather than still in flight. Everything is bounded: 50 lines
+and 16 KiB of tail, 20 inputs, 20 diagnostics. Pastes are recorded by size only,
+but the screen tail is deliberately unscrubbed — it is what the terminal showed,
+so treat a crash report like a screenshot when storing or forwarding it.
+
 ## Diagnostics
 
 `terminal.diagnostics()` returns the bounded, oldest-first log of what the

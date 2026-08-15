@@ -49,7 +49,13 @@ interface MutableModes {
 export interface ShellIntegration {
   /** True once the program emitted any OSC 133 mark. */
   readonly supported: boolean;
-  /** True when the last mark says a prompt is waiting for input. */
+  /**
+   * True when the last mark says the shell is waiting for input: `B` (the
+   * prompt has been printed and the input line is live) or `D` (the command
+   * finished). `A` only announces that a prompt is *about to be drawn*, and
+   * arrives before its text — treating it as readiness returns a screen that
+   * has no prompt on it yet.
+   */
   readonly ready: boolean;
   /** The last mark seen: `'A'` prompt, `'B'` input, `'C'` command, `'D'` done. */
   readonly lastMark: string | null;
@@ -165,6 +171,26 @@ export class VtScreen {
     return run;
   }
 
+  /**
+   * Resolves once every write issued so far has been parsed. A child's dying
+   * output — a stack trace, a panic — is usually still in flight when the pty
+   * reports the exit, so anything that reads the screen at that moment must
+   * drain first or it reads a screen from before the crash.
+   */
+  drain(): Promise<void> {
+    return this.#queue;
+  }
+
+  /** Every retained line, scrollback first, as text. */
+  allLines(): string[] {
+    const buffer = this.terminal.buffer.active;
+    const lines: string[] = [];
+    for (let index = 0; index < buffer.length; index += 1) {
+      lines.push(buffer.getLine(index)?.translateToString(true) ?? '');
+    }
+    return lines;
+  }
+
   /** Resizes the emulator grid (the PTY is resized separately by the session). */
   resize(columns: number, rows: number): void {
     if (this.#disposed) return;
@@ -200,8 +226,7 @@ export class VtScreen {
   shellIntegration(): ShellIntegration {
     return Object.freeze({
       supported: this.#shell.lastMark !== null,
-      // Anything but a running command means the shell is back at a prompt.
-      ready: this.#shell.lastMark !== null && this.#shell.lastMark !== 'C',
+      ready: this.#shell.lastMark === 'B' || this.#shell.lastMark === 'D',
       lastMark: this.#shell.lastMark,
       lastExitCode: this.#shell.lastExitCode,
     });

@@ -220,6 +220,120 @@ describe.skipIf(!ptyAvailable())('session events and emulator-side APIs', { time
   });
 });
 
+describe.skipIf(!ptyAvailable())('crash reports', { timeout: 20_000 }, () => {
+  it('captures the stack trace of a program that threw', async () => {
+    const terminal = await launch('crash-app.mjs');
+    await terminal.waitForText('CRASH APP READY');
+
+    const crashes: unknown[] = [];
+    terminal.events.on('crash', (report) => crashes.push(report));
+
+    await terminal.press('a'); // remembered as the input before the death
+    await terminal.press('x');
+    const status = await terminal.waitForExit();
+    expect(status.code).toBe(1);
+
+    const report = terminal.crashReport();
+    expect(report).not.toBeNull();
+    // The dying output is parsed before the exit is published, so the trace is
+    // in the report rather than still in flight.
+    expect(report?.screenTail.join('\n')).toContain('boom from the fixture');
+    // The trace wraps at 60 columns, so the frame is reassembled before matching.
+    expect(report?.screenTail.join('')).toMatch(/at .*crash-app\.mjs/u);
+    expect(report?.exit).toEqual(status);
+    expect(report?.lastSemanticTree).toBeNull();
+    expect(report?.timeMs).toBeGreaterThan(0);
+
+    const inputs = report?.recentInputs ?? [];
+    expect(inputs.map((input) => input.preview)).toEqual(['a', 'x']);
+    expect(inputs.every((input) => input.kind === 'key')).toBe(true);
+
+    // The event carries the same report a caller can read afterwards.
+    expect(crashes).toHaveLength(1);
+    expect(crashes[0]).toBe(report);
+  });
+
+  it('captures a death by signal', async () => {
+    const terminal = await launch('crash-app.mjs');
+    await terminal.waitForText('CRASH APP READY');
+
+    await terminal.press('k');
+    const status = await terminal.waitForExit();
+    expect(status.signal).toBe('SIGKILL');
+
+    const report = terminal.crashReport();
+    expect(report?.exit.signal).toBe('SIGKILL');
+    expect(report?.screenTail.join('\n')).toContain('CRASH APP READY');
+  });
+
+  it('reports the crash from any wait that can no longer make progress', async () => {
+    const terminal = await launch('crash-app.mjs');
+    await terminal.waitForText('CRASH APP READY');
+    await terminal.press('x');
+    await terminal.waitForExit();
+
+    const error = await terminal
+      .waitForText('never', { timeout: 500 })
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('process-exited');
+    expect((error as TermwrightError).diagnostics.screenExcerpt).toContain('boom from the fixture');
+    expect((error as TermwrightError).diagnostics.suggestion).toContain('crashReport()');
+  });
+
+  it('keeps the last semantic tree of an instrumented program that died', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    await terminal.getByTestId('approve').resolve();
+
+    await terminal.press('X');
+    await terminal.waitForExit();
+
+    const report = terminal.crashReport();
+    expect(report?.lastSemanticTree?.revision).toBe(1);
+    expect(report?.lastSemanticTree?.nodes.map((node) => node.name)).toContain('Approve');
+    expect(report?.diagnosticsTail.some((entry) => entry.code === 'adapter-attached')).toBe(true);
+  });
+
+  it('never reports a crash for a clean exit or a teardown the caller asked for', async () => {
+    const clean = await launch('crash-app.mjs');
+    await clean.waitForText('CRASH APP READY');
+    await clean.press('e');
+    expect((await clean.waitForExit()).code).toBe(0);
+    expect(clean.crashReport()).toBeNull();
+
+    const signalled = await launch('crash-app.mjs');
+    await signalled.waitForText('CRASH APP READY');
+    await signalled.signal('KILL');
+    await signalled.waitForExit();
+    expect(signalled.crashReport()).toBeNull();
+
+    const closed = await launch('crash-app.mjs');
+    await closed.waitForText('CRASH APP READY');
+    await closed.close();
+    expect(closed.crashReport()).toBeNull();
+  });
+
+  it('remembers a paste by size only', async () => {
+    const terminal = await launch('crash-app.mjs');
+    await terminal.waitForText('CRASH APP READY');
+
+    // The payload avoids the fixture's command keys: it reads every code point
+    // of a chunk, exactly as a raw-mode program does.
+    const secret = 'S3CR3T-P4SSW0RD-42';
+    await terminal.paste(secret);
+    await terminal.press('x');
+    await terminal.waitForExit();
+
+    const report = terminal.crashReport();
+    const paste = report?.recentInputs.find((input) => input.kind === 'paste');
+    expect(paste?.bytes).toBe(secret.length);
+    expect(paste?.preview).toBeUndefined();
+    // The guarantee is about the input record. The screen tail is deliberately
+    // not scrubbed: it reports what the terminal showed, echo included, and a
+    // crash report that edited the screen would be lying about the crash.
+    expect(JSON.stringify(report?.recentInputs)).not.toContain(secret);
+  });
+});
+
 describe.skipIf(!ptyAvailable())('the debug log', { timeout: 20_000 }, () => {
   it('narrates the session to stderr without leaking the session token', async () => {
     const lines: string[] = [];
@@ -359,7 +473,7 @@ describe.skipIf(!ptyAvailable())('waitForReady', { timeout: 20_000 }, () => {
       .waitForReady({ timeout: 20 })
       .catch((cause: unknown) => cause as TermwrightError);
     expect((error as TermwrightError).code).toBe('timeout');
-    expect((error as TermwrightError).message).toContain('running command');
+    expect((error as TermwrightError).message).toContain('never reported an input prompt');
   });
 });
 

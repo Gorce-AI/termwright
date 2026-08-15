@@ -8,6 +8,8 @@
 import { randomUUID } from 'node:crypto';
 import type {
   CellSnapshot,
+  CrashInput,
+  CrashReport,
   DiagnosticCode,
   EnvMode,
   SessionDiagnostic,
@@ -110,6 +112,16 @@ const PAIRING_TIMEOUT_MS = 1_000;
  */
 const LATE_ATTACH_GRACE_MS = 2_000;
 
+/** Bounds on a crash report: enough to explain a death, never unbounded. */
+const CRASH_TAIL_LINES = 50;
+const CRASH_TAIL_BYTES = 16 * 1024;
+const CRASH_INPUTS = 20;
+const CRASH_DIAGNOSTICS = 20;
+const CRASH_INPUT_PREVIEW = 40;
+
+/** How long the exit waits for the child's dying output to finish parsing. */
+const CRASH_DRAIN_MS = 250;
+
 /** Bounded diagnostics log: a flooding adapter cannot grow it without bound. */
 const MAX_DIAGNOSTICS = 200;
 
@@ -204,6 +216,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #resolveExit: ((status: ExitStatus) => void) | null = null;
   #lastOutputAt = Date.now();
   #violation: ProtocolViolationError | null = null;
+  #crash: CrashReport | null = null;
+  /** Inputs kept for a crash report; a bounded ring, oldest first. */
+  readonly #recentInputs: CrashInput[] = [];
+  /** True once the harness itself asked the child to go away. */
+  #teardownRequested = false;
   #debug: DebugLog | null = null;
   /** When the generic verdict becomes final; null while semantics are still possible. */
   #genericDefiniteAt: number | null = null;
@@ -307,7 +324,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       this.#emitter.emit('output', { data, timeMs: this.#now() });
       void this.#vt.write(data);
     });
-    this.#pty.onExit((status) => this.#onExit(status));
+    this.#pty.onExit((status) => {
+      void this.#finishExit(status);
+    });
 
     const negotiationMs = this.#options.semanticNegotiationMs ?? DEFAULT_NEGOTIATION_MS;
     this.#negotiationTimer = setTimeout(() => {
@@ -435,6 +454,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   async signal(sig: 'INT' | 'TERM' | 'KILL' | 'HUP'): Promise<void> {
     this.assertOpen();
+    // A death the caller asked for is not a crash, whatever the exit status.
+    this.#teardownRequested = true;
     this.#pty?.signal(sig);
     await Promise.resolve();
   }
@@ -545,7 +566,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         if (shell.ready) {
           this.#diagnostic(
             'ready-shell-integration',
-            `the program reported a prompt: last OSC 133 mark was ${String(shell.lastMark)}`,
+            `the program reported it is waiting for input: last OSC 133 mark was ${String(shell.lastMark)}`,
           );
           return;
         }
@@ -561,7 +582,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           shell.supported
-            ? `the shell reported a running command (last OSC 133 mark ${String(shell.lastMark)}) and never returned to a prompt`
+            ? `the shell never reported an input prompt (last OSC 133 mark ${String(shell.lastMark)}); a command is still running or the prompt was never drawn`
             : `the program never settled into a prompt within ${opts?.timeout ?? this.timeouts.ready} ms`,
           this.errorDiagnostics({
             suggestion: 'wait for a concrete locator or text instead, or raise the ready timeout',
@@ -683,8 +704,14 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       );
     }
     this.#pty?.write(data);
-    this.#emitter.emit('input', { data, timeMs: this.#now(), kind });
+    const timeMs = this.#now();
+    this.#rememberInput(data, kind, timeMs);
+    this.#emitter.emit('input', { data, timeMs, kind });
     await Promise.resolve();
+  }
+
+  crashReport(): CrashReport | null {
+    return this.#crash;
   }
 
   /** Public, bounded diagnostics log (oldest first). */
@@ -712,6 +739,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    this.#teardownRequested = true;
     if (this.#negotiationTimer !== null) clearTimeout(this.#negotiationTimer);
     if (this.#graceTimer !== null) clearTimeout(this.#graceTimer);
     this.#settle();
@@ -831,21 +859,78 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     for (const resolve of waiters) resolve();
   }
 
+  /**
+   * Publishes an exit once the output that preceded it has been parsed. The pty
+   * reports the exit as soon as the process is gone, which is routinely before
+   * the last chunk it wrote — the very chunk carrying the stack trace.
+   */
+  async #finishExit(status: ExitStatus): Promise<void> {
+    if (this.#exitStatus !== null) return;
+    await Promise.race([this.#vt.drain(), delay(CRASH_DRAIN_MS)]);
+    this.#onExit(status);
+  }
+
   #onExit(status: ExitStatus): void {
     if (this.#exitStatus !== null) return;
     this.#exitStatus = Object.freeze(status);
+    if (this.#isCrash(status)) {
+      this.#crash = this.#buildCrashReport(status);
+      this.#emitter.emit('crash', this.#crash);
+    }
     this.#emitter.emit('exit', { ...status, timeMs: this.#now() });
     this.#resolveExit?.(this.#exitStatus);
     this.#settle();
     this.#notifyChange();
   }
 
+  /** A death nobody asked for: a signal, or a non-zero exit code. */
+  #isCrash(status: ExitStatus): boolean {
+    if (this.#teardownRequested) return false;
+    if (status.signal !== null) return true;
+    return status.code !== null && status.code !== 0;
+  }
+
+  #rememberInput(data: Uint8Array, kind: CrashInput['kind'], timeMs: number): void {
+    const entry: CrashInput = {
+      timeMs,
+      kind,
+      bytes: data.length,
+      // A paste is the one input that routinely carries a secret; its size is
+      // all a crash report needs from it.
+      ...(kind === 'paste' ? {} : { preview: previewBytes(data) }),
+    };
+    this.#recentInputs.push(Object.freeze(entry));
+    if (this.#recentInputs.length > CRASH_INPUTS) this.#recentInputs.shift();
+  }
+
+  #buildCrashReport(status: ExitStatus): CrashReport {
+    return Object.freeze({
+      exit: status,
+      screenTail: crashTail(this.#vt.allLines()),
+      lastSemanticTree: this.#index?.snapshot ?? null,
+      recentInputs: Object.freeze([...this.#recentInputs]),
+      diagnosticsTail: Object.freeze(this.#diagnosticsLog.slice(-CRASH_DIAGNOSTICS)),
+      timeMs: this.#now(),
+    });
+  }
+
   #assertAlive(operation: string): void {
     if (this.#exitStatus === null) return;
+    const crash = this.#crash;
     throw new ProcessExitedError(
       `${operation} cannot make progress: the program exited with code ${String(this.#exitStatus.code)}` +
         (this.#exitStatus.signal === null ? '' : ` (signal ${this.#exitStatus.signal})`),
-      this.errorDiagnostics(),
+      this.errorDiagnostics(
+        crash === null
+          ? {}
+          : {
+              // The tail beats the live grid here: a stack trace long enough to
+              // scroll is exactly the case worth reporting.
+              screenExcerpt: crash.screenTail.slice(-CRASH_EXCERPT_LINES).join('\n'),
+              suggestion:
+                'the program died on its own; call crashReport() for the full tail, the last semantic tree and the inputs that preceded it',
+            },
+      ),
     );
   }
 
@@ -979,6 +1064,36 @@ function buildChildEnv(mode: EnvMode, overrides: Readonly<Record<string, string>
   }
   for (const [key, value] of Object.entries(overrides ?? {})) env[key] = value;
   return env;
+}
+
+/** Lines of the crash excerpt embedded in a process-exited error. */
+const CRASH_EXCERPT_LINES = 20;
+
+/** Escaped, truncated rendering of an input payload. */
+function previewBytes(data: Uint8Array): string {
+  const text = new TextDecoder().decode(data.subarray(0, CRASH_INPUT_PREVIEW));
+  const escaped = JSON.stringify(text).slice(1, -1);
+  return data.length > CRASH_INPUT_PREVIEW ? `${escaped}…` : escaped;
+}
+
+/**
+ * Trims a buffer down to the tail worth keeping: trailing blank lines dropped,
+ * then bounded by line count and by bytes so a single enormous line cannot
+ * blow the budget on its own.
+ */
+function crashTail(lines: readonly string[]): readonly string[] {
+  let end = lines.length;
+  while (end > 0 && (lines[end - 1] ?? '').trim() === '') end -= 1;
+  const tail = lines.slice(Math.max(0, end - CRASH_TAIL_LINES), end);
+  let bytes = 0;
+  const kept: string[] = [];
+  for (let index = tail.length - 1; index >= 0; index -= 1) {
+    const line = tail[index] ?? '';
+    bytes += Buffer.byteLength(line, 'utf8') + 1;
+    if (bytes > CRASH_TAIL_BYTES) break;
+    kept.push(line);
+  }
+  return Object.freeze(kept.reverse());
 }
 
 function delay(ms: number): Promise<void> {

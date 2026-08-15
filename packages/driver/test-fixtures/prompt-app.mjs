@@ -17,10 +17,12 @@ function prompt() {
   if (exitAfterPrompt) process.exit(0);
 }
 
-// A slow start: the prompt only appears after the banner, so a test that
-// asserts readiness cannot pass by accident on the first byte.
+// The banner and the first prompt land in one frame. Delaying the prompt would
+// race the settled-screen fallback: a program that stays silent long enough is
+// called ready by the heuristic before its marks ever arrive, which is correct
+// behaviour and makes for a flaky test.
 process.stdout.write('booting\r\n');
-setTimeout(prompt, 120);
+prompt();
 
 process.stdin.setRawMode?.(true);
 process.stdin.resume();

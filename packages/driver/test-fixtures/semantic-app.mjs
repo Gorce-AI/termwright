@@ -128,6 +128,13 @@ process.stdin.on('data', (chunk) => {
     process.stdout.write('BYE\r\n');
     process.exit(0);
   }
+  if (text === 'X') {
+    // Dies on its own, with a semantic tree already published.
+    setTimeout(() => {
+      throw new Error('boom from the semantic fixture');
+    }, 0);
+    return;
+  }
   if (text === '\t') {
     focused = focused === 'approve' ? 'reject' : 'approve';
     publish();
