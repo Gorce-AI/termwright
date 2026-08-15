@@ -1,0 +1,742 @@
+//! Snapshot validation.
+//!
+//! A structural port of the reference `validate.ts`: same invariants, same
+//! error codes, same order of checks, so a snapshot rejected here is rejected
+//! by the driver and vice versa. Never panics on hostile input.
+
+use std::collections::{HashMap, HashSet};
+
+use serde_json::{Map, Value};
+
+use crate::error::ValidationError;
+use crate::framing::project_dto;
+use crate::limits::Limits;
+use crate::marker::MAX_SAFE_INTEGER;
+use crate::roles::{valid_action, valid_role};
+
+/// A schema defect, carrying the path the reference implementation reports.
+/// The path is what decides the error code.
+struct Issue {
+    path: Vec<String>,
+    message: String,
+    too_big: bool,
+}
+
+impl Issue {
+    fn new(path: Vec<String>, message: impl Into<String>) -> Self {
+        Self {
+            path,
+            message: message.into(),
+            too_big: false,
+        }
+    }
+
+    fn too_big(path: Vec<String>, message: impl Into<String>) -> Self {
+        Self {
+            path,
+            message: message.into(),
+            too_big: true,
+        }
+    }
+
+    fn code(&self) -> &'static str {
+        let has = |key: &str| self.path.iter().any(|element| element == key);
+        if has("role") {
+            "unknown-role"
+        } else if has("revision") {
+            "revision"
+        } else if has("bounds") || has("rect") {
+            "bad-rect"
+        } else if self.too_big && (has("nodes") || has("rootIds")) {
+            "count"
+        } else if self.message.contains("UTF-8 bytes") {
+            "string-bytes"
+        } else {
+            "schema"
+        }
+    }
+
+    fn into_error(self) -> ValidationError {
+        let where_ = if self.path.is_empty() {
+            "<root>".to_owned()
+        } else {
+            self.path.join(".")
+        };
+        let code = self.code();
+        ValidationError::new(code, format!("{where_}: {}", self.message))
+    }
+}
+
+fn path(base: &[String], more: &[&str]) -> Vec<String> {
+    let mut next: Vec<String> = base.to_vec();
+    next.extend(more.iter().map(|element| (*element).to_owned()));
+    next
+}
+
+// -- scalar checks ---------------------------------------------------------
+
+fn as_object<'a>(value: &'a Value, at: &[String]) -> Result<&'a Map<String, Value>, Issue> {
+    value
+        .as_object()
+        .ok_or_else(|| Issue::new(at.to_vec(), "expected an object"))
+}
+
+fn strict(object: &Map<String, Value>, allowed: &[&str], at: &[String]) -> Result<(), Issue> {
+    let mut unknown: Vec<&str> = object
+        .keys()
+        .map(String::as_str)
+        .filter(|key| !allowed.contains(key))
+        .collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    unknown.sort_unstable();
+    Err(Issue::new(
+        at.to_vec(),
+        format!("Unrecognized key(s) in object: {}", unknown.join(", ")),
+    ))
+}
+
+fn whole(
+    value: Option<&Value>,
+    at: Vec<String>,
+    message: &str,
+    ok: impl Fn(i64) -> bool,
+) -> Result<i64, Issue> {
+    let number = value
+        .and_then(Value::as_i64)
+        .filter(|n| n.abs() <= MAX_SAFE_INTEGER);
+    match number {
+        Some(number) if ok(number) => Ok(number),
+        _ => Err(Issue::new(at, message)),
+    }
+}
+
+fn safe_int(value: Option<&Value>, at: Vec<String>) -> Result<i64, Issue> {
+    whole(value, at, "expected a safe integer", |_| true)
+}
+
+fn non_negative(value: Option<&Value>, at: Vec<String>) -> Result<i64, Issue> {
+    whole(value, at, "expected a non-negative safe integer", |n| {
+        n >= 0
+    })
+}
+
+fn positive(value: Option<&Value>, at: Vec<String>) -> Result<i64, Issue> {
+    whole(value, at, "expected a positive safe integer", |n| n > 0)
+}
+
+fn text<'a>(value: Option<&'a Value>, at: Vec<String>, limits: &Limits) -> Result<&'a str, Issue> {
+    let Some(text) = value.and_then(Value::as_str) else {
+        return Err(Issue::new(at, "expected a string"));
+    };
+    if text.len() > limits.max_string_bytes {
+        return Err(Issue::new(
+            at,
+            format!("expected at most {} UTF-8 bytes", limits.max_string_bytes),
+        ));
+    }
+    Ok(text)
+}
+
+fn boolean(value: Option<&Value>, at: Vec<String>) -> Result<bool, Issue> {
+    value
+        .and_then(Value::as_bool)
+        .ok_or_else(|| Issue::new(at, "expected a boolean"))
+}
+
+// -- schema layer ----------------------------------------------------------
+
+const RECT_KEYS: [&str; 4] = ["row", "column", "width", "height"];
+
+fn check_rect(value: &Value, at: &[String]) -> Result<Rect, Issue> {
+    let object = as_object(value, at)?;
+    strict(object, &RECT_KEYS, at)?;
+    Ok(Rect {
+        row: safe_int(object.get("row"), path(at, &["row"]))?,
+        column: safe_int(object.get("column"), path(at, &["column"]))?,
+        width: non_negative(object.get("width"), path(at, &["width"]))?,
+        height: non_negative(object.get("height"), path(at, &["height"]))?,
+    })
+}
+
+/// The four numbers of a rect, once they are known to be well-formed.
+struct Rect {
+    row: i64,
+    column: i64,
+    width: i64,
+    height: i64,
+}
+
+const STATE_BOOL_KEYS: [&str; 9] = [
+    "disabled",
+    "focused",
+    "selected",
+    "expanded",
+    "modal",
+    "busy",
+    "hidden",
+    "readonly",
+    "multiline",
+];
+
+const STATE_KEYS: [&str; 16] = [
+    "disabled",
+    "focused",
+    "selected",
+    "expanded",
+    "modal",
+    "busy",
+    "hidden",
+    "readonly",
+    "multiline",
+    "checked",
+    "orientation",
+    "level",
+    "positionInSet",
+    "setSize",
+    "scrollOffset",
+    "scrollExtent",
+];
+
+fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
+    let object = as_object(value, at)?;
+    strict(object, &STATE_KEYS, at)?;
+    for key in STATE_BOOL_KEYS {
+        if object.contains_key(key) {
+            boolean(object.get(key), path(at, &[key]))?;
+        }
+    }
+    if let Some(checked) = object.get("checked") {
+        if !checked.is_boolean() && checked.as_str() != Some("mixed") {
+            return Err(Issue::new(
+                path(at, &["checked"]),
+                "expected a boolean or 'mixed'",
+            ));
+        }
+    }
+    if let Some(orientation) = object.get("orientation") {
+        if !matches!(orientation.as_str(), Some("horizontal") | Some("vertical")) {
+            return Err(Issue::new(
+                path(at, &["orientation"]),
+                "expected 'horizontal' or 'vertical'",
+            ));
+        }
+    }
+    for key in ["level", "positionInSet"] {
+        if object.contains_key(key) {
+            positive(object.get(key), path(at, &[key]))?;
+        }
+    }
+    for key in ["setSize", "scrollOffset", "scrollExtent"] {
+        if object.contains_key(key) {
+            non_negative(object.get(key), path(at, &[key]))?;
+        }
+    }
+    Ok(())
+}
+
+const NODE_KEYS: [&str; 13] = [
+    "id",
+    "parentId",
+    "role",
+    "name",
+    "description",
+    "value",
+    "bounds",
+    "state",
+    "actions",
+    "labelledBy",
+    "describedBy",
+    "textRanges",
+    "testId",
+];
+
+fn check_relations(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
+    let Some(items) = value.as_array() else {
+        return Err(Issue::new(at.to_vec(), "expected an array"));
+    };
+    if items.len() > limits.max_relation_targets {
+        return Err(Issue::too_big(
+            at.to_vec(),
+            format!("expected at most {} items", limits.max_relation_targets),
+        ));
+    }
+    for (index, item) in items.iter().enumerate() {
+        text(Some(item), path(at, &[&index.to_string()]), limits)?;
+    }
+    Ok(())
+}
+
+fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
+    let object = as_object(value, at)?;
+    strict(object, &NODE_KEYS, at)?;
+
+    if text(object.get("id"), path(at, &["id"]), limits)?.is_empty() {
+        return Err(Issue::new(path(at, &["id"]), "node id must not be empty"));
+    }
+    if object.contains_key("parentId") {
+        text(object.get("parentId"), path(at, &["parentId"]), limits)?;
+    }
+    match object.get("role").and_then(Value::as_str) {
+        Some(role) if valid_role(role) => {}
+        _ => {
+            return Err(Issue::new(
+                path(at, &["role"]),
+                "expected one of the v1 semantic roles",
+            ))
+        }
+    }
+    text(object.get("name"), path(at, &["name"]), limits)?;
+    for key in ["description", "value", "testId"] {
+        if object.contains_key(key) {
+            text(object.get(key), path(at, &[key]), limits)?;
+        }
+    }
+    if let Some(bounds) = object.get("bounds") {
+        check_rect(bounds, &path(at, &["bounds"]))?;
+    }
+    if let Some(state) = object.get("state") {
+        check_state(state, &path(at, &["state"]))?;
+    }
+    if let Some(actions) = object.get("actions") {
+        let Some(items) = actions.as_array() else {
+            return Err(Issue::new(path(at, &["actions"]), "expected an array"));
+        };
+        if items.len() > crate::roles::SEMANTIC_ACTIONS.len() {
+            return Err(Issue::too_big(path(at, &["actions"]), "too many actions"));
+        }
+        for (index, item) in items.iter().enumerate() {
+            match item.as_str() {
+                Some(action) if valid_action(action) => {}
+                _ => {
+                    return Err(Issue::new(
+                        path(at, &["actions", &index.to_string()]),
+                        "expected one of the v1 semantic actions",
+                    ))
+                }
+            }
+        }
+    }
+    for key in ["labelledBy", "describedBy"] {
+        if let Some(relations) = object.get(key) {
+            check_relations(relations, &path(at, &[key]), limits)?;
+        }
+    }
+    if let Some(ranges) = object.get("textRanges") {
+        let Some(items) = ranges.as_array() else {
+            return Err(Issue::new(path(at, &["textRanges"]), "expected an array"));
+        };
+        if items.len() > limits.max_relation_targets {
+            return Err(Issue::too_big(
+                path(at, &["textRanges"]),
+                "too many text ranges",
+            ));
+        }
+        for (index, item) in items.iter().enumerate() {
+            let item_path = path(at, &["textRanges", &index.to_string()]);
+            let entry = as_object(item, &item_path)?;
+            strict(entry, &["startOffset", "endOffset", "rect"], &item_path)?;
+            non_negative(entry.get("startOffset"), path(&item_path, &["startOffset"]))?;
+            non_negative(entry.get("endOffset"), path(&item_path, &["endOffset"]))?;
+            let rect = entry
+                .get("rect")
+                .ok_or_else(|| Issue::new(path(&item_path, &["rect"]), "expected an object"))?;
+            check_rect(rect, &path(&item_path, &["rect"]))?;
+        }
+    }
+    Ok(())
+}
+
+fn check_cursor(value: &Value, at: &[String]) -> Result<(), Issue> {
+    let object = as_object(value, at)?;
+    strict(object, &["row", "column", "visible", "shape"], at)?;
+    non_negative(object.get("row"), path(at, &["row"]))?;
+    non_negative(object.get("column"), path(at, &["column"]))?;
+    boolean(object.get("visible"), path(at, &["visible"]))?;
+    if let Some(shape) = object.get("shape") {
+        if !matches!(
+            shape.as_str(),
+            Some("block") | Some("underline") | Some("bar")
+        ) {
+            return Err(Issue::new(
+                path(at, &["shape"]),
+                "expected 'block', 'underline' or 'bar'",
+            ));
+        }
+    }
+    Ok(())
+}
+
+const SNAPSHOT_KEYS: [&str; 8] = [
+    "v",
+    "sessionId",
+    "revision",
+    "columns",
+    "rows",
+    "cursor",
+    "rootIds",
+    "nodes",
+];
+
+fn check_snapshot_schema(value: &Value, limits: &Limits) -> Result<(), Issue> {
+    let root: Vec<String> = Vec::new();
+    let object = as_object(value, &root)?;
+    strict(object, &SNAPSHOT_KEYS, &root)?;
+
+    if object.get("v").and_then(Value::as_i64) != Some(1) {
+        return Err(Issue::new(vec!["v".into()], "expected the literal 1"));
+    }
+    if text(object.get("sessionId"), vec!["sessionId".into()], limits)?.is_empty() {
+        return Err(Issue::new(
+            vec!["sessionId".into()],
+            "sessionId must not be empty",
+        ));
+    }
+    positive(object.get("revision"), vec!["revision".into()])?;
+    positive(object.get("columns"), vec!["columns".into()])?;
+    positive(object.get("rows"), vec!["rows".into()])?;
+    if let Some(cursor) = object.get("cursor") {
+        check_cursor(cursor, &["cursor".to_owned()])?;
+    }
+
+    let Some(root_ids) = object.get("rootIds").and_then(Value::as_array) else {
+        return Err(Issue::new(vec!["rootIds".into()], "expected an array"));
+    };
+    if root_ids.len() > limits.max_nodes {
+        return Err(Issue::too_big(
+            vec!["rootIds".into()],
+            format!("expected at most {} items", limits.max_nodes),
+        ));
+    }
+    for (index, item) in root_ids.iter().enumerate() {
+        text(
+            Some(item),
+            vec!["rootIds".into(), index.to_string()],
+            limits,
+        )?;
+    }
+
+    let Some(nodes) = object.get("nodes").and_then(Value::as_array) else {
+        return Err(Issue::new(vec!["nodes".into()], "expected an array"));
+    };
+    if nodes.len() > limits.max_nodes {
+        return Err(Issue::too_big(
+            vec!["nodes".into()],
+            format!("expected at most {} items", limits.max_nodes),
+        ));
+    }
+    for (index, node) in nodes.iter().enumerate() {
+        check_node_schema(node, &["nodes".to_owned(), index.to_string()], limits)?;
+    }
+    Ok(())
+}
+
+// -- structural layer ------------------------------------------------------
+
+fn intersects_viewport(rect: &Rect, columns: i64, rows: i64) -> bool {
+    rect.width != 0
+        && rect.height != 0
+        && rect.column < columns
+        && rect.row < rows
+        && rect.column + rect.width > 0
+        && rect.row + rect.height > 0
+}
+
+/// Whether the sum still round-trips through a JavaScript number.
+fn is_safe_sum(left: i64, right: i64) -> bool {
+    matches!(left.checked_add(right), Some(sum) if sum.abs() <= MAX_SAFE_INTEGER)
+}
+
+fn node_id(node: &Map<String, Value>) -> &str {
+    node.get("id").and_then(Value::as_str).unwrap_or_default()
+}
+
+fn check_node_shape(
+    node: &Map<String, Value>,
+    columns: i64,
+    rows: i64,
+    ids: &HashSet<&str>,
+    limits: &Limits,
+) -> Result<(), ValidationError> {
+    let id = node_id(node);
+
+    if let Some(bounds) = node.get("bounds") {
+        let rect = check_rect(bounds, &[]).map_err(Issue::into_error)?;
+        if !is_safe_sum(rect.row, rect.height) || !is_safe_sum(rect.column, rect.width) {
+            return Err(ValidationError::new(
+                "bad-rect",
+                format!("node {id}: bounds overflow the safe-integer range"),
+            ));
+        }
+        let hidden = node
+            .get("state")
+            .and_then(Value::as_object)
+            .and_then(|state| state.get("hidden"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if !hidden && !intersects_viewport(&rect, columns, rows) {
+            return Err(ValidationError::new(
+                "bad-rect",
+                format!(
+                    "node {id}: bounds do not intersect the {columns}x{rows} viewport and the node is not hidden"
+                ),
+            ));
+        }
+    }
+
+    if let Some(ranges) = node.get("textRanges").and_then(Value::as_array) {
+        for item in ranges {
+            let entry = item.as_object().expect("schema layer checked the shape");
+            let start = entry
+                .get("startOffset")
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let end = entry
+                .get("endOffset")
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            if end < start {
+                return Err(ValidationError::new(
+                    "bad-rect",
+                    format!("node {id}: text range ends before it starts"),
+                ));
+            }
+            let rect = check_rect(&entry["rect"], &[]).map_err(Issue::into_error)?;
+            if !is_safe_sum(rect.row, rect.height) {
+                return Err(ValidationError::new(
+                    "bad-rect",
+                    format!("node {id}: text range rect overflows the safe-integer range"),
+                ));
+            }
+        }
+    }
+
+    for field in ["labelledBy", "describedBy"] {
+        let Some(targets) = node.get(field).and_then(Value::as_array) else {
+            continue;
+        };
+        if targets.len() > limits.max_relation_targets {
+            return Err(ValidationError::new(
+                "count",
+                format!(
+                    "node {id}: {field} exceeds {} targets",
+                    limits.max_relation_targets
+                ),
+            ));
+        }
+        for target in targets {
+            let target = target.as_str().unwrap_or_default();
+            if !ids.contains(target) {
+                return Err(ValidationError::new(
+                    "missing-parent",
+                    format!("node {id}: {field} references unknown node {target}"),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Depth of every node (roots at 1), or the id where a parent chain closes.
+fn compute_depths<'a>(
+    nodes: &[&'a Map<String, Value>],
+    by_id: &HashMap<&'a str, &'a Map<String, Value>>,
+) -> Result<HashMap<&'a str, usize>, &'a str> {
+    let mut depths: HashMap<&str, usize> = HashMap::new();
+
+    for start in nodes {
+        if depths.contains_key(node_id(start)) {
+            continue;
+        }
+        let mut chain: Vec<&str> = Vec::new();
+        let mut on_chain: HashSet<&str> = HashSet::new();
+        let mut current: Option<&&Map<String, Value>> = Some(start);
+
+        while let Some(node) = current {
+            let id = node_id(node);
+            if depths.contains_key(id) {
+                break;
+            }
+            if !on_chain.insert(id) {
+                return Err(id);
+            }
+            chain.push(id);
+            current = match node.get("parentId").and_then(Value::as_str) {
+                Some(parent_id) => by_id.get(parent_id),
+                None => None,
+            };
+        }
+
+        let mut depth = current.map(|node| depths[node_id(node)]).unwrap_or(0);
+        for id in chain.iter().rev() {
+            depth += 1;
+            depths.insert(id, depth);
+        }
+    }
+    Ok(depths)
+}
+
+/// Validate an untrusted snapshot against `limits`.
+///
+/// Checks unique ids, existing and acyclic parents, the closed role, action
+/// and state vocabularies, bounded strings and counts, and rects that
+/// intersect the viewport unless the node is hidden.
+///
+/// # Errors
+/// Returns a [`ValidationError`] whose `code` matches the reference
+/// implementation's.
+pub fn validate_snapshot(value: &Value, limits: &Limits) -> Result<(), ValidationError> {
+    if let Err(violation) = project_dto(value, limits.max_depth) {
+        let code = if violation.code == "dto-depth" {
+            "depth"
+        } else {
+            "schema"
+        };
+        return Err(ValidationError::new(code, violation.to_string()));
+    }
+
+    let serialised = serde_json::to_vec(value)
+        .map_err(|_| ValidationError::new("schema", "snapshot is not JSON-serialisable"))?;
+    if serialised.len() > limits.max_snapshot_bytes {
+        return Err(ValidationError::new(
+            "bytes",
+            format!(
+                "snapshot is {} bytes, ceiling is {}",
+                serialised.len(),
+                limits.max_snapshot_bytes
+            ),
+        ));
+    }
+
+    check_snapshot_schema(value, limits).map_err(Issue::into_error)?;
+
+    let snapshot = value.as_object().expect("schema layer checked the shape");
+    let columns = snapshot["columns"]
+        .as_i64()
+        .expect("checked by the schema layer");
+    let rows = snapshot["rows"]
+        .as_i64()
+        .expect("checked by the schema layer");
+
+    let raw_nodes = snapshot["nodes"]
+        .as_array()
+        .expect("checked by the schema layer");
+    if raw_nodes.len() > limits.max_nodes {
+        return Err(ValidationError::new(
+            "count",
+            format!(
+                "snapshot carries {} nodes, ceiling is {}",
+                raw_nodes.len(),
+                limits.max_nodes
+            ),
+        ));
+    }
+
+    let mut nodes: Vec<&Map<String, Value>> = Vec::with_capacity(raw_nodes.len());
+    let mut by_id: HashMap<&str, &Map<String, Value>> = HashMap::with_capacity(raw_nodes.len());
+    for raw in raw_nodes {
+        let node = raw.as_object().expect("checked by the schema layer");
+        let id = node_id(node);
+        if by_id.insert(id, node).is_some() {
+            return Err(ValidationError::new(
+                "duplicate-id",
+                format!("node id {id} appears more than once"),
+            ));
+        }
+        nodes.push(node);
+    }
+
+    let mut root_ids: HashSet<&str> = HashSet::new();
+    for raw in snapshot["rootIds"]
+        .as_array()
+        .expect("checked by the schema layer")
+    {
+        let id = raw.as_str().unwrap_or_default();
+        if !root_ids.insert(id) {
+            return Err(ValidationError::new(
+                "duplicate-id",
+                format!("root id {id} appears more than once"),
+            ));
+        }
+        let Some(node) = by_id.get(id) else {
+            return Err(ValidationError::new(
+                "missing-parent",
+                format!("rootIds references unknown node {id}"),
+            ));
+        };
+        if node.contains_key("parentId") {
+            return Err(ValidationError::new(
+                "schema",
+                format!("root node {id} declares a parent"),
+            ));
+        }
+    }
+
+    let ids: HashSet<&str> = by_id.keys().copied().collect();
+
+    for node in &nodes {
+        let id = node_id(node);
+        match node.get("parentId").and_then(Value::as_str) {
+            None => {
+                if !root_ids.contains(id) {
+                    return Err(ValidationError::new(
+                        "schema",
+                        format!("parentless node {id} is missing from rootIds"),
+                    ));
+                }
+            }
+            Some(parent_id) if !by_id.contains_key(parent_id) => {
+                return Err(ValidationError::new(
+                    "missing-parent",
+                    format!("node {id} references unknown parent {parent_id}"),
+                ));
+            }
+            Some(parent_id) if parent_id == id => {
+                return Err(ValidationError::new(
+                    "cycle",
+                    format!("node {id} is its own parent"),
+                ));
+            }
+            Some(_) => {}
+        }
+        check_node_shape(node, columns, rows, &ids, limits)?;
+    }
+
+    match compute_depths(&nodes, &by_id) {
+        Err(cycle_at) => {
+            return Err(ValidationError::new(
+                "cycle",
+                format!("parent chain through node {cycle_at} is cyclic"),
+            ))
+        }
+        Ok(depths) => {
+            for (id, depth) in depths {
+                if depth > limits.max_depth {
+                    return Err(ValidationError::new(
+                        "depth",
+                        format!(
+                            "node {id} sits at depth {depth}, ceiling is {}",
+                            limits.max_depth
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
+    if let Some(cursor) = snapshot.get("cursor").and_then(Value::as_object) {
+        let row = cursor["row"].as_i64().expect("checked by the schema layer");
+        let column = cursor["column"]
+            .as_i64()
+            .expect("checked by the schema layer");
+        if row >= rows || column >= columns {
+            return Err(ValidationError::new(
+                "bad-rect",
+                format!("cursor ({row}, {column}) lies outside the viewport"),
+            ));
+        }
+    }
+
+    Ok(())
+}

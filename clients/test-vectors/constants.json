@@ -1,0 +1,79 @@
+{
+  "protocolId": "termwright/1",
+  "protocolVersion": 1,
+  "frameHeaderBytes": 4,
+  "markerDcsPrefix": "twm;",
+  "markerDcsFinal": "t",
+  "markerMacBytes": 16,
+  "env": {
+    "endpoint": "TERMWRIGHT_ENDPOINT",
+    "token": "TERMWRIGHT_TOKEN",
+    "protocol": "TERMWRIGHT_PROTOCOL"
+  },
+  "roles": [
+    "application",
+    "region",
+    "dialog",
+    "alert",
+    "status",
+    "list",
+    "listitem",
+    "menu",
+    "menuitem",
+    "button",
+    "checkbox",
+    "radio",
+    "tab",
+    "textbox",
+    "heading",
+    "text",
+    "progressbar",
+    "separator",
+    "scrollbar",
+    "table",
+    "row",
+    "cell",
+    "generic"
+  ],
+  "actions": [
+    "focus",
+    "activate",
+    "toggle",
+    "setValue",
+    "scroll",
+    "select",
+    "expand"
+  ],
+  "capabilities": [
+    "tree",
+    "bounds",
+    "absolute-bounds",
+    "states",
+    "actions",
+    "text-ranges",
+    "render-revisions",
+    "tree-diffs"
+  ],
+  "defaultLimits": {
+    "maxFrameBytes": 1048576,
+    "maxSnapshotBytes": 1048576,
+    "maxNodes": 5000,
+    "maxDepth": 64,
+    "maxStringBytes": 16384,
+    "maxRelationTargets": 64,
+    "maxQueuedFrames": 32,
+    "maxPendingWaiters": 256,
+    "maxSessions": 16
+  },
+  "absoluteLimits": {
+    "maxFrameBytes": 8388608,
+    "maxSnapshotBytes": 8388608,
+    "maxNodes": 50000,
+    "maxDepth": 256,
+    "maxStringBytes": 262144,
+    "maxRelationTargets": 1024,
+    "maxQueuedFrames": 256,
+    "maxPendingWaiters": 4096,
+    "maxSessions": 128
+  }
+}

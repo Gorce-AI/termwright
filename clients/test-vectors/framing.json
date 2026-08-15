@@ -1,0 +1,266 @@
+{
+  "maxFrameBytes": 1048576,
+  "note": "frameHex = 4-byte big-endian body length + UTF-8 JSON body. Cases marked \"optional\": true depend on a JSON parser that preserves lone surrogates; clients whose parser replaces them (Go) may skip those.",
+  "encode": [
+    {
+      "name": "empty-object",
+      "value": {},
+      "bodyJson": "{}",
+      "bodyBytes": 2,
+      "frameHex": "000000027b7d"
+    },
+    {
+      "name": "revision-commit",
+      "value": {
+        "type": "revision-commit",
+        "revision": 1
+      },
+      "bodyJson": "{\"type\":\"revision-commit\",\"revision\":1}",
+      "bodyBytes": 39,
+      "frameHex": "000000277b2274797065223a227265766973696f6e2d636f6d6d6974222c227265766973696f6e223a317d"
+    },
+    {
+      "name": "hello",
+      "value": {
+        "type": "hello",
+        "protocol": "termwright/1",
+        "token": "test-token",
+        "adapter": {
+          "name": "vectors",
+          "version": "0.1.0"
+        },
+        "capabilities": [
+          "tree",
+          "bounds",
+          "states"
+        ]
+      },
+      "bodyJson": "{\"type\":\"hello\",\"protocol\":\"termwright/1\",\"token\":\"test-token\",\"adapter\":{\"name\":\"vectors\",\"version\":\"0.1.0\"},\"capabilities\":[\"tree\",\"bounds\",\"states\"]}",
+      "bodyBytes": 152,
+      "frameHex": "000000987b2274797065223a2268656c6c6f222c2270726f746f636f6c223a227465726d7772696768742f31222c22746f6b656e223a22746573742d746f6b656e222c2261646170746572223a7b226e616d65223a22766563746f7273222c2276657273696f6e223a22302e312e30227d2c226361706162696c6974696573223a5b2274726565222c22626f756e6473222c22737461746573225d7d"
+    },
+    {
+      "name": "unicode-name",
+      "value": {
+        "type": "error",
+        "code": "internal",
+        "message": "zażółć gęślą jaźń — ✓ 🎛"
+      },
+      "bodyJson": "{\"type\":\"error\",\"code\":\"internal\",\"message\":\"zażółć gęślą jaźń — ✓ 🎛\"}",
+      "bodyBytes": 86,
+      "frameHex": "000000567b2274797065223a226572726f72222c22636f6465223a22696e7465726e616c222c226d657373616765223a227a61c5bcc3b3c582c4872067c499c59b6cc485206a61c5bac58420e2809420e29c9320f09f8e9b227d"
+    },
+    {
+      "name": "nested",
+      "value": {
+        "a": {
+          "b": {
+            "c": [
+              1,
+              2,
+              3,
+              null,
+              true,
+              -0.5
+            ]
+          }
+        }
+      },
+      "bodyJson": "{\"a\":{\"b\":{\"c\":[1,2,3,null,true,-0.5]}}}",
+      "bodyBytes": 40,
+      "frameHex": "000000287b2261223a7b2262223a7b2263223a5b312c322c332c6e756c6c2c747275652c2d302e355d7d7d7d"
+    }
+  ],
+  "decode": [
+    {
+      "name": "single-frame-one-chunk",
+      "chunksHex": [
+        "000000277b2274797065223a227265766973696f6e2d636f6d6d6974222c227265766973696f6e223a377d"
+      ],
+      "messages": [
+        {
+          "type": "revision-commit",
+          "revision": 7
+        }
+      ]
+    },
+    {
+      "name": "two-frames-one-chunk",
+      "chunksHex": [
+        "000000277b2274797065223a227265766973696f6e2d636f6d6d6974222c227265766973696f6e223a317d000000277b2274797065223a227265766973696f6e2d636f6d6d6974222c227265766973696f6e223a327d"
+      ],
+      "messages": [
+        {
+          "type": "revision-commit",
+          "revision": 1
+        },
+        {
+          "type": "revision-commit",
+          "revision": 2
+        }
+      ]
+    },
+    {
+      "name": "two-frames-byte-by-byte",
+      "chunksHex": [
+        "00",
+        "00",
+        "00",
+        "27",
+        "7b",
+        "22",
+        "74",
+        "79",
+        "70",
+        "65",
+        "22",
+        "3a",
+        "22",
+        "72",
+        "65",
+        "76",
+        "69",
+        "73",
+        "69",
+        "6f",
+        "6e",
+        "2d",
+        "63",
+        "6f",
+        "6d",
+        "6d",
+        "69",
+        "74",
+        "22",
+        "2c",
+        "22",
+        "72",
+        "65",
+        "76",
+        "69",
+        "73",
+        "69",
+        "6f",
+        "6e",
+        "22",
+        "3a",
+        "31",
+        "7d",
+        "00",
+        "00",
+        "00",
+        "27",
+        "7b",
+        "22",
+        "74",
+        "79",
+        "70",
+        "65",
+        "22",
+        "3a",
+        "22",
+        "72",
+        "65",
+        "76",
+        "69",
+        "73",
+        "69",
+        "6f",
+        "6e",
+        "2d",
+        "63",
+        "6f",
+        "6d",
+        "6d",
+        "69",
+        "74",
+        "22",
+        "2c",
+        "22",
+        "72",
+        "65",
+        "76",
+        "69",
+        "73",
+        "69",
+        "6f",
+        "6e",
+        "22",
+        "3a",
+        "32",
+        "7d"
+      ],
+      "messages": [
+        {
+          "type": "revision-commit",
+          "revision": 1
+        },
+        {
+          "type": "revision-commit",
+          "revision": 2
+        }
+      ]
+    },
+    {
+      "name": "header-split-from-body",
+      "chunksHex": [
+        "0000",
+        "00277b2274797065223a227265766973696f6e2d636f6d6d6974222c227265766973696f6e223a317d000000277b2274797065223a227265766973696f6e2d636f6d6d6974222c227265766973696f6e223a327d"
+      ],
+      "messages": [
+        {
+          "type": "revision-commit",
+          "revision": 1
+        },
+        {
+          "type": "revision-commit",
+          "revision": 2
+        }
+      ]
+    }
+  ],
+  "reject": [
+    {
+      "name": "zero-length-frame",
+      "streamHex": "00000000",
+      "code": "frame-malformed",
+      "optional": false
+    },
+    {
+      "name": "declared-length-over-ceiling",
+      "streamHex": "ffffffff7b",
+      "code": "frame-oversized",
+      "optional": false
+    },
+    {
+      "name": "body-not-json",
+      "streamHex": "000000037b7b7b",
+      "code": "frame-malformed",
+      "optional": false
+    },
+    {
+      "name": "body-not-utf8",
+      "streamHex": "0000000322ff22",
+      "code": "frame-encoding",
+      "optional": false
+    },
+    {
+      "name": "reserved-key",
+      "streamHex": "000000157b225f5f70726f746f5f5f223a7b2261223a317d7d",
+      "code": "dto-key",
+      "optional": false
+    },
+    {
+      "name": "nesting-over-max-depth",
+      "streamHex": "000000855b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b315d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d",
+      "code": "dto-depth",
+      "optional": false
+    },
+    {
+      "name": "lone-surrogate-string",
+      "streamHex": "0000000e7b2261223a225c7564383030227d",
+      "code": "dto-string",
+      "optional": true
+    }
+  ]
+}

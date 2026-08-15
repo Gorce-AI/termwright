@@ -1,0 +1,7 @@
+# Rust
+rust/target/
+# Python
+python/*.egg-info/
+python/build/
+__pycache__/
+.pytest_cache/

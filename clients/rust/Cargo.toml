@@ -1,0 +1,20 @@
+[package]
+name = "termwright-protocol"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+description = "Semantic side-channel client for the termwright terminal test driver: framing, render-commit markers, snapshot validation"
+license = "MIT"
+repository = "https://github.com/gorce-ai/termwright"
+documentation = "https://docs.rs/termwright-protocol"
+readme = "README.md"
+keywords = ["terminal", "tui", "testing", "accessibility"]
+categories = ["development-tools::testing", "command-line-interface"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.10"
+hmac = "0.12"
+base64 = "0.22"
+subtle = "2"

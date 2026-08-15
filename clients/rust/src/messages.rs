@@ -1,0 +1,483 @@
+//! Wire messages: typed builders for what an adapter sends, checked parsers
+//! for what it receives.
+//!
+//! The adapter pushes commits, the driver issues requests, and either side may
+//! send an error and close. Everything is validated against the active limits
+//! before it is retained; failures are returned, never raised.
+
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+use crate::error::ParseError;
+use crate::framing::project_dto;
+use crate::limits::Limits;
+use crate::marker::MAX_SAFE_INTEGER;
+use crate::roles::{valid_capability, Capability, ADAPTER_CAPABILITIES};
+use crate::tree::Snapshot;
+use crate::validate::validate_snapshot;
+
+/// The wire protocol identifier both sides must agree on.
+pub const PROTOCOL_ID: &str = "termwright/1";
+
+/// The current major version.
+pub const PROTOCOL_VERSION: u8 = 1;
+
+/// Longest token, identifier or free-text message accepted.
+const MAX_IDENTIFIER_LENGTH: usize = 1024;
+
+const ERROR_CODES: [&str; 5] = [
+    "bad-token",
+    "bad-version",
+    "malformed",
+    "limit-exceeded",
+    "internal",
+];
+
+const LIMIT_FIELDS: [&str; 9] = [
+    "maxFrameBytes",
+    "maxSnapshotBytes",
+    "maxNodes",
+    "maxDepth",
+    "maxStringBytes",
+    "maxRelationTargets",
+    "maxQueuedFrames",
+    "maxPendingWaiters",
+    "maxSessions",
+];
+
+/// Identifies the adapter implementation to the driver.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterInfo {
+    /// Accessible name; empty when the node has none.
+    pub name: String,
+    /// Adapter version string.
+    pub version: String,
+}
+
+/// The adapter's handshake: sent exactly once, before anything else.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hello {
+    /// Wire discriminator (`type` on the wire).
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Protocol identifier; must be `termwright/1`.
+    pub protocol: String,
+    /// Per-launch session token from the environment.
+    pub token: String,
+    /// Adapter name and version.
+    pub adapter: AdapterInfo,
+    /// What this adapter can provide.
+    pub capabilities: Vec<Capability>,
+}
+
+impl Hello {
+    /// Build a handshake for this adapter.
+    pub fn new(token: &str, name: &str, version: &str, capabilities: Vec<Capability>) -> Self {
+        Self {
+            kind: "hello".into(),
+            protocol: PROTOCOL_ID.into(),
+            token: token.to_owned(),
+            adapter: AdapterInfo {
+                name: name.to_owned(),
+                version: version.to_owned(),
+            },
+            capabilities,
+        }
+    }
+}
+
+/// Whether the adapter should emit render markers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MarkerConfig {
+    /// Whether the adapter should emit render markers.
+    pub enabled: bool,
+}
+
+/// The driver's reply: session id, negotiated limits, what to push.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HelloAck {
+    /// Wire discriminator (`type` on the wire).
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Protocol identifier; must be `termwright/1`.
+    pub protocol: String,
+    /// Session this snapshot belongs to.
+    pub session_id: String,
+    /// Ceilings the driver imposes for this session.
+    pub limits: Limits,
+    /// What the driver wants pushed: snapshots or revisions.
+    pub subscribe: String,
+    /// Whether render markers are wanted.
+    pub marker: MarkerConfig,
+}
+
+/// Announces that a render was committed to the terminal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RevisionCommit {
+    /// Wire discriminator (`type` on the wire).
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+    /// Render revision, strictly increasing per session.
+    pub revision: i64,
+}
+
+impl RevisionCommit {
+    /// Commit `revision`.
+    pub fn new(revision: i64) -> Self {
+        Self {
+            kind: "revision-commit",
+            revision,
+        }
+    }
+}
+
+/// Carries a full tree for one revision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SnapshotMessage<'a> {
+    /// Wire discriminator (`type` on the wire).
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+    /// The tree being carried.
+    pub snapshot: &'a Snapshot,
+}
+
+impl<'a> SnapshotMessage<'a> {
+    /// Wrap a snapshot in its envelope.
+    pub fn new(snapshot: &'a Snapshot) -> Self {
+        Self {
+            kind: "snapshot",
+            snapshot,
+        }
+    }
+}
+
+/// The driver asking for a tree: the latest, or a held revision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetTree {
+    /// Wire discriminator (`type` on the wire).
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Correlates a request with its answer.
+    pub request_id: i64,
+    /// Render revision, strictly increasing per session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<i64>,
+}
+
+/// Answers a [`GetTree`] with exactly one of a snapshot or an error.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetTreeResult {
+    /// Wire discriminator (`type` on the wire).
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+    /// Correlates a request with its answer.
+    pub request_id: i64,
+    /// The tree being carried.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot: Option<Box<serde_json::value::RawValue>>,
+    /// Why the request could not be answered.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl GetTreeResult {
+    /// Answer with a retained snapshot body.
+    pub fn found(request_id: i64, snapshot: Box<serde_json::value::RawValue>) -> Self {
+        Self {
+            kind: "get-tree-result",
+            request_id,
+            snapshot: Some(snapshot),
+            error: None,
+        }
+    }
+
+    /// Answer that the requested revision is not available.
+    pub fn missing(request_id: i64, detail: impl Into<String>) -> Self {
+        Self {
+            kind: "get-tree-result",
+            request_id,
+            snapshot: None,
+            error: Some(detail.into()),
+        }
+    }
+}
+
+/// Terminal error: the sender closes after emitting it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProtocolErrorMessage {
+    /// Wire discriminator (`type` on the wire).
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// One of the five wire error codes.
+    pub code: String,
+    /// Human-readable detail; never carries the token.
+    pub message: String,
+}
+
+impl ProtocolErrorMessage {
+    /// Build an error message with one of the five wire codes.
+    pub fn new(code: &str, message: impl Into<String>) -> Self {
+        Self {
+            kind: "error".into(),
+            code: code.to_owned(),
+            message: message.into(),
+        }
+    }
+}
+
+/// Every capability a tree-publishing adapter with real bounds announces.
+pub fn default_capabilities() -> Vec<Capability> {
+    vec![
+        Capability::Tree,
+        Capability::Bounds,
+        Capability::AbsoluteBounds,
+        Capability::States,
+        Capability::Actions,
+        Capability::RenderRevisions,
+    ]
+}
+
+// -- parsing ---------------------------------------------------------------
+
+fn project(value: &Value, limits: &Limits) -> Result<(), ParseError> {
+    project_dto(value, limits.max_depth).map_err(|violation| {
+        if violation.code == "dto-depth" {
+            ParseError::new("limit-exceeded", violation.to_string())
+        } else {
+            ParseError::malformed(violation.to_string())
+        }
+    })
+}
+
+fn as_message<'a>(value: &'a Value) -> Result<(&'a Map<String, Value>, &'a str), ParseError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| ParseError::malformed("unknown or missing message type"))?;
+    let kind = object
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ParseError::malformed("unknown or missing message type"))?;
+    Ok((object, kind))
+}
+
+fn require_keys(
+    object: &Map<String, Value>,
+    required: &[&str],
+    optional: &[&str],
+) -> Result<(), ParseError> {
+    for key in required {
+        if !object.contains_key(*key) {
+            return Err(ParseError::malformed(format!("missing field \"{key}\"")));
+        }
+    }
+    for key in object.keys() {
+        if !required.contains(&key.as_str()) && !optional.contains(&key.as_str()) {
+            return Err(ParseError::malformed(format!("unrecognized key \"{key}\"")));
+        }
+    }
+    Ok(())
+}
+
+fn identifier(object: &Map<String, Value>, key: &str, allow_empty: bool) -> Result<(), ParseError> {
+    let Some(text) = object.get(key).and_then(Value::as_str) else {
+        return Err(ParseError::malformed(format!("{key}: expected a string")));
+    };
+    if text.len() > MAX_IDENTIFIER_LENGTH {
+        return Err(ParseError::malformed(format!(
+            "{key}: expected at most {MAX_IDENTIFIER_LENGTH} characters"
+        )));
+    }
+    if !allow_empty && text.is_empty() {
+        return Err(ParseError::malformed(format!(
+            "{key}: expected a non-empty string"
+        )));
+    }
+    Ok(())
+}
+
+fn whole_number(object: &Map<String, Value>, key: &str, positive: bool) -> Result<(), ParseError> {
+    let number = object
+        .get(key)
+        .and_then(Value::as_i64)
+        .filter(|n| n.abs() <= MAX_SAFE_INTEGER);
+    match number {
+        Some(number) if positive && number > 0 => Ok(()),
+        Some(number) if !positive && number >= 0 => Ok(()),
+        _ if positive => Err(ParseError::malformed(format!(
+            "{key}: expected a positive safe integer"
+        ))),
+        _ => Err(ParseError::malformed(format!(
+            "{key}: expected a non-negative safe integer"
+        ))),
+    }
+}
+
+fn check_embedded_snapshot(value: &Value, limits: &Limits) -> Result<(), ParseError> {
+    match validate_snapshot(value, limits) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            let code = match error.code {
+                "bytes" | "count" | "depth" | "string-bytes" => "limit-exceeded",
+                _ => "malformed",
+            };
+            Err(ParseError::new(code, format!("snapshot {error}")))
+        }
+    }
+}
+
+fn check_error_message(object: &Map<String, Value>) -> Result<(), ParseError> {
+    require_keys(object, &["type", "code", "message"], &[])?;
+    let code = object
+        .get("code")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if !ERROR_CODES.contains(&code) {
+        return Err(ParseError::malformed("code: unknown error code"));
+    }
+    identifier(object, "message", true)
+}
+
+fn check_protocol_field(object: &Map<String, Value>) -> Result<(), ParseError> {
+    match object.get("protocol").and_then(Value::as_str) {
+        Some(protocol) if protocol != PROTOCOL_ID => Err(ParseError::new(
+            "bad-version",
+            format!("unsupported protocol {protocol}"),
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// Validate one adapter → driver message.
+///
+/// # Errors
+/// Returns a [`ParseError`] whose `code` is `bad-version`, `malformed` or
+/// `limit-exceeded`.
+pub fn parse_adapter_message(value: &Value, limits: &Limits) -> Result<(), ParseError> {
+    project(value, limits)?;
+    let (object, kind) = as_message(value)?;
+
+    match kind {
+        "hello" => {
+            check_protocol_field(object)?;
+            require_keys(
+                object,
+                &["type", "protocol", "token", "adapter", "capabilities"],
+                &[],
+            )?;
+            identifier(object, "token", false)?;
+            let adapter = object
+                .get("adapter")
+                .and_then(Value::as_object)
+                .ok_or_else(|| ParseError::malformed("adapter: expected an object"))?;
+            require_keys(adapter, &["name", "version"], &[])?;
+            identifier(adapter, "name", false)?;
+            identifier(adapter, "version", false)?;
+            let capabilities = object
+                .get("capabilities")
+                .and_then(Value::as_array)
+                .ok_or_else(|| ParseError::malformed("capabilities: expected an array"))?;
+            if capabilities.len() > ADAPTER_CAPABILITIES.len() {
+                return Err(ParseError::malformed("capabilities: too many entries"));
+            }
+            for item in capabilities {
+                match item.as_str() {
+                    Some(name) if valid_capability(name) => {}
+                    _ => return Err(ParseError::malformed("capabilities: unknown capability")),
+                }
+            }
+            Ok(())
+        }
+        "revision-commit" => {
+            require_keys(object, &["type", "revision"], &[])?;
+            whole_number(object, "revision", true)
+        }
+        "snapshot" => {
+            require_keys(object, &["type", "snapshot"], &[])?;
+            check_embedded_snapshot(&object["snapshot"], limits)
+        }
+        "get-tree-result" => {
+            require_keys(object, &["type", "requestId"], &["snapshot", "error"])?;
+            whole_number(object, "requestId", false)?;
+            let has_snapshot = object.contains_key("snapshot");
+            let has_error = object.contains_key("error");
+            if has_snapshot == has_error {
+                return Err(ParseError::malformed(
+                    "exactly one of snapshot or error must be present",
+                ));
+            }
+            if has_error {
+                return identifier(object, "error", true);
+            }
+            check_embedded_snapshot(&object["snapshot"], limits)
+        }
+        "error" => check_error_message(object),
+        _ => Err(ParseError::malformed("unknown or missing message type")),
+    }
+}
+
+/// Validate one driver → adapter message.
+///
+/// # Errors
+/// Returns a [`ParseError`] whose `code` is `bad-version`, `malformed` or
+/// `limit-exceeded`.
+pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseError> {
+    project(value, limits)?;
+    let (object, kind) = as_message(value)?;
+
+    match kind {
+        "hello-ack" => {
+            check_protocol_field(object)?;
+            require_keys(
+                object,
+                &[
+                    "type",
+                    "protocol",
+                    "sessionId",
+                    "limits",
+                    "subscribe",
+                    "marker",
+                ],
+                &[],
+            )?;
+            identifier(object, "sessionId", false)?;
+            let limits_object = object
+                .get("limits")
+                .and_then(Value::as_object)
+                .ok_or_else(|| ParseError::malformed("limits: expected an object"))?;
+            require_keys(limits_object, &LIMIT_FIELDS, &[])?;
+            for field in LIMIT_FIELDS {
+                whole_number(limits_object, field, true)?;
+            }
+            match object.get("subscribe").and_then(Value::as_str) {
+                Some("snapshots") | Some("revisions") => {}
+                _ => {
+                    return Err(ParseError::malformed(
+                        "subscribe: expected 'snapshots' or 'revisions'",
+                    ))
+                }
+            }
+            let marker = object
+                .get("marker")
+                .and_then(Value::as_object)
+                .ok_or_else(|| ParseError::malformed("marker: expected an object"))?;
+            require_keys(marker, &["enabled"], &[])?;
+            if !marker["enabled"].is_boolean() {
+                return Err(ParseError::malformed("marker.enabled: expected a boolean"));
+            }
+            Ok(())
+        }
+        "get-tree" => {
+            require_keys(object, &["type", "requestId"], &["revision"])?;
+            whole_number(object, "requestId", false)?;
+            if object.contains_key("revision") {
+                whole_number(object, "revision", true)?;
+            }
+            Ok(())
+        }
+        "error" => check_error_message(object),
+        _ => Err(ParseError::malformed("unknown or missing message type")),
+    }
+}
