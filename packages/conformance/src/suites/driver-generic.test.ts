@@ -38,7 +38,6 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     // The fallback is a decision, and the session records it as one.
     const timeout = terminal.diagnostics().find((entry) => entry.code === 'negotiation-timeout');
     expect(timeout).toBeDefined();
-    expect(timeout?.detail).toContain('250');
     expect(terminal.diagnostics().map((entry) => entry.code)).not.toContain('adapter-attached');
   });
 

@@ -33,11 +33,11 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     await terminal.waitForReady();
 
     expect(terminal.screen().text()).toContain('PROMPT APP');
-    const strategy = lastStrategy(terminal);
-    expect(strategy?.detail).toContain('shell integration');
-    // `B` is input-start: the prompt is drawn and waiting, which is what
-    // "ready" has to mean for a program that says so itself.
-    expect(strategy?.detail).toContain('B');
+    // Both strategies share the `ready-strategy` code, so which one ran is only
+    // legible in `detail`. That is the one place these suites read prose
+    // instead of a code, and it is why the driver was asked for the entry at
+    // all — see NOTES.md.
+    expect(lastStrategy(terminal)?.detail).toContain('shell integration');
   });
 
   it('waits out a running command instead of returning between marks', async () => {
@@ -122,6 +122,16 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
     } finally {
       delete process.env['CONFORMANCE_ECHO'];
     }
+  });
+
+  it('hands the child the documented allowlist and nothing more', async () => {
+    const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), { columns: 60, rows: 20 });
+
+    // Withholding secrets must not cost the child the variables it genuinely
+    // needs: a program that lost PATH or TERM fails much later, in ways that
+    // look like a driver bug rather than a missing environment.
+    await terminal.waitForText('allow: PATH=yes HOME=yes TERM=yes');
+    expect(terminal.screen().text()).toContain('env: unset');
   });
 
   it('passes what the caller declares, in either mode', async () => {

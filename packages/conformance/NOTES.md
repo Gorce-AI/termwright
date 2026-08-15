@@ -33,7 +33,16 @@ because the suites that caught them are still the regression tests for them.
    check; `waitForReady` reaches its ready branch first. Pinned as observed in
    `ready.test.ts` ("still reports readiness from the last prompt of an exited
    program") with a note that the expectation flips when the waits align.
-2. **`SessionDiagnostic` carries no machine-readable wire code.** A
+2. **`ready-strategy` conflates the two outcomes it exists to distinguish.**
+   One code covers both "shell integration said so" and "the screen went
+   quiet", which are a fact and a guess respectively — the whole reason the
+   entry is worth having. Telling them apart therefore requires matching prose
+   in `detail`, and that is the only place these suites read a string instead of
+   a code. Either two codes (`ready-shell-integration`, `ready-settled-screen`)
+   or a `strategy` field would close it. Same shape as the `revision-dropped`
+   case, where "already published" and "too many in flight" share a code and are
+   told apart by the revision number instead.
+3. **`SessionDiagnostic` carries no machine-readable wire code.** A
    `protocol-violation` entry has the human explanation in `detail`, so a suite
    asserting *which* wire error closed the channel still has to read it off the
    adapter's own output. An optional `wireCode` field would close the last
