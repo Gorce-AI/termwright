@@ -252,6 +252,46 @@ func TestAttachPublishesTheTreeAndCommitsWithAMarker(t *testing.T) {
 	}
 }
 
+func TestTheFirstTreeArrivesWithoutAnyInteraction(t *testing.T) {
+	driver := startFakeDriver(t)
+	t.Setenv(protocol.EnvEndpoint, driver.endpoint())
+	t.Setenv(protocol.EnvToken, testToken)
+
+	app, root, _ := demoApp()
+	screen := tcell.NewSimulationScreen("UTF-8")
+	screen.SetSize(80, 24)
+
+	session, err := Attach(app, root, WithScreen(screen), WithMarkerWriter(&syncBuffer{}))
+	if err != nil || session == nil {
+		t.Fatalf("attach failed: %v", err)
+	}
+	defer session.Close()
+
+	done := make(chan error, 1)
+	go func() { done <- app.SetRoot(root, true).Run() }()
+	defer func() {
+		app.Stop()
+		<-done
+	}()
+
+	// No key is sent and no redraw is requested: tview draws its first frame
+	// before the handshake lands and then sits idle forever, so the adapter
+	// itself has to force the frame that carries the first tree. A test that
+	// pressed a key here would pass against an adapter that never publishes
+	// until the user touches the keyboard.
+	snapshot := driver.waitForSnapshot(t)
+	if err := protocol.ValidateSnapshot(snapshot, protocol.DefaultLimits); err != nil {
+		t.Fatalf("the first published snapshot is invalid: %v", err)
+	}
+	names := map[string]bool{}
+	for _, raw := range snapshot["nodes"].([]any) {
+		names[raw.(map[string]any)["name"].(string)] = true
+	}
+	if !names["Approve"] {
+		t.Errorf("the first tree is missing the buttons: %v", names)
+	}
+}
+
 func TestDescriberOverridesRoleAndName(t *testing.T) {
 	driver := startFakeDriver(t)
 	t.Setenv(protocol.EnvEndpoint, driver.endpoint())

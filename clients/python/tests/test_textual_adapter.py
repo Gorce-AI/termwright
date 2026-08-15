@@ -94,6 +94,34 @@ async def test_pilot_still_works_with_semantics_enabled(endpoint):
     await driver.close()
 
 
+async def test_the_first_tree_arrives_without_any_interaction(endpoint):
+    """An idle app must still publish: nothing may wait on a keystroke.
+
+    Textual draws its first frame before the handshake completes and then sits
+    idle, so the adapter has to publish itself once the session goes live. A
+    test that pressed a key here would pass against an adapter that only ever
+    publishes after the user touches the keyboard.
+    """
+    driver = FakeDriver(endpoint)
+    await driver.start()
+
+    app = DemoApp()
+    async with app.run_test() as pilot:
+        semantics = enable_semantics(app, env={ENV_ENDPOINT: endpoint, ENV_TOKEN: TOKEN})
+        assert semantics is not None
+        # The display hook is the only trigger; no input follows it.
+        semantics.on_display()
+        await driver.wait_for(2, timeout=5.0)
+        await semantics.close()
+
+    snapshots = [frame for frame in driver.received if frame["type"] == "snapshot"]
+    assert snapshots, "the adapter published nothing while the app sat idle"
+    names = {node["name"] for node in snapshots[0]["snapshot"]["nodes"]}
+    assert "Approve" in names, f"the first tree is missing the buttons: {names}"
+
+    await driver.close()
+
+
 # -- tree shape ------------------------------------------------------------
 
 

@@ -137,9 +137,19 @@ func Attach(app *tview.Application, root tview.Primitive, options ...Option) (*S
 	app.SetScreen(&commitScreen{Screen: settings.screen, session: session})
 	app.SetAfterDrawFunc(session.afterDraw)
 
-	// The handshake must not block the first frame; publishing stays a no-op
-	// until it completes.
-	go func() { _ = client.Start(protocol.DialTimeout) }()
+	// The handshake must not block the first frame, so it runs off to the side
+	// and publishing stays a no-op until it completes. That leaves a gap: tview
+	// has usually drawn the first frame by then, and an idle application never
+	// draws again, so without a nudge the first tree would only appear once the
+	// user pressed a key. Force one redraw as soon as the session is live.
+	go func() {
+		if err := client.Start(protocol.DialTimeout); err != nil {
+			return
+		}
+		// Blocks until the application's event loop runs this; an Attach whose
+		// app is never run parks this goroutine, which costs nothing else.
+		app.QueueUpdateDraw(func() {})
+	}()
 
 	return session, nil
 }

@@ -73,6 +73,12 @@ earlier would let the driver act on a paint that has not landed. Use
 `WithMarkerWriter` to send it somewhere other than `os.Stdout`, and
 `WithScreen` to supply your own screen (a `tcell.SimulationScreen` in tests).
 
+`Attach` also forces one redraw as soon as the handshake completes. tview has
+usually drawn its first frame by then and an idle application never draws
+again, so without that nudge the first tree would only appear once the user
+pressed a key — and a test that starts with `waitForText` plus a semantic
+assertion, with no input, would find no tree at all.
+
 ### Roles and children
 
 Roles come from the tview type: `Button` → `button`, `InputField`/`TextArea` →
