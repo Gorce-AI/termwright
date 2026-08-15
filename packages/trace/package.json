@@ -4,13 +4,28 @@
   "description": "trace format: asciicast v3 + events + semantics, readers/writers, HTML report",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@termwright/driver": "workspace:*" }
+  "dependencies": {
+    "@termwright/driver": "workspace:*",
+    "@termwright/protocol": "workspace:*",
+    "@xterm/headless": "^6.0.0",
+    "asciinema-player": "^3.17.0",
+    "fflate": "^0.8.3"
+  }
 }
