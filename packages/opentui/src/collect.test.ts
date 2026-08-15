@@ -164,6 +164,42 @@ describe('SnapshotCollector', () => {
     expect(validateSnapshot(snapshot, limits)).toMatchObject({ ok: true });
   });
 
+  it('gives each node its own actions array, whatever the source', () => {
+    // `validateSnapshot` rejects a snapshot in which any value is reachable
+    // twice, and there are two ways to alias one: the role table hands out one
+    // frozen array per role, and an application author reuses one array across
+    // annotations. Both are copied at the node-construction site.
+    //
+    // This must be validated IN MEMORY. `encodeFrame` is `JSON.stringify`,
+    // which has no concept of reference identity, so a test that checks what
+    // came off the socket checks a copy in which the aliasing is already gone.
+    const root = new FakeRenderable({ id: 'root' });
+    const first = root.add(new FakeRenderable({ role: 'button', plainText: 'Approve' }));
+    const second = root.add(new FakeRenderable({ role: 'button', plainText: 'Reject' }));
+    const shared = root.add(new FakeRenderable({ plainText: 'Later' }));
+    const alsoShared = root.add(new FakeRenderable({ plainText: 'Never' }));
+
+    const registry = new SemanticRegistry();
+    const authorActions = ['activate', 'focus'] as const;
+    registry.register(shared, { role: 'button', actions: authorActions });
+    registry.register(alsoShared, { role: 'button', actions: authorActions });
+
+    const snapshot = collect(root, registry);
+    expect(validateSnapshot(snapshot, DEFAULT_LIMITS)).toMatchObject({ ok: true });
+
+    const actionsOf = (renderable: FakeRenderable): readonly string[] | undefined =>
+      snapshot.nodes.find((node) => node.id === `n${String(renderable.num)}`)?.actions;
+
+    for (const [left, right] of [
+      [first, second],
+      [shared, alsoShared],
+    ] as const) {
+      expect(actionsOf(left)).toEqual(actionsOf(right));
+      expect(actionsOf(left)).not.toBe(actionsOf(right));
+    }
+    expect(actionsOf(shared)).not.toBe(authorActions);
+  });
+
   it('clamps strings on a code-point boundary', () => {
     const limits: ProtocolLimits = { ...DEFAULT_LIMITS, maxStringBytes: 8 };
     const root = new FakeRenderable({ id: 'root' });
