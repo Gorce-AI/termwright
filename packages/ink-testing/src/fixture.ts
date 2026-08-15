@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   launchTerminal,
   ProcessExitedError,
+  type EnvMode,
   type TerminalHarness,
   type TimeoutClasses,
 } from '@termwright/driver';
@@ -41,6 +42,17 @@ export interface LaunchInkFixtureOptions {
   readonly cwd?: string;
   /** Extra environment variables for the fixture process. */
   readonly env?: Readonly<Record<string, string>>;
+  /**
+   * How the fixture's environment is built, as in `launchTerminal`. Default
+   * `'replace'`: the process starts from a documented allowlist plus
+   * {@link LaunchInkFixtureOptions.env}, so a variable on a developer's laptop
+   * cannot change what CI sees.
+   *
+   * Unlike a mount, this is real isolation — the fixture is a separate process
+   * and its `process.env` is exactly what the driver built. Pass `'inherit'`
+   * when the component genuinely needs the runner's environment.
+   */
+  readonly envMode?: EnvMode;
   /** Arguments inserted before the runner, e.g. `['--import', 'tsx']`. */
   readonly nodeArgs?: readonly string[];
   /** Driver timeout classes, as in `launchTerminal`. */
@@ -94,6 +106,7 @@ export async function launchInkFixture(options: LaunchInkFixtureOptions): Promis
     rows: options.rows ?? 24,
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.envMode === undefined ? {} : { envMode: options.envMode }),
     ...(options.timeouts === undefined ? {} : { timeouts: options.timeouts }),
   });
 

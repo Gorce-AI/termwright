@@ -51,6 +51,14 @@ click. What is not identical:
   app and reports the status the signal would have produced
   (`{code: null, signal: 'SIGINT'}`). A component with its own `SIGINT` handler
   will not see it. Fixtures deliver the real thing.
+- **`envMode`.** Both modes accept it and both pass it to `launchTerminal`, but
+  it means different things. A fixture is a separate process, so `'replace'`
+  (the driver's default) is real isolation — its `process.env` is exactly the
+  allowlist plus `env`. A mount shares the runner's process and never mutates
+  `process.env`, so the component reads the runner's environment regardless;
+  `envMode` shapes only what the *adapter* is handed. `src/env-mode.test.tsx`
+  asserts both directions, including that a fixture with `'inherit'` does see
+  the runner's variables.
 - **Props.** A mount takes anything React takes; a fixture takes bounded JSON.
   `assertJsonProps` refuses functions, `undefined`, cycles, class instances and
   depth over 8 *before* spawning, because `JSON.stringify` would drop them
@@ -94,6 +102,19 @@ click. What is not identical:
 
 ## Gotchas for future maintainers
 
+- **A fixture component must keep the event loop alive.** `env-app.mjs` was
+  written without `useInput` at first and every launch failed with
+  `process-exited` (code 0): nothing referenced the loop, Node drained it, and
+  Ink unmounted on its own `beforeExit` handler before the harness saw a frame.
+  The `died` race in `fixture.ts` is what turns that into a legible failure
+  instead of a settle timeout. Any interactive component is fine; a static one
+  needs something holding the loop.
+- **`NODE_OPTIONS` does not reach a fixture** under the driver's `'replace'`
+  default — the allowlist is `PATH`, `HOME`, `LANG`, `LC_ALL`, `SHELL`,
+  `TMPDIR`, `USER`, `TERM`. Nothing here needs it (the runner is spawned with
+  an absolute path and resolves its imports by directory walk), but a user whose
+  TypeScript loader is configured through `NODE_OPTIONS` will find it silently
+  dropped. `nodeArgs` is the answer, and the README says so.
 - `waitForText` is a screen wait. The tree for that frame lands immediately
   afterwards, so an assertion on `semanticState()`/`value` right after a text
   wait needs a `waitForStable()` between them. This is driver semantics, not a
@@ -132,13 +153,6 @@ review them like source.
 
 ## Open threads
 
-- `api.ts` has grown `locatorForRef`, `waitForReady`, `diagnostics()` and
-  `envMode` ahead of the driver's implementation. `InkHarnessImpl` forwards
-  `TerminalHarness` member by member, so it will stop compiling the moment those
-  land — by design, but it means one small follow-up here: three forwards, plus
-  deciding what `envMode` means for a mount (the in-process app reads the
-  runner's own `process.env` regardless, so `'replace'` cannot be honoured the
-  way a child process honours it).
 - Windows is untested. `@lydell/node-pty` covers the fixture path and the
   in-process path has no platform surface at all, but neither has been exercised
   on a ConPTY host.

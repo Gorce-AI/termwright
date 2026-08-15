@@ -79,6 +79,21 @@ The fixture module default-exports the component; props cross as JSON and are
 validated before a process is spawned, so a stray callback fails the test
 instead of silently arriving as `undefined`.
 
+Two things to know when writing one:
+
+- **A fixture must hold the event loop open.** A component that renders once and
+  handles no input references nothing, so Node drains the loop and Ink unmounts
+  on `beforeExit` — the launch then fails with `process-exited` before the
+  harness sees a frame. Any component with `useInput` (that is, any interactive
+  one) is fine; a purely static one needs something to keep it alive.
+- **The fixture process does not inherit your environment.** `envMode` defaults
+  to `'replace'`, so it starts from an allowlist (`PATH`, `HOME`, `LANG`,
+  `LC_ALL`, `SHELL`, `TMPDIR`, `USER`, `TERM`) plus whatever you pass in `env`.
+  That deliberately excludes `NODE_OPTIONS`: if your TypeScript fixtures rely on
+  a loader configured that way, pass it explicitly as `nodeArgs: ['--import',
+  'tsx']`, which is the form that keeps working in CI regardless of how the
+  runner was started.
+
 ## What the harness resolves with
 
 `mountInk` and `launchInkFixture` both resolve once the application has
@@ -152,3 +167,11 @@ runner's `process.stdout`, no raw mode on the runner's `process.stdin`, and no
 open socket after `close()`. The instrumentation environment is handed to the
 adapter directly instead of being exported, which is what keeps a component test
 from silently instrumenting every other process the suite spawns.
+
+Isolation in the other direction is where the modes differ, and it is worth
+being precise about. `envMode` shapes the environment the *session* builds, so
+in a fixture — a separate process — `'replace'` is real: the component's
+`process.env` is exactly what the driver handed it. In a mount the component
+calls `process.env` on the runner's own object, which a mount deliberately never
+mutates, so no `envMode` can hide a variable from it. Use `launchInkFixture`
+when the component's environment is part of what you are testing.

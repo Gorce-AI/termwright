@@ -10,6 +10,7 @@ import {
   launchTerminal,
   SessionClosedError,
   type CellSnapshot,
+  type EnvMode,
   type ExitStatus,
   type Locator,
   type RoleLocatorOptions,
@@ -17,6 +18,7 @@ import {
   type ScrollbackApi,
   type SelectionApi,
   type SessionCapabilities,
+  type SessionDiagnostic,
   type SessionEvents,
   type TerminalHarness,
   type TextLocatorOptions,
@@ -66,12 +68,28 @@ export interface MountInkOptions {
    * Extra environment variables for the *session*, merged into the environment
    * the driver hands the adapter.
    *
-   * This is not `process.env`: a mount never writes to the real environment, so
-   * the component under test will not observe these through `process.env`. Use
-   * {@link launchInkFixture} when the component itself must read environment
-   * variables.
+   * This is not `process.env`. A mount shares the runner's process and never
+   * writes to the real environment, so the component under test does not
+   * observe these through `process.env` — only the adapter does. Launch a
+   * fixture when the component itself must read an environment variable.
    */
   readonly env?: Readonly<Record<string, string>>;
+  /**
+   * How the session environment is built, as in `launchTerminal`. Default
+   * `'replace'`.
+   *
+   * **What this can and cannot do in a mount.** It shapes the environment the
+   * driver computes and hands to the adapter, which is what decides whether an
+   * instrumented component sees a variable through `semanticRender`'s
+   * `semantics.env`. It cannot touch what the component reads from
+   * `process.env`, because that object belongs to the test runner and a mount
+   * deliberately never mutates it. `'replace'` therefore isolates the session,
+   * not the process.
+   *
+   * Environment isolation of the application itself is a property only a
+   * separate process can have — use `launchInkFixture` for that.
+   */
+  readonly envMode?: EnvMode;
   /** Driver timeout classes, as in `launchTerminal`. */
   readonly timeouts?: TimeoutClasses;
   /** How long the initial mount and each `rerender` may take to commit. */
@@ -187,6 +205,7 @@ export async function mountInk(element: ReactNode, options: MountInkOptions = {}
     columns,
     rows,
     ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.envMode === undefined ? {} : { envMode: options.envMode }),
     ...(options.timeouts === undefined ? {} : { timeouts: options.timeouts }),
   });
 
@@ -328,6 +347,10 @@ class InkHarnessImpl implements InkHarness {
     return this.#session.locator(selector);
   }
 
+  locatorForRef(ref: string): Locator {
+    return this.#session.locatorForRef(ref);
+  }
+
   press(keys: string): Promise<void> {
     return this.#session.press(keys);
   }
@@ -376,8 +399,16 @@ class InkHarnessImpl implements InkHarness {
     return this.#session.waitForIdle(opts);
   }
 
+  waitForReady(opts?: WaitOptions): Promise<void> {
+    return this.#session.waitForReady(opts);
+  }
+
   waitForExit(opts?: WaitOptions): Promise<ExitStatus> {
     return this.#session.waitForExit(opts);
+  }
+
+  diagnostics(): readonly SessionDiagnostic[] {
+    return this.#session.diagnostics();
   }
 
   title(): string {

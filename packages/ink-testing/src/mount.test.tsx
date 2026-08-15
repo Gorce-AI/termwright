@@ -165,6 +165,26 @@ describe('mountInk', () => {
     expect(() => harness.screen()).toThrowError(/closed/u);
   });
 
+  it('rebuilds a locator from a ref', async () => {
+    const harness = await mount();
+
+    const target = await harness.getByRole('button', { name: 'Approve' }).resolve();
+    const rebuilt = harness.locatorForRef(target.ref);
+
+    expect(await rebuilt.textContent()).toBe('Approve');
+    expect((await rebuilt.resolve()).ref).toBe(target.ref);
+  });
+
+  it('answers waitForReady, and says how it decided', async () => {
+    const harness = await mount();
+
+    // Ink emits no shell-integration marks, so this exercises the driver's
+    // settled-screen fallback — the path a TUI always takes.
+    await harness.waitForReady();
+
+    expect(harness.diagnostics().every((entry) => typeof entry.code === 'string')).toBe(true);
+  });
+
   it('reports a signal as the reason the application stopped', async () => {
     const harness = await mount();
 
