@@ -1,0 +1,106 @@
+name: Finalize release
+
+# Last step. Publishes the draft GitHub Release created by tag.yml — but only
+# after checking that every registry actually has the artifacts, so the release
+# notes never announce something a user cannot install.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Release anchor tag (e.g. protocol/v0.2.0)'
+        required: true
+        type: string
+      allow_partial:
+        description: 'Publish the notes even if a registry is missing the version (say why in the release body)'
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: finalize-release-${{ inputs.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # publish the draft release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Every registry must have this version
+        id: check
+        shell: bash
+        run: |
+          set -uo pipefail
+          version=$(node -p "require('./packages/protocol/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          missing=()
+
+          npm_code=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/@termwright/protocol/$version")
+          [ "$npm_code" = "200" ] || missing+=("npm @termwright/protocol@$version")
+
+          pypi_code=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/termwright/$version/json")
+          [ "$pypi_code" = "200" ] || missing+=("PyPI termwright $version")
+
+          crate=$(curl -s -H 'User-Agent: termwright-release (github.com/gorce-ai/termwright)' \
+            "https://crates.io/api/v1/crates/termwright-protocol/$version")
+          echo "$crate" | grep -q '"version"' || missing+=("crates.io termwright-protocol $version")
+
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "all three registries have $version"
+            echo "missing=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          printf '::warning::missing: %s\n' "${missing[@]}"
+          echo "missing=$(printf '%s; ' "${missing[@]}")" >> "$GITHUB_OUTPUT"
+
+          if [ '${{ inputs.allow_partial }}' != 'true' ]; then
+            echo "::error::not finalizing — publish the missing registries first, or re-run with allow_partial."
+            exit 1
+          fi
+
+      - name: Publish the release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.check.outputs.version }}
+          MISSING: ${{ steps.check.outputs.missing }}
+        shell: bash
+        run: |
+          tag="protocol/v$VERSION"
+
+          if [ -n "$MISSING" ]; then
+            gh release edit "$tag" --notes "$(
+              gh release view "$tag" --json body --jq .body
+              printf '\n\n> **Partial release.** Not yet available: %s\n' "$MISSING"
+            )"
+          fi
+
+          gh release edit "$tag" --draft=false --latest
+          echo "published release notes for $tag"
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          # shellcheck disable=SC2016  # backticks and $ inside single quotes are literal markdown
+          {
+            echo "## Finalized — ${{ inputs.ref }}"
+            echo
+            if [ -n '${{ steps.check.outputs.missing }}' ]; then
+              echo 'Published as a **partial** release. Missing: `${{ steps.check.outputs.missing }}`'
+            else
+              echo 'All three registries confirmed.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

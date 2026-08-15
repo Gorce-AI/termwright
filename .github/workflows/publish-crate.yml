@@ -1,0 +1,147 @@
+name: Publish — crates.io
+
+# Manual, approved, checked out at a tag. First of the three registries:
+# crates.io -> PyPI -> npm. It goes first because it is the least reversible —
+# a crates.io release cannot be replaced, only yanked, and a yank is not a fix.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag to publish from (e.g. protocol/v0.2.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Package and verify, publish nothing'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: publish-crate-${{ inputs.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify ${{ inputs.ref }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      published: ${{ steps.published.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: The tag must agree with the manifests
+        id: version
+        working-directory: clients/rust
+        shell: bash
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | node -e "
+            const meta = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+            const crate = meta.packages.find((p) => p.name === 'termwright-protocol');
+            if (!crate) { console.error('termwright-protocol not found in cargo metadata'); process.exit(1); }
+            console.log(crate.version);
+          ")
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+          ref='${{ inputs.ref }}'
+          case "$ref" in
+            protocol/v*)
+              tagged="${ref#protocol/v}"
+              if [ "$tagged" != "$version" ]; then
+                echo "::error::tag says $tagged, clients/rust/Cargo.toml says $version"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::warning::$ref is not a protocol/vX.Y.Z anchor; skipping the tag-vs-manifest check"
+              ;;
+          esac
+
+      - run: node scripts/sync-protocol-version.mjs --check
+
+      - name: Is this version already on crates.io?
+        id: published
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          body=$(curl -s -H 'User-Agent: termwright-release (github.com/gorce-ai/termwright)' \
+            "https://crates.io/api/v1/crates/termwright-protocol/$VERSION")
+          if echo "$body" | grep -q '"version"'; then
+            echo "::notice::termwright-protocol $VERSION is already on crates.io — the publish job will skip."
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Test and package
+        working-directory: clients/rust
+        run: |
+          cargo test
+          cargo package
+
+  publish:
+    name: publish to crates.io
+    needs: verify
+    if: needs.verify.outputs.published == 'false'
+    runs-on: ubuntu-latest
+    environment: crates-publish
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # crates.io trusted publishing. It refuses OIDC from pull_request_target
+      # and workflow_run triggers, which is one more reason this workflow is
+      # dispatch-only.
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - name: Publish
+        working-directory: clients/rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            cargo publish --dry-run
+          else
+            # --no-verify: the verify job already built and tested this exact
+            # tree, and rebuilding it here only widens the window.
+            #
+            # NOT passing -Zpublish-timeout: it is a nightly-only flag, and
+            # stable cargo rejects any -Z outright, so adding it here would fail
+            # every run. Without it, cargo can report a timeout for an upload
+            # that did land while the index catches up — check crates.io before
+            # concluding anything, and re-dispatch: the verify job's
+            # already-published check makes a second run a no-op.
+            cargo publish --no-verify
+          fi
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## crates.io — ${{ inputs.ref }}"
+            echo
+            echo "version: \`${{ needs.verify.outputs.version }}\`  ·  dry run: \`${{ inputs.dry_run }}\`"
+            echo
+            echo 'A crates.io release cannot be replaced. If this failed after the upload landed, do not yank — ship the next patch.'
+          } >> "$GITHUB_STEP_SUMMARY"

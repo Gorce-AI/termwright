@@ -227,6 +227,60 @@ jobs:
         working-directory: clients/rust
         run: cargo test
 
+  release-hygiene:
+    name: release hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      # The protocol version is carried by four manifests in three languages.
+      # They drift silently otherwise, and the first symptom is a release where
+      # the crate and the npm package disagree about the wire format.
+      - name: Protocol lockstep
+        run: node scripts/sync-protocol-version.mjs --check
+
+      - run: pnpm install --frozen-lockfile
+
+      # A change to a published package without a changeset is a change that
+      # ships with no changelog entry and no version bump. Release-only PRs are
+      # exempt: `changeset version` consumes the files it was given.
+      - name: A PR touching packages/** needs a changeset
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'release')
+        shell: bash
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "$BASE" "$HEAD" -- 'packages/**' || true)
+          if [ -z "$changed" ]; then
+            echo "no packages/** changes — nothing to require"
+            exit 0
+          fi
+
+          added=$(git diff --name-only --diff-filter=A "$BASE" "$HEAD" -- '.changeset/*.md' \
+            | grep -v '.changeset/README.md' || true)
+          if [ -n "$added" ]; then
+            echo "changeset present:"
+            echo "$added"
+            exit 0
+          fi
+
+          echo "::error::this PR changes packages/** but adds no changeset. Run \`pnpm changeset\`, or add the 'release' label if the change genuinely ships nothing (docs, tests, comments)."
+          echo 'Changed files:'
+          echo "$changed"
+          exit 1
+
   vectors:
     name: cross-language vectors are current
     runs-on: ubuntu-latest

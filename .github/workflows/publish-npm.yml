@@ -1,0 +1,189 @@
+name: Publish — npm
+
+# Manual, approved, and checked out at a tag. Nothing here runs on a push.
+#
+# Publish order across registries is crates.io -> PyPI -> npm; see RELEASING.md.
+# npm goes last because it is the one registry with a staging buffer.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag to publish from (e.g. protocol/v0.2.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Resolve and pack everything, publish nothing'
+        required: true
+        default: true
+        type: boolean
+      dist_tag:
+        description: 'npm dist-tag. Use a backport tag (e.g. 0.x-lts) when releasing from release/N.x, so latest keeps pointing at the newest line.'
+        required: true
+        default: latest
+        type: string
+
+concurrency:
+  group: publish-npm-${{ inputs.ref }}
+  # Never cancel a publish in flight: a cancelled run can leave some packages
+  # published and others not, which is the one state that needs a human.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify ${{ inputs.ref }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.versions.outputs.protocol }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.4.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm -r --filter './packages/*' run typecheck
+      - run: pnpm -r --filter './packages/*' run test
+
+      - name: The tag must agree with the manifests
+        id: versions
+        shell: bash
+        run: |
+          protocol=$(node -p "require('./packages/protocol/package.json').version")
+          echo "protocol=$protocol" >> "$GITHUB_OUTPUT"
+
+          ref='${{ inputs.ref }}'
+          case "$ref" in
+            protocol/v*)
+              tagged="${ref#protocol/v}"
+              if [ "$tagged" != "$protocol" ]; then
+                echo "::error::tag says $tagged, packages/protocol/package.json says $protocol"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::warning::$ref is not a protocol/vX.Y.Z anchor; skipping the tag-vs-manifest check"
+              ;;
+          esac
+
+      - run: node scripts/sync-protocol-version.mjs --check
+
+      - name: Refuse to publish a workspace with unapplied changesets
+        shell: bash
+        run: |
+          pending=$(find .changeset -name '*.md' ! -name README.md | wc -l | tr -d ' ')
+          if [ "$pending" != "0" ]; then
+            echo "::error::$pending changeset(s) unapplied — this ref is not a release commit."
+            exit 1
+          fi
+
+      - name: Pack every publishable package
+        run: pnpm -r --filter './packages/*' exec npm pack --dry-run
+
+  publish:
+    name: publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    # Required reviewers live on this environment. Approval is the gate, and it
+    # is the reason this workflow can be dispatched by anyone but released by
+    # few. OIDC also requires a GitHub-hosted runner — self-hosted cannot mint
+    # the token.
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write # trusted publishing (OIDC); provenance comes with it
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.4.0'
+
+      # No `cache: pnpm` here on purpose: a publish job should resolve from the
+      # registry rather than from a cache another workflow populated.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.14'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1 (and Node >= 22.14). Asserted
+      # rather than assumed: an older npm falls back to token auth, finds no
+      # token, and fails with something far less obvious than this message.
+      - name: npm must be new enough for trusted publishing
+        shell: bash
+        run: |
+          npm install -g npm@latest
+          # shellcheck disable=SC2016  # the JS below is quoted for node, not for the shell
+          NPM_VERSION="$(npm --version)" node -e '
+            const [major, minor, patch] = process.env.NPM_VERSION.split(".").map(Number);
+            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            console.log(`npm ${process.env.NPM_VERSION}`);
+            if (!ok) {
+              console.error(`::error::npm ${process.env.NPM_VERSION} is too old for OIDC publishing (need >= 11.5.1)`);
+              process.exit(1);
+            }
+          '
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+
+      - name: Publish
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          DIST_TAG: ${{ inputs.dist_tag }}
+          # No NPM_TOKEN: authentication is OIDC. Classic tokens were revoked in
+          # December 2025, and a token here would silently take precedence.
+          NPM_CONFIG_PROVENANCE: 'true'
+        run: |
+          set -euo pipefail
+
+          for dir in packages/*/; do
+            name=$(node -p "require('./${dir}package.json').name")
+            version=$(node -p "require('./${dir}package.json').version")
+            private=$(node -p "require('./${dir}package.json').private === true")
+            [ "$private" = "true" ] && continue
+
+            # Already-published is a normal state during a retry after a partial
+            # failure, not an error. Never republish, never yank.
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "::notice::$name@$version is already on the registry, skipping"
+              continue
+            fi
+
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "would publish $name@$version --tag $DIST_TAG"
+              npm publish --dry-run --tag "$DIST_TAG" --workspaces=false --provenance false "./$dir"
+            else
+              echo "publishing $name@$version --tag $DIST_TAG"
+              npm publish --tag "$DIST_TAG" --workspaces=false "./$dir"
+            fi
+          done
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          # shellcheck disable=SC2016  # backticks and $ inside single quotes are literal markdown
+          {
+            echo "## npm — ${{ inputs.ref }}"
+            echo
+            echo "dry run: \`${{ inputs.dry_run }}\`  ·  dist-tag: \`${{ inputs.dist_tag }}\`"
+            echo
+            echo 'Packages already present on the registry are skipped, so re-dispatching after a partial failure is safe.'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,94 @@
+name: Publish — canary snapshot
+
+# A real npm publish under the `canary` dist-tag, from an arbitrary branch,
+# without touching the changesets on it. Use it to hand someone a build they
+# can install before the release is ready.
+#
+# `latest` is never moved by this workflow: a canary is opt-in on the consumer's
+# side, so no existing install can pick one up by accident.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or commit to build the snapshot from'
+        required: true
+        default: main
+        type: string
+      tag:
+        description: 'Snapshot label — becomes both the version suffix and the dist-tag'
+        required: true
+        default: canary
+        type: string
+      dry_run:
+        description: 'Version and pack, publish nothing'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: publish-canary-${{ inputs.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.4.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.14'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm install -g npm@latest
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm -r --filter './packages/*' run test
+
+      # `--snapshot` rewrites versions to 0.0.0-<tag>-<timestamp>-<sha> in the
+      # working tree only. Nothing is committed, and the changesets stay pending
+      # for the real release.
+      - name: Version as a snapshot
+        run: pnpm changeset version --snapshot ${{ inputs.tag }}
+
+      - name: Publish under the snapshot tag
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          TAG: ${{ inputs.tag }}
+          NPM_CONFIG_PROVENANCE: 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            pnpm changeset publish --tag "$TAG" --dry-run
+          else
+            pnpm changeset publish --tag "$TAG"
+          fi
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          # shellcheck disable=SC2016  # backticks and $ inside single quotes are literal markdown
+          {
+            echo "## Canary — ${{ inputs.ref }}"
+            echo
+            echo "dist-tag: \`${{ inputs.tag }}\`  ·  dry run: \`${{ inputs.dry_run }}\`"
+            echo
+            echo 'Install with `npm i @termwright/driver@${{ inputs.tag }}`. `latest` was not moved.'
+          } >> "$GITHUB_STEP_SUMMARY"

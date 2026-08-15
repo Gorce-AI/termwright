@@ -1,0 +1,130 @@
+name: Tag release
+
+# Step 2 of a release, run after the Version PR is merged. Creates the tags the
+# publish workflows check out, and a DRAFT GitHub Release. Publishes nothing to
+# any registry.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit or branch to tag (the merged Version PR commit)'
+        required: true
+        default: main
+        type: string
+
+concurrency:
+  group: tag-${{ inputs.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create tags and the draft release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.4.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Refuse to tag a commit that still has pending changesets
+        shell: bash
+        run: |
+          pending=$(find .changeset -name '*.md' ! -name README.md | wc -l | tr -d ' ')
+          if [ "$pending" != "0" ]; then
+            echo "::error::$pending changeset(s) are still unapplied — merge the Version PR first."
+            exit 1
+          fi
+
+      - name: Verify the protocol lockstep
+        run: node scripts/sync-protocol-version.mjs --check
+
+      - name: Configure git
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+      # Per-package tags, e.g. @termwright/driver@0.2.0. These are what
+      # `changeset publish` would have created; we create them up front so a
+      # publish workflow can check out an immutable ref.
+      - name: Tag every package
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm changeset tag
+
+      - name: Tag the protocol and the Go module
+        id: anchors
+        shell: bash
+        run: |
+          version=$(node -p "require('./packages/protocol/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # protocol/vX.Y.Z is the anchor every publish workflow is dispatched
+          # against: one ref that names the whole coordinated release.
+          # clients/go/vX.Y.Z is how a Go module in a subdirectory is published
+          # — the path prefix is required, and tagging is the entire release.
+          for tag in "protocol/v$version" "clients/go/v$version"; do
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "::notice::$tag already exists, leaving it alone"
+            else
+              git tag -a "$tag" -m "$tag"
+              echo "created $tag"
+            fi
+          done
+
+      - name: Push the tags
+        run: git push --follow-tags origin --tags
+
+      # Draft, not published: the release notes go live only once every
+      # registry actually has the artifacts (finalize-release.yml).
+      - name: Create the draft GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.anchors.outputs.version }}
+        shell: bash
+        run: |
+          tag="protocol/v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::notice::release $tag already exists, leaving it alone"
+            exit 0
+          fi
+          gh release create "$tag" \
+            --draft \
+            --title "termwright — protocol v$VERSION" \
+            --generate-notes
+
+      - name: Summary
+        shell: bash
+        env:
+          VERSION: ${{ steps.anchors.outputs.version }}
+        run: |
+          # shellcheck disable=SC2016  # backticks and $ inside single quotes are literal markdown
+          {
+            echo "## Tagged"
+            echo
+            echo "Anchor ref: \`protocol/v$VERSION\` — pass it as \`ref\` to the publish workflows."
+            echo
+            echo '### Next, in this order (each needs an approval)'
+            echo
+            echo '1. `publish-crate.yml` — crates.io is the least reversible.'
+            echo '2. `publish-pypi.yml`'
+            echo '3. `publish-npm.yml`'
+            echo '4. `finalize-release.yml` — publishes the draft release.'
+            echo
+            echo 'Dry-run each one first: every publish workflow takes `dry_run`.'
+          } >> "$GITHUB_STEP_SUMMARY"

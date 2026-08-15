@@ -60,6 +60,7 @@ export default defineConfig({
 						{label: 'Protocol v1', slug: 'reference/protocol'},
 						{label: 'Configuration', slug: 'reference/configuration'},
 						{label: 'CLI and exit codes', slug: 'reference/cli'},
+						{label: 'Releasing', slug: 'reference/releasing'},
 						{label: 'Limitations and FAQ', slug: 'reference/limitations'},
 						{label: 'Decisions (ADRs)', slug: 'reference/decisions'},
 					],

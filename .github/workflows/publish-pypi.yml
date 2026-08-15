@@ -1,0 +1,143 @@
+name: Publish — PyPI
+
+# Manual, approved, checked out at a tag. Second of the three registries:
+# crates.io -> PyPI -> npm (see RELEASING.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag to publish from (e.g. protocol/v0.2.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Build and check the distribution, upload nothing'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: publish-pypi-${{ inputs.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify ${{ inputs.ref }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      published: ${{ steps.published.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: The tag must agree with the manifests
+        id: version
+        shell: bash
+        run: |
+          version=$(python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('clients/python/pyproject.toml').read_text())['project']['version'])")
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+          ref='${{ inputs.ref }}'
+          case "$ref" in
+            protocol/v*)
+              tagged="${ref#protocol/v}"
+              if [ "$tagged" != "$version" ]; then
+                echo "::error::tag says $tagged, clients/python/pyproject.toml says $version"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::warning::$ref is not a protocol/vX.Y.Z anchor; skipping the tag-vs-manifest check"
+              ;;
+          esac
+
+      # The Python client shares the protocol's version with the npm package,
+      # the crate and the Go module. A drift here means the tag is lying about
+      # what it contains.
+      - run: node scripts/sync-protocol-version.mjs --check
+
+      - name: Is this version already on PyPI?
+        id: published
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/termwright/$VERSION/json")
+          if [ "$code" = "200" ]; then
+            echo "::notice::termwright $VERSION is already on PyPI — the publish job will skip."
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and check the distribution
+        working-directory: clients/python
+        run: |
+          pip install build twine
+          python -m build
+          twine check dist/*
+
+      - name: Test the built package
+        working-directory: clients/python
+        run: |
+          pip install -e ".[dev]"
+          pytest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pypi-dist
+          path: clients/python/dist
+          retention-days: 7
+
+  publish:
+    name: publish to PyPI
+    needs: verify
+    # Already-published is a normal state when re-dispatching after a partial
+    # failure: skip, never re-upload, never yank.
+    if: needs.verify.outputs.published == 'false'
+    runs-on: ubuntu-latest
+    environment: pypi-publish
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pypi-dist
+          path: dist
+
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+      - name: Dry run — what would have been uploaded
+        if: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          echo "dry run: not uploading. Contents of dist/:"
+          ls -l dist
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## PyPI — ${{ inputs.ref }}"
+            echo
+            echo "version: \`${{ needs.verify.outputs.version }}\`  ·  dry run: \`${{ inputs.dry_run }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

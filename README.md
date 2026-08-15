@@ -95,7 +95,9 @@ pnpm -r --filter './packages/*' run test
 
 Cross-package contracts are normative in [`CONTRACTS.md`](CONTRACTS.md); changes
 to them are logged in [`CHANGELOG-contracts.md`](CHANGELOG-contracts.md). See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request, and
+[`RELEASING.md`](RELEASING.md) for how versions ship — every publish is a
+manual, approved pipeline; nothing releases on a merge.
 
 ## License
 

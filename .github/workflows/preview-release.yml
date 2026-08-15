@@ -1,0 +1,42 @@
+name: Preview release
+
+# Installable builds of a pull request, published to pkg-pr-new rather than to
+# npm. Nothing here touches the real registry, and no version is consumed.
+#
+# Opt-in per PR: add the `pr preview` label. A preview of every PR would be
+# noise, and a preview built from an unreviewed fork is not something to hand
+# people a one-line install command for by default.
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    if: contains(github.event.pull_request.labels.*.name, 'pr preview')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.4.0'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+
+      # pkg-pr-new serves each package straight from the build, so a reviewer
+      # installs the PR with `npm i https://pkg.pr.new/@termwright/driver@<pr>`.
+      - run: pnpm dlx pkg-pr-new@0 publish --pnpm './packages/*'

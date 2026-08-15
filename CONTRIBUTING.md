@@ -98,6 +98,20 @@ error or a diagnostic — `semanticTree: false`, `unsupported-action`,
 nothing will read. A locator that silently matches the wrong cell turns a test
 suite into a source of false confidence, which is worse than no suite.
 
+## Working in a shared tree
+
+This repository is worked on by several people and agents at once, and the git
+index is shared. [`CONTRACTS.md` §Git hygiene in this shared
+tree](CONTRACTS.md#git-hygiene-in-this-shared-tree-binding-for-every-agent) is
+binding: commit with explicit paths, never `-a`, never `--amend`, never rewind
+the whole tree.
+
+**Bisecting:** commit `1c0442a` does not build on its own for the `termwright`
+package. Its build script compiles `src/reporter.ts` and `src/ui-reporter.ts`,
+and neither file exists at that commit — the manifest was committed ahead of its
+sources when two agents shared an index. It is an artifact, not a product
+regression, so `git bisect skip` it rather than chasing the failure.
+
 ## Changesets
 
 Every user-visible change to a published package needs one:
@@ -107,8 +121,13 @@ pnpm changeset
 ```
 
 Write the entry for someone reading the changelog — what changed and what they
-have to do about it. All the npm packages share a version and release together;
-see [`.changeset/README.md`](.changeset/README.md).
+have to do about it. CI enforces this: a pull request touching `packages/**`
+with no changeset fails `release-hygiene`.
+
+All the npm packages share a version and release together; see
+[`.changeset/README.md`](.changeset/README.md). Adding a changeset does not
+release anything — publishing is a manual, approved pipeline, documented in
+[`RELEASING.md`](RELEASING.md).
 
 ## Writing an adapter
 
