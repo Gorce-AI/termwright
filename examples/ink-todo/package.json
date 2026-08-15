@@ -1,0 +1,30 @@
+{
+  "name": "@termwright-examples/ink-todo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Ink todo list with a modal confirmation, tested end to end and per component",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsup src/cli.tsx --format esm --target node22 --out-dir dist",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "pretest": "pnpm build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@termwright/ink": "workspace:*",
+    "ink": "^7.1.1",
+    "react": "^19.2.8"
+  },
+  "devDependencies": {
+    "@termwright/driver": "workspace:*",
+    "@termwright/ink-testing": "workspace:*",
+    "@termwright/test": "workspace:*",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.2.18",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}

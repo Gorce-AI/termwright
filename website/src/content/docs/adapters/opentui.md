@@ -1,37 +1,95 @@
 ---
 title: OpenTUI
-description: What the OpenTUI adapter reads, why the framework is a good fit, and where its API is documented.
+description: instrumentRenderer and describeRenderable, the three annotation levels, and why bounds need alternate-screen mode.
 ---
 
-[OpenTUI](https://github.com/sst/opentui) is a class-A framework in the
+[OpenTUI](https://github.com/anomalyco/opentui) is a class-A framework in the
 [feasibility classes](../): it retains a `Renderable` tree, each node caches its
-`screenX` / `screenY`, and it exposes a parent chain, `getChildren()`, lifecycle
-hooks and a `layout-changed` event. That is everything an adapter needs, and it
-means bounds are trustworthy without the alternate-screen caveat that applies to
-[Ink](../ink/).
+`screenX` / `screenY`, and it exposes a parent chain, children, lifecycle hooks
+and a frame event. That is everything an adapter needs.
 
-Roles are supplied as a convention over reconciler props, in the same spirit as
-Ink's `aria-role` / `aria-label` — annotate what a test should be able to find,
-and leave the rest to the three-level fallback (explicit annotation → widget
-type map → `generic`).
+```sh
+npm install --save-dev @termwright/opentui
+```
 
-The adapter obeys the same rules as every other one:
+Node >= 22, ESM only. `@opentui/core` >= 0.5 is a peer dependency — and note
+that OpenTUI itself currently needs **Bun** to load its native library.
 
-- **dormant** without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` — no socket,
-  no marker, byte-identical output;
-- publishes a full snapshot after every committed frame, then writes the signed
-  DCS marker once the frame's bytes are out;
-- never throws across its boundary: losing the driver disables semantics and
-  leaves the application rendering.
+Without a driver in the environment the adapter is **completely inert**: no
+socket, no listener, no tree, no marker, byte-identical output. That is
+asserted, not claimed: the conformance suite runs the fixture with and without
+the adapter compiled in and compares the two streams byte for byte.
 
-:::note[API reference pending]
-`@termwright/opentui` is being finalised alongside the umbrella CLI. The
-package's own README is the source of truth for its exported functions, and this
-page will carry the annotated example once that surface is frozen. Everything
-above is fixed by the [protocol](../../reference/protocol/) and does not depend
-on the remaining API decisions.
-:::
+## Usage
 
-The Zig core's C ABI is the long-term lever here: it is the layer where
-positions and a widget identity already exist for every renderer built on
-OpenTUI, not just for the TypeScript one.
+```ts
+import {BoxRenderable, TextRenderable, createCliRenderer} from '@opentui/core';
+import {describeRenderable, instrumentRenderer} from '@termwright/opentui';
+
+const renderer = await createCliRenderer({screenMode: 'alternate-screen'});
+instrumentRenderer(renderer);
+
+const approve = new BoxRenderable(renderer, {id: 'approve', width: 11, height: 1});
+approve.add(new TextRenderable(renderer, {content: '[ Approve ]'}));
+renderer.root.add(approve);
+
+describeRenderable(approve, {role: 'button', name: 'Approve'});
+```
+
+Call `instrumentRenderer` right after creating the renderer and before building
+the tree. Ship both calls unconditionally — in an uninstrumented run
+`describeRenderable` is a no-op that registers nothing and retains nothing.
+
+## Annotating
+
+Three levels, in precedence order:
+
+1. **`describeRenderable(node, meta)`** — role, name, description, value, state,
+   actions, testId. All optional; anything you leave out is derived.
+2. **Convention properties on the renderable** — `role`, `semanticName`,
+   `ariaLabel`, `testId`. Assign them *after* construction: OpenTUI's
+   `Renderable` constructor drops options it does not recognise, so they cannot
+   be passed as props (verified against 0.5.3).
+3. **The widget class**, mapped conservatively: `TextRenderable` → `text`,
+   `InputRenderable` / `TextareaRenderable` → `textbox`, `SelectRenderable` →
+   `list`, `TextTableRenderable` → `table`, `ScrollBoxRenderable` → `region`.
+   A `BoxRenderable` stays unmapped — a box is a layout primitive, and a border
+   is styling, not semantics.
+
+The adapter derives the rest on its own: `bounds` from
+`screenX` / `screenY` / `width` / `height`, `focused` from OpenTUI's own flag,
+`focus` as an action for anything focusable, `name` from `plainText` or a box
+title, `value` from a widget's value, and `testId` from an author-chosen `id`
+(never from a generated `renderable-<n>`).
+
+Only interesting nodes are published: annotated ones, ones whose class maps to a
+role, focusable ones, and ones carrying text. Layout boxes are skipped and their
+children reparent to the nearest published ancestor, so the tree stays connected
+however much of it is dropped.
+
+## Coordinates need alternate-screen mode
+
+`bounds` are published only under `screenMode: 'alternate-screen'`, and that is
+also the only configuration in which the adapter claims the `absolute-bounds`
+capability.
+
+In `main-screen` and `split-footer` mode the renderer draws into a region whose
+origin the process cannot observe, so coordinates would be plausible and wrong.
+The protocol makes [`bounds` optional](../../reference/protocol/) precisely for
+this case, and locators fall back to text.
+
+## How a frame gets marked
+
+OpenTUI's render loop writes the frame and *then* emits `frame`. The adapter
+collects the tree in that handler — while `screenX` / `screenY` still describe
+the frame that was just drawn — pushes the snapshot, waits for the output stream
+to drain, and writes the DCS render-commit marker. The driver pairs tree and
+pixels on that marker, and a frame superseded before its snapshot goes out is
+dropped rather than mispaired.
+
+## Also exported
+
+`readAdapterEnv`, `asSemanticRole`, `defaultActionsFor`, `mapRenderableClass`
+and `canPublishAbsoluteBounds` are public for anyone building on the same
+machinery — a different OpenTUI host, or a renderer that wants the role map
+without the instrumentation.

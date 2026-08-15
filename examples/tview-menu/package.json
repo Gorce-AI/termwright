@@ -1,0 +1,22 @@
+{
+  "name": "@termwright-examples/tview-menu",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A tview menu and form, driven end to end from TypeScript",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "go run ./app",
+    "typecheck": "tsc --noEmit",
+    "pretest": "pnpm build",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@termwright/driver": "workspace:*",
+    "@termwright/test": "workspace:*",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}
