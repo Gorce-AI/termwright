@@ -21,6 +21,8 @@ export type {
   ActivateReceipt,
   CellAttributes,
   CellColor,
+  AppLogEvent,
+  AppLogSource,
   CellSnapshot,
   CrashInput,
   CrashReport,

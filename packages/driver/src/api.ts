@@ -4,6 +4,7 @@
  * CONTRACTS.md and notifying all package owners.
  */
 import type {
+  LogRecord,
   ProtocolErrorMessage,
   Rect,
   SemanticRole,
@@ -52,6 +53,12 @@ export interface LaunchOptions {
    * stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
    */
   readonly debug?: boolean;
+  /**
+   * Log files to follow for the lifetime of the session. A file that does not
+   * exist yet is waited for; one that already exists is followed from its
+   * current end, so a session never replays a previous run.
+   */
+  readonly logs?: readonly AppLogSource[];
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
   readonly semanticNegotiationMs?: number; // default 250
@@ -327,10 +334,46 @@ export type DiagnosticCode =
   | 'endpoint-error'
   /** A `SessionEvents` listener threw; the session continued. */
   | 'listener-error'
+  /** Lines the driver did not deliver: a log source outran its rate limit. */
+  | 'log-dropped'
+  /** A followed log source changed state: attached, rotated, truncated, unreadable. */
+  | 'log-source'
   /** `waitForReady` observed an OSC 133 prompt mark: a fact, not a guess. */
   | 'ready-shell-integration'
   /** `waitForReady` fell back to "the screen settled": a heuristic. */
   | 'ready-settled-screen';
+
+/** A log file the session follows. */
+export interface AppLogSource {
+  readonly path: string;
+  /** Short name used in events and diagnostics; defaults to the path. */
+  readonly label?: string;
+}
+
+/**
+ * One entry of an application's own log, published on the session timeline.
+ *
+ * Two sources feed this event and they carry different payloads: a followed
+ * file yields {@link line}, an instrumented adapter yields a structured
+ * {@link record}. Exactly one of them is present.
+ */
+export interface AppLogEvent {
+  readonly source: 'file' | 'adapter';
+  readonly label?: string;
+  /** Raw line, for a followed file. Truncated lines end with an ellipsis. */
+  readonly line?: string;
+  /** Structured record, for an adapter that negotiated the logs capability. */
+  readonly record?: LogRecord;
+  /**
+   * Milliseconds since session start, on the same clock as every other event.
+   *
+   * For a file this is when the driver *read* the line, not when the program
+   * wrote it: the two differ by up to one poll interval, so treat it as an
+   * upper bound rather than as the write timestamp. A record carries the
+   * adapter's own timestamp inside it.
+   */
+  readonly timeMs: number;
+}
 
 /** One remembered input, as it appears in a {@link CrashReport}. */
 export interface CrashInput {
@@ -394,6 +437,8 @@ export interface SessionEventMap {
   'screen-revision': { readonly revision: number; readonly timeMs: number };
   'semantic-revision': { readonly revision: number; readonly timeMs: number };
   exit: ExitStatus & { readonly timeMs: number };
+  /** A line or record from the application own log. */
+  'app-log': AppLogEvent;
   /**
    * The child died unexpectedly. Emitted before `exit`, so a listener reacting
    * to the exit can already read {@link TerminalHarness.crashReport}.

@@ -7,6 +7,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type {
+  AppLogSource,
   CellSnapshot,
   CrashInput,
   CrashReport,
@@ -50,6 +51,7 @@ import {
 } from './errors.js';
 import { DebugLog, debugMode, formatBytes, instrument } from './debug.js';
 import { SessionEventEmitter } from './events.js';
+import { LogTailer } from './logs.js';
 import { encodeFocus, encodeKeys, encodePaste, encodeText } from './keys.js';
 import { LocatorImpl, type LocatorContext } from './locator.js';
 import { SemanticIndex, textInRect } from './matching.js';
@@ -222,6 +224,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   /** True once the harness itself asked the child to go away. */
   #teardownRequested = false;
   #debug: DebugLog | null = null;
+  #logs: LogTailer | null = null;
   /** When the generic verdict becomes final; null while semantics are still possible. */
   #genericDefiniteAt: number | null = null;
   #graceTimer: NodeJS.Timeout | null = null;
@@ -327,6 +330,15 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#pty.onExit((status) => {
       void this.#finishExit(status);
     });
+
+    const sources = this.#options.logs ?? [];
+    if (sources.length > 0) {
+      this.#logs = new LogTailer(sources, {
+        onLine: (source, line) => this.#publishLogLine(source, line),
+        onDiagnostic: (code, detail) => this.#diagnostic(code, detail),
+      });
+      await this.#logs.start();
+    }
 
     const negotiationMs = this.#options.semanticNegotiationMs ?? DEFAULT_NEGOTIATION_MS;
     this.#negotiationTimer = setTimeout(() => {
@@ -751,6 +763,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       await Promise.race([this.exit, delay(CLOSE_GRACE_MS)]);
     }
     if (this.#exitStatus === null) this.#onExit({ code: null, signal: null });
+    await this.#logs?.stop();
     await this.#channel?.close();
     this.#vt.dispose();
     for (const waiter of [...this.#changeWaiters]) waiter.resolve();
@@ -789,6 +802,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#emitter.on('diagnostic', (entry) => log.diagnostic(entry));
     this.#emitter.on('exit', ({ code, signal }) =>
       log.line('api', `exited code=${String(code)} signal=${String(signal)}`),
+    );
+    this.#emitter.on('app-log', (entry) =>
+      log.line('app', `${entry.label ?? 'log'} | ${entry.line ?? JSON.stringify(entry.record)}`),
     );
     if (log.logsIo) {
       this.#emitter.on('output', ({ data }) => log.line('io', `out ${formatBytes(data)}`));
@@ -839,6 +855,20 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     );
     this.#pairing.setMarkerEnabled(attachment.markerEnabled);
     this.#settle();
+  }
+
+  /**
+   * Publishes one log line. The timestamp is when the driver read it, which
+   * trails the write by up to a poll interval — documented on the event.
+   */
+  #publishLogLine(source: AppLogSource, line: string): void {
+    if (this.#closed) return;
+    this.#emitter.emit('app-log', {
+      source: 'file',
+      ...(source.label !== undefined ? { label: source.label } : {}),
+      line,
+      timeMs: this.#now(),
+    });
   }
 
   #publishSemantic(snapshot: SemanticSnapshot): void {

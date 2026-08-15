@@ -13,7 +13,7 @@
 import type { SessionDiagnostic } from './api.js';
 
 /** Categories a line can belong to; the prefix a reader greps for. */
-export type DebugCategory = 'api' | 'wait' | 'vt' | 'sem' | 'diag' | 'io';
+export type DebugCategory = 'api' | 'wait' | 'vt' | 'sem' | 'diag' | 'io' | 'app';
 
 /** Marker used to recover the real object from an instrumented one. */
 const RAW = Symbol.for('termwright.debug.raw');

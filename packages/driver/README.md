@@ -129,6 +129,31 @@ Categories are `api` (calls), `wait` (what was awaited, how long, how it ended),
 `paste`/`write` payloads are logged by size only. Switched off, nothing is
 wrapped and no listener is registered.
 
+## Following the program's own log
+
+A TUI's real diagnostics go to a file, not to the screen — the screen is busy
+drawing. Point the session at that file and its lines land on the same timeline
+as everything else:
+
+```ts
+const terminal = await launchTerminal({
+  command: ['node', 'app.js'],
+  logs: [{ path: '/tmp/app.log', label: 'app' }],
+});
+terminal.events.on('app-log', (entry) => console.log(entry.label, entry.line));
+```
+
+A file that does not exist yet is waited for (programs create their log on first
+write); one that already exists is followed from its current end, so a session
+never replays a previous run. Truncation and rotation restart the tail instead
+of failing, with a `log-source` diagnostic saying why.
+
+`timeMs` is when the driver *read* the line, not when the program wrote it —
+they differ by up to one poll interval, so treat it as an upper bound. Bounded
+throughout: lines longer than 4 KiB are truncated with an ellipsis, and a source
+that outruns 250 lines per 250 ms has the rest dropped and counted in a
+`log-dropped` diagnostic rather than drowning the session.
+
 ## When the program dies on its own
 
 A child that exits on a signal, or with a non-zero code, without the harness
