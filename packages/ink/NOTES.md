@@ -102,13 +102,21 @@ which also covers an author hoisting one `actions` const across many
 `useSemantic` calls.
 
 This one hid for a while because **the channel destroys the evidence**:
-`encodeFrame` JSON-serialises, and JSON has no aliases, so the driver's
-`parseAdapterMessage` always saw a valid snapshot. Only in-process consumers —
-`@termwright/ink-testing`, conformance, anything holding a `get-tree` response —
-see the real object. `collect.test.tsx` therefore runs `validateSnapshot`
-against a snapshot collected straight off a mounted tree, with no socket in
-between; a test that only inspects what the fake driver received cannot catch
-this class of bug. Credit to the OpenTUI adapter for hitting it first.
+`encodeFrame` JSON-serialises, and JSON has no aliases, so anything that reaches
+the driver — including `get-tree` responses, and including
+`@termwright/ink-testing`, whose "in-process" refers to the application process
+and not to the channel — always saw a valid snapshot. The exposure is narrower
+and more precise than "in-process consumers": **only a caller that reads the
+collector's object without a serialisation round-trip in between.** In practice
+that is this package's own tests and anything that embeds `SnapshotCollector`
+directly.
+
+`collect.test.tsx` therefore runs `validateSnapshot` against a snapshot
+collected straight off a mounted tree, with no socket in between. A test that
+only inspects what the fake driver received cannot catch this class of bug, no
+matter how many same-role nodes it builds — two such nodes are necessary but not
+sufficient. Credit to the OpenTUI adapter for hitting it first, and to
+`@termwright/ink-testing` for correcting the blast radius.
 
 The subtle case is truncation: when the walk stops at `maxNodes`, children are
 never emitted after their parent was dropped, because `parentId` always points
