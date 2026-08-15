@@ -74,12 +74,17 @@ A package change is done when:
 
 ### One extra obligation for adapters
 
-An adapter needs at least one test calling `validateSnapshot` on a snapshot its
-collector built **in memory**, with no serialization in between. Framing is
-`JSON.stringify`, which erases reference identity, so a test that only inspects
-what arrived over the socket cannot see aliasing — two nodes sharing one
-`actions` array pass on the wire and are rejected in-process by `mountInk` or a
-`getTree` response. Both shipped adapters learned this from a real bug.
+A TypeScript adapter needs at least one test calling `validateSnapshot` on a
+snapshot its collector returned **in memory**, with no serialization anywhere in
+between. The obligation is about the path, not the fixture: a big tree proves
+nothing if the value being validated has been through JSON.
+
+Framing is `JSON.stringify`, which erases reference identity, so a test that
+only inspects what arrived over the socket cannot see aliasing — two nodes
+sharing one `actions` array pass on the wire and are rejected in-process by
+`mountInk` or a `getTree` response. Both shipped adapters learned this from a
+real bug. The language clients serialize on the way out, so it cannot happen to
+them.
 
 ## Two habits that matter more than they look
 

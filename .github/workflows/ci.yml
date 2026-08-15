@@ -159,7 +159,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
       - run: bun --version
+
+      # Without the flag a missing precondition (no Bun, no dist/) skips the
+      # suite, and vitest exits 0 on a skip — this job would go green without
+      # running the tests it exists for. The flag turns that into a failure
+      # naming the reason. Skipping stays the default on a developer machine.
       - run: pnpm --filter @termwright/opentui run test:conformance
+        env:
+          TERMWRIGHT_REQUIRE_CONFORMANCE: '1'
 
   clients:
     name: clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})

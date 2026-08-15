@@ -59,14 +59,23 @@ with no bounds at all is valid, and consumers treat it as a normal state.
 
 #### Validate the tree you built, not the one that came back
 
-At least one test must call `validateSnapshot` on a snapshot your collector
-built **in memory**, with no serialization in between. A suite that only checks
-what the driver received over the socket is blind to an entire class of bug.
+:::caution[TypeScript adapters only]
+This trap comes from sharing a heap with the consumer. The Python, Go and Rust
+clients serialize on the way out, so an alias cannot survive to reach
+validation — nothing below applies to them.
+:::
 
-The reason is aliasing. `validateSnapshot` rejects a snapshot in which any value
-is reachable twice, and there are two easy ways to produce one: a role table
-that hands the same frozen `actions` array to every node of that role, and an
-application author who reuses one array across two annotations. Framing is
+At least one test must call `validateSnapshot` on a snapshot your collector
+returned **in memory**, with no serialization anywhere between the two. That is
+the whole obligation, and it is a property of the *path*, not of the fixture:
+elaborate trees prove nothing if the value being validated has been through
+JSON. One of the shipped adapters had trees with fifty `button` nodes and a
+green suite for exactly that reason.
+
+The bug it catches is aliasing. `validateSnapshot` rejects a snapshot in which
+any value is reachable twice, and there are two easy ways to produce one: a role
+table that hands the same frozen `actions` array to every node of that role, and
+an application author who reuses one array across two annotations. Framing is
 `JSON.stringify`, which has no concept of reference identity — so the wire looks
 perfectly clean while the in-process consumers (`mountInk`, a `getTree`
 response) get an object the validator throws out.
@@ -75,12 +84,13 @@ response) get an object the validator throws out.
 import {DEFAULT_LIMITS, validateSnapshot} from '@termwright/protocol';
 
 it('gives each node its own actions array, whatever the source', () => {
-  // Built here, validated here: no encodeFrame in between, or the aliasing
-  // this test exists to catch is copied away before the assertion runs.
+  // Straight from the collector, validated as-is. An encodeFrame anywhere in
+  // between copies away the very thing this test exists to catch.
   const snapshot = collect(root, registry);
 
   expect(validateSnapshot(snapshot, DEFAULT_LIMITS)).toMatchObject({ok: true});
 
+  // Optional, but it names the failure when it happens.
   const [first, second] = snapshot.nodes.filter((node) => node.role === 'button');
   expect(first?.actions).toEqual(second?.actions);
   expect(first?.actions).not.toBe(second?.actions);  // equal, never the same array
@@ -88,7 +98,7 @@ it('gives each node its own actions array, whatever the source', () => {
 ```
 
 Copy at the node-construction site, so neither source of aliasing can reach a
-snapshot. Both shipped adapters learned this the hard way.
+snapshot in the first place.
 
 ### 4. Ordering: snapshot, commit, marker
 
