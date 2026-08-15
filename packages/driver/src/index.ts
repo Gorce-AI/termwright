@@ -1,1 +1,82 @@
-export * from './api.js';
+/**
+ * `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
+ *
+ * The normative public API lives in `api.ts`; this module is the only entry
+ * point and re-exports the types from there together with their runtime
+ * implementations.
+ *
+ * @example
+ * ```ts
+ * import { launchTerminal } from '@termwright/driver';
+ *
+ * const terminal = await launchTerminal({ command: ['node', 'app.js'] });
+ * await terminal.waitForText('Ready');
+ * await terminal.getByRole('button', { name: 'Approve' }).activate();
+ * await terminal.close();
+ * ```
+ */
+
+// Normative types (api.ts declares the contract; the values live below).
+export type {
+  ActivateReceipt,
+  CellAttributes,
+  CellColor,
+  CellSnapshot,
+  ErrorDiagnostics,
+  ExitStatus,
+  LaunchOptions,
+  Locator,
+  PointerOptions,
+  RecordingOptions,
+  ResolvedTarget,
+  RoleLocatorOptions,
+  ScreenSnapshot,
+  ScrollbackApi,
+  SelectionApi,
+  SessionCapabilities,
+  SessionEventMap,
+  SessionEvents,
+  TerminalHarness,
+  TerminalModes,
+  TermwrightErrorCode,
+  TextLocatorOptions,
+  TimeoutClasses,
+  WaitOptions,
+} from './api.js';
+
+export { launchTerminal, type LaunchTerminalOptions } from './session.js';
+
+export {
+  AmbiguousLocatorError,
+  CapacityError,
+  HistoryTruncatedError,
+  ProcessExitedError,
+  ProtocolViolationError,
+  SessionClosedError,
+  StaleSnapshotError,
+  TermwrightError,
+  TimeoutError,
+  UnsupportedActionError,
+} from './errors.js';
+
+export {
+  createNodePtyBackend,
+  type PtyBackend,
+  type PtyProcess,
+  type PtySignal,
+  type PtySpawnOptions,
+  type PtyUnsubscribe,
+} from './pty.js';
+
+export { encodeKeys, encodePaste, encodeText, type KeyEncodingModes } from './keys.js';
+export { encodeMouse, type MouseButton, type MouseEvent } from './mouse.js';
+export {
+  parseSelector,
+  textMatcher,
+  type GenericQuery,
+  type LocatorQuery,
+  type SemanticQuery,
+  type SemanticStep,
+  type StylePredicates,
+  type TextMatcher,
+} from './selectors.js';
