@@ -49,8 +49,11 @@ afterAll(() => {
   rmSync(OUTPUT, { recursive: true, force: true });
 });
 
-describe.skipIf(!available)('the preset against a real PTY', { timeout: 30_000 }, () => {
-  test('asserts the semantic tree, the screen and the effect of an action', async ({ terminal, step }) => {
+describe.skipIf(!available)('the preset against a real PTY', () => {
+  // Each test carries its own timeout: it must exceed the `expect` timeout
+  // class, or a failing matcher is cut off by the runner before it can print
+  // what it saw.
+  test('asserts the semantic tree, the screen and the effect of an action', { timeout: 30_000 }, async ({ terminal, step }) => {
     const app = await terminal.launch();
     // A screen wait: the tree for this frame is paired with its render-commit
     // marker slightly later, so every semantic assertion below is landing in
@@ -82,7 +85,7 @@ describe.skipIf(!available)('the preset against a real PTY', { timeout: 30_000 }
     await expect(app).toMatchCellSnapshot();
   });
 
-  test('isolates each test with its own directory and session', async ({ terminal, termwright }) => {
+  test('isolates each test with its own directory and session', { timeout: 30_000 }, async ({ terminal, termwright }) => {
     const app = await terminal.launch();
     await app.waitForText('Permission required');
     expect(termwright.tmpdir).toContain('termwright-');
@@ -91,7 +94,7 @@ describe.skipIf(!available)('the preset against a real PTY', { timeout: 30_000 }
     expect(app.sessionId).toEqual(expect.any(String));
   });
 
-  test('records a trace archive with the steps it was given', async ({ terminal, step }) => {
+  test('records a trace archive with the steps it was given', { timeout: 30_000 }, async ({ terminal, step }) => {
     const app = await terminal.launch();
     await app.waitForText('Permission required');
     await step('a named step', async () => {
@@ -102,7 +105,7 @@ describe.skipIf(!available)('the preset against a real PTY', { timeout: 30_000 }
 });
 
 describe.skipIf(!available)('trace collection', () => {
-  test('leaves finished archives behind for the reporter', async () => {
+  test('leaves finished archives behind for the reporter', { timeout: 30_000 }, async () => {
     const traces = join(OUTPUT, 'traces');
     const archives = readdirSync(traces).filter((entry) => entry.endsWith('.twtrace'));
     expect(archives.length).toBeGreaterThan(0);

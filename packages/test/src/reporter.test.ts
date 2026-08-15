@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { Reporter } from 'vitest/node';
 import { TermwrightReporter } from './reporter.js';
 
 const directories: string[] = [];
@@ -43,6 +44,16 @@ function testCase(id: string, fullName: string, options: CaseOptions = {}): Para
 }
 
 describe('TermwrightReporter', () => {
+  it('is assignable to the Reporter interface Vitest expects', () => {
+    // Compile-time assertion. This package builds with
+    // `exactOptionalPropertyTypes`, and so do its users: the structural views
+    // of Vitest's `TestCase` below must accept `T | undefined` wherever Vitest
+    // declares an optional property, or `reporters: [new TermwrightReporter()]`
+    // stops typechecking in the consumer's `vitest.config.ts`.
+    const reporter: Reporter = new TermwrightReporter({ silent: true });
+    expect(reporter).toBeInstanceOf(TermwrightReporter);
+  });
+
   it('collects outcomes, traces and durations', () => {
     const reporter = new TermwrightReporter({ silent: true });
     reporter.onTestRunStart();

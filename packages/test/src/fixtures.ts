@@ -25,6 +25,7 @@ import { createTraceWriter, type TraceWriter } from '@termwright/trace';
 import { getTermwrightConfig, type ResolvedTermwrightConfig } from './config.js';
 import { beginSnapshotScope } from './snapshot-store.js';
 import { currentScope, enterScope, openStep, scopeKey, type TermwrightScope } from './trace-context.js';
+import './task-meta.js';
 
 /** What a test may override when launching a program. */
 export interface LaunchFixtureOptions extends Omit<LaunchOptions, 'command'> {
@@ -59,13 +60,6 @@ export interface TermwrightFixtures {
   termwright: TermwrightScopeFixture;
   terminal: TerminalFactory;
   step: StepRunner;
-}
-
-declare module 'vitest' {
-  interface TaskMeta {
-    /** Trace archives written for this test, read by `TermwrightReporter`. */
-    termwright?: { readonly traces: readonly string[] };
-  }
 }
 
 /** Environment variables inherited by launched programs; everything else is dropped. */

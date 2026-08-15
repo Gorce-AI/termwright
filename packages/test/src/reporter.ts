@@ -20,6 +20,12 @@
 import { join } from 'node:path';
 import { generateHtmlReport, type ReportTestResult } from '@termwright/trace';
 import { getTermwrightConfig } from './config.js';
+import './task-meta.js';
+
+// Re-exported so the declaration bundler keeps the augmentation module a
+// *module*: an emitted `.d.ts` with no exports is a script, and `declare module
+// 'vitest'` in a script shadows the real module instead of merging into it.
+export type { TermwrightTaskMeta } from './task-meta.js';
 
 /** Options for {@link TermwrightReporter}. */
 export interface TermwrightReporterOptions {
@@ -39,27 +45,58 @@ export interface CollectedTest extends ReportTestResult {
   readonly flaky: boolean;
 }
 
-/** Structural view of the Vitest 3 `TestCase` this reporter reads. */
+/**
+ * Structural views of the Vitest types this reporter reads.
+ *
+ * Every optional property spells out `| undefined`. Both this package and its
+ * users build with `exactOptionalPropertyTypes`, where `foo?: T` accepts an
+ * absent property but not an explicit `undefined` — so without it Vitest's own
+ * `TestCase` is not assignable here, and `reporters: [new TermwrightReporter()]`
+ * stops typechecking in the consumer's `vitest.config.ts`.
+ */
+interface ErrorLike {
+  readonly message?: string | undefined;
+  readonly stack?: string | undefined;
+}
+
+/** Structural view of the Vitest 3 `TestCase`. */
 interface TestCaseLike {
-  readonly id?: string;
-  readonly name?: string;
-  readonly fullName?: string;
-  readonly module?: { readonly moduleId?: string };
-  result?: () => { state?: string; errors?: readonly { message?: string; stack?: string }[] } | undefined;
-  diagnostic?: () => { duration?: number; retryCount?: number; flaky?: boolean } | undefined;
-  meta?: () => { termwright?: { traces?: readonly string[] } } | undefined;
+  readonly id?: string | undefined;
+  readonly name?: string | undefined;
+  readonly fullName?: string | undefined;
+  readonly module?: { readonly moduleId?: string | undefined } | undefined;
+  result?:
+    | (() => { state?: string | undefined; errors?: readonly ErrorLike[] | undefined } | undefined)
+    | undefined;
+  diagnostic?:
+    | (() => { duration?: number | undefined; retryCount?: number | undefined; flaky?: boolean | undefined } | undefined)
+    | undefined;
+  /**
+   * Vitest's `TaskMeta` is an interface every package augments, so pinning its
+   * shape here would make assignability depend on which augmentations a
+   * consumer happens to load. It is accepted as a plain object and narrowed by
+   * {@link tracesOf}.
+   */
+  meta?: (() => object | undefined) | undefined;
 }
 
 /** Structural view of a legacy task tree, used by the `onFinished` fallback. */
 interface TaskLike {
-  readonly id?: string;
-  readonly type?: string;
-  readonly name?: string;
-  readonly mode?: string;
-  readonly file?: { readonly filepath?: string };
-  readonly meta?: { termwright?: { traces?: readonly string[] } };
-  readonly result?: { state?: string; duration?: number; retryCount?: number; errors?: readonly { message?: string; stack?: string }[] };
-  readonly tasks?: readonly TaskLike[];
+  readonly id?: string | undefined;
+  readonly type?: string | undefined;
+  readonly name?: string | undefined;
+  readonly mode?: string | undefined;
+  readonly file?: { readonly filepath?: string | undefined } | undefined;
+  readonly meta?: object | undefined;
+  readonly result?:
+    | {
+        state?: string | undefined;
+        duration?: number | undefined;
+        retryCount?: number | undefined;
+        errors?: readonly ErrorLike[] | undefined;
+      }
+    | undefined;
+  readonly tasks?: readonly TaskLike[] | undefined;
 }
 
 /**
@@ -143,12 +180,11 @@ function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | und
   if (id === undefined) return undefined;
   const result = testCase.result?.();
   const diagnostic = testCase.diagnostic?.();
-  const meta = testCase.meta?.();
   const state = result?.state;
   const status = toStatus(state);
   if (status === undefined) return undefined;
   const error = result?.errors?.[0];
-  const traces = meta?.termwright?.traces ?? [];
+  const traces = tracesOf(testCase.meta?.());
   return {
     id,
     title: testCase.fullName ?? testCase.name ?? id,
@@ -172,7 +208,7 @@ function walk(tasks: readonly TaskLike[]): (CollectedTest & { id: string })[] {
       const status = toStatus(task.result?.state);
       if (status === undefined || task.id === undefined) return;
       const error = task.result?.errors?.[0];
-      const traces = task.meta?.termwright?.traces ?? [];
+      const traces = tracesOf(task.meta);
       collected.push({
         id: task.id,
         title: names.join(' > '),
@@ -193,6 +229,18 @@ function walk(tasks: readonly TaskLike[]): (CollectedTest & { id: string })[] {
     for (const child of file.tasks ?? []) visit(child, []);
   }
   return collected;
+}
+
+/**
+ * Reads the trace archives a fixture stored on `task.meta`.
+ *
+ * The value crossed a worker boundary as JSON, so it is validated rather than
+ * trusted: a stale or foreign `termwright` key must not crash the reporter.
+ */
+function tracesOf(meta: object | undefined): readonly string[] {
+  const carrier = meta as { termwright?: { traces?: unknown } } | undefined;
+  const traces = carrier?.termwright?.traces;
+  return Array.isArray(traces) ? traces.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
 function toStatus(state: string | undefined): 'passed' | 'failed' | 'skipped' | undefined {
