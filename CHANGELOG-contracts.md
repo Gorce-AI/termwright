@@ -120,3 +120,10 @@
   STRICTLY (full tree, exact flags; new nodes/states fail; `changed` rewrites
   on any textual diff). Inline patterns remain partial. Previously file
   snapshots silently used partial matching and could never fail on additions.
+- 2026-08-16 (approved, driver 7f77ea3): negotiation window says when a session
+  STARTS behaving generic; a bounded late-attach grace (default 2 s) says when
+  that verdict becomes FINAL. During grace semantic locators wait; after it
+  they throw 'unsupported-action' immediately. Hello after grace expiry is
+  REJECTED (wire 'internal' + diagnostic) — §4.1 "late hello never flips a
+  selected mode" is now enforced, with the grace as the explicit tolerance.
+  api.ts gains LaunchOptions.debug?: boolean (TERMWRIGHT_DEBUG=1|all).
