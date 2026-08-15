@@ -6,11 +6,24 @@
   "type": "module",
   "engines": { "node": ">=22" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
+  "files": ["dist", "runner"],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@termwright/driver": "workspace:*", "@termwright/ink": "workspace:*", "@termwright/protocol": "workspace:*" }
+  "dependencies": {
+    "@termwright/driver": "workspace:*",
+    "@termwright/ink": "workspace:*",
+    "@termwright/protocol": "workspace:*"
+  },
+  "peerDependencies": {
+    "ink": ">=7.1.0",
+    "react": ">=19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "ink": "^7.1.1",
+    "react": "^19.2.8"
+  }
 }
