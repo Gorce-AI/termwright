@@ -26,7 +26,8 @@ Changing a normative file requires: update it first, note the change in
 - `test` depends on `driver` (+ `trace`) and declares `vitest` as peer.
 - `ink-testing` depends on `driver`, `ink` (adapter), `protocol`.
 - `mcp` depends on `driver` + MCP SDK behind `src/sdk-facade.ts`. No session logic of its own.
-- `trace` depends on `driver` types only (consumes `SessionEvents`).
+- `trace` depends on `driver` types only (consumes `SessionEvents`) and may
+  type-import from `protocol` (it stores `SemanticSnapshot` verbatim).
 - `ui` depends on `trace` + `driver`. Talks to Vitest only via our own event protocol.
 - `conformance` may depend on everything; nothing depends on it.
 
@@ -49,8 +50,15 @@ A directory (zipped for transport) containing:
   label = step title. Recording includes all PTY output; `Hide()/Show()`
   windows excluded at write time.
 - `events.jsonl` — one JSON object per line:
-  `{ t: <ms>, kind: 'input'|'resize'|'step-start'|'step-end'|'action'|'assert',
-     ... }` where `action` carries `{ api, selector?, ref?, ok, error? }`.
+  `{ t: <ms>, castOffset: <ms>, kind: 'input'|'resize'|'step-start'|'step-end'|
+     'action'|'assert', ... }` where `action` carries
+  `{ api, selector?, ref?, ok, error? }`. `castOffset` positions the event on
+  the (idle-trimmed, hide-window-adjusted) recording timeline; readers fall
+  back to `t` when absent.
+
+`SessionEventMap` `timeMs` semantics (binding for the driver): milliseconds
+since session start, monotonic, never resets for the lifetime of a session
+(reconnects included).
 - `semantics.jsonl` — `{ t: <ms>, revision, castOffset: <ms>, snapshot }`,
   snapshot = `SemanticSnapshot` verbatim.
 
