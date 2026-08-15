@@ -201,6 +201,9 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@termwright/screenshot':
+        specifier: workspace:*
+        version: link:../screenshot
       '@termwright/trace':
         specifier: workspace:*
         version: link:../trace
