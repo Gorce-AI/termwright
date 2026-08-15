@@ -28,6 +28,11 @@ Every suite skips itself rather than failing where it cannot run: no
 pseudo-terminal (`TERMWRIGHT_SKIP_PTY=1`, or a sandbox that cannot fork one),
 no Go toolchain, no Python with Textual and the `termwright` package installed.
 
+`TERMWRIGHT_DEBUG=1` streams a live log to stderr while a suite runs — every
+API call with its arguments, every wait and how it ended, screen and semantic
+revisions, and each diagnostic the session recorded. It is the first thing to
+reach for when a test waits for something that never arrives.
+
 A run writes `<example>/termwright-report/index.html` — the trace report, with
 the recording, the visual diff and the semantic diff of every failure. The
 examples keep traces only for failures (`trace: 'retain-on-failure'`);
@@ -84,17 +89,19 @@ integration.
 ## What to copy
 
 - **Let the assertion be the wait.** Every locator matcher re-probes until the
-  application publishes the tree for the frame your input caused, so
-  `press()` followed straight by `expect(...)` is correct and sleep-free. Two
-  things do not poll, and both bite under load: an **action**, which resolves
-  its locator once and fails outright if no tree has arrived yet, and a
-  **spy**, which renders nothing and so produces no frame to wait for. Settle
-  first (`waitForStable()`) before the first action of a test; poll a spy with
-  `vi.waitFor`. `waitForReady()` is not enough on its own — it means the screen
-  went quiet, not that the adapter finished its handshake.
+  application publishes the tree for the frame your input caused, so `press()`
+  followed straight by `expect(...)` is correct and sleep-free. Actions wait for
+  a slow child to attach too, so a test can act right after a screen wait. The
+  one thing that never waits is a plain read — `capabilities()` in a bare
+  `expect`, or a **spy**, which renders nothing and so produces no frame to wait
+  for. Put a polling matcher first, and poll a spy with `vi.waitFor`.
 - **Scope destructive locators.** `dialog button#confirm` keeps working the day
   someone adds a second Delete button to the toolbar; `getByRole('button',
   {name: 'Delete'})` starts failing as ambiguous.
+- **A pattern is partial; a file snapshot is a fence.** An inline pattern
+  asserts only what it lists, and starts at the tree's root — scope it with
+  `{ within: locator }` instead of spelling out the path. A snapshot stored in
+  `__snapshots__` is compared strictly, so it tells you about any change at all.
 - **Assert both oracles for anything important.** A semantic snapshot is
   published by the adapter, so it can pass on a screen nobody painted. The cell
   snapshot is the second opinion.

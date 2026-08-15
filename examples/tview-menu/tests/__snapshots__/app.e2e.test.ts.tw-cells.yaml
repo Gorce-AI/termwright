@@ -1,6 +1,6 @@
 # @termwright/test snapshots — generated, but review them like test source.
 # Update with `vitest -u` or TERMWRIGHT_UPDATE_SNAPSHOTS=changed.
-"publishes the menu as a semantic tree 1": |
+"the tview menu > publishes the menu as a semantic tree 1": |
   ┌─ 72×16 ────────────────────────────────────────────────────────────────┐
   │╔═════════════════════════════════Menu═════════════════════════════════╗│
   │║New file                                                              ║│

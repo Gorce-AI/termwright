@@ -9,82 +9,81 @@
  */
 
 import { fileURLToPath } from 'node:url';
-import { expect, test } from '@termwright/test';
-import { ptyAvailable } from './pty.js';
+import { describe, expect, ptyAvailable, test } from '@termwright/test';
 import { pythonWithTextual } from './python.js';
 
 const python = pythonWithTextual();
 const script = fileURLToPath(new URL('../app/notes_app.py', import.meta.url));
-const testIf = python !== null && ptyAvailable() ? test : test.skip;
+const runnable = python !== null && (await ptyAvailable());
 
-/** The command, resolved once. `python` is non-null wherever this is used. */
+/** `python` is non-null wherever this command is used. */
 const command = [python ?? 'python3', script];
 
-testIf('publishes the notebook as a semantic tree', async ({ terminal }) => {
-  const app = await terminal.launch({ command });
-  await app.waitForText('write the release notes');
-  await app.waitForStable();
+describe.skipIf(!runnable)('the notes app', () => {
+  test('publishes the notebook as a semantic tree', async ({ terminal }) => {
+    const app = await terminal.launch({ command });
+    await app.waitForText('write the release notes');
 
-  // The matcher polls, so it is what waits for the handshake; the plain read
-  // of the capability is only safe once a tree has actually arrived.
-  await expect(app).toMatchSemanticSnapshot();
-  expect(app.capabilities().semanticTree).toBe(true);
-});
-
-testIf('adds a note from the input field', async ({ terminal, step }) => {
-  const app = await terminal.launch({ command });
-  await app.waitForText('write the release notes');
-  // `waitForText` is satisfied by the screen, and the tree describing that
-  // frame is published a beat later. Matchers poll through that gap; an
-  // *action* does not, so a test that acts first waits for the frame to settle.
-  await app.waitForStable();
-
-  await step('type into the draft field', async () => {
-    await app.getByRole('textbox').click();
-    await app.type('ship 1.0');
-    await expect(app.getByRole('textbox')).toHaveText('ship 1.0');
+    // The matcher polls, so it is what waits for the adapter's handshake — a
+    // plain read of the capability is only meaningful once a tree arrived.
+    await expect(app).toMatchSemanticSnapshot();
+    expect(app.capabilities().semanticTree).toBe(true);
   });
 
-  await app.getByRole('button', { name: 'Add' }).activate();
+  test('adds a note from the input field', async ({ terminal, step }) => {
+    const app = await terminal.launch({ command });
+    await app.waitForText('write the release notes');
 
-  // The assertion is the wait: it re-probes until Textual has published the
-  // tree for the frame the click caused.
-  await expect(app.getByRole('listitem', { name: 'ship 1.0' })).toBeVisible();
-  await expect(app).toHaveText('status: added ship 1.0');
-});
+    await step('type into the draft field', async () => {
+      await app.getByRole('textbox').click();
+      await app.type('ship 1.0');
+      await expect(app.getByRole('textbox')).toHaveText('ship 1.0');
+    });
 
-testIf('asks for confirmation before deleting a note', async ({ terminal, step }) => {
-  const app = await terminal.launch({ command });
-  await app.waitForText('write the release notes');
-  await app.waitForStable();
+    await app.getByRole('button', { name: 'Add' }).activate();
 
-  await step('open the dialog', async () => {
-    await app.getByRole('button', { name: 'Delete' }).activate();
+    // The assertion is the wait: it re-probes until Textual has published the
+    // tree for the frame the click caused.
+    await expect(app.getByRole('listitem', { name: 'ship 1.0' })).toBeVisible();
+    await expect(app).toHaveText('status: added ship 1.0');
   });
 
-  await expect(app.getByRole('dialog')).toBeVisible();
-  await expect(app.getByRole('button', { name: 'Cancel' }).within(app.getByRole('dialog'))).toBeFocused();
+  test('asks for confirmation before deleting a note', async ({ terminal, step }) => {
+    const app = await terminal.launch({ command });
+    await app.waitForText('write the release notes');
 
-  await step('dismiss it with Escape', async () => {
-    await app.press('Escape');
-    await expect(app.getByRole('dialog')).not.toBeVisible();
+    await step('open the dialog', async () => {
+      await app.getByRole('button', { name: 'Delete' }).activate();
+    });
+
+    await expect(app.getByRole('dialog')).toBeVisible();
+    // Textual nests its dialog in layout containers, so a scoped pattern would
+    // have to spell them out; what this test means is simply that Cancel holds
+    // the focus, so an accidental Enter deletes nothing.
+    await expect(app.getByRole('button', { name: 'Cancel' }).within(app.getByRole('dialog'))).toBeFocused();
+    await expect(app.getByRole('button', { name: 'Delete' }).within(app.getByRole('dialog'))).not.toBeFocused();
+
+    await step('dismiss it with Escape', async () => {
+      await app.press('Escape');
+      await expect(app.getByRole('dialog')).not.toBeVisible();
+    });
+
+    await expect(app).toHaveText('status: cancelled');
+
+    await step('confirm the second time', async () => {
+      await app.getByRole('button', { name: 'Delete' }).activate();
+      // Scoped to the dialog: the toolbar has a Delete button too, and an
+      // unscoped locator would fail as ambiguous rather than pick one.
+      const confirm = app.locator('dialog button#confirm');
+      await expect(confirm).toBeVisible();
+      // Textual fades a modal in, so the button exists at coordinates that are
+      // still moving. A click needs the frame to hold still; a matcher, which
+      // only reads the tree, does not.
+      await app.waitForStable();
+      await confirm.activate();
+    });
+
+    await expect(app.getByRole('listitem', { name: 'buy milk' })).not.toBeVisible();
+    await expect(app).toHaveText('status: deleted buy milk');
   });
-
-  await expect(app).toHaveText('status: cancelled');
-
-  await step('confirm the second time', async () => {
-    await app.getByRole('button', { name: 'Delete' }).activate();
-    // Scoped to the dialog: the toolbar has a Delete button too, and an
-    // unscoped locator would fail as ambiguous rather than pick one.
-    const confirm = app.locator('dialog button#confirm');
-    await expect(confirm).toBeVisible();
-    // Textual fades a modal in, so the button exists at coordinates that are
-    // still moving. A click needs the frame to hold still; a matcher, which
-    // only reads the tree, does not.
-    await app.waitForStable();
-    await confirm.activate();
-  });
-
-  await expect(app.getByRole('listitem', { name: 'buy milk' })).not.toBeVisible();
-  await expect(app).toHaveText('status: deleted buy milk');
 });
