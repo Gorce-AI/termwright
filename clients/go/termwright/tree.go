@@ -40,6 +40,10 @@ func (s *Session) walk(
 	// focus flag belongs to the deepest primitive that reports it. Asking the
 	// application instead would deadlock: this runs inside tview's draw lock.
 	focused := primitive.HasFocus() && !anyHasFocus(children)
+	if hidden {
+		// Nothing off-screen holds the focus, whatever the primitive believes.
+		focused = false
+	}
 
 	node := protocol.Node{
 		ID:       id,
@@ -57,9 +61,10 @@ func (s *Session) walk(
 	snapshot.Nodes = append(snapshot.Nodes, node)
 
 	for _, child := range children {
-		s.walk(child, id, snapshot, columns, rows, hidden)
+		// Hiding is inherited: everything under an unshown page is unshown.
+		s.walk(child.primitive, id, snapshot, columns, rows, hidden || child.hidden)
 	}
-	s.appendSynthetic(primitive, id, snapshot)
+	s.appendSynthetic(primitive, id, snapshot, hidden)
 }
 
 // idFor assigns a stable id per primitive, so a node keeps its identity across
@@ -184,9 +189,9 @@ func boundsOf(primitive tview.Primitive, columns, rows int) *protocol.Rect {
 }
 
 // anyHasFocus reports whether the focus lives below this level.
-func anyHasFocus(children []tview.Primitive) bool {
-	for _, child := range children {
-		if child != nil && child.HasFocus() {
+func anyHasFocus(children []child) bool {
+	for _, entry := range children {
+		if entry.primitive != nil && entry.primitive.HasFocus() {
 			return true
 		}
 	}
@@ -248,43 +253,72 @@ func actionsFor(role protocol.Role) []protocol.Action {
 
 // -- child enumeration -----------------------------------------------------
 
+// child is one enumerated child and whether its container is showing it.
+type child struct {
+	primitive tview.Primitive
+	hidden    bool
+}
+
+func visible(primitives ...tview.Primitive) []child {
+	children := make([]child, 0, len(primitives))
+	for _, primitive := range primitives {
+		if primitive != nil {
+			children = append(children, child{primitive: primitive})
+		}
+	}
+	return children
+}
+
 // childrenOf walks the containers tview exposes accessors for. Grid has no
 // item accessor, so its children are reachable only through WithChildren.
-func (s *Session) childrenOf(primitive tview.Primitive) []tview.Primitive {
+//
+// Pages is the one container that keeps children it is not showing, and those
+// have to be published as hidden: a test asserting "the settings screen is
+// open" must not pass while that page is still stacked out of sight.
+func (s *Session) childrenOf(primitive tview.Primitive) []child {
 	if s.config.children != nil {
-		if children := s.config.children(primitive); children != nil {
-			return children
+		if supplied := s.config.children(primitive); supplied != nil {
+			// A caller-supplied list says what exists, not what is shown; the
+			// container's own state still decides visibility.
+			return visible(supplied...)
 		}
 	}
 
 	switch container := primitive.(type) {
 	case *tview.Flex:
-		children := make([]tview.Primitive, 0, container.GetItemCount())
+		primitives := make([]tview.Primitive, 0, container.GetItemCount())
 		for index := 0; index < container.GetItemCount(); index++ {
-			children = append(children, container.GetItem(index))
+			primitives = append(primitives, container.GetItem(index))
 		}
-		return children
+		return visible(primitives...)
 	case *tview.Pages:
+		shown := make(map[string]struct{})
+		for _, name := range container.GetPageNames(true) {
+			shown[name] = struct{}{}
+		}
 		names := container.GetPageNames(false)
-		children := make([]tview.Primitive, 0, len(names))
+		children := make([]child, 0, len(names))
 		for _, name := range names {
-			if page := container.GetPage(name); page != nil {
-				children = append(children, page)
+			page := container.GetPage(name)
+			if page == nil {
+				continue
 			}
+			_, isShown := shown[name]
+			children = append(children, child{primitive: page, hidden: !isShown})
 		}
 		return children
 	case *tview.Form:
-		children := make([]tview.Primitive, 0, container.GetFormItemCount()+container.GetButtonCount())
+		primitives := make([]tview.Primitive, 0, container.GetFormItemCount()+container.GetButtonCount())
 		for index := 0; index < container.GetFormItemCount(); index++ {
-			children = append(children, container.GetFormItem(index))
+			primitives = append(primitives, container.GetFormItem(index))
 		}
 		for index := 0; index < container.GetButtonCount(); index++ {
-			children = append(children, container.GetButton(index))
+			primitives = append(primitives, container.GetButton(index))
 		}
-		return children
+		return visible(primitives...)
 	case *tview.Frame:
 		if inner := container.GetPrimitive(); inner != nil {
-			return []tview.Primitive{inner}
+			return visible(inner)
 		}
 	}
 	return nil
@@ -293,7 +327,13 @@ func (s *Session) childrenOf(primitive tview.Primitive) []tview.Primitive {
 // appendSynthetic emits nodes for items that are not primitives of their own —
 // list entries and dropdown options — so they are addressable by role and name.
 // They carry no bounds, which the schema allows.
-func (s *Session) appendSynthetic(primitive tview.Primitive, parentID string, snapshot *protocol.Snapshot) {
+func (s *Session) appendSynthetic(primitive tview.Primitive, parentID string, snapshot *protocol.Snapshot, hidden bool) {
+	hiddenFlag := func() *bool {
+		if hidden {
+			return protocol.Bool(true)
+		}
+		return nil
+	}
 	switch widget := primitive.(type) {
 	case *tview.List:
 		current := widget.GetCurrentItem()
@@ -309,6 +349,7 @@ func (s *Session) appendSynthetic(primitive tview.Primitive, parentID string, sn
 					Selected:      protocol.Bool(index == current),
 					PositionInSet: protocol.Int(index + 1),
 					SetSize:       protocol.Int(widget.GetItemCount()),
+					Hidden:        hiddenFlag(),
 				},
 			}
 			snapshot.Nodes = append(snapshot.Nodes, node)
@@ -326,6 +367,7 @@ func (s *Session) appendSynthetic(primitive tview.Primitive, parentID string, sn
 					Selected:      protocol.Bool(index == current),
 					PositionInSet: protocol.Int(index + 1),
 					SetSize:       protocol.Int(widget.GetOptionCount()),
+					Hidden:        hiddenFlag(),
 				},
 			})
 		}

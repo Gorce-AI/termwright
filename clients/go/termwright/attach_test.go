@@ -2,6 +2,7 @@ package termwright
 
 import (
 	"bytes"
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -346,6 +347,136 @@ func TestDescriberOverridesRoleAndName(t *testing.T) {
 }
 
 // -- pure tree shape -------------------------------------------------------
+
+func TestUnshownPagesArePublishedAsHidden(t *testing.T) {
+	app := tview.NewApplication()
+
+	form := tview.NewForm().
+		AddInputField("Name", "", 20, nil, nil).
+		AddButton("Save", nil)
+	form.SetTitle("Settings")
+	menu := tview.NewList().AddItem("Open settings", "", 0, nil)
+	menu.SetTitle("Menu")
+
+	pages := tview.NewPages()
+	pages.AddPage("main", menu, true, true)
+	pages.AddPage("settings", form, true, false)
+
+	session := &Session{app: app, root: pages, ids: make(map[tview.Primitive]string)}
+	nodes := map[string]map[string]any{}
+	for _, raw := range asWire(t, session.buildSnapshot(80, 24))["nodes"].([]any) {
+		node := raw.(map[string]any)
+		nodes[node["role"].(string)+"/"+node["name"].(string)] = node
+	}
+
+	// Everything under the page that Pages is not showing must say so, or a
+	// `toBeVisible` assertion goes green before the screen ever opened.
+	for _, name := range []string{"region/Settings", "textbox/Name", "button/Save"} {
+		node, found := nodes[name]
+		if !found {
+			t.Fatalf("node %q is missing; got %v", name, keysOf(nodes))
+		}
+		state, _ := node["state"].(map[string]any)
+		if state == nil || state["hidden"] != true {
+			t.Errorf("%q is on an unshown page but published state %v", name, node["state"])
+		}
+	}
+
+	// The shown page stays visible.
+	menuNode, found := nodes["list/Menu"]
+	if !found {
+		t.Fatalf("the shown page is missing; got %v", keysOf(nodes))
+	}
+	if state, _ := menuNode["state"].(map[string]any); state != nil && state["hidden"] == true {
+		t.Errorf("the shown page was published as hidden: %v", menuNode["state"])
+	}
+	if item, found := nodes["listitem/Open settings"]; !found {
+		t.Error("the shown list published no items")
+	} else if state, _ := item["state"].(map[string]any); state != nil && state["hidden"] == true {
+		t.Errorf("an item of the shown list was published as hidden: %v", item["state"])
+	}
+}
+
+func TestSwitchingPagesMovesTheHiddenFlag(t *testing.T) {
+	app := tview.NewApplication()
+	first := tview.NewTextView().SetText("first")
+	second := tview.NewTextView().SetText("second")
+	pages := tview.NewPages()
+	pages.AddPage("first", first, true, true)
+	pages.AddPage("second", second, true, false)
+
+	session := &Session{app: app, root: pages, ids: make(map[tview.Primitive]string)}
+
+	hiddenNames := func() map[string]bool {
+		out := map[string]bool{}
+		for _, raw := range asWire(t, session.buildSnapshot(80, 24))["nodes"].([]any) {
+			node := raw.(map[string]any)
+			state, _ := node["state"].(map[string]any)
+			out[node["name"].(string)] = state != nil && state["hidden"] == true
+		}
+		return out
+	}
+
+	before := hiddenNames()
+	if before["first"] || !before["second"] {
+		t.Fatalf("initial visibility is wrong: %v", before)
+	}
+
+	pages.SwitchToPage("second")
+	after := hiddenNames()
+	if !after["first"] || after["second"] {
+		t.Errorf("visibility did not follow the page switch: %v", after)
+	}
+}
+
+func TestSuppliedChildrenAreNotAssumedHidden(t *testing.T) {
+	app := tview.NewApplication()
+	header := tview.NewTextView().SetText("header")
+	grid := tview.NewGrid().AddItem(header, 0, 0, 1, 1, 0, 0, false)
+
+	session := &Session{
+		app:  app,
+		root: grid,
+		ids:  make(map[tview.Primitive]string),
+		config: config{children: func(p tview.Primitive) []tview.Primitive {
+			if p == grid {
+				return []tview.Primitive{header}
+			}
+			return nil
+		}},
+	}
+
+	for _, raw := range asWire(t, session.buildSnapshot(80, 24))["nodes"].([]any) {
+		node := raw.(map[string]any)
+		if node["name"] != "header" {
+			continue
+		}
+		if state, _ := node["state"].(map[string]any); state != nil && state["hidden"] == true {
+			t.Errorf("a WithChildren-supplied child was published as hidden: %v", node["state"])
+		}
+		return
+	}
+	t.Error("the supplied child never reached the snapshot")
+}
+
+// asWire round-trips a snapshot through JSON, which is what the driver sees.
+func asWire(t *testing.T, snapshot *protocol.Snapshot) map[string]any {
+	t.Helper()
+	snapshot.SessionID = "s-test"
+	snapshot.Revision = 1
+	if err := snapshot.Validate(protocol.DefaultLimits); err != nil {
+		t.Fatalf("built an invalid snapshot: %v", err)
+	}
+	body, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(body, &wire); err != nil {
+		t.Fatal(err)
+	}
+	return wire
+}
 
 func TestRoleMappingOfBareWidgets(t *testing.T) {
 	cases := []struct {

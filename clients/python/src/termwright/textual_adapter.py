@@ -150,7 +150,8 @@ def _state_for(widget: Any, app: Any, visible: bool) -> Optional[SemanticState]:
     readonly = getattr(widget, "read_only", None)
 
     state = SemanticState(
-        focused=True if focused else None,
+        # Nothing off-screen holds the focus, whatever the app still points at.
+        focused=True if focused and visible else None,
         disabled=True if disabled else None,
         hidden=None if visible else True,
         checked=checked,

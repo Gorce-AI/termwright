@@ -90,8 +90,13 @@ Roles come from the tview type: `Button` → `button`, `InputField`/`TextArea` �
 primitives.
 
 Children are enumerated through the accessors tview exposes: `Flex`, `Pages`,
-`Form` and `Frame`. **`Grid` has no item accessor**, so its children are
-invisible unless you supply them:
+`Form` and `Frame`. `Pages` is the one container that keeps children it is not
+showing, so everything under an unshown page is published with `hidden` set
+(and inherits it downwards, and never claims focus) — a `toBeVisible()`
+assertion must not go green for a screen that has not opened yet.
+
+**`Grid` has no item accessor**, so its children are invisible unless you
+supply them:
 
 ```go
 session, _ := termwright.Attach(app, root,

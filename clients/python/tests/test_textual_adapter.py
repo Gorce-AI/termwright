@@ -156,6 +156,40 @@ async def test_attribute_overrides_win(endpoint):
     assert node["name"] == "Disk almost full"
 
 
+class HiddenApp(App):
+    """One shown widget and one that `display = False` takes off the screen."""
+
+    def compose(self) -> ComposeResult:
+        yield Label("visible", id="shown")
+        save = Button("Save", id="save")
+        save.display = False
+        yield save
+
+
+async def test_undisplayed_widgets_are_published_as_hidden(endpoint):
+    """A widget that is not on screen must say so, and must not claim focus.
+
+    Otherwise `toBeVisible()` goes green for a control the user cannot see, and
+    a stale focus flag points at something off-screen.
+    """
+    app = HiddenApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        semantics = TextualSemantics(app, _offline_client(endpoint))
+        snapshot = semantics.build_snapshot().to_wire()
+
+    by_test_id = {node.get("testId"): node for node in snapshot["nodes"]}
+
+    save = by_test_id["save"]
+    assert save["state"]["hidden"] is True, f"an undisplayed button published {save['state']}"
+    assert "focused" not in save["state"], f"an off-screen node claims focus: {save['state']}"
+    assert "bounds" not in save, "an undisplayed widget published bounds"
+
+    shown = by_test_id["shown"]
+    assert "hidden" not in (shown.get("state") or {}), "a visible widget was published as hidden"
+    assert shown["bounds"]["width"] > 0
+
+
 def test_role_and_name_mapping_of_bare_widgets():
     assert role_for(Button("Save")) == "button"
     assert role_for(Input()) == "textbox"
