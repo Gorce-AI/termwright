@@ -120,21 +120,63 @@ def _first_text(*candidates: Any) -> str:
     return ""
 
 
-def name_for(widget: Any) -> str:
-    """Accessible name: explicit attribute, then label/value/text, then id."""
+#: Roles that take their accessible name from what they contain when they
+#: carry no name of their own, as ARIA's "name from content" prescribes. A
+#: `ListItem` wrapping a `Label` is the common case: the item is what a test
+#: addresses, but the text lives one level down.
+NAME_FROM_CONTENT_ROLES = frozenset(
+    {"listitem", "menuitem", "tab", "button", "checkbox", "radio", "cell", "row", "heading"}
+)
+
+#: Longest name derived from a node's contents, in characters.
+MAX_CONTENT_NAME = 200
+
+
+def name_from_content(widget: Any) -> str:
+    """Join the text of a widget's descendants, as ARIA names from content."""
+    try:
+        descendants = widget.query("*")
+    except Exception:
+        return ""
+    parts: List[str] = []
+    for child in descendants:
+        text = _first_text(
+            getattr(child, "label", None),
+            getattr(child, "content", None),
+            getattr(child, "renderable", None),
+        ).strip()
+        if text:
+            parts.append(text)
+    return " ".join(parts)[:MAX_CONTENT_NAME].strip()
+
+
+def name_for(widget: Any, role: Optional[str] = None) -> str:
+    """Accessible name: explicit attribute, then own text, then contents, then id.
+
+    ``role`` decides whether the contents are consulted; pass it for a node
+    whose role names from content, or leave it out to skip that step.
+    """
     override = getattr(widget, "termwright_name", None)
     if isinstance(override, str):
         return override
-    return _first_text(
+
+    own = _first_text(
         getattr(widget, "label", None),
         getattr(widget, "placeholder", None),
         # `content` is where Static (and so Label) keeps its text; `renderable`
         # is the same thing on older Textual versions.
         getattr(widget, "content", None),
         getattr(widget, "renderable", None),
-        getattr(widget, "name", None),
-        getattr(widget, "id", None),
     )
+    if own:
+        return own
+
+    if role in NAME_FROM_CONTENT_ROLES:
+        from_content = name_from_content(widget)
+        if from_content:
+            return from_content
+
+    return _first_text(getattr(widget, "name", None), getattr(widget, "id", None))
 
 
 def _state_for(widget: Any, app: Any, visible: bool) -> Optional[SemanticState]:
@@ -251,7 +293,7 @@ class TextualSemantics:
                     role=role,
                     # The screen's own `name` is Textual's internal "_default";
                     # the app's title is what a test would look for.
-                    name=self._app_name() if widget is screen else name_for(widget),
+                    name=self._app_name() if widget is screen else name_for(widget, role),
                     testId=getattr(widget, "id", None) or None,
                     value=_value_for(widget, role),
                     bounds=bounds,

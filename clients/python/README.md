@@ -72,8 +72,16 @@ Roles come from the widget class, matched along the MRO, so your own
 `class SaveButton(Button)` is a `button` without any configuration. `Input` and
 `TextArea` map to `textbox`, `DataTable` to `table`, `ListView`/`OptionList` to
 `list`, `Label`/`Static` to `text`, containers to `region`, `ModalScreen` to
-`dialog`. Names come from the widget's label, placeholder, renderable, `name`,
-or DOM `id`, in that order; the DOM `id` is also published as `testId`.
+`dialog`. Names come from the widget's label, placeholder, content, `name`, or DOM `id`,
+in that order; the DOM `id` is also published as `testId`.
+
+Roles that ARIA names from content — `listitem`, `menuitem`, `tab`, `button`,
+`checkbox`, `radio`, `cell`, `row`, `heading` — fall back to the text of what
+they contain before they fall back to the id. That is what makes a Textual
+`ListItem(Label("Open settings"))` addressable as
+`getByRole('listitem', { name: 'Open settings' })`: the item holds no text of
+its own, the `Label` inside does. Containers are never named this way — a
+`region` would otherwise be named by everything on the screen.
 
 Override either per widget:
 

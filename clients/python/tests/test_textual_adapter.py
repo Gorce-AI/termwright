@@ -8,7 +8,7 @@ pytest.importorskip("textual", reason="the Textual adapter needs textual install
 
 from textual.app import App, ComposeResult  # noqa: E402
 from textual.containers import Vertical  # noqa: E402
-from textual.widgets import Button, Input, Label  # noqa: E402
+from textual.widgets import Button, Input, Label, ListItem, ListView  # noqa: E402
 
 from termwright import DEFAULT_LIMITS, validate_snapshot  # noqa: E402
 from termwright.client import ENV_ENDPOINT, ENV_TOKEN  # noqa: E402
@@ -16,6 +16,7 @@ from termwright.textual_adapter import (  # noqa: E402
     TextualSemantics,
     enable_semantics,
     name_for,
+    name_from_content,
     role_for,
 )
 
@@ -188,6 +189,71 @@ async def test_undisplayed_widgets_are_published_as_hidden(endpoint):
     shown = by_test_id["shown"]
     assert "hidden" not in (shown.get("state") or {}), "a visible widget was published as hidden"
     assert shown["bounds"]["width"] > 0
+
+
+class MenuApp(App):
+    """A ListView whose items keep their text in a nested Label."""
+
+    def compose(self) -> ComposeResult:
+        yield ListView(
+            ListItem(Label("Open settings"), id="settings"),
+            ListItem(Label("Quit"), id="quit"),
+        )
+
+
+async def test_listitem_takes_its_name_from_its_contents(endpoint):
+    """ARIA names a listitem from what it contains, and so do we.
+
+    A Textual ListItem holds no text of its own — the Label inside does — so
+    without this `getByRole('listitem', {name})` would need a hand-written
+    `termwright_name` on every row. The tview adapter already names its items
+    from their text; this keeps the two frameworks addressable the same way.
+    """
+    app = MenuApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        semantics = TextualSemantics(app, _offline_client(endpoint))
+        snapshot = semantics.build_snapshot().to_wire()
+
+    items = {
+        node["name"]: node for node in snapshot["nodes"] if node["role"] == "listitem"
+    }
+    assert "Open settings" in items, f"listitems were named {sorted(items)}"
+    assert "Quit" in items
+    # The id stays available as a test id; it is not the name any more.
+    assert items["Open settings"]["testId"] == "settings"
+
+
+def test_a_name_of_its_own_beats_the_contents():
+    item = ListItem(Label("inner text"))
+    item.termwright_name = "explicit"
+    assert name_for(item, "listitem") == "explicit"
+
+
+async def test_contents_are_only_consulted_for_roles_that_name_from_content():
+    """The role decides whether contents count, not whether they are readable."""
+    app = MenuApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        item = app.query_one("#settings", ListItem)
+        container = app.query_one(ListView)
+
+        # The same contents are readable either way…
+        assert name_from_content(item) == "Open settings"
+        # …but only a name-from-content role uses them.
+        assert name_for(item, "listitem") == "Open settings"
+        assert name_for(container, "list") == ""
+
+
+async def test_a_name_from_content_joins_several_children():
+    class TwoLabelApp(App):
+        def compose(self) -> ComposeResult:
+            yield ListView(ListItem(Label("Disk"), Label("almost full"), id="warning"))
+
+    app = TwoLabelApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert name_from_content(app.query_one("#warning", ListItem)) == "Disk almost full"
 
 
 def test_role_and_name_mapping_of_bare_widgets():
