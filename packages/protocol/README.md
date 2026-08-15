@@ -69,6 +69,31 @@ const marker = verifyMarkerPayload(payload, token, sessionId);
 | `validate` | `validateSnapshot` |
 | `errors` | `ProtocolViolation`, `ProtocolViolationCode` |
 
+## Integrating the marker with a VT parser
+
+The one trap in this package. `encodeMarker` emits
+`ESC P t wm;{rev};{mac} ESC \`, where `t` is the DCS **final byte**. VT parsers
+dispatch on that byte and consume it, so a handler registered on `{ final: 't' }`
+receives only `wm;{rev};{mac}`. `verifyMarkerPayload` expects the payload
+*including* the final byte, so prepend it — verified against `@xterm/headless`:
+
+```ts
+import { MARKER_DCS_FINAL, verifyMarkerPayload } from '@termwright/protocol';
+
+term.parser.registerDcsHandler({ final: MARKER_DCS_FINAL }, (data) => {
+  const marker = verifyMarkerPayload(MARKER_DCS_FINAL + data, token, sessionId);
+  if (marker !== null) commit(marker.revision);
+  return true; // consumed: keeps the sequence out of the visible grid
+});
+```
+
+Forwarding the parser's `data` verbatim fails silently — every marker simply
+returns `null`. A regression test in `marker.test.ts` pins this down.
+
+The token is likewise **opaque**: whatever lands in `TERMWRIGHT_TOKEN` is what
+both sides pass to the HMAC as the key. Never decode it to bytes first. Use
+`generateToken()` so every client mints it the same way.
+
 ## Guarantees worth knowing
 
 - **Framing.** 4-byte big-endian length prefix + UTF-8 JSON. The declared

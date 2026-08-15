@@ -21,6 +21,26 @@ import { ProtocolViolation } from './errors.js';
 
 export const MARKER_DCS_PREFIX = 'twm;';
 
+/**
+ * The DCS **final byte** of the marker sequence (`t`), i.e. the byte a VT
+ * parser dispatches on. Register a handler with this, not a literal.
+ *
+ * VT parsers split `ESC P … ST` into params, intermediates, a final byte, and
+ * the payload that follows. Our sequence has no params or intermediates, so
+ * `t` is the final byte and parsers hand the handler only `wm;{rev};{mac}` —
+ * the final byte already consumed. {@link verifyMarkerPayload} expects the
+ * payload *including* it (per the DCS-to-ST definition above), so a VT
+ * integration must prepend it:
+ *
+ * ```ts
+ * term.parser.registerDcsHandler({ final: MARKER_DCS_FINAL }, (data) => {
+ *   const marker = verifyMarkerPayload(MARKER_DCS_FINAL + data, token, sessionId);
+ *   return true; // consumed: keeps the sequence out of the visible grid
+ * });
+ * ```
+ */
+export const MARKER_DCS_FINAL = 't';
+
 /** Bytes of HMAC-SHA256 output retained in the marker MAC. */
 export const MARKER_MAC_BYTES = 16;
 

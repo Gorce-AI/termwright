@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { ProtocolViolation } from './errors.js';
 import {
+  MARKER_DCS_FINAL,
   MARKER_DCS_PREFIX,
   MARKER_MAC_BYTES,
   encodeMarker,
@@ -121,6 +122,19 @@ describe('verifyMarkerPayload', () => {
     for (const payload of hostile) {
       expect(verifyMarkerPayload(payload, TOKEN, SESSION)).toBeNull();
     }
+  });
+
+  // Regression guard for the driver/adapter integration: VT parsers consume
+  // the DCS final byte before handing over the payload, so an integration that
+  // forwards the parser's `data` verbatim will silently never match.
+  it('requires the DCS final byte, which VT parsers strip from the payload', () => {
+    const payload = payloadOf(encodeMarker(TOKEN, SESSION, 8));
+    expect(payload.startsWith(MARKER_DCS_FINAL)).toBe(true);
+
+    // What xterm.js hands a handler registered on { final: 't' }:
+    const parserData = payload.slice(MARKER_DCS_FINAL.length);
+    expect(verifyMarkerPayload(parserData, TOKEN, SESSION)).toBeNull();
+    expect(verifyMarkerPayload(MARKER_DCS_FINAL + parserData, TOKEN, SESSION)).not.toBeNull();
   });
 
   it('rejects everything when the token or session is empty', () => {
