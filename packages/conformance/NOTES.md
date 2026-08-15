@@ -123,17 +123,25 @@ has to delete an assertion that explains itself.
 - **The tree lags the screen by design.** The marker follows the frame, so a
   `waitForText` on rendered output can precede the matching semantic revision by
   a beat. State assertions right after a rendered change use `expect.poll`.
-- **`AdapterProbe.waitForText` sees cumulative output**, not a rendered screen:
-  anything the app printed once matches forever. Proving that an app is *still*
-  rendering uses growth in output length, not a text match.
-- **Waiting for one of two identical events is waiting for the first one.**
-  The double-click test used to count `MOUSE press` lines on a screen snapshot
-  after waiting for the release. When the pair arrived as two chunks — which a
-  loaded machine does regularly — the wait was already satisfied by the first
-  pair and the count found one press. The fixture now decides what a double
-  click is and reports it as its own event, so the test waits for a thing that
-  exists exactly once. Same lesson as the scroll-off trap below: wait for
-  something whose first occurrence is the one you mean.
+- **`AdapterProbe.waitForText` reads the grid; `observation.text` is cumulative.**
+  The two are different views of the same session and are easy to confuse. The
+  grid is what a user sees and is what waits match against. The raw text is
+  everything ever written, so anything printed once matches it forever —
+  which is why proving an app is *still* rendering uses growth in its length,
+  never a text match.
+- **If an assertion counts occurrences, the wait before it must not be
+  satisfiable by the first one.** The double-click test counted `MOUSE press`
+  lines on a screen snapshot taken after waiting for the release. When the pair
+  arrived as two chunks — which a loaded machine does regularly — the wait was
+  already satisfied by the first pair and the count found one press. The fixture
+  now decides what a double click is and reports it as a single unambiguous
+  event, so the test waits for something that exists exactly once.
+
+  This is a different failure from the scroll-off trap below, and the pair is
+  worth holding side by side: that one is *asserting on something that can
+  disappear*, this one is *waiting for something that arrives twice*. Both look
+  like flakiness and neither is — the test was wrong, and the machine's timing
+  only decided when it would say so.
 - **The report script must use the workspace's vitest, never `npx vitest`.**
   `npx` downloads the latest release when the local binary is not on its lookup
   path, so a workspace change elsewhere in the repo turned `pnpm conformance`
