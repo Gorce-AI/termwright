@@ -73,27 +73,21 @@ If `@termwright/trace` ever exports a `diffSemanticSnapshots` with the same
 "minimal roots" semantics and the dependency rules are relaxed, swapping is a
 one-import change in `diff.ts`.
 
-## No runtime dependency on `@termwright/protocol`
+## One source of truth for the closed sets
 
-`model.ts` derives every protocol-shaped type (`SemanticSnapshot`,
-`SemanticNode`, `SemanticRole`, `Rect`, …) from the public `TerminalHarness`
-surface instead of importing them, so this package stays on `driver` + SDK as
-the dependency rules require, while a protocol change still reaches it through
-the driver.
+`model.ts` re-exports `SEMANTIC_ROLES` and the snapshot types from
+`@termwright/protocol`, and `sessions.ts` takes its session ceiling from
+`DEFAULT_LIMITS.maxSessions`. CONTRACTS.md allows this package to import the
+protocol's constants and types, so nothing about roles, states or limits is
+restated here — the tool schemas an agent reads are generated from the protocol's
+own lists.
 
-The one thing that cannot be derived is the *runtime* role list needed for the
-zod enum. `model.ts: SEMANTIC_ROLES` restates it, guarded by
-`ROLES_ARE_COMPLETE`: a type-level check that stops compiling — and names the
-missing member — if the protocol adds a role. `MCP_LIMITS` in `sessions.ts`
-restates `DEFAULT_LIMITS.maxSessions` for the same reason, without that guard.
-
-**Open:** CHANGELOG-contracts.md (2026-08-15, "mcp landed") now allows this
-package to depend on `@termwright/protocol` for constants and types, which would
-delete both restated lists. Taking it up needs a `pnpm install`, and that rewrites
-the root `pnpm-lock.yaml` — a file outside this package. Left for whoever lands
-the dependency bump; the change here is then `model.ts` re-exporting protocol's
-`SEMANTIC_ROLES` and `sessions.ts` importing `DEFAULT_LIMITS`, with
-`ROLES_ARE_COMPLETE` deleted.
+`ROLES_ARE_COMPLETE` survives as a regression lock with a sharper job than
+before: it compares the roles the **driver** can report against the roles the
+**protocol** defines, and stops type-checking (naming the offending member) if
+the two ever diverge. Verified by temporarily widening one side — the build fails
+with `["role drift", …]`. Screen- and session-shaped types still come from the
+driver, which owns them.
 
 ## Environment handling
 

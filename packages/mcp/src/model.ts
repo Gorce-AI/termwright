@@ -1,28 +1,18 @@
 /**
- * The driver-shaped types this package projects into MCP results.
+ * The protocol- and driver-shaped types this package projects into MCP results.
  *
- * `@termwright/mcp` depends on `@termwright/driver` only (CONTRACTS.md
- * §Dependency rules), and the driver does not re-export the protocol types it
- * uses. Rather than forking the contract with a second declaration, every type
- * below is *derived* from the public `TerminalHarness` surface, so a change in
- * `@termwright/protocol` reaches this package through the driver.
+ * Roles, states and snapshot types come straight from `@termwright/protocol`
+ * (CONTRACTS.md §Dependency rules allows `mcp` to import its constants and
+ * types), so there is exactly one source of truth for the closed sets an agent
+ * sees in the tool schemas. Screen- and session-shaped types come from the
+ * driver, which owns them.
  */
 import type { TerminalHarness } from '@termwright/driver';
+import { SEMANTIC_ROLES } from '@termwright/protocol';
+import type { Rect, SemanticNode, SemanticRole, SemanticSnapshot, SemanticState } from '@termwright/protocol';
 
-/** A semantic snapshot exactly as the driver hands it out. */
-export type SemanticSnapshot = NonNullable<ReturnType<TerminalHarness['semanticTree']>>;
-
-/** One node of a {@link SemanticSnapshot}. */
-export type SemanticNode = SemanticSnapshot['nodes'][number];
-
-/** The closed v1 role set. */
-export type SemanticRole = SemanticNode['role'];
-
-/** The closed v1 state set. */
-export type SemanticState = NonNullable<SemanticNode['state']>;
-
-/** Zero-based viewport cell rectangle. */
-export type Rect = NonNullable<SemanticNode['bounds']>;
+export { SEMANTIC_ROLES };
+export type { Rect, SemanticNode, SemanticRole, SemanticSnapshot, SemanticState };
 
 /** The driver's view of the visible grid. */
 export type ScreenSnapshot = ReturnType<TerminalHarness['screen']>;
@@ -30,47 +20,23 @@ export type ScreenSnapshot = ReturnType<TerminalHarness['screen']>;
 /** Session capabilities as reported after the semantic handshake window. */
 export type SessionCapabilities = ReturnType<TerminalHarness['capabilities']>;
 
-/**
- * Roles offered as an enum to agents (tool schemas, `agent-context`).
- *
- * The list is not a second source of truth: {@link ROLES_ARE_COMPLETE} fails to
- * compile if `@termwright/protocol` ever adds a role that is missing here.
- */
-export const SEMANTIC_ROLES = [
-  'application',
-  'region',
-  'dialog',
-  'alert',
-  'status',
-  'list',
-  'listitem',
-  'menu',
-  'menuitem',
-  'button',
-  'checkbox',
-  'radio',
-  'tab',
-  'textbox',
-  'heading',
-  'text',
-  'progressbar',
-  'separator',
-  'scrollbar',
-  'table',
-  'row',
-  'cell',
-  'generic',
-] as const satisfies readonly SemanticRole[];
+/** The role type the driver actually reports on a semantic node. */
+type DriverRole = NonNullable<ReturnType<TerminalHarness['semanticTree']>>['nodes'][number]['role'];
 
-type MissingRole = Exclude<SemanticRole, (typeof SEMANTIC_ROLES)[number]>;
+type RoleDrift = Exclude<DriverRole, SemanticRole> | Exclude<SemanticRole, DriverRole>;
 
 /**
- * Compile-time lock: `true` while {@link SEMANTIC_ROLES} covers every role the
- * driver can report. If a role is added upstream, this line stops type-checking
- * and names the missing member.
+ * Regression lock: `true` while the roles the driver reports are exactly the
+ * roles `@termwright/protocol` defines. If the two ever diverge, this line stops
+ * type-checking and names the offending member — the tool schemas below build on
+ * the protocol's list, so a silent drift would let an agent ask for a role the
+ * driver can never match.
  */
-export const ROLES_ARE_COMPLETE: [MissingRole] extends [never] ? true : ['missing roles', MissingRole] =
-  true as [MissingRole] extends [never] ? true : ['missing roles', MissingRole];
+export const ROLES_ARE_COMPLETE: [RoleDrift] extends [never] ? true : ['role drift', RoleDrift] = true as [
+  RoleDrift,
+] extends [never]
+  ? true
+  : ['role drift', RoleDrift];
 
 /** State flags an agent may filter on; the value type follows {@link SemanticState}. */
 export const FILTERABLE_STATES = [

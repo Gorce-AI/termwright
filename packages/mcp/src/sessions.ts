@@ -13,21 +13,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchTerminal } from '@termwright/driver';
 import type { ExitStatus, LaunchOptions, TerminalHarness } from '@termwright/driver';
+import { DEFAULT_LIMITS } from '@termwright/protocol';
 import { McpError, noSessionError, usageError } from './errors.js';
 import { definedOnly } from './objects.js';
 import type { Loose } from './objects.js';
 import type { SemanticSnapshot } from './model.js';
 
 /**
- * Ceilings mirroring `DEFAULT_LIMITS` from `@termwright/protocol`. They are
- * restated here (rather than imported) because this package depends on the
- * driver only; see NOTES.md.
+ * Ceilings for the MCP layer. The session counts come from
+ * `DEFAULT_LIMITS` in `@termwright/protocol`; the rest are this package's own
+ * (how much capture history a terminal keeps, how long a command line may be).
  */
 export const MCP_LIMITS = Object.freeze({
-  /** Concurrent MCP sessions (`DEFAULT_LIMITS.maxSessions`). */
-  maxSessions: 16,
+  /** Concurrent MCP sessions. */
+  maxSessions: DEFAULT_LIMITS.maxSessions,
   /** Concurrent terminals inside one MCP session. */
-  maxTerminals: 16,
+  maxTerminals: DEFAULT_LIMITS.maxSessions,
   /** Snapshots retained per terminal for `capture_since` cursors. */
   maxHistory: 16,
   /** Argument ceiling for a launch command line. */
