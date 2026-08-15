@@ -92,6 +92,10 @@ export function readSnapshot(file: string, key: string): string | undefined {
 export function writeSnapshot(file: string, key: string, value: string): void {
   const entries = load(file);
   entries.set(key, value);
+  persist(file, entries);
+}
+
+function persist(file: string, entries: ReadonlyMap<string, string>): void {
   mkdirSync(dirname(file), { recursive: true });
   const body = stringifyYaml(Object.fromEntries(entries), {
     defaultStringType: 'BLOCK_LITERAL',
@@ -100,6 +104,51 @@ export function writeSnapshot(file: string, key: string, value: string): void {
     sortMapEntries: true,
   });
   writeFileSync(file, `${HEADER}${body}`, 'utf8');
+}
+
+/** What {@link pruneObsoleteSnapshots} found, and whether it acted. */
+export interface ObsoleteSnapshots {
+  readonly file: string;
+  /** Keys whose test no longer exists, in file order. */
+  readonly keys: readonly string[];
+  /** True when the keys were removed from the file. */
+  readonly removed: boolean;
+}
+
+/**
+ * Finds — and in a writing mode removes — snapshots no test claims any more.
+ *
+ * A key is obsolete when the test name it carries is not among `declared`.
+ * `declared` must list every test the file *declares*, skipped ones included;
+ * pruning against the tests that merely *ran* would delete the snapshots of a
+ * suite skipped on this machine.
+ *
+ * @param declared - full test names, as {@link collectTestNames} produces them.
+ * @param mode - `changed` and `all` remove; every other mode only reports.
+ */
+export function pruneObsoleteSnapshots(
+  file: string,
+  declared: ReadonlySet<string>,
+  mode: UpdateSnapshotsMode,
+): ObsoleteSnapshots {
+  const entries = load(file);
+  if (entries.size === 0 || declared.size === 0) {
+    // No snapshots, or a file whose tests could not be enumerated: pruning on
+    // an empty picture of the world is how a whole file gets wiped.
+    return { file, keys: [], removed: false };
+  }
+  const keys = [...entries.keys()].filter((key) => !declared.has(testNameOf(key)));
+  if (keys.length === 0) return { file, keys, removed: false };
+  if (mode !== 'changed' && mode !== 'all') return { file, keys, removed: false };
+  for (const key of keys) entries.delete(key);
+  persist(file, entries);
+  return { file, keys, removed: true };
+}
+
+/** `'login > shows the dialog 2'` -> `'login > shows the dialog'`. */
+function testNameOf(key: string): string {
+  const match = /^(.*) \d+$/u.exec(key);
+  return match?.[1] ?? key;
 }
 
 /** Forgets cached files. Intended for this package's own tests. */

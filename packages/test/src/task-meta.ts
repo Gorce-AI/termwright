@@ -21,7 +21,12 @@
  */
 export interface TermwrightTaskMeta {
   /** Trace archives written for this test, in launch order. */
-  readonly traces: readonly string[];
+  readonly traces?: readonly string[];
+  /**
+   * Snapshot keys in this test's file that no declared test claims any more.
+   * Carried by whichever test of the file ran first.
+   */
+  readonly obsoleteSnapshots?: readonly string[];
 }
 
 declare module 'vitest' {

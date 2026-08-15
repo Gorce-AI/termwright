@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   beginSnapshotScope,
+  pruneObsoleteSnapshots,
   nextSnapshotKey,
   readSnapshot,
   resetSnapshotCache,
@@ -113,5 +114,61 @@ describe('key allocation', () => {
   it('restarts numbering when the test changes, even without a scope', () => {
     expect(nextSnapshotKey('t1', 'first', 'semantic')).toBe('first 1');
     expect(nextSnapshotKey('t2', 'second', 'semantic')).toBe('second 1');
+  });
+});
+
+describe('pruneObsoleteSnapshots', () => {
+  const declared = new Set(['login > shows the dialog', 'login > approves']);
+
+  function seed(): string {
+    const file = join(workspace(), 'login.test.ts.tw-semantic.yaml');
+    writeSnapshot(file, 'login > shows the dialog 1', 'a\n');
+    writeSnapshot(file, 'login > shows the dialog 2', 'b\n');
+    writeSnapshot(file, 'login > approves 1', 'c\n');
+    writeSnapshot(file, 'login > renamed away 1', 'd\n');
+    return file;
+  }
+
+  it('finds keys whose test no longer exists', () => {
+    const file = seed();
+    const report = pruneObsoleteSnapshots(file, declared, 'missing');
+    expect(report.keys).toEqual(['login > renamed away 1']);
+    expect(report.removed).toBe(false);
+    expect(readSnapshot(file, 'login > renamed away 1')).toBe('d\n');
+  });
+
+  it('removes them in changed and all modes', () => {
+    for (const mode of ['changed', 'all'] as const) {
+      const file = seed();
+      const report = pruneObsoleteSnapshots(file, declared, mode);
+      expect(report.removed).toBe(true);
+      resetSnapshotCache();
+      expect(readSnapshot(file, 'login > renamed away 1')).toBeUndefined();
+      expect(readSnapshot(file, 'login > approves 1')).toBe('c\n');
+      expect(readFileSync(file, 'utf8')).toContain('# @termwright/test snapshots');
+    }
+  });
+
+  it('keeps every numbered snapshot of a test that still exists', () => {
+    const file = seed();
+    pruneObsoleteSnapshots(file, declared, 'changed');
+    resetSnapshotCache();
+    expect(readSnapshot(file, 'login > shows the dialog 2')).toBe('b\n');
+  });
+
+  it('refuses to prune when no test could be enumerated', () => {
+    // A file whose tests are all skipped, or a caller that could not read the
+    // task tree: pruning here would delete the whole file.
+    const file = seed();
+    const report = pruneObsoleteSnapshots(file, new Set(), 'all');
+    expect(report).toEqual({ file, keys: [], removed: false });
+    resetSnapshotCache();
+    expect(readSnapshot(file, 'login > renamed away 1')).toBe('d\n');
+  });
+
+  it('says nothing about a snapshot file that does not exist', () => {
+    const file = join(workspace(), 'absent.test.ts.tw-cells.yaml');
+    expect(pruneObsoleteSnapshots(file, declared, 'all')).toEqual({ file, keys: [], removed: false });
+    expect(existsSync(file)).toBe(false);
   });
 });

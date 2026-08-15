@@ -220,6 +220,22 @@ resolved as:
 | `TERMWRIGHT_UPDATE_SNAPSHOTS=missing`, or a plain run | write missing; a mismatch fails |
 | `TERMWRIGHT_UPDATE_SNAPSHOTS=none`, or `--update=none` | never write; a missing snapshot fails |
 
+### Snapshots nobody claims any more
+
+Rename or delete a test and its stored snapshot stays behind. On the first test
+of each file the preset compares the file's keys against the tests that file
+*declares*, and:
+
+- in `changed` / `all` it removes the orphans;
+- in any other mode it leaves them alone and the reporter names them in the
+  summary. It never fails the run — an orphaned snapshot is housekeeping, and a
+  red run would only teach people to stop renaming tests.
+
+"Declares" is the important word: a test skipped by `describe.skipIf(!pty)` is
+still declared, so its snapshots survive on a machine that skips it. Pruning
+against the tests that merely *ran* would delete your E2E baselines the first
+time CI ran without a pseudo-terminal.
+
 `config.updateSnapshots` overrides all of it. Because a stored snapshot is
 compared strictly, `changed` rewrites it on any textual difference — review the
 diff the way you would review the code that caused it.

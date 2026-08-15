@@ -23,7 +23,14 @@ import { test as base } from 'vitest';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
 import { createTraceWriter, type TraceWriter } from '@termwright/trace';
 import { getTermwrightConfig, type ResolvedTermwrightConfig } from './config.js';
-import { beginSnapshotScope } from './snapshot-store.js';
+import { collectTestNames } from './declared-tests.js';
+import {
+  beginSnapshotScope,
+  pruneObsoleteSnapshots,
+  resolveUpdateMode,
+  snapshotFilePath,
+  type SnapshotKind,
+} from './snapshot-store.js';
 import { currentScope, enterScope, openStep, scopeKey, type TermwrightScope } from './trace-context.js';
 import './task-meta.js';
 
@@ -82,7 +89,7 @@ interface Session {
  */
 export const test = base.extend<TermwrightFixtures>({
   termwright: [
-    async ({ task }, use) => {
+    async ({ task, expect }, use) => {
       const config = getTermwrightConfig();
       const testName = fullName(task);
       const scope: TermwrightScope = {
@@ -94,6 +101,7 @@ export const test = base.extend<TermwrightFixtures>({
         traces: [],
       };
       beginSnapshotScope();
+      const obsolete = sweepObsoleteSnapshots(task.file, config, updateFlagOf(expect));
       let directory: string | undefined;
       const fixture: TermwrightScopeFixture = {
         config,
@@ -112,7 +120,12 @@ export const test = base.extend<TermwrightFixtures>({
       } finally {
         exit();
         if (directory !== undefined) rmSync(directory, { recursive: true, force: true });
-        if (scope.traces.length > 0) task.meta.termwright = { traces: [...scope.traces] };
+        if (scope.traces.length > 0 || obsolete.length > 0) {
+          task.meta.termwright = {
+            ...(scope.traces.length > 0 ? { traces: [...scope.traces] } : {}),
+            ...(obsolete.length > 0 ? { obsoleteSnapshots: obsolete } : {}),
+          };
+        }
       }
     },
     { auto: true },
@@ -248,6 +261,42 @@ function fullName(task: TaskLike): string {
     parent = parent.suite as TaskLike['suite'];
   }
   return names.join(' > ');
+}
+
+const swept = new WeakSet<object>();
+
+/**
+ * Vitest's `--update` flag, as the runner recorded it on the test's own
+ * `expect`. The fixture has no matcher state of its own, and reading the global
+ * `expect` would miss a run where only this test file is being updated.
+ */
+function updateFlagOf(expect: unknown): string | undefined {
+  const state = (expect as { getState?: () => { snapshotState?: { _updateSnapshot?: string } } }).getState?.();
+  return state?.snapshotState?._updateSnapshot;
+}
+
+/**
+ * Reports — and in a writing mode removes — snapshots left behind by tests that
+ * no longer exist, once per file per run.
+ *
+ * Runs on the first test of a file rather than the last: by then Vitest has
+ * collected the whole file, so every declared test is known, including the ones
+ * this machine skips.
+ */
+function sweepObsoleteSnapshots(
+  file: { readonly filepath: string } & Parameters<typeof collectTestNames>[0],
+  config: ResolvedTermwrightConfig,
+  updateFlag: string | undefined,
+): readonly string[] {
+  if (swept.has(file)) return [];
+  swept.add(file);
+  const declared = collectTestNames(file);
+  const mode = config.updateSnapshots ?? resolveUpdateMode(process.env, updateFlag);
+  const kinds: readonly SnapshotKind[] = ['semantic', 'cells'];
+  return kinds.flatMap(
+    (kind) =>
+      pruneObsoleteSnapshots(snapshotFilePath(file.filepath, kind, config.snapshotDir), declared, mode).keys,
+  );
 }
 
 interface TraceNaming {

@@ -22,6 +22,7 @@ interface CaseOptions {
   readonly retryCount?: number;
   readonly flaky?: boolean;
   readonly traces?: readonly string[];
+  readonly obsolete?: readonly string[];
   readonly error?: string;
 }
 
@@ -39,7 +40,15 @@ function testCase(id: string, fullName: string, options: CaseOptions = {}): Para
       retryCount: options.retryCount ?? 0,
       ...(options.flaky === undefined ? {} : { flaky: options.flaky }),
     }),
-    meta: () => (options.traces === undefined ? {} : { termwright: { traces: options.traces } }),
+    meta: () =>
+      options.traces === undefined && options.obsolete === undefined
+        ? {}
+        : {
+            termwright: {
+              ...(options.traces === undefined ? {} : { traces: options.traces }),
+              ...(options.obsolete === undefined ? {} : { obsoleteSnapshots: options.obsolete }),
+            },
+          },
   };
 }
 
@@ -152,6 +161,30 @@ describe('TermwrightReporter', () => {
     ] as never);
     expect(reporter.tests[0]).toMatchObject({ title: 'login > fails', status: 'failed', tracePath: 'out/x.twtrace' });
     expect(existsSync(join(dir, 'legacy.html'))).toBe(true);
+  });
+
+  it('names obsolete snapshots in the summary of an otherwise green run', async () => {
+    const written: string[] = [];
+    const stdout = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string) => {
+      written.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+
+    const reporter = new TermwrightReporter({ outFile: join(workspace(), 'none.html') });
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(testCase('1', 'passes', { obsolete: ['login > renamed away 1'] }));
+    try {
+      // Green run: no report is written, and the run must not go red.
+      expect(await reporter.report()).toBeUndefined();
+    } finally {
+      process.stdout.write = stdout;
+    }
+
+    const summary = written.join('');
+    expect(summary).toContain('1 obsolete snapshot (no test claims it any more)');
+    expect(summary).toContain('login > renamed away 1');
+    expect(summary).toContain('vitest -u');
   });
 
   it('does not report twice for one run', async () => {

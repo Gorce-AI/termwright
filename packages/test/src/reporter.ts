@@ -43,6 +43,8 @@ export interface TermwrightReporterOptions {
 export interface CollectedTest extends ReportTestResult {
   /** Passed only after a retry. */
   readonly flaky: boolean;
+  /** Snapshot keys in this test's file that no declared test claims. */
+  readonly obsoleteSnapshots?: readonly string[];
 }
 
 /**
@@ -141,6 +143,27 @@ export class TermwrightReporter {
   }
 
   /**
+   * Names the snapshots no test claims any more.
+   *
+   * Reported, never failed on: an orphaned snapshot is a housekeeping signal,
+   * and a run that goes red because a test was renamed teaches people to stop
+   * renaming tests.
+   */
+  #reportObsolete(tests: readonly CollectedTest[]): void {
+    if (this.#options.silent === true) return;
+    const keys = [...new Set(tests.flatMap((test) => test.obsoleteSnapshots ?? []))];
+    if (keys.length === 0) return;
+    const shown = keys.slice(0, 5);
+    process.stdout.write(
+      `\ntermwright: ${keys.length} obsolete snapshot${keys.length === 1 ? '' : 's'} ` +
+        `(no test claims ${keys.length === 1 ? 'it' : 'them'} any more)\n` +
+        `${shown.map((key) => `  ${key}\n`).join('')}` +
+        `${keys.length > shown.length ? `  …and ${keys.length - shown.length} more\n` : ''}` +
+        '  Remove them with `vitest -u`.\n',
+    );
+  }
+
+  /**
    * Writes the report for the tests collected so far.
    *
    * @returns the report path, or `undefined` when there was nothing worth
@@ -155,6 +178,7 @@ export class TermwrightReporter {
         ? all
         : all.filter((test) => test.status === 'failed' || test.flaky);
     const flaky = all.filter((test) => test.flaky);
+    this.#reportObsolete(all);
     if (interesting.length === 0) return undefined;
 
     const outFile = this.#options.outFile ?? join(config.outputDir, 'index.html');
@@ -175,6 +199,7 @@ export class TermwrightReporter {
 
 export default TermwrightReporter;
 
+
 function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | undefined {
   const id = testCase.id;
   if (id === undefined) return undefined;
@@ -184,7 +209,9 @@ function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | und
   const status = toStatus(state);
   if (status === undefined) return undefined;
   const error = result?.errors?.[0];
-  const traces = tracesOf(testCase.meta?.());
+  const meta = testCase.meta?.();
+  const traces = tracesOf(meta);
+  const obsolete = obsoleteOf(meta);
   return {
     id,
     title: testCase.fullName ?? testCase.name ?? id,
@@ -196,6 +223,7 @@ function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | und
       ? {}
       : { error: { message: error.message ?? 'test failed', ...(error.stack === undefined ? {} : { stack: error.stack }) } }),
     ...(traces[0] === undefined ? {} : { tracePath: traces[0] }),
+    ...(obsolete.length === 0 ? {} : { obsoleteSnapshots: obsolete }),
   };
 }
 
@@ -209,6 +237,7 @@ function walk(tasks: readonly TaskLike[]): (CollectedTest & { id: string })[] {
       if (status === undefined || task.id === undefined) return;
       const error = task.result?.errors?.[0];
       const traces = tracesOf(task.meta);
+      const obsolete = obsoleteOf(task.meta);
       collected.push({
         id: task.id,
         title: names.join(' > '),
@@ -220,6 +249,7 @@ function walk(tasks: readonly TaskLike[]): (CollectedTest & { id: string })[] {
           ? {}
           : { error: { message: error.message ?? 'test failed', ...(error.stack === undefined ? {} : { stack: error.stack }) } }),
         ...(traces[0] === undefined ? {} : { tracePath: traces[0] }),
+        ...(obsolete.length === 0 ? {} : { obsoleteSnapshots: obsolete }),
       });
       return;
     }
@@ -238,9 +268,18 @@ function walk(tasks: readonly TaskLike[]): (CollectedTest & { id: string })[] {
  * trusted: a stale or foreign `termwright` key must not crash the reporter.
  */
 function tracesOf(meta: object | undefined): readonly string[] {
-  const carrier = meta as { termwright?: { traces?: unknown } } | undefined;
-  const traces = carrier?.termwright?.traces;
-  return Array.isArray(traces) ? traces.filter((entry): entry is string => typeof entry === 'string') : [];
+  return stringsOf(meta, 'traces');
+}
+
+/** Snapshot keys a fixture found orphaned in this test's file. */
+function obsoleteOf(meta: object | undefined): readonly string[] {
+  return stringsOf(meta, 'obsoleteSnapshots');
+}
+
+function stringsOf(meta: object | undefined, key: 'traces' | 'obsoleteSnapshots'): readonly string[] {
+  const carrier = meta as { termwright?: Record<string, unknown> } | undefined;
+  const value = carrier?.termwright?.[key];
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
 function toStatus(state: string | undefined): 'passed' | 'failed' | 'skipped' | undefined {

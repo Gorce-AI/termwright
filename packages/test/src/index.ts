@@ -104,9 +104,13 @@ export { serializeScreen, type CellSnapshotOptions } from './cells.js';
 
 export { ptyAvailable, resetPtyProbe } from './pty-available.js';
 
+export { collectTestNames, type DeclaredTask } from './declared-tests.js';
+
 export {
   beginSnapshotScope,
   nextSnapshotKey,
+  pruneObsoleteSnapshots,
+  type ObsoleteSnapshots,
   readSnapshot,
   resetSnapshotCache,
   resolveUpdateMode,
