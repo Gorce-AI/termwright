@@ -68,3 +68,6 @@
   'protocol-violation' entries (approved; closes the last indirect
   conformance assertion). `waitForReady` must check process liveness before
   reporting readiness (consistent with other waits).
+- 2026-08-16: DiagnosticCode 'ready-strategy' is REPLACED by two codes:
+  'ready-shell-integration' and 'ready-settled-screen' (fact vs heuristic must
+  be distinguishable by code, not prose). Closed-set size: 14.
