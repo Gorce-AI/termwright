@@ -19,33 +19,36 @@ equal:
 `terminal.snapshot` returns both explicitly (`revision`, `cursorValue` and
 `semanticRevision`) so an agent never has to infer which is which.
 
-## Refs are resolved by this package, not by the driver
+## Refs go straight to the driver
 
-The driver has no public "locator for this ref" factory: refs are outputs of
-`Locator.resolve()`. `targets.ts` therefore looks a ref up in the *current*
-semantic tree and rebuilds the narrowest driver locator for that node
-(`getByTestId` when the node has a test id, otherwise `getByRole` + exact name).
-Strictness, waiting and candidate diagnostics stay in the driver.
+`harness.locatorForRef(ref)` (driver f78174f) resolves a ref by node **identity**
+and owns its staleness rule, so `targets.ts` just calls it. That is strictly
+better than the workaround it replaced — rebuilding a locator from role plus
+exact name — which made two same-named buttons ambiguous and could not express a
+grid ref at all. Grid refs (`grid:1,2,9,1@7`) now work for free.
 
-A ref whose revision is not the live semantic revision fails with
-`stale-snapshot` before any locator is built — the driver's own rule, applied at
-the one place where refs re-enter the system.
+The malformed-ref and superseded-ref failures are the driver's, verbatim: kinds
+`unsupported-action` and `stale-snapshot` with the driver's own suggestion. The
+suggestion is phrased for a library caller ("re-resolve the locator"); the
+MCP-flavoured advice ("call terminal.snapshot again") lives in the server
+instructions and in `SKILL.md`, per error kind, rather than by rewriting what the
+driver said.
 
-**If the driver ever grows `harness.locatorForRef(ref)`**, `locatorForRef()` in
-`targets.ts` collapses to one line and no call site moves.
+## `settleSemantics` — reads wait for renders to pair
 
-## `settleSemantics` — the gap between "announced" and "observable"
+A screen revision lands before the semantic revision it belongs to: the tree
+arrives on the socket, the render-commit marker in the byte stream, and only the
+pair is observable. Two symptoms follow if a read tool does not wait. A snapshot
+taken right after `wait_for text` reports `semanticTree: unavailable` for a
+program that does publish a tree. And `capture_since` reports changed *rows* with
+no changed *subtrees*, because it caught the pair mid-flight — this one was
+intermittent in the end-to-end suite, and an agent polling `capture_since` after
+an action would have hit exactly the same race.
 
-`capabilities().semanticTree` is true from a successful handshake, but
-`semanticTree()` stays `null` until a tree *and* its render-commit marker have
-been paired. A snapshot taken immediately after `wait_for text` would otherwise
-report `semanticTree: unavailable` for a program that does publish one.
-
-`tools.ts: settleSemantics()` waits out that gap with the public
-`waitForStable()` (2 s budget) and swallows the timeout — a session that really
-has no observable tree is reported honestly rather than being made to look
-broken. The driver's locators already wait this way internally; this only aligns
-the *read* tools with them.
+`tools.ts: settleSemantics()` therefore calls the public `waitForStable()` before
+every read: 2 s for a session still waiting for its first tree, 250 ms to let an
+in-flight render pair. Timeouts are swallowed — a session with no observable tree
+is reported honestly rather than made to look broken.
 
 ## Structured errors travel in `_meta`, not in `structuredContent`
 
@@ -89,30 +92,19 @@ the two ever diverge. Verified by temporarily widening one side — the build fa
 with `["role drift", …]`. Screen- and session-shaped types still come from the
 driver, which owns them.
 
-## Environment handling
+## Environment handling belongs to the driver
 
-A child inherits only `PATH`, `HOME`, `LANG`, `LC_ALL`, `SHELL`, `TMPDIR`,
-`USER` and `TERM` unless a caller passes `inheritEnv: true`; anything else has to
-be named explicitly in `env`. Nothing about the environment — and nothing about
-the session token, which only the driver ever sees — appears in a tool result, in
-the compact snapshot or in a log line.
+`LaunchOptions.envMode` (driver f78174f) defaults to `'replace'`: the child gets
+PATH, HOME, LANG, LC_ALL, SHELL, TMPDIR, USER and TERM plus whatever `env` names,
+and nothing else. `terminal.launch` exposes that enum directly instead of the
+`inheritEnv` boolean it used to carry, so the tool schema speaks the same
+vocabulary as the library and the allowlist has exactly one owner. The local copy
+of the allowlist is gone.
 
-Note that the driver merges its own inheritance on top of `process.env` before
-applying `options.env`, so `inheritEnv: false` is a *narrowing of intent* at the
-MCP layer today rather than an isolation guarantee. Real isolation needs the
-driver to accept "replace the environment" semantics.
-
-**TODO (needs driver):** an explicit `envMode: 'inherit' | 'replace'` on
-`LaunchOptions`, so an agent-facing server can actually withhold the operator's
-environment from an untrusted child.
-
-## The `skill` package is generated, not written
-
-`agent-skill.ts` renders `SKILL.md`, `reference.md` and `agent-context.json` from
-the same zod schemas the tools register, so a parameter that changes changes the
-distributed skill in the same commit. The prose in `SKILL.md` is the only
-hand-written part, and it is deliberately short: what the loop is, how to read a
-snapshot, which revision is which, and what to do per error kind.
+This is now a real isolation guarantee rather than the narrowing of intent it was
+before, when the driver merged `process.env` unconditionally. Nothing about the
+environment — and nothing about the session token, which only the driver ever
+sees — appears in a tool result, in the compact snapshot or in a log line.
 
 ## Screenshots
 

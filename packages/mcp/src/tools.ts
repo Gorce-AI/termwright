@@ -106,26 +106,34 @@ function optionalTimeout(timeout: number | undefined): { timeout?: number } {
 }
 
 /**
- * Waits out the gap between a session announcing a semantic tree and the first
- * tree becoming observable (tree frame plus its render-commit marker).
+ * Lets renders and their semantic trees pair up before a read tool reports.
  *
- * Without it, a snapshot taken right after `wait_for text` would report
- * `semanticTree: unavailable` for a program that does publish one — the driver's
- * own locators wait for exactly this. A timeout is not an error: whatever is on
- * screen is reported honestly.
+ * A screen revision lands before the semantic revision that belongs to it (the
+ * tree arrives on the socket, the render-commit marker in the byte stream). Two
+ * things go wrong without this wait: a snapshot taken right after `wait_for
+ * text` reports `semanticTree: unavailable` for a program that does publish one,
+ * and `capture_since` reports changed *rows* with no changed *subtrees* because
+ * it caught the pair mid-flight. The driver's locators already wait this way
+ * internally; this aligns the read tools with them.
+ *
+ * A session still waiting for its very first tree gets the longer budget. A
+ * timeout is not an error — whatever is on screen is reported honestly.
  */
 async function settleSemantics(entry: TerminalEntry): Promise<void> {
   if (!entry.harness.capabilities().semanticTree) return;
-  if (entry.harness.semanticTree() !== null) return;
+  const budget = entry.harness.semanticTree() === null ? FIRST_TREE_SETTLE_MS : PAIRING_SETTLE_MS;
   try {
-    await entry.harness.waitForStable({ timeout: SEMANTIC_SETTLE_MS });
+    await entry.harness.waitForStable({ timeout: budget });
   } catch {
-    // Report the session as it is; the compact snapshot says "unavailable".
+    // Report the session as it is; the compact snapshot says what it found.
   }
 }
 
-/** Budget for {@link settleSemantics}. */
-const SEMANTIC_SETTLE_MS = 2_000;
+/** Budget for a session that has never published a tree. */
+const FIRST_TREE_SETTLE_MS = 2_000;
+
+/** Budget for letting an in-flight render pair with its semantic revision. */
+const PAIRING_SETTLE_MS = 250;
 
 /** Current screen + semantic state of one terminal, recorded for later diffs. */
 function capture(
@@ -187,8 +195,8 @@ const launch = defineTool({
   title: 'Launch a terminal',
   description:
     'Starts a program in a real pseudo-terminal and returns a terminal handle plus the first ' +
-    'snapshot. The child inherits only a safe environment subset unless inheritEnv is set; ' +
-    'values passed in env are never echoed back.',
+    'snapshot. The child gets a minimal environment unless envMode is "inherit"; values passed ' +
+    'in env are never echoed back.',
   inputSchema: {
     command: z
       .array(z.string())
@@ -196,10 +204,13 @@ const launch = defineTool({
       .describe('argv, e.g. ["node", "app.js"] — no shell is involved'),
     cwd: z.string().optional(),
     env: z.record(z.string(), z.string()).optional().describe('extra environment for the child'),
-    inheritEnv: z
-      .boolean()
+    envMode: z
+      .enum(['replace', 'inherit'])
       .optional()
-      .describe('pass the whole server environment to the child (default false)'),
+      .describe(
+        'default "replace": the child gets PATH, HOME, LANG, LC_ALL, SHELL, TMPDIR, USER, TERM ' +
+          'plus env. "inherit" hands it the whole server environment',
+      ),
     columns: z.number().int().min(1).max(1000).optional().describe('default 100'),
     rows: z.number().int().min(1).max(1000).optional().describe('default 30'),
     scrollbackLines: z.number().int().min(0).max(100_000).optional(),

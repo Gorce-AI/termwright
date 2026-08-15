@@ -12,7 +12,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchTerminal } from '@termwright/driver';
-import type { ExitStatus, LaunchOptions, TerminalHarness } from '@termwright/driver';
+import type { EnvMode, ExitStatus, LaunchOptions, TerminalHarness } from '@termwright/driver';
 import { DEFAULT_LIMITS } from '@termwright/protocol';
 import { McpError, noSessionError, usageError } from './errors.js';
 import { definedOnly } from './objects.js';
@@ -34,9 +34,6 @@ export const MCP_LIMITS = Object.freeze({
   /** Argument ceiling for a launch command line. */
   maxCommandParts: 64,
 });
-
-/** Environment variables inherited by a child when `inheritEnv` is off. */
-const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'SHELL', 'TMPDIR', 'USER', 'TERM'] as const;
 
 /** A snapshot the server handed out, kept so a later cursor can diff against it. */
 export interface RevisionRecord {
@@ -80,33 +77,12 @@ export interface LaunchRequest {
   readonly command: readonly string[];
   readonly cwd?: string | undefined;
   readonly env?: Readonly<Record<string, string>> | undefined;
-  readonly inheritEnv?: boolean | undefined;
+  readonly envMode?: EnvMode | undefined;
   readonly columns?: number | undefined;
   readonly rows?: number | undefined;
   readonly scrollbackLines?: number | undefined;
   readonly semanticNegotiationMs?: number | undefined;
   readonly timeouts?: Loose<NonNullable<LaunchOptions['timeouts']>> | undefined;
-}
-
-/**
- * Builds the child environment. Secrets are never echoed back to the agent: the
- * store keeps no copy of the map beyond the call, and nothing in the result
- * payloads mentions environment values.
- */
-function childEnv(request: LaunchRequest): Record<string, string> {
-  const env: Record<string, string> = {};
-  if (request.inheritEnv === true) {
-    for (const [key, value] of Object.entries(process.env)) {
-      if (value !== undefined) env[key] = value;
-    }
-  } else {
-    for (const key of SAFE_ENV_KEYS) {
-      const value = process.env[key];
-      if (value !== undefined) env[key] = value;
-    }
-  }
-  for (const [key, value] of Object.entries(request.env ?? {})) env[key] = value;
-  return env;
 }
 
 /** The terminals of a single MCP session, plus their capture history. */
@@ -146,7 +122,10 @@ export class TerminalStore {
 
     const options: LaunchOptions = {
       command: [...request.command],
-      env: childEnv(request),
+      // Environment policy belongs to the driver: 'replace' (its default) keeps
+      // the operator's secrets out of the child, 'inherit' is opt-in.
+      ...(request.env === undefined ? {} : { env: request.env }),
+      ...(request.envMode === undefined ? {} : { envMode: request.envMode }),
       ...(request.cwd === undefined ? {} : { cwd: request.cwd }),
       ...(request.columns === undefined ? {} : { columns: request.columns }),
       ...(request.rows === undefined ? {} : { rows: request.rows }),

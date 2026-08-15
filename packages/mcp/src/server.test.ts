@@ -172,7 +172,10 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     const stale = await call('terminal.click', { terminal, ref: approve?.ref });
     expect(stale.isError).toBe(true);
     expect(stale.error?.kind).toBe('stale-snapshot');
-    expect(stale.error?.suggestion).toContain('terminal.snapshot');
+    // The driver's own suggestion passes through verbatim; per-kind advice for
+    // agents lives in the server instructions and in SKILL.md.
+    expect(stale.error?.suggestion).toBeDefined();
+    expect(stale.text.startsWith('error stale-snapshot:')).toBe(true);
   });
 
   it('writes the full dump to disk and returns only refs plus the path', async () => {
@@ -190,11 +193,12 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     const dump = JSON.parse(await readFile(dumpPath, 'utf8')) as {
       text: string;
       html: string;
-      semantic: { nodes: unknown[] } | null;
+      semantic: { nodes: readonly unknown[] } | null;
     };
     expect(dump.text).toContain('Permission required');
     expect(dump.html).toContain('<');
-    expect(dump.semantic?.nodes.length).toBe(3);
+    const names = (dump.semantic?.nodes ?? []).map((node) => (node as { name?: string }).name);
+    expect(names).toEqual(expect.arrayContaining(['Permission', 'Approve', 'Reject']));
   });
 
   it('keeps one session’s terminals invisible to another', async () => {

@@ -40,6 +40,8 @@ process.on('SIGINT', () => void running.close());
 
 ```jsonc
 // terminal.launch  -> { terminal: "t1", semanticTree: "available", compact: … }
+// envMode defaults to "replace": the child gets a minimal environment, not the
+// operator's secrets. Pass "inherit" (or name variables in env) when it needs more.
 { "command": ["node", "app.js"], "columns": 100, "rows": 30 }
 
 // terminal.snapshot -> the compact format, plus refs / cursor / modes / scroll
@@ -83,9 +85,11 @@ expression. Locators are strict: more than one match fails with
 
 ## Refs and revisions
 
-A ref is `n8@42`: node id at semantic revision 42. It is valid only while 42 is
-the live semantic revision — reuse after the screen moved on fails with
-`stale-snapshot`, exactly as in the driver, and the fix is to snapshot again.
+A ref is `n8@42`: node id at semantic revision 42 (grid matches get
+`grid:1,2,9,1@7`). Refs go straight to `harness.locatorForRef()`, so they resolve
+by node *identity* — two buttons with the same name stay distinct — and a ref
+reused after its revision was superseded fails with `stale-snapshot`, the
+driver's own rule. The fix is always to snapshot again.
 
 `terminal.snapshot` also returns a screen `revision`; pass it back as the
 `cursor` of `terminal.capture_since` to get only the rows and semantic subtrees

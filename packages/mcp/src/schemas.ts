@@ -56,7 +56,10 @@ export const targetShape = {
   ref: z
     .string()
     .optional()
-    .describe('ref from a previous snapshot, e.g. "n8@42"; only valid at that semantic revision'),
+    .describe(
+      'ref from a previous snapshot: "n8@42" (semantic node) or "grid:1,2,9,1@7" (grid match); ' +
+        'valid only at the revision it was minted at',
+    ),
   selector: z
     .string()
     .optional()

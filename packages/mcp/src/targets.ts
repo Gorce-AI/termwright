@@ -6,10 +6,9 @@
  * candidate diagnostics — to `@termwright/driver`.
  */
 import type { Locator, TerminalHarness } from '@termwright/driver';
-import { McpError, usageError } from './errors.js';
+import { usageError } from './errors.js';
 import { definedOnly } from './objects.js';
 import type { Loose } from './objects.js';
-import { parseRef } from './format.js';
 import type { SemanticRole, SemanticState } from './model.js';
 
 /**
@@ -19,7 +18,7 @@ import type { SemanticRole, SemanticState } from './model.js';
  * from zod-parsed arguments, where an absent key is present-and-undefined.
  */
 export interface TargetInput {
-  /** A ref from a previous snapshot, e.g. `n8@42`. */
+  /** A ref from a previous snapshot: `n8@42`, or `grid:1,2,9,1@7`. */
   readonly ref?: string | undefined;
   /** The Textual-style CSS dialect, e.g. `dialog button#approve:focused`. */
   readonly selector?: string | undefined;
@@ -69,53 +68,19 @@ export function hasTarget(input: TargetInput): boolean {
 }
 
 /**
- * Resolves a `ref` against the *current* semantic tree.
- *
- * Refs bind their revision (driver contract): a ref minted at semantic revision
- * 42 is only usable while 42 is the live revision. Anything older fails as
- * `stale-snapshot` — the same failure the driver would raise — so agents learn
- * to re-snapshot rather than to act on a screen that has moved on.
- */
-function locatorForRef(harness: TerminalHarness, ref: string): Locator {
-  const parsed = parseRef(ref);
-  if (parsed === null) {
-    throw usageError(`ref ${JSON.stringify(ref)} is not of the form n8@42`);
-  }
-  const tree = harness.semanticTree();
-  if (tree === null) {
-    throw new McpError(
-      'unsupported-action',
-      `ref ${ref} cannot be used: this session has no semantic tree`,
-      'target by text or by grid coordinates instead',
-    );
-  }
-  if (tree.revision !== parsed.revision) {
-    throw new McpError(
-      'stale-snapshot',
-      `ref ${ref} was minted at semantic revision ${parsed.revision}; the live revision is ${tree.revision}`,
-      'call terminal.snapshot or terminal.capture_since and use the fresh refs',
-    );
-  }
-  const node = tree.nodes.find((candidate) => candidate.id === parsed.nodeId);
-  if (node === undefined) {
-    throw new McpError(
-      'stale-snapshot',
-      `ref ${ref} no longer exists at semantic revision ${tree.revision}`,
-      'call terminal.snapshot and use the fresh refs',
-    );
-  }
-  if (node.testId !== undefined) return harness.getByTestId(node.testId);
-  return harness.getByRole(node.role, definedOnly({ name: node.name, exact: true }));
-}
-
-/**
  * Builds the locator described by `input`. Precedence is `ref`, `selector`,
  * `testId`, `role`, `label`, `text` — the order from most to least specific.
+ *
+ * Every branch hands straight to a driver factory; nothing here matches, waits
+ * or decides staleness.
  */
 export function buildLocator(harness: TerminalHarness, input: TargetInput): Locator {
   let locator: Locator;
   if (input.ref !== undefined) {
-    locator = locatorForRef(harness, input.ref);
+    // The driver resolves a ref by node identity and owns its staleness rule,
+    // so two nodes with the same name stay distinct and a superseded ref fails
+    // as `stale-snapshot` without this layer guessing at either.
+    locator = harness.locatorForRef(input.ref);
   } else if (input.selector !== undefined) {
     locator = harness.locator(input.selector);
   } else if (input.testId !== undefined) {
