@@ -58,23 +58,27 @@ const metaSchema = z.object({
 });
 
 /**
- * The crash section of `meta.json`, when the recording carries one.
+ * The crash section of `meta.json`, projected into the shape the live tools use.
  *
- * `@termwright/trace` is adding the typed field (format agreed with its owner:
- * the driver's `CrashReport` minus the semantic tree, which already lives in
- * `semantics.jsonl`, plus `lastSemanticRevision`). Reading it structurally keeps
- * this tool working before and after that lands; the cast goes away once
- * `TraceMeta.crash` is typed upstream.
+ * `@termwright/trace` types this field now, so the read is direct. Its `t` is a
+ * wall-clock offset and it adds `castOffset` for seeking a player; the live
+ * projection carries one `timeMs`, so the cast offset is the one kept — that is
+ * the timeline `trace.frame_at` and `trace.diff` already speak.
  */
 function crashOfMeta(meta: TraceMeta): CrashProjection | undefined {
-  const raw = (meta as TraceMeta & { crash?: unknown }).crash;
-  if (typeof raw !== 'object' || raw === null) return undefined;
+  const crash = meta.crash;
+  if (crash === undefined) return undefined;
+  // The field is typed upstream, but meta.json is still external data — an
+  // older writer or a hand-edited archive can carry anything. Validating keeps
+  // a broken section from failing a call that has plenty else to report.
   const parsed = crashSchema.safeParse({
+    exit: crash.exit,
+    timeMs: crash.castOffset,
+    screenTail: crash.screenTail,
     screenTailTruncated: false,
-    lastSemanticRevision: null,
-    recentInputs: [],
-    diagnostics: [],
-    ...raw,
+    lastSemanticRevision: crash.lastSemanticRevision ?? null,
+    recentInputs: crash.recentInputs ?? [],
+    diagnostics: crash.diagnosticsTail ?? [],
   });
   return parsed.success ? parsed.data : undefined;
 }

@@ -462,12 +462,17 @@ describe('a crash recorded in the archive', () => {
   async function withCrashMeta(path: string): Promise<string> {
     const metaPath = join(path, 'meta.json');
     const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
+    // The shape @termwright/trace writes (TraceCrash): wall-clock `t`, a cast
+    // offset for seeking, and the last semantic revision rather than the tree.
     meta['crash'] = {
+      t: 2_500,
+      castOffset: 2_400,
       exit: { code: 9, signal: null },
-      timeMs: 2_500,
       screenTail: ['Traceback (most recent call last):', '  RuntimeError: boom'],
       recentInputs: [{ timeMs: 2_400, kind: 'key', bytes: 1, preview: '\\r' }],
-      diagnostics: [{ code: 'pairing-timeout', detail: 'no marker for revision 3', timeMs: 2_450 }],
+      diagnosticsTail: [
+        { code: 'pairing-timeout', detail: 'no marker for revision 3', timeMs: 2_450 },
+      ],
       lastSemanticRevision: 2,
     };
     await writeFile(metaPath, JSON.stringify(meta), 'utf8');
@@ -488,6 +493,8 @@ describe('a crash recorded in the archive', () => {
     expect(crash.exit.code).toBe(9);
     expect(crash.screenTail).toContain('  RuntimeError: boom');
     expect(crash.lastSemanticRevision).toBe(2);
+    // The cast offset is kept: that is the timeline frame_at and diff speak.
+    expect((overview.data['crash'] as { timeMs: number }).timeMs).toBe(2_400);
     expect(overview.text).toContain('crash: the program exited on its own');
     expect(overview.text).toContain('RuntimeError: boom');
     expect(overview.text).toContain('diagnostic pairing-timeout');
