@@ -24,3 +24,10 @@
   provisional (matches testId/name token) pending protocol-level classes.
 - 2026-08-15: `waitForReady` (shell prompt) missing from api.ts — deferred
   addition before 1.0 (timeout class 'ready' already defined).
+- 2026-08-15 (mcp landed): `mcp` MAY depend on `@termwright/protocol` for
+  constants/types (rule relaxed; removes duplicated SEMANTIC_ROLES/limits).
+  Compact snapshot carries BOTH counters explicitly: screen `revision`
+  (capture_since cursor) and `semanticRevision` (refs `nX@rev`). Structured
+  tool errors ride in `_meta["io.termwright/error"]` (SDK clients validate
+  structuredContent against outputSchema even for isError — documented
+  deviation from "structuredContent everywhere").
