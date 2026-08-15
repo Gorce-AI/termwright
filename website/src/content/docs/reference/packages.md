@@ -29,7 +29,7 @@ description: What each package is for, what it may depend on, and which one you 
 | `@termwright/trace` | The `.twtrace` format: writer, streaming reader, HTML report generator. |
 | `@termwright/ui` | Interactive runner: local server plus browser app. |
 | `@termwright/conformance` | Fixtures and the reusable adapter contract suite. |
-| `termwright` | Umbrella package and CLI, re-exporting the common surface. |
+| `termwright` | Umbrella package and CLI, re-exporting the common surface: `termwright` (driver), `termwright/test` (Vitest preset), `termwright/ink` (component testing), `termwright/cli`. |
 
 Other registries, same repository:
 

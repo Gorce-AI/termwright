@@ -6,8 +6,13 @@ description: Install the Vitest preset, write your first terminal test, and see 
 ## Install
 
 ```sh
-npm install --save-dev @termwright/test vitest
+npm install --save-dev termwright vitest
 ```
+
+`termwright` is the umbrella: the CLI plus the surface most projects need, so a
+test file has one import instead of three. Everything below imports from
+`termwright/test`; if you prefer the individual packages, the same code works
+with `@termwright/test` — see [Packages](../reference/packages/).
 
 Node >= 22, Vitest >= 3.2, ESM only. Prebuilt pseudo-terminal binaries ship for
 macOS, Linux (glibc) and Windows; Alpine/musl is not supported — use
@@ -28,7 +33,7 @@ Any program works, instrumented or not. This one is a plain script:
 
 ```ts
 // tests/agent.test.ts
-import {expect, test} from '@termwright/test';
+import {expect, test} from 'termwright/test';
 
 test('asks before running a command', async ({terminal}) => {
   const app = await terminal.launch({command: ['node', 'agent.js']});
@@ -169,9 +174,13 @@ export default defineConfig({
 });
 ```
 
-Import the reporter from `@termwright/test/reporter`, never from the package
-root: `vitest.config.ts` is loaded before the test runner exists, and the root
-module registers matchers on `expect` as a side effect.
+Two things about that import. It must be `@termwright/test/reporter`, never the
+package root: `vitest.config.ts` is loaded before the test runner exists, and
+the root module registers matchers on `expect` as a side effect. And if you
+installed only the `termwright` umbrella, add `@termwright/test` to your
+devDependencies as well — the umbrella has no reporter subpath yet, and a
+transitive dependency is not importable under pnpm's default node_modules
+layout.
 
 ## Where to go next
 
