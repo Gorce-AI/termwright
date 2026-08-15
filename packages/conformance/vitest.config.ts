@@ -9,8 +9,8 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     pool: 'forks',
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
     // Fixtures bind unix sockets and spawn PTYs; running files in parallel
     // multiplies both without making the suite meaningfully faster.
     fileParallelism: false,

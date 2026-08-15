@@ -10,12 +10,33 @@
  */
 
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+
+/**
+ * The workspace's own vitest, never `npx vitest`.
+ *
+ * `npx` falls back to downloading the latest release when the local binary is
+ * not on its lookup path, which silently runs the matrix on a different major
+ * than the suites were written against — and reports the resulting startup
+ * crash as a failed conformance run.
+ */
+function vitestBinary() {
+  for (const candidate of [
+    join(ROOT, 'node_modules', '.bin', 'vitest'),
+    join(ROOT, '..', '..', 'node_modules', '.bin', 'vitest'),
+  ]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error('conformance: vitest is not installed in this workspace; run `pnpm install` first');
+}
+
+const VITEST = vitestBinary();
 
 /** Suite file → what it certifies, in the order the matrix prints them. */
 const SUITES = [
@@ -30,7 +51,7 @@ const SUITES = [
 
 function run(args) {
   return new Promise((resolve) => {
-    const child = spawn('npx', ['vitest', 'run', ...args], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
+    const child = spawn(VITEST, ['run', ...args], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
     child.on('close', (code) => resolve(code ?? 1));
   });
 }

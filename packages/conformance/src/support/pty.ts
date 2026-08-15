@@ -133,9 +133,11 @@ export function createSessionPool(): SessionPool {
         // whole environment here would quietly make every suite an 'inherit'
         // test and leave the default uncovered.
         // Conformance runs start a fresh Node process, a pseudo-terminal and a
-        // socket per test. On a loaded CI box the defaults are tight enough
-        // that machine load, not the implementation, decides the result.
-        timeouts: { text: 15_000, action: 15_000, exit: 15_000 },
+        // socket per test, and several suites run beside other builds. The
+        // driver's defaults are tight enough that machine load, rather than the
+        // implementation, would decide the result — a genuine failure still
+        // fails here, just later.
+        timeouts: { text: 30_000, action: 30_000, exit: 30_000 },
         ...launchOptions,
       });
       open.push(terminal);

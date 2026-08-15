@@ -106,6 +106,21 @@ has to delete an assertion that explains itself.
 - **`AdapterProbe.waitForText` sees cumulative output**, not a rendered screen:
   anything the app printed once matches forever. Proving that an app is *still*
   rendering uses growth in output length, not a text match.
+- **Waiting for one of two identical events is waiting for the first one.**
+  The double-click test used to count `MOUSE press` lines on a screen snapshot
+  after waiting for the release. When the pair arrived as two chunks — which a
+  loaded machine does regularly — the wait was already satisfied by the first
+  pair and the count found one press. The fixture now decides what a double
+  click is and reports it as its own event, so the test waits for a thing that
+  exists exactly once. Same lesson as the scroll-off trap below: wait for
+  something whose first occurrence is the one you mean.
+- **The report script must use the workspace's vitest, never `npx vitest`.**
+  `npx` downloads the latest release when the local binary is not on its lookup
+  path, so a workspace change elsewhere in the repo turned `pnpm conformance`
+  into a run against a different vitest major — reported as a startup crash and
+  read at first glance as a conformance failure. `scripts/conformance.mjs`
+  resolves `node_modules/.bin/vitest` explicitly and fails loudly if it is
+  missing.
 - **Text that can scroll off is not a safe thing to wait for.** A pseudo-
   terminal may deliver a program's whole output in one chunk, so a `waitForText`
   on an early line passes or fails depending on how the write was split. Every

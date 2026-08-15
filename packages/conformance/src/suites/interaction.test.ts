@@ -50,11 +50,12 @@ describe.skipIf(!ptyAvailable())('pointer interaction', () => {
     await terminal.getByText('Beta').click();
     await terminal.waitForText('ev: MOUSE press b=0 c=4 r=3');
 
+    // The fixture reports the double click as its own event, so this waits for
+    // the pair to complete rather than counting two identical lines — a count
+    // is already satisfied by the first press when the pair arrives in two
+    // chunks, which a loaded machine does regularly.
     await terminal.getByText('Gamma').doubleClick();
-    await terminal.waitForText('ev: MOUSE release b=0 c=5 r=4');
-    // A double click is two full press/release pairs at the same cell.
-    const screen = terminal.screen().text();
-    expect(screen.match(/MOUSE press b=0 c=5 r=4/gu)).toHaveLength(2);
+    await terminal.waitForText('ev: MOUSE dblclick c=5 r=4');
 
     // A click outside every drawn glyph still lands where it was aimed.
     await terminal.getByText('Gamma').click({ position: { rowOffset: 8, columnOffset: 40 } });

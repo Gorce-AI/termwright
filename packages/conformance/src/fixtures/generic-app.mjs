@@ -164,6 +164,15 @@ function step(rest) {
     const [, button, column, row, final] = report;
     const kind = final === 'm' ? 'release' : Number(button) >= 64 ? 'wheel' : 'press';
     note(`MOUSE ${kind} b=${button} c=${column} r=${row}`);
+    if (kind === 'press' && Number(button) < 32) {
+      // The fixture decides what a double click is, so a test can wait for one
+      // event instead of counting two identical ones — a count on a repainted
+      // screen is satisfied by the first of the pair as soon as it lands.
+      const at = Date.now();
+      const cell = `c=${column} r=${row}`;
+      if (lastPress.cell === cell && at - lastPress.at < 500) note(`MOUSE dblclick ${cell}`);
+      lastPress = { cell, at };
+    }
     return rest.slice(report[0].length);
   }
   if (rest.startsWith('\x1b[A')) {
@@ -186,6 +195,7 @@ function step(rest) {
   return rest.slice(head.length);
 }
 
+let lastPress = { cell: '', at: 0 };
 let pending = '';
 
 process.stdout.write('\x1b]0;generic-app\x07');
