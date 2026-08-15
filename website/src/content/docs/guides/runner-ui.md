@@ -118,8 +118,10 @@ all bounded, and the hostile-input suite runs under
 
 - **A session switcher.** Multiple sessions in one test are attached and listed,
   but the terminal pane shows the first one that produced output.
-- **SVG screenshots** with embedded Nerd Font glyph paths are scoped as a
-  separate optional package, not part of the runner.
+- **Screenshots** are not taken by the runner. They live in
+  [`@termwright/screenshot`](../traces/), which renders SVG with embedded glyph
+  outlines and PNG through resvg — deliberately a separate package, so a native
+  renderer stays out of every test run.
 - **An automated browser suite.** The three panes, selector generation,
   pick-mode hit testing and time travel were exercised through Playwright
   against a running server; a committed browser project belongs to the CI lane.

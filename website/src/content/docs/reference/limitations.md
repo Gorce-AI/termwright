@@ -51,10 +51,22 @@ generic-mode on Windows today.
 
 - Multiple sessions in one test are attached and listed, but the terminal pane
   shows the first one that produced output.
-- SVG screenshots with embedded Nerd Font glyph paths are scoped as a separate
-  optional package.
+- Screenshots are a separate package by design
+  ([`@termwright/screenshot`](../../guides/traces/)), not something the runner
+  does.
 - There is no committed browser test suite yet; the panes were verified through
   Playwright by hand.
+
+**Screenshots**
+
+- A character no configured font covers falls back to `<text>` with a monospace
+  family instead of an embedded outline. It still renders wherever a suitable
+  font exists, and `selfContained` / `fallbackCharacters` say when that applies.
+- `bold` is synthesised by stroking and `italic` by shearing, because the
+  outlines come from the regular face.
+- No MCP tool returns a PNG yet: the renderer exists, the wiring into
+  `trace.frame_at` and `trace.diff` does not, and asking for one fails loudly
+  rather than silently.
 
 **MCP**
 

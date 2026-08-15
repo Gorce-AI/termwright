@@ -54,6 +54,7 @@ agents (MCP), and an interactive runner with live preview and time travel.
 | [`@termwright/opentui`](packages/opentui) | Semantic adapter for OpenTUI |
 | [`@termwright/mcp`](packages/mcp) | MCP server over the public driver API |
 | [`@termwright/trace`](packages/trace) | The `.twtrace` format: writer, reader, HTML report |
+| [`@termwright/screenshot`](packages/screenshot) | SVG with embedded glyph outlines, PNG through resvg, no browser |
 | [`@termwright/ui`](packages/ui) | Interactive runner: live view, inspector, time travel, recorder |
 | [`@termwright/conformance`](packages/conformance) | Fixtures and the reusable adapter contract suite |
 | [`termwright`](packages/termwright-cli) | Umbrella package and CLI |

@@ -172,6 +172,10 @@ only refs plus the path.
 
 No tool returns `ImageContent` yet. `trace.frame_at` and `trace.diff` accept a
 `screenshot` flag, and passing it today fails with `unsupported-action` and says
-why rather than silently ignoring it: PNG rendering waits on
-`@termwright/screenshot`. Headless Chromium is not an acceptable dependency
-here, which is what made this a separate package rather than a quick win.
+why rather than silently ignoring it.
+
+The renderer itself now exists — [`@termwright/screenshot`](../traces/) produces
+SVG with embedded glyph outlines and PNG through resvg, with no browser
+involved — so what remains is wiring it into these tools. Until that lands, an
+agent gets the reconstructed screen text and the compact tree, which is what it
+can actually reason over anyway.

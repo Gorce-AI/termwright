@@ -139,6 +139,54 @@ run writes `<outputDir>/index.html`. Tests that only passed after a retry are
 listed separately as **flaky**: a flaky test is a different problem from a
 broken one, and hiding it in the pass count is how it stays broken.
 
+## Screenshots, without a browser
+
+`@termwright/screenshot` turns a cell grid into an SVG with the **glyph outlines
+embedded**, and rasterises it to PNG through resvg. No Chromium starting up in
+the middle of a test run, and no dependency on the viewer having the right font
+installed — which is the whole point when the screen is full of Nerd Font icons.
+
+```ts
+import {renderPng, renderSvg} from '@termwright/screenshot';
+
+const shot = renderSvg(harness.screen(), {fontSize: 16});
+if (!shot.selfContained) {
+  console.warn('no outline for', shot.fallbackCharacters.join(''));
+}
+```
+
+Layout comes from the grid — cell `(row, column)` is drawn at
+`padding + column × cellWidth` — so a double-width cell occupies two columns
+because the *emulator* said so, not because a font did. Emoji, CJK and box
+drawing stay on the grid. Colours, `inverse`, `dim`, `underline`,
+`strikethrough` and the cursor are drawn; `bold` is synthesised by stroking and
+`italic` by shearing, since the outlines come from the regular face.
+
+`selfContained` tells you whether everything was embedded. Characters no
+configured font covers fall back to `<text>` with a monospace family, still
+positioned per cell — correct wherever a suitable font exists, and flagged when
+that caveat applies. Point it at the font your users actually see:
+
+```ts
+renderSvg(frame, {font: {files: ['/fonts/JetBrainsMonoNerdFont-Regular.ttf']}});
+```
+
+The report embeds images the caller hands it rather than rasterising anything
+itself, which keeps a native renderer out of every test run:
+
+```ts
+await generateHtmlReport({
+  outFile: 'out/report.html',
+  results: [{
+    id: 't1',
+    title: 'login',
+    status: 'failed',
+    tracePath: 'out/login.twtrace',
+    screenshots: [{label: 'at failure', image: renderPng(frame, {scale: 2}).png}],
+  }],
+});
+```
+
 ## Bounds
 
 Buffered output is capped at 32 MB by default. On overflow the writer stops

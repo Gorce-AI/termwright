@@ -13,6 +13,7 @@ description: What each package is for, what it may depend on, and which one you 
 | test Ink components instead of processes | `@termwright/ink-testing` |
 | give an AI agent a terminal | `@termwright/mcp` |
 | open a live runner, inspector and time-travel UI | `@termwright/ui` |
+| turn a screen into an SVG or PNG without a browser | `@termwright/screenshot` |
 | certify your own adapter | `@termwright/conformance` |
 
 ## The map
@@ -27,6 +28,7 @@ description: What each package is for, what it may depend on, and which one you 
 | `@termwright/opentui` | Adapter for OpenTUI. |
 | `@termwright/mcp` | MCP server over the public driver API. |
 | `@termwright/trace` | The `.twtrace` format: writer, streaming reader, HTML report generator. |
+| `@termwright/screenshot` | SVG with embedded glyph outlines, and PNG through resvg. No browser. |
 | `@termwright/ui` | Interactive runner: local server plus browser app. |
 | `@termwright/conformance` | Fixtures and the reusable adapter contract suite. |
 | `termwright` | Umbrella package and CLI. Subpaths: `termwright` (driver), `/test` (Vitest preset), `/ink` (component testing), `/reporter` and `/ui-reporter` (for `vitest.config.ts`), `/cli`. |
