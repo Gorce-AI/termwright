@@ -12,5 +12,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@termwright/protocol": "workspace:*" }
+  "dependencies": { "@termwright/protocol": "workspace:*" },
+  "peerDependencies": {
+    "ink": ">=7.1.0",
+    "react": ">=19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "ink": "^7.1.1",
+    "react": "^19.2.8"
+  }
 }
