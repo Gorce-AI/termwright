@@ -25,16 +25,16 @@ INITIAL = ["buy milk", "call the bank", "write the release notes"]
 class NoteItem(ListItem):
     """One note.
 
-    ``ListItem`` holds no text of its own — the ``Label`` inside it does — so
-    without ``termwright_name`` the item is published with an empty accessible
-    name and ``getByRole('listitem', {name: …})`` never matches it. The
-    attribute is the documented way to say what a widget is called.
+    The subclass exists to keep the note's text as data — reading it back out
+    of the rendered ``Label`` is how the delete path used to break. It needs no
+    termwright-specific annotation: a ``listitem`` takes its accessible name
+    from its contents, so ``getByRole('listitem', {name: 'buy milk'})`` finds
+    it as written.
     """
 
     def __init__(self, note: str) -> None:
         super().__init__(Label(note))
         self.note = note
-        self.termwright_name = note
 
 
 class ConfirmDelete(ModalScreen[bool]):
