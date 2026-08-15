@@ -93,9 +93,22 @@
   reachable more than once at $.nodes[N].actions"). A role→actions table that
   hands out one shared frozen array therefore fails validation as soon as two
   nodes share a role; every adapter must copy such arrays per node.
-  `@termwright/opentui` does; `@termwright/ink` looks to have the same latent
-  bug, untriggered only because its tests never put two same-role nodes in one
-  snapshot. (2) `maxDepth` bounds the DTO projector's *object nesting*, not just
+  `@termwright/opentui` does; `@termwright/ink` did not, and fixed it in
+  6f41325. **Blast radius, corrected after impl-ink verified it:** the wire is
+  unaffected, because `encodeFrame` is `JSON.stringify`, which has no concept
+  of reference identity and flattens an alias into two equal values. Only
+  IN-PROCESS consumers of a snapshot object see it — `@termwright/ink-testing`,
+  the conformance probe's in-memory checks, and `get-tree` answers that hand
+  back the retained object. This is therefore a TypeScript-only trap; a Python,
+  Go or Rust adapter serialises on the way out and cannot hit it.
+  The same fact explains why it hides: a test that validates what came off the
+  socket validates a post-serialisation copy, and serialisation destroys the
+  evidence. Two same-role nodes are necessary but not sufficient to catch it —
+  the snapshot must be validated **in memory**, straight off the collector.
+  Copy at the node-construction site rather than making the role table return
+  fresh arrays: the second alias source is an application author reusing one
+  `const actions` across several annotation calls, and only the collector-side
+  copy catches both. (2) `maxDepth` bounds the DTO projector's *object nesting*, not just
   semantic tree depth, so it cannot be tightened below what a snapshot object
   itself needs (~5) when testing truncation.
   The umbrella `termwright` CLI adds no taxonomy of its own: it imports
