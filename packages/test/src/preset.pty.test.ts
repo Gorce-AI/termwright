@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect } from 'vitest';
-import { configureTermwright, ptyAvailable, test } from './index.js';
+import { collectCrashes, configureTermwright, formatCrashSection, ptyAvailable, test } from './index.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'driver', 'test-fixtures');
 const OUTPUT = mkdtempSync(join(tmpdir(), 'tw-preset-'));
@@ -79,6 +79,34 @@ describe.skipIf(!available)('the preset against a real PTY', () => {
       ['- button "Approve" [focused]', '- button /^Rej/'].join('\n'),
       { within: app.getByRole('dialog') },
     );
+  });
+
+  test('turns a real crash into the section a failure message carries', { timeout: 30_000 }, async ({
+    terminal,
+  }) => {
+    const app = await terminal.launch({ command: [process.execPath, join(FIXTURES, 'crash-app.mjs')] });
+    await app.waitForText('CRASH APP READY');
+
+    await app.press('x'); // uncaught exception: stack on stderr, exit code 1
+    const status = await app.waitForExit();
+    expect(status.code).toBe(1);
+
+    // What the fixture does on a failing test, against a real dead process.
+    const crashes = collectCrashes([{ harness: app, dir: 'out/crash.twtrace' }]);
+    expect(crashes).toHaveLength(1);
+    const section = formatCrashSection(crashes);
+    expect(section).toContain('Process crashed');
+    expect(section).toContain('exited with code 1');
+    expect(section).toContain('boom from the fixture');
+    expect(section).toContain('full trace: out/crash.twtrace');
+  });
+
+  test('reports no crash when the program was asked to leave', { timeout: 30_000 }, async ({ terminal }) => {
+    const app = await terminal.launch({ command: [process.execPath, join(FIXTURES, 'crash-app.mjs')] });
+    await app.waitForText('CRASH APP READY');
+    await app.press('e'); // clean exit
+    expect(await app.waitForExit()).toEqual({ code: 0, signal: null });
+    expect(collectCrashes([{ harness: app }])).toEqual([]);
   });
 
   test('isolates each test with its own directory and session', { timeout: 30_000 }, async ({ terminal, termwright }) => {

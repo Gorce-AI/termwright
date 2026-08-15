@@ -20,6 +20,7 @@
 import { join } from 'node:path';
 import { generateHtmlReport, type ReportTestResult } from '@termwright/trace';
 import { getTermwrightConfig } from './config.js';
+import type { ReportCrash } from './crash.js';
 import './task-meta.js';
 
 // Re-exported so the declaration bundler keeps the augmentation module a
@@ -45,6 +46,8 @@ export interface CollectedTest extends ReportTestResult {
   readonly flaky: boolean;
   /** Snapshot keys in this test's file that no declared test claims. */
   readonly obsoleteSnapshots?: readonly string[];
+  /** Programs that died unexpectedly during this test. */
+  readonly crashes?: readonly ReportCrash[];
 }
 
 /**
@@ -185,7 +188,7 @@ export class TermwrightReporter {
     await generateHtmlReport({
       outFile,
       title: this.#options.title ?? 'termwright',
-      results: interesting.map(({ flaky: _flaky, ...result }) => result),
+      results: toReportResults(interesting),
     });
     if (this.#options.silent !== true) {
       const failed = all.filter((test) => test.status === 'failed').length;
@@ -198,6 +201,19 @@ export class TermwrightReporter {
 }
 
 export default TermwrightReporter;
+
+/**
+ * Strips this reporter's own bookkeeping and hands the crash to the report.
+ *
+ * `crash` is spread in rather than declared: the field belongs to
+ * `@termwright/trace`, whose crash panel consumes it, and an unknown key is
+ * ignored by an older version of the report.
+ */
+export function toReportResults(tests: readonly CollectedTest[]): readonly ReportTestResult[] {
+  return tests.map(({ flaky: _flaky, obsoleteSnapshots: _obsolete, crashes, ...result }) =>
+    crashes === undefined || crashes[0] === undefined ? result : { ...result, crash: crashes[0] },
+  );
+}
 
 
 function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | undefined {
@@ -212,6 +228,7 @@ function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | und
   const meta = testCase.meta?.();
   const traces = tracesOf(meta);
   const obsolete = obsoleteOf(meta);
+  const crashes = crashesOf(meta);
   return {
     id,
     title: testCase.fullName ?? testCase.name ?? id,
@@ -224,6 +241,7 @@ function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | und
       : { error: { message: error.message ?? 'test failed', ...(error.stack === undefined ? {} : { stack: error.stack }) } }),
     ...(traces[0] === undefined ? {} : { tracePath: traces[0] }),
     ...(obsolete.length === 0 ? {} : { obsoleteSnapshots: obsolete }),
+    ...(crashes.length === 0 ? {} : { crashes }),
   };
 }
 
@@ -238,6 +256,7 @@ function walk(tasks: readonly TaskLike[]): (CollectedTest & { id: string })[] {
       const error = task.result?.errors?.[0];
       const traces = tracesOf(task.meta);
       const obsolete = obsoleteOf(task.meta);
+      const crashes = crashesOf(task.meta);
       collected.push({
         id: task.id,
         title: names.join(' > '),
@@ -250,6 +269,7 @@ function walk(tasks: readonly TaskLike[]): (CollectedTest & { id: string })[] {
           : { error: { message: error.message ?? 'test failed', ...(error.stack === undefined ? {} : { stack: error.stack }) } }),
         ...(traces[0] === undefined ? {} : { tracePath: traces[0] }),
         ...(obsolete.length === 0 ? {} : { obsoleteSnapshots: obsolete }),
+        ...(crashes.length === 0 ? {} : { crashes }),
       });
       return;
     }
@@ -274,6 +294,18 @@ function tracesOf(meta: object | undefined): readonly string[] {
 /** Snapshot keys a fixture found orphaned in this test's file. */
 function obsoleteOf(meta: object | undefined): readonly string[] {
   return stringsOf(meta, 'obsoleteSnapshots');
+}
+
+/**
+ * Crashes a fixture recorded for this test.
+ *
+ * Shaped, not validated field by field: it crossed a process boundary as JSON
+ * produced by this same package, and the report treats it as display data.
+ */
+function crashesOf(meta: object | undefined): readonly ReportCrash[] {
+  const carrier = meta as { termwright?: { crashes?: unknown } } | undefined;
+  const crashes = carrier?.termwright?.crashes;
+  return Array.isArray(crashes) ? (crashes.filter((entry) => typeof entry === 'object' && entry !== null) as ReportCrash[]) : [];
 }
 
 function stringsOf(meta: object | undefined, key: 'traces' | 'obsoleteSnapshots'): readonly string[] {

@@ -23,6 +23,7 @@ import { test as base } from 'vitest';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
 import { createTraceWriter, type TraceWriter } from '@termwright/trace';
 import { getTermwrightConfig, type ResolvedTermwrightConfig } from './config.js';
+import { appendCrashSection, collectCrashes, toReportCrash, type ReportCrash } from './crash.js';
 import { collectTestNames } from './declared-tests.js';
 import {
   beginSnapshotScope,
@@ -121,7 +122,10 @@ export const test = base.extend<TermwrightFixtures>({
         exit();
         if (directory !== undefined) rmSync(directory, { recursive: true, force: true });
         if (scope.traces.length > 0 || obsolete.length > 0) {
+          // Merge: the `terminal` fixture tears down first and may already have
+          // recorded crashes here.
           task.meta.termwright = {
+            ...(task.meta.termwright ?? {}),
             ...(scope.traces.length > 0 ? { traces: [...scope.traces] } : {}),
             ...(obsolete.length > 0 ? { obsoleteSnapshots: obsolete } : {}),
           };
@@ -140,11 +144,19 @@ export const test = base.extend<TermwrightFixtures>({
     const scope = currentScope(scopeKey(task.file.filepath, fullName(task)));
     const sessions: Session[] = [];
     const harnesses: TerminalHarness[] = [];
+    const crashed: ReportCrash[] = [];
     const attempt = (attempts.get(task.id) ?? 0) + 1;
     attempts.set(task.id, attempt);
     let failed = false;
     onTestFailed(() => {
       failed = true;
+      // A program that died explains the failure better than the assertion
+      // that noticed it, so the crash goes into the message the runner prints
+      // rather than into a channel only the HTML report reads.
+      const crashes = collectCrashes(sessions);
+      if (crashes.length === 0) return;
+      crashed.push(...crashes.map((crash) => toReportCrash(crash.report)));
+      appendCrashSection(task.result?.errors, crashes);
     });
 
     const factory: TerminalFactory = {
@@ -191,6 +203,10 @@ export const test = base.extend<TermwrightFixtures>({
     };
 
     await use(factory);
+
+    if (crashed.length > 0) {
+      task.meta.termwright = { ...(task.meta.termwright ?? {}), crashes: [...crashed] };
+    }
 
     for (const session of sessions.reverse()) {
       const keep = config.trace === 'on' || (failed && config.trace === 'retain-on-failure');

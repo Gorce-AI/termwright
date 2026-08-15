@@ -27,7 +27,11 @@ export interface TermwrightTaskMeta {
    * Carried by whichever test of the file ran first.
    */
   readonly obsoleteSnapshots?: readonly string[];
+  /** Programs that died unexpectedly during this test. */
+  readonly crashes?: readonly ReportCrash[];
 }
+
+import type { ReportCrash } from './crash.js';
 
 declare module 'vitest' {
   interface TaskMeta {

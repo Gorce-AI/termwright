@@ -104,6 +104,18 @@ export { serializeScreen, type CellSnapshotOptions } from './cells.js';
 
 export { ptyAvailable, resetPtyProbe } from './pty-available.js';
 
+export {
+  collectCrashes,
+  describeExit,
+  formatCrashSection,
+  toReportCrash,
+  MESSAGE_TAIL_LINES,
+  REPORT_TAIL_LINES,
+  type CrashSource,
+  type CrashedSession,
+  type ReportCrash,
+} from './crash.js';
+
 export { collectTestNames, type DeclaredTask } from './declared-tests.js';
 
 export {

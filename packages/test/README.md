@@ -240,6 +240,37 @@ time CI ran without a pseudo-terminal.
 compared strictly, `changed` rewrites it on any textual difference — review the
 diff the way you would review the code that caused it.
 
+## When the program dies
+
+A crashed program does not fail a test in any useful way: the assertion that
+notices it reports a timeout, and the panic that explains it scrolls past. When
+a session the test launched died unexpectedly, the preset appends what the
+driver remembers to the failure message:
+
+```
+expect(getByRole('dialog')).toBeVisible()
+
+Expected: visible
+Received: hidden
+Timeout:  5000ms
+
+Process crashed
+  exited with code 1 after 812ms
+  screen tail (last 15 of 31 lines):
+    Error: ENOENT: no such file or directory, open 'config.toml'
+        at Object.readFileSync (node:fs:1234:20)
+  last input: key "c" at 640ms
+  full trace: termwright-report/traces/opens-the-dialog-4-0.twtrace
+```
+
+A clean exit is not a crash, and neither is a session the test closed or
+signalled — that judgement lives in the driver, so the preset shows a section
+only when there is something to explain. The same data reaches the HTML report,
+where `@termwright/trace` renders it with the recording.
+
+Treat a crash section like a screenshot: it is the terminal's output verbatim,
+so whatever the program printed on its way out — secrets included — is in it.
+
 ## Configuration
 
 ```ts

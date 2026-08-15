@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Reporter } from 'vitest/node';
-import { TermwrightReporter } from './reporter.js';
+import { TermwrightReporter, toReportResults } from './reporter.js';
+import type { ReportCrash } from './crash.js';
 
 const directories: string[] = [];
 
@@ -23,6 +24,7 @@ interface CaseOptions {
   readonly flaky?: boolean;
   readonly traces?: readonly string[];
   readonly obsolete?: readonly string[];
+  readonly crashes?: readonly ReportCrash[];
   readonly error?: string;
 }
 
@@ -41,12 +43,13 @@ function testCase(id: string, fullName: string, options: CaseOptions = {}): Para
       ...(options.flaky === undefined ? {} : { flaky: options.flaky }),
     }),
     meta: () =>
-      options.traces === undefined && options.obsolete === undefined
+      options.traces === undefined && options.obsolete === undefined && options.crashes === undefined
         ? {}
         : {
             termwright: {
               ...(options.traces === undefined ? {} : { traces: options.traces }),
               ...(options.obsolete === undefined ? {} : { obsoleteSnapshots: options.obsolete }),
+              ...(options.crashes === undefined ? {} : { crashes: options.crashes }),
             },
           },
   };
@@ -185,6 +188,31 @@ describe('TermwrightReporter', () => {
     expect(summary).toContain('1 obsolete snapshot (no test claims it any more)');
     expect(summary).toContain('login > renamed away 1');
     expect(summary).toContain('vitest -u');
+  });
+
+  it('carries a crash from the worker to the report', async () => {
+    const crash: ReportCrash = {
+      exit: { code: null, signal: 'SIGKILL' },
+      screenTail: ['CRASH APP READY'],
+      timeMs: 42,
+    };
+    const reporter = new TermwrightReporter({ silent: true });
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(testCase('1', 'dies', { state: 'failed', error: 'boom', crashes: [crash] }));
+    expect(reporter.tests[0]?.crashes).toEqual([crash]);
+
+    const [result] = toReportResults(reporter.tests);
+    expect(result).toMatchObject({ id: '1', crash });
+    // Our own bookkeeping does not leak into the report's input.
+    expect(result).not.toHaveProperty('flaky');
+    expect(result).not.toHaveProperty('crashes');
+  });
+
+  it('leaves the crash field out when nothing died', () => {
+    const reporter = new TermwrightReporter({ silent: true });
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(testCase('1', 'fails', { state: 'failed', error: 'boom' }));
+    expect(toReportResults(reporter.tests)[0]).not.toHaveProperty('crash');
   });
 
   it('does not report twice for one run', async () => {
