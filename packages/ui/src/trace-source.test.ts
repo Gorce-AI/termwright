@@ -1,0 +1,94 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { openTrace, type TraceReader } from '@termwright/trace';
+import { buildFixtureTrace, FIXTURE_TREES } from './__fixtures__/build-trace.js';
+import { UiHub } from './hub.js';
+import { publishTraceTimeline, readTraceOverview, traceStateAt, type TraceOverview } from './trace-source.js';
+
+let reader: TraceReader;
+let overview: TraceOverview;
+
+beforeAll(async () => {
+  reader = await openTrace(await buildFixtureTrace());
+  overview = await readTraceOverview(reader);
+});
+
+afterAll(async () => {
+  await reader.close();
+});
+
+const prefix = (state: { castPrefixB64: string }): string =>
+  Buffer.from(state.castPrefixB64, 'base64').toString('utf8');
+
+describe('readTraceOverview', () => {
+  it('describes the recording the timeline pane draws', () => {
+    expect(overview.command).toEqual(['node', 'agent.js']);
+    expect(overview.columns).toBe(80);
+    expect(overview.semanticTree).toBe(true);
+    expect(overview.exit).toEqual({ code: 0, signal: null });
+    expect(overview.durationMs).toBeGreaterThanOrEqual(1_500);
+  });
+
+  it('lists steps and revision markers, in time order', () => {
+    expect(overview.steps.map((step) => step.title)).toEqual(['approve']);
+    expect(overview.markers.map((marker) => marker.kind)).toEqual(['revision', 'step', 'revision']);
+    const times = overview.markers.map((marker) => marker.t);
+    expect([...times].sort((left, right) => left - right)).toEqual(times);
+  });
+});
+
+describe('publishTraceTimeline', () => {
+  it('replays the archive as the same events a live run produces', () => {
+    const hub = new UiHub();
+    publishTraceTimeline(hub, overview);
+    expect(hub.backlog.map((message) => message.type)).toEqual([
+      'run-start',
+      'test-start',
+      'step',
+      'step',
+      'test-end',
+      'run-end',
+    ]);
+    const [runStart, testStart] = hub.backlog;
+    expect(runStart?.type === 'run-start' && runStart.mode).toBe('post-mortem');
+    expect(testStart?.type === 'test-start' && testStart.title).toBe('node agent.js');
+    const testEnd = hub.backlog.find((message) => message.type === 'test-end');
+    expect(testEnd?.type === 'test-end' && testEnd.status).toBe('passed');
+  });
+});
+
+describe('traceStateAt', () => {
+  it('reconstructs the screen before the second output arrived', async () => {
+    const state = await traceStateAt(reader, 500);
+    expect(prefix(state)).toContain('Permission required');
+    expect(prefix(state)).not.toContain('running: ls -la');
+    expect(state.columns).toBe(80);
+    expect(state.rows).toBe(24);
+  });
+
+  it('returns the newest tree at or before the requested moment', async () => {
+    const early = await traceStateAt(reader, 500);
+    expect(early.revision).toBe(1);
+    expect(early.snapshot).toEqual(FIXTURE_TREES[0]);
+
+    const late = await traceStateAt(reader, 1_900);
+    expect(late.revision).toBe(2);
+    expect(late.snapshot).toEqual(FIXTURE_TREES[1]);
+  });
+
+  it('reports the step covering the requested moment', async () => {
+    const state = await traceStateAt(reader, 1_200);
+    expect(state.step?.title).toBe('approve');
+  });
+
+  it('clamps a scrub past the end of the recording', async () => {
+    const state = await traceStateAt(reader, 10_000_000);
+    expect(state.timeMs).toBeLessThanOrEqual(overview.durationMs + 1);
+    expect(prefix(state)).toContain('running: ls -la');
+  });
+
+  it('is monotonic: a later moment never shows less output', async () => {
+    const early = await traceStateAt(reader, 400);
+    const late = await traceStateAt(reader, 1_400);
+    expect(prefix(late).startsWith(prefix(early))).toBe(true);
+  });
+});

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>termwright</title>
+    <!-- Inline, because the app must render on a machine with no network. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230e1117'/%3E%3Cpath d='M3 5l3 3-3 3M8 11h5' stroke='%237aa2f7' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="pane terminal-pane">
+        <header class="pane-head"><h2>Terminal</h2></header>
+        <div id="terminal" class="terminal"></div>
+      </section>
+      <section class="pane" id="inspector"></section>
+      <section class="pane" id="timeline"></section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

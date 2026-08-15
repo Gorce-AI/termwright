@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    // `node` is here for the modules the app shares with the server (their
+    // Node-only branches are dead code in the bundle), not for the app itself.
+    "types": ["node"]
+  },
+  "include": ["src/app", "src/events.ts", "src/selector.ts", "src/codegen.ts", "src/trace-source.ts"]
+}

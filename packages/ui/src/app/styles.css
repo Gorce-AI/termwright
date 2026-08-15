@@ -1,0 +1,344 @@
+/* One dark theme, tuned to sit next to a terminal rather than compete with it. */
+
+:root {
+  --bg: #0e1117;
+  --panel: #161a22;
+  --line: #262c38;
+  --text: #e6e9ef;
+  --muted: #8b93a7;
+  --accent: #7aa2f7;
+  --pass: #7bd88f;
+  --fail: #f7768e;
+  --warn: #e0af68;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 1.4fr);
+  grid-template-rows: minmax(0, 1fr) minmax(180px, 0.6fr);
+  grid-template-areas: 'terminal inspector' 'timeline inspector';
+  gap: 1px;
+  height: 100vh;
+  background: var(--line);
+}
+
+.terminal-pane {
+  grid-area: terminal;
+}
+#inspector {
+  grid-area: inspector;
+}
+#timeline {
+  grid-area: timeline;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pane-head h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+button {
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  color: var(--text);
+  background: #1e2430;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* Terminal ------------------------------------------------------------- */
+
+.terminal {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 4px;
+  background: #0e1117;
+}
+
+.overlay {
+  position: absolute;
+  pointer-events: none;
+}
+
+.overlay.picking {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.bounds {
+  position: absolute;
+  border: 1px solid var(--accent);
+  background: rgb(122 162 247 / 12%);
+  pointer-events: none;
+}
+
+.bounds.selected {
+  border-color: var(--warn);
+  background: rgb(224 175 104 / 14%);
+}
+
+.bounds-label {
+  position: absolute;
+  top: -16px;
+  left: 0;
+  padding: 0 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  color: #0e1117;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.bounds.selected .bounds-label {
+  background: var(--warn);
+}
+
+/* Inspector ------------------------------------------------------------ */
+
+.tree {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.subtree .children {
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+  margin-left: 4px;
+}
+
+.node {
+  padding: 1px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.node:hover,
+.node.hovered {
+  background: #1e2430;
+}
+
+.node.selected {
+  background: #2a3247;
+  outline: 1px solid var(--accent);
+}
+
+.node .role {
+  color: var(--accent);
+}
+.node .name {
+  color: var(--text);
+}
+.node .testid {
+  color: var(--pass);
+}
+.node .states {
+  color: var(--muted);
+}
+
+.empty {
+  padding: 10px;
+  color: var(--muted);
+}
+
+.selector {
+  border-top: 1px solid var(--line);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selector code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--pass);
+}
+
+.selector code.fragile {
+  color: var(--warn);
+}
+
+.selector .warn {
+  margin: 0;
+  color: var(--warn);
+  font-size: 11px;
+}
+
+.selector .status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Timeline ------------------------------------------------------------- */
+
+.scrubber {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.scrubber input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.clock {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+  min-width: 60px;
+  text-align: right;
+}
+
+.markers {
+  position: relative;
+  height: 10px;
+  margin: 0 44px 4px 44px;
+}
+
+.marker {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 10px;
+  padding: 0;
+  border-radius: 2px;
+  border: none;
+  background: var(--muted);
+  transform: translateX(-3px);
+}
+
+.marker.step {
+  background: var(--accent);
+}
+
+.tests {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+  padding: 4px 8px;
+  list-style: none;
+}
+
+.test {
+  padding: 3px 0;
+}
+
+.test-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.dot.passed {
+  background: var(--pass);
+}
+.dot.failed {
+  background: var(--fail);
+}
+.dot.running {
+  background: var(--accent);
+}
+
+.test .error {
+  margin: 2px 0 2px 14px;
+  color: var(--fail);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 18px;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  gap: 8px;
+  padding: 1px 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.step.failed {
+  color: var(--fail);
+}
+
+.step:hover {
+  color: var(--text);
+}
+
+.summary {
+  border-top: 1px solid var(--line);
+  padding: 6px 10px;
+  color: var(--muted);
+}
