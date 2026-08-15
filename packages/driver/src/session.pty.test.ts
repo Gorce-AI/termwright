@@ -259,22 +259,27 @@ describe.skipIf(!ptyAvailable())('waitForReady', { timeout: 20_000 }, () => {
     await terminal.waitForReady();
     expect(terminal.screen().text()).toContain('$');
 
-    const strategy = terminal.diagnostics().findLast((entry) => entry.code === 'ready-strategy');
-    expect(strategy?.detail).toContain('shell integration');
+    expect(terminal.diagnostics().at(-1)?.code).toBe('ready-shell-integration');
 
     // While a command runs, readiness is false again until D arrives.
     await terminal.press('x');
     await terminal.waitForText('working');
     await terminal.waitForReady();
-    expect(terminal.diagnostics().filter((entry) => entry.code === 'ready-strategy')).toHaveLength(2);
+    expect(
+      terminal.diagnostics().filter((entry) => entry.code === 'ready-shell-integration'),
+    ).toHaveLength(2);
   });
 
   it('falls back to a settled screen, and says so', async () => {
     const terminal = await launch('echo-app.mjs');
     await terminal.waitForReady();
 
-    const strategy = terminal.diagnostics().findLast((entry) => entry.code === 'ready-strategy');
-    expect(strategy?.detail).toContain('heuristic');
+    // The fallback is a guess and says so by code, not by prose.
+    const strategy = terminal.diagnostics().at(-1);
+    expect(strategy?.code).toBe('ready-settled-screen');
+    expect(
+      terminal.diagnostics().some((entry) => entry.code === 'ready-shell-integration'),
+    ).toBe(false);
   });
 
   it('does not call an exited program ready, even with a prompt on screen', async () => {

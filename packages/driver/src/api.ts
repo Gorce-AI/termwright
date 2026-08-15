@@ -315,8 +315,10 @@ export type DiagnosticCode =
   | 'endpoint-error'
   /** A `SessionEvents` listener threw; the session continued. */
   | 'listener-error'
-  /** Which strategy `waitForReady` used, and what it observed. */
-  | 'ready-strategy';
+  /** `waitForReady` observed an OSC 133 prompt mark: a fact, not a guess. */
+  | 'ready-shell-integration'
+  /** `waitForReady` fell back to "the screen settled": a heuristic. */
+  | 'ready-settled-screen';
 
 /** One entry of the session diagnostics log. */
 export interface SessionDiagnostic {

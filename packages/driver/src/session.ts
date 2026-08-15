@@ -513,8 +513,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (shell.supported) {
         if (shell.ready) {
           this.#diagnostic(
-            'ready-strategy',
-            `ready from shell integration: last OSC 133 mark was ${String(shell.lastMark)}`,
+            'ready-shell-integration',
+            `the program reported a prompt: last OSC 133 mark was ${String(shell.lastMark)}`,
           );
           return;
         }
@@ -522,8 +522,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         // No shell integration: the honest fallback is "the program stopped
         // writing", which is a heuristic and is reported as one.
         this.#diagnostic(
-          'ready-strategy',
-          `ready from the settled-screen heuristic: no output for ${READY_QUIET_MS} ms and no OSC 133 marks were seen`,
+          'ready-settled-screen',
+          `no OSC 133 marks were seen, so readiness was guessed from silence: no output for ${READY_QUIET_MS} ms`,
         );
         return;
       }

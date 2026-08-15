@@ -105,8 +105,10 @@ Pass `envMode: 'inherit'` when the program really needs the full environment.
 `waitForReady()` prefers OSC 133 shell-integration marks (`A` prompt start,
 `B` input start, `C` command start, `D` finished) — the same marks VS Code,
 iTerm2, WezTerm and fish already emit. When a program emits none, it falls back
-to "the screen settled", which is a heuristic and is reported as one: every call
-records a `ready-strategy` entry saying which path it took.
+to "the screen settled", which is a heuristic and is reported as one — by code,
+not by prose: a diagnostic entry of `ready-shell-integration` means the program
+said it was at a prompt, `ready-settled-screen` means the driver guessed from
+silence.
 
 ## Diagnostics
 
