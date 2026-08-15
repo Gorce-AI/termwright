@@ -32,6 +32,22 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+      vitest:
+        specifier: '>=3.2.0'
+        version: 3.2.7(@types/node@22.20.1)(yaml@2.9.0)
+    devDependencies:
+      '@termwright/ink':
+        specifier: workspace:*
+        version: link:../ink
+      '@types/react':
+        specifier: ^19.2.18
+        version: 19.2.18
+      ink:
+        specifier: ^7.1.1
+        version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
 
   packages/driver:
     dependencies:
@@ -78,6 +94,16 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.18
+        version: 19.2.18
+      ink:
+        specifier: ^7.1.1
+        version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
 
   packages/mcp:
     dependencies:
@@ -87,6 +113,9 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       zod:
         specifier: ^4.0.0
         version: 4.4.3
@@ -120,12 +149,19 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@termwright/trace':
         specifier: workspace:*
         version: link:../trace
       yaml:
         specifier: ^2.5.0
         version: 2.9.0
+    devDependencies:
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.20.1)(yaml@2.9.0)
 
   packages/trace:
     dependencies:
