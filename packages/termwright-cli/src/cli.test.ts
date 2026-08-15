@@ -1,0 +1,256 @@
+import { describe, expect, it, vi } from 'vitest';
+import { EXIT_CODES } from '@termwright/mcp';
+import type { UiServer, UiServerOptions } from '@termwright/ui';
+import { runCli, type CliDeps } from './cli.js';
+import type { VitestHandle, VitestRun } from './ui-command.js';
+import { CLI_VERSION } from './version.js';
+
+interface Harness {
+  readonly deps: CliDeps;
+  readonly out: string[];
+  readonly err: string[];
+  readonly uiOptions: UiServerOptions[];
+  readonly runs: VitestRun[];
+  readonly mcpArgs: string[][];
+  readonly closed: () => number;
+}
+
+function harness(
+  overrides: {
+    readonly mode?: UiServer['mode'];
+    readonly runnerExit?: number;
+    readonly mcpExit?: number;
+  } = {},
+): Harness {
+  const out: string[] = [];
+  const err: string[] = [];
+  const uiOptions: UiServerOptions[] = [];
+  const runs: VitestRun[] = [];
+  const mcpArgs: string[][] = [];
+  let closes = 0;
+
+  const deps: CliDeps = {
+    io: { out: (text) => out.push(text), err: (text) => err.push(text) },
+    cwd: '/workspace',
+    runMcp: async (argv) => {
+      mcpArgs.push([...argv]);
+      return overrides.mcpExit ?? EXIT_CODES.ok;
+    },
+    ui: {
+      startUi: async (options) => {
+        uiOptions.push(options);
+        return {
+          url: 'http://127.0.0.1:5000/?token=abc',
+          port: 5000,
+          token: 'abc',
+          mode: overrides.mode ?? 'live',
+          hub: undefined as never,
+          recorder: undefined,
+          trace: undefined,
+          attach: () => () => undefined,
+          close: async () => {
+            closes += 1;
+          },
+        } satisfies UiServer;
+      },
+      startVitest: (run): VitestHandle => {
+        runs.push(run);
+        return {
+          exited: Promise.resolve(overrides.runnerExit ?? 0),
+          rerun: () => undefined,
+          stop: () => undefined,
+        };
+      },
+      waitForInterrupt: async () => undefined,
+    },
+  };
+
+  return { deps, out, err, uiOptions, runs, mcpArgs, closed: () => closes };
+}
+
+describe('informational commands', () => {
+  it('prints the version, and a JSON object with --json', async () => {
+    const plain = harness();
+    expect(await runCli(['--version'], plain.deps)).toBe(EXIT_CODES.ok);
+    expect(plain.out).toEqual([CLI_VERSION]);
+
+    const json = harness();
+    await runCli(['--version', '--json'], json.deps);
+    expect(JSON.parse(json.out[0] as string)).toMatchObject({ name: 'termwright', version: CLI_VERSION });
+  });
+
+  it('prints help listing every command', async () => {
+    const h = harness();
+    expect(await runCli([], h.deps)).toBe(EXIT_CODES.ok);
+    const help = h.out.join('\n');
+    for (const command of ['ui', 'codegen', 'mcp', 'agent-context', 'usage', 'skill']) {
+      expect(help).toContain(command);
+    }
+  });
+
+  it('emits the agent context generated from the MCP schemas', async () => {
+    const h = harness();
+    expect(await runCli(['agent-context'], h.deps)).toBe(EXIT_CODES.ok);
+    const context = JSON.parse(h.out.join('\n')) as {
+      tools: { name: string }[];
+      server: { version: string };
+      exitCodes: Record<string, number>;
+    };
+    expect(context.server.version.length).toBeGreaterThan(0);
+    expect(context.tools.map((tool) => tool.name)).toContain('terminal.snapshot');
+    // The taxonomy the CLI reports is the one it actually exits with.
+    expect(context.exitCodes).toMatchObject({ ...EXIT_CODES });
+  });
+
+  it('emits the skill package as files', async () => {
+    const h = harness();
+    expect(await runCli(['skill'], h.deps)).toBe(EXIT_CODES.ok);
+    expect(h.out.join('\n')).toContain('SKILL.md');
+  });
+
+  it('emits the cheat sheet, and the same context as agent-context with --json', async () => {
+    const plain = harness();
+    await runCli(['usage'], plain.deps);
+    expect(plain.out.join('\n').length).toBeGreaterThan(0);
+
+    const json = harness();
+    await runCli(['usage', '--json'], json.deps);
+    expect(JSON.parse(json.out[0] as string)).toHaveProperty('tools');
+  });
+});
+
+describe('mcp delegation', () => {
+  it('forwards its arguments to @termwright/mcp untouched', async () => {
+    const h = harness();
+    expect(await runCli(['mcp', '--http', '--port', '7333'], h.deps)).toBe(EXIT_CODES.ok);
+    expect(h.mcpArgs).toEqual([['--http', '--port', '7333']]);
+  });
+
+  it('carries --json through, and returns the delegate exit code', async () => {
+    const h = harness({ mcpExit: EXIT_CODES.noSession });
+    expect(await runCli(['mcp', '--json'], h.deps)).toBe(EXIT_CODES.noSession);
+    expect(h.mcpArgs[0]).toContain('--json');
+  });
+});
+
+describe('the ui command', () => {
+  it('starts the runner and the suite, and prints the URL', async () => {
+    const h = harness();
+    expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.ok);
+
+    expect(h.out.join('\n')).toContain('http://127.0.0.1:5000/?token=abc');
+    expect(h.runs).toHaveLength(1);
+    expect(h.runs[0]).toMatchObject({ uiUrl: 'http://127.0.0.1:5000/?token=abc', cwd: '/workspace' });
+    expect(h.closed()).toBe(1);
+  });
+
+  it('reports a failing run as an assertion failure', async () => {
+    const h = harness({ runnerExit: 1 });
+    expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.assertion);
+    expect(h.closed()).toBe(1);
+  });
+
+  it('forwards runner arguments after --', async () => {
+    const h = harness();
+    await runCli(['ui', '--', 'src/login.test.ts'], h.deps);
+    expect(h.runs[0]?.args).toEqual(['src/login.test.ts']);
+  });
+
+  it('prints machine-readable readiness with --json', async () => {
+    const h = harness();
+    await runCli(['ui', '--json'], h.deps);
+    expect(JSON.parse(h.out[0] as string)).toEqual({
+      url: 'http://127.0.0.1:5000/?token=abc',
+      port: 5000,
+      mode: 'live',
+    });
+  });
+
+  it('opens an archive without starting a runner', async () => {
+    const h = harness({ mode: 'post-mortem' });
+    expect(await runCli(['ui', '--trace', 'out/login.twtrace'], h.deps)).toBe(EXIT_CODES.ok);
+    expect(h.uiOptions[0]).toMatchObject({ trace: 'out/login.twtrace' });
+    expect(h.runs).toHaveLength(0);
+    expect(h.closed()).toBe(1);
+  });
+
+  it('records a command instead of watching a suite', async () => {
+    const h = harness({ mode: 'record' });
+    expect(
+      await runCli(['codegen', '--out-file', 'src/rec.test.ts', '--', 'node', 'agent.js'], h.deps),
+    ).toBe(EXIT_CODES.ok);
+
+    expect(h.uiOptions[0]?.record).toMatchObject({
+      command: ['node', 'agent.js'],
+      outFile: 'src/rec.test.ts',
+      cwd: '/workspace',
+    });
+    expect(h.runs).toHaveLength(0);
+  });
+
+  it('leaves the suite alone with --no-watch', async () => {
+    const h = harness();
+    await runCli(['ui', '--no-watch'], h.deps);
+    expect(h.runs).toHaveLength(0);
+    expect(h.closed()).toBe(1);
+  });
+
+  it('wires the browser controls to the runner', async () => {
+    const h = harness();
+    const rerun = vi.fn();
+    const stop = vi.fn();
+    const ui = h.deps.ui as { startVitest: CliDeps['ui']['startVitest'] };
+    let released: (() => void) | undefined;
+    ui.startVitest = () => ({
+      exited: new Promise<number>((resolve) => {
+        released = () => resolve(0);
+      }),
+      rerun,
+      stop,
+    });
+
+    const running = runCli(['ui'], h.deps);
+    await vi.waitFor(() => expect(h.uiOptions).toHaveLength(1));
+    await vi.waitFor(() => expect(released).toBeTypeOf('function'));
+
+    h.uiOptions[0]?.onRerun?.(undefined);
+    h.uiOptions[0]?.onStop?.();
+    expect(rerun).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledOnce();
+
+    released?.();
+    expect(await running).toBe(EXIT_CODES.ok);
+  });
+
+  it('closes the runner even when starting the suite throws', async () => {
+    const h = harness();
+    const ui = h.deps.ui as { startVitest: CliDeps['ui']['startVitest'] };
+    ui.startVitest = () => {
+      throw new Error('vitest is not installed in this project');
+    };
+
+    expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.internal);
+    expect(h.err.join('\n')).toContain('vitest is not installed');
+    expect(h.closed()).toBe(1);
+  });
+});
+
+describe('failures', () => {
+  it('maps a usage error to exit code 2', async () => {
+    const h = harness();
+    expect(await runCli(['--nope'], h.deps)).toBe(EXIT_CODES.usage);
+    expect(h.err.join('\n')).toContain('usage:');
+  });
+
+  it('renders failures as JSON carrying kind when asked, even for a later argument', async () => {
+    const h = harness();
+    expect(await runCli(['--json', 'ui', '--port', 'soon'], h.deps)).toBe(EXIT_CODES.usage);
+    expect(JSON.parse(h.err[0] as string)).toMatchObject({ kind: 'usage' });
+  });
+
+  it('honours --json when the failing argument comes before it', async () => {
+    const h = harness();
+    expect(await runCli(['ui', '--port', 'soon', '--json'], h.deps)).toBe(EXIT_CODES.usage);
+    expect(JSON.parse(h.err[0] as string)).toMatchObject({ kind: 'usage' });
+  });
+});

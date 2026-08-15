@@ -1,16 +1,37 @@
 {
   "name": "termwright",
   "version": "0.1.0",
-  "description": "umbrella CLI: ui, codegen, agent-context, usage, skill",
+  "description": "umbrella package + CLI: ui, codegen, mcp, agent-context, usage, skill",
   "license": "MIT",
   "type": "module",
   "engines": { "node": ">=22" },
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./test": { "types": "./dist/test.d.ts", "import": "./dist/test.js" },
+    "./ink": { "types": "./dist/ink.d.ts", "import": "./dist/ink.js" },
+    "./cli": { "types": "./dist/cli.d.ts", "import": "./dist/cli.js" }
+  },
+  "bin": { "termwright": "./dist/bin.js" },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/test.ts src/ink.ts src/cli.ts src/bin.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@termwright/driver": "workspace:*", "@termwright/ui": "workspace:*", "@termwright/mcp": "workspace:*" }
+  "dependencies": {
+    "@termwright/driver": "workspace:*",
+    "@termwright/ink-testing": "workspace:*",
+    "@termwright/mcp": "workspace:*",
+    "@termwright/test": "workspace:*",
+    "@termwright/ui": "workspace:*"
+  },
+  "peerDependencies": {
+    "vitest": ">=3.2.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": { "optional": true }
+  },
+  "devDependencies": {
+    "vitest": "^3.2.0"
+  }
 }
