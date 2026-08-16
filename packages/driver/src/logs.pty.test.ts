@@ -2,7 +2,7 @@
  * Log tailing over a real PTY: a program writing to its own log file while the
  * session follows it. Skipped where no pseudo-terminal can be opened.
  */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,6 +86,36 @@ describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, ()
     // Same clock as every other event on the session timeline.
     expect(lines[0]?.timeMs).toBeGreaterThan(0);
     expect(lines[1]?.timeMs).toBeGreaterThanOrEqual(lines[0]?.timeMs ?? 0);
+  });
+
+  it('delivers each line once when appends are spread over several polls', async () => {
+    // Regression: the head fingerprint used to be taken over min(64, size), so
+    // it grew with the file. Any append to a file shorter than the window then
+    // looked like a replacement, and the tail restarted and re-delivered every
+    // line it had already published.
+    const { terminal, lines, path } = await launchWithLog();
+
+    appendFileSync(path, 'line one\n');
+    await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    appendFileSync(path, 'line two\n');
+    await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(2);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    expect(lines.map((entry) => entry.line)).toEqual(['line one', 'line two']);
+    expect(terminal.diagnostics().filter((entry) => entry.code === 'log-source').length).toBe(1);
+  });
+
+  it('keeps delivering once past the fingerprint window', async () => {
+    // The window widens when the file outgrows it; that must not re-deliver.
+    const { lines, path } = await launchWithLog();
+    for (let index = 0; index < 6; index += 1) {
+      appendFileSync(path, `padding line ${index} with enough text to pass 64 bytes\n`);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+    await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(6);
+    expect(new Set(lines.map((entry) => entry.line)).size).toBe(6);
   });
 
   it('does not replay a log that was already there', async () => {

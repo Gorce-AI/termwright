@@ -53,8 +53,13 @@ interface SourceState {
   offset: number;
   /** Inode of the open file, so a rename can be told from a write. */
   inode: number | null;
-  /** First bytes of the file as last seen; a change means it was replaced. */
-  fingerprint: string | null;
+  /**
+   * First bytes of the file as last seen, together with how many were taken.
+   * The window is fixed once taken: comparing "the first min(64, size) bytes"
+   * would grow with the file, so every append to a file shorter than the
+   * window would read as a replacement.
+   */
+  fingerprint: { readonly value: string; readonly length: number } | null;
   pending: Buffer;
   attached: boolean;
   windowStartedAt: number;
@@ -183,28 +188,42 @@ export class LogTailer {
    * being followed.
    */
   async #headChanged(state: SourceState, size: number): Promise<boolean> {
-    if (state.offset === 0 || size === 0) return false;
-    const head = await this.#readHead(state, size);
+    const taken = state.fingerprint;
+    if (taken === null || state.offset === 0) return false;
+    // Fewer bytes than the window we fingerprinted means the file lost content.
+    if (size < taken.length) return true;
+    const head = await this.#readHead(state, taken.length);
     if (head === null) return false;
-    if (state.fingerprint === null) {
-      state.fingerprint = head;
-      return false;
-    }
-    return head !== state.fingerprint;
+    return head !== taken.value;
   }
 
-  async #readHead(state: SourceState, size: number): Promise<string | null> {
+  /** Reads exactly `length` bytes from the start of the file. */
+  async #readHead(state: SourceState, length: number): Promise<string | null> {
+    if (length <= 0) return null;
     if (state.handle === null) {
       state.handle = await open(state.source.path, 'r').catch(() => null);
       if (state.handle === null) return null;
     }
-    const length = Math.min(FINGERPRINT_BYTES, size);
     const buffer = Buffer.alloc(length);
     const { bytesRead } = await state.handle
       .read(buffer, 0, length, 0)
       .catch(() => ({ bytesRead: 0 }));
-    if (bytesRead <= 0) return null;
-    return buffer.subarray(0, bytesRead).toString('base64');
+    if (bytesRead < length) return null;
+    return buffer.toString('base64');
+  }
+
+  /**
+   * Takes the fingerprint once there is something to take, and widens it to the
+   * full window as soon as the file is long enough. Widening is safe: the file
+   * only ever grew, so those bytes are the same bytes.
+   */
+  async #refreshFingerprint(state: SourceState): Promise<void> {
+    const current = state.fingerprint;
+    if (current !== null && current.length >= FINGERPRINT_BYTES) return;
+    const length = Math.min(FINGERPRINT_BYTES, state.offset);
+    if (current !== null && length <= current.length) return;
+    const value = await this.#readHead(state, length);
+    if (value !== null) state.fingerprint = { value, length };
   }
 
   /** Starts the source over at byte zero, without treating it as a failure. */
@@ -241,7 +260,7 @@ export class LogTailer {
     }));
     if (bytesRead <= 0) return;
     state.offset += bytesRead;
-    if (state.fingerprint === null) state.fingerprint = await this.#readHead(state, size);
+    await this.#refreshFingerprint(state);
     this.#consume(state, buffer.subarray(0, bytesRead));
   }
 
