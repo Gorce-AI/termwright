@@ -72,9 +72,11 @@ So the adapter wraps the console methods itself (`captureConsole` in
 `src/logs.ts`), which is plain JavaScript rather than an Ink internal. Two
 details make it compose with Ink instead of fighting it:
 
-- the wrapper is installed **after** the first render, so it wraps Ink's
-  already-patched methods; the original call still reaches Ink's render-safe
-  routing, and the frame is never corrupted;
+- the wrapper is installed **after** the first render and only once the driver
+  has actually enabled logs, so it wraps Ink's already-patched methods; the
+  original call still reaches Ink's render-safe routing, and the frame is never
+  corrupted. Wrapping earlier would mutate a global for records that no
+  subscriber would receive;
 - Ink restores the pristine console on unmount, which drops our wrapper with
   it, so there is nothing to leak.
 

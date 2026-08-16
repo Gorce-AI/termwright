@@ -95,6 +95,7 @@ function renderWith(
   const userOnRender = inkOptions.onRender;
   let publisher: SemanticPublisher | undefined;
   let logForwarder: LogForwarder | undefined;
+  let restoreConsole: (() => void) | undefined;
   let disposed = false;
 
   const wrap = (child: ReactNode): ReactNode => (
@@ -159,21 +160,24 @@ function renderWith(
             limits: channel.session.limits,
             currentRevision: () => publisher?.revision ?? 0,
           }) ?? undefined;
+
+        // Wrapped only once logs are actually flowing, and only then: with no
+        // subscriber every published record is discarded anyway, so wrapping
+        // earlier would mutate a global to no purpose. By now Ink has long
+        // since patched the console, so this composes on top of its
+        // render-safe routing rather than being replaced by it.
+        if (logForwarder !== undefined && semantics?.captureConsole !== false) {
+          restoreConsole = captureConsole();
+        }
       }
     })
     .catch(() => undefined);
-
-  // Installed straight after the first render, so it wraps Ink's own patched
-  // console rather than being wrapped by it. Publishing is free until the
-  // forwarder subscribes, so pre-handshake output simply finds no listener.
-  const restoreConsole =
-    semantics?.captureConsole === false ? () => undefined : captureConsole();
 
   const dispose = (): void => {
     disposed = true;
     logForwarder?.dispose();
     publisher?.dispose();
-    restoreConsole();
+    restoreConsole?.();
   };
 
   return {

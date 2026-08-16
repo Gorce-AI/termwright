@@ -88,6 +88,7 @@ describe('application logs', () => {
     });
 
     it('sends nothing when the driver did not enable the channel', async () => {
+      const before = console.error;
       const { driver } = await launch();
 
       publishLog({ level: 'error', message: 'should not travel' });
@@ -95,6 +96,9 @@ describe('application logs', () => {
 
       expect(driver.logs).toHaveLength(0);
       expect(hasLogSubscribers()).toBe(false);
+      // No subscriber means every record is discarded anyway, so there is no
+      // reason to have touched the global console.
+      expect(console.error).toBe(before);
     });
 
     it('sends nothing when the driver disabled the channel explicitly', async () => {
