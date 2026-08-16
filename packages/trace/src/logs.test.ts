@@ -354,3 +354,65 @@ describe('logs in the HTML report', () => {
     expect(html).not.toContain('<h3>Application logs');
   });
 });
+
+describe('artifacts for a test that passed', () => {
+  it('shows the whole log, not a failure window', async () => {
+    const root = await workspace();
+    const dir = join(root, 'passed.twtrace');
+    await recordWithLogs(dir);
+
+    const { html } = await generateHtmlReport({
+      outFile: join(root, 'report.html'),
+      embedPlayer: false,
+      results: [{ id: 't1', title: 'submits', status: 'passed', tracePath: dir }],
+    });
+
+    expect(html).toContain('<h3>Application logs');
+    // Including the entry from before the first step, which the failure
+    // window would have cut.
+    expect(html).toContain('listening');
+    expect(html).toContain('save failed');
+    expect(html).not.toContain('around the failure');
+  });
+
+  it('keeps the section collapsed and still names the archive', async () => {
+    const root = await workspace();
+    const dir = join(root, 'collapsed.twtrace');
+    await recordWithLogs(dir);
+
+    const { html } = await generateHtmlReport({
+      outFile: join(root, 'report.html'),
+      embedPlayer: false,
+      results: [{ id: 't1', title: 'submits', status: 'passed', tracePath: dir }],
+    });
+
+    expect(html).toContain('<details class="tw-test tw-passed">');
+    expect(html).not.toContain('<details class="tw-test tw-passed" open>');
+    expect(html).toContain(`<code class="tw-path">${dir}</code>`);
+  });
+
+  it('narrows to the failing step when there is one', async () => {
+    const root = await workspace();
+    const dir = join(root, 'narrowed.twtrace');
+    await recordWithLogs(dir);
+
+    const { html } = await generateHtmlReport({
+      outFile: join(root, 'report.html'),
+      embedPlayer: false,
+      results: [{ id: 't1', title: 'submits', status: 'failed', tracePath: dir }],
+    });
+
+    expect(html).toContain('around the failure');
+    expect(html).not.toContain('>listening<');
+  });
+
+  it('omits the trace path when the caller gave none', async () => {
+    const root = await workspace();
+    const { html } = await generateHtmlReport({
+      outFile: join(root, 'report.html'),
+      embedPlayer: false,
+      results: [{ id: 't1', title: 'no trace', status: 'passed' }],
+    });
+    expect(html).not.toContain('<code class="tw-path">');
+  });
+});

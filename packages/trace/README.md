@@ -122,6 +122,10 @@ verbatim: filtering by channel (`db.pool`) is a different question from "which
 stream do I render this under", and a display fallback is the wrong thing to
 filter on.
 
+A test that passed under `trace: 'on'` keeps its archive too, so its section
+names the `.twtrace` path and shows the whole log rather than a failure window.
+The section stays collapsed — nothing failed — but the artifacts are all there.
+
 The report shows the entries inside the failing step, level-coloured, and pins
 `warn`/`error`/`fatal` entries onto the test timeline next to the steps, so a
 logged error is visible *where in the test it happened*. A followed file line

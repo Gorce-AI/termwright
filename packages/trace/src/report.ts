@@ -182,6 +182,8 @@ interface TestSection {
   readonly logs: readonly TraceLogEntry[];
   /** error/fatal/warn entries across the whole run, for the timeline. */
   readonly notableLogs: readonly TraceLogEntry[];
+  /** True when `logs` is the failing step's window rather than the whole log. */
+  readonly logsAroundFailure: boolean;
   readonly cast: string | null;
   readonly castNote: string | null;
 }
@@ -199,6 +201,7 @@ async function buildSection(
     crash: null,
     logs: [],
     notableLogs: [],
+    logsAroundFailure: false,
     cast: null,
     castNote: null,
   };
@@ -228,7 +231,13 @@ async function buildSection(
     const visual = await buildVisual(result, before, after, trace);
     const semantic = buildSemantic(result, before, after);
     const { cast, castNote } = await loadCast(trace, options);
-    const { logs, notableLogs } = await loadLogs(trace, result, failingStep, options);
+    // `failingStep` falls back to the last step for the player's start point;
+    // the log window needs the step that actually failed, or none at all.
+    const failedStep =
+      result.status === 'failed'
+        ? (steps.find((step) => step.status === 'failed') ?? null)
+        : null;
+    const { logs, notableLogs } = await loadLogs(trace, failedStep, options);
 
     return {
       result,
@@ -239,6 +248,7 @@ async function buildSection(
       crash: trace?.meta.crash ?? null,
       logs,
       notableLogs,
+      logsAroundFailure: failedStep !== null,
       cast,
       castNote,
     };
@@ -305,14 +315,16 @@ const NOTABLE_LEVELS = new Set(['warn', 'error', 'fatal']);
  */
 async function loadLogs(
   trace: TraceReader | null,
-  result: ReportTestResult,
-  failingStep: StepSummary | null,
+  failedStep: StepSummary | null,
   options: ReportOptions,
 ): Promise<{ logs: readonly TraceLogEntry[]; notableLogs: readonly TraceLogEntry[] }> {
   if (trace === null || trace.meta.logs === undefined) return { logs: [], notableLogs: [] };
   const limit = options.maxLogEntriesShown ?? 200;
-  const from = failingStep?.castOffset ?? 0;
-  const until = failingStep?.castEndOffset ?? Number.POSITIVE_INFINITY;
+  // A failure narrows the view to the step that failed. A test that passed
+  // still kept an archive under `trace: 'on'`, and its log is the artifact —
+  // show the whole thing, newest kept when it runs long.
+  const from = failedStep?.castOffset ?? 0;
+  const until = failedStep?.castEndOffset ?? Number.POSITIVE_INFINITY;
 
   const window: TraceLogEntry[] = [];
   const notable: TraceLogEntry[] = [];
@@ -320,7 +332,6 @@ async function loadLogs(
     if (entry.level !== undefined && NOTABLE_LEVELS.has(entry.level)) {
       if (notable.length < limit) notable.push(entry);
     }
-    if (result.status !== 'failed') continue;
     if (entry.castOffset < from || entry.castOffset > until) continue;
     window.push(entry);
     if (window.length > limit) window.shift();
@@ -436,7 +447,14 @@ function renderSection(section: TestSection): string {
   if (section.castNote !== null) {
     parts.push(`<p class="tw-note">${escapeHtml(section.castNote)}</p>`);
   }
-  if (section.logs.length > 0) parts.push(renderLogs(section.logs));
+  if (result.tracePath !== undefined) {
+    // A path to copy, not a link: a browser cannot usefully open a directory,
+    // and this is what gets pasted into `termwright ui`.
+    parts.push(
+      `<p class="tw-note">trace: <code class="tw-path">${escapeHtml(result.tracePath)}</code></p>`,
+    );
+  }
+  if (section.logs.length > 0) parts.push(renderLogs(section.logs, section.logsAroundFailure));
   if (section.steps.length > 0 || section.notableLogs.length > 0) {
     parts.push(renderTimeline(section.steps, section.notableLogs));
   }
@@ -672,7 +690,7 @@ function logLabel(entry: TraceLogEntry): string {
 }
 
 /** Every log entry inside the failing step, level-coloured. */
-function renderLogs(logs: readonly TraceLogEntry[]): string {
+function renderLogs(logs: readonly TraceLogEntry[], aroundFailure: boolean): string {
   const rows = logs
     .map((entry) => {
       const attrs =
@@ -691,7 +709,7 @@ function renderLogs(logs: readonly TraceLogEntry[]): string {
   return `<section class="tw-block">
     <h3>Application logs <span class="tw-note">${logs.length} entr${
       logs.length === 1 ? 'y' : 'ies'
-    } around the failure</span></h3>
+    }${aroundFailure ? ' around the failure' : ''}</span></h3>
     <ul class="tw-logs">
       ${rows}
     </ul>
@@ -808,6 +826,7 @@ summary { cursor:pointer; display:flex; gap:12px; align-items:baseline; flex-wra
 .tw-crash-head { margin:0; }
 .tw-warn { margin:6px 0; padding:6px 10px; border-radius:6px; font-size:12px; color:#ffd8a8; background:rgba(200,163,74,.12); border:1px solid rgba(200,163,74,.4); }
 .tw-crash-screen { background:#141414; border:1px solid var(--line); border-radius:6px; padding:8px; overflow-x:auto; font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace; font-size:12px; line-height:1.3; white-space:pre; margin:0; }
+.tw-path { user-select:all; color:var(--text); }
 .tw-logs { margin:0; padding:0; list-style:none; font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace; font-size:12px; line-height:1.5; background:#111; border:1px solid var(--line); border-radius:6px; padding:8px; overflow-x:auto; }
 .tw-logs li { white-space:pre-wrap; border-left:2px solid transparent; padding-left:6px; }
 .tw-log-at { color:var(--muted); }
