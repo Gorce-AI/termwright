@@ -313,6 +313,7 @@ class TextualSemantics:
                     bounds=bounds,
                     state=_state_for(widget, app, visible),
                     actions=_actions_for(role),
+                    frameworkType=type(widget).__name__ if role == "generic" else None,
                 )
             )
 

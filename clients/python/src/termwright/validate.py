@@ -192,6 +192,7 @@ _NODE_KEYS = (
     "describedBy",
     "textRanges",
     "testId",
+    "frameworkType",
 )
 
 
@@ -219,9 +220,17 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
     if "name" not in node:
         raise _Issue(tuple(path) + ("name",), "expected a string")
     _text(node["name"], tuple(path) + ("name",), limits)
-    for key in ("description", "value", "testId"):
+    for key in ("description", "value", "testId", "frameworkType"):
         if key in node:
             _text(node[key], tuple(path) + (key,), limits)
+    if node.get("role") == "generic" and not node.get("frameworkType"):
+        # An unrecognised widget must at least name what the framework called
+        # it. An empty string carries no more than its absence, so both fail.
+        raise _Issue(
+            tuple(path) + ("frameworkType",),
+            f"node {node.get('id')} has role 'generic' without a frameworkType; "
+            "an unrecognised widget must name what the framework called it",
+        )
     if "bounds" in node:
         _rect(node["bounds"], tuple(path) + ("bounds",))
     if "state" in node:

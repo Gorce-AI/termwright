@@ -57,6 +57,10 @@ type Node struct {
 	DescribedBy []string    `json:"describedBy,omitempty"`
 	TextRanges  []TextRange `json:"textRanges,omitempty"`
 	TestID      string      `json:"testId,omitempty"`
+	// FrameworkType is what the UI framework calls this widget. Required when
+	// Role is RoleGeneric: an unrecognised widget must at least name its own
+	// type, so a reader can tell one unknown thing from another.
+	FrameworkType string `json:"frameworkType,omitempty"`
 }
 
 // Cursor is the terminal cursor position in viewport cells.

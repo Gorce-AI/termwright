@@ -64,10 +64,14 @@ def test_deeply_nested_trees_are_rejected_by_depth():
 
 def test_oversized_snapshots_are_rejected_by_bytes():
     filler = "x" * (DEFAULT_LIMITS.maxStringBytes - 1)
+    # Derived from the ceiling rather than hard-coded: this test was written
+    # with a fixed 80 nodes against a 1 MiB limit and silently stopped
+    # exceeding anything when the limit moved to 2 MiB.
+    count = DEFAULT_LIMITS.maxSnapshotBytes // DEFAULT_LIMITS.maxStringBytes + 2
     nodes = [SemanticNode(id="root", role="application", name="")]
     nodes.extend(
         SemanticNode(id=f"n{index}", parentId="root", role="text", name=filler)
-        for index in range(80)
+        for index in range(count)
     )
     snapshot = SemanticSnapshot(
         sessionId="s-1", revision=1, columns=80, rows=24, rootIds=["root"], nodes=nodes

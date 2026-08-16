@@ -8,6 +8,7 @@ pytest.importorskip("textual", reason="the Textual adapter needs textual install
 
 from textual.app import App, ComposeResult  # noqa: E402
 from textual.containers import Vertical  # noqa: E402
+from textual.widget import Widget  # noqa: E402
 from textual.widgets import Button, Input, Label, ListItem, ListView  # noqa: E402
 
 from termwright import DEFAULT_LIMITS, validate_snapshot  # noqa: E402
@@ -327,3 +328,53 @@ def test_the_name_from_content_roles_are_exactly_the_contract_s():
     assert NAME_FROM_CONTENT_ROLES == {
         "button", "listitem", "menuitem", "tab", "checkbox", "radio", "cell", "row", "heading",
     }
+
+
+class CustomWidgetApp(App):
+    """A widget the role map has never heard of, which is the common case.
+
+    Any application with a widget of its own lands here, so this is not an
+    exotic path: it is what happens the first time somebody subclasses
+    something the adapter does not recognise.
+    """
+
+    def compose(self) -> ComposeResult:
+        yield WeatherGlyph()
+
+
+class WeatherGlyph(Widget):
+    """Deliberately not in the role map, and not a name that is in it either.
+
+    The first attempt at this fixture was called `Sparkline`, which Textual
+    ships and the role map already answers with `progressbar` — so it proved
+    nothing.
+    """
+
+
+async def test_an_unrecognised_widget_names_its_own_type(endpoint):
+    """A generic node must carry frameworkType, or the driver rejects the tree.
+
+    Without it the whole snapshot fails validation — not just the one node —
+    so a single unknown widget would silently cost the application its entire
+    semantic tree.
+    """
+    app = CustomWidgetApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        semantics = TextualSemantics(app, _offline_client(endpoint))
+        snapshot = semantics.build_snapshot().to_wire()
+
+    generic = [node for node in snapshot["nodes"] if node["role"] == "generic"]
+    assert generic, "the fixture no longer produces a generic node"
+    assert all(node.get("frameworkType") for node in generic)
+    assert "WeatherGlyph" in {node.get("frameworkType") for node in generic}
+
+    result = validate_snapshot(snapshot, DEFAULT_LIMITS)
+    assert result.ok, f"{result.code}: {result.detail}"
+
+
+def test_a_recognised_role_does_not_claim_a_framework_type():
+    """frameworkType answers "what is this unknown thing", nothing else."""
+    from termwright.textual_adapter import role_for as resolve
+
+    assert resolve(Button("Save")) == "button"

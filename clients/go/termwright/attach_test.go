@@ -645,3 +645,40 @@ func TestTestIDsComeFromTheAnnotation(t *testing.T) {
 		}
 	}
 }
+
+// weatherGlyph is a primitive tview has never heard of, which is the common
+// case: any application with a widget of its own lands on the generic role.
+type weatherGlyph struct {
+	*tview.Box
+}
+
+// A generic node must carry frameworkType, or the driver rejects the whole
+// snapshot — not just the one node — so a single unknown widget would silently
+// cost the application its entire semantic tree. asWire validates, so this
+// test fails at the validation step when the field is missing.
+func TestAnUnrecognisedPrimitiveNamesItsOwnType(t *testing.T) {
+	app := tview.NewApplication()
+	root := &weatherGlyph{Box: tview.NewBox()}
+	session := &Session{app: app, root: root, ids: make(map[tview.Primitive]string)}
+
+	var generic []map[string]any
+	for _, raw := range asWire(t, session.buildSnapshot(80, 24))["nodes"].([]any) {
+		node := raw.(map[string]any)
+		if node["role"] == string(protocol.RoleGeneric) {
+			generic = append(generic, node)
+		}
+	}
+
+	if len(generic) == 0 {
+		t.Fatal("the fixture no longer produces a generic node")
+	}
+	for _, node := range generic {
+		framework, _ := node["frameworkType"].(string)
+		if framework == "" {
+			t.Fatalf("generic node %v published no frameworkType", node["id"])
+		}
+		if !strings.Contains(framework, "weatherGlyph") {
+			t.Fatalf("frameworkType %q does not name the widget's own type", framework)
+		}
+	}
+}

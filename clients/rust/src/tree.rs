@@ -186,6 +186,11 @@ pub struct Node {
     /// Author-supplied test id.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub test_id: Option<String>,
+    /// What the UI framework calls this widget. Required when `role` is
+    /// [`Role::Generic`]: an unrecognised widget must at least name its own
+    /// type, so a reader can tell one unknown thing from another.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub framework_type: Option<String>,
 }
 
 impl Node {
@@ -205,7 +210,15 @@ impl Node {
             described_by: None,
             text_ranges: None,
             test_id: None,
+            framework_type: None,
         }
+    }
+
+    /// Name what the framework calls this widget, which the protocol requires
+    /// for a [`Role::Generic`] node.
+    pub fn with_framework_type(mut self, framework_type: impl Into<String>) -> Self {
+        self.framework_type = Some(framework_type.into());
+        self
     }
 
     /// Attach this node to a parent.

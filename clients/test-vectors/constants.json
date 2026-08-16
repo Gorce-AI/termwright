@@ -74,7 +74,7 @@
   ],
   "defaultLimits": {
     "maxFrameBytes": 1048576,
-    "maxSnapshotBytes": 1048576,
+    "maxSnapshotBytes": 2097152,
     "maxNodes": 5000,
     "maxDepth": 64,
     "maxStringBytes": 16384,

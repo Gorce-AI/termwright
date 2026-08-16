@@ -382,13 +382,26 @@ const snapshotReject = [
   { name: 'self-parent', snapshot: mutate((s) => { s.nodes[2].parentId = 'n3'; }) },
   {
     name: 'parent-cycle',
+    // frameworkType on both nodes on purpose: a generic node without one is
+    // rejected by an earlier rule, which would leave this vector passing for
+    // the wrong reason and the cycle check with no cross-language coverage.
     snapshot: mutate((s) => {
       s.rootIds = [];
       s.nodes = [
-        { id: 'a', parentId: 'b', role: 'generic', name: '' },
-        { id: 'b', parentId: 'a', role: 'generic', name: '' },
+        { id: 'a', parentId: 'b', role: 'generic', frameworkType: 'Fixture', name: '' },
+        { id: 'b', parentId: 'a', role: 'generic', frameworkType: 'Fixture', name: '' },
       ];
     }),
+  },
+  {
+    // The rule that shadowed the cycle above, now covered in its own right.
+    name: 'generic-without-framework-type',
+    snapshot: mutate((s) => { s.nodes[1].role = 'generic'; }),
+  },
+  {
+    // An empty string carries no more than the field's absence.
+    name: 'generic-with-empty-framework-type',
+    snapshot: mutate((s) => { s.nodes[1].role = 'generic'; s.nodes[1].frameworkType = ''; }),
   },
   { name: 'unknown-role', snapshot: mutate((s) => { s.nodes[1].role = 'slider'; }) },
   { name: 'root-with-parent', snapshot: mutate((s) => { s.nodes[0].parentId = 'n2'; }) },

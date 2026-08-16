@@ -1,8 +1,15 @@
-"""The adapter-side diagnostic log: off by default, a file when asked, never stderr."""
+"""The adapter-side diagnostic log: off by default, a file when asked, never stderr.
+
+Tests that need a running loop are ``async def`` and rely on this package's
+``asyncio_mode = "auto"``. Do not reach for ``asyncio.run`` here: on Python 3.9
+it calls ``set_event_loop(None)`` on the way out, which leaves every later test
+in the session without a current loop — including the Textual ones, which fail
+with ``RuntimeError: There is no current event loop`` for a reason that has
+nothing to do with them.
+"""
 
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 
@@ -144,7 +151,7 @@ def test_a_protocol_mismatch_says_so(tmp_path):
     assert "dormant: TERMWRIGHT_PROTOCOL='termwright/2'" in target.read_text()
 
 
-def test_the_token_never_appears(tmp_path):
+async def test_the_token_never_appears(tmp_path):
     target = tmp_path / "adapter.log"
     client = client_from_env(
         adapter_name="test",
@@ -156,12 +163,12 @@ def test_the_token_never_appears(tmp_path):
         },
     )
     assert client is not None
-    assert asyncio.run(client.start(timeout=0.5)) is False
+    assert await client.start(timeout=0.5) is False
     assert "s3cret-token-value" not in target.read_text()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="unix socket path")
-def test_a_failed_dial_names_the_error_class(tmp_path, endpoint):
+async def test_a_failed_dial_names_the_error_class(tmp_path, endpoint):
     """The line that would have settled the Windows question by itself.
 
     ``endpoint`` rather than ``tmp_path`` for the socket: a path under pytest's
@@ -179,7 +186,7 @@ def test_a_failed_dial_names_the_error_class(tmp_path, endpoint):
         },
     )
     assert client is not None
-    assert asyncio.run(client.start(timeout=0.5)) is False
+    assert await client.start(timeout=0.5) is False
     text = target.read_text()
     assert "dial unix:" in text
     assert "dial failed, staying dormant: FileNotFoundError" in text

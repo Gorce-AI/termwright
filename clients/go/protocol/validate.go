@@ -242,6 +242,7 @@ func checkState(value any, path []string) *issue {
 var nodeKeys = []string{
 	"id", "parentId", "role", "name", "description", "value", "bounds",
 	"state", "actions", "labelledBy", "describedBy", "textRanges", "testId",
+	"frameworkType",
 }
 
 func checkRelations(value any, path []string, limits Limits) *issue {
@@ -288,11 +289,21 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 	if _, problem := checkText(object["name"], at(path, "name"), limits); problem != nil {
 		return problem
 	}
-	for _, key := range []string{"description", "value", "testId"} {
+	for _, key := range []string{"description", "value", "testId", "frameworkType"} {
 		if present, ok := object[key]; ok {
 			if _, problem := checkText(present, at(path, key), limits); problem != nil {
 				return problem
 			}
+		}
+	}
+	if Role(role) == RoleGeneric {
+		// An unrecognised widget must at least name what the framework called
+		// it. An empty string carries no more than its absence, so both fail.
+		framework, _ := object["frameworkType"].(string)
+		if framework == "" {
+			return fail(at(path, "frameworkType"), fmt.Sprintf(
+				"node %s has role 'generic' without a frameworkType; an unrecognised widget "+
+					"must name what the framework called it", id))
 		}
 	}
 	if bounds, ok := object["bounds"]; ok {

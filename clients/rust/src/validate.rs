@@ -236,7 +236,7 @@ fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
     Ok(())
 }
 
-const NODE_KEYS: [&str; 13] = [
+const NODE_KEYS: [&str; 14] = [
     "id",
     "parentId",
     "role",
@@ -250,6 +250,7 @@ const NODE_KEYS: [&str; 13] = [
     "describedBy",
     "textRanges",
     "testId",
+    "frameworkType",
 ];
 
 fn check_relations(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
@@ -288,9 +289,27 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
         }
     }
     text(object.get("name"), path(at, &["name"]), limits)?;
-    for key in ["description", "value", "testId"] {
+    for key in ["description", "value", "testId", "frameworkType"] {
         if object.contains_key(key) {
             text(object.get(key), path(at, &[key]), limits)?;
+        }
+    }
+    if object.get("role").and_then(Value::as_str) == Some("generic") {
+        // An unrecognised widget must at least name what the framework called
+        // it. An empty string carries no more than its absence, so both fail.
+        let named = object
+            .get("frameworkType")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty());
+        if !named {
+            let id = object.get("id").and_then(Value::as_str).unwrap_or("");
+            return Err(Issue::new(
+                path(at, &["frameworkType"]),
+                format!(
+                    "node {id} has role 'generic' without a frameworkType; an unrecognised \
+                     widget must name what the framework called it"
+                ),
+            ));
         }
     }
     if let Some(bounds) = object.get("bounds") {

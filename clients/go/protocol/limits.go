@@ -24,7 +24,7 @@ type Limits struct {
 // DefaultLimits is what an adapter assumes until hello-ack says otherwise.
 var DefaultLimits = Limits{
 	MaxFrameBytes:      1 * 1024 * 1024,
-	MaxSnapshotBytes:   1 * 1024 * 1024,
+	MaxSnapshotBytes:   2 * 1024 * 1024,
 	MaxNodes:           5000,
 	MaxDepth:           64,
 	MaxStringBytes:     16 * 1024,

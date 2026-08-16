@@ -1579,7 +1579,7 @@
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxNodes": 5000,
             "maxDepth": 64,
             "maxStringBytes": 16384,
@@ -1604,7 +1604,7 @@
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxNodes": 5000,
             "maxDepth": 64,
             "maxStringBytes": 16384,
@@ -1631,7 +1631,7 @@
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxNodes": 5000,
             "maxDepth": 64,
             "maxStringBytes": 16384,
@@ -1657,7 +1657,7 @@
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxNodes": 5000,
             "maxDepth": 64,
             "maxStringBytes": 16384,
@@ -1691,7 +1691,7 @@
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxNodes": 5000,
             "maxDepth": 64,
             "maxStringBytes": 16384,
@@ -1716,7 +1716,7 @@
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxNodes": 5000,
             "maxDepth": 64,
             "maxStringBytes": 16384,
@@ -1766,7 +1766,7 @@
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxDepth": 64,
             "maxStringBytes": 16384,
             "maxRelationTargets": 64,
@@ -1792,7 +1792,7 @@
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxNodes": 5000,
             "maxDepth": 64,
             "maxStringBytes": 16384,
@@ -1819,7 +1819,7 @@
           "sessionId": "",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxNodes": 5000,
             "maxDepth": 64,
             "maxStringBytes": 16384,
@@ -1846,7 +1846,7 @@
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
             "maxNodes": 5000,
             "maxDepth": 64,
             "maxStringBytes": 16384,

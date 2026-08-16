@@ -37,7 +37,7 @@ pub struct Limits {
 /// What an adapter assumes until `hello-ack` says otherwise.
 pub const DEFAULT_LIMITS: Limits = Limits {
     max_frame_bytes: 1024 * 1024,
-    max_snapshot_bytes: 1024 * 1024,
+    max_snapshot_bytes: 2 * 1024 * 1024,
     max_nodes: 5_000,
     max_depth: 64,
     max_string_bytes: 16 * 1024,

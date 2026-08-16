@@ -1,6 +1,7 @@
 package termwright
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -46,15 +47,16 @@ func (s *Session) walk(
 	}
 
 	node := protocol.Node{
-		ID:       id,
-		ParentID: parentID,
-		Role:     role,
-		Name:     name,
-		Bounds:   boundsOf(primitive, columns, rows),
-		State:    stateOf(primitive, focused, hidden),
-		Actions:  actionsFor(role),
-		Value:    valueOf(primitive),
-		TestID:   s.testIDFor(primitive),
+		ID:            id,
+		ParentID:      parentID,
+		Role:          role,
+		Name:          name,
+		Bounds:        boundsOf(primitive, columns, rows),
+		State:         stateOf(primitive, focused, hidden),
+		Actions:       actionsFor(role),
+		Value:         valueOf(primitive),
+		TestID:        s.testIDFor(primitive),
+		FrameworkType: frameworkTypeFor(primitive, role),
 	}
 	if parentID == "" {
 		snapshot.RootIDs = append(snapshot.RootIDs, id)
@@ -386,4 +388,16 @@ func optionText(widget *tview.DropDown, index int) string {
 	// tview exposes no per-index accessor, so options other than the current
 	// one are published positionally.
 	return "option " + strconv.Itoa(index+1)
+}
+
+// frameworkTypeFor names the widget's own Go type, which the protocol requires
+// whenever the role is generic: an unrecognised widget must at least say what
+// tview (or the application) called it. `%T` yields e.g. "*tview.Box" or the
+// application's own "*main.Sparkline", which is exactly the distinguishing
+// information a reader of an unknown node needs.
+func frameworkTypeFor(primitive tview.Primitive, role protocol.Role) string {
+	if role != protocol.RoleGeneric {
+		return ""
+	}
+	return fmt.Sprintf("%T", primitive)
 }

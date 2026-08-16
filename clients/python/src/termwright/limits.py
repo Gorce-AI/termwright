@@ -53,7 +53,7 @@ class ProtocolLimits:
 
 DEFAULT_LIMITS = ProtocolLimits(
     maxFrameBytes=1 * 1024 * 1024,
-    maxSnapshotBytes=1 * 1024 * 1024,
+    maxSnapshotBytes=2 * 1024 * 1024,
     maxNodes=5_000,
     maxDepth=64,
     maxStringBytes=16 * 1024,

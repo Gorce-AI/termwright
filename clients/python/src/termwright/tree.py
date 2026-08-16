@@ -86,6 +86,10 @@ class SemanticNode:
     describedBy: Optional[Sequence[str]] = None
     textRanges: Optional[Sequence[SemanticTextRange]] = None
     testId: Optional[str] = None
+    #: What the UI framework calls this widget. Required when ``role`` is
+    #: ``generic``: an unrecognised widget must at least name its own type, so
+    #: a reader can tell one unknown thing from another.
+    frameworkType: Optional[str] = None
 
     def to_wire(self) -> Dict[str, Any]:
         wire: Dict[str, Any] = {"id": self.id, "role": self.role, "name": self.name}
@@ -111,6 +115,8 @@ class SemanticNode:
             wire["textRanges"] = [item.to_wire() for item in self.textRanges]
         if self.testId is not None:
             wire["testId"] = self.testId
+        if self.frameworkType is not None:
+            wire["frameworkType"] = self.frameworkType
         return wire
 
 
