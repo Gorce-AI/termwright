@@ -52,7 +52,15 @@ Four rules the clients enforce for you:
 - **A drop leaves a gap.** Every attempt consumes a sequence number, delivered
   or not, so a hole in `seq` tells the driver records died in the adapter
   rather than in transit. Renumbering would hide exactly what the counter
-  exists to report.
+  exists to report — which is why the counter advances *before* the budget is
+  consulted, not after.
+- **The adapter owns `seq`.** The log channel is open to more than one
+  publisher, and two of them can pick the same number in good faith, so the
+  adapter restamps every record on the way out. Go and Rust accept a
+  caller-built record and keep its number as the `origin.seq` attribute — a
+  diagnostic, dropped rather than allowed to push the record past the
+  attribute ceiling or the byte ceiling. Python takes fields rather than a
+  record, so a collision cannot be expressed there at all.
 - **`attrs` are flat.** Nested context makes a record's size unbounded and
   depth-dependent, so each bridge flattens to dotted keys (`db.host`) before
   sending — the same spelling in all three languages, so an assertion written

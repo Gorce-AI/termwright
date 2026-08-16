@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -266,5 +267,104 @@ func TestHandlerLevelFiltersBeforeTheBudgetDoes(t *testing.T) {
 	}
 	if !handler.Enabled(context.Background(), slog.LevelError) {
 		t.Error("error was filtered by a warn-level handler")
+	}
+}
+
+// -- who owns the sequence number ------------------------------------------
+
+// TestTheAdapterOwnsTheSequenceNumber: the channel is open to several
+// publishers, and two of them can pick the same number in good faith. The
+// adapter restamps, so what reaches the driver is strictly increasing however
+// badly the publishers collide — and the publisher's own number survives as a
+// diagnostic rather than as a promise.
+func TestTheAdapterOwnsTheSequenceNumber(t *testing.T) {
+	driver, client := connectedClient(t, testBudget)
+
+	for _, origin := range []int64{7, 7, 3} {
+		if !client.LogRecordWith(LogRecord{Level: LevelInfo, Message: "collide", Seq: origin}) {
+			t.Fatalf("the record carrying origin %d was dropped", origin)
+		}
+	}
+
+	records := logFrames(driver.waitFor(t, 4))
+	if len(records) != 3 {
+		t.Fatalf("got %d records", len(records))
+	}
+	var previous float64
+	for index, record := range records {
+		seq := record["seq"].(float64)
+		if index > 0 && seq <= previous {
+			t.Errorf("record %d carries seq %v after %v: not strictly increasing", index, seq, previous)
+		}
+		previous = seq
+	}
+	// Order is preserved, and each keeps the number its publisher chose.
+	origins := []float64{7, 7, 3}
+	for index, record := range records {
+		attrs, ok := record["attrs"].(map[string]any)
+		if !ok {
+			t.Fatalf("record %d carries no attrs", index)
+		}
+		if attrs["origin.seq"].(float64) != origins[index] {
+			t.Errorf("record %d kept origin.seq %v, want %v", index, attrs["origin.seq"], origins[index])
+		}
+	}
+}
+
+// TestARateLimitedRunGapsOnTheAdaptersCounter publishes everything under one
+// colliding number, so a gap can only come from the adapter's own counter.
+func TestARateLimitedRunGapsOnTheAdaptersCounter(t *testing.T) {
+	driver, client := connectedClient(t, &LogBudget{Enabled: true, MaxRecordsPerSecond: 20, Burst: 2})
+
+	delivered := 0
+	for index := 0; index < 40; index++ {
+		if client.LogRecordWith(LogRecord{Level: LevelInfo, Message: "burst", Seq: 1}) {
+			delivered++
+		}
+	}
+	if delivered >= 40 {
+		t.Fatal("the rate limit never engaged")
+	}
+
+	// A drop at the very end is invisible until something later arrives, so
+	// the gap is only assertable once the bucket has refilled.
+	time.Sleep(300 * time.Millisecond)
+	if !client.LogRecordWith(LogRecord{Level: LevelInfo, Message: "after the refill", Seq: 1}) {
+		t.Fatal("the bucket never refilled")
+	}
+
+	records := logFrames(driver.waitFor(t, delivered+2))
+	last := records[len(records)-1]["seq"].(float64)
+	if last <= float64(len(records)) {
+		t.Errorf("last seq %v with %d records: the gap did not come from the adapter", last, len(records))
+	}
+	if last != 41 {
+		t.Errorf("last seq is %v, want 41", last)
+	}
+}
+
+// TestOriginSeqIsSkippedAtTheAttributeCeiling: the hint is dropped rather than
+// allowed to push a record past a limit.
+func TestOriginSeqIsSkippedAtTheAttributeCeiling(t *testing.T) {
+	driver, client := connectedClient(t, testBudget)
+
+	attrs := make(map[string]any, MaxLogAttrs)
+	for index := 0; index < MaxLogAttrs; index++ {
+		attrs[fmt.Sprintf("k%d", index)] = index
+	}
+	if !client.LogRecordWith(LogRecord{Level: LevelInfo, Message: "wide", Seq: 9, Attrs: attrs}) {
+		t.Fatal("a record at the attribute ceiling was dropped")
+	}
+
+	records := logFrames(driver.waitFor(t, 2))
+	published := records[0]["attrs"].(map[string]any)
+	if len(published) != MaxLogAttrs {
+		t.Errorf("published %d attrs, want %d", len(published), MaxLogAttrs)
+	}
+	if _, present := published["origin.seq"]; present {
+		t.Error("origin.seq was added on top of a full attribute set")
+	}
+	if err := ValidateLogRecord(records[0], DefaultLimits); err != nil {
+		t.Errorf("the published record is invalid: %v", err)
 	}
 }

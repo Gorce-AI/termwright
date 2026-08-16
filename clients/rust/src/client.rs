@@ -22,7 +22,7 @@ use serde_json::Value;
 use crate::error::Error;
 use crate::framing::{encode_frame, FrameDecoder};
 use crate::limits::{Limits, DEFAULT_LIMITS};
-use crate::logs::{LogLevel, LogRecord};
+use crate::logs::{AttrValue, LogLevel, LogRecord, MAX_LOG_ATTRS};
 use crate::marker::encode_marker;
 use crate::messages::{
     default_capabilities, parse_driver_message, GetTree, GetTreeResult, Hello, HelloAck,
@@ -344,13 +344,20 @@ impl Client {
     ///
     /// Every attempt consumes a sequence number, dropped or not: the gap left
     /// in `seq` is precisely how the driver learns records were lost here
-    /// rather than in transit. `seq`, `revision` and an unset `ts` are filled
-    /// in here — an adapter never picks its own sequence numbers.
+    /// rather than in transit.
+    ///
+    /// `seq` is assigned here whatever the caller set, because the adapter is
+    /// the only authority on it: the channel is open to several publishers,
+    /// and two of them can pick the same number in good faith. A caller's own
+    /// number is kept as the `origin.seq` attribute, which is a diagnostic
+    /// rather than a promise — it is dropped rather than allowed to push the
+    /// record over a limit.
     pub fn log(&mut self, mut record: LogRecord) -> bool {
         if self.session_id.is_none() || self.stream.is_none() || self.log_bucket.is_none() {
             return false;
         }
 
+        let origin = record.seq;
         self.log_seq += 1;
         record.seq = self.log_seq;
         if record.ts == 0 {
@@ -368,6 +375,16 @@ impl Client {
         if !allowed {
             self.logs_dropped += 1;
             return false;
+        }
+        if origin > 0 && record.attrs.len() < MAX_LOG_ATTRS {
+            // A hint is never worth turning a log line into a rejected frame,
+            // so it is backed out if it costs the record its validity.
+            record
+                .attrs
+                .insert("origin.seq".to_owned(), AttrValue::Int(origin));
+            if record.validate(&self.limits).is_err() {
+                record.attrs.remove("origin.seq");
+            }
         }
         if record.validate(&self.limits).is_err() {
             // An oversized or malformed record is dropped locally rather than

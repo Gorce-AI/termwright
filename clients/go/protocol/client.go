@@ -363,14 +363,20 @@ func (c *Client) Log(level LogLevel, message string, attrs map[string]any) bool 
 }
 
 // LogRecordWith sends a record the caller built, for a bridge that already has
-// a timestamp and logger name of its own. Seq and Revision are still assigned
-// here: an adapter never picks its own sequence numbers.
+// a timestamp and logger name of its own.
+//
+// Seq is assigned here whatever the caller set, because the adapter is the
+// only authority on it: the channel is open to several publishers, and two of
+// them can pick the same number in good faith. A caller's own number is kept
+// as the `origin.seq` attribute, which is a diagnostic rather than a promise —
+// it is dropped rather than allowed to push the record over a limit.
 func (c *Client) LogRecordWith(record LogRecord) bool {
 	c.mu.Lock()
 	if c.sessionID == "" || c.closed || c.conn == nil || c.logBucket == nil {
 		c.mu.Unlock()
 		return false
 	}
+	origin := record.Seq
 	c.logSeq++
 	record.Seq = c.logSeq
 	if record.Revision == 0 {
@@ -389,6 +395,9 @@ func (c *Client) LogRecordWith(record LogRecord) bool {
 	if !allowed {
 		return false
 	}
+	if origin > 0 {
+		record.Attrs = withOriginSeq(record.Attrs, origin, limits, &record)
+	}
 	if err := record.Validate(limits); err != nil {
 		c.mu.Lock()
 		c.logsDropped++
@@ -396,6 +405,29 @@ func (c *Client) LogRecordWith(record LogRecord) bool {
 		return false
 	}
 	return c.send(NewLogMessage(&record), limits) == nil
+}
+
+// withOriginSeq adds the publisher's own sequence number as a diagnostic, and
+// backs out when doing so would cost the record: a hint is never worth turning
+// a log line into a rejected frame.
+func withOriginSeq(attrs map[string]any, origin int64, limits Limits, record *LogRecord) map[string]any {
+	if len(attrs) >= MaxLogAttrs {
+		return attrs
+	}
+	next := make(map[string]any, len(attrs)+1)
+	for key, value := range attrs {
+		next[key] = value
+	}
+	next["origin.seq"] = origin
+
+	before := record.Attrs
+	record.Attrs = next
+	if record.Validate(limits) != nil {
+		record.Attrs = before
+		return attrs
+	}
+	record.Attrs = before
+	return next
 }
 
 func (c *Client) remember(revision int64, body json.RawMessage) {

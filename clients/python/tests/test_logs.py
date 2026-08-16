@@ -257,3 +257,34 @@ def _snapshot():
         rootIds=["root"],
         nodes=[SemanticNode(id="root", role="application", name="app", bounds=Rect(0, 0, 10, 1))],
     )
+
+
+# -- who owns the sequence number ------------------------------------------
+
+
+async def test_the_adapter_owns_the_sequence_number(endpoint):
+    """A caller cannot influence `seq`, by construction.
+
+    The channel's other implementations expose a record-shaped API where two
+    publishers can pick the same number in good faith, so they restamp and keep
+    the caller's number as `origin.seq`. This client takes fields rather than a
+    record, so a collision cannot be expressed — the counter is reachable only
+    from inside. Pinned here so an API change has to face the question.
+    """
+    import inspect
+
+    parameters = set(inspect.signature(SemanticClient.log).parameters)
+    assert "seq" not in parameters, "exposing seq would make the adapter one publisher among many"
+
+    driver, client = await connected_client(endpoint)
+    for _ in range(3):
+        assert client.log("info", "line")
+    await driver.wait_for(3)
+
+    seqs = [frame["record"]["seq"] for frame in driver.received if frame["type"] == "log"]
+    assert seqs == [1, 2, 3]
+    assert all("origin.seq" not in (frame["record"].get("attrs") or {}) for frame in driver.received
+               if frame["type"] == "log"), "there is no publisher number to preserve here"
+
+    await client.close()
+    await driver.close()

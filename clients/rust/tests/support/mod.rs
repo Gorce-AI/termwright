@@ -23,15 +23,23 @@ pub struct Driver {
 /// A socket path short enough for the 104-byte `sockaddr_un` limit, which the
 /// usual temp directories on macOS blow straight through.
 pub fn socket_path() -> String {
-    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
     format!("/tmp/tw-{stamp}-{:?}.sock", thread::current().id())
 }
 
 /// Load one shared vector file.
 pub fn vectors(name: &str) -> Value {
-    let path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "..", "test-vectors", &format!("{name}.json")]
-        .iter()
-        .collect();
+    let path: PathBuf = [
+        env!("CARGO_MANIFEST_DIR"),
+        "..",
+        "test-vectors",
+        &format!("{name}.json"),
+    ]
+    .iter()
+    .collect();
     let body = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("reading {}: {error}", path.display()));
     serde_json::from_str(&body).expect("vector file is valid JSON")
@@ -103,6 +111,11 @@ pub fn records_from(driver: &Driver, count: usize) -> Vec<Value> {
             Err(_) => continue,
         }
     }
-    assert_eq!(records.len(), count, "expected {count} log records, got {}", records.len());
+    assert_eq!(
+        records.len(),
+        count,
+        "expected {count} log records, got {}",
+        records.len()
+    );
     records
 }
