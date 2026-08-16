@@ -268,3 +268,8 @@
   `sources`, because the driver's own contract says a label can be shared
   between sources — two nodes logging under `app` must stay distinguishable.
   No compatibility branch: one generation of producers.
+- 2026-08-16 (approved): SessionEventMap gains `action`
+  {api, selector?, ref?, ok, error?, timeMs} — emitted by the driver for every
+  locator/harness action (click/press/type/...), success and failure alike.
+  TraceWriter records it as events.jsonl kind 'action'; the preset records
+  only assertions (its own layer); UI live gets actions via attachSession.
