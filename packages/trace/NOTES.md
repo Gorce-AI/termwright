@@ -125,6 +125,17 @@ logging under `app` is a normal setup, and there is a test for it. An index
 would avoid the repetition but couples two files' orderings and reads worse in a
 JSONL stream; adapter records have no path and pay nothing.
 
+`meta.logs` is absent **only** when nothing was logged and nothing was evicted:
+`buildLogSummary()` returns `undefined` on `count === 0 && dropped === 0`, so a
+consumer treating its absence as "zero of everything" is telling the truth. The
+evicted-everything case (a ceiling of 0) still emits a summary, because
+`dropped` is the whole point of it.
+
+The reader does not gate log reads on that summary, though. The summary and the
+file are two statements about the same thing, and an archive where they
+disagree is one to survive rather than believe — so `stateAt().logs` streams
+`logs.jsonl` like `logs()` does, and both report what the file actually holds.
+
 ### Eviction is counted at the end, not on the next event
 
 The driver's team flagged a bug pattern worth checking for: a counter

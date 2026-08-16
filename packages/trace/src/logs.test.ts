@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -465,5 +465,65 @@ describe('artifacts for a test that passed', () => {
       results: [{ id: 't1', title: 'no trace', status: 'passed' }],
     });
     expect(html).not.toContain('<code class="tw-path">');
+  });
+});
+
+describe('the summary and the file disagreeing', () => {
+  it('reads entries that meta.json failed to mention', async () => {
+    const root = await workspace();
+    const dir = join(root, 'nosummary.twtrace');
+    await recordWithLogs(dir);
+
+    // An archive edited by hand, or written by something that dropped the
+    // summary: logs.jsonl still has the entries.
+    const meta = JSON.parse(await readFile(join(dir, TRACE_FILES.meta), 'utf8')) as Record<
+      string,
+      unknown
+    >;
+    delete meta['logs'];
+    await writeFile(join(dir, TRACE_FILES.meta), JSON.stringify(meta), 'utf8');
+
+    const trace = await openTrace(dir);
+    try {
+      expect(trace.meta.logs).toBeUndefined();
+      const streamed = [];
+      for await (const entry of trace.logs()) streamed.push(entry);
+      expect(streamed).toHaveLength(4);
+      // The window agrees with the stream rather than with the missing summary.
+      expect((await trace.stateAt(10_000)).logs).toHaveLength(4);
+    } finally {
+      await trace.close();
+    }
+  });
+
+  it('leaves meta.logs out only when nothing was logged or dropped', async () => {
+    const root = await workspace();
+
+    const quiet = join(root, 'quiet.twtrace');
+    const quietSession = new FakeSession();
+    const quietWriter = createTraceWriter(quietSession, { dir: quiet, now: quietSession.now });
+    quietSession.output('nothing to say');
+    await quietWriter.finalize();
+
+    // Everything evicted: the summary must still be there to report it.
+    const evicted = join(root, 'evicted.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, {
+      dir: evicted,
+      now: session.now,
+      maxLogEntries: 0,
+    });
+    session.logRecord({ level: 'info', message: 'gone' });
+    await writer.finalize();
+
+    const quietTrace = await openTrace(quiet);
+    const evictedTrace = await openTrace(evicted);
+    try {
+      expect(quietTrace.meta.logs).toBeUndefined();
+      expect(evictedTrace.meta.logs).toMatchObject({ count: 0, dropped: 1 });
+    } finally {
+      await quietTrace.close();
+      await evictedTrace.close();
+    }
   });
 });

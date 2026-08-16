@@ -182,9 +182,17 @@ class ArchiveReader implements TraceReader {
     return parseJsonLines<TraceLogEntry>(this.#files.lines(TRACE_FILES.logs), TRACE_FILES.logs);
   }
 
-  /** The last `limit` entries at or before `castOffsetMs`, oldest first. */
+  /**
+   * The last `limit` entries at or before `castOffsetMs`, oldest first.
+   *
+   * Deliberately not gated on `meta.logs`: the summary and the file are two
+   * statements about the same thing, and an archive where they disagree is one
+   * a reader should survive rather than believe. Streaming an absent
+   * `logs.jsonl` yields nothing anyway, so the gate only bought a divergence
+   * between this and {@link TraceReader.logs}.
+   */
   async #logsBefore(castOffsetMs: number, limit: number): Promise<readonly TraceLogEntry[]> {
-    if (limit <= 0 || this.meta.logs === undefined) return [];
+    if (limit <= 0) return [];
     const window: TraceLogEntry[] = [];
     for await (const entry of this.logs()) {
       if (entry.castOffset > castOffsetMs) break;
