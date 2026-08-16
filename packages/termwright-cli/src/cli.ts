@@ -15,16 +15,16 @@
 import {
   buildAgentContext,
   buildAgentSkill,
-  buildUsage,
   exitCodeFor,
   runCli as runMcpCli,
   toErrorPayload,
+  usageError,
   writeAgentSkill,
   EXIT_CODES,
   type CliIo,
 } from '@termwright/mcp';
 import { openInBrowser, shouldOpenBrowser, startUiServer, writeInlineReport } from '@termwright/ui';
-import { parseArgs, type ParsedArgs } from './args.js';
+import { documentedCommands, parseArgs, type ParsedArgs } from './args.js';
 import {
   runUi,
   startVitest,
@@ -89,11 +89,11 @@ export async function runCli(
         return EXIT_CODES.ok;
 
       case 'help':
-        io.out(json ? JSON.stringify(buildAgentContext()) : helpText());
+        io.out(json ? JSON.stringify(usageDocument()) : helpText());
         return EXIT_CODES.ok;
 
       case 'usage':
-        io.out(json ? JSON.stringify(buildAgentContext()) : buildUsage());
+        io.out(json ? JSON.stringify(usageDocument()) : usageText());
         return EXIT_CODES.ok;
 
       case 'agent-context':
@@ -139,6 +139,29 @@ async function emitSkill(args: ParsedArgs, io: CliIo): Promise<number> {
 }
 
 /**
+ * Reclassifies a failure to open an archive the user named.
+ *
+ * A path the user typed is *input*: a typo in it is a usage error (exit 2), not
+ * an internal fault (exit 5). The trace reader reports a missing archive as a
+ * protocol violation and the filesystem reports one as `ENOENT`, and both land
+ * in the catch-all otherwise — which quietly tells an agent or a CI job that
+ * termwright broke when in fact the path was wrong.
+ *
+ * Only errors carrying a string `code` are reclassified: `TraceError` and
+ * Node's filesystem errors both do, while a genuine bug in our own code (a
+ * `TypeError`, say) does not, and must keep reading as internal.
+ */
+function asArchiveUsageError(error: unknown, path: string): unknown {
+  const code: unknown = (error as { code?: unknown } | null)?.code;
+  if (typeof code !== 'string') return error;
+  const detail = error instanceof Error ? error.message : String(error);
+  return usageError(
+    `cannot read the archive ${path}: ${detail}`,
+    'check the path, or pass the directory or .zip a run wrote',
+  );
+}
+
+/**
  * `termwright report` — the viewer and one archive, written as a single file.
  *
  * The same page `ui --trace` shows, with its data baked in: it opens over
@@ -147,7 +170,12 @@ async function emitSkill(args: ParsedArgs, io: CliIo): Promise<number> {
 async function emitReport(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
   const trace = args.trace as string; // `parseArgs` rejects `report` without one
   const out = args.outFile ?? 'termwright-report.html';
-  const result = await writeInlineReport(trace, out);
+  let result: Awaited<ReturnType<typeof writeInlineReport>>;
+  try {
+    result = await writeInlineReport(trace, out);
+  } catch (error) {
+    throw asArchiveUsageError(error, trace);
+  }
 
   if (json) {
     deps.io.out(JSON.stringify({ path: result.path, bytes: result.bytes, cut: result.cut }));
@@ -188,21 +216,7 @@ async function launchUi(args: ParsedArgs, deps: CliDeps, json: boolean): Promise
     });
   };
 
-  const result = await runUi(
-    {
-      trace: args.trace,
-      record: args.record ? args.rest : undefined,
-      outFile: args.outFile,
-      port: args.port,
-      host: args.host,
-      watch: args.watch,
-      // In record mode `rest` is the recorded command, not runner arguments.
-      rest: args.record ? [] : args.rest,
-      cwd: deps.cwd,
-    },
-    deps.ui,
-    announce,
-  );
+  const result = await launch(args, deps, announce);
 
   // The runner's own failures are assertion failures, not CLI faults.
   return result.runnerExitCode === undefined || result.runnerExitCode === 0
@@ -210,32 +224,63 @@ async function launchUi(args: ParsedArgs, deps: CliDeps, json: boolean): Promise
     : EXIT_CODES.assertion;
 }
 
+/**
+ * Starts the runner, reclassifying a bad `--trace` path as a usage error.
+ *
+ * Only the archive can fail this way: in replay mode `runUi` opens the file and
+ * then waits, so an error carrying a code is about the file the user named.
+ */
+async function launch(
+  args: ParsedArgs,
+  deps: CliDeps,
+  announce: (ready: Omit<UiResult, 'runnerExitCode'>) => void,
+): Promise<UiResult> {
+  const request = {
+    trace: args.trace,
+    record: args.record ? args.rest : undefined,
+    outFile: args.outFile,
+    port: args.port,
+    host: args.host,
+    watch: args.watch,
+    // In record mode `rest` is the recorded command, not runner arguments.
+    rest: args.record ? [] : args.rest,
+    cwd: deps.cwd,
+  };
+  if (args.trace === undefined) return runUi(request, deps.ui, announce);
+  try {
+    return await runUi(request, deps.ui, announce);
+  } catch (error) {
+    throw asArchiveUsageError(error, args.trace);
+  }
+}
+
+const NAME_COLUMN = 16;
+
+/** Indents continuation lines under a command's first summary line. */
+function summaryBlock(name: string, summary: readonly string[]): readonly string[] {
+  const [first, ...rest] = summary;
+  return [
+    `  ${name.padEnd(NAME_COLUMN - 2)}${first ?? ''}`,
+    ...rest.map((line) => `${' '.repeat(NAME_COLUMN)}${line}`),
+  ];
+}
+
+/**
+ * The full help, rendered from {@link CLI_COMMANDS}.
+ *
+ * Both this and {@link usageText} read the same table, so a command cannot be
+ * documented in one and missing from the other.
+ */
 function helpText(): string {
+  const commands = documentedCommands();
   return [
     `${CLI_NAME} ${CLI_VERSION} — testing terminal programs by role and name`,
     '',
     'Usage:',
-    `  ${CLI_NAME} ui [--trace <file>] [--port N] [--host H] [--no-watch] [--no-open] [-- <vitest args>]`,
-    `  ${CLI_NAME} ui --record [--out-file <file>] -- <command>`,
-    `  ${CLI_NAME} report --trace <file> [--out-file <file>]`,
-    `  ${CLI_NAME} codegen [--out-file <file>] -- <command>`,
-    `  ${CLI_NAME} mcp [--http] [--port N]`,
-    `  ${CLI_NAME} agent-context | usage | skill [--out <dir>]`,
+    ...commands.flatMap(([, doc]) => doc.synopsis.map((line) => `  ${CLI_NAME} ${line}`)),
     '',
     'Commands:',
-    '  ui              open the runner: live terminal, semantic inspector, timeline.',
-    '                  With no flags it starts Vitest in watch mode and points it at',
-    '                  the runner; --trace opens a .twtrace archive instead, and',
-    '                  --record drives a program you name and writes the test.',
-    '                  The runner opens in your browser; --no-open just prints the URL.',
-    '  report          write the viewer and one archive as a single HTML file,',
-    '                  openable from disk — a CI artifact rather than a server.',
-    '  codegen         `ui --record`, for when recording is the whole point.',
-    '  mcp             serve the MCP tools; every argument is forwarded to',
-    '                  @termwright/mcp untouched.',
-    '  agent-context   versioned JSON describing every tool, parameter and exit code.',
-    '  usage           the one-screen cheat sheet.',
-    '  skill           an agent-skill package (SKILL.md + reference + context).',
+    ...commands.flatMap(([name, doc]) => summaryBlock(name, doc.summary)),
     '',
     'Global:',
     '  --json          machine-readable output; errors carry `kind`.',
@@ -244,6 +289,42 @@ function helpText(): string {
     '',
     'Exit codes: 0 ok, 1 assertion, 2 usage, 3 no-session, 4 ipc, 5 internal.',
   ].join('\n');
+}
+
+/**
+ * The one-screen cheat sheet for **this** CLI.
+ *
+ * It used to print `@termwright/mcp`'s cheat sheet, which described the MCP
+ * server and never mentioned `ui`, `report` or `codegen`. That sheet is still
+ * one command away — `termwright mcp usage` — where it belongs.
+ */
+function usageText(): string {
+  return [
+    `${CLI_NAME} ${CLI_VERSION} — testing terminal programs by role and name`,
+    '',
+    ...documentedCommands().map(([name, doc]) => `  ${name.padEnd(NAME_COLUMN - 2)}${doc.headline}`),
+    '',
+    `  ${CLI_NAME} mcp usage`.padEnd(NAME_COLUMN + 14) + 'the MCP tool cheat sheet, for agents.',
+    `  ${CLI_NAME} --help`.padEnd(NAME_COLUMN + 14) + 'the same list with every flag.',
+    '',
+    'Exit codes: 0 ok, 1 assertion, 2 usage, 3 no-session, 4 ipc, 5 internal.',
+  ].join('\n');
+}
+
+/** The machine-readable form of {@link usageText}. */
+function usageDocument(): Record<string, unknown> {
+  return {
+    v: 1,
+    name: CLI_NAME,
+    version: CLI_VERSION,
+    commands: documentedCommands().map(([name, doc]) => ({
+      name,
+      synopsis: [...doc.synopsis],
+      headline: doc.headline,
+      summary: doc.summary.join(' '),
+    })),
+    exitCodes: { ...EXIT_CODES },
+  };
 }
 
 /** Entry point for the `termwright` bin. */

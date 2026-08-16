@@ -108,14 +108,67 @@ describe('informational commands', () => {
     expect(h.out.join('\n')).toContain('SKILL.md');
   });
 
-  it('emits the cheat sheet, and the same context as agent-context with --json', async () => {
+  it('describes THIS cli, not the MCP server', async () => {
     const plain = harness();
-    await runCli(['usage'], plain.deps);
-    expect(plain.out.join('\n').length).toBeGreaterThan(0);
+    expect(await runCli(['usage'], plain.deps)).toBe(EXIT_CODES.ok);
+    const sheet = plain.out.join('\n');
+
+    // The whole point of the fix: a CLI user asking for usage gets the CLI.
+    for (const command of ['ui', 'report', 'codegen', 'mcp', 'agent-context', 'skill']) {
+      expect(sheet).toContain(command);
+    }
+    // …and is told where the MCP sheet went.
+    expect(sheet).toContain('termwright mcp usage');
+    // The MCP cheat sheet's own headline must not be what a CLI user sees.
+    expect(sheet).not.toContain('drive terminal programs over MCP');
+  });
+
+  it('emits the command table with --json', async () => {
+    const json = harness();
+    expect(await runCli(['usage', '--json'], json.deps)).toBe(EXIT_CODES.ok);
+    const document = JSON.parse(json.out[0] as string) as {
+      commands: { name: string; synopsis: string[]; summary: string }[];
+      exitCodes: Record<string, number>;
+    };
+
+    expect(document.commands.map((command) => command.name)).toEqual([
+      'ui',
+      'report',
+      'codegen',
+      'mcp',
+      'agent-context',
+      'usage',
+      'skill',
+    ]);
+    expect(document.exitCodes).toMatchObject({ ...EXIT_CODES });
+    for (const command of document.commands) {
+      expect(command.synopsis.length, command.name).toBeGreaterThan(0);
+      expect(command.summary.length, command.name).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps help and usage describing the same commands', async () => {
+    const help = harness();
+    await runCli(['--help'], help.deps);
+    const usage = harness();
+    await runCli(['usage'], usage.deps);
 
     const json = harness();
     await runCli(['usage', '--json'], json.deps);
-    expect(JSON.parse(json.out[0] as string)).toHaveProperty('tools');
+    const names = (JSON.parse(json.out[0] as string) as { commands: { name: string }[] }).commands;
+
+    // Both are rendered from CLI_COMMANDS, so neither can drift from the other.
+    for (const { name } of names) {
+      expect(help.out.join('\n'), name).toContain(name);
+      expect(usage.out.join('\n'), name).toContain(name);
+    }
+  });
+
+  it('still reaches the MCP cheat sheet through `mcp usage`', async () => {
+    const h = harness();
+    expect(await runCli(['mcp', 'usage'], h.deps)).toBe(EXIT_CODES.ok);
+    // The delegate is called with the arguments untouched.
+    expect(h.mcpArgs).toEqual([['usage']]);
   });
 });
 

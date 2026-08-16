@@ -19,6 +19,96 @@ export type CliCommand =
   | 'help'
   | 'version';
 
+/** How one command is documented. */
+export interface CommandDoc {
+  /** Invocation lines shown under "Usage:", without the binary name. */
+  readonly synopsis: readonly string[];
+  /**
+   * One self-contained line for the cheat sheet.
+   *
+   * Separate from {@link summary} because truncating a paragraph to its first
+   * line leaves a sentence cut in half — "write the viewer and one archive as a
+   * single HTML file," and nothing else.
+   */
+  readonly headline: string;
+  /** The fuller description, for `--help`. */
+  readonly summary: readonly string[];
+  /** `help` and `version` are listed under "Global:", not as commands. */
+  readonly global?: boolean;
+}
+
+/**
+ * Every command, with its documentation.
+ *
+ * Typed as `Record<CliCommand, …>` on purpose: {@link CliCommand} is a closed
+ * union, so adding a command without documenting it stops the build. A
+ * hand-maintained list in the renderer would have stayed quiet instead — which
+ * is exactly how `usage` came to describe the MCP server and nothing else.
+ */
+export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
+  ui: {
+    headline: 'open the runner: live terminal, semantic inspector, timeline.',
+    synopsis: [
+      'ui [--trace <file>] [--port N] [--host H] [--no-watch] [--no-open] [-- <vitest args>]',
+      'ui --record [--out-file <file>] -- <command>',
+    ],
+    summary: [
+      'open the runner: live terminal, semantic inspector, timeline.',
+      'With no flags it starts Vitest in watch mode and points it at',
+      'the runner; --trace opens a .twtrace archive instead, and',
+      '--record drives a program you name and writes the test.',
+      'The runner opens in your browser; --no-open just prints the URL.',
+    ],
+  },
+  report: {
+    headline: 'write one archive and the viewer as a single HTML file.',
+    synopsis: ['report --trace <file> [--out-file <file>]'],
+    summary: [
+      'write the viewer and one archive as a single HTML file,',
+      'openable from disk — a CI artifact rather than a server.',
+    ],
+  },
+  codegen: {
+    headline: 'drive a program and write the test from what you did.',
+    synopsis: ['codegen [--out-file <file>] -- <command>'],
+    summary: ['`ui --record`, for when recording is the whole point.'],
+  },
+  mcp: {
+    headline: 'serve the MCP tools; arguments go to @termwright/mcp untouched.',
+    synopsis: ['mcp [--http] [--port N]', 'mcp usage'],
+    summary: [
+      'serve the MCP tools; every argument is forwarded to',
+      '@termwright/mcp untouched — including `mcp usage`, which',
+      'prints that server’s own cheat sheet.',
+    ],
+  },
+  'agent-context': {
+    headline: 'versioned JSON: every MCP tool, parameter and exit code.',
+    synopsis: ['agent-context'],
+    summary: ['versioned JSON describing every MCP tool, parameter and exit code.'],
+  },
+  usage: {
+    headline: 'this one-screen cheat sheet.',
+    synopsis: ['usage'],
+    summary: ['this one-screen cheat sheet.'],
+  },
+  skill: {
+    headline: 'an agent-skill package (SKILL.md + reference + context).',
+    synopsis: ['skill [--out <dir>]'],
+    summary: ['an agent-skill package (SKILL.md + reference + context).'],
+  },
+  help: { headline: 'print the full help.', synopsis: ['--help, -h'], summary: ['print the full help.'], global: true },
+  version: { headline: 'print the version.', synopsis: ['--version, -v'], summary: ['print the version.'], global: true },
+};
+
+/** The commands a user invokes, in the order they are documented. */
+export function documentedCommands(): readonly (readonly [CliCommand, CommandDoc])[] {
+  return Object.entries(CLI_COMMANDS).filter(([, doc]) => doc.global !== true) as (readonly [
+    CliCommand,
+    CommandDoc,
+  ])[];
+}
+
 /** A parsed command line. */
 export interface ParsedArgs {
   readonly command: CliCommand;
