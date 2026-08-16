@@ -9,6 +9,7 @@ import { createFrameDecoder, encodeFrame, projectDto } from './framing.js';
 import { DEFAULT_LIMITS } from './limits.js';
 import { parseAdapterMessage } from './messages.js';
 import { validateLogRecord } from './logs.js';
+import { applyTreeDelta, validateTreeDelta } from './delta.js';
 import { validateSnapshot } from './validate.js';
 
 const MB = 1024 * 1024;
@@ -233,5 +234,90 @@ describe('hostile log flood', () => {
     for (let i = 0; i < 5_000; i += 1) deep = { deep };
     const result = validateLogRecord({ ...record(1), attrs: { deep } }, DEFAULT_LIMITS);
     expect(['depth', 'schema', 'bytes']).toContain(result.ok ? 'ok' : result.code);
+  });
+});
+
+describe('hostile tree deltas', () => {
+  function base(nodeCount: number) {
+    const nodes: Record<string, unknown>[] = [{ id: 'root', role: 'region', name: 'main' }];
+    for (let i = 0; i < nodeCount; i += 1) {
+      nodes.push({ id: `n${i}`, parentId: 'root', role: 'text', name: 'x' });
+    }
+    return { v: 1, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['root'], nodes };
+  }
+
+  it('validates a delta flood without retaining any of it', () => {
+    for (let i = 0; i < 20_000; i += 1) {
+      const result = parseAdapterMessage(
+        { type: 'tree-delta', baseRevision: i + 1, revision: i + 2, changed: [], removed: [] },
+        DEFAULT_LIMITS,
+      );
+      if (!result.ok) throw new Error(`${result.code}: ${result.detail}`);
+    }
+    expect(true).toBe(true);
+  });
+
+  it('refuses a mismatched base instead of patching speculatively', () => {
+    const snapshot = validateSnapshot(base(2), DEFAULT_LIMITS);
+    if (!snapshot.ok) throw new Error(snapshot.detail);
+    const result = applyTreeDelta(
+      snapshot.snapshot,
+      { baseRevision: 999, revision: 1000, changed: [], removed: [] },
+      DEFAULT_LIMITS,
+    );
+    expect(result.ok ? 'ok' : result.code).toBe('revision');
+  });
+
+  it('refuses to remove nodes the base never had', () => {
+    const snapshot = validateSnapshot(base(2), DEFAULT_LIMITS);
+    if (!snapshot.ok) throw new Error(snapshot.detail);
+    const result = applyTreeDelta(
+      snapshot.snapshot,
+      { baseRevision: 1, revision: 2, changed: [], removed: ['ghost'] },
+      DEFAULT_LIMITS,
+    );
+    expect(result.ok ? 'ok' : result.code).toBe('missing-parent');
+  });
+
+  it('cascades a deep removal iteratively rather than recursing', () => {
+    // A 10k-deep chain would blow the stack under naive recursion.
+    const nodes: Record<string, unknown>[] = [{ id: 'n0', role: 'region', name: 'n0' }];
+    for (let i = 1; i < 10_000; i += 1) {
+      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', name: 'x' });
+    }
+    const limits = { ...DEFAULT_LIMITS, maxDepth: 20_000, maxNodes: 20_000, maxSnapshotBytes: 8 * MB };
+    const snapshot = validateSnapshot(
+      { v: 1, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['n0'], nodes },
+      limits,
+    );
+    if (!snapshot.ok) throw new Error(snapshot.detail);
+
+    const result = applyTreeDelta(
+      snapshot.snapshot,
+      { baseRevision: 1, revision: 2, changed: [], removed: ['n1'], rootIds: ['n0'] },
+      limits,
+    );
+    if (!result.ok) throw new Error(`${result.code}: ${result.detail}`);
+    expect(result.snapshot.nodes).toHaveLength(1);
+  });
+
+  it('rejects a hostile delta object without throwing', () => {
+    const cyclic: Record<string, unknown> = { baseRevision: 1, revision: 2, changed: [], removed: [] };
+    cyclic['self'] = cyclic;
+    expect(() => validateTreeDelta(cyclic, DEFAULT_LIMITS)).not.toThrow();
+    expect(validateTreeDelta(cyclic, DEFAULT_LIMITS).ok).toBe(false);
+
+    let invoked = false;
+    const hostile = {
+      baseRevision: 1,
+      revision: 2,
+      removed: [],
+      get changed(): unknown[] {
+        invoked = true;
+        return [];
+      },
+    };
+    expect(validateTreeDelta(hostile, DEFAULT_LIMITS).ok).toBe(false);
+    expect(invoked).toBe(false);
   });
 });

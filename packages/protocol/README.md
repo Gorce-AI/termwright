@@ -67,6 +67,7 @@ const marker = verifyMarkerPayload(payload, token, sessionId);
 | `framing` | `createFrameDecoder`, `encodeFrame`, `projectDto` |
 | `marker` | `encodeMarker`, `verifyMarkerPayload` |
 | `validate` | `validateSnapshot` |
+| `delta` | `TreeDelta`, `validateTreeDelta`, `applyTreeDelta` |
 | `errors` | `ProtocolViolation`, `ProtocolViolationCode` |
 
 ## Integrating the marker with a VT parser
@@ -140,6 +141,57 @@ called out here because adapters must satisfy them: every node without a
 `parentId` must appear in `rootIds`, and `labelledBy`/`describedBy` must
 reference nodes present in the same snapshot.
 
+## Tree deltas
+
+With `subscribe: 'diffs'` an adapter sends `tree-delta` instead of a full
+snapshot after each commit. A delta is bound to an **exact** base revision:
+
+```ts
+import { applyTreeDelta, validateTreeDelta } from '@termwright/protocol';
+
+const checked = validateTreeDelta(body, limits);        // shape only
+if (!checked.ok) return closeWith('malformed', checked.detail);
+
+const composed = applyTreeDelta(held, checked.delta, limits);
+if (!composed.ok) {
+  // Never patch around a mismatch — ask for the whole tree instead.
+  if (composed.code === 'revision') return requestFullTree();
+  return closeWith('malformed', composed.detail);
+}
+```
+
+**Composition semantics** (normative — every adapter and client must agree):
+
+- `changed` upserts by id. A node already present is **replaced wholesale**,
+  never field-merged: merging would need a third state meaning "unset this
+  optional field", which the wire cannot express.
+- `removed` removes each id **together with its subtree**. Cascade is what
+  keeps deltas small — dropping a dialog is one id, not one per descendant —
+  and it is the only rule that cannot leave orphans behind.
+- `rootIds`, when present, replaces the root list. When absent the base roots
+  carry over minus anything removed, so **introducing a new root requires
+  sending `rootIds`**; otherwise the parentless node is missing from the root
+  list and validation rejects it.
+- Removals are applied **before** upserts, so one delta can rescue a node out
+  of a subtree it also removes.
+
+**The validation split matters.** `validateTreeDelta` checks only what is
+knowable without the base: bounded sizes, well-formed nodes, unique ids, a
+revision that moves forward. Parent existence, acyclicity, depth and whether
+bounds intersect the viewport are properties of the *composed* tree — a delta
+carries no viewport at all — so `applyTreeDelta` checks them by running the
+result through `validateSnapshot`. A delta is never trusted to produce a valid
+tree, only to describe one.
+
+**Resynchronisation.** A base-revision mismatch, or a removal of a node the
+receiver does not hold, means the producer's view and ours have diverged. Both
+return a failure telling the caller to request a full snapshot via `get-tree`.
+A speculative patch would produce a tree that looks fine and is wrong, and
+every assertion downstream would inherit that error silently.
+
+A delta cannot change the cursor, the viewport or the session id; those are
+inherited from the base snapshot.
+
 ## Protocol evolution
 
 The protocol grows without a version bump only in ways an already published
@@ -177,6 +229,13 @@ stripped, so a reader that does understand them still can.
 - **New capability strings.** The driver filters the adapter's advertised
   capabilities down to the ones it knows, so an adapter may advertise a
   capability a given driver has never heard of.
+- **A new closed-set value that is gated behind a capability.**
+  `subscribe: 'diffs'` is the worked example. Growing a closed set is normally
+  breaking, and it still would be here — except the driver only ever selects
+  `diffs` for an adapter that announced `tree-diffs` first. An adapter that has
+  never heard of the value cannot be sent it, so the gate, not the set, is what
+  makes this safe. Extending a closed set **without** such a gate stays
+  breaking.
 
 **Breaking — needs a coordinated release:**
 

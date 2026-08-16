@@ -1,8 +1,8 @@
 import { Buffer } from 'node:buffer';
 import { z } from 'zod';
+import { treeSchemas } from './node-schema.js';
 import type { SemanticNode, SemanticSnapshot } from './tree.js';
 import type { ProtocolLimits } from './limits.js';
-import { SEMANTIC_ACTIONS, SEMANTIC_ROLES } from './roles.js';
 import { ProtocolViolation } from './errors.js';
 import { projectDto } from './framing.js';
 
@@ -26,117 +26,6 @@ export type ValidationErrorCode =
 
 function fail(code: ValidationErrorCode, detail: string): ValidationResult {
   return { ok: false, code, detail };
-}
-
-/**
- * Snapshot schemas depend on the active limits, so they are built per limits
- * object and memoised. Limits are frozen singletons in practice, so this keeps
- * schema construction off the per-snapshot path.
- */
-const schemaCache = new WeakMap<ProtocolLimits, z.ZodType>();
-
-function safeInt(): z.ZodType<number> {
-  return z.number().refine(Number.isSafeInteger, 'expected a safe integer');
-}
-
-function nonNegativeInt(): z.ZodType<number> {
-  return z
-    .number()
-    .refine((n) => Number.isSafeInteger(n) && n >= 0, 'expected a non-negative safe integer');
-}
-
-function positiveInt(): z.ZodType<number> {
-  return z
-    .number()
-    .refine((n) => Number.isSafeInteger(n) && n > 0, 'expected a positive safe integer');
-}
-
-function boundedString(maxStringBytes: number): z.ZodType<string> {
-  return z
-    .string()
-    .refine(
-      (s) => Buffer.byteLength(s, 'utf8') <= maxStringBytes,
-      `expected at most ${maxStringBytes} UTF-8 bytes`,
-    );
-}
-
-function buildSnapshotSchema(limits: ProtocolLimits): z.ZodType {
-  const text = boundedString(limits.maxStringBytes);
-  const relations = z.array(text).max(limits.maxRelationTargets);
-
-  const rect = z.strictObject({
-    row: safeInt(),
-    column: safeInt(),
-    width: nonNegativeInt(),
-    height: nonNegativeInt(),
-  });
-
-  const state = z.strictObject({
-    disabled: z.boolean().optional(),
-    focused: z.boolean().optional(),
-    selected: z.boolean().optional(),
-    checked: z.union([z.boolean(), z.literal('mixed')]).optional(),
-    expanded: z.boolean().optional(),
-    modal: z.boolean().optional(),
-    busy: z.boolean().optional(),
-    hidden: z.boolean().optional(),
-    readonly: z.boolean().optional(),
-    multiline: z.boolean().optional(),
-    orientation: z.union([z.literal('horizontal'), z.literal('vertical')]).optional(),
-    level: positiveInt().optional(),
-    positionInSet: positiveInt().optional(),
-    setSize: nonNegativeInt().optional(),
-    scrollOffset: nonNegativeInt().optional(),
-    scrollExtent: nonNegativeInt().optional(),
-  });
-
-  const textRange = z.strictObject({
-    startOffset: nonNegativeInt(),
-    endOffset: nonNegativeInt(),
-    rect,
-  });
-
-  const node = z.strictObject({
-    id: text.refine((s) => s.length > 0, 'node id must not be empty'),
-    parentId: text.optional(),
-    role: z.enum(SEMANTIC_ROLES),
-    name: text,
-    description: text.optional(),
-    value: text.optional(),
-    bounds: rect.optional(),
-    state: state.optional(),
-    actions: z.array(z.enum(SEMANTIC_ACTIONS)).max(SEMANTIC_ACTIONS.length).optional(),
-    labelledBy: relations.optional(),
-    describedBy: relations.optional(),
-    textRanges: z.array(textRange).max(limits.maxRelationTargets).optional(),
-    testId: text.optional(),
-  });
-
-  const cursor = z.strictObject({
-    row: nonNegativeInt(),
-    column: nonNegativeInt(),
-    visible: z.boolean(),
-    shape: z.union([z.literal('block'), z.literal('underline'), z.literal('bar')]).optional(),
-  });
-
-  return z.strictObject({
-    v: z.literal(1),
-    sessionId: text.refine((s) => s.length > 0, 'sessionId must not be empty'),
-    revision: positiveInt(),
-    columns: positiveInt(),
-    rows: positiveInt(),
-    cursor: cursor.optional(),
-    rootIds: z.array(text).max(limits.maxNodes),
-    nodes: z.array(node).max(limits.maxNodes),
-  });
-}
-
-function snapshotSchema(limits: ProtocolLimits): z.ZodType {
-  const cached = schemaCache.get(limits);
-  if (cached !== undefined) return cached;
-  const built = buildSnapshotSchema(limits);
-  schemaCache.set(limits, built);
-  return built;
 }
 
 /**
@@ -295,7 +184,7 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
     return fail('bytes', `snapshot is ${bytes} bytes, ceiling is ${limits.maxSnapshotBytes}`);
   }
 
-  const parsed = snapshotSchema(limits).safeParse(projected);
+  const parsed = treeSchemas(limits).snapshot.safeParse(projected);
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
     return fail(codeForIssue(issue), describeIssue(issue));

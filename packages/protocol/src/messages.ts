@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import type { SemanticSnapshot } from './tree.js';
 import type { LogRecord } from './logs.js';
+import type { TreeDelta } from './delta.js';
 import type { ProtocolLimits } from './limits.js';
 import { PROTOCOL_ID } from './env.js';
 import { ProtocolViolation } from './errors.js';
 import { projectDto } from './framing.js';
 import { validateSnapshot } from './validate.js';
 import { validateLogRecord } from './logs.js';
+import { validateTreeDelta } from './delta.js';
 
 /**
  * Wire messages. Transport: length-prefixed JSON frames (see framing.ts).
@@ -42,8 +44,15 @@ export interface HelloAckMessage {
   readonly protocol: 'termwright/1';
   readonly sessionId: string;
   readonly limits: ProtocolLimits;
-  /** Which traffic the driver wants pushed. v1 drivers request 'snapshots'. */
-  readonly subscribe: 'snapshots' | 'revisions';
+  /**
+   * Which traffic the driver wants pushed.
+   *
+   * `diffs` is only ever selected for an adapter that announced the
+   * `tree-diffs` capability, so an adapter that does not know the value never
+   * receives it — the closed set grew without breaking anyone, because the
+   * adapter opts in first.
+   */
+  readonly subscribe: 'snapshots' | 'revisions' | 'diffs';
   /** Marker configuration: adapter must emit DCS marker with this nonce base. */
   readonly marker: { readonly enabled: boolean };
   /**
@@ -93,6 +102,18 @@ export interface GetTreeResponse {
 }
 
 /**
+ * adapter → driver, an incremental tree update (capability `tree-diffs`,
+ * `subscribe: 'diffs'`).
+ *
+ * Bound to an exact base revision: see `delta.ts` for composition semantics.
+ * A receiver that does not hold `baseRevision` must request a full snapshot
+ * with `get-tree` rather than patch speculatively.
+ */
+export interface TreeDeltaMessage extends TreeDelta {
+  readonly type: 'tree-delta';
+}
+
+/**
  * adapter → driver, one application log record (capability `logs`).
  *
  * Sent only after the driver enabled logs in `hello-ack`. Records are
@@ -121,6 +142,7 @@ export type AdapterToDriverMessage =
   | RevisionCommitMessage
   | SnapshotMessage
   | GetTreeResponse
+  | TreeDeltaMessage
   | LogMessage
   | ProtocolErrorMessage;
 
@@ -210,6 +232,8 @@ const snapshotEnvelopeSchema = z.strictObject({
   snapshot: z.unknown(),
 });
 
+const treeDeltaTypeSchema = z.object({ type: z.literal('tree-delta') });
+
 const logEnvelopeSchema = z.strictObject({
   type: z.literal('log'),
   record: z.unknown(),
@@ -233,7 +257,7 @@ const helloAckSchema = z.object({
   protocol: z.literal(PROTOCOL_ID),
   sessionId: nonEmptyIdentifier,
   limits: limitsSchema,
-  subscribe: z.enum(['snapshots', 'revisions']),
+  subscribe: z.enum(['snapshots', 'revisions', 'diffs']),
   marker: z.object({ enabled: z.boolean() }),
   logs: z
     .object({
@@ -321,6 +345,25 @@ function checkLogRecord(value: unknown, limits: ProtocolLimits): MessageParseRes
 }
 
 /**
+ * Validate a tree delta carried inside an envelope, mapping capacity failures
+ * onto `limit-exceeded` exactly as snapshots do.
+ */
+function checkTreeDelta(value: unknown, limits: ProtocolLimits): MessageParseResult<never> | null {
+  const result = validateTreeDelta(value, limits);
+  if (result.ok) return null;
+  const overCapacity =
+    result.code === 'bytes' ||
+    result.code === 'count' ||
+    result.code === 'depth' ||
+    result.code === 'string-bytes';
+  return {
+    ok: false,
+    code: overCapacity ? 'limit-exceeded' : 'malformed',
+    detail: `tree delta ${result.code}: ${result.detail}`,
+  };
+}
+
+/**
  * Parse and validate one adapter → driver message.
  *
  * **Strict reader**: this is the hostile-input boundary, so unknown fields are
@@ -369,6 +412,14 @@ export function parseAdapterMessage(
         if (bad !== null) return bad;
       }
       return { ok: true, message: dto as GetTreeResponse };
+    }
+    case 'tree-delta': {
+      const issue = check(treeDeltaTypeSchema, dto);
+      if (issue !== null) return malformed(issue);
+      // The delta body is everything but the discriminator.
+      const { type: _type, ...body } = dto as Record<string, unknown>;
+      const bad = checkTreeDelta(body, limits);
+      return bad ?? { ok: true, message: dto as TreeDeltaMessage };
     }
     case 'log': {
       const issue = check(logEnvelopeSchema, dto);

@@ -201,6 +201,53 @@ describe('parseAdapterMessage — log records', () => {
   });
 });
 
+describe('parseAdapterMessage — tree deltas', () => {
+  function treeDelta(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      type: 'tree-delta',
+      baseRevision: 4,
+      revision: 5,
+      changed: [{ id: 'ok', parentId: 'root', role: 'button', name: 'Approve' }],
+      removed: ['stale'],
+      ...overrides,
+    };
+  }
+
+  it('accepts a tree-delta message', () => {
+    expect(adapterCode(treeDelta())).toBe('ok');
+  });
+
+  it('exposes the delta fields on the message itself', () => {
+    const result = parseAdapterMessage(treeDelta(), LIMITS);
+    if (!result.ok) throw new Error(result.detail);
+    if (result.message.type !== 'tree-delta') throw new Error('expected a tree-delta');
+    expect(result.message.baseRevision).toBe(4);
+    expect(result.message.revision).toBe(5);
+    expect(result.message.removed).toEqual(['stale']);
+    expect(Object.isFrozen(result.message)).toBe(true);
+  });
+
+  it('rejects a delta that does not move the revision forward', () => {
+    expect(adapterCode(treeDelta({ baseRevision: 5, revision: 5 }))).toBe('malformed');
+  });
+
+  it('rejects unknown properties on the envelope', () => {
+    expect(adapterCode(treeDelta({ speculative: true }))).toBe('malformed');
+  });
+
+  it('reports an oversized delta as limit-exceeded', () => {
+    const result = parseAdapterMessage(
+      treeDelta({ changed: [{ id: 'a', role: 'button', name: 'A'.repeat(4096) }] }),
+      { ...LIMITS, maxSnapshotBytes: 512 },
+    );
+    expect(result.ok ? 'ok' : result.code).toBe('limit-exceeded');
+  });
+
+  it('rejects a tree-delta arriving on the driver side', () => {
+    expect(driverCode(treeDelta())).toBe('malformed');
+  });
+});
+
 describe('parseDriverMessage', () => {
   it('accepts each driver → adapter message', () => {
     expect(driverCode(helloAck())).toBe('ok');
@@ -217,6 +264,10 @@ describe('parseDriverMessage', () => {
   it('rejects a hello-ack carrying malformed limits', () => {
     expect(driverCode({ ...helloAck(), limits: { ...LIMITS, maxNodes: -1 } })).toBe('malformed');
     expect(driverCode({ ...helloAck(), limits: { maxNodes: 1 } })).toBe('malformed');
+  });
+
+  it('accepts subscribe: diffs', () => {
+    expect(driverCode({ ...helloAck(), subscribe: 'diffs' })).toBe('ok');
   });
 
   it('accepts a hello-ack with a log budget, and one without', () => {
