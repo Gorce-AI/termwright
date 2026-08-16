@@ -340,3 +340,12 @@
   already-held revision replaces the composition base without being
   re-published (a successful repair must not report as data loss).
   @termwright/vt gains /unicode subpath (applyProfile) for browser/trace use.
+- 2026-08-16 (marker encoding, DECIDED by owner-delegated evidence): the
+  render-commit marker moves from private DCS to a PRIVATE OSC everywhere —
+  single path, no negotiation. Evidence: the in-CI escape-transparency probe
+  shows ConPTY drops DCS/APC/OSC-8 but passes private OSC (BEL and ST) and
+  OSC 133 on Windows; POSIX passes everything. Emit with BEL, accept BEL and
+  ST. The probe stays in CI as a standing invariant ("what survives the pty
+  is a conformance property"). Coordinated round: protocol (encodeMarker/
+  verifyMarkerPayload + docs), driver (OSC handler), ink + py/go clients
+  (emission), conformance (fixtures + asserts).
