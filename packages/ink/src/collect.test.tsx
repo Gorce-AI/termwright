@@ -220,3 +220,53 @@ describe('snapshot collection', () => {
     expect(snapshot.nodes.length).toBeLessThanOrEqual(5);
   });
 });
+
+describe('protocol shape obligations', () => {
+  const openApps: Instance[] = [];
+  const openDrivers: FakeDriver[] = [];
+
+  afterEach(async () => {
+    for (const app of openApps.splice(0)) app.unmount();
+    for (const driver of openDrivers.splice(0)) await driver.close();
+  });
+
+  /** An element the author registered but gave no role: this yields `generic`. */
+  function Unroled({ label }: { readonly label: string }): React.ReactNode {
+    const ref = useRef<DOMElement>(null);
+    useSemantic(ref, {});
+    return (
+      <Box ref={ref}>
+        <Text>{label}</Text>
+      </Box>
+    );
+  }
+
+  it('names the framework type on every node, so a generic one is never invalid', async () => {
+    const driver = await startFakeDriver();
+    openDrivers.push(driver);
+    const app = semanticRender(<Unroled label="mystery" />, {
+      stdout: createFakeStdout(),
+      interactive: true,
+      alternateScreen: true,
+      patchConsole: false,
+      semantics: {
+        env: { TERMWRIGHT_ENDPOINT: driver.endpoint, TERMWRIGHT_TOKEN: driver.token },
+      },
+    });
+    openApps.push(app);
+
+    const [snapshot] = await driver.waitForSnapshots(1);
+    const nodes = (snapshot as SemanticSnapshot).nodes;
+
+    // The protocol requires it only for `generic`, but a conditional here is a
+    // rule that has to be remembered whenever role resolution changes — and it
+    // was not, which cost a deterministic red on three operating systems.
+    expect(nodes.every((node) => node.frameworkType !== undefined)).toBe(true);
+    expect(nodes.some((node) => node.role === 'generic')).toBe(true);
+    expect(nodes.find((node) => node.role === 'generic')?.frameworkType).toBe('ink-box');
+
+    // In memory, not after a JSON round-trip: the wire cannot tell us this.
+    const result = validateSnapshot(snapshot, DEFAULT_LIMITS);
+    expect(result.ok ? null : result.detail).toBeNull();
+  });
+});

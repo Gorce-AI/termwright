@@ -73,6 +73,7 @@ export class SnapshotCollector {
       id: rootId,
       role: 'application',
       name: '',
+      frameworkType: root.nodeName,
       ...(options.includeBounds
         ? withBounds(root, this.#viewportRect(options))
         : {}),
@@ -158,6 +159,11 @@ export class SnapshotCollector {
       parentId,
       role,
       name,
+      // Ink's own name for the element — one of four host kinds. Set on every
+      // node rather than only where the protocol demands it (a `generic` role),
+      // because a conditional here is a rule that has to be remembered every
+      // time role resolution changes, and this one already broke once.
+      frameworkType: node.nodeName,
       ...(meta?.description === undefined ? {} : { description: this.#clamp(meta.description) }),
       ...(meta?.value === undefined ? {} : { value: this.#clamp(meta.value) }),
       ...(options.includeBounds ? withBounds(node) : {}),

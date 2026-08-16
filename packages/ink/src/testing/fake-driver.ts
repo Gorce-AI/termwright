@@ -85,6 +85,15 @@ export interface FakeDriver {
   close(): Promise<void>;
 }
 
+/**
+ * Default wait, deliberately below Vitest's 5 s test timeout.
+ *
+ * Both firing at 5 s is a race, and Vitest wins it: the useful message — which
+ * frame the driver refused and why — never reaches the report, leaving a bare
+ * "timed out" on every OS. Losing that race once cost a full CI triage.
+ */
+const DEFAULT_WAIT_MS = 4_000;
+
 /** Start a fake driver on a private endpoint. */
 export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<FakeDriver> {
   const directory = await mkdtemp(join(tmpdir(), 'termwright-ink-'));
@@ -104,6 +113,15 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
   const responses = new Map<number, (response: GetTreeResponse) => void>();
   const waiters: Array<() => void> = [];
   let hello: HelloMessage | undefined;
+  /**
+   * Why a frame was refused, if one was.
+   *
+   * A rejected frame kills the connection, and every wait then fails as a bare
+   * timeout — which is what a protocol-shape change looks like in CI: red on
+   * every OS with nothing saying why. Keeping the validator's own complaint and
+   * putting it in the timeout message turns that into a diagnosis.
+   */
+  let rejection: string | undefined;
   let connection: Socket | undefined;
   let nextRequestId = 1;
 
@@ -127,7 +145,9 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
       for (const frame of frames) {
         const parsed = parseAdapterMessage(frame, limits);
         if (!parsed.ok) {
+          rejection ??= `${parsed.code}: ${parsed.detail}`;
           socket.destroy();
+          notify();
           return;
         }
         handle(socket, parsed.message);
@@ -215,7 +235,10 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
   const until = async (predicate: () => boolean, timeoutMs: number, what: string): Promise<void> => {
     if (predicate()) return;
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`fake driver: timed out waiting for ${what}`)), timeoutMs);
+      const timer = setTimeout(() => {
+        const because = rejection === undefined ? '' : `; the driver refused a frame — ${rejection}`;
+        reject(new Error(`fake driver: timed out waiting for ${what}${because}`));
+      }, timeoutMs);
       const check = (): void => {
         if (!predicate()) {
           waiters.push(check);
@@ -250,27 +273,27 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
     get treeTraffic() {
       return treeTraffic;
     },
-    async waitForSnapshots(count, timeoutMs = 5_000) {
+    async waitForSnapshots(count, timeoutMs = DEFAULT_WAIT_MS) {
       await until(() => snapshots.length >= count, timeoutMs, `${count} snapshot(s)`);
       return snapshots;
     },
-    async waitForCommits(count, timeoutMs = 5_000) {
+    async waitForCommits(count, timeoutMs = DEFAULT_WAIT_MS) {
       await until(() => commits.length >= count, timeoutMs, `${count} revision commit(s)`);
       return commits;
     },
-    async waitForTreeTraffic(count, timeoutMs = 5_000) {
+    async waitForTreeTraffic(count, timeoutMs = DEFAULT_WAIT_MS) {
       await until(() => treeTraffic.length >= count, timeoutMs, `${count} tree message(s)`);
       return treeTraffic.length;
     },
-    async waitForLogs(count, timeoutMs = 5_000) {
+    async waitForLogs(count, timeoutMs = DEFAULT_WAIT_MS) {
       await until(() => logs.length >= count, timeoutMs, `${count} log record(s)`);
       return logs;
     },
-    async waitForHandshake(timeoutMs = 5_000) {
+    async waitForHandshake(timeoutMs = DEFAULT_WAIT_MS) {
       await until(() => hello !== undefined, timeoutMs, 'handshake');
       return hello as HelloMessage;
     },
-    async requestTree(revision, timeoutMs = 5_000) {
+    async requestTree(revision, timeoutMs = DEFAULT_WAIT_MS) {
       const socket = connection;
       if (socket === undefined) throw new Error('fake driver: no connection');
       const requestId = nextRequestId++;
