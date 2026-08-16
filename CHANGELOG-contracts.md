@@ -415,3 +415,10 @@
   archiwum pozostaje protocol-violation), driver (nieistniejący cwd/command
   odrzucany PRZED powstaniem pty; tylko polecenia będące ścieżką — goła nazwa
   nadal idzie w PATH), CLI mapuje not-found → exit 2.
+- 2026-08-16 (ui): manifest runów v3 — OPCJONALNA sekcja `git {commit,
+  message, author, branch}` (wszystkie cztery pola albo żadne; nieobecność =
+  „to nie było repozytorium", nie puste łańcuchy). Manifesty v2 odrzucane
+  przez mechanizm wersji (bez migracji — jedna generacja przed 1.0). Fakty o
+  projekcie (mtime, średnie czasy, ostatnie wyniki) idą przez niekontraktowe
+  GET /api/specs, nie przez §UI events — strumień zdarzeń opisuje przebieg,
+  nie stan dysku.
