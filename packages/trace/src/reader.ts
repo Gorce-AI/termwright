@@ -166,7 +166,9 @@ class ArchiveReader implements TraceReader {
   }
 
   events(): AsyncIterable<TraceEvent> {
-    return parseJsonLines<TraceEvent>(this.#files.lines(TRACE_FILES.events), TRACE_FILES.events);
+    return validateEvents(
+      parseJsonLines<TraceEvent>(this.#files.lines(TRACE_FILES.events), TRACE_FILES.events),
+    );
   }
 
   semantics(): AsyncIterable<SemanticRecord> {
@@ -197,7 +199,7 @@ class ArchiveReader implements TraceReader {
     const open = new Map<string, StepSummary>();
     const ordered: StepSummary[] = [];
     for await (const event of this.events()) {
-      const castOffset = event.castOffset ?? event.t;
+      const castOffset = event.castOffset;
       if (event.kind === 'step-start') {
         const summary: StepSummary = {
           stepId: event.stepId,
@@ -328,6 +330,31 @@ function parseSize(data: string): { columns: number; rows: number } | null {
   const match = /^(\d+)x(\d+)$/.exec(data);
   if (match === null) return null;
   return { columns: Number(match[1]), rows: Number(match[2]) };
+}
+
+/**
+ * Rejects event lines that cannot be placed on the recording.
+ *
+ * `castOffset` is required by §Trace. Falling back to `t` would put an event
+ * at the wrong moment in any recording that was hidden or idle-trimmed, and
+ * do it silently — a corrupt line is better news than a plausible lie.
+ */
+async function* validateEvents(events: AsyncIterable<TraceEvent>): AsyncGenerator<TraceEvent> {
+  let lineNumber = 0;
+  for await (const event of events) {
+    lineNumber += 1;
+    if (typeof event.castOffset !== 'number' || !Number.isFinite(event.castOffset)) {
+      throw new TraceError(
+        'protocol-violation',
+        `${TRACE_FILES.events}:${lineNumber} has no castOffset`,
+        {
+          suggestion:
+            'The archive predates the required castOffset field, or was written by something other than @termwright/trace. Re-record it.',
+        },
+      );
+    }
+    yield event;
+  }
 }
 
 async function* parseJsonLines<T>(

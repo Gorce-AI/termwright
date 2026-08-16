@@ -124,6 +124,18 @@ export interface TraceWriter {
   dispose(): void;
 }
 
+/**
+ * An event as the writer holds it, before the timeline exists.
+ *
+ * `castOffset` is required on disk but unknowable until `finalize()` applies
+ * the hide and trim transforms, so the buffered form omits it and
+ * `writeArchive` is the one place that can complete an event. Distributive, so
+ * each member of the union keeps its own shape.
+ */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+type PendingTraceEvent = DistributiveOmit<TraceEvent, 'castOffset'>;
+
 interface PendingCastEvent {
   wall: number;
   seq: number;
@@ -162,7 +174,7 @@ export function createTraceWriter(
   const startedAt = new Date().toISOString();
 
   const castEvents: PendingCastEvent[] = [];
-  const traceEvents: TraceEvent[] = [];
+  const traceEvents: PendingTraceEvent[] = [];
   const semantics: { t: number; revision: number; snapshot: SemanticSnapshot }[] = [];
   const hiddenWindows: HiddenWindow[] = [];
   const logs: TraceLogEntry[] = [];
@@ -544,7 +556,7 @@ export function createTraceWriter(
 interface WriteArchiveInput {
   readonly dir: string;
   readonly castEvents: readonly PendingCastEvent[];
-  readonly traceEvents: readonly TraceEvent[];
+  readonly traceEvents: readonly PendingTraceEvent[];
   readonly semantics: readonly { t: number; revision: number; snapshot: SemanticSnapshot }[];
   readonly hiddenWindows: readonly HiddenWindow[];
   readonly idleTimeLimit: number | undefined;

@@ -207,11 +207,17 @@ interface TraceEventBase {
   readonly t: number;
   readonly kind: TraceEventKind;
   /**
-   * Offset into the **cast timeline** in milliseconds, i.e. `t` after hidden
-   * windows and idle trimming were removed. Written by
-   * {@link TraceWriter.finalize}; readers fall back to `t` when absent.
+   * Offset into the **cast timeline** in milliseconds: `t` after hidden
+   * windows and idle trimming were removed.
+   *
+   * Required. Written by {@link TraceWriter.finalize}, which is the only
+   * moment the transforms are known — a line without it cannot be placed on
+   * the recording, so the reader rejects it as corrupt rather than guessing
+   * `t`. `t` and `castOffset` are equal only in a recording that was neither
+   * hidden nor trimmed, so the guess would be silently wrong exactly where
+   * the timeline matters.
    */
-  readonly castOffset?: number;
+  readonly castOffset: number;
 }
 
 /** Raw bytes written into the PTY by the harness. */

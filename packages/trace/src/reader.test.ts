@@ -217,3 +217,71 @@ describe('zip container', () => {
     await expect(packTrace(root, join(root, 'x.zip'))).rejects.toThrow(/not a .twtrace/);
   });
 });
+
+describe('castOffset is required', () => {
+  it('rejects an event line that has none instead of guessing t', async () => {
+    const root = await workspace();
+    const dir = join(root, 'legacy.twtrace');
+    await recordSample(dir);
+
+    // An archive from before castOffset was required: `t` alone.
+    await writeFile(
+      join(dir, TRACE_FILES.events),
+      `${JSON.stringify({ t: 120, kind: 'step-start', stepId: 's1', title: 'old' })}\n`,
+      'utf8',
+    );
+
+    const trace = await openTrace(dir);
+    try {
+      await expect(trace.steps()).rejects.toThrow(/castOffset/);
+      const drain = async (): Promise<void> => {
+        for await (const _event of trace.events()) {
+          // consume
+        }
+      };
+      await expect(drain()).rejects.toThrow(TraceError);
+    } finally {
+      await trace.close();
+    }
+  });
+
+  it('rejects a castOffset that is not a finite number', async () => {
+    const root = await workspace();
+    const dir = join(root, 'nonfinite.twtrace');
+    await recordSample(dir);
+    await writeFile(
+      join(dir, TRACE_FILES.events),
+      `${JSON.stringify({ t: 1, castOffset: null, kind: 'action', api: 'x', ok: true })}\n`,
+      'utf8',
+    );
+
+    const trace = await openTrace(dir);
+    try {
+      await expect(trace.steps()).rejects.toThrow(/castOffset/);
+    } finally {
+      await trace.close();
+    }
+  });
+
+  it('names the line that is broken', async () => {
+    const root = await workspace();
+    const dir = join(root, 'secondline.twtrace');
+    await recordSample(dir);
+    await writeFile(
+      join(dir, TRACE_FILES.events),
+      [
+        JSON.stringify({ t: 0, castOffset: 0, kind: 'step-start', stepId: 's1', title: 'ok' }),
+        JSON.stringify({ t: 5, kind: 'step-end', stepId: 's1', title: 'ok', status: 'passed' }),
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const trace = await openTrace(dir);
+    try {
+      await expect(trace.steps()).rejects.toThrow(/events\.jsonl:2/);
+    } finally {
+      await trace.close();
+    }
+  });
+});

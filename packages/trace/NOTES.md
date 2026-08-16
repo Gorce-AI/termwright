@@ -96,9 +96,17 @@ for the retained events and interpolates everything else between those knots, so
 a snapshot recorded in the middle of a 20 s gap trimmed to 1 s lands at 500 ms
 rather than past the end of the gap.
 
-`events.jsonl` stores `castOffset` on every line. `/CONTRACTS.md` §Trace shows
-`{ t, kind, ... }`; the field is additive and readers fall back to `t` when it is
-absent, so older archives still open.
+`events.jsonl` stores `castOffset` on **every** line, and §Trace requires it.
+There is no reader fallback to `t`: a line without it is rejected as corrupt.
+
+That is deliberate, not strictness for its own sake. `t` and `castOffset` are
+equal only in a recording that was neither hidden nor idle-trimmed, so the
+fallback would place events correctly in the easy case and silently wrong in
+exactly the recordings where the timeline matters. The writer cannot know the
+offset until `finalize()` applies the transforms, which is why the buffered
+event type omits the field (`PendingTraceEvent`) and `writeArchive` is the one
+place that completes an event — the type system now enforces what the format
+requires.
 
 ## Clock coupling with the driver — needs confirmation
 
