@@ -328,7 +328,13 @@ not a bug to fix.
    as a stable handle.
 5. Selection and scroll *position* are readable for `List` and `Table`; content
    *extent* is not readable anywhere, and `ScrollbarState` exposes only
-   position.
+   position. **Corrected in Phase 6:** this measured the public API, and a
+   patch runs *inside* the crate. `List::items` is `pub(crate)`, so the item
+   count and the item text are reachable from a patched `ratatui-widgets` and
+   from nowhere else — which is what makes `setSize` and item names
+   obtainable, and what justifies patching a second crate. `ScrollbarState`'s
+   private fields are still private to the patch too, so `scrollExtent`
+   remains unavailable.
 6. `type_name` is available and mechanical for built-ins, but yields author
    names rather than roles for custom widgets, and never sees nested children.
 7. The ephemeral `--config` patch is real and needs no file in the project —
