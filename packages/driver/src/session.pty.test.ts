@@ -6,7 +6,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { TerminalHarness } from './api.js';
+import type { ActionEvent, TerminalHarness } from './api.js';
 import { AmbiguousLocatorError, TermwrightError } from './errors.js';
 import { createNodePtyBackend } from './pty.js';
 import { launchTerminal } from './session.js';
@@ -339,7 +339,7 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
     const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
     await terminal.getByTestId('approve').resolve();
 
-    const actions: { api: string; ok: boolean; selector?: string; ref?: string; error?: string }[] = [];
+    const actions: ActionEvent[] = [];
     terminal.events.on('action', (event) => actions.push(event));
 
     await terminal.press('Tab');
@@ -362,7 +362,7 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
     const terminal = await launch('echo-app.mjs');
     await terminal.waitForText('READY');
 
-    const actions: { api: string; ok: boolean; error?: string }[] = [];
+    const actions: ActionEvent[] = [];
     terminal.events.on('action', (event) => actions.push(event));
 
     await terminal.getByText('READY').click().catch(() => {});

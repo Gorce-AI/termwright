@@ -15,7 +15,14 @@
 import xh from '@xterm/headless';
 import serializeAddon from '@xterm/addon-serialize';
 import unicode11Addon from '@xterm/addon-unicode11';
-import type { ITerminalAddon, IUnicodeVersionProvider, Terminal } from '@xterm/headless';
+import type {
+  IBuffer,
+  IBufferCell,
+  IBufferLine,
+  ITerminalAddon,
+  IUnicodeVersionProvider,
+  Terminal,
+} from '@xterm/headless';
 import { resolveProfile, type TerminalProfile, type TerminalProfileLike } from './profiles.js';
 import { createProfileProvider } from './unicode.js';
 
@@ -50,7 +57,7 @@ export function createTerminal(options: CreateTerminalOptions): ProfiledTerminal
     scrollback: options.scrollback ?? 0,
     allowProposedApi: true,
     convertEol: false,
-    reflowCursorLine: profile.reflowOnResize,
+    reflowCursorLine: profile.reflowCursorLineOnResize,
   });
 
   const base = loadBaseProvider(profile);
@@ -114,4 +121,4 @@ export function loadSerializeAddon(terminal: Terminal): {
   return addon;
 }
 
-export type { Terminal };
+export type { IBuffer, IBufferCell, IBufferLine, Terminal };

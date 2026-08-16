@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createTerminal, loadSerializeAddon } from './terminal.js';
-import { DEFAULT_PROFILE, resolveProfile, TERMINAL_PROFILES } from './profiles.js';
+import { DEFAULT_PROFILE, resolveProfile, resolveProfileId, TERMINAL_PROFILES } from './profiles.js';
 import { isAmbiguousWidth } from './unicode.js';
 import type { TerminalProfileLike } from './profiles.js';
 
@@ -102,6 +102,17 @@ describe('resolveProfile', () => {
 
   it('refuses an unknown id instead of silently defaulting', () => {
     expect(() => resolveProfile('konsole' as never)).toThrow(/unknown terminal profile/u);
+  });
+});
+
+describe('resolveProfileId', () => {
+  it('answers with a profile or with nothing, and never throws', () => {
+    // For callers holding a string read from a recording: they report an
+    // unknown profile in their own vocabulary instead of catching ours.
+    expect(resolveProfileId('kitty')).toBe(TERMINAL_PROFILES.kitty);
+    expect(resolveProfileId('konsole')).toBeUndefined();
+    expect(resolveProfileId('')).toBeUndefined();
+    expect(resolveProfileId('__proto__')).toBeUndefined();
   });
 });
 

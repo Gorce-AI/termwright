@@ -19,6 +19,9 @@ export {
   createTerminal,
   loadSerializeAddon,
   type CreateTerminalOptions,
+  type IBuffer,
+  type IBufferCell,
+  type IBufferLine,
   type ProfiledTerminal,
   type Terminal,
 } from './terminal.js';
@@ -29,6 +32,7 @@ export {
   KITTY_PROFILE,
   TERMINAL_PROFILES,
   resolveProfile,
+  resolveProfileId,
   type TerminalProfile,
   type TerminalProfileId,
   type TerminalProfileLike,

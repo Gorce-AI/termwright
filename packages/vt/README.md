@@ -45,7 +45,7 @@ lines up. A profile is a named set of answers to exactly those questions:
 | `unicodeVersion` | which width tables apply |
 | `ambiguousWide` | whether East Asian Ambiguous characters take one column or two |
 | `variationSelectors` | whether `❤️` (VS16) is one column or two |
-| `reflowOnResize` | whether the cursor's line reflows when the terminal resizes |
+| `reflowCursorLineOnResize` | whether the cursor's line reflows when the terminal resizes (wrapped lines always do) |
 
 Three profiles ship, because they cover the three answers real terminals give:
 
@@ -72,9 +72,9 @@ package in this repository tests with vitest, so a profile that needed it would
 hang the test suite of everyone who imported this package. Shipping three
 profiles that work beats shipping four when the fourth freezes the room.
 
-`reflowOnResize` is also narrower than its name suggests: xterm.js always
-reflows *wrapped* lines and only lets a host choose what happens to the line the
-cursor is on. The TSDoc says so at the field.
+`reflowCursorLineOnResize` is named for exactly what it reaches. xterm.js always
+reflows *wrapped* lines; the only choice it offers is the cursor's line, and the
+field says so rather than promising reflow control it does not have.
 
 ## Why the factory, and not just a shared config
 
