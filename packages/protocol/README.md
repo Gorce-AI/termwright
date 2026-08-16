@@ -413,18 +413,29 @@ instead, and why the framework forces it.
 
 An undeclared deviation is a bug, not a difference.
 
+Rules 1–5 bind whatever publishes a semantic tree, so a package that publishes
+none — the Rust crate is the protocol plus a logs bridge — has nothing to
+declare and needs no such heading. The requirement follows the adapter, not the
+package.
+
+Entry formatting is deliberately unconstrained: adapters use prose, bullets and
+a table, and conformance parses all three. The rule governs adapters, not
+markdown, and making authors rewrite prose to suit a parser would be the tail
+wagging the dog.
+
 ### Where the current differences live
 
 This section carried a snapshot of per-adapter gaps when the rules were first
-written down. Every entry in it has since been either fixed or declared, and all
-five adapters now carry a `## Deviations` heading, so the snapshot is deleted
-rather than left to rot: a stale list in a normative document is worse than no
-list, because it is read as current.
+written down. Every entry in it has since been fixed or declared, so the
+snapshot is deleted rather than left to rot: a stale list in a normative
+document is worse than no list, because it is read as current. That applies to
+counts and claims here too — this paragraph deliberately names no totals.
 
-The live source of truth is each adapter's own `## Deviations` section —
-`@termwright/ink`, `@termwright/opentui`, and the Python, Go and Rust clients.
-That is also what conformance enforces: a difference that is declared there is a
-documented limitation, and a difference that is not is a bug.
+The live source of truth is each tree-publishing adapter's own `## Deviations`
+section: `@termwright/ink`, `@termwright/opentui`, and the Python and Go
+clients. Conformance reads those sections rather than a registration in the
+suite, because two copies of the same fact drift and the README is the copy a
+user reads. `pnpm conformance --deviations` prints the current listing.
 
 ## Protocol evolution
 
