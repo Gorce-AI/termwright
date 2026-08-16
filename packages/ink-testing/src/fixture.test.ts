@@ -85,7 +85,21 @@ describe('launchInkFixture', () => {
 
     await harness.signal('INT');
 
-    expect(await harness.waitForExit()).toMatchObject({ signal: 'SIGINT' });
+    // How a signalled child is *reported* is the platform's business: POSIX
+    // fills in the signal, ConPTY has no signals at all and gives back a plain
+    // exit. What the session owes is the same everywhere — it notices the death
+    // and stops pretending the program can still be driven.
+    await harness.waitForExit();
+    await expect
+      .poll(async () => {
+        try {
+          await harness.press('a');
+          return undefined;
+        } catch (error) {
+          return (error as { code?: string }).code;
+        }
+      })
+      .toBe('process-exited');
   });
 
   it('refuses a component export that does not exist', async () => {

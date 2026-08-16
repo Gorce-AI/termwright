@@ -11,6 +11,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { MAX_PAYLOAD_BYTES } from './payload.js';
 
 const runner = fileURLToPath(new URL('../runner/runner-entry.mjs', import.meta.url));
 const run = promisify(execFile);
@@ -81,7 +82,12 @@ describe('runner-entry', () => {
   });
 
   it('refuses an oversized payload without parsing it', async () => {
-    const result = await runWith(`{"v":1,"pad":"${'x'.repeat(70_000)}"}`);
+    // Just over the gate, and derived from it rather than hard-coded: a literal
+    // would drift the day the ceiling moves, and one large enough to also breach
+    // the OS command-line limit would be refused by the platform at spawn
+    // instead — which is a different failure wearing the same red.
+    const pad = 'x'.repeat(MAX_PAYLOAD_BYTES);
+    const result = await runWith(`{"v":1,"pad":"${pad}"}`);
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('larger than');

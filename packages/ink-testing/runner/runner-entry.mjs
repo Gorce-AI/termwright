@@ -15,8 +15,15 @@ import { connect } from 'node:net';
 import { createElement } from 'react';
 import { semanticRender } from '@termwright/ink';
 
-/** Mirrors `MAX_PAYLOAD_BYTES` in `src/payload.ts`. */
-const MAX_PAYLOAD_BYTES = 64 * 1024;
+/**
+ * Mirrors `MAX_PAYLOAD_BYTES` in `src/payload.ts`.
+ *
+ * Bounded by the narrowest platform command line rather than by taste — see
+ * the note there. Kept as a second gate because this is a separate program:
+ * anything on the machine can start it, and "the caller already checked" is not
+ * a property a process boundary preserves.
+ */
+const MAX_PAYLOAD_BYTES = 24 * 1024;
 
 /** Mirrors the control-channel constants in `src/control.ts`. */
 const ENV_CONTROL_ENDPOINT = 'TERMWRIGHT_FIXTURE_CONTROL';

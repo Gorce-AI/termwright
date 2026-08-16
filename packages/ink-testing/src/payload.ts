@@ -32,8 +32,20 @@ export interface FixturePayload {
   readonly maxFps: number;
 }
 
-/** Largest serialized payload accepted, in bytes. */
-export const MAX_PAYLOAD_BYTES = 64 * 1024;
+/**
+ * Largest serialized payload accepted, in bytes.
+ *
+ * The payload travels as a command-line argument, so this ceiling has to fit
+ * the narrowest platform's command line, not the roomiest. Windows caps a whole
+ * command line at 32,767 characters — a limit the *operating system* enforces
+ * at spawn, long before any code of ours runs. A larger ceiling here would mean
+ * accepting props that then die as a raw `ENAMETOOLONG` with nothing to say
+ * about what went wrong, and only on one OS.
+ *
+ * 24 KiB leaves roughly 8 KiB for the interpreter path, the runner path and
+ * quoting, which is ample even in a deeply nested CI checkout.
+ */
+export const MAX_PAYLOAD_BYTES = 24 * 1024;
 
 /** Deepest object/array nesting accepted in props. */
 export const MAX_PROPS_DEPTH = 8;

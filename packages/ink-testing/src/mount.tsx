@@ -229,6 +229,12 @@ export async function mountInk(element: ReactNode, options: MountInkOptions = {}
     backend,
     columns,
     rows,
+    // The component harness owns both ends: the mounted component's mode
+    // requests reach our own backend rather than a platform PTY, so they are
+    // observable by construction. Saying so pins the same branch on every OS —
+    // without it a Windows run silently degrades to "mouse mode unknown", and
+    // an assertion about refusing a click starts asserting the opposite.
+    modesObservable: true,
     ...(options.env === undefined ? {} : { env: options.env }),
     ...(options.envMode === undefined ? {} : { envMode: options.envMode }),
     ...(options.logs === undefined ? {} : { logs: options.logs }),
