@@ -519,7 +519,12 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       detachRecorder?.();
       for (const client of wss.clients) client.terminate();
       await new Promise<void>((done) => wss.close(() => done()));
-      await new Promise<void>((done) => http.close(() => done()));
+      const closed = new Promise<void>((done) => http.close(() => done()));
+      // `close()` only stops new connections; it then waits for the open ones,
+      // and a browser holds its keep-alive sockets open indefinitely. Without
+      // this the promise never settles when the pages outlive the server.
+      http.closeAllConnections();
+      await closed;
       await recorder?.close();
       await reader?.close();
     },

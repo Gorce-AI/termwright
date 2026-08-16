@@ -129,7 +129,9 @@ describe('the runner UI in a browser', () => {
     // The strip carries a marker per step, semantic revision and notable log,
     // and the earliest of those sits at 0ms — jump to the last one, which is
     // the only click guaranteed to move the clock.
-    const markers = page.locator(`${testId('markers')} button`);
+    // The markers moved onto the track itself when the strip and the slider
+    // were merged; a separate strip is what made them drift.
+    const markers = page.locator(`${testId('scrub')} .marker`);
     await expect.poll(() => markers.count(), { timeout: 15_000 }).toBeGreaterThan(0);
     await markers.last().click();
 
@@ -156,8 +158,12 @@ describe('the runner UI in a browser', () => {
     expect(atStart).toContain('listening on 3000'); // tailed file, t=0
     expect(atStart).not.toContain('pool exhausted'); // adapter record, t=1050
 
-    // Move to the end of the recording, and the later record appears.
-    await page.locator(`${testId('markers')} button`).last().click();
+    // Move to the end of the recording. The last marker in DOM order is not
+    // the last in time (log marks render after the trace's own), so this asks
+    // the track for its right edge instead.
+    const track = await page.locator(testId('scrub')).boundingBox();
+    if (track === null) throw new Error('the track has no layout');
+    await page.mouse.click(track.x + track.width - 1, track.y + track.height / 2);
 
     await expect
       .poll(() => textOf(page, testId('logs')), { timeout: 15_000 })
@@ -514,45 +520,49 @@ describe('the playback track', () => {
    * the right. They now share one element and one time→position function, and
    * this pins that at both edges and the middle, where the old bug was largest.
    */
-  it('puts the thumb exactly where the marker is, at both edges and the middle', async () => {
-    const page = await open(await buildFixtureTrace());
-    const track = page.locator('[data-testid="scrub"]');
-    await track.waitFor();
+  const thumbCentre = (page: Page): Promise<number> =>
+    page.evaluate(() => {
+      const thumb = document.querySelector('.track .thumb');
+      if (thumb === null) return Number.NaN;
+      const rect = thumb.getBoundingClientRect();
+      return rect.left + rect.width / 2;
+    });
 
-    const box = await track.boundingBox();
-    if (box === null) throw new Error('the track has no layout');
+  it('puts the thumb exactly where the pointer went down, at both edges and the middle', async () => {
+    const page = await open(await buildFixtureTrace());
+    const track = page.locator(testId('scrub'));
+    // Wait for the archive: until the overview arrives there is no duration to
+    // seek within, and the drift measured would be measuring the wrong thing.
+    await page.locator(`${testId('scrub')} .marker`).first().waitFor();
 
     for (const fraction of [0, 0.5, 1]) {
-      const x = box.x + box.width * fraction;
-      await page.mouse.move(x, box.y + box.height / 2);
-      await page.mouse.down();
-      await page.mouse.up();
+      const box = await track.boundingBox();
+      if (box === null) throw new Error('the track has no layout');
+      // `x + width` is one pixel *outside* the element and lands on the button
+      // beside it, which seeks somewhere else entirely. Stay inside.
+      const x = Math.min(box.x + box.width * fraction, box.x + box.width - 1);
+      await page.mouse.click(x, box.y + box.height / 2);
 
-      const thumbCentre = await page.evaluate(() => {
-        const thumb = document.querySelector('.track .thumb');
-        if (thumb === null) return Number.NaN;
-        const rect = thumb.getBoundingClientRect();
-        return rect.left + rect.width / 2;
-      });
-      // Where the pointer went down is where the thumb must be.
-      expect(Math.abs(thumbCentre - x)).toBeLessThanOrEqual(1);
+      // Seeking is asynchronous — the position lands on the next frame, so this
+      // waits for it rather than reading a thumb that has not moved yet.
+      await expect.poll(async () => Math.abs((await thumbCentre(page)) - x) <= 1).toBe(true);
     }
   });
 
   it('lands the thumb on the marker that was clicked', async () => {
     const page = await open(await buildFixtureTrace());
-    const marker = page.locator('.track .marker').last();
+    await page.locator('.track .marker').last().waitFor();
+    // Bind to one element, not to a locator. Seeking loads the log window around
+    // the new moment, which appends log marks to the track, so a re-resolved
+    // `.last()` is a different marker after the click than the one measured
+    // before it — the comparison would then be between two unrelated positions.
+    const marker = await page.locator('.track .marker').last().elementHandle();
+    if (marker === null) throw new Error('the track has no markers');
+    const box = await marker.boundingBox();
+    if (box === null) throw new Error('the marker has no layout');
+    const centre = box.x + box.width / 2;
     await marker.click();
 
-    const drift = await page.evaluate(() => {
-      const centre = (element: Element | null): number => {
-        if (element === null) return Number.NaN;
-        const rect = element.getBoundingClientRect();
-        return rect.left + rect.width / 2;
-      };
-      const markers = document.querySelectorAll('.track .marker');
-      return Math.abs(centre(markers[markers.length - 1] ?? null) - centre(document.querySelector('.track .thumb')));
-    });
-    expect(drift).toBeLessThanOrEqual(1);
+    await expect.poll(async () => Math.abs(centre - (await thumbCentre(page))) <= 1).toBe(true);
   });
 });
