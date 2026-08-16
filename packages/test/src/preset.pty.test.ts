@@ -127,15 +127,9 @@ describe.skipIf(!available)('the preset against a real PTY', () => {
     await expect(terminal).toHaveLogged({ message: 'could not reach the cache' });
     expect(terminal.logs.filter({ minLevel: 'error' })).toEqual([]);
 
-    // Order and content, not exact equality: the driver's file follower
-    // currently re-emits the previous line when a later poll picks up new
-    // content (reported to impl-driver with a repro). Tighten this to
-    // toBe(...) once that lands — the preset itself stores what it is given.
-    const lines = terminal.logs.text({ source: 'file' }).trimEnd().split('\n');
-    expect(lines[0]).toBe('[app] starting up');
-    expect(lines.at(-1)).toBe('[app] error: could not reach the cache');
-    expect(new Set(lines)).toEqual(
-      new Set(['[app] starting up', '[app] error: could not reach the cache']),
+    // Exact equality: appends spread across polls must each arrive once.
+    expect(terminal.logs.text({ source: 'file' })).toBe(
+      ['[app] starting up', '[app] error: could not reach the cache', ''].join('\n'),
     );
 
     terminal.logs.clear();
