@@ -89,10 +89,29 @@ def test_limits_still_require_every_known_ceiling():
     assert "maxNodes" in result.detail
 
 
-def test_unknown_keys_are_still_rejected_outside_limits():
-    """Only `limits` is extensible; the envelope stays strict."""
+def test_tolerance_follows_the_speaker_not_the_message():
+    """Driver traffic is read tolerantly; adapter traffic is not.
+
+    The asymmetry is about who is speaking. A driver is the trusted side and
+    may grow its messages, so an adapter published today must survive fields
+    invented tomorrow. Adapter traffic crosses an untrusted boundary, where an
+    unknown field is a signal rather than an extension — and `error` proves the
+    point, because it is the same message read both ways.
+    """
+    error = {"type": "error", "code": "internal", "message": "boom", "trace": "…"}
+    assert parse_driver_message(error, DEFAULT_LIMITS).ok
+    assert not parse_adapter_message(error, DEFAULT_LIMITS).ok
+
+
+def test_closed_sets_stay_closed_in_both_directions():
+    """Tolerance is not leniency: a vocabulary is not a growth point."""
     ack = VECTORS["driverToAdapter"]["accept"][0]["message"]
-    assert not parse_driver_message({**ack, "surprise": 1}, DEFAULT_LIMITS).ok
+    assert not parse_driver_message({**ack, "subscribe": "everything"}, DEFAULT_LIMITS).ok
     assert not parse_driver_message(
-        {**ack, "marker": {"enabled": True, "surprise": 1}}, DEFAULT_LIMITS
+        {"type": "error", "code": "meltdown", "message": "x"}, DEFAULT_LIMITS
+    ).ok
+    assert not parse_driver_message({**ack, "type": "hello-ack-v2"}, DEFAULT_LIMITS).ok
+    # Known fields keep their types even when unknown ones are tolerated.
+    assert not parse_driver_message(
+        {**ack, "marker": {"enabled": "yes", "style": "dcs"}}, DEFAULT_LIMITS
     ).ok

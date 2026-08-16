@@ -421,14 +421,45 @@ fn limits_still_require_every_known_ceiling() {
     assert_eq!(error.code, "malformed");
 }
 
+/// Tolerance follows the speaker, not the message: a driver is the trusted
+/// side and may grow its messages, so an adapter published today must survive
+/// fields invented tomorrow. Adapter traffic crosses an untrusted boundary,
+/// where an unknown field is a signal rather than an extension — and `error`
+/// proves the point, being the same message read both ways.
 #[test]
-fn unknown_keys_are_still_rejected_outside_limits() {
-    let limits = serde_json::to_value(DEFAULT_LIMITS).expect("limits serialise");
-    let ack = hello_ack_with(limits, Some(("surprise", serde_json::json!(1))));
+fn tolerance_follows_the_speaker_not_the_message() {
+    let message = serde_json::json!({
+        "type": "error", "code": "internal", "message": "boom", "trace": "…"
+    });
+    parse_driver_message(&message, &DEFAULT_LIMITS).expect("driver traffic was read strictly");
     assert!(
-        parse_driver_message(&ack, &DEFAULT_LIMITS).is_err(),
-        "an unknown envelope field was accepted"
+        parse_adapter_message(&message, &DEFAULT_LIMITS).is_err(),
+        "adapter traffic was read tolerantly"
     );
+}
+
+/// Tolerance is not leniency: a vocabulary is not a growth point.
+#[test]
+fn closed_sets_stay_closed_in_both_directions() {
+    let limits = serde_json::to_value(DEFAULT_LIMITS).expect("limits serialise");
+
+    let mut unknown_subscribe = hello_ack_with(limits.clone(), None);
+    unknown_subscribe["subscribe"] = serde_json::json!("everything");
+    assert!(parse_driver_message(&unknown_subscribe, &DEFAULT_LIMITS).is_err());
+
+    let mut unknown_type = hello_ack_with(limits.clone(), None);
+    unknown_type["type"] = serde_json::json!("hello-ack-v2");
+    assert!(parse_driver_message(&unknown_type, &DEFAULT_LIMITS).is_err());
+
+    // Known fields keep their types even where unknown ones are tolerated.
+    let bad_marker = hello_ack_with(
+        limits,
+        Some((
+            "marker",
+            serde_json::json!({ "enabled": "yes", "style": "dcs" }),
+        )),
+    );
+    assert!(parse_driver_message(&bad_marker, &DEFAULT_LIMITS).is_err());
 }
 
 #[test]

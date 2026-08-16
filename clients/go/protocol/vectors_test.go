@@ -511,21 +511,53 @@ func TestLimitsStillRequireEveryKnownCeiling(t *testing.T) {
 	}
 }
 
-func TestUnknownKeysAreStillRejectedOutsideLimits(t *testing.T) {
+// TestToleranceFollowsTheSpeakerNotTheMessage pins the asymmetry: a driver is
+// the trusted side and may grow its messages, so an adapter published today
+// must survive fields invented tomorrow. Adapter traffic crosses an untrusted
+// boundary, where an unknown field is a signal rather than an extension —
+// and `error` proves the point, being the same message read both ways.
+func TestToleranceFollowsTheSpeakerNotTheMessage(t *testing.T) {
+	message := map[string]any{
+		"type": "error", "code": "internal", "message": "boom", "trace": "…",
+	}
+	if _, err := ParseDriverMessage(message, DefaultLimits); err != nil {
+		t.Errorf("driver traffic was read strictly: %v", err)
+	}
+	if _, err := ParseAdapterMessage(message, DefaultLimits); err == nil {
+		t.Error("adapter traffic was read tolerantly")
+	}
+}
+
+// TestClosedSetsStayClosedInBothDirections: tolerance is not leniency.
+func TestClosedSetsStayClosedInBothDirections(t *testing.T) {
 	limits := map[string]any{}
 	for _, field := range limitFields {
 		limits[field] = float64(1)
 	}
-	ack := map[string]any{
-		"type":      "hello-ack",
-		"protocol":  ProtocolID,
-		"sessionId": "s-1",
-		"limits":    limits,
-		"subscribe": "snapshots",
-		"marker":    map[string]any{"enabled": true},
-		"surprise":  float64(1),
+	base := func() map[string]any {
+		return map[string]any{
+			"type": "hello-ack", "protocol": ProtocolID, "sessionId": "s-1",
+			"limits": limits, "subscribe": "snapshots",
+			"marker": map[string]any{"enabled": true},
+		}
 	}
-	if _, err := ParseDriverMessage(ack, DefaultLimits); err == nil {
-		t.Error("an unknown envelope field was accepted")
+
+	unknownSubscribe := base()
+	unknownSubscribe["subscribe"] = "everything"
+	if _, err := ParseDriverMessage(unknownSubscribe, DefaultLimits); err == nil {
+		t.Error("a value outside the closed subscribe set was accepted")
+	}
+
+	unknownType := base()
+	unknownType["type"] = "hello-ack-v2"
+	if _, err := ParseDriverMessage(unknownType, DefaultLimits); err == nil {
+		t.Error("an unknown message type was accepted")
+	}
+
+	// Known fields keep their types even where unknown ones are tolerated.
+	badMarker := base()
+	badMarker["marker"] = map[string]any{"enabled": "yes", "style": "dcs"}
+	if _, err := ParseDriverMessage(badMarker, DefaultLimits); err == nil {
+		t.Error("a mistyped known field was accepted alongside an unknown one")
 	}
 }

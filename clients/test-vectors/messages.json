@@ -552,6 +552,66 @@
         }
       },
       {
+        "name": "hello-ack-unknown-envelope-field",
+        "message": {
+          "type": "hello-ack",
+          "protocol": "termwright/1",
+          "sessionId": "s-0001",
+          "limits": {
+            "maxFrameBytes": 1048576,
+            "maxSnapshotBytes": 1048576,
+            "maxNodes": 5000,
+            "maxDepth": 64,
+            "maxStringBytes": 16384,
+            "maxRelationTargets": 64,
+            "maxQueuedFrames": 32,
+            "maxPendingWaiters": 256,
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000
+          },
+          "subscribe": "snapshots",
+          "marker": {
+            "enabled": true
+          },
+          "surprise": 1
+        }
+      },
+      {
+        "name": "hello-ack-unknown-nested-field",
+        "message": {
+          "type": "hello-ack",
+          "protocol": "termwright/1",
+          "sessionId": "s-0001",
+          "limits": {
+            "maxFrameBytes": 1048576,
+            "maxSnapshotBytes": 1048576,
+            "maxNodes": 5000,
+            "maxDepth": 64,
+            "maxStringBytes": 16384,
+            "maxRelationTargets": 64,
+            "maxQueuedFrames": 32,
+            "maxPendingWaiters": 256,
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000
+          },
+          "subscribe": "snapshots",
+          "marker": {
+            "enabled": true,
+            "style": "dcs"
+          }
+        }
+      },
+      {
+        "name": "get-tree-unknown-envelope-field",
+        "message": {
+          "type": "get-tree",
+          "requestId": 3,
+          "priority": "high"
+        }
+      },
+      {
         "name": "get-tree-latest",
         "message": {
           "type": "get-tree",
@@ -576,34 +636,6 @@
       }
     ],
     "reject": [
-      {
-        "name": "hello-ack-extra-field",
-        "message": {
-          "type": "hello-ack",
-          "protocol": "termwright/1",
-          "sessionId": "s-0001",
-          "limits": {
-            "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 1048576,
-            "maxNodes": 5000,
-            "maxDepth": 64,
-            "maxStringBytes": 16384,
-            "maxRelationTargets": 64,
-            "maxQueuedFrames": 32,
-            "maxPendingWaiters": 256,
-            "maxSessions": 16,
-            "maxLogRecordBytes": 32768,
-            "maxLogQueue": 1000
-          },
-          "subscribe": "snapshots",
-          "marker": {
-            "enabled": true
-          },
-          "surprise": 1
-        },
-        "code": "malformed",
-        "detail": "<root>: Unrecognized key: \"surprise\""
-      },
       {
         "name": "hello-ack-missing-limit-key",
         "message": {

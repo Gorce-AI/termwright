@@ -25,6 +25,23 @@ constructor that returns nothing — `client_from_env() -> None`,
 `termwright.Attach() -> (nil, nil)` — so the calling app needs no feature flag
 and shipping the adapter in production costs one import.
 
+## Protocol evolution
+
+Capacity is negotiated and therefore extensible; vocabulary is closed and
+therefore fixed. The test: would a reader that ignored the new thing still
+behave correctly? If yes, it is additive.
+
+In practice all three clients read **driver traffic tolerantly** — unknown
+fields in the envelope and in the driver's nested objects (`limits`, `marker`,
+`logs`) are ignored and passed through — and read **adapter traffic strictly**,
+because that side crosses an untrusted boundary where an unknown field is a
+signal rather than an extension. The same `error` message is therefore read
+both ways, depending on who sent it.
+
+Tolerance is not leniency: known fields keep their types, missing known fields
+are still errors, and the closed sets (message types, `error.code`,
+`subscribe`, roles, actions, state fields) stay closed in both directions.
+
 ## Test vectors
 
 `test-vectors/*.json` are generated from the built TypeScript package, and the

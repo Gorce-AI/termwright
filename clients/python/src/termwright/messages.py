@@ -149,7 +149,7 @@ def _check_log_budget(value: Any) -> Optional[str]:
     """
     if not isinstance(value, dict):
         return "logs: expected an object"
-    issue = _exact_keys(value, ("enabled", "maxRecordsPerSecond", "burst"))
+    issue = _required_keys(value, ("enabled", "maxRecordsPerSecond", "burst"))
     if issue:
         return f"logs: {issue}"
     if not isinstance(value["enabled"], bool):
@@ -173,8 +173,12 @@ def _check_snapshot(value: Any, limits: ProtocolLimits) -> Optional[ParseResult]
     )
 
 
-def _check_error(message: Mapping[str, Any]) -> Optional[str]:
-    issue = _exact_keys(message, ("type", "code", "message"))
+def _check_error(message: Mapping[str, Any], strict: bool = True) -> Optional[str]:
+    issue = (
+        _exact_keys(message, ("type", "code", "message"))
+        if strict
+        else _required_keys(message, ("type", "code", "message"))
+    )
     if issue:
         return issue
     if message["code"] not in ERROR_CODES:
@@ -183,7 +187,11 @@ def _check_error(message: Mapping[str, Any]) -> Optional[str]:
 
 
 def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> ParseResult:
-    """Parse one adapter → driver message. Never raises."""
+    """Parse one adapter → driver message. Never raises.
+
+    Strict: an unknown field from an adapter is a protocol error, not an
+    extension. See :func:`parse_driver_message` for the other direction.
+    """
     projected = _project(value, limits)
     if not projected.ok:
         return projected
@@ -258,7 +266,20 @@ def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -
 
 
 def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> ParseResult:
-    """Parse one driver → adapter message. Never raises."""
+    """Parse one driver → adapter message. Never raises.
+
+    Driver traffic is read tolerantly: unknown fields in the envelope and in
+    the driver's nested objects (``marker``, ``logs``, ``limits``) are ignored
+    and passed through to the caller, so a newer driver can add a field without
+    breaking an adapter that was published before it existed.
+
+    The asymmetry is about who is speaking, not about the message. Adapter
+    traffic crosses an untrusted boundary, where an unknown field is a signal
+    rather than an extension, so :func:`parse_adapter_message` stays strict.
+    Tolerance is not leniency either: known fields keep their types, and the
+    closed sets (message types, error codes, ``subscribe``, roles, actions)
+    stay closed in both directions.
+    """
     projected = _project(value, limits)
     if not projected.ok:
         return projected
@@ -271,10 +292,8 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
         protocol = message.get("protocol")
         if isinstance(protocol, str) and protocol != PROTOCOL_ID:
             return ParseResult(ok=False, code="bad-version", detail=f"unsupported protocol {protocol}")
-        issue = _exact_keys(
-            message,
-            ("type", "protocol", "sessionId", "limits", "subscribe", "marker"),
-            ("logs",),
+        issue = _required_keys(
+            message, ("type", "protocol", "sessionId", "limits", "subscribe", "marker")
         )
         if issue:
             return _malformed(issue)
@@ -302,7 +321,7 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
         marker = message["marker"]
         if not isinstance(marker, dict):
             return _malformed("marker: expected an object")
-        issue = _exact_keys(marker, ("enabled",))
+        issue = _required_keys(marker, ("enabled",))
         if issue:
             return _malformed(f"marker: {issue}")
         if not isinstance(marker["enabled"], bool):
@@ -314,7 +333,7 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
         return ParseResult(ok=True, message=message)
 
     if kind == "get-tree":
-        issue = _exact_keys(message, ("type", "requestId"), ("revision",))
+        issue = _required_keys(message, ("type", "requestId"))
         if issue:
             return _malformed(issue)
         issue = _index(message["requestId"], "requestId")
@@ -327,7 +346,7 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
         return ParseResult(ok=True, message=message)
 
     if kind == "error":
-        issue = _check_error(message)
+        issue = _check_error(message, strict=False)
         return _malformed(issue) if issue else ParseResult(ok=True, message=message)
 
     return _malformed("unknown or missing message type")

@@ -458,9 +458,9 @@ const adapterReject = [
 const driverAccept = [
   { name: 'hello-ack', message: helloAckMessage },
   {
-    // `limits` is a tolerant reader in every implementation: it is the one
-    // object on the wire that grows between versions, so a receiver that
-    // rejected a ceiling it had never heard of would drop the channel every
+    // Driver traffic is read tolerantly throughout: `limits` is the object
+    // that grows most often, but the rule is the same everywhere — a receiver
+    // that rejected a field it had never heard of would drop the channel every
     // time the protocol gained one.
     name: 'hello-ack-unknown-limit-key',
     message: {
@@ -468,15 +468,27 @@ const driverAccept = [
       limits: { ...DEFAULT_LIMITS, maxQuantumFlux: 7, maxTeaPots: 1 },
     },
   },
+  {
+    // An unknown field on the envelope itself.
+    name: 'hello-ack-unknown-envelope-field',
+    message: { ...helloAckMessage, surprise: 1 },
+  },
+  {
+    // And one nested inside a driver-sent object, which is the less obvious
+    // half of the same rule.
+    name: 'hello-ack-unknown-nested-field',
+    message: { ...helloAckMessage, marker: { enabled: true, style: 'dcs' } },
+  },
+  {
+    name: 'get-tree-unknown-envelope-field',
+    message: { type: 'get-tree', requestId: 3, priority: 'high' },
+  },
   { name: 'get-tree-latest', message: { type: 'get-tree', requestId: 0 } },
   { name: 'get-tree-revision', message: { type: 'get-tree', requestId: 4, revision: 12 } },
   { name: 'error', message: { type: 'error', code: 'bad-token', message: 'nope' } },
 ];
 
 const driverReject = [
-  // Tolerance stops at the `limits` object: the envelope stays strict, so a
-  // new field there is still a protocol error rather than something to ignore.
-  { name: 'hello-ack-extra-field', message: { ...helloAckMessage, surprise: 1 } },
   {
     name: 'hello-ack-missing-limit-key',
     message: {

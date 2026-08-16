@@ -362,7 +362,7 @@ fn check_log_budget(value: &Value) -> Result<(), ParseError> {
     let budget = value
         .as_object()
         .ok_or_else(|| ParseError::malformed("logs: expected an object"))?;
-    require_keys(budget, &["enabled", "maxRecordsPerSecond", "burst"], &[])?;
+    required_keys(budget, &["enabled", "maxRecordsPerSecond", "burst"])?;
     if !budget["enabled"].is_boolean() {
         return Err(ParseError::malformed("logs.enabled: expected a boolean"));
     }
@@ -370,8 +370,12 @@ fn check_log_budget(value: &Value) -> Result<(), ParseError> {
     whole_number(budget, "burst", false)
 }
 
-fn check_error_message(object: &Map<String, Value>) -> Result<(), ParseError> {
-    require_keys(object, &["type", "code", "message"], &[])?;
+fn check_error_message(object: &Map<String, Value>, strict: bool) -> Result<(), ParseError> {
+    if strict {
+        require_keys(object, &["type", "code", "message"], &[])?;
+    } else {
+        required_keys(object, &["type", "code", "message"])?;
+    }
     let code = object
         .get("code")
         .and_then(Value::as_str)
@@ -393,6 +397,9 @@ fn check_protocol_field(object: &Map<String, Value>) -> Result<(), ParseError> {
 }
 
 /// Validate one adapter → driver message.
+///
+/// Strict: an unknown field from an adapter is a protocol error, not an
+/// extension. See [`parse_driver_message`] for the other direction.
 ///
 /// # Errors
 /// Returns a [`ParseError`] whose `code` is `bad-version`, `malformed` or
@@ -455,12 +462,23 @@ pub fn parse_adapter_message(value: &Value, limits: &Limits) -> Result<(), Parse
             }
             check_embedded_snapshot(&object["snapshot"], limits)
         }
-        "error" => check_error_message(object),
+        "error" => check_error_message(object, true),
         _ => Err(ParseError::malformed("unknown or missing message type")),
     }
 }
 
 /// Validate one driver → adapter message.
+///
+/// Driver traffic is read tolerantly: unknown fields in the envelope and in
+/// the driver's nested objects (`marker`, `logs`, `limits`) are ignored and
+/// passed through to the caller, so a newer driver can add a field without
+/// breaking an adapter published before it existed.
+///
+/// The asymmetry is about who is speaking, not about the message: adapter
+/// traffic crosses an untrusted boundary, where an unknown field is a signal
+/// rather than an extension. Tolerance is not leniency either — known fields
+/// keep their types, and the closed sets (message types, error codes,
+/// `subscribe`, roles, actions) stay closed in both directions.
 ///
 /// # Errors
 /// Returns a [`ParseError`] whose `code` is `bad-version`, `malformed` or
@@ -472,7 +490,7 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
     match kind {
         "hello-ack" => {
             check_protocol_field(object)?;
-            require_keys(
+            required_keys(
                 object,
                 &[
                     "type",
@@ -482,7 +500,6 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
                     "subscribe",
                     "marker",
                 ],
-                &["logs"],
             )?;
             identifier(object, "sessionId", false)?;
             let limits_object = object
@@ -507,7 +524,7 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
                 .get("marker")
                 .and_then(Value::as_object)
                 .ok_or_else(|| ParseError::malformed("marker: expected an object"))?;
-            require_keys(marker, &["enabled"], &[])?;
+            required_keys(marker, &["enabled"])?;
             if !marker["enabled"].is_boolean() {
                 return Err(ParseError::malformed("marker.enabled: expected a boolean"));
             }
@@ -517,14 +534,14 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
             Ok(())
         }
         "get-tree" => {
-            require_keys(object, &["type", "requestId"], &["revision"])?;
+            required_keys(object, &["type", "requestId"])?;
             whole_number(object, "requestId", false)?;
             if object.contains_key("revision") {
                 whole_number(object, "revision", true)?;
             }
             Ok(())
         }
-        "error" => check_error_message(object),
+        "error" => check_error_message(object, false),
         _ => Err(ParseError::malformed("unknown or missing message type")),
     }
 }

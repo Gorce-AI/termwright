@@ -222,7 +222,7 @@ func checkLogBudget(value any) *ParseError {
 	if !ok {
 		return malformed("logs: expected an object")
 	}
-	if problem := requireKeys(budget, []string{"enabled", "maxRecordsPerSecond", "burst"}, nil); problem != nil {
+	if problem := requiredKeys(budget, []string{"enabled", "maxRecordsPerSecond", "burst"}); problem != nil {
 		return problem
 	}
 	if _, ok := budget["enabled"].(bool); !ok {
@@ -234,8 +234,13 @@ func checkLogBudget(value any) *ParseError {
 	return wholeNumber(budget, "burst", false)
 }
 
-func checkErrorMessage(object map[string]any) *ParseError {
-	if problem := requireKeys(object, []string{"type", "code", "message"}, nil); problem != nil {
+func checkErrorMessage(object map[string]any, strict bool) *ParseError {
+	keys := []string{"type", "code", "message"}
+	problem := requiredKeys(object, keys)
+	if strict {
+		problem = requireKeys(object, keys, nil)
+	}
+	if problem != nil {
 		return problem
 	}
 	code, _ := object["code"].(string)
@@ -266,6 +271,9 @@ func checkProtocolField(object map[string]any) *ParseError {
 
 // ParseAdapterMessage validates one adapter → driver message and returns the
 // checked generic form. It never panics; failures come back as *ParseError.
+//
+// Strict: an unknown field from an adapter is a protocol error, not an
+// extension. See ParseDriverMessage for the other direction.
 func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 	projected, parseErr := project(value, limits)
 	if parseErr != nil {
@@ -353,7 +361,7 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 		return object, nil
 
 	case "error":
-		if problem := checkErrorMessage(object); problem != nil {
+		if problem := checkErrorMessage(object, true); problem != nil {
 			return nil, problem
 		}
 		return object, nil
@@ -362,6 +370,17 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 }
 
 // ParseDriverMessage validates one driver → adapter message.
+//
+// Driver traffic is read tolerantly: unknown fields in the envelope and in the
+// driver's nested objects (marker, logs, limits) are ignored and passed
+// through to the caller, so a newer driver can add a field without breaking an
+// adapter published before it existed.
+//
+// The asymmetry is about who is speaking, not about the message: adapter
+// traffic crosses an untrusted boundary, where an unknown field is a signal
+// rather than an extension. Tolerance is not leniency either — known fields
+// keep their types, and the closed sets (message types, error codes,
+// subscribe, roles, actions) stay closed in both directions.
 func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 	projected, parseErr := project(value, limits)
 	if parseErr != nil {
@@ -377,9 +396,8 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 		if problem := checkProtocolField(object); problem != nil {
 			return nil, problem
 		}
-		if problem := requireKeys(object,
-			[]string{"type", "protocol", "sessionId", "limits", "subscribe", "marker"},
-			[]string{"logs"}); problem != nil {
+		if problem := requiredKeys(object,
+			[]string{"type", "protocol", "sessionId", "limits", "subscribe", "marker"}); problem != nil {
 			return nil, problem
 		}
 		if problem := identifier(object, "sessionId", false); problem != nil {
@@ -409,7 +427,7 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 		if !ok {
 			return nil, malformed("marker: expected an object")
 		}
-		if problem := requireKeys(marker, []string{"enabled"}, nil); problem != nil {
+		if problem := requiredKeys(marker, []string{"enabled"}); problem != nil {
 			return nil, problem
 		}
 		if _, ok := marker["enabled"].(bool); !ok {
@@ -423,7 +441,7 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 		return object, nil
 
 	case "get-tree":
-		if problem := requireKeys(object, []string{"type", "requestId"}, []string{"revision"}); problem != nil {
+		if problem := requiredKeys(object, []string{"type", "requestId"}); problem != nil {
 			return nil, problem
 		}
 		if problem := wholeNumber(object, "requestId", false); problem != nil {
@@ -437,7 +455,7 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 		return object, nil
 
 	case "error":
-		if problem := checkErrorMessage(object); problem != nil {
+		if problem := checkErrorMessage(object, false); problem != nil {
 			return nil, problem
 		}
 		return object, nil
