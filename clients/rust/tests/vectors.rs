@@ -8,8 +8,8 @@ use serde_json::value::RawValue;
 use serde_json::Value;
 
 use termwright_protocol::{
-    encode_frame, encode_marker, marker::MARKER_DCS_FINAL, marker::MARKER_DCS_PREFIX,
-    marker::MARKER_MAC_BYTES, parse_adapter_message, parse_driver_message, roles::valid_action,
+    encode_frame, encode_marker, marker::MARKER_MAC_BYTES, marker::MARKER_OSC_CODE,
+    marker::MARKER_OSC_PREFIX, parse_adapter_message, parse_driver_message, roles::valid_action,
     roles::valid_capability, roles::valid_role, validate_snapshot, verify_marker_payload,
     FrameDecoder, Limits, ABSOLUTE_LIMITS, DEFAULT_LIMITS, FRAME_HEADER_BYTES, PROTOCOL_ID,
     PROTOCOL_VERSION,
@@ -49,8 +49,8 @@ fn constants_match_the_reference() {
     assert_eq!(vectors["protocolId"], PROTOCOL_ID);
     assert_eq!(vectors["protocolVersion"], PROTOCOL_VERSION);
     assert_eq!(vectors["frameHeaderBytes"], FRAME_HEADER_BYTES);
-    assert_eq!(vectors["markerDcsPrefix"], MARKER_DCS_PREFIX);
-    assert_eq!(vectors["markerDcsFinal"], MARKER_DCS_FINAL);
+    assert_eq!(vectors["markerOscCode"], MARKER_OSC_CODE);
+    assert_eq!(vectors["markerOscPrefix"], MARKER_OSC_PREFIX);
     assert_eq!(vectors["markerMacBytes"], MARKER_MAC_BYTES);
 
     let default_limits: Limits =
@@ -241,6 +241,18 @@ fn marker_vectors() {
         assert_eq!(marker.mac, case["mac"].as_str().unwrap());
     }
 
+    // A parser strips the terminator; a regex over raw output keeps it. Both
+    // must verify, and the normal path never exercises the second.
+    for case in vectors["acceptTerminators"].as_array().unwrap() {
+        let marker = verify_marker_payload(
+            case["payload"].as_str().unwrap(),
+            case["token"].as_str().unwrap(),
+            case["sessionId"].as_str().unwrap(),
+        )
+        .unwrap_or_else(|| panic!("{} did not verify", case["name"]));
+        assert_eq!(marker.revision, case["revision"].as_i64().unwrap());
+    }
+
     for case in vectors["verifyReject"].as_array().unwrap() {
         let verified = verify_marker_payload(
             case["payload"].as_str().unwrap(),
@@ -270,7 +282,11 @@ fn marker_rejects_bad_arguments() {
 #[test]
 fn a_marker_does_not_verify_under_another_token() {
     let sequence = encode_marker("token-a", "s-1", 4).expect("encoding");
-    let payload = &sequence[2..sequence.len() - 2];
+    // Only the introducer is stripped: verification tolerates the trailing
+    // terminator, so leaving it on exercises that tolerance.
+    let payload = sequence
+        .strip_prefix(format!("\x1b]{MARKER_OSC_CODE};").as_str())
+        .expect("an OSC introducer");
     assert!(verify_marker_payload(payload, "token-a", "s-1").is_some());
     assert!(verify_marker_payload(payload, "token-b", "s-1").is_none());
     assert!(verify_marker_payload(payload, "token-a", "s-2").is_none());

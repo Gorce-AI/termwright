@@ -66,8 +66,8 @@ pub use framing::{encode_frame, project_dto, Frame, FrameDecoder, FRAME_HEADER_B
 pub use limits::{Limits, ABSOLUTE_LIMITS, DEFAULT_LIMITS, DEFAULT_NEGOTIATION_MS};
 pub use logs::{validate_log_record, AttrValue, LogLevel, LogRecord, LOG_LEVELS, MAX_LOG_ATTRS};
 pub use marker::{
-    compute_mac, encode_marker, verify_marker_payload, RenderMarker, MARKER_DCS_FINAL,
-    MARKER_DCS_PREFIX, MARKER_MAC_BYTES,
+    compute_mac, encode_marker, verify_marker_payload, RenderMarker, MARKER_MAC_BYTES,
+    MARKER_OSC_CODE, MARKER_OSC_PREFIX,
 };
 pub use messages::{parse_adapter_message, parse_driver_message, PROTOCOL_ID, PROTOCOL_VERSION};
 pub use roles::{Action, Capability, Role};

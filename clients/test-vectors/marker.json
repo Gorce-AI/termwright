@@ -1,7 +1,7 @@
 {
-  "note": "mac = base64url(HMAC-SHA256(key = token as UTF-8 bytes, msg = `${sessionId}:${revision}` as UTF-8 bytes))[:16], unpadded. sequence = ESC P + \"twm;\" + revision + \";\" + mac + ESC \\.",
-  "dcsPrefix": "twm;",
-  "dcsFinal": "t",
+  "note": "mac = base64url(HMAC-SHA256(key = token as UTF-8 bytes, msg = `${sessionId}:${revision}` as UTF-8 bytes))[:16], unpadded. sequence = ESC ] 8487 \";\" + \"twm;\" + revision + \";\" + mac + BEL. `payload` is what a VT parser hands an OSC handler: everything after `OSC 8487;`, terminator already consumed. Receivers must also accept a payload that still carries a trailing BEL or ST — see acceptTerminators.",
+  "oscCode": 8487,
+  "oscPrefix": "twm;",
   "macBytes": 16,
   "encode": [
     {
@@ -10,8 +10,8 @@
       "revision": 1,
       "mac": "A3z3AJsMv0lB2mza1ADSfA",
       "payload": "twm;1;A3z3AJsMv0lB2mza1ADSfA",
-      "sequence": "\u001bPtwm;1;A3z3AJsMv0lB2mza1ADSfA\u001b\\",
-      "sequenceHex": "1b5074776d3b313b41337a33414a734d76306c42326d7a613141445366411b5c"
+      "sequence": "\u001b]8487;twm;1;A3z3AJsMv0lB2mza1ADSfA\u0007",
+      "sequenceHex": "1b5d383438373b74776d3b313b41337a33414a734d76306c42326d7a6131414453664107"
     },
     {
       "token": "v6dEXO4t9EfDoMpDPCiRxCsW1PLtN0EQ0GDvUXcAhFA",
@@ -19,8 +19,8 @@
       "revision": 2,
       "mac": "FgCDBAQJtU_1fSbj1f09Nw",
       "payload": "twm;2;FgCDBAQJtU_1fSbj1f09Nw",
-      "sequence": "\u001bPtwm;2;FgCDBAQJtU_1fSbj1f09Nw\u001b\\",
-      "sequenceHex": "1b5074776d3b323b466743444241514a74555f316653626a316630394e771b5c"
+      "sequence": "\u001b]8487;twm;2;FgCDBAQJtU_1fSbj1f09Nw\u0007",
+      "sequenceHex": "1b5d383438373b74776d3b323b466743444241514a74555f316653626a316630394e7707"
     },
     {
       "token": "v6dEXO4t9EfDoMpDPCiRxCsW1PLtN0EQ0GDvUXcAhFA",
@@ -28,8 +28,8 @@
       "revision": 42,
       "mac": "i9ItAR_NSQ3FgNwkJi4jNQ",
       "payload": "twm;42;i9ItAR_NSQ3FgNwkJi4jNQ",
-      "sequence": "\u001bPtwm;42;i9ItAR_NSQ3FgNwkJi4jNQ\u001b\\",
-      "sequenceHex": "1b5074776d3b34323b6939497441525f4e53513346674e776b4a69346a4e511b5c"
+      "sequence": "\u001b]8487;twm;42;i9ItAR_NSQ3FgNwkJi4jNQ\u0007",
+      "sequenceHex": "1b5d383438373b74776d3b34323b6939497441525f4e53513346674e776b4a69346a4e5107"
     },
     {
       "token": "v6dEXO4t9EfDoMpDPCiRxCsW1PLtN0EQ0GDvUXcAhFA",
@@ -37,8 +37,8 @@
       "revision": 9007199254740991,
       "mac": "aKEV7dY4nfTal_HmjAouOw",
       "payload": "twm;9007199254740991;aKEV7dY4nfTal_HmjAouOw",
-      "sequence": "\u001bPtwm;9007199254740991;aKEV7dY4nfTal_HmjAouOw\u001b\\",
-      "sequenceHex": "1b5074776d3b393030373139393235343734303939313b614b4556376459346e6654616c5f486d6a416f754f771b5c"
+      "sequence": "\u001b]8487;twm;9007199254740991;aKEV7dY4nfTal_HmjAouOw\u0007",
+      "sequenceHex": "1b5d383438373b74776d3b393030373139393235343734303939313b614b4556376459346e6654616c5f486d6a416f754f7707"
     },
     {
       "token": "v6dEXO4t9EfDoMpDPCiRxCsW1PLtN0EQ0GDvUXcAhFA",
@@ -46,8 +46,8 @@
       "revision": 42,
       "mac": "OS5Mz6qXFW8brYx32d5epA",
       "payload": "twm;42;OS5Mz6qXFW8brYx32d5epA",
-      "sequence": "\u001bPtwm;42;OS5Mz6qXFW8brYx32d5epA\u001b\\",
-      "sequenceHex": "1b5074776d3b34323b4f53354d7a36715846573862725978333264356570411b5c"
+      "sequence": "\u001b]8487;twm;42;OS5Mz6qXFW8brYx32d5epA\u0007",
+      "sequenceHex": "1b5d383438373b74776d3b34323b4f53354d7a367158465738627259783332643565704107"
     },
     {
       "token": "short",
@@ -55,8 +55,8 @@
       "revision": 42,
       "mac": "Cy0pJc7AsVvwLpvv6i_RsQ",
       "payload": "twm;42;Cy0pJc7AsVvwLpvv6i_RsQ",
-      "sequence": "\u001bPtwm;42;Cy0pJc7AsVvwLpvv6i_RsQ\u001b\\",
-      "sequenceHex": "1b5074776d3b34323b437930704a633741735676774c70767636695f5273511b5c"
+      "sequence": "\u001b]8487;twm;42;Cy0pJc7AsVvwLpvv6i_RsQ\u0007",
+      "sequenceHex": "1b5d383438373b74776d3b34323b437930704a633741735676774c70767636695f52735107"
     },
     {
       "token": "zażółć-token-🎛",
@@ -64,8 +64,31 @@
       "revision": 3,
       "mac": "CzMQ_MhwPCwZe0t9j9DpjQ",
       "payload": "twm;3;CzMQ_MhwPCwZe0t9j9DpjQ",
-      "sequence": "\u001bPtwm;3;CzMQ_MhwPCwZe0t9j9DpjQ\u001b\\",
-      "sequenceHex": "1b5074776d3b333b437a4d515f4d68775043775a653074396a3944706a511b5c"
+      "sequence": "\u001b]8487;twm;3;CzMQ_MhwPCwZe0t9j9DpjQ\u0007",
+      "sequenceHex": "1b5d383438373b74776d3b333b437a4d515f4d68775043775a653074396a3944706a5107"
+    }
+  ],
+  "acceptTerminators": [
+    {
+      "name": "bare-payload",
+      "payload": "twm;42;i9ItAR_NSQ3FgNwkJi4jNQ",
+      "token": "v6dEXO4t9EfDoMpDPCiRxCsW1PLtN0EQ0GDvUXcAhFA",
+      "sessionId": "s-0001",
+      "revision": 42
+    },
+    {
+      "name": "trailing-bel",
+      "payload": "twm;42;i9ItAR_NSQ3FgNwkJi4jNQ\u0007",
+      "token": "v6dEXO4t9EfDoMpDPCiRxCsW1PLtN0EQ0GDvUXcAhFA",
+      "sessionId": "s-0001",
+      "revision": 42
+    },
+    {
+      "name": "trailing-st",
+      "payload": "twm;42;i9ItAR_NSQ3FgNwkJi4jNQ\u001b\\",
+      "token": "v6dEXO4t9EfDoMpDPCiRxCsW1PLtN0EQ0GDvUXcAhFA",
+      "sessionId": "s-0001",
+      "revision": 42
     }
   ],
   "verifyReject": [

@@ -4,7 +4,7 @@ Semantic side-channel client for the [termwright](https://github.com/gorce-ai/te
 terminal test driver, plus an adapter for [Textual](https://textual.textualize.io).
 
 An instrumented app publishes its widget tree over a unix socket and commits
-each render with a signed DCS marker, so the driver can assert on *roles and
+each render with a signed OSC marker, so the driver can assert on *roles and
 names* instead of screen-scraping cells.
 
 **Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in the

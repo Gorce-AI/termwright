@@ -13,6 +13,16 @@ use termwright_protocol::{
     DEFAULT_LIMITS,
 };
 
+/// What a VT parser would hand an OSC handler. Only the introducer is
+/// stripped: `verify_marker_payload` tolerates the trailing terminator, and
+/// leaving it on exercises that tolerance.
+fn payload_of(marker: &str) -> &str {
+    let introducer = format!("\x1b]{};", termwright_protocol::MARKER_OSC_CODE);
+    marker
+        .strip_prefix(introducer.as_str())
+        .unwrap_or_else(|| panic!("marker {marker:?} does not open with {introducer:?}"))
+}
+
 const TOKEN: &str = "test-token";
 const SESSION: &str = "s-42";
 
@@ -196,7 +206,7 @@ fn handshake_and_publish() {
     assert_eq!(commit["type"], "revision-commit");
     assert_eq!(commit["revision"], 1);
 
-    let payload = &marker[2..marker.len() - 2];
+    let payload = payload_of(&marker);
     let verified = verify_marker_payload(payload, TOKEN, SESSION).expect("marker verifies");
     assert_eq!(verified.revision, 1);
 
@@ -216,8 +226,8 @@ fn revisions_increase_by_one_per_publish() {
             .publish(&mut sample_snapshot())
             .expect("publish")
             .expect("marker");
-        let verified = verify_marker_payload(&marker[2..marker.len() - 2], TOKEN, SESSION)
-            .expect("marker verifies");
+        let verified =
+            verify_marker_payload(payload_of(&marker), TOKEN, SESSION).expect("marker verifies");
         assert_eq!(verified.revision, expected);
         assert_eq!(next_frame(&frames)["type"], "snapshot");
         assert_eq!(next_frame(&frames)["revision"], expected);

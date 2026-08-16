@@ -10,11 +10,27 @@ import (
 	"strings"
 )
 
-// MarkerDCSPrefix starts the marker payload inside the DCS sequence.
-const MarkerDCSPrefix = "twm;"
+// MarkerOSCCode is the private OSC number carrying render-commit markers.
+//
+// OSC rather than DCS because ConPTY rewrites the stream it forwards: a
+// passthrough probe showed it dropping DCS, APC and OSC 8 while passing
+// private OSC with either terminator, so a DCS marker could not reach the
+// driver on Windows at all. The number is chosen clear of everything in use
+// (xterm's allocations, OSC 8, 9, 99, 133, 633, 697, 777+): 84 and 87 are the
+// ASCII codes of `T` and `W`, for termwright.
+const MarkerOSCCode = 8487
 
-// MarkerDCSFinal is the DCS final byte a VT parser dispatches on.
-const MarkerDCSFinal = "t"
+// MarkerOSCPrefix opens a marker payload, immediately after `OSC 8487;`. It is
+// a self-identifying guard: if anything ever claims 8487, a marker still says
+// what it is rather than being mistaken for that feature's payload.
+const MarkerOSCPrefix = "twm;"
+
+// bel is the terminator this implementation emits — the one ConPTY was
+// observed to forward most reliably.
+const bel = "\x07"
+
+// st is the terminator a receiver must also accept.
+const st = "\x1b\\"
 
 // MarkerMACBytes is how much of the HMAC-SHA256 output the marker retains.
 const MarkerMACBytes = 16
@@ -40,7 +56,7 @@ func ComputeMAC(token, sessionID string, revision int64) string {
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:MarkerMACBytes])
 }
 
-// EncodeMarker builds the full DCS sequence committing revision.
+// EncodeMarker builds the full OSC sequence committing revision.
 //
 // Write it to stdout immediately after the last byte of the render it commits;
 // it is a frame-commit signal, not a data carrier.
@@ -54,24 +70,33 @@ func EncodeMarker(token, sessionID string, revision int64) (string, error) {
 	if revision <= 0 || revision > maxSafeInteger {
 		return "", violation("marker-argument", "revision must be a positive safe integer")
 	}
-	return "\x1bP" + MarkerDCSPrefix + strconv.FormatInt(revision, 10) + ";" +
-		ComputeMAC(token, sessionID, revision) + "\x1b\\", nil
+	return "\x1b]" + strconv.Itoa(MarkerOSCCode) + ";" + MarkerOSCPrefix +
+		strconv.FormatInt(revision, 10) + ";" + ComputeMAC(token, sessionID, revision) + bel, nil
 }
 
-// VerifyMarkerPayload parses and verifies the bytes between ESC P and ESC \.
+// VerifyMarkerPayload parses and verifies an OSC payload — everything after
+// `OSC 8487;`.
 //
 // Total function: hostile payloads return ok == false, never an error value to
 // interpret. Only canonically formatted revisions are accepted, so "1" and
 // "01" cannot both authenticate the same commit, and the MAC compare is
 // constant time.
+//
+// A trailing BEL or ST is tolerated: a VT parser consumes the terminator
+// before dispatching, so a handler normally passes a payload without one,
+// while a caller scanning raw output with a regex keeps it. Both must work.
 func VerifyMarkerPayload(payload, token, sessionID string) (RenderMarker, bool) {
 	if token == "" || sessionID == "" {
 		return RenderMarker{}, false
 	}
-	if !strings.HasPrefix(payload, MarkerDCSPrefix) {
+	text := strings.TrimSuffix(payload, bel)
+	if text == payload {
+		text = strings.TrimSuffix(payload, st)
+	}
+	if !strings.HasPrefix(text, MarkerOSCPrefix) {
 		return RenderMarker{}, false
 	}
-	body := payload[len(MarkerDCSPrefix):]
+	body := text[len(MarkerOSCPrefix):]
 	separator := strings.Index(body, ";")
 	if separator < 0 {
 		return RenderMarker{}, false

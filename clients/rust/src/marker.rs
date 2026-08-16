@@ -1,11 +1,16 @@
 //! Render-commit marker.
 //!
-//! The adapter writes this DCS sequence to stdout *after* the last byte of the
+//! The adapter writes this OSC sequence to stdout *after* the last byte of the
 //! render belonging to revision N. It commits a frame; it never carries data.
 //!
 //! ```text
-//! ESC P twm;<revision>;<mac> ESC \
+//! OSC 8487 ; twm;<revision>;<mac> BEL
 //! ```
+//!
+//! OSC rather than DCS because ConPTY rewrites the stream it forwards: a
+//! passthrough probe showed it dropping DCS, APC and OSC 8 while passing
+//! private OSC with either terminator, so a DCS marker could not reach the
+//! driver on Windows at all.
 //!
 //! with `mac = base64url(HMAC-SHA256(token, "{session_id}:{revision}"))[..16]`,
 //! unpadded. The token is an opaque UTF-8 string end to end: whatever arrives
@@ -19,11 +24,22 @@ use subtle::ConstantTimeEq;
 
 use crate::error::Violation;
 
-/// Prefix that opens the marker payload inside the DCS sequence.
-pub const MARKER_DCS_PREFIX: &str = "twm;";
+/// The private OSC number carrying render-commit markers. Chosen clear of
+/// everything in use (xterm's allocations, OSC 8, 9, 99, 133, 633, 697, 777+):
+/// 84 and 87 are the ASCII codes of `T` and `W`, for termwright.
+pub const MARKER_OSC_CODE: u32 = 8487;
 
-/// The DCS final byte a VT parser dispatches on.
-pub const MARKER_DCS_FINAL: &str = "t";
+/// The tag opening a marker payload, immediately after `OSC 8487;`. A
+/// self-identifying guard: if anything ever claims 8487, a marker still says
+/// what it is rather than being mistaken for that feature's payload.
+pub const MARKER_OSC_PREFIX: &str = "twm;";
+
+/// The terminator this implementation emits — the one ConPTY was observed to
+/// forward most reliably.
+const BEL: &str = "\x07";
+
+/// The terminator a receiver must also accept.
+const ST: &str = "\x1b\\";
 
 /// How much of the HMAC-SHA256 output the marker retains.
 pub const MARKER_MAC_BYTES: usize = 16;
@@ -75,21 +91,29 @@ pub fn encode_marker(token: &str, session_id: &str, revision: i64) -> Result<Str
         ));
     }
     Ok(format!(
-        "\x1bP{MARKER_DCS_PREFIX}{revision};{}\x1b\\",
+        "\x1b]{MARKER_OSC_CODE};{MARKER_OSC_PREFIX}{revision};{}{BEL}",
         compute_mac(token, session_id, revision)
     ))
 }
 
-/// Parse and verify a DCS payload, i.e. the bytes between `ESC P` and `ESC \`.
+/// Parse and verify an OSC payload — everything after `OSC 8487;`.
 ///
 /// Total function: hostile payloads yield `None`, never an error to interpret.
 /// Only canonically formatted revisions are accepted, so `1` and `01` cannot
 /// both authenticate the same commit, and the MAC compare is constant time.
+///
+/// A trailing BEL or ST is tolerated: a VT parser consumes the terminator
+/// before dispatching, so a handler normally passes a payload without one,
+/// while a caller scanning raw output with a regex keeps it. Both must work.
 pub fn verify_marker_payload(payload: &str, token: &str, session_id: &str) -> Option<RenderMarker> {
     if token.is_empty() || session_id.is_empty() {
         return None;
     }
-    let body = payload.strip_prefix(MARKER_DCS_PREFIX)?;
+    let text = payload
+        .strip_suffix(BEL)
+        .or_else(|| payload.strip_suffix(ST))
+        .unwrap_or(payload);
+    let body = text.strip_prefix(MARKER_OSC_PREFIX)?;
     let (revision_text, mac) = body.split_once(';')?;
     if !canonical_revision(revision_text) || !canonical_mac(mac) {
         return None;

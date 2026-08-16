@@ -2,9 +2,11 @@ package protocol
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +16,18 @@ const (
 	testToken   = "test-token"
 	testSession = "s-42"
 )
+
+// payloadOf returns what a VT parser would hand an OSC handler. Only the
+// introducer is stripped: VerifyMarkerPayload tolerates the trailing
+// terminator, and leaving it on exercises that tolerance.
+func payloadOf(t *testing.T, marker string) string {
+	t.Helper()
+	introducer := fmt.Sprintf("\x1b]%d;", MarkerOSCCode)
+	if !strings.HasPrefix(marker, introducer) {
+		t.Fatalf("marker %q does not open with %q", marker, introducer)
+	}
+	return strings.TrimPrefix(marker, introducer)
+}
 
 // fakeDriver is the driver end of the channel: it completes the handshake and
 // records what the adapter sends.
@@ -223,7 +237,7 @@ func TestHandshakeAndPublish(t *testing.T) {
 		t.Errorf("third frame is %v", frames[2])
 	}
 
-	verified, ok := VerifyMarkerPayload(marker[2:len(marker)-2], testToken, testSession)
+	verified, ok := VerifyMarkerPayload(payloadOf(t, marker), testToken, testSession)
 	if !ok || verified.Revision != 1 {
 		t.Errorf("marker %q did not verify against the session", marker)
 	}
@@ -242,7 +256,7 @@ func TestRevisionsIncreaseByOnePerPublish(t *testing.T) {
 		if err != nil {
 			t.Fatalf("publish %d failed: %v", expected, err)
 		}
-		verified, ok := VerifyMarkerPayload(marker[2:len(marker)-2], testToken, testSession)
+		verified, ok := VerifyMarkerPayload(payloadOf(t, marker), testToken, testSession)
 		if !ok || verified.Revision != expected {
 			t.Fatalf("marker for publish %d verified as %+v (ok=%v)", expected, verified, ok)
 		}

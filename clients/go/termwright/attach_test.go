@@ -3,6 +3,7 @@ package termwright
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -237,13 +238,14 @@ func TestAttachPublishesTheTreeAndCommitsWithAMarker(t *testing.T) {
 		t.Errorf("stacked buttons share a row: %v vs %v", bounds, rejectBounds)
 	}
 
-	// One marker per committed frame, so take the most recent.
-	written := strings.Split(strings.TrimSuffix(markers.String(), "\x1b\\"), "\x1b\\")
+	// One marker per committed frame, so take the most recent. Markers are
+	// `OSC 8487; … BEL`, so BEL is the separator.
+	written := strings.Split(strings.TrimSuffix(markers.String(), "\x07"), "\x07")
 	if len(written) == 0 || written[0] == "" {
 		t.Fatal("no render-commit marker was written")
 	}
 	last := written[len(written)-1]
-	payload := strings.TrimPrefix(last, "\x1bP")
+	payload := strings.TrimPrefix(last, fmt.Sprintf("\x1b]%d;", protocol.MarkerOSCCode))
 	verified, ok := protocol.VerifyMarkerPayload(payload, testToken, testSession)
 	if !ok {
 		t.Fatalf("the marker %q does not verify", last)

@@ -4,7 +4,7 @@ Semantic side-channel client for the [termwright](https://github.com/gorce-ai/te
 terminal test driver, plus an adapter for [tview](https://github.com/rivo/tview).
 
 An instrumented app publishes its primitive tree over a unix socket and commits
-each frame with a signed DCS marker, so tests assert on *roles and names*
+each frame with a signed OSC marker, so tests assert on *roles and names*
 instead of screen-scraping cells.
 
 **Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in the
@@ -67,8 +67,8 @@ region "Permission"   bounds=(0,0,80,24)
 ### Where the marker is emitted
 
 `Attach` wraps the `tcell.Screen`. The tree is built in tview's after-draw
-hook, but the marker is written immediately after `Show()` has flushed the
-frame — the marker commits the bytes that precede it, so emitting it any
+hook, but the marker — a private `OSC 8487` sequence terminated by BEL — is
+written immediately after `Show()` has flushed the frame — the marker commits the bytes that precede it, so emitting it any
 earlier would let the driver act on a paint that has not landed. Use
 `WithMarkerWriter` to send it somewhere other than `os.Stdout`, and
 `WithScreen` to supply your own screen (a `tcell.SimulationScreen` in tests).

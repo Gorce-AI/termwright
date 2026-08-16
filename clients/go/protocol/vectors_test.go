@@ -41,8 +41,8 @@ func TestConstantsMatchTheReference(t *testing.T) {
 		ProtocolID       string   `json:"protocolId"`
 		ProtocolVersion  int      `json:"protocolVersion"`
 		FrameHeaderBytes int      `json:"frameHeaderBytes"`
-		MarkerDCSPrefix  string   `json:"markerDcsPrefix"`
-		MarkerDCSFinal   string   `json:"markerDcsFinal"`
+		MarkerOSCCode    int      `json:"markerOscCode"`
+		MarkerOSCPrefix  string   `json:"markerOscPrefix"`
 		MarkerMACBytes   int      `json:"markerMacBytes"`
 		Roles            []string `json:"roles"`
 		Actions          []string `json:"actions"`
@@ -63,8 +63,8 @@ func TestConstantsMatchTheReference(t *testing.T) {
 	if vectors.FrameHeaderBytes != FrameHeaderBytes || vectors.MarkerMACBytes != MarkerMACBytes {
 		t.Error("framing or marker sizes drifted")
 	}
-	if vectors.MarkerDCSPrefix != MarkerDCSPrefix || vectors.MarkerDCSFinal != MarkerDCSFinal {
-		t.Error("marker DCS identity drifted")
+	if vectors.MarkerOSCCode != MarkerOSCCode || vectors.MarkerOSCPrefix != MarkerOSCPrefix {
+		t.Error("marker OSC identity drifted")
 	}
 	if vectors.DefaultLimits != DefaultLimits || vectors.AbsoluteLimits != AbsoluteLimits {
 		t.Error("limits drifted from the reference")
@@ -234,6 +234,13 @@ func TestMarkerVectors(t *testing.T) {
 			Sequence    string `json:"sequence"`
 			SequenceHex string `json:"sequenceHex"`
 		} `json:"encode"`
+		AcceptTerminators []struct {
+			Name      string `json:"name"`
+			Payload   string `json:"payload"`
+			Token     string `json:"token"`
+			SessionID string `json:"sessionId"`
+			Revision  int64  `json:"revision"`
+		} `json:"acceptTerminators"`
 		VerifyReject []struct {
 			Name      string `json:"name"`
 			Payload   string `json:"payload"`
@@ -257,6 +264,15 @@ func TestMarkerVectors(t *testing.T) {
 		marker, ok := VerifyMarkerPayload(testCase.Payload, testCase.Token, testCase.SessionID)
 		if !ok || marker.Revision != testCase.Revision || marker.MAC != testCase.MAC {
 			t.Errorf("reference marker did not verify: %+v ok=%v", marker, ok)
+		}
+	}
+
+	// A parser strips the terminator; a regex over raw output keeps it. Both
+	// must verify, and the normal path never exercises the second.
+	for _, testCase := range vectors.AcceptTerminators {
+		marker, ok := VerifyMarkerPayload(testCase.Payload, testCase.Token, testCase.SessionID)
+		if !ok || marker.Revision != testCase.Revision {
+			t.Errorf("terminator case %q did not verify: %+v ok=%v", testCase.Name, marker, ok)
 		}
 	}
 

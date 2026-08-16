@@ -1,14 +1,20 @@
 """Render-commit marker.
 
-The adapter writes this DCS sequence to stdout *after* the last byte of the
+The adapter writes this OSC sequence to stdout *after* the last byte of the
 render belonging to revision N. It is a frame-commit signal, never a data
 carrier::
 
-    ESC P twm;<revision>;<mac> ESC \\
+    OSC 8487 ; twm;<revision>;<mac> BEL
 
 with ``mac = base64url(HMAC-SHA256(token, f"{session_id}:{revision}"))[:16]``,
 unpadded. The token is an opaque UTF-8 string end to end: whatever arrives in
 ``TERMWRIGHT_TOKEN`` is fed to the HMAC as key bytes, never re-decoded.
+
+OSC rather than DCS because ConPTY rewrites the stream it forwards: a
+passthrough probe showed it dropping DCS, APC and OSC 8 while passing private
+OSC with either terminator, so a DCS marker could not reach the driver on
+Windows at all. One encoding everywhere beats negotiating per platform — the
+path used least is the one that rots unnoticed.
 """
 
 from __future__ import annotations
@@ -22,8 +28,22 @@ from typing import Optional
 
 from .errors import ProtocolViolation
 
-MARKER_DCS_PREFIX = "twm;"
-MARKER_DCS_FINAL = "t"
+#: The private OSC number carrying render-commit markers. Chosen clear of
+#: everything in use (xterm's allocations, OSC 8, 9, 99, 133, 633, 697, 777+):
+#: 84 and 87 are the ASCII codes of ``T`` and ``W``, for termwright.
+MARKER_OSC_CODE = 8487
+
+#: The tag opening a marker payload, immediately after ``OSC 8487;``. Kept as a
+#: self-identifying guard: if anything ever claims 8487, a marker still says
+#: what it is instead of being mistaken for that feature's payload.
+MARKER_OSC_PREFIX = "twm;"
+
+#: The terminator this implementation emits — the one ConPTY was observed to
+#: forward most reliably.
+BEL = "\x07"
+
+#: The terminator a receiver must also accept.
+ST = "\x1b\\"
 MARKER_MAC_BYTES = 16
 MARKER_MAC_CHARS = 22
 
@@ -64,22 +84,33 @@ def encode_marker(token: str, session_id: str, revision: int) -> str:
     if revision <= 0 or revision > _MAX_SAFE_INTEGER:
         raise ProtocolViolation("marker-argument", "revision must be a positive safe integer")
     mac = compute_mac(token, session_id, revision)
-    return f"\x1bP{MARKER_DCS_PREFIX}{revision};{mac}\x1b\\"
+    return f"\x1b]{MARKER_OSC_CODE};{MARKER_OSC_PREFIX}{revision};{mac}{BEL}"
 
 
 def verify_marker_payload(payload: str, token: str, session_id: str) -> Optional[RenderMarker]:
-    """Parse and verify a DCS payload (the bytes between ``ESC P`` and ``ESC \\``).
+    """Parse and verify an OSC payload — everything after ``OSC 8487;``.
 
     Total function: hostile payloads return ``None``, never raise. Only
     canonically formatted revisions are accepted, so ``1`` and ``01`` cannot
     both authenticate the same commit, and the MAC compare is constant-time.
+
+    A trailing BEL or ST is tolerated: a VT parser consumes the terminator
+    before dispatching, so a handler normally passes a payload without one,
+    while a caller scanning raw output with a regex keeps it. Both must work.
     """
     if not token or not session_id:
         return None
-    if not payload.startswith(MARKER_DCS_PREFIX):
+
+    text = payload
+    if text.endswith(BEL):
+        text = text[: -len(BEL)]
+    elif text.endswith(ST):
+        text = text[: -len(ST)]
+
+    if not text.startswith(MARKER_OSC_PREFIX):
         return None
 
-    body = payload[len(MARKER_DCS_PREFIX) :]
+    body = text[len(MARKER_OSC_PREFIX) :]
     separator = body.find(";")
     if separator < 0:
         return None

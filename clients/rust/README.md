@@ -4,7 +4,7 @@ Semantic side-channel client for the [termwright](https://github.com/gorce-ai/te
 terminal test driver.
 
 An instrumented TUI publishes its widget tree over a unix socket and commits
-each render with a signed DCS marker, so tests assert on *roles and names*
+each render with a signed OSC marker, so tests assert on *roles and names*
 instead of screen-scraping cells. This crate is the protocol side of that
 contract — framing, the marker, message and snapshot validation, and a blocking
 socket client. It ships **no framework adapter**: wire it into whatever draws

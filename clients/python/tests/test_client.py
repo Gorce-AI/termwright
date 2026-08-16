@@ -7,13 +7,32 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-from termwright import DEFAULT_LIMITS, SemanticClient, client_from_env, verify_marker_payload
+from termwright import (
+    DEFAULT_LIMITS,
+    MARKER_OSC_CODE,
+    SemanticClient,
+    client_from_env,
+    verify_marker_payload,
+)
 from termwright.client import ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN
 from termwright.framing import FrameDecoder, encode_frame
 from termwright.tree import Rect, SemanticNode, SemanticSnapshot
 
 TOKEN = "test-token"
 SESSION = "s-42"
+
+#: `OSC 8487;` — what precedes a marker payload on the wire.
+OSC_INTRODUCER = f"\x1b]{MARKER_OSC_CODE};"
+
+
+def payload_of(marker: str) -> str:
+    """The payload a VT parser would hand an OSC handler.
+
+    Only the introducer is stripped: `verify_marker_payload` tolerates the
+    trailing terminator, and leaving it on exercises that tolerance.
+    """
+    assert marker.startswith(OSC_INTRODUCER), marker
+    return marker[len(OSC_INTRODUCER) :]
 
 
 def sample_snapshot() -> SemanticSnapshot:
@@ -167,7 +186,7 @@ async def test_handshake_and_publish(endpoint):
     assert commit_frame == {"type": "revision-commit", "revision": 1}
 
     assert marker is not None
-    verified = verify_marker_payload(marker[2:-2], TOKEN, SESSION)
+    verified = verify_marker_payload(payload_of(marker), TOKEN, SESSION)
     assert verified is not None and verified.revision == 1
 
     await client.close()
@@ -207,7 +226,7 @@ async def test_revisions_increase_by_one_per_publish(endpoint):
     for expected in (1, 2, 3):
         marker = client.publish_nowait(sample_snapshot())
         assert marker is not None
-        assert verify_marker_payload(marker[2:-2], TOKEN, SESSION).revision == expected
+        assert verify_marker_payload(payload_of(marker), TOKEN, SESSION).revision == expected
 
     await driver.wait_for(6)
     commits = [frame["revision"] for frame in driver.received if frame["type"] == "revision-commit"]

@@ -24,9 +24,9 @@ import {
   MAX_LOG_ATTRS,
   DEFAULT_LIMITS,
   FRAME_HEADER_BYTES,
-  MARKER_DCS_FINAL,
-  MARKER_DCS_PREFIX,
   MARKER_MAC_BYTES,
+  MARKER_OSC_CODE,
+  MARKER_OSC_PREFIX,
   PROTOCOL_ID,
   PROTOCOL_VERSION,
   SEMANTIC_ACTIONS,
@@ -59,8 +59,8 @@ write('constants.json', {
   protocolId: PROTOCOL_ID,
   protocolVersion: PROTOCOL_VERSION,
   frameHeaderBytes: FRAME_HEADER_BYTES,
-  markerDcsPrefix: MARKER_DCS_PREFIX,
-  markerDcsFinal: MARKER_DCS_FINAL,
+  markerOscCode: MARKER_OSC_CODE,
+  markerOscPrefix: MARKER_OSC_PREFIX,
   markerMacBytes: MARKER_MAC_BYTES,
   env: {
     endpoint: 'TERMWRIGHT_ENDPOINT',
@@ -224,7 +224,9 @@ const markerCases = [
   { token: 'zażółć-token-🎛', sessionId: 'sesja-ż', revision: 3 },
 ].map(({ token, sessionId, revision }) => {
   const sequence = encodeMarker(token, sessionId, revision);
-  const payload = sequence.slice(2, -2); // strip ESC P … ESC \
+  // Everything after `OSC 8487;` and before the terminator, which is what a VT
+  // parser hands an OSC handler.
+  const payload = sequence.slice(`\x1b]${MARKER_OSC_CODE};`.length, -1);
   const verified = verifyMarkerPayload(payload, token, sessionId);
   if (verified === null || verified.revision !== revision) {
     throw new Error(`marker vector ${sessionId}/${revision} does not round-trip`);
@@ -241,15 +243,15 @@ const markerCases = [
 });
 
 const markerReject = [
-  { name: 'wrong-mac', payload: `${MARKER_DCS_PREFIX}42;AAAAAAAAAAAAAAAAAAAAAA` },
+  { name: 'wrong-mac', payload: `${MARKER_OSC_PREFIX}42;AAAAAAAAAAAAAAAAAAAAAA` },
   { name: 'wrong-session', payload: markerCases[4].payload },
-  { name: 'leading-zero-revision', payload: `${MARKER_DCS_PREFIX}042;${markerCases[2].mac}` },
-  { name: 'revision-zero', payload: `${MARKER_DCS_PREFIX}0;${markerCases[2].mac}` },
-  { name: 'negative-revision', payload: `${MARKER_DCS_PREFIX}-1;${markerCases[2].mac}` },
-  { name: 'mac-too-short', payload: `${MARKER_DCS_PREFIX}42;${markerCases[2].mac.slice(0, -1)}` },
-  { name: 'mac-not-base64url', payload: `${MARKER_DCS_PREFIX}42;${'+'.repeat(22)}` },
+  { name: 'leading-zero-revision', payload: `${MARKER_OSC_PREFIX}042;${markerCases[2].mac}` },
+  { name: 'revision-zero', payload: `${MARKER_OSC_PREFIX}0;${markerCases[2].mac}` },
+  { name: 'negative-revision', payload: `${MARKER_OSC_PREFIX}-1;${markerCases[2].mac}` },
+  { name: 'mac-too-short', payload: `${MARKER_OSC_PREFIX}42;${markerCases[2].mac.slice(0, -1)}` },
+  { name: 'mac-not-base64url', payload: `${MARKER_OSC_PREFIX}42;${'+'.repeat(22)}` },
   { name: 'missing-prefix', payload: `xxx;42;${markerCases[2].mac}` },
-  { name: 'no-separator', payload: `${MARKER_DCS_PREFIX}42${markerCases[2].mac}` },
+  { name: 'no-separator', payload: `${MARKER_OSC_PREFIX}42${markerCases[2].mac}` },
   { name: 'empty', payload: '' },
 ].map(({ name, payload }) => {
   const verified = verifyMarkerPayload(payload, MARKER_TOKEN, MARKER_SESSION);
@@ -257,15 +259,38 @@ const markerReject = [
   return { name, payload, token: MARKER_TOKEN, sessionId: MARKER_SESSION };
 });
 
+/**
+ * The receiver tolerates a trailing terminator: a VT parser consumes it before
+ * dispatching, so a handler normally sees a bare payload, while a caller
+ * scanning raw output with a regex keeps it. Both have to verify, and the
+ * normal path never exercises the second — which is exactly why it is here.
+ */
+const markerTerminators = [
+  { name: 'bare-payload', suffix: '' },
+  { name: 'trailing-bel', suffix: '\x07' },
+  { name: 'trailing-st', suffix: '\x1b\\' },
+].map(({ name, suffix }) => {
+  const payload = markerCases[2].payload + suffix;
+  const verified = verifyMarkerPayload(payload, MARKER_TOKEN, MARKER_SESSION);
+  if (verified === null || verified.revision !== markerCases[2].revision) {
+    throw new Error(`terminator vector ${name} did not verify`);
+  }
+  return { name, payload, token: MARKER_TOKEN, sessionId: MARKER_SESSION, revision: verified.revision };
+});
+
 write('marker.json', {
   note:
     'mac = base64url(HMAC-SHA256(key = token as UTF-8 bytes, ' +
     'msg = `${sessionId}:${revision}` as UTF-8 bytes))[:16], unpadded. ' +
-    'sequence = ESC P + "twm;" + revision + ";" + mac + ESC \\.',
-  dcsPrefix: MARKER_DCS_PREFIX,
-  dcsFinal: MARKER_DCS_FINAL,
+    'sequence = ESC ] 8487 ";" + "twm;" + revision + ";" + mac + BEL. ' +
+    '`payload` is what a VT parser hands an OSC handler: everything after ' +
+    '`OSC 8487;`, terminator already consumed. Receivers must also accept a ' +
+    'payload that still carries a trailing BEL or ST — see acceptTerminators.',
+  oscCode: MARKER_OSC_CODE,
+  oscPrefix: MARKER_OSC_PREFIX,
   macBytes: MARKER_MAC_BYTES,
   encode: markerCases,
+  acceptTerminators: markerTerminators,
   verifyReject: markerReject,
 });
 

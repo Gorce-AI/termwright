@@ -40,9 +40,9 @@ from .logs import (
     validate_log_record,
 )
 from .marker import (
-    MARKER_DCS_FINAL,
-    MARKER_DCS_PREFIX,
     MARKER_MAC_BYTES,
+    MARKER_OSC_CODE,
+    MARKER_OSC_PREFIX,
     RenderMarker,
     encode_marker,
     verify_marker_payload,
@@ -87,9 +87,9 @@ __all__ = [
     "ENV_TOKEN",
     "FRAME_HEADER_BYTES",
     "FrameDecoder",
-    "MARKER_DCS_FINAL",
-    "MARKER_DCS_PREFIX",
     "MARKER_MAC_BYTES",
+    "MARKER_OSC_CODE",
+    "MARKER_OSC_PREFIX",
     "PROTOCOL_ID",
     "PROTOCOL_VERSION",
     "ParseResult",

@@ -2,8 +2,8 @@
   "protocolId": "termwright/1",
   "protocolVersion": 1,
   "frameHeaderBytes": 4,
-  "markerDcsPrefix": "twm;",
-  "markerDcsFinal": "t",
+  "markerOscCode": 8487,
+  "markerOscPrefix": "twm;",
   "markerMacBytes": 16,
   "env": {
     "endpoint": "TERMWRIGHT_ENDPOINT",
