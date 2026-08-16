@@ -118,3 +118,32 @@ describe('rasterising embedded outlines', () => {
     expect(inkCoverage(shot.svg)).toBeCloseTo(0.5, 1);
   });
 });
+
+describe('reporting what a render cost', () => {
+  it('says when a render did not need the system fonts', () => {
+    const shot = renderPng(textFrame('ok'), GEOMETRY);
+    if (!shot.selfContained) return; // no font on this machine
+    expect(shot.systemFontsLoaded).toBe(false);
+  });
+
+  it(
+    'says when a render paid for them',
+    () => {
+      const shot = renderPng(textFrame('a\u{F0000}'), GEOMETRY);
+      expect(shot.selfContained).toBe(false);
+      expect(shot.systemFontsLoaded).toBe(true);
+    },
+    FONT_SCAN_TIMEOUT_MS,
+  );
+
+  it('says when the caller declined them, fallbacks or not', () => {
+    const shot = renderPng(textFrame('a\u{F0000}'), {
+      ...GEOMETRY,
+      systemFontFallback: false,
+    });
+    // Still honest about what could not be embedded...
+    expect(shot.fallbackCharacters).toContain('\u{F0000}');
+    // ...and explicit that nothing went looking for a font to cover it.
+    expect(shot.systemFontsLoaded).toBe(false);
+  });
+});

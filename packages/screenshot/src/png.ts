@@ -51,5 +51,6 @@ export function renderPng(frame: ScreenFrame, options: PngOptions = {}): Screens
     height: image.height,
     selfContained: rendered.selfContained,
     fallbackCharacters: rendered.fallbackCharacters,
+    systemFontsLoaded: needsSystemFonts,
   };
 }

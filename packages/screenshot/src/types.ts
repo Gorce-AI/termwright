@@ -84,7 +84,17 @@ export interface ScreenshotSvg {
    * renders identically everywhere with no fonts installed.
    */
   readonly selfContained: boolean;
-  /** Characters that had to fall back to `<text>`, deduplicated and sorted. */
+  /**
+   * Characters drawn as `<text>` because no configured font could supply a
+   * glyph, deduplicated and sorted.
+   *
+   * "Not embedded" is not "not drawn". A viewer with a suitable font renders
+   * them normally, and {@link renderPng} loads system fonts on their behalf by
+   * default — what the list actually means is that the output depends on the
+   * machine that displays (or rasterises) it. They come out blank only where
+   * no font covers them, which for PNG means
+   * {@link PngOptions.systemFontFallback} was turned off.
+   */
   readonly fallbackCharacters: readonly string[];
   /** Font files whose outlines were embedded, in the order they were used. */
   readonly fontsUsed: readonly string[];
@@ -117,5 +127,16 @@ export interface ScreenshotPng {
   readonly width: number;
   readonly height: number;
   readonly selfContained: boolean;
+  /** See {@link ScreenshotSvg.fallbackCharacters}. */
   readonly fallbackCharacters: readonly string[];
+  /**
+   * Whether this render made the rasteriser enumerate the system fonts — the
+   * expensive path, roughly a second on macOS and several on Windows, paid per
+   * call.
+   *
+   * Reported rather than left to be derived from `selfContained` and the
+   * options, so a caller rendering in bulk can see which frames cost what
+   * instead of inferring the rule from documentation.
+   */
+  readonly systemFontsLoaded: boolean;
 }

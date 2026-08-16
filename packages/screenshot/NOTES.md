@@ -143,7 +143,10 @@ Two consequences:
 - `renderPng` only asks for system fonts when the SVG actually has fallback
   characters, and `systemFontFallback: false` declines even then, for callers
   rendering many frames who would rather have blank glyphs than minutes of font
-  enumeration.
+  enumeration. The result reports `systemFontsLoaded` rather than leaving the
+  rule to be re-derived from `selfContained` plus the options: the CLI asked
+  how to know which renders were expensive, and "read the docs and infer it" is
+  a worse answer than a field.
 - The package's own PNG tests render in outline mode with explicit
   `cellWidth`/`lineHeight`, which keeps their geometry assertions exact without
   paying the scan. Exactly one test renders an uncoverable character on

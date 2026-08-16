@@ -73,7 +73,9 @@ shot.fontsUsed;            // font files whose glyphs were embedded
 ```
 
 `renderPng` returns the same story in pixels: `png`, `width`, `height` (SVG
-units × `scale`), plus `selfContained` and `fallbackCharacters`.
+units × `scale`), plus `selfContained`, `fallbackCharacters` and
+`systemFontsLoaded` — the last one says whether *this* render paid for the font
+scan described below.
 
 ### The cost of a fallback
 
@@ -93,8 +95,12 @@ renderPng(frame, { systemFontFallback: false });
 ### Self-containment
 
 Characters no configured font covers fall back to `<text>` with a monospace
-family, still positioned per cell. They render correctly wherever a suitable
-font exists, and the flag tells you when that caveat applies.
+family, still positioned per cell. **Not embedded is not the same as not
+drawn**: a viewer with a suitable font renders them normally, and `renderPng`
+loads system fonts on their behalf by default. What the list really tells you
+is that the output depends on the machine displaying or rasterising it — those
+characters come out blank only where nothing covers them, which for PNG means
+`systemFontFallback: false`.
 
 Fonts are resolved from `font.files`, then `TERMWRIGHT_FONT`, then platform
 defaults (Menlo on macOS, DejaVu/Liberation/Noto on Linux, Consolas on Windows,
