@@ -136,6 +136,16 @@ file are two statements about the same thing, and an archive where they
 disagree is one to survive rather than believe — so `stateAt().logs` streams
 `logs.jsonl` like `logs()` does, and both report what the file actually holds.
 
+The same gate existed in the runner UI and was removed there for the same
+reason, which suggests the shape invites it. If a consumer needs to *detect*
+the disagreement rather than just survive it, the rule the UI settled on is
+worth reusing instead of inventing a third: **the counter is a claim about the
+file, the records on disk are the evidence** — report the larger of the two as
+the total and mark the list incomplete, rather than picking a side. This
+package does not expose that comparison, because knowing it costs a full stream
+of `logs.jsonl` and `stateAt` should not pay for it; a consumer that wants it
+already has `meta.logs.count` and `logs()`.
+
 ### Eviction is counted at the end, not on the next event
 
 The driver's team flagged a bug pattern worth checking for: a counter
