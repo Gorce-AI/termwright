@@ -358,3 +358,10 @@
   KNOWN-off mode; on 'unknown' it sends SGR-encoded input and records a new
   diagnostic 'mouse-mode-unverifiable' (closed set: 18). POSIX behavior
   unchanged ('none' remains known-off).
+- 2026-08-16 (test): opcje per plik/suite przez natywne
+  `test.scoped({ termwrightOptions })`; scalanie klucz-po-kluczu w `launch()`
+  w kolejności config < scoped < launch(options), z `env` i `timeouts`
+  scalanymi wpisami, `command` zastępowanym w całości; `launch({ files,
+  template })` zasiewa prywatny katalog testu przed startem programu, ścieżki
+  wychodzące poza niego są odrzucane. Polityka `trace` jest per SESJA
+  (rozstrzygana przy launch), nie per test.
