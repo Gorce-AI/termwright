@@ -31,6 +31,8 @@ if (!shot.selfContained) {
 }
 
 // A recorded one: reconstruct the moment a step failed, then rasterise it.
+// The frame measures characters with the profile the recording was made with,
+// so the screenshot matches the screen the test saw.
 const trace = await openTrace('out/login.twtrace');
 const steps = await trace.steps();
 const failing = steps.find((step) => step.status === 'failed');
@@ -58,16 +60,22 @@ screen full of emoji still reports `selfContained: true`. Cells holding several
 code points — a variation selector, a ZWJ family — are shaped through the font
 rather than looked up by first code point.
 
-## Self-containment
-
-`renderSvg` reports whether it managed to embed everything:
+## What you get back
 
 ```ts
 const shot = renderSvg(frame);
+shot.svg;                  // the document
+shot.width;                // user units, so a caller can size the element
+shot.height;
 shot.selfContained;        // true when no character needed a font at view time
 shot.fallbackCharacters;   // the ones that did, e.g. ['\u{F0000}']
-shot.fontsUsed;            // font files whose outlines were embedded
+shot.fontsUsed;            // font files whose glyphs were embedded
 ```
+
+`renderPng` returns the same story in pixels: `png`, `width`, `height` (SVG
+units × `scale`), plus `selfContained` and `fallbackCharacters`.
+
+### Self-containment
 
 Characters no configured font covers fall back to `<text>` with a monospace
 family, still positioned per cell. They render correctly wherever a suitable
@@ -82,12 +90,19 @@ what your users actually see:
 renderSvg(frame, { font: { files: ['/fonts/JetBrainsMonoNerdFont-Regular.ttf'] } });
 ```
 
+Emoji are looked up in a colour font last in that chain and embedded as artwork
+— a bitmap strike (`sbix`, `CBDT`) as a `data:` image, a `COLR`/`CPAL` font as
+its coloured layers — so a screen full of emoji still reports
+`selfContained: true`.
+
 ## In a failure report
 
 `@termwright/trace` embeds images the caller hands it, rather than rasterising
 anything itself — that keeps a native renderer out of every test run:
 
 ```ts
+import { generateHtmlReport } from '@termwright/trace';
+
 await generateHtmlReport({
   outFile: 'out/report.html',
   results: [{

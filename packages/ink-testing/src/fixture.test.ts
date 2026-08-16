@@ -32,6 +32,17 @@ describe('launchInkFixture', () => {
     expect(await harness.getByRole('button', { name: 'Approve' }).count()).toBe(1);
   });
 
+  it('has a tree the moment it resolves, with no wait by the caller', async () => {
+    // The guarantee the whole package rests on: after `launchInkFixture`
+    // resolves, a locator works. It is asserted here rather than defended by a
+    // wait in each test, because a test that forgets the wait fails somewhere
+    // else entirely — as a component that "rendered nothing".
+    const harness = await launch();
+
+    expect(harness.semanticTree()).not.toBeNull();
+    expect(harness.screen().text()).toContain('Approve');
+  });
+
   it('reports the negotiated capabilities from settled()', async () => {
     const harness = await launch();
 

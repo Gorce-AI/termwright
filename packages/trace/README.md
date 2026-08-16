@@ -2,14 +2,13 @@
 
 The `.twtrace` archive format for [termwright](https://github.com/gorce-ai/termwright):
 a writer that records a live terminal session, a streaming reader that powers
-time travel in the runner UI, and a self-contained HTML failure report with a
-visual diff, a semantic diff and an embedded recording.
+time travel in the runner UI, and a self-contained HTML failure report.
 
-An archive is a directory (zippable for transport) holding four files:
+An archive is a directory (zippable for transport):
 
 | File | Content |
 |---|---|
-| `meta.json` | session id, command, viewport, platform, exit status, crash |
+| `meta.json` | session id, command, viewport, platform, terminal profile, exit, crash, log summary |
 | `session.cast` | asciicast **v3**; `test.step()` titles become markers |
 | `events.jsonl` | inputs, resizes, steps, driver actions, assertions, crash |
 | `semantics.jsonl` | one semantic tree per revision, with its cast offset |
@@ -26,12 +25,11 @@ pnpm add @termwright/trace
 
 Requires Node >= 22. ESM only.
 
-## Usage
+## Recording
 
 ```ts
-import { createTraceWriter, openTrace, generateHtmlReport } from '@termwright/trace';
+import { createTraceWriter } from '@termwright/trace';
 
-// 1. Record. The writer subscribes to the harness's session events.
 const writer = createTraceWriter(harness, {
   dir: 'out/login.twtrace',
   command: ['node', 'app.js'],
@@ -39,66 +37,87 @@ const writer = createTraceWriter(harness, {
   rows: 30,
 });
 
-writer.hide();                       // keep setup noise out of the recording
+writer.hide();                     // keep setup noise out of the recording
 await harness.waitForText('ready');
 writer.show();
 
-const step = writer.addStep('submit the form');   // -> cast marker "submit the form"
+const step = writer.addStep('submit the form');  // → cast marker "submit the form"
 await harness.getByRole('button', { name: 'Submit' }).click();
-writer.recordAction({ api: 'locator.click', selector: 'button', ok: true });
 step.end('failed', 'button stayed disabled');
 
-await writer.finalize({ idleTimeLimit: 2 });      // trim gaps longer than 2s
-
-// 2. Read back — `stateAt` is the time-travel primitive.
-const trace = await openTrace('out/login.twtrace');
-const state = await trace.stateAt(1_500);
-terminal.write(state.castPrefix);                  // screen at 1.5s
-console.log(state.nearestSemanticRevision);        // newest tree at or before it
-await trace.close();
-
-// 3. Report.
-await generateHtmlReport({
-  outFile: 'out/report.html',
-  results: [{ id: 't1', title: 'login', status: 'failed', tracePath: 'out/login.twtrace' }],
-});
+await writer.finalize({ idleTimeLimit: 2 });     // trim gaps longer than 2s
 ```
 
-## What each piece is for
+The writer attaches to anything exposing `sessionId` and `events` — a
+`TerminalHarness`, or a fake in tests. Driver actions, application logs and
+crashes arrive on their own through those events; nothing above reports them by
+hand. `recordAction` exists only for work the driver cannot see, and calling it
+for a harness action would record that action twice.
 
-**`createTraceWriter(session, options)`** — attaches to anything exposing
-`sessionId` and `events` (a `TerminalHarness`, or a fake in tests). `hide()`
-and `show()` exclude windows of output from the recording; `addStep(title)`
-writes a marker; `finalize({ idleTimeLimit })` applies the hide and trim
-transforms, stamps every artefact with its `castOffset`, and writes the archive.
+Nothing is written until `finalize()`, because that is the first moment the
+timeline is known.
 
-**`openTrace(path)`** — opens a directory or a zip, validates versions, and
-streams cast events, trace events and semantic records. `stateAt(timeMs)`
-returns the output prefix needed to reconstruct the screen, the viewport after
-resizes, the nearest earlier semantic revision, and the step covering that
+## The two timelines
+
+Every artefact carries two times, and mixing them up is the easiest mistake to
+make here:
+
+- **`t`** — wall-clock milliseconds since recording started.
+- **`castOffset`** — position on the *recording*: `t` after `hide()` windows
+  were cut out and idle gaps compressed.
+
+They are equal only in a recording that was neither hidden nor trimmed, so
+`castOffset` is required on every line and readers never fall back to `t`. A
+line missing it is rejected as corrupt rather than placed at a plausible wrong
 moment.
 
-**`diffSemanticSnapshots(before, after)`** — structured diff plus plain-English
-sentences: `button "Submit" state changed to disabled`. Nodes are matched by id,
-then by role and name, so frameworks that regenerate ids still produce a
-readable diff.
+Everything a player or UI seeks to is a `castOffset`.
 
-**`generateHtmlReport(options)`** — one HTML file, no network requests at all.
-For a failing test it derives the screen before the failing step and at failure,
-renders both to styled HTML, highlights the rows that changed, lists the
-semantic changes as sentences, and embeds an asciinema player positioned on the
-failing step's marker. Callers with their own before/after screens or trees (a
-snapshot mismatch, say) can pass them directly via `visual` and `semantic`.
+## Reading
 
-**`frameAt(trace, timeMs)`** — replays the recording's output prefix back into a
-cell grid shaped like the driver's `ScreenSnapshot`, so a recorded moment can be
-inspected cell by cell or handed to `@termwright/screenshot`. It measures
-characters with the profile the session used (`meta.terminalProfile`), through
-the shared emulator in `@termwright/vt`, so a replayed frame lines up with the
-screen the test saw.
+```ts
+import { openTrace } from '@termwright/trace';
 
-**`packTrace(dir, file)` / `unpackTrace(file, dir)`** — zip an archive for CI
-artifact upload and read it back.
+const trace = await openTrace('out/login.twtrace');   // directory or zip
+
+const state = await trace.stateAt(1_500);
+state.castPrefix;                // output to write into an emulator
+state.columns;                   // viewport after resizes up to that point
+state.nearestSemanticRevision;   // newest tree at or before it
+state.step;                      // the step covering that moment
+state.logs;                      // preceding log entries, bounded
+
+for await (const event of trace.events()) console.log(event.kind, event.castOffset);
+for (const step of await trace.steps()) console.log(step.title, step.status);
+
+await trace.close();
+```
+
+`stateAt` is the time-travel primitive: scrub to an offset, get everything
+needed to render that moment. `packTrace(dir, file)` and
+`unpackTrace(file, dir)` zip an archive for CI upload and read it back.
+
+## Frames, and why they line up
+
+```ts
+import { frameAt } from '@termwright/trace';
+
+const frame = await frameAt(trace, 1_500);
+frame.cell(3, 10);   // a driver-shaped CellSnapshot
+frame.text();
+```
+
+`frameAt` replays the output prefix back into a cell grid shaped like the
+driver's `ScreenSnapshot`, so a recorded moment can be inspected cell by cell or
+handed to [`@termwright/screenshot`](../screenshot).
+
+It measures characters with the profile the session used
+(`meta.terminalProfile`, captured from `capabilities().terminalProfile`) through
+the shared emulator in `@termwright/vt`. That matters more than it sounds: when
+the session and its replay used different width tables, an emoji was two columns
+live and one on replay, and the screenshot quietly disagreed with the assertion.
+An archive naming a profile this build does not know is rejected rather than
+replayed with the wrong tables.
 
 ## Application logs
 
@@ -106,7 +125,7 @@ A TUI cannot print diagnostics to the screen without corrupting the render, so
 `logs.jsonl` carries what the program said about itself: lines from a followed
 log file, and structured records from an adapter that negotiated the `logs`
 capability. Both land in one shape with a `message` field, so nothing has to
-branch on where an entry came from before printing it.
+branch on provenance before printing an entry.
 
 ```ts
 if (trace.meta.logs !== undefined) {
@@ -116,73 +135,78 @@ if (trace.meta.logs !== undefined) {
 }
 
 // Or just the window leading up to a moment, for a scrubbing UI:
-const state = await trace.stateAt(1_500, { logWindow: 50 });
+const around = await trace.stateAt(1_500, { logWindow: 50 });
 ```
 
-`label` is the display name of the stream — the file's label, or the record's
-logger when there is no file. `logger` is kept separately on adapter records,
-verbatim: filtering by channel (`db.pool`) is a different question from "which
-stream do I render this under", and a display fallback is the wrong thing to
-filter on.
+`label` is the display name of the stream; `logger` and `path` are kept
+separately, because filtering by channel (`db.pool`) or attributing a line to a
+file are different questions from "which stream do I render this under" — and a
+label may be shared between sources.
 
-A test that passed under `trace: 'on'` keeps its archive too, so its section
-names the `.twtrace` path and shows the whole log rather than a failure window.
-The section stays collapsed — nothing failed — but the artifacts are all there.
+A followed file line carries **no level**. The driver does not infer one from
+the text and neither does this package: colouring a report by substring match is
+wrong often enough to be worse than no colour.
 
-Driver actions record themselves: the harness emits one per `click`, `press`,
-`resize` and so on, **failures included**, so the report can say the click
-never landed and why instead of showing a screen that simply did not change.
-Failed actions appear on the test timeline with their error code. Note that an
-action's timestamp is when it *finished*, so the bytes it sent sit earlier on
-the timeline than the action itself.
+`meta.logs` summarises the file — count, per-level counts, sources — and reports
+how many entries were evicted. The writer keeps the most recent `maxLogEntries`
+(10 000 by default), because when a program floods its log the end is the part
+worth keeping.
 
-The report shows the entries inside the failing step, level-coloured, and pins
-`warn`/`error`/`fatal` entries onto the test timeline next to the steps, so a
-logged error is visible *where in the test it happened*. A followed file line
-carries no level — the driver does not invent one from the text, and neither
-does the report, so file lines appear in the log section but never in the
-timeline's notable set.
-
-`meta.logs` summarises the file (count, per-level counts, sources) and reports
-how many entries were evicted: the writer keeps the most recent
-`maxLogEntries` (10 000 by default), because when a program floods its log the
-end is the part worth keeping.
-
-Redaction happens at the source, in `@termwright/logs`, which is where the
-record's structure is known. **Lines tailed from a log file are not redacted** —
-they arrive as raw text, so treat them like `meta.crash.screenTail` when you
-store or forward an archive.
+Redaction happens at the source, in `@termwright/logs`. **Lines tailed from a
+log file are not redacted**: they arrive as raw text, so treat them the way you
+treat a crash's screen tail.
 
 ## When the program dies on its own
 
-If the driver reports a crash — a signal, or a non-zero exit nobody asked for —
-the writer stores it in `meta.crash` and marks the moment in `events.jsonl`. The
-report grows a **Crash** panel above the diffs: how it died, the screen it died
-on, the last inputs, and the session diagnostics. `trace.crashSemantic()`
-resolves the tree that was current at the time out of `semantics.jsonl`.
+A signal, or a non-zero exit nobody asked for, lands in `meta.crash` and is
+marked on the timeline in `events.jsonl`.
 
 ```ts
-const trace = await openTrace('out/server.twtrace');
-if (trace.meta.crash) {
+if (trace.meta.crash !== undefined) {
   console.error(trace.meta.crash.screenTail.join('\n'));
+  const tree = await trace.crashSemantic();   // the tree current at the time
 }
 ```
-
-When there is no archive to carry the crash — recording off, or
-`retain-on-failure` discarding it — pass one straight to the report instead:
-
-```ts
-results: [{ id: 't1', title: 'login', status: 'failed', crash: harnessCrash }]
-```
-
-`ReportCrash` is structural and JSON-safe, so it survives a trip through a
-Vitest worker's `task.meta`. A supplied crash wins over the trace's.
 
 **`meta.crash.screenTail` is not redacted.** It is what the terminal showed,
 verbatim — whatever the program or the tty's echo displayed is in there, secrets
 included. Treat an archive carrying a crash like a screenshot when you store it,
 upload it as a CI artifact or forward it. Pasted input is the one exception: its
 size is recorded, never its contents.
+
+## The report
+
+```ts
+import { generateHtmlReport } from '@termwright/trace';
+
+await generateHtmlReport({
+  outFile: 'out/report.html',
+  results: [
+    { id: 't1', title: 'login', status: 'failed', tracePath: 'out/login.twtrace' },
+  ],
+});
+```
+
+One HTML file that makes no network requests at all — the asciinema player is
+inlined from `node_modules` at generation time.
+
+For a failing test it derives the screen before the failing step and at failure,
+renders both to styled HTML with the changed rows highlighted, lists the
+semantic changes as sentences (`button "Submit" state changed to disabled`),
+shows the crash panel and the logs from the failing step, and embeds the
+recording positioned on that step's marker. Failed driver actions sit on the
+timeline beside the steps with their error code, so a failure reads as "the
+click never landed, and here is why" rather than as a screen that did not
+change.
+
+A test that **passed** keeps its archive too under `trace: 'on'`: its section is
+collapsed, but it names the `.twtrace` path and shows the whole log.
+
+Callers that already have the pieces can supply them instead of a trace —
+`visual` and `semantic` for a snapshot mismatch, `crash` when recording was off,
+`screenshots` for PNGs from `@termwright/screenshot`. The report embeds images;
+it never rasterises anything itself, which keeps a native renderer out of every
+test run.
 
 ## Development
 

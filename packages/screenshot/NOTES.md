@@ -1,5 +1,27 @@
 # @termwright/screenshot — implementation notes
 
+Open items are first; everything after them is settled.
+
+## Open
+
+- **Window chrome** (title bar, rounded corners) for documentation screenshots
+  was deliberately left out. It is presentation, and easy to add around the SVG,
+  so it stays out until something actually needs it.
+- **COLR v1** (gradients, transforms, compositing): fontkit exposes v0 layers,
+  so a v1 font degrades to its v0 layers or to an outline.
+- **The COLR path is not exercised against a real COLR font in CI.** macOS ships
+  `sbix` and Linux Noto ships `CBDT`, so no machine here has one. The layer code
+  is driven through a stand-in shaped like the fontkit surface it touches; that
+  tests the mapping and the colour conversion, not fontkit's own parsing.
+
+## Resolved
+
+- **Bold and italic used to be synthesised always.** Real faces are loaded when
+  the system has them; synthesis is the fallback. See "Bold and italic" below.
+- **Colour emoji used to force `selfContained: false`**, because colour glyphs
+  are not outlines and fell through to `<text>`. Bitmap strikes and COLR layers
+  are embedded now. See "Colour glyphs" below.
+
 ## Glyph outlines, with `<text>` as the fallback — not one or the other
 
 The brief offered two options: embed glyph outlines the way tui-test does, or
@@ -97,19 +119,16 @@ than the emoji font, so `⚠️` came out as a thin black outline. When the clus
 carries U+FE0F the author asked for the emoji presentation, so an outline is
 kept only as a last resort.
 
-### What is not covered
+### Costs of embedding colour glyphs
 
-- **COLR v1** (gradients, transforms, compositing) is not supported: fontkit
-  exposes v0 layers. A v1 font degrades to its v0 layers or to an outline.
-- **The COLR path is not exercised against a real COLR font in CI.** macOS ships
-  `sbix` and Linux Noto ships `CBDT`, so no machine here has one. The layer
-  code is driven through a stand-in shaped like the fontkit surface it touches;
-  that tests the mapping and the colour conversion, not fontkit's own parsing.
 - **Bitmap strikes are requested at a fixed 96 ppem.** Large `fontSize` values
   can look soft; the strike is picked by the font, not resampled.
-- **Size.** Each distinct emoji adds roughly 6–12 kB of base64 to the SVG.
-  They are deduplicated through `<defs>`, so a screen repeating one emoji pays
-  once, but a screen of many distinct ones grows.
+- Each distinct emoji adds roughly 6–12 kB of base64 to the SVG. They are
+  deduplicated through `<defs>`, so a screen repeating one emoji pays once, but
+  a screen of many distinct ones grows.
+
+The COLR limits live under "Open" at the top of this file, since they are things
+this package still cannot do rather than trade-offs it chose.
 
 ## Deduplicated `<defs>`, merged background runs
 
@@ -148,13 +167,3 @@ The PNG tests do decode: `inkCoverage` rasterises with `loadSystemFonts: false`
 and counts pixels differing from the background, which proves the `<defs>`/
 `<use>` outlines actually reach the raster — a blank PNG would otherwise pass a
 signature-and-dimensions check happily.
-
-## Open
-
-- **Bold/italic faces** instead of synthesis (see above).
-- **Colour emoji**: outlines cannot carry `COLR`/`CBDT` colour layers, so emoji
-  always fall back to `<text>` and depend on the viewer's emoji font. Embedding
-  colour glyph layers is possible in principle and worth revisiting if emoji in
-  screenshots turn out to matter.
-- **Window chrome** (title bar, rounded corners) for documentation screenshots
-  was deliberately left out; it is presentation, and easy to add around the SVG.

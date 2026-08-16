@@ -53,11 +53,13 @@ export async function commitFrame(
  * - **Described.** A semantic tree exists for it. This is what a locator
  *   depends on.
  *
- * The adapter publishes its first tree as soon as the handshake completes,
- * which is a socket round-trip — under load it can land well before Ink's
- * first frame has travelled through the pty. Settling on the tree alone then
- * hands back a harness over a blank screen, and the failure reads as "the
- * component rendered nothing" rather than "the harness returned too early".
+ * Neither implies the other, and under load they can arrive in either order.
+ * The adapter's first tree is a socket round-trip, so it can land well before
+ * Ink's first frame has travelled through the pty; settling on the tree alone
+ * hands back a harness over a blank screen. The paint can equally arrive first,
+ * with the tree still in flight; settling on the paint alone hands back a
+ * harness whose `getByRole` has nothing to match. Both failures read as a
+ * broken component rather than a harness that returned too early.
  */
 export async function waitForFirstFrame(
   harness: TerminalHarness,
@@ -69,36 +71,23 @@ export async function waitForFirstFrame(
     await harness.waitForRender({ after: 0, timeout: remaining(deadline) });
   }
 
-  if (harness.semanticTree() === null) {
-    // A session whose adapter never attaches is a generic session, which is a
-    // legitimate outcome rather than a failure — the grid locators still work.
-    // Bounded so that case costs a grace period, not the whole timeout.
-    await waitForTree(harness, Math.min(remaining(deadline), TREE_GRACE_MS));
-  }
+  // `settled()` is the session's own verdict: it waits out the negotiation and,
+  // for a session whose adapter attached, for the first tree to be paired. A
+  // session no adapter can still join resolves as generic, which is a
+  // legitimate outcome — grid locators work without a tree.
+  //
+  // This replaced a grace period of our own, which was a guess at how long a
+  // tree may take to follow the paint. The guess held on an idle machine and
+  // quietly degraded to "no tree" on a loaded one, handing back a harness whose
+  // semantic locators could not work yet. Guessing was never necessary: the
+  // session knows, and now says so.
+  await harness.settled({ timeout: remaining(deadline) });
 
   await quiesce(harness, { timeout: remaining(deadline) });
 }
 
-/** How long a painted frame waits for the tree that describes it. */
-const TREE_GRACE_MS = 1_000;
-
 function remaining(deadline: number): number {
   return Math.max(1, deadline - Date.now());
-}
-
-/** Resolves when a tree arrives, or when the grace period expires. */
-function waitForTree(harness: TerminalHarness, timeout: number): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const finish = (): void => {
-      clearTimeout(timer);
-      unsubscribe();
-      resolve();
-    };
-    const timer = setTimeout(finish, timeout);
-    timer.unref?.();
-    const unsubscribe = harness.events.on('semantic-revision', finish);
-    if (harness.semanticTree() !== null) finish();
-  });
 }
 
 /**

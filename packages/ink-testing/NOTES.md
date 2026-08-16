@@ -123,6 +123,27 @@ click. What is not identical:
   capped at 64 KiB; the runner re-validates it from scratch and refuses anything
   that is not a `file:` URL. It never evaluates a string.
 
+## "First frame" means painted *and* described
+
+`waitForFirstFrame` waits for two independent facts, because neither implies
+the other and under load they arrive in either order. The adapter's first tree
+is a socket round-trip and can beat Ink's first frame through the pty; the
+paint can equally land with the tree still in flight. Settling on one alone
+hands back a harness that is either blank or unaddressable, and both failures
+read as a broken component rather than a harness that returned too early.
+
+The tree half was originally a grace period of our own — wait up to a second
+for a tree, then carry on. That held on an idle machine and quietly degraded to
+"no tree" on a loaded one, which is how `parity.test.ts` came to read
+`semanticTree() === null` in a full run. The fix was to delete the guess:
+`harness.settled()` is the session's own verdict, waiting out the negotiation
+and, for a session whose adapter attached, for the first tree to be paired,
+while resolving immediately as generic when no adapter can still join. The
+session always knew; it just had no way to say so until `settled()` landed.
+
+The lesson generalises: when this package finds itself estimating how long
+something in the driver takes, the estimate is the bug.
+
 ## Gotchas for future maintainers
 
 - **A fixture component must keep the event loop alive.** `env-app.mjs` was
