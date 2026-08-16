@@ -48,6 +48,14 @@ export interface FakeDriver {
   readonly commits: readonly number[];
   /** Resolve once `count` snapshots have arrived. */
   waitForSnapshots(count: number, timeoutMs?: number): Promise<readonly SemanticSnapshot[]>;
+  /**
+   * Resolve once `count` revision commits have arrived.
+   *
+   * A commit is a separate frame that follows its snapshot, so waiting for
+   * snapshots says nothing about it: on a transport that does not coalesce
+   * writes the commit is still in flight.
+   */
+  waitForCommits(count: number, timeoutMs?: number): Promise<readonly number[]>;
   /** Resolve once a connection has completed the handshake. */
   waitForHandshake(timeoutMs?: number): Promise<HelloMessage>;
   /** Issue a `get-tree` request and await the adapter's answer. */
@@ -199,6 +207,10 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
     async waitForSnapshots(count, timeoutMs = 5_000) {
       await until(() => snapshots.length >= count, timeoutMs, `${count} snapshot(s)`);
       return snapshots;
+    },
+    async waitForCommits(count, timeoutMs = 5_000) {
+      await until(() => commits.length >= count, timeoutMs, `${count} revision commit(s)`);
+      return commits;
     },
     async waitForHandshake(timeoutMs = 5_000) {
       await until(() => hello !== undefined, timeoutMs, 'handshake');

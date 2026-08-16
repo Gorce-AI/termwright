@@ -48,6 +48,34 @@ export function markersIn(output: string, token: string, sessionId: string): Fou
   return found;
 }
 
+/**
+ * Wait until `count` verified markers are present in a stream.
+ *
+ * The marker for a revision is written *after* its snapshot has been pushed and
+ * after stdout has drained, so a test that waited on the snapshot and then read
+ * the stream once is asserting on an effect that has not happened yet. It
+ * survives on a transport that coalesces writes and fails where one does not.
+ *
+ * @param read - Returns the stream contents as captured so far.
+ */
+export async function waitForMarkers(
+  read: () => string,
+  token: string,
+  sessionId: string,
+  count: number,
+  timeoutMs = 5_000,
+): Promise<FoundMarker[]> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const found = markersIn(read(), token, sessionId);
+    if (found.length >= count) return found;
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${count} marker(s); saw ${found.length}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 /** The stream with every marker sequence removed, for byte-identity comparisons. */
 export function stripMarkers(output: string): string {
   return output.replaceAll(markerPattern(), '');

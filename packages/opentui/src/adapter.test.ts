@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN, validateSnapshot, DEFAULT_LIMITS } from '@termwright/protocol';
 import { describeRenderable, instrumentRenderer, type SemanticSession } from './instrument.js';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
-import { markersIn, stripMarkers } from './testing/markers.js';
+import { markersIn, stripMarkers, waitForMarkers } from './testing/markers.js';
 import { FakeRenderable, FakeRenderer } from './testing/fake-renderer.js';
 
 const sessions: SemanticSession[] = [];
@@ -143,10 +143,12 @@ describe('an instrumented session', () => {
     await driver.waitForSnapshots(1);
     renderer.commit('FRAME-TWO');
     await driver.waitForSnapshots(2);
-    await settle();
 
+    // The marker lands after its snapshot and after the stream drains, so the
+    // snapshot it follows proves nothing about it; it has to be waited for on
+    // its own terms rather than read once.
+    const markers = await waitForMarkers(() => renderer.output(), driver.token, driver.sessionId, 2);
     const output = renderer.output();
-    const markers = markersIn(output, driver.token, driver.sessionId);
     expect(markers.length).toBeGreaterThanOrEqual(2);
 
     for (const marker of markers) {
@@ -183,13 +185,19 @@ describe('an instrumented session', () => {
     instrument(renderer, driver);
     await driver.waitForHandshake();
 
+    // Two separate revisions, so the pause between them stays: back-to-back
+    // commits are one publication.
     renderer.commit();
     await settle();
     renderer.commit();
-    await settle();
 
+    // Waited for, not settled into: the commit is its own frame, and a fixed
+    // pause only reaches it wherever the transport hands both writes over at
+    // once. That is how the sibling adapter's version of this failed on
+    // Windows named pipes.
+    const commits = await driver.waitForCommits(2);
+    expect(commits.length).toBeGreaterThanOrEqual(2);
     expect(driver.snapshots).toHaveLength(0);
-    expect(driver.commits.length).toBeGreaterThanOrEqual(2);
   });
 
   it('emits no marker when the driver disabled it', async () => {
@@ -215,7 +223,10 @@ describe('surviving the driver', () => {
 
     renderer.commit('before');
     await driver.waitForSnapshots(1);
-    await settle();
+    // Cutting before the first marker has been written would make the rest of
+    // this vacuous: the publisher suppresses markers once the channel is gone,
+    // so `beforeCut` has to be a stream that already contains one.
+    await waitForMarkers(() => renderer.output(), driver.token, driver.sessionId, 1);
 
     driver.cutConnection();
     await settle();
