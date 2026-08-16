@@ -13,10 +13,21 @@ A `.twtrace` is a directory (zippable for transport) holding four files:
 
 | File | Content |
 |---|---|
-| `meta.json` | session id, command, viewport, platform, exit status |
+| `meta.json` | session id, command, viewport, platform, terminal profile, exit status, crash |
 | `session.cast` | asciicast **v3**; `test.step()` titles become markers |
-| `events.jsonl` | inputs, resizes, steps, locator actions, assertions |
+| `events.jsonl` | inputs, resizes, steps, locator actions, assertions, crash |
 | `semantics.jsonl` | one semantic tree per revision, with its cast offset |
+| `logs.jsonl` | [application logs](../app-logs/) — absent when the session logged nothing |
+
+`meta.terminalProfile` records how the session counted characters, so a replay
+measures the way the session did rather than the way the replaying machine
+happens to — see [Terminal profiles](../terminal-profiles/).
+
+:::caution[An archive can carry unscrubbed output]
+`meta.crash.screenTail` and any followed log file's lines are stored **raw** —
+they are what the program printed. Treat an archive like a screenshot when
+storing or forwarding it.
+:::
 
 The layout is normative in
 [`CONTRACTS.md`](https://github.com/gorce-ai/termwright/blob/main/CONTRACTS.md)

@@ -41,11 +41,23 @@ generic-mode on Windows today.
 
 - Ink publishes no `cursor` field: Ink exposes no way to read the committed
   cursor position from outside a component.
-- The `text-ranges` and `tree-diffs` capabilities are not claimed by any adapter
-  yet. Both are additive in 1.x.
+- The `text-ranges` capability is not claimed by any adapter yet. It is additive
+  in 1.x.
 - Bounds are only trustworthy where an adapter claims `absolute-bounds` — for
   Ink, that means interactive alternate-screen renders, and it drops bounds
   entirely once `<Static>` shifts the layout region.
+
+**Terminal profiles**
+
+- `unicodeVersion` accepts only `'11'`. The intended `'15-graphemes'` value
+  needs an addon that never finishes importing inside a Vitest worker, which
+  would hang the suite of every package that depended on it. So a ZWJ sequence
+  like 👩‍👩‍👧 occupies three cells, not one.
+- `reflowCursorLineOnResize` is named for exactly what it reaches: xterm.js
+  always reflows *wrapped* lines, and the cursor's line is the only choice on
+  offer.
+- The runner's browser pane cannot reproduce every profile, and says so when it
+  cannot — see [Terminal profiles](../../guides/terminal-profiles/).
 
 **Runner UI**
 
@@ -54,8 +66,15 @@ generic-mode on Windows today.
 - Screenshots are a separate package by design
   ([`@termwright/screenshot`](../../guides/traces/)), not something the runner
   does.
-- There is no committed browser test suite yet; the panes were verified through
-  Playwright by hand.
+
+**Accessibility**
+
+- The runner's own accessibility was verified through Chromium's computed
+  accessibility tree. **No real screen reader was run**, so what is proven is
+  the tree, not the announcement — see [Accessibility](../accessibility/).
+- The AccessKit export is bridge-ready, not bridged: a terminal application has
+  no native window to attach a tree to, and cell coordinates do not convert to
+  pixels without the emulator's metrics.
 
 **Screenshots**
 
@@ -64,24 +83,24 @@ generic-mode on Windows today.
   font exists, and `selfContained` / `fallbackCharacters` say when that applies.
 - `bold` is synthesised by stroking and `italic` by shearing, because the
   outlines come from the regular face.
-- No MCP tool returns a PNG yet: the renderer exists, the wiring into
-  `trace.frame_at` and `trace.diff` does not, and asking for one fails loudly
-  rather than silently.
 
 **MCP**
 
-- No tool returns `ImageContent`. A real PNG needs a rasteriser, and headless
-  Chromium is not an acceptable dependency; `snapshot {variant: "full"}` writes
-  text, ANSI and HTML to disk instead.
 - Concurrent *driver* sessions are covered by conformance; concurrent MCP
   sessions have their own ownership rules still to certify.
+- A screenshot large enough to crowd a model's context window is a real
+  possibility; lower `screenshotScale` or resize the terminal.
 
-**Component testing**
+**Application logs**
 
-- `launchInkFixture` has no `rerender`. Change props by relaunching, or drive
-  the change through input.
-- There is no `mountOpenTui` yet, though the backend, streams and settlement
-  helpers are framework-agnostic and exported for exactly that.
+- `failOnLogLevel` never fires on a **file line**: a followed file yields text,
+  not levels, and guessing severity from the word "error" would fail tests over
+  a URL.
+- Redaction covers credential *shapes*, not generic high-entropy strings —
+  deliberately, because redacting anything random-looking destroys the git SHAs,
+  request ids and trace ids that make a log worth reading.
+- A mount does not capture `console.*`: a mounted component shares the runner's
+  process, so its `console` is Vitest's own.
 
 ## Traps that cost an afternoon
 

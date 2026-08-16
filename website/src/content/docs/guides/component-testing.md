@@ -32,7 +32,8 @@ rendered through [`@termwright/ink`](../../adapters/ink/) and annotated with
 | where the component runs | this process | a child process, in a real pty |
 | props | anything, including callbacks and spies | bounded JSON |
 | speed | ~100 ms per mount | ~400 ms per launch |
-| `rerender`, `renderError` | yes | no |
+| `rerender` | a React element | props, as bounded JSON |
+| `renderError` | yes | no |
 | raw mode, signals, `SIGWINCH` | modelled | real |
 
 Reach for `mountInk` by default, and for `launchInkFixture` when the *process*
@@ -181,6 +182,14 @@ ConPTY, or a machine where the native pty binding failed to build.
   `applyOnlcr` — the pty stand-in, exported for adapters other than Ink.
 - `encodeFixturePayload`, `assertJsonProps` — the fixture boundary.
 
-`launchInkFixture` has no `rerender`: prop updates in a fixture would need a
-control channel into the runner. Change props by relaunching, or drive the
-change through input.
+A fixture's props can be changed after launch too:
+
+```ts
+await harness.rerender({label: 'Reject'});
+```
+
+That travels over a private socket the harness created, not over stdin — stdin
+belongs to the simulated user, and multiplexing commands onto it would make
+every keystroke test depend on nobody typing the escape sequence the harness
+happens to use. The component itself is fixed when the fixture starts: a
+rerender changes what it shows, never which code runs.

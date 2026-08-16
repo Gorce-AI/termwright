@@ -87,6 +87,29 @@ to drain, and writes the DCS render-commit marker. The driver pairs tree and
 pixels on that marker, and a frame superseded before its snapshot goes out is
 dropped rather than mispaired.
 
+## Component testing
+
+`mountOpenTui` runs a renderer in-process, the way `mountInk` does for Ink:
+
+```ts
+import {mountOpenTui} from '@termwright/opentui/testing';
+
+const harness = await mountOpenTui((renderer) => {
+  const approve = new BoxRenderable(renderer, {id: 'approve', width: 13, height: 1});
+  approve.add(new TextRenderable(renderer, {content: '[ Approve ]'}));
+  renderer.root.add(approve);
+  describeRenderable(approve, {role: 'button', name: 'Approve'});
+}, {columns: 40, rows: 10});
+
+await harness.getByRole('button', {name: 'Approve'}).click();
+await harness.commit(() => { status.content = 'Approved'; });
+await harness.close();
+```
+
+`commit()` is the settlement primitive: it applies a mutation and resolves once
+the resulting frame has been published, so an assertion after it reads the new
+tree rather than the old one.
+
 ## Also exported
 
 `readAdapterEnv`, `asSemanticRole`, `defaultActionsFor`, `mapRenderableClass`

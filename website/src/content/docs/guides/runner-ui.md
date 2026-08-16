@@ -9,8 +9,17 @@ program. Three panes, three modes.
 | Pane | What it shows |
 |---|---|
 | Terminal | xterm.js fed by the session's output, with semantic bounds drawn on top |
-| Inspector | the accessibility tree — hover to highlight, click to generate a selector |
+| Inspector | the accessibility tree — hover to highlight, click to generate a selector. Also carries the **Logs** and **Commands** tabs |
 | Timeline | tests and steps live; a scrubber with marker jumps in post-mortem |
+
+The inspector pane is a real ARIA tree, navigable by keyboard — see
+[Accessibility](../../reference/accessibility/). The **Logs** tab shows
+[application logs](../app-logs/) on the same timeline as everything else, with
+notable levels marked on the scrubber; **Commands** lists the actions the
+session ran, from the trace's event log.
+
+A crash panel appears above the panes when the session died on its own, with a
+button that seeks to the moment it happened.
 
 - **Live** — watches a Vitest run through a reporter.
 - **Post-mortem** — opens a `.twtrace` from CI and lets you move through it in
@@ -101,6 +110,20 @@ test('approves the command', async ({terminal}) => {
 Codegen is easier in a terminal than in a browser, for once: termwright owns the
 whole input stream, so there is nothing to guess about what the user did.
 
+## When the pane cannot match the profile
+
+The browser pane is a real xterm.js, but not the headless build, and it cannot
+reproduce every [terminal profile](../terminal-profiles/). When a session or
+archive announces one it cannot match, the UI says so rather than rendering
+something subtly wrong in silence:
+
+```
+profile "iterm2-ambiguous-wide" — this view measures with Unicode 11 widths
+```
+
+The semantics, the timeline and the tree remain exact; only that pane's column
+arithmetic may differ from what the session saw.
+
 ## Security
 
 A live terminal is a shell, and record mode runs a program the user named in the
@@ -122,6 +145,10 @@ all bounded, and the hostile-input suite runs under
   [`@termwright/screenshot`](../traces/), which renders SVG with embedded glyph
   outlines and PNG through resvg — deliberately a separate package, so a native
   renderer stays out of every test run.
-- **An automated browser suite.** The three panes, selector generation,
-  pick-mode hit testing and time travel were exercised through Playwright
-  against a running server; a committed browser project belongs to the CI lane.
+
+## How this is tested
+
+The panes, time travel, the log and crash panels and the live control round trip
+are covered by a committed browser suite that runs on every CI build — a real
+Chromium against a real server serving a real `.twtrace` archive written by the
+trace writer.

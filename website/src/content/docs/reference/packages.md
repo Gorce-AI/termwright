@@ -20,7 +20,9 @@ description: What each package is for, what it may depend on, and which one you 
 
 | Package | Purpose |
 |---|---|
-| `@termwright/protocol` | Schemas, limits, roles, framing, handshake, marker, validation. Zero framework dependencies. |
+| `@termwright/protocol` | Schemas, limits, roles, framing, handshake, marker, validation, tree deltas, the AccessKit export. Zero framework dependencies. |
+| `@termwright/vt` | The shared VT core: one terminal factory, one set of [terminal profiles](../../guides/terminal-profiles/). |
+| `@termwright/logs` | [Application log](../../guides/app-logs/) capture: the `termwright:log` channel, redaction, pino/winston/consola/OTel bridges. |
 | `@termwright/driver` | PTY + VT emulator, sessions, screen model, locators, actions, waits, typed errors, recording hooks. |
 | `@termwright/test` | Vitest preset: fixtures, matchers, semantic and cell snapshots, trace reporter, flaky classification, config. |
 | `@termwright/ink` | Production adapter for Ink 7 (`aria-*` props + `useSemantic`). |
@@ -49,6 +51,12 @@ These are enforced by review, and they are what keeps the driver installable in
 a project that has never heard of React:
 
 - `protocol` depends on `zod` only — never on React, Ink, MCP, PTY or the driver;
+- `vt` depends on the xterm packages only, and **driver, trace, screenshot and
+  ui build terminals solely through its factory**. Private per-package
+  terminal factories are how the Unicode 6/11 width split happened, and are
+  banned;
+- `logs` depends on `protocol` only; the logger libraries are optional peers,
+  never runtime dependencies;
 - `driver` depends on `protocol` plus the PTY and VT libraries — never on Ink,
   Vitest or MCP;
 - **adapters** depend on `protocol` and their framework — never on the driver;

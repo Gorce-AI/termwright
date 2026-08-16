@@ -100,6 +100,13 @@ Generic matches resolve to rectangles, `ResolvedTarget.semantic` is `false`, and
 every diagnostic says `semanticTree: false`. If a test needs `getByRole`, the
 answer is to [add an adapter](../../adapters/), not to guess.
 
+:::danger[A locator matching nothing while the screen looks right is not a selector bug]
+It almost always means the semantic channel died: the application keeps
+rendering, the tree stopped arriving. Rewriting the selector cannot fix that.
+Check `capabilities().semanticTree` and `diagnostics()` first — see
+[Debugging a failing test](../debugging/).
+:::
+
 ## Actions are physical
 
 Every action goes out through the pseudo-terminal. Before a pointer action the

@@ -133,6 +133,20 @@ always a sign that a wait was missing:
 | `waitForStable({frames, timeout})` | no screen or semantic revision for a quiet interval, and no unpaired render in flight |
 | `waitForReady()` | the program signals a shell prompt (OSC 133), or the screen settled |
 | `waitForExit()` | the process exits |
+| `settled()` | negotiation has reached its verdict — after this, `semanticTree` will not change again |
+
+`settled()` is the one to use when a test needs to *branch* on whether the
+program published a tree. `capabilities()` answers immediately with what is
+known so far, and right after launch three things can still be pending: the
+negotiation window, the grace a slow adapter gets to attach after it, and the
+first tree of an adapter that did attach.
+
+```ts
+const capabilities = await app.settled();
+if (capabilities.semanticTree) {
+  await app.getByRole('button', {name: 'Approve'}).click();
+}
+```
 
 One consequence worth internalising early: **the semantic tree lags the screen
 by design.** The render-commit marker follows the frame's bytes, so a

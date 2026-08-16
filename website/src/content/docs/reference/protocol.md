@@ -56,9 +56,76 @@ Three kinds of traffic on one channel, CDP-style:
 3. **subscriptions** — the driver declares whether it wants full snapshots,
    diffs, or bare revision numbers.
 
-v1 ships full snapshots after each commit. The request/response frame is in the
-protocol from day one so that 1.x diffs are additive rather than breaking, and
+Full snapshots after each commit are the baseline. Deltas are negotiated, and
 every delta binds an exact base revision — any gap forces a full rehydrate.
+
+## Tree deltas
+
+An adapter that announces the `tree-diffs` capability can subscribe the driver
+to `tree-delta` messages instead of a full snapshot after each commit. A
+semantic tree changes on nearly every keystroke, and resending all of it each
+time is what makes the semantic channel expensive — so **an adapter that offers
+deltas gets them by default**.
+
+```ts
+import {applyTreeDelta, validateTreeDelta} from '@termwright/protocol';
+
+const checked = validateTreeDelta(body, limits);        // shape only
+if (!checked.ok) return closeWith('malformed', checked.detail);
+
+const composed = applyTreeDelta(held, checked.delta, limits);
+if (!composed.ok) {
+  // Never patch around a mismatch — ask for the whole tree instead.
+  if (composed.code === 'revision') return requestFullTree();
+  return closeWith('malformed', composed.detail);
+}
+```
+
+### Composition rules
+
+Normative — every adapter and every client must agree on all four, or two
+implementations will hold different trees while both believe they are correct:
+
+1. **`changed` upserts by id, replacing a node wholesale.** Never field-merged:
+   merging would need a third state meaning "unset this optional field", which
+   the wire cannot express.
+2. **`removed` removes each id together with its subtree.** The cascade is what
+   keeps deltas small — dropping a dialog is one id, not one per descendant —
+   and it is the only rule that cannot leave orphans behind.
+3. **`rootIds`, when present, replaces the root list.** When absent, the base
+   roots carry over minus anything removed. So *introducing a new root requires
+   sending `rootIds`*; otherwise the parentless node is missing from the root
+   list and validation rejects it.
+4. **Removals apply before upserts**, so a single delta can rescue a node out of
+   a subtree it also removes.
+
+`cursor`, when present, replaces the cursor; absent means **unchanged**. Without
+that rule a diffs-only session could never move the cursor — which in a TUI
+moves on nearly every keystroke — making the mode useless for exactly the
+interactive applications it exists to make cheap.
+
+:::caution[A delta can set the cursor but cannot clear it]
+`{visible: false}` means there is a cursor and it is hidden. An absent `cursor`
+on a snapshot means there is no cursor information at all. Those differ, so a
+producer whose tree loses its cursor entirely **must send a full snapshot**.
+:::
+
+### When a delta cannot be composed
+
+The driver asks for a full tree (`get-tree`) and ignores further deltas until it
+arrives. That is reported as **`delta-resync`**, not as a dropped revision:
+nothing was lost, and a repair should not read like damage. The last good tree
+stays observable throughout.
+
+If you suspect deltas are involved in a bug, take them out of the picture:
+
+```ts
+await terminal.launch({command, treeUpdates: 'snapshots'});
+```
+
+That declines deltas from an adapter that offers them, so the session behaves
+exactly as it did before deltas existed. It is the switch to reach for when a
+replay and a live session disagree and the delta path is a suspect.
 
 ## The render marker
 

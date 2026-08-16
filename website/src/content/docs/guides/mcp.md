@@ -166,16 +166,20 @@ loop works on a recording from a machine it has never seen.
 
 ## Screenshots
 
-`terminal.snapshot {variant: "full"}` writes the complete dump — text, ANSI and
-the HTML rendering — to a file under the system temporary directory and returns
-only refs plus the path.
+`terminal.snapshot` and `trace.frame_at` take `screenshot: true` and attach a
+PNG as `ImageContent`, rendered by [`@termwright/screenshot`](../traces/) — a
+cell grid becomes an SVG with embedded glyph outlines, rasterised through resvg.
+No browser is involved.
 
-No tool returns `ImageContent` yet. `trace.frame_at` and `trace.diff` accept a
-`screenshot` flag, and passing it today fails with `unsupported-action` and says
-why rather than silently ignoring it.
+```jsonc
+{"terminal": "t1", "screenshot": true, "screenshotScale": 2, "screenshotTheme": "light"}
+```
 
-The renderer itself now exists — [`@termwright/screenshot`](../traces/) produces
-SVG with embedded glyph outlines and PNG through resvg, with no browser
-involved — so what remains is wiring it into these tools. Until that lands, an
-agent gets the reconstructed screen text and the compact tree, which is what it
-can actually reason over anyway.
+`structuredContent.screenshot` carries the size and `selfContained` — false when
+a character had no embedded outline and fell back to a font that may not exist
+where the image is viewed. If an image comes back too large for the model's
+window, lower `screenshotScale` or resize the terminal.
+
+`terminal.snapshot {variant: "full"}` remains the text path: it writes the
+complete dump — text, ANSI and HTML — to a file and returns only refs plus the
+path.

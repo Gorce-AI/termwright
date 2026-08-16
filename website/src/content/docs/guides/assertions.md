@@ -15,8 +15,9 @@ it is what makes an assertion safe immediately after physical input.
 | `toBeFocused()` | locator |
 | `toHaveState({disabled: true})` | locator; asserts only the keys you list |
 | `toHaveText('Save' \| /Sav/)` | locator (exact, whitespace-normalized) or terminal (substring of the grid) |
-| `toMatchSemanticSnapshot(expected?)` | terminal or a `SemanticSnapshot` |
+| `toMatchSemanticSnapshot(expected?, {within})` | terminal or a `SemanticSnapshot` |
 | `toMatchCellSnapshot(expected?)` | terminal or a `ScreenSnapshot` |
+| `toHaveLogged({level, message, …})` | terminal — [application logs](../app-logs/) |
 
 ```ts
 await expect(app.getByRole('button', {name: 'Approve'})).toBeVisible();
@@ -102,6 +103,26 @@ time the screen legitimately gains a node.
 Because the stored form is strict, update mode `changed` rewrites it on any
 textual difference. Review those diffs like source; that file *is* the
 assertion.
+
+### Scoping a snapshot
+
+A strict snapshot of a whole screen breaks whenever anything on it changes,
+which is often not what you want. Scope it to the part under test:
+
+```ts
+await expect(app).toMatchSemanticSnapshot(
+  `
+    - button "Approve" [focused]
+    - button /^Rej/
+  `,
+  {within: app.getByRole('dialog')},
+);
+```
+
+`within` takes a locator, excludes the node itself from the pattern, and is
+re-resolved on every attempt — so a re-render that mints new node ids does not
+invalidate the scope. Use `{rootId}` instead when you want the node itself to be
+the top level of the snapshot.
 
 ## Cell snapshots, and why both
 

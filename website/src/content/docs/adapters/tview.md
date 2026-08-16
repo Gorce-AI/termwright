@@ -120,6 +120,22 @@ if client != nil && client.Start(protocol.DialTimeout) == nil {
 }
 ```
 
+## Application logs
+
+`slog` records reach the driver instead of corrupting the render:
+
+```go
+session, _ := termwright.Attach(app, root, termwright.WithLogs())
+slog.SetDefault(slog.New(protocol.NewSlogHandler(session.Client(), nil)))
+
+slog.Error("policy missing", "path", "/etc/app/policy.json")  // never painted
+```
+
+`NewSlogHandler(nil, nil)` is never enabled, so the dormant path costs nothing.
+Groups and attributes flatten to dotted keys, levels map onto the wire's closed
+ladder, and a record the budget refuses leaves a gap in `seq` rather than being
+renumbered. See [Application logs](../../guides/app-logs/).
+
 ## Limitations
 
 - **Windows named pipes are not supported**; the client stays dormant on a

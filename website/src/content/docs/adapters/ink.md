@@ -97,6 +97,19 @@ instrumented run.
 The ordering matters and is part of the contract: snapshot, then
 `revision-commit`, then the marker after the frame's last byte.
 
+## Deltas and logs
+
+The adapter claims `tree-diffs`, so when the driver asks for `subscribe: 'diffs'`
+it sends a tree delta instead of a whole snapshot after each commit. The first
+tree of a session is always a full snapshot, and so is any update whose delta
+would cost more than sending the tree outright.
+
+It also claims `logs`: when the driver enables that capability, the adapter
+subscribes to the `termwright:log` channel and forwards records — including
+`console.error` / `warn` / `log` / `info` / `debug`, tagged `logger: 'console'`.
+Pass `semantics: {captureConsole: false}` if your logger already prints and you
+would rather not see both. See [Application logs](../../guides/app-logs/).
+
 ## Failure behaviour
 
 The adapter never throws across its boundary. A refused connection, a rejected
@@ -109,8 +122,8 @@ never broken by the thing that was supposed to observe it.
 - **No `cursor` in snapshots.** Ink has `useCursor` / `setCursorPosition` but
   exposes no way to read the committed cursor position from outside a component,
   so the protocol field stays absent until it does.
-- **`text-ranges` and `tree-diffs` capabilities are not claimed.** Both are
-  additive in 1.x and neither is needed by the current driver.
+- **The `text-ranges` capability is not claimed.** It is additive in 1.x and the
+  current driver does not need it.
 - **Windows is untested.** Named pipes are handled by `node:net` transparently,
   but nothing in this package has been exercised on a ConPTY host.
 

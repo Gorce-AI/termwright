@@ -73,6 +73,17 @@ Live terminal, semantic inspector, a timeline you can scrub, and a recorder that
 </Card>
 </CardGrid>
 
+## The assertion nobody writes
+
+A TUI cannot print diagnostics to the screen without corrupting its own render,
+so they go to a logger — where a test stops seeing them. termwright follows the
+log file, or takes structured records over a public
+`termwright:log` channel, and **fails a test that passed while the program
+logged an error**. Clicking through a flow while the program logs
+`error: failed to save` is not a passing test; it is a test that did not look.
+
+[Application logs →](guides/app-logs/)
+
 ## Honest about what it cannot see
 
 A program without a termwright adapter is still fully testable — text, cells,

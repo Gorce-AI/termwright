@@ -15,11 +15,16 @@ export default defineTermwrightConfig({
   trace: 'retain-on-failure',            // 'on' | 'retain-on-failure' | 'off'
   outputDir: 'termwright-report',
   timeouts: {expect: 5_000, action: 5_000},
+  failOnLogLevel: 'error',               // 'warn' | 'error' | 'fatal' | false
   profiles: {
     ci: {trace: 'on', palette: XTERM_PALETTE},
   },
 });
 ```
+
+`failOnLogLevel` is what makes a test fail when the program logged an error
+nobody asserted on. Turn it off per test with `terminal.failOnLogLevel(false)`;
+see [Application logs](../../guides/app-logs/).
 
 ```ts
 // vitest.setup.ts
@@ -75,8 +80,20 @@ const app = await terminal.launch({
   scrollbackLines: 2_000,      // default
   timeouts: {action: 15_000},
   recording: {enabled: true, idleTimeLimit: 2},
+
+  terminalProfile: 'default',  // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
+  logs: [{path: 'var/app.log', label: 'app'}],
+  treeUpdates: 'auto',         // 'snapshots' declines deltas
+  debug: false,                // same as TERMWRIGHT_DEBUG=1, for one session
 });
 ```
+
+| Option | What it is for |
+|---|---|
+| `terminalProfile` | how this session counts characters — [Terminal profiles](../../guides/terminal-profiles/) |
+| `logs` | files to follow, so their lines become assertable — [Application logs](../../guides/app-logs/) |
+| `treeUpdates` | `'snapshots'` declines tree deltas from an adapter that offers them, which is the switch to reach for when a replay and a live session disagree |
+| `debug` | streams the [debug log](../../guides/debugging/) to stderr for this session |
 
 ### `envMode`
 
@@ -118,6 +135,7 @@ order of specificity.
 | `TERMWRIGHT_UPDATE_SNAPSHOTS` | `all` / `changed` / `missing` / `none` — see [snapshots](../../guides/assertions/) |
 | `TERMWRIGHT_TIMEOUT_*` | the five timeout classes above |
 | `TERMWRIGHT_SKIP_PTY` | skip suites that need a pseudo-terminal |
+| `TERMWRIGHT_DEBUG` | `1` for the debug log, `all` to include raw PTY traffic — see [Debugging](../../guides/debugging/) |
 | `TERMWRIGHT_UI_URL` | where the UI reporter publishes; unset means it does nothing |
 | `TERMWRIGHT_ENDPOINT`, `TERMWRIGHT_TOKEN`, `TERMWRIGHT_PROTOCOL` | injected by the driver into the child; never set these yourself |
 

@@ -63,9 +63,18 @@ Roles come from the widget class, matched along the MRO, so your own
 to `list`, `Label` / `Static` to `text`, containers to `region`, `ModalScreen`
 to `dialog`.
 
-Names come from the widget's label, placeholder, renderable, `name`, or DOM
-`id`, in that order; the DOM `id` is also published as `testId`. Override either
-per widget:
+Names come from the widget's label, placeholder, content, `name`, or DOM `id`,
+in that order; the DOM `id` is also published as `testId`.
+
+Roles that ARIA names from content — `listitem`, `menuitem`, `tab`, `button`,
+`checkbox`, `radio`, `cell`, `row`, `heading` — fall back to the text of what
+they *contain* before they fall back to the id. That is what makes
+`ListItem(Label("Open settings"))` addressable as
+`getByRole('listitem', {name: 'Open settings'})`: the item holds no text of its
+own, the `Label` inside does. Containers are never named this way — a `region`
+would otherwise be named by everything on the screen.
+
+Override either per widget:
 
 ```python
 label = Label("87%")
@@ -115,6 +124,27 @@ the marker immediately and sends the frames on a background task, in order.
 `TERMWRIGHT_TOKEN` are absent, and `enable_semantics()` installs nothing. That
 is deliberately expressed as a constructor returning nothing, so the calling app
 needs no feature flag and shipping the adapter in production costs one import.
+
+## Application logs
+
+The client can forward Python's `logging` to the driver, so `log.error(...)`
+becomes assertable test state:
+
+```python
+from termwright.client import CAPABILITIES_WITH_LOGS
+from termwright.logging_bridge import install_log_handler
+
+client = client_from_env(adapter_name="my-tui", adapter_version="1.0.0",
+                         capabilities=CAPABILITIES_WITH_LOGS)
+if client is not None and await client.start():
+    install_log_handler(client)
+```
+
+`install_log_handler(None)` is a no-op, so an app can call it unconditionally.
+Levels map onto the wire's closed ladder (anything below `DEBUG` is `trace`,
+`CRITICAL` is `fatal`), `extra=` fields become flat dotted attributes, and a
+record the budget refuses leaves a gap in `seq` so the driver can report the
+loss. See [Application logs](../../guides/app-logs/).
 
 ## Limitations
 
