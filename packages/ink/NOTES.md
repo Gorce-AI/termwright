@@ -115,10 +115,18 @@ also why `semantics.captureConsole: false` exists.
   `hello-ack.logs` (`maxRecordsPerSecond` refill, `burst` capacity) drops
   over-budget records before they reach the socket, because a log storm that
   got that far would compete with the semantic tree for the frame budget.
-  Dropped records are *not* renumbered: `seq` comes from the publisher, so a
-  drop leaves a gap and the gap is how the driver counts what was lost. Note
-  that a trailing drop is invisible until a later record lands — the test
+- **The adapter owns wire `seq`** (contract change of 2026-08-16).
+  `termwright:log` is a public channel, so two independent publishers can each
+  emit `seq: 7` in good faith while the wire requires strict increase; records
+  are therefore renumbered in send order. The counter is consumed **before**
+  the budget check, so a dropped record still burns its number and an upward
+  gap keeps meaning "dropped at the source" rather than "never seen". Note
+  that a trailing drop stays invisible until a later record lands — the test
   asserts the gap only after publishing again past the refill.
+  The publisher's own number survives as the `origin.seq` attribute, which
+  makes a duplicated publisher diagnosable, but it is dropped rather than
+  allowed to push the record past `MAX_LOG_ATTRS` or `maxLogRecordBytes`:
+  turning a log line into a malformed frame is worse than losing a hint.
 - **`logs` is announced whenever the process is instrumented**, because the
   diagnostics channel is always a possible source: any dependency can publish
   to `termwright:log` without importing anything of ours. Whether records

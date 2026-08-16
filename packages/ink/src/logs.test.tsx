@@ -1,6 +1,11 @@
 import { Box, Text, type Instance } from 'ink';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hasLogSubscribers, publishLog, resetLogSequence } from '@termwright/logs';
+import {
+  getLogChannel,
+  hasLogSubscribers,
+  publishLog,
+  resetLogSequence,
+} from '@termwright/logs';
 import { DEFAULT_LIMITS, type LogRecord } from '@termwright/protocol';
 import { semanticRender } from './index.js';
 import { captureConsole, startLogForwarder } from './logs.js';
@@ -128,7 +133,10 @@ describe('application logs', () => {
       expect(record?.level).toBe('error');
       expect(record?.message).toBe('payment failed');
       expect(record?.logger).toBe('billing');
-      expect(record?.attrs).toEqual({ orderId: 42, retried: true });
+      // The application's own attributes survive verbatim; the adapter adds
+      // only the publisher-sequence hint alongside them.
+      expect(record?.attrs).toMatchObject({ orderId: 42, retried: true });
+      expect(record?.attrs?.['origin.seq']).toBeTypeOf('number');
       expect(record?.ts).toBeGreaterThan(0);
     });
 
@@ -160,6 +168,55 @@ describe('application logs', () => {
     });
   });
 
+  describe('seq authority', () => {
+    it('renumbers colliding publishers into a strictly increasing wire sequence', async () => {
+      const { driver } = await launch({ logs: GENEROUS, captureConsole: false });
+      const raw = getLogChannel();
+
+      // Two independent publishers on the public channel, each convinced it
+      // owns the numbering. Both are valid records, so nothing coerces them.
+      raw.publish({ ts: Date.now(), level: 'info', message: 'from A', seq: 7 });
+      raw.publish({ ts: Date.now(), level: 'info', message: 'from B', seq: 7 });
+      raw.publish({ ts: Date.now(), level: 'info', message: 'from A again', seq: 3 });
+
+      const records = await driver.waitForLogs(3);
+      const seqs = records.map((record) => record.seq);
+
+      expect(seqs).toHaveLength(3);
+      for (let index = 1; index < seqs.length; index += 1) {
+        expect(seqs[index] as number).toBeGreaterThan(seqs[index - 1] as number);
+      }
+      expect(records.map((record) => record.message)).toEqual([
+        'from A',
+        'from B',
+        'from A again',
+      ]);
+    });
+
+    it('keeps the publisher sequence as a local hint', async () => {
+      const { driver } = await launch({ logs: GENEROUS, captureConsole: false });
+
+      getLogChannel().publish({ ts: Date.now(), level: 'warn', message: 'hint', seq: 99 });
+      const [record] = await driver.waitForLogs(1);
+
+      expect(record?.attrs?.['origin.seq']).toBe(99);
+      expect(record?.seq).not.toBe(99);
+    });
+
+    it('drops the hint rather than overflow the attribute ceiling', async () => {
+      const { driver } = await launch({ logs: GENEROUS, captureConsole: false });
+
+      const attrs: Record<string, number> = {};
+      for (let index = 0; index < 64; index += 1) attrs[`k${index}`] = index;
+      getLogChannel().publish({ ts: Date.now(), level: 'info', message: 'full', seq: 5, attrs });
+
+      const [record] = await driver.waitForLogs(1);
+      expect(Object.keys(record?.attrs ?? {})).toHaveLength(64);
+      expect(record?.attrs?.['origin.seq']).toBeUndefined();
+      expect(record?.seq).toBe(0);
+    });
+  });
+
   describe('rate limit', () => {
     it('drops over budget and leaves the gap in seq', async () => {
       const driver = await startFakeDriver({
@@ -178,8 +235,15 @@ describe('application logs', () => {
       openApps.push(app);
       await driver.waitForSnapshots(1);
 
+      // All published with the SAME publisher seq: the gap must come from the
+      // adapter's own counter, not from the publisher's.
       for (let index = 0; index < 10; index += 1) {
-        publishLog({ level: 'info', message: `record ${index}` });
+        getLogChannel().publish({
+          ts: Date.now(),
+          level: 'info',
+          message: `record ${index}`,
+          seq: 1,
+        });
       }
       await driver.waitForLogs(3);
       expect(driver.logs).toHaveLength(3);
@@ -187,7 +251,12 @@ describe('application logs', () => {
       // Let the bucket refill, then publish once more. Only now can the driver
       // see the gap: a trailing drop is invisible until a later record lands.
       await new Promise((resolve) => setTimeout(resolve, 120));
-      publishLog({ level: 'info', message: 'after the storm' });
+      getLogChannel().publish({
+        ts: Date.now(),
+        level: 'info',
+        message: 'after the storm',
+        seq: 1,
+      });
       const records = await driver.waitForLogs(4);
 
       const seqs = records.map((record) => record.seq);

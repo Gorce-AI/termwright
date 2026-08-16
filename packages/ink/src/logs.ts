@@ -6,17 +6,25 @@
  * carries them across: it subscribes to the `termwright:log` diagnostics
  * channel and pushes each record down the semantic channel.
  *
- * Two rules shape it. **The budget is enforced here, at the source**, because a
- * log storm that reached the socket would compete with the semantic tree for
- * the frame budget; over-budget records are dropped locally, and the resulting
- * gap in `LogRecord.seq` is how the driver learns how many were lost. And, as
- * everywhere else in this adapter, **nothing here may take the application
- * down**: a fault disables log forwarding and leaves rendering untouched.
+ * Three rules shape it. **The budget is enforced here, at the source**, because
+ * a log storm that reached the socket would compete with the semantic tree for
+ * the frame budget. **The adapter owns `seq`**: `termwright:log` is a public
+ * channel, so two independent publishers can legitimately emit the same
+ * number, and the wire contract requires strict increase — records are
+ * therefore renumbered in send order. And, as everywhere else in this adapter,
+ * **nothing here may take the application down**: a fault disables log
+ * forwarding and leaves rendering untouched.
  */
 
 import { format } from 'node:util';
 import { publishLog, subscribeToLogs } from '@termwright/logs';
-import type { LogLevel, LogRecord, ProtocolLimits } from '@termwright/protocol';
+import {
+  MAX_LOG_ATTRS,
+  validateLogRecord,
+  type LogLevel,
+  type LogRecord,
+  type ProtocolLimits,
+} from '@termwright/protocol';
 import type { SemanticChannel } from './channel.js';
 
 /** The driver's log budget, as negotiated in `hello-ack`. */
@@ -81,6 +89,7 @@ export class LogForwarder {
   readonly #bucket: TokenBucket;
   #unsubscribe: (() => void) | undefined;
   #dropped = 0;
+  #nextSeq = 0;
 
   /** @internal Use {@link startLogForwarder}. */
   constructor(options: LogForwarderOptions, bucket: TokenBucket) {
@@ -117,26 +126,48 @@ export class LogForwarder {
       this.dispose();
       return;
     }
+
+    // Consumed before the budget check, so a dropped record still burns its
+    // number: that is what keeps an upward gap meaning "dropped at the source"
+    // rather than "the adapter never saw it".
+    const seq = this.#nextSeq;
+    this.#nextSeq += 1;
+
     if (!this.#bucket.take()) {
-      // Dropped on purpose: the gap this leaves in `seq` is the signal.
       this.#dropped += 1;
       return;
     }
-    channel.sendLog(this.#stamp(record));
+    channel.sendLog(this.#stamp(record, seq));
   }
 
   /**
-   * Attach the revision that was on screen when the record was produced.
+   * Renumber the record and attach the revision that was on screen.
    *
-   * Forwarding is synchronous with publication, so "current" is accurate. A
-   * fresh object is built rather than the record mutated: records are frozen,
-   * and reusing one object across messages is exactly the aliasing trap that
-   * the protocol's DTO projection rejects.
+   * The publisher's own `seq` survives as the `origin.seq` attribute — a local
+   * hint that makes a misbehaving or duplicated publisher diagnosable — but
+   * only while there is room under {@link MAX_LOG_ATTRS}, and only if the
+   * augmented record still fits the byte ceiling. Growing a record past its
+   * limit would turn a log line into a malformed frame, which is a far worse
+   * outcome than losing a debugging hint.
+   *
+   * Revision stamping is accurate because forwarding is synchronous with
+   * publication. A fresh object is built rather than the record mutated:
+   * records are frozen, and reusing one object across messages is exactly the
+   * aliasing trap that the protocol's DTO projection rejects.
    */
-  #stamp(record: LogRecord): LogRecord {
-    if (record.revision !== undefined) return record;
-    const revision = this.#options.currentRevision();
-    return revision > 0 ? { ...record, revision } : record;
+  #stamp(record: LogRecord, seq: number): LogRecord {
+    const revision = record.revision ?? nonZero(this.#options.currentRevision());
+    const base: LogRecord = {
+      ...record,
+      seq,
+      ...(revision === undefined ? {} : { revision }),
+    };
+
+    const attrs = record.attrs ?? {};
+    if (Object.keys(attrs).length >= MAX_LOG_ATTRS) return base;
+
+    const augmented: LogRecord = { ...base, attrs: { ...attrs, 'origin.seq': record.seq } };
+    return validateLogRecord(augmented, this.#options.limits).ok ? augmented : base;
   }
 }
 
@@ -154,6 +185,10 @@ export function startLogForwarder(options: LogForwarderOptions): LogForwarder | 
 
   const now = options.now ?? (() => performance.now());
   return new LogForwarder(options, new TokenBucket(maxRecordsPerSecond, burst, now));
+}
+
+function nonZero(value: number): number | undefined {
+  return value > 0 ? value : undefined;
 }
 
 /** Console methods captured, and the level each maps onto. */

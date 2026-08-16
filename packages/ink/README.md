@@ -93,8 +93,12 @@ false}` if your logger already prints and you would rather not see both.
 
 The driver sets a rate budget, which the adapter enforces locally: over-budget
 records are dropped here rather than allowed to compete with the semantic tree
-for the frame budget. Dropped records leave a gap in `seq`, which is how the
-driver reports how many were lost.
+for the frame budget.
+
+`seq` on the wire is assigned by the adapter, in send order, because the channel
+is public and two publishers can legitimately pick the same number. Dropped
+records still consume one, so a gap is how the driver reports how many were
+lost; a publisher's own number is preserved as the `origin.seq` attribute.
 
 ## Bounds and `alternateScreen`
 
