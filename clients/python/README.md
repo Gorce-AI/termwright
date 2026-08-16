@@ -144,6 +144,24 @@ Levels map onto the wire's closed ladder (anything below `DEBUG` is `trace`,
 client drops what the budget does not allow — leaving a gap in `seq` so the
 driver can report the loss.
 
+## Deviations
+
+Measured against the adapter conventions in the protocol README. Everything
+not listed here follows them.
+
+- **`multiline` is derived from the widget type, not a flag** (rule 4). Textual
+  has no `multiline` property: `TextArea` accepts newlines and `Input` does
+  not, as a matter of what the classes are. The state is published from the
+  type for that reason and for no other — no other state here is inferred.
+- **Widgets on an inactive screen are absent, not `hidden`** (rule 4). The
+  adapter walks `app.screen`, so a pushed-over screen's widgets are not in the
+  tree at all. A widget hidden on the *active* screen (`display = False`) does
+  publish `hidden: true`. Textual owns the screen stack; reaching into it would
+  mean publishing widgets that no longer receive events.
+- **A `Static` subclass with a custom `render()` is named by its `content`**
+  (rule 2), which is the markup it was given rather than what it draws. Textual
+  renders to a strip of segments with no text handle the adapter can read.
+
 ## Conformance
 
 `tests/` runs against `clients/test-vectors/`, which is generated from the

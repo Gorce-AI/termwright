@@ -149,6 +149,31 @@ Groups and attributes flatten to dotted keys, `slog` levels map onto the wire's
 closed ladder, and the client drops what the budget does not allow — leaving a
 gap in `seq` so the driver can report the loss.
 
+## Deviations
+
+Measured against the adapter conventions in the protocol README. Everything
+not listed here follows them.
+
+- **`testId` has no native source** (rule 3). tview exposes no identifier — a
+  Box title is display text, not an id — so the only source is the annotation,
+  via `WithTestIDs` or `Session.SetTestID`. A widget with neither publishes no
+  `testId` at all rather than a synthesised one, because an id that shifts when
+  an unrelated widget is added fails later and looks flaky rather than wrong.
+- **`modal` is derived from the widget type, not a flag** (rule 4). A
+  `tview.Modal` is modal by construction and the type carries no property to
+  read. No other state here is inferred: `disabled`, `checked` and `focused`
+  all come from `IsDisabled`, `IsChecked` and `HasFocus`.
+- **`Grid` children are invisible without help** (rules 1–5, transitively).
+  tview offers no item accessor for `Grid`, so its children reach the tree only
+  through `WithChildren`. Everything under an unsupplied Grid is simply absent.
+- **List and DropDown entries are synthesised, not primitives** (rule 3). They
+  are published as `listitem` nodes with generated ids (`p4:item0`), because
+  tview keeps them as text rather than as widgets. They carry no `testId`, and
+  their ids move if the list is reordered — address them by role and name.
+- **DropDown options other than the current one have positional names** (rule
+  2). tview exposes no per-index accessor, so an unselected option is published
+  as `option 2` rather than its text.
+
 ## Conformance
 
 `protocol/vectors_test.go` runs against `clients/test-vectors/`, generated from

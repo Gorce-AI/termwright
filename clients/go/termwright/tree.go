@@ -54,6 +54,7 @@ func (s *Session) walk(
 		State:    stateOf(primitive, focused, hidden),
 		Actions:  actionsFor(role),
 		Value:    valueOf(primitive),
+		TestID:   s.testIDFor(primitive),
 	}
 	if parentID == "" {
 		snapshot.RootIDs = append(snapshot.RootIDs, id)
@@ -142,18 +143,20 @@ func nameOf(primitive tview.Primitive) string {
 	return ""
 }
 
-// valueOf reports the current value of a value-bearing widget.
-func valueOf(primitive tview.Primitive) string {
+// valueOf reports what a value-bearing widget contains, including the empty
+// string — an empty field has a value of "", not no value. A nil result means
+// the widget is not value-bearing at all.
+func valueOf(primitive tview.Primitive) *string {
 	switch widget := primitive.(type) {
 	case *tview.InputField:
-		return widget.GetText()
+		return protocol.Text(widget.GetText())
 	case *tview.TextArea:
-		return trimText(widget.GetText())
+		return protocol.Text(trimText(widget.GetText()))
 	case *tview.DropDown:
 		_, option := widget.GetCurrentOption()
-		return option
+		return protocol.Text(option)
 	}
-	return ""
+	return nil
 }
 
 func trimText(text string) string {

@@ -40,6 +40,15 @@ type ChildrenFunc func(tview.Primitive) []tview.Primitive
 // Return ok == false to keep the derived values.
 type Describer func(tview.Primitive) (role protocol.Role, name string, ok bool)
 
+// TestIDFunc supplies the author-chosen test id for a primitive, or "" to
+// leave it unset.
+//
+// tview exposes no identifier of its own — a Box title is display text, not an
+// id — so an annotation is the only source there is. Without one, tests can
+// address a widget by role and name but never by a stable handle that survives
+// its label being rewritten.
+type TestIDFunc func(tview.Primitive) string
+
 // Option configures Attach.
 type Option func(*config)
 
@@ -51,6 +60,7 @@ type config struct {
 	adapterName  string
 	version      string
 	capabilities []protocol.Capability
+	testID       TestIDFunc
 }
 
 // WithScreen supplies the screen to draw on, instead of letting Attach create
@@ -74,6 +84,23 @@ func WithChildren(fn ChildrenFunc) Option {
 // WithDescriber overrides roles and names per primitive.
 func WithDescriber(fn Describer) Option {
 	return func(c *config) { c.describe = fn }
+}
+
+// WithTestIDs supplies test ids for primitives, which tview cannot provide on
+// its own. Return "" for anything that should not carry one.
+//
+//	termwright.WithTestIDs(func(p tview.Primitive) string {
+//	    switch p {
+//	    case approve: return "approve"
+//	    case reject:  return "reject"
+//	    }
+//	    return ""
+//	})
+//
+// Session.SetTestID is the imperative equivalent for code that builds its
+// widgets far from the Attach call.
+func WithTestIDs(fn TestIDFunc) Option {
+	return func(c *config) { c.testID = fn }
 }
 
 // WithLogs announces the `logs` capability, which is what makes the driver
@@ -100,8 +127,44 @@ type Session struct {
 	mu      sync.Mutex
 	pending string
 	ids     map[tview.Primitive]string
+	testIDs map[tview.Primitive]string
 	nextID  int
 	closed  bool
+}
+
+// SetTestID annotates one primitive with an author-chosen test id, which is
+// published as `testId` and is what a test addresses when a label may change.
+// An empty id removes the annotation. Safe to call at any time; the next frame
+// carries it.
+func (s *Session) SetTestID(primitive tview.Primitive, id string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.testIDs == nil {
+		s.testIDs = map[tview.Primitive]string{}
+	}
+	if id == "" {
+		delete(s.testIDs, primitive)
+		return
+	}
+	s.testIDs[primitive] = id
+}
+
+// testIDFor resolves the annotation: the explicit registry first, then the
+// resolver supplied to Attach. tview has no native identifier to fall back to.
+func (s *Session) testIDFor(primitive tview.Primitive) string {
+	s.mu.Lock()
+	registered, ok := s.testIDs[primitive]
+	s.mu.Unlock()
+	if ok {
+		return registered
+	}
+	if s.config.testID != nil {
+		return s.config.testID(primitive)
+	}
+	return ""
 }
 
 // Attach publishes app's tree after every committed frame.
@@ -136,11 +199,12 @@ func Attach(app *tview.Application, root tview.Primitive, options ...Option) (*S
 	}
 
 	session := &Session{
-		app:    app,
-		root:   root,
-		client: client,
-		config: settings,
-		ids:    make(map[tview.Primitive]string),
+		app:     app,
+		root:    root,
+		client:  client,
+		config:  settings,
+		ids:     make(map[tview.Primitive]string),
+		testIDs: make(map[tview.Primitive]string),
 	}
 
 	app.SetScreen(&commitScreen{Screen: settings.screen, session: session})

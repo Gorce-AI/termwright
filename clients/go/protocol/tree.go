@@ -39,12 +39,17 @@ type TextRange struct {
 // Node is one accessible element. Bounds, when present, are absolute viewport
 // cells — never parent-relative.
 type Node struct {
-	ID          string      `json:"id"`
-	ParentID    string      `json:"parentId,omitempty"`
-	Role        Role        `json:"role"`
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	Value       string      `json:"value,omitempty"`
+	ID          string `json:"id"`
+	ParentID    string `json:"parentId,omitempty"`
+	Role        Role   `json:"role"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	// Value is what the widget CONTAINS, as against Name, which is what it is
+	// called. A pointer because the empty string is meaningful: `""` says the
+	// field is empty, absent says this is not a value-bearing widget at all.
+	// `omitempty` on a plain string collapses the first into the second and
+	// makes toHaveValue('') unassertable.
+	Value       *string     `json:"value,omitempty"`
 	Bounds      *Rect       `json:"bounds,omitempty"`
 	State       *State      `json:"state,omitempty"`
 	Actions     []Action    `json:"actions,omitempty"`
@@ -93,3 +98,7 @@ func Bool(v bool) *bool { return &v }
 
 // Int returns a pointer to v, for the optional State fields.
 func Int(v int) *int { return &v }
+
+// Text returns a pointer to v, for Node.Value, where the empty string differs
+// from no value at all.
+func Text(v string) *string { return &v }

@@ -563,3 +563,83 @@ func keysOf(m map[string]map[string]any) []string {
 	}
 	return out
 }
+
+// -- the shared adapter conventions ----------------------------------------
+
+// TestAnEmptyFieldPublishesAnEmptyValue pins rule 5: `""` says the field is
+// empty, absent says the widget is not value-bearing. Go's omitempty collapses
+// the first into the second, which is what made toHaveValue(”) unassertable.
+func TestAnEmptyFieldPublishesAnEmptyValue(t *testing.T) {
+	app := tview.NewApplication()
+	empty := tview.NewInputField().SetLabel("Reason")
+	filled := tview.NewInputField().SetLabel("Name").SetText("Ada")
+	button := tview.NewButton("Approve")
+	root := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(empty, 1, 0, false).
+		AddItem(filled, 1, 0, false).
+		AddItem(button, 1, 0, false)
+
+	session := &Session{app: app, root: root, ids: make(map[tview.Primitive]string)}
+	nodes := map[string]map[string]any{}
+	for _, raw := range asWire(t, session.buildSnapshot(80, 24))["nodes"].([]any) {
+		node := raw.(map[string]any)
+		nodes[node["name"].(string)] = node
+	}
+
+	value, present := nodes["Reason"]["value"]
+	if !present {
+		t.Error("an empty textbox published no value at all")
+	} else if value != "" {
+		t.Errorf("an empty textbox published %q", value)
+	}
+	if nodes["Name"]["value"] != "Ada" {
+		t.Errorf("a filled textbox published %v", nodes["Name"]["value"])
+	}
+	if _, present := nodes["Approve"]["value"]; present {
+		t.Error("a button published a value, but it is not value-bearing")
+	}
+}
+
+// TestTestIDsComeFromTheAnnotation pins rule 3 for a framework with no native
+// identifier: tview offers none, so the annotation is the only source.
+func TestTestIDsComeFromTheAnnotation(t *testing.T) {
+	app := tview.NewApplication()
+	approve := tview.NewButton("Approve")
+	reject := tview.NewButton("Reject")
+	root := tview.NewFlex().AddItem(approve, 1, 0, true).AddItem(reject, 1, 0, false)
+
+	session := &Session{
+		app: app, root: root, ids: make(map[tview.Primitive]string),
+		testIDs: make(map[tview.Primitive]string),
+		config: config{testID: func(p tview.Primitive) string {
+			if p == approve {
+				return "approve"
+			}
+			return ""
+		}},
+	}
+	// The registry covers widgets built far from the Attach call.
+	session.SetTestID(reject, "reject")
+
+	ids := map[string]string{}
+	for _, raw := range asWire(t, session.buildSnapshot(80, 24))["nodes"].([]any) {
+		node := raw.(map[string]any)
+		if testID, present := node["testId"]; present {
+			ids[node["name"].(string)] = testID.(string)
+		}
+	}
+	if ids["Approve"] != "approve" || ids["Reject"] != "reject" {
+		t.Errorf("test ids are %v", ids)
+	}
+
+	// Clearing one removes it rather than publishing an empty string.
+	session.SetTestID(reject, "")
+	for _, raw := range asWire(t, session.buildSnapshot(80, 24))["nodes"].([]any) {
+		node := raw.(map[string]any)
+		if node["name"] == "Reject" {
+			if _, present := node["testId"]; present {
+				t.Error("a cleared annotation still published a test id")
+			}
+		}
+	}
+}

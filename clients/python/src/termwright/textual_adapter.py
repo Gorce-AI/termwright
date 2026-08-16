@@ -150,6 +150,20 @@ def name_from_content(widget: Any) -> str:
     return " ".join(parts)[:MAX_CONTENT_NAME].strip()
 
 
+def test_id_for(widget: Any) -> Optional[str]:
+    """Test id: the author's annotation, then Textual's own DOM id.
+
+    Both sources are accepted and the annotation wins, so a widget whose DOM id
+    is generated, reused across screens, or simply wrong for a test can be
+    given a stable handle without renaming it in the CSS.
+    """
+    annotated = getattr(widget, "termwright_test_id", None)
+    if isinstance(annotated, str) and annotated:
+        return annotated
+    native = getattr(widget, "id", None)
+    return native if isinstance(native, str) and native else None
+
+
 def name_for(widget: Any, role: Optional[str] = None) -> str:
     """Accessible name: explicit attribute, then own text, then contents, then id.
 
@@ -294,7 +308,7 @@ class TextualSemantics:
                     # The screen's own `name` is Textual's internal "_default";
                     # the app's title is what a test would look for.
                     name=self._app_name() if widget is screen else name_for(widget, role),
-                    testId=getattr(widget, "id", None) or None,
+                    testId=test_id_for(widget),
                     value=_value_for(widget, role),
                     bounds=bounds,
                     state=_state_for(widget, app, visible),

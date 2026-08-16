@@ -272,3 +272,58 @@ def _offline_client(endpoint: str):
     client = SemanticClient(endpoint, TOKEN, adapter_name="test", adapter_version="0.1.0")
     client.session_id = "s-offline"
     return client
+
+
+# -- the shared adapter conventions ----------------------------------------
+
+
+class AnnotatedApp(App):
+    """A widget whose DOM id is wrong for tests, corrected by annotation."""
+
+    def compose(self) -> ComposeResult:
+        approve = Button("Approve", id="btn-7f3a")
+        approve.termwright_test_id = "approve"
+        yield approve
+        yield Button("Reject", id="reject")
+        yield Input(id="reason")
+
+
+async def test_a_test_id_annotation_beats_the_dom_id(endpoint):
+    """Rule 3: both sources are accepted, the annotation wins.
+
+    A generated or reused DOM id is exactly the handle a test should not have
+    to depend on, and renaming it in the CSS to suit a test is worse.
+    """
+    app = AnnotatedApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        semantics = TextualSemantics(app, _offline_client(endpoint))
+        snapshot = semantics.build_snapshot().to_wire()
+
+    ids = {node.get("testId") for node in snapshot["nodes"]}
+    assert "approve" in ids, "the annotation did not reach the tree"
+    assert "btn-7f3a" not in ids, "the DOM id survived alongside the annotation"
+    # An unannotated widget still publishes its native id.
+    assert "reject" in ids and "reason" in ids
+
+
+async def test_an_empty_field_publishes_an_empty_value(endpoint):
+    """Rule 5: `''` means the field is empty, absent means not value-bearing."""
+    app = AnnotatedApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        semantics = TextualSemantics(app, _offline_client(endpoint))
+        snapshot = semantics.build_snapshot().to_wire()
+
+    by_test_id = {node.get("testId"): node for node in snapshot["nodes"]}
+    assert by_test_id["reason"]["value"] == "", "an empty textbox lost its value"
+    assert "value" not in by_test_id["approve"], "a button is not value-bearing"
+
+
+def test_the_name_from_content_roles_are_exactly_the_contract_s():
+    """Rule 2: the list is normative, including `row`."""
+    from termwright.textual_adapter import NAME_FROM_CONTENT_ROLES
+
+    assert NAME_FROM_CONTENT_ROLES == {
+        "button", "listitem", "menuitem", "tab", "checkbox", "radio", "cell", "row", "heading",
+    }
