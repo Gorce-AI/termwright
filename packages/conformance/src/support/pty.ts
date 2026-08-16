@@ -304,18 +304,23 @@ export async function enableMouseReporting(
 }
 
 /**
- * Asks the child to enable focus reporting and reports whether the emulator
- * saw it happen.
+ * Asks the child to enable focus reporting and reports what the emulator made
+ * of it.
  *
- * Same shape as the mouse: ConPTY consumes the DECSET, and unlike the mouse
- * fields `focusReporting` has no `'unknown'` state — it simply stays `false`,
- * so the driver refuses `focus()` on a child that did enable it. Waiting a
- * bounded moment and branching on what the emulator ended up seeing keeps the
- * suite honest about both platforms without asserting either one.
+ * Same shape as the mouse, and the same three answers: `'on'` where the DECSET
+ * was seen, `'unknown'` where the platform reports the host's state rather than
+ * the child's — ConPTY does that — and `'off'` only while the request is still
+ * in flight. Waiting for a settled answer is what keeps the caller off the
+ * third: branching on `'off'` would mean branching on how loaded the machine
+ * is, which is how this last flaked.
  */
-export async function enableFocusReporting(terminal: TerminalHarness): Promise<boolean> {
+export async function enableFocusReporting(
+  terminal: TerminalHarness,
+): Promise<'on' | 'off' | 'unknown'> {
   await terminal.press('f');
-  await pollUntil(() => terminal.screen().modes.focusReporting, 3_000).catch(() => undefined);
+  await pollUntil(() => terminal.screen().modes.focusReporting !== 'off', 3_000).catch(
+    () => undefined,
+  );
   return terminal.screen().modes.focusReporting;
 }
 

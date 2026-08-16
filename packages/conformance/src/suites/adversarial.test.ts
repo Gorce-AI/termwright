@@ -34,15 +34,40 @@ function collectLogs(terminal: TerminalHarness): number[] {
 const FIRST_FLOOD_REVISION = 2;
 const FLOOD_REVISIONS = 99;
 
+/**
+ * Extra arguments handed to every launch of the peer.
+ *
+ * `TERMWRIGHT_CONFORMANCE_SOCKET_LAG=<ms>` holds the peer's socket writes back
+ * by that much, so the pty stream overtakes them. On a unix socket the frames
+ * are always there first, which lets a test wait for a line of output and then
+ * read state only a frame can carry; where the socket is the slower of the two
+ * — Windows named pipes — the same test asserts on something still in flight.
+ * The knob reproduces that ordering on POSIX, where it can be debugged.
+ */
+const PEER_ARGS: readonly string[] = (() => {
+  const lag = process.env['TERMWRIGHT_CONFORMANCE_SOCKET_LAG'];
+  return lag === undefined || lag === '' ? [] : [`--socket-lag=${lag}`];
+})();
+
+/** Scenarios that do not publish an opening revision, so `arm` must not wait for one. */
+const PUBLISHES_NOTHING = new Set(['bad-token', 'bad-version', 'no-hello', 'delta-before-snapshot']);
+
 /** Launches the peer, lets it publish a valid revision 1, and returns it armed. */
 async function arm(scenario: string): Promise<TerminalHarness> {
   const terminal = await sessions.launch(CONFORMANCE_FIXTURES.adversarialPeer(), {
     columns: 70,
     rows: 16,
     semanticNegotiationMs: 3_000,
-    args: [scenario],
+    args: [scenario, ...PEER_ARGS],
   });
   await terminal.waitForText(`PEER READY ${scenario}`);
+  // `PEER READY` is a pty line; the revision behind it is a socket frame and a
+  // marker. Returning on the line alone leaves every later assertion racing a
+  // publication still in flight, which is free on a transport that coalesces
+  // and is not free on one that does not. Armed means the revision landed.
+  if (!PUBLISHES_NOTHING.has(scenario)) {
+    await expect.poll(() => terminal.semanticTree()?.revision).toBe(1);
+  }
   return terminal;
 }
 
@@ -206,7 +231,8 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
   it('publishes nothing for a marker without a tree', async () => {
     const terminal = await arm('marker-without-tree');
     await fire(terminal);
-    await expect.poll(() => codes(terminal)).toContain('revision-expired');
+    // The expiry is a timer, and it only starts once the unpaired half is in.
+    await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-expired');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
     // The unpaired half names itself, so a half-published revision cannot be
@@ -219,7 +245,10 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const terminal = await arm('tree-without-marker');
     await fire(terminal);
     // The unpaired half expires; the driver keeps the last complete revision.
-    await expect.poll(() => codes(terminal)).toContain('revision-expired');
+    // The expiry is a timer the driver starts when the tree lands, so the wait
+    // has to cover delivery *and* the window — a default poll only covers the
+    // window, which is enough wherever the socket is the faster of the two.
+    await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-expired');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
     expect(entriesFor(terminal, 'revision-expired').map((entry) => entry.revision)).toContain(4);
@@ -261,7 +290,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
       rows: 16,
       scrollbackLines: 50,
       semanticNegotiationMs: 3_000,
-      args: ['flood'],
+      args: ['flood', ...PEER_ARGS],
     });
     await terminal.waitForText('PEER READY flood');
     await terminal.press('g');
@@ -279,7 +308,14 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     // ceiling is met — so the exact set is derivable and worth pinning. A
     // change of ceiling, or an eviction policy that dropped the newest, fails
     // here rather than passing as "something was dropped".
+    // Waited for rather than read once: an idle screen says the pty has nothing
+    // more to draw, which is no statement at all about frames still crossing
+    // the socket that carries the evictions.
     const evicted = FLOOD_REVISIONS - DEFAULT_LIMITS.maxQueuedFrames;
+    await expect
+      .poll(() => entriesFor(terminal, 'revision-dropped').length, { timeout: 20_000 })
+      .toBe(evicted);
+
     const dropped = entriesFor(terminal, 'revision-dropped');
     expect(dropped.map((entry) => entry.revision)).toEqual(
       Array.from({ length: evicted }, (_, index) => index + FIRST_FLOOD_REVISION),
@@ -300,7 +336,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
       columns: 70,
       rows: 16,
       semanticNegotiationMs: 250,
-      args: ['none', '--hello-delay=700'],
+      args: ['none', '--hello-delay=700', ...PEER_ARGS],
     });
     await terminal.waitForText('PEER SENT HELLO');
 
@@ -315,7 +351,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
       columns: 70,
       rows: 16,
       semanticNegotiationMs: 250,
-      args: ['none', '--hello-delay=3000'],
+      args: ['none', '--hello-delay=3000', ...PEER_ARGS],
     });
     await terminal.waitForText('PEER SENT HELLO');
 

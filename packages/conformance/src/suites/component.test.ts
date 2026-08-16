@@ -151,7 +151,10 @@ describe.skipIf(!ptyAvailable())('a component mounted in a real terminal', () =>
     // instead and records why, which is the other half of the same honesty.
     if (mouseModeHidden(terminal)) {
       await terminal.getByTestId('decrement').click();
-      expect(terminal.diagnostics().filter((entry) => entry.code === 'mouse-mode-unverifiable')).toHaveLength(1);
+      const unverified = terminal
+        .diagnostics()
+        .filter((entry) => entry.code === 'mode-unverifiable' && entry.mode === 'mouse');
+      expect(unverified).toHaveLength(1);
       return;
     }
     const refused = (await rejection(terminal.getByTestId('decrement').click())) as TermwrightError;

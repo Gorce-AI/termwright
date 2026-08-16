@@ -193,12 +193,20 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     const before = (await rejection(terminal.focus())) as TermwrightError;
     expect(before.code).toBe('unsupported-action');
 
-    if (!(await enableFocusReporting(terminal))) {
-      // The platform hides the DECSET, so the driver cannot tell that the child
-      // asked; refusing is all it can do, and focus reporting is unusable here.
-      expect(((await rejection(terminal.focus())) as TermwrightError).code).toBe('unsupported-action');
+    const reporting = await enableFocusReporting(terminal);
+    if (reporting === 'unknown') {
+      // The platform reports the host's focus mode rather than the child's, so
+      // there is nothing to refuse from: the driver delivers the report and
+      // records once that it could not verify the mode. The rest of this test
+      // asks what the child prints, which is not a claim the platform supports.
+      await terminal.focus();
+      const unverified = terminal
+        .diagnostics()
+        .filter((entry) => entry.code === 'mode-unverifiable' && entry.mode === 'focus');
+      expect(unverified).toHaveLength(1);
       return;
     }
+    expect(reporting).toBe('on');
 
     await terminal.focus();
     await terminal.waitForText('ev: FOCUS:in');
@@ -206,7 +214,7 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     await terminal.waitForText('ev: FOCUS:out');
 
     await terminal.press('f');
-    await expect.poll(() => terminal.screen().modes.focusReporting).toBe(false);
+    await expect.poll(() => terminal.screen().modes.focusReporting).toBe('off');
     expect(((await rejection(terminal.focus())) as TermwrightError).code).toBe('unsupported-action');
   });
 

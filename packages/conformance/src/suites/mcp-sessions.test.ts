@@ -161,7 +161,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
 
     for (const [index, session] of sessions.entries()) {
       const snapshot = await call(session, 'terminal.snapshot', { terminal: 't1' });
-      expect(snapshot.isError).toBeFalsy();
+      expect(snapshot.isError, `snapshot failed: ${JSON.stringify(snapshot._meta)}`).toBeFalsy();
       // Every session sees exactly one terminal, and it is its own.
       const text = JSON.stringify(snapshot.structuredContent);
       expect(text, `session ${index} saw an empty screen`).toContain('GENERIC READY');
@@ -186,7 +186,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     // answers about *its own* terminal rather than the first session's.
     expect(query.isError ?? false).toBe(query.isError ?? false);
     const snapshot = await call(first, 'terminal.snapshot', { terminal: 't1' });
-    expect(snapshot.isError).toBeFalsy();
+    expect(snapshot.isError, `snapshot failed: ${JSON.stringify(snapshot._meta)}`).toBeFalsy();
   });
 
   it('kills exactly the children of the session that was deleted', async () => {
@@ -211,7 +211,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     // …and the survivor is untouched, not merely still registered: it answers.
     expect(alive(other.pid)).toBe(true);
     const snapshot = await call(second, 'terminal.snapshot', { terminal: 't1' });
-    expect(snapshot.isError).toBeFalsy();
+    expect(snapshot.isError, `snapshot failed: ${JSON.stringify(snapshot._meta)}`).toBeFalsy();
     expect(JSON.stringify(snapshot.structuredContent)).toContain('GENERIC READY');
   });
 
@@ -231,7 +231,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     // Time passes for both sessions; only one of them keeps talking.
     clock += 90_000;
     const busyStillThere = await call(busySession, 'terminal.snapshot', { terminal: 't1' });
-    expect(busyStillThere.isError).toBeFalsy();
+    expect(busyStillThere.isError, `snapshot failed: ${JSON.stringify(busyStillThere._meta)}`).toBeFalsy();
 
     const swept = await handle.registry.sweepIdle();
     expect(swept).toEqual([abandonedSession.sessionId]);
@@ -318,7 +318,7 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     // Only the first session's terminal is driven.
     await call(first, 'terminal.press', { terminal: 't1', keys: 'ArrowDown' });
     const settled = await call(first, 'terminal.wait_for', { terminal: 't1', wait: 'text', text: '> Beta' });
-    expect(settled.isError).toBeFalsy();
+    expect(settled.isError, `call failed: ${JSON.stringify(settled._meta)}`).toBeFalsy();
 
     const changedFirst = await call(first, 'terminal.capture_since', { terminal: 't1', cursor: firstCursor });
     const rowsFirst = changedFirst.structuredContent?.['changedRows'] as { text: string }[];

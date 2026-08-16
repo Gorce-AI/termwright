@@ -33,6 +33,20 @@ const scenario = process.argv[2] ?? 'none';
  */
 const delayArg = process.argv.find((argument) => argument.startsWith('--hello-delay='));
 const helloDelayMs = delayArg === undefined ? 0 : Number(delayArg.slice('--hello-delay='.length));
+/**
+ * Holds every socket write back by a fixed lag, so the pty stream overtakes it.
+ *
+ * A unix socket hands the driver everything this peer wrote long before the pty
+ * has re-encoded a single byte, which hides any test that waits for a line of
+ * output and then reads state only a socket frame can carry. Where the socket
+ * is slower than the terminal — Windows named pipes, which neither coalesce
+ * writes nor deliver them on the pty's schedule — that test asserts on
+ * something still in flight. The flag makes the same ordering reproducible on
+ * any platform. The lag is constant rather than per-write, so a flood of two
+ * hundred revisions still finishes inside the suite's budget.
+ */
+const lagArg = process.argv.find((argument) => argument.startsWith('--socket-lag='));
+const socketLagMs = lagArg === undefined ? 0 : Number(lagArg.slice('--socket-lag='.length));
 const endpoint = process.env['TERMWRIGHT_ENDPOINT'];
 const token = process.env['TERMWRIGHT_TOKEN'];
 
@@ -437,6 +451,22 @@ if (endpoint === undefined || token === undefined) {
   say('PEER DORMANT');
 } else {
   socket = connect(endpoint, () => {
+    if (socketLagMs > 0) {
+      const write = socket.write.bind(socket);
+      const held = [];
+      let scheduled = false;
+      socket.write = (chunk) => {
+        held.push(chunk);
+        if (!scheduled) {
+          scheduled = true;
+          setTimeout(() => {
+            scheduled = false;
+            while (held.length > 0) write(held.shift());
+          }, socketLagMs);
+        }
+        return true;
+      };
+    }
     if (ATTACKS_HANDSHAKE.has(scenario)) {
       fire();
       say(`PEER READY ${scenario}`);

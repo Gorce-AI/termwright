@@ -68,6 +68,14 @@ Round 2 (driver 0e1b0fe, contract note 2d09049):
 6. **`ready-strategy` conflated a fact with a guess** — replaced by
    `ready-shell-integration` and `ready-settled-screen`. With that, no assertion
    in this package matches diagnostic prose; every one is on a code.
+7. **`focusReporting` had no `'unknown'`, so focus reporting was unusable where
+   the platform hides the DECSET** — reported after the Windows run and fixed in
+   the driver (7336039): the field is now `'on' | 'off' | 'unknown'`, a report
+   is *sent* rather than refused while the mode is unverifiable, and the
+   per-mode diagnostic `mouse-mode-unverifiable` became `mode-unverifiable`
+   with a `mode` field. The suites here follow the same shape for both modes:
+   assert the refusal only where the mode is visible, and assert the recorded
+   `mode-unverifiable` entry where it is not.
 
 ## The liveness split (do not "fix" this)
 
@@ -227,8 +235,31 @@ has to delete an assertion that explains itself.
   starts reporting the mode tightens these assertions by itself and one that
   stops loosens them — with no list of platforms to keep current. Where the
   mode is hidden the effect is asserted instead: the child decodes the report,
-  and the session records `mouse-mode-unverifiable` exactly once, because that
-  entry describes the platform rather than any one action.
+  and the session records `mode-unverifiable` for that mode exactly once,
+  because that entry describes the platform rather than any one action.
+- **A tri-state mode is not a boolean, and truthiness will not say so.**
+  `focusReporting` gained `'unknown'` once the driver stopped reporting the
+  host's focus mode as the child's. The helper here still returned it as a
+  `boolean`, so `'off'` — the reading while the DECSET is still in flight —
+  came back truthy and the suite took the "the terminal saw it" branch on a
+  child the terminal had not seen yet. It failed only under load, which is the
+  worst way to learn it: the machine, not the platform, decided the branch.
+  Helpers now wait for a settled answer (`'on'` or `'unknown'`) and return the
+  three states, and `pnpm typecheck` catches the next such rename, which is how
+  this one was actually found.
+- **A socket and a pty are two transports, and only one of them is fast.**
+  Frames reach the driver long before the pty has re-encoded a byte, so a test
+  can wait for a line of output and then read state only a frame carries — and
+  pass, everywhere the socket wins. Windows named pipes neither coalesce writes
+  nor deliver them on the pty's schedule, so the same test asserts on something
+  in flight there. `TERMWRIGHT_CONFORMANCE_SOCKET_LAG=<ms>` holds the hostile
+  peer's socket writes back by that much and reproduces the ordering on POSIX:
+  at 150 ms it failed 14 of the 40 hostile tests, all of them resting on the
+  opening revision having landed by the time `PEER READY` was drawn; at 400 ms
+  it also caught the flood's eviction list being read once after an idle
+  screen. `arm()` now waits for the revision itself, and the two waits that
+  cover a driver *timer* — a revision expiring — budget for delivery as well as
+  for the window.
 - **A PTY coalesces writes.** Two `press()` calls routinely arrive as one chunk.
   Both interactive fixtures tokenise the chunk (escape sequences whole, then one
   code point at a time); treating a chunk as one event silently drops the second

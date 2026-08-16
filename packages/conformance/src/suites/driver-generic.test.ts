@@ -177,7 +177,9 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     // child and it decoded them — and where the mode was hidden the session
     // says so exactly once, because that describes the platform rather than
     // any one action.
-    const unverifiable = terminal.diagnostics().filter((entry) => entry.code === 'mouse-mode-unverifiable');
+    const unverifiable = terminal
+      .diagnostics()
+      .filter((entry) => entry.code === 'mode-unverifiable' && entry.mode === 'mouse');
     expect(unverifiable).toHaveLength(mouseModeHidden(terminal) ? 1 : 0);
   });
 
@@ -202,19 +204,24 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
       await drag;
     }
 
-    if (await enableFocusReporting(terminal)) {
+    const reporting = await enableFocusReporting(terminal);
+    if (reporting === 'unknown') {
+      // The platform reports focus reporting as the host has it, not as the
+      // child asked for it. There is nothing to refuse from, so the report is
+      // sent and the session says once that it could not verify the mode.
       await terminal.focus();
-      await terminal.waitForText('ev: FOCUS:in');
-      await terminal.blur();
-      await terminal.waitForText('ev: FOCUS:out');
-    } else {
-      // The child asked for focus reports and the terminal never saw it ask.
-      // The driver refuses, which is the only thing it can honestly do with
-      // what it observes — and the consequence is that focus reporting is
-      // unusable on such a platform. Recorded rather than asserted away.
-      const refused = (await rejection(terminal.focus())) as TermwrightError;
-      expect(refused.code).toBe('unsupported-action');
+      const unverified = terminal
+        .diagnostics()
+        .filter((entry) => entry.code === 'mode-unverifiable' && entry.mode === 'focus');
+      expect(unverified).toHaveLength(1);
+      return;
     }
+
+    expect(reporting).toBe('on');
+    await terminal.focus();
+    await terminal.waitForText('ev: FOCUS:in');
+    await terminal.blur();
+    await terminal.waitForText('ev: FOCUS:out');
   });
 
   it('reports exit status and close exactly', async () => {
