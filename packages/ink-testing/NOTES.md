@@ -59,6 +59,13 @@ click. What is not identical:
   `envMode` shapes only what the *adapter* is handed. `src/env-mode.test.tsx`
   asserts both directions, including that a fixture with `'inherit'` does see
   the runner's variables.
+- **`crashReport()`.** Forwarded by both, but only a fixture can ever return
+  one. A crash is a process dying unasked; a mount shares the runner's process
+  and every way it ends — `close()`, `signal()`, the app unmounting itself — is
+  either requested or clean. `src/crash-report.test.tsx` pins both halves,
+  including a fixture that throws out of a timer on input and the report that
+  comes back with the stack in `screenTail` and the keystroke in
+  `recentInputs`.
 - **Props.** A mount takes anything React takes; a fixture takes bounded JSON.
   `assertJsonProps` refuses functions, `undefined`, cycles, class instances and
   depth over 8 *before* spawning, because `JSON.stringify` would drop them

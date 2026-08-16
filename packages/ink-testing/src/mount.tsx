@@ -10,6 +10,7 @@ import {
   launchTerminal,
   SessionClosedError,
   type CellSnapshot,
+  type CrashReport,
   type EnvMode,
   type ExitStatus,
   type Locator,
@@ -409,6 +410,10 @@ class InkHarnessImpl implements InkHarness {
 
   diagnostics(): readonly SessionDiagnostic[] {
     return this.#session.diagnostics();
+  }
+
+  crashReport(): CrashReport | null {
+    return this.#session.crashReport();
   }
 
   title(): string {
