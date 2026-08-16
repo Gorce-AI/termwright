@@ -71,9 +71,9 @@ A directory (zipped for transport) containing:
 - `events.jsonl` — one JSON object per line:
   `{ t: <ms>, castOffset: <ms>, kind: 'input'|'resize'|'step-start'|'step-end'|
      'action'|'assert'|'crash', ... }` where `action` carries
-  `{ api, selector?, ref?, ok, error? }`. `castOffset` positions the event on
-  the (idle-trimmed, hide-window-adjusted) recording timeline; readers fall
-  back to `t` when absent.
+  `{ api, selector?, ref?, ok, error? }`. `castOffset` is REQUIRED and
+  positions the event on the (idle-trimmed, hide-window-adjusted) recording
+  timeline. There is no reader fallback — one writer generation exists.
 
 `SessionEventMap` `timeMs` semantics (binding for the driver): milliseconds
 since session start, monotonic, never resets for the lifetime of a session

@@ -273,3 +273,6 @@
   locator/harness action (click/press/type/...), success and failure alike.
   TraceWriter records it as events.jsonl kind 'action'; the preset records
   only assertions (its own layer); UI live gets actions via attachSession.
+- 2026-08-16 (owner rule applied to §Trace): castOffset is REQUIRED on every
+  events.jsonl line; the reader fallback to `t` is removed (single writer
+  generation pre-1.0).
