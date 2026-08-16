@@ -66,6 +66,21 @@ Four rules the clients enforce for you:
   sending — the same spelling in all three languages, so an assertion written
   against one reads the same against another.
 
+### What the application has to import
+
+Nothing. The seam is the logger the application already configures, so its
+call sites stay `logging.getLogger(...).error(...)`, `slog.Error(...)` and
+`tracing::error!(...)` with no termwright name among them. The one import
+lives wherever semantics are enabled, which is a single place that is already
+dormant without the driver.
+
+That is the same property `@termwright/ink` gets from `node:diagnostics_channel`
+— an application feeding termwright without taking a production dependency on
+a test tool — reached through a different seam. The cost of each shows up
+elsewhere: an open channel admits several publishers and so needs the
+restamping above, while a logging framework as the seam means the record
+arrives already formatted by it.
+
 `ts` is Unix epoch milliseconds, not session-relative: an adapter cannot know
 when the driver considers the session to have started, so the wall clock is the
 only clock both sides agree on without negotiating. The driver rebases it.
