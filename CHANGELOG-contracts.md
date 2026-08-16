@@ -312,3 +312,10 @@
   a `protocol-violation` — wrong width tables produce a frame that looks right
   and is not. Stored in `meta.json` rather than the asciicast header: it
   describes the session, and our file has no collision risk with the format.
+- 2026-08-16 (driver 4a3261c): SessionEventMap gains `action` (ActionEvent
+  {api, selector?, ref?, ok, error?, timeMs}) for every harness/locator
+  action, emitted AFTER completion (input bytes precede the action entry on
+  any timeline); `error` carries the CODE, not prose; failures are reported
+  too. Approved for #25 reception round: new DiagnosticCode 'delta-resync'
+  (set: 17) — resync is the opposite of loss; subscribe defaults to 'diffs'
+  for tree-diffs adapters with a LaunchOptions override to force snapshots.
