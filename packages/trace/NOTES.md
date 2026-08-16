@@ -223,6 +223,11 @@ harness. CJK is unaffected (`漢` is width 2 either way).
 
 This matters for anything comparing a replayed frame against a live one, and for
 screenshots of recorded sessions, where an emoji then occupies one column
-instead of two. Fixing it means adding the addon to this package and activating
-it in `vt.ts`; that is a dependency change, so it is written down here rather
-than smuggled into an unrelated task.
+instead of two.
+
+**Tracked, do not patch here.** The fix belongs to task #19: a shared
+`createTerminal(profile)` factory in `@termwright/vt`, so the driver and every
+replay path agree on width tables by construction instead of by two packages
+remembering to activate the same addon. `vt.ts` becomes a thin adapter over
+that factory when it lands. Adding the addon locally would fix the symptom and
+re-create the drift the shared factory exists to prevent.
