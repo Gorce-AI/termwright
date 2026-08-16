@@ -9,6 +9,7 @@
 import { html, type TemplateResult } from 'lit-html';
 import { countTests, filterTests, groupTests, type TestRow } from '../test-model.js';
 import { renderTestRow, type TestRowStep } from './test-row.js';
+import { statusGlyph } from '../view-model.js';
 
 /** What the list needs to render. */
 export interface TestListModel {
@@ -34,6 +35,19 @@ export interface TestListHandlers {
   seek(timeMs: number): void;
 }
 
+/**
+ * One counter.
+ *
+ * A zero is rendered as `--`: "nothing failed" and "zero failures" are the same
+ * fact but not the same sentence, and the dash reads as nothing to look at
+ * while a `0` reads as a measurement worth checking.
+ */
+function renderCount(kind: string, value: number, label: string): TemplateResult {
+  return html`<span class=${`count ${kind}`} title=${`${value} ${label}`}>
+    <span aria-hidden="true">${statusGlyph(kind)}</span>${value === 0 ? '--' : value}
+  </span>`;
+}
+
 /** Renders the test list. */
 export function renderTestList(model: TestListModel, handlers: TestListHandlers): TemplateResult {
   const matching = filterTests(model.tests, model.query);
@@ -51,12 +65,12 @@ export function renderTestList(model: TestListModel, handlers: TestListHandlers)
         @input=${(event: Event) => handlers.setQuery((event.target as HTMLInputElement).value)}
       />
       <span class="counts" data-testid="test-counts">
-        <span class="count passed">${counts.passed}</span>
-        <span class="count failed">${counts.failed}</span>
-        ${counts.flaky === 0 ? '' : html`<span class="count flaky">${counts.flaky}</span>`}
-        ${counts.skipped === 0 ? '' : html`<span class="count skipped">${counts.skipped}</span>`}
-        ${counts.running === 0 ? '' : html`<span class="count running">${counts.running}</span>`}
-        ${counts.notRun === 0 ? '' : html`<span class="count not-run" title="Discovered, not run yet">${counts.notRun}</span>`}
+        ${renderCount('passed', counts.passed, 'passed')}
+        ${renderCount('failed', counts.failed, 'failed')}
+        ${counts.flaky === 0 ? '' : renderCount('flaky', counts.flaky, 'flaky')}
+        ${counts.skipped === 0 ? '' : renderCount('skipped', counts.skipped, 'skipped')}
+        ${counts.running === 0 ? '' : renderCount('running', counts.running, 'running')}
+        ${counts.notRun === 0 ? '' : renderCount('not-run', counts.notRun, 'discovered, not run yet')}
       </span>
       ${model.canRerun
         ? html`

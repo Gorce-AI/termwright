@@ -224,6 +224,27 @@ The archives our matchers write today carry `selector` and no `ref`, so that
 highlight stays dark on them. The UI side is done and tested; filling in `ref`
 is a change in whoever calls `recordAction`/`recordAssert`.
 
+## One viewer, two sources — and one row for a test
+
+The panel is a single application with one state. Live and post-mortem are not
+two views: they are the same views over two sources. `TerminalPane`,
+`command-log`, `log-panel`, `inspector`, `semantic-view`, `test-list`,
+`crash-panel` and the timeline each exist once and are rendered by `main.ts`
+regardless of mode; what changes is where the data came from (WebSocket
+messages, or the archive readers behind `/api/`) and that a replay has a
+scrubber and speeds while a live run follows.
+
+Run history is navigation inside that same application — runs → run → test →
+the test in archive mode — and opening a test calls the same `openArchive` that
+`--trace` calls at startup. `--trace` is a deep link, not a second program.
+
+The one place this had already gone wrong was the test row: the run history had
+grown its own, next to the live list's. They are one component now
+(`test-row.ts`), with the two things that legitimately differ — what a click
+does, and the trailing affordance — as parameters. **If a second rendering of a
+test, a command or a log line ever appears, that is the bug**, not a style
+choice.
+
 ## The panel is a design system, not a pile of CSS
 
 Colours, spacing and type sizes are tokens on `:root`, and the light theme
@@ -240,6 +261,15 @@ keeping:
 - **Splits are draggable *and* focusable.** A splitter that only answers to a
   mouse is a control some people do not have; arrows move it, and where it was
   left is remembered per split.
+
+The visual bar is not from memory: current screenshots of the Cypress App were
+pulled from `docs.cypress.io` and kept in the scratchpad as a design bar. What
+came from them is density and hierarchy, never branding — a number gutter in the
+command log, `--` instead of `0` in the counters (nothing failed and "zero
+failures" are the same fact but not the same sentence), uppercase group labels
+for steps, a left accent bar for the selected row instead of an outline, a
+duration pill in the header, and an `assert` chip so an assertion reads as a
+different kind of thing from a command at a glance.
 
 `prefers-reduced-motion` disables every transition, and the storage helpers
 tolerate a browser that refuses to remember anything (private mode) by falling

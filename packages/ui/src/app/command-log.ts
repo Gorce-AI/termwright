@@ -21,6 +21,8 @@ export interface CommandLogModel {
   readonly selectedId: string | null;
   /** False in a live run with no actions reported yet. */
   readonly available: boolean;
+  /** Length of the recording, shown as a pill. `null` in a live run. */
+  readonly durationMs: number | null;
   /** The archive's event log stopped early; what is listed is partial. */
   readonly incomplete: boolean;
   /** Why it stopped. */
@@ -42,6 +44,9 @@ export function renderCommandLog(
     <header class="pane-head">
       <h2>Commands</h2>
       <span class="muted" data-testid="command-count">${model.rows.length}</span>
+      ${model.durationMs === null
+        ? ''
+        : html`<span class="spacer"></span><span class="pill">${formatMs(model.durationMs)}</span>`}
     </header>
 
     ${model.rows.length === 0
@@ -51,7 +56,7 @@ export function renderCommandLog(
             : 'Commands appear as the test calls the driver. A replay reads them from the archive; a live run needs the test process to report them.'}
         </p>`
       : html`<div class="commands" data-testid="commands">
-          ${model.rows.map((row, index) => renderRow(row, index === model.currentIndex, model, handlers))}
+          ${model.rows.map((row, index) => renderRow(row, index, index === model.currentIndex, model, handlers))}
         </div>`}
     ${model.incomplete
       ? html`<p class="warn" data-testid="commands-incomplete">
@@ -64,6 +69,7 @@ export function renderCommandLog(
 
 function renderRow(
   row: CommandRow,
+  index: number,
   current: boolean,
   model: CommandLogModel,
   handlers: CommandLogHandlers,
@@ -86,9 +92,13 @@ function renderRow(
       style=${`padding-left:${6 + row.depth * 12}px`}
       @click=${() => handlers.select(row)}
     >
+      <span class="gutter" aria-hidden="true">${row.kind === 'step' ? '' : String(index + 1)}</span>
       <span class="at">${formatMs(row.t)}</span>
+      ${row.kind === 'assert' ? html`<span class="chip assert">assert</span>` : ''}
       <span class="api">${row.label}</span>
-      ${row.selector === undefined ? '' : html`<span class="selector">${row.selector}</span>`}
+      ${row.selector === undefined
+        ? ''
+        : html`<span class="selector" title=${row.selector}>${row.selector}</span>`}
       ${row.ref === undefined ? '' : html`<span class="ref">${row.ref}</span>`}
       ${row.error === undefined
         ? ''

@@ -654,7 +654,8 @@ button.active {
 
 .logs {
   flex: 1;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 4px 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
@@ -771,9 +772,13 @@ button.active {
 }
 
 .count {
-  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 var(--s3);
   border-radius: 8px;
   background: var(--raised);
+  font-variant-numeric: tabular-nums;
 }
 
 .count.passed {
@@ -807,7 +812,8 @@ button.active {
 
 .test.selected > .test-head {
   background: var(--selected);
-  border-radius: 3px;
+  border-radius: var(--radius);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .test-head {
@@ -865,8 +871,11 @@ button.active {
 
 .commands {
   flex: 1;
-  overflow: auto;
-  padding: 4px 0;
+  /* Rows must shrink to the pane rather than widening a horizontal scroller —
+     otherwise a long selector is clipped at the edge instead of ellipsised. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--s2) var(--s4) var(--s2) 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
 }
@@ -890,11 +899,16 @@ button.active {
 }
 
 .command.selected {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .command.step {
+  margin-top: var(--s2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.command.step .api {
   color: var(--text);
   font-weight: 600;
 }
@@ -915,18 +929,57 @@ button.active {
   color: var(--fail);
 }
 
+.command .gutter {
+  flex: none;
+  min-width: 18px;
+  text-align: right;
+  color: var(--muted);
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
 .command .at {
   flex: none;
   min-width: 48px;
   text-align: right;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip {
+  flex: none;
+  padding: 0 var(--s2);
+  border-radius: 3px;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chip.assert {
+  color: var(--warn);
+  background: var(--tint-warn);
+}
+
+.pill {
+  padding: 0 var(--s3);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .command .selector {
   color: var(--pass);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.command .api {
+  flex: none;
 }
 
 .command .ref {
@@ -1113,7 +1166,9 @@ button.active {
 }
 
 .run-detail .test.selected {
-  outline: 1px solid var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--selected);
+  border-radius: var(--radius);
 }
 
 .run-detail .replay {

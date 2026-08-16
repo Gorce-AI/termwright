@@ -206,6 +206,7 @@ function draw(): void {
                 currentIndex: currentCommand(state.commands, state.timeMs, state.selectedCommandId),
                 selectedId: state.selectedCommandId,
                 available: state.mode === 'post-mortem' || state.commands.length > 0,
+                durationMs: state.trace?.durationMs ?? null,
                 incomplete: state.commandsIncomplete,
                 ...(state.commandsError === null ? {} : { error: state.commandsError }),
               },
