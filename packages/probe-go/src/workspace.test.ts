@@ -144,6 +144,38 @@ describe('the go directive', () => {
   });
 });
 
+describe('use and replace cannot name the same directory', () => {
+  it('drops a use that points at something we redirect', () => {
+    // Go refuses the combination outright: "workspace module … is replaced at
+    // all versions in the go.work file". The replace is the one we need, since
+    // a use does not satisfy a versioned require.
+    const rendered = renderWorkspace({
+      moduleDir: '/proj/app',
+      inherited: {
+        uses: [{ dir: '/proj/app' }, { dir: '/cache/bubbles', module: 'charm.land/bubbles/v2' }],
+        replaces: [],
+      },
+      replaces: [{ from: 'charm.land/bubbles/v2', to: '/cache/bubbles' }],
+    });
+
+    expect(rendered).toContain('use /proj/app');
+    expect(rendered).not.toContain('use /cache/bubbles');
+    expect(rendered).toContain('replace charm.land/bubbles/v2 => /cache/bubbles');
+  });
+
+  it('keeps a use whose directory is a replacement target for a different module', () => {
+    // Matched by module path, not by directory: redirecting some other module
+    // at a used directory is legal and must not disturb the use.
+    const rendered = renderWorkspace({
+      moduleDir: '/proj/app',
+      inherited: { uses: [{ dir: '/proj/lib', module: 'example.com/lib' }], replaces: [] },
+      replaces: [{ from: 'example.com/absent', to: '/proj/lib' }],
+    });
+
+    expect(rendered).toContain('use /proj/lib');
+  });
+});
+
 describe('vendor mode', () => {
   it('refuses -mod=vendor by name instead of overriding it', () => {
     expect(() => assertNoVendorMode({ GOFLAGS: '-mod=vendor' })).toThrow(WorkspaceError);

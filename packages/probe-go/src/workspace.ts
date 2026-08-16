@@ -28,6 +28,15 @@ const run = promisify(execFile);
 /** One `use` entry of a Go workspace, as an absolute directory. */
 export interface WorkspaceUse {
   readonly dir: string;
+  /**
+   * Module path declared in that directory's go.mod, when known.
+   *
+   * Needed because Go refuses a workspace that both uses and replaces the same
+   * module, and the two are matched by module path rather than by directory:
+   * a replace pointing *at* a used directory for some other module path is
+   * legal and must not be disturbed.
+   */
+  readonly module?: string;
 }
 
 /** One `replace` entry: a module path redirected to a directory or a version. */
@@ -188,7 +197,14 @@ export function renderWorkspace(plan: WorkspacePlan): string {
   // 1.22 while a member needs 1.25 must still get a workspace that builds.
   const goVersion = highest(plan.inherited.goVersion, plan.fallbackGoVersion) ?? '1.22';
 
-  const uses = [...plan.inherited.uses.map((entry) => entry.dir)];
+  // A module cannot be both used and replaced: Go refuses the workspace with
+  // "is replaced at all versions in the go.work file". The replace is the one
+  // we need — a `use` does not satisfy a versioned require — so a `use` of a
+  // module we redirect is dropped, matched by module path.
+  const replacedModules = new Set(plan.replaces.map((entry) => entry.from));
+  const uses = plan.inherited.uses
+    .filter((entry) => entry.module === undefined || !replacedModules.has(entry.module))
+    .map((entry) => entry.dir);
   if (!uses.includes(plan.moduleDir)) uses.push(plan.moduleDir);
 
   // The user's own replace of a module we redirect would fight ours; ours is
@@ -207,6 +223,17 @@ export function renderWorkspace(plan: WorkspacePlan): string {
     '',
   ];
   return lines.join('\n');
+}
+
+/** Module path declared in a directory's go.mod, when there is one. */
+async function moduleNameIn(dir: string): Promise<string | undefined> {
+  const { readFile } = await import('node:fs/promises');
+  try {
+    const text = await readFile(join(dir, 'go.mod'), 'utf8');
+    return /^module\s+(\S+)\s*$/mu.exec(text)?.[1];
+  } catch {
+    return undefined;
+  }
 }
 
 /** The newer of two `go` directives, tolerating either being absent. */
@@ -250,7 +277,13 @@ export async function writeWorkspace(file: string, plan: WorkspacePlan): Promise
     moduleDir: await realDir(plan.moduleDir),
     inherited: {
       ...plan.inherited,
-      uses: await Promise.all(plan.inherited.uses.map(async (u) => ({ dir: await realDir(u.dir) }))),
+      uses: await Promise.all(
+        plan.inherited.uses.map(async (use) => {
+          const dir = await realDir(use.dir);
+          const module = use.module ?? (await moduleNameIn(dir));
+          return module === undefined ? { dir } : { dir, module };
+        }),
+      ),
       replaces: await Promise.all(
         plan.inherited.replaces.map(async (r) => ({ from: r.from, to: await realDir(r.to) })),
       ),

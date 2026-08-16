@@ -222,8 +222,102 @@ func termwrightRecognise(value reflect.Value, fieldName string) *recognised {
 		// carrying the name Bubbles gave it.
 		node.Role = protocol.RoleGeneric
 	}
+	// Anything the Bubbles patch set exposes is layered on top; without that
+	// patch set these calls find nothing and the node keeps what the public
+	// getters gave it.
+	termwrightLibraryState(value, component, &node)
+
 	return &recognised{frameworkType: component, node: node}
 }
+
+// termwrightLibraryState reads the accessors the Bubbles patch set adds.
+//
+// Found by name through reflection rather than by importing Bubbles, which
+// keeps the two patch sets independent: an application built with an
+// unpatched Bubbles simply reports less, instead of failing to compile.
+//
+// These are the facts the audit found valuable and Bubbles keeps private: a
+// spinner is otherwise just a glyph, `Percent()` reports the animation's
+// target rather than what is drawn, and a file picker's highlighted entry has
+// no index anywhere in its public surface.
+func termwrightLibraryState(value reflect.Value, component string, node *protocol.Node) {
+	switch component {
+	case "spinner":
+		if frame, ok := termwrightCallInt(value, "TermwrightFrame"); ok {
+			node.State = termwrightWithPosition(node.State, frame, termwrightCallIntOr(value, "TermwrightFrameCount", 0))
+		}
+	case "progress":
+		// The drawn fraction, not the one being animated towards.
+		if shown, ok := termwrightCallFloat(value, "TermwrightShownPercent"); ok {
+			text := strconv.FormatFloat(shown, 'f', 3, 64)
+			node.Value = &text
+		}
+	case "filepicker":
+		if index, ok := termwrightCallInt(value, "TermwrightSelectedIndex"); ok && index >= 0 {
+			node.State = termwrightWithPosition(node.State, index, termwrightCallIntOr(value, "TermwrightEntryCount", 0))
+			if name := termwrightCallString(value, "TermwrightSelectedName"); name != nil && *name != "" {
+				node.Value = name
+			}
+		}
+	case "list":
+		if message := termwrightCallString(value, "TermwrightStatusMessage"); message != nil && *message != "" {
+			node.Description = *message
+		}
+	case "table":
+		if count, ok := termwrightCallInt(value, "TermwrightRowCount"); ok {
+			node.State = termwrightWithSetSize(node.State, count)
+		}
+	}
+}
+
+func termwrightWithPosition(state *protocol.State, index, count int) *protocol.State {
+	if state == nil {
+		state = &protocol.State{}
+	}
+	state.PositionInSet = protocol.Int(index + 1)
+	if count > 0 {
+		state.SetSize = protocol.Int(count)
+	}
+	return state
+}
+
+func termwrightWithSetSize(state *protocol.State, count int) *protocol.State {
+	if state == nil {
+		state = &protocol.State{}
+	}
+	state.SetSize = protocol.Int(count)
+	return state
+}
+
+func termwrightCallInt(value reflect.Value, name string) (int, bool) {
+	method := value.MethodByName(name)
+	if !method.IsValid() || method.Type().NumIn() != 0 || method.Type().NumOut() != 1 {
+		return 0, false
+	}
+	if !method.Type().Out(0).ConvertibleTo(reflect.TypeOf(0)) {
+		return 0, false
+	}
+	return int(method.Call(nil)[0].Int()), true
+}
+
+func termwrightCallIntOr(value reflect.Value, name string, fallback int) int {
+	if result, ok := termwrightCallInt(value, name); ok {
+		return result
+	}
+	return fallback
+}
+
+func termwrightCallFloat(value reflect.Value, name string) (float64, bool) {
+	method := value.MethodByName(name)
+	if !method.IsValid() || method.Type().NumIn() != 0 || method.Type().NumOut() != 1 {
+		return 0, false
+	}
+	if method.Type().Out(0).Kind() != reflect.Float64 {
+		return 0, false
+	}
+	return method.Call(nil)[0].Float(), true
+}
+
 
 // termwrightCallString invokes a no-argument getter returning a string.
 //
