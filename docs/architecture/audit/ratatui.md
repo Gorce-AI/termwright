@@ -278,6 +278,42 @@ Remaining sensitivities, not yet measured and flagged for whoever builds this:
   satisfies the dependants' requirements; `ratatui-core` moving to 0.2 would
   need a new copy of the patched source, not a version bump in the patch entry.
 
+
+### Measured again at implementation time (Phase 6)
+
+Four more facts, from patching a real copy rather than a marker constant. The
+scratch project depends on `ratatui` 0.30.2; the copy is `ratatui-core` 0.1.2
+with an insertion inside `Frame::render_widget` itself.
+
+**f. The patched code executes, not merely resolves.** The earlier measurement
+proved the graph *pointed* at the copy. This one proves the copy *runs*: the
+line inserted into `render_widget` printed on every frame, and vanished when
+the `--config` flag was dropped. Resolution and execution are different claims
+and only the second one matters.
+
+**g. `ratatui-core` is `#![no_std]`** (`src/lib.rs:1`). A patch that reaches
+for `std` unguarded does not compile — measured, with `cannot find macro
+eprintln in this scope`. The `std` feature *is* enabled in a normal
+application, because the `ratatui` facade turns it on (`cargo metadata` reports
+`["default", "layout-cache", "std", "underline-color"]`), but that is the
+facade's doing and not a property of the crate. Every line of instrumentation
+must therefore sit behind `#[cfg(feature = "std")]`, or a `no_std` user of
+`ratatui-core` alone gets a broken build from a tool they never invoked.
+
+**h. Cargo's registry sources are writable.** `~/.cargo/registry/src/**` keeps
+the write bit, so a copy is editable straight away. This is worth stating
+because the Go probe had to strip read-only bits from its module cache copy;
+that trap does not exist here and the defensive code should not be transplanted.
+
+**i. The lockfile damage is reversible, exactly.** Finding (c) stands — a
+patched build rewrites `Cargo.lock` — but any subsequent ordinary build
+restores it **byte for byte**, including under `--offline` (verified by
+checksum: before and after are the same hash, the patched state a different
+one). So a launcher can guarantee the project is left as it found it by saving
+the lockfile's bytes and writing them back, rather than hoping. The residual
+risk is a concurrent build racing that restore, which is a caveat to document,
+not a bug to fix.
+
 ## 8. Findings that constrain the design
 
 1. `ratatui-core` is the crate to patch; the `ratatui` facade contains no
@@ -296,4 +332,9 @@ Remaining sensitivities, not yet measured and flagged for whoever builds this:
 6. `type_name` is available and mechanical for built-ins, but yields author
    names rather than roles for custom widgets, and never sees nested children.
 7. The ephemeral `--config` patch is real and needs no file in the project —
-   but it rewrites `Cargo.lock` and is refused outright under `--locked`.
+   but it rewrites `Cargo.lock` and is refused outright under `--locked`. The
+   rewrite is exactly reversible, so a launcher restores the bytes; `--locked`
+   has no accommodation and must be reported to the user as unsupported.
+8. Instrumentation must be `no_std`-safe. `ratatui-core` declares `#![no_std]`
+   and only gets `std` because the facade enables it, so every patched line
+   lives behind `#[cfg(feature = "std")]`.
