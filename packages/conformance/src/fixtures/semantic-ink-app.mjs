@@ -317,6 +317,17 @@ function App() {
         h(
           Node,
           {
+            key: 'unnamed-region',
+            // Deliberately annotated with a role and a test id but NO name,
+            // wrapping text: a container must not take the text of what it
+            // contains, or every ancestor of a label becomes a match for it.
+            meta: { role: 'region', testId: 'unnamed-region' },
+          },
+          h(Text, null, 'Nested label'),
+        ),
+        h(
+          Node,
+          {
             key: 'unicode',
             // A ZWJ sequence, a combining mark and a CJK pair, kept out of any
             // bordered container: Yoga and the emulator do not always agree on

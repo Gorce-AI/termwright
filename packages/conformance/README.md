@@ -73,6 +73,24 @@ logs: { input: 'l', expect: 'conformance log record' },
 example does at startup, and the obligation waits for the record instead of
 provoking one.
 
+Conventions the fixture has to opt into — an annotated test id, an empty
+textbox, a container with no label — are declared under `conventions`; the rest
+run for every adapter. A rule an adapter genuinely cannot follow is a *declared
+deviation*, not a failure:
+
+```ts
+conventions: {
+  emptyTextboxTestId: 'reason',
+  deviations: { '3': 'tview exposes no native identifier' },
+  readmePath: 'clients/go/README.md',
+},
+```
+
+The reason appears in the test title, so the exemption stays visible. Rules 1, 2
+and 4 cannot be judged in full from outside a subprocess, so the README check is
+advisory: a missing `## Deviations` heading writes a warning to stderr rather
+than failing the run.
+
 It checks the five obligations an adapter has:
 
 | Obligation | What is asserted |
@@ -85,6 +103,7 @@ It checks the five obligations an adapter has:
 | Channel loss | Cutting the socket leaves the application rendering and alive, and the adapter does not reconnect |
 | Logs | An adapter that did not announce `logs` sends none. One that declares them in the registration must deliver a record whose `seq` is unique and increasing and whose message never appears on the terminal |
 | Deltas (when announced) | With `subscribe: 'diffs'`, the deltas an adapter emits compose — through the protocol's own `applyTreeDelta` — to the same tree it reports when asked with `get-tree` |
+| Conventions | The machine-checkable half of the protocol README's "Adapter semantics conventions": containers are not named from their content (rule 2), an annotated test id reaches the wire (rule 3), an empty textbox publishes `value: ''` and no value is derived outside `{textbox, progressbar}` or from a boolean (rule 5) |
 
 `await` it at the top level: `vitest` is imported dynamically so the package can
 also be used from a plain script.

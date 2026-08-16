@@ -22,6 +22,15 @@ await runAdapterConformance({
   // `l` publishes through `@termwright/logs`; the message must reach the
   // driver's log channel and never the screen.
   logs: { input: 'l', expect: 'conformance log record' },
+  conventions: {
+    annotatedTestId: 'save-main',
+    emptyTextboxTestId: 'filter',
+    unnamedContainerTestId: 'unnamed-region',
+    // `unicode` is a `text` node whose value the fixture annotates, which the
+    // role gate allows; everything else must derive none.
+    annotatedValues: ['unicode'],
+    readmePath: new URL('../../../ink/README.md', import.meta.url).pathname,
+  },
   columns: 80,
   rows: 24,
   expectAbsoluteBounds: true,

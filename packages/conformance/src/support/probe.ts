@@ -27,7 +27,8 @@ import {
   ENV_ENDPOINT,
   ENV_PROTOCOL,
   ENV_TOKEN,
-  MARKER_DCS_PREFIX,
+  MARKER_OSC_CODE,
+  MARKER_OSC_PREFIX,
   parseAdapterMessage,
   PROTOCOL_ID,
   PROTOCOL_VERSION,
@@ -122,7 +123,17 @@ export interface ProbeObservation {
   readonly compositionError: string | null;
 }
 
-const MARKER_PATTERN = /\x1bP(twm;[0-9]+;[A-Za-z0-9_-]+)\x1b\\/gu;
+/**
+ * A marker on the wire: `OSC 8487 ; twm;<rev>;<mac>` closed by BEL or ST.
+ *
+ * Both terminators are matched because both are legal — an implementation
+ * emits BEL, but a receiver that only understood BEL would reject a
+ * conforming adapter, and this probe stands in for a receiver.
+ */
+const MARKER_PATTERN = new RegExp(
+  `\\x1b\\]${MARKER_OSC_CODE};(${MARKER_OSC_PREFIX}[0-9]+;[A-Za-z0-9_-]+)(?:\\x07|\\x1b\\\\)`,
+  'gu',
+);
 
 /**
  * Runs one fixture under a pseudo-terminal with a protocol endpoint attached.
@@ -498,7 +509,7 @@ export class AdapterProbe {
 }
 
 /** The marker prefix, re-exported so suites can assert on dormant output. */
-export const MARKER_TEXT_PREFIX = `\x1bP${MARKER_DCS_PREFIX}`;
+export const MARKER_TEXT_PREFIX = `\x1b]${MARKER_OSC_CODE};${MARKER_OSC_PREFIX}`;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {

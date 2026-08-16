@@ -12,6 +12,7 @@
  * frames, so a Python, Go or Rust adapter self-certifies exactly like the Ink
  * one — nothing here imports an adapter.
  */
+import { existsSync, readFileSync } from 'node:fs';
 import { ADAPTER_CAPABILITIES, validateSnapshot, DEFAULT_LIMITS } from '@termwright/protocol';
 import type { SemanticSnapshot } from '@termwright/protocol';
 import { AdapterProbe, MARKER_TEXT_PREFIX, type AdapterCommand, type ProbeObservation } from './support/probe.js';
@@ -70,6 +71,34 @@ export interface AdapterConformanceOptions {
    * asserted, and an adapter that announces `logs` but never delivers one
    * fails here rather than in a user's test.
    */
+  /**
+   * How to check the normative adapter conventions (protocol README, "Adapter
+   * semantics conventions"). Rules 1, 2 and 4 are largely judgement calls from
+   * outside; what is listed here is what a subprocess can actually observe.
+   *
+   * A rule an adapter cannot follow is a *declared deviation*, not a failure:
+   * name it in `deviations` and the matching check is skipped with the reason
+   * in the test title, so the exemption stays visible instead of becoming
+   * folklore.
+   */
+  readonly conventions?: {
+    /** A test id the fixture sets by author annotation (rule 3). */
+    readonly annotatedTestId?: string;
+    /** A textbox whose field is empty, to prove `value: ''` (rule 5). */
+    readonly emptyTextboxTestId?: string;
+    /** A container with no name of its own, wrapping text (rule 2). */
+    readonly unnamedContainerTestId?: string;
+    /**
+     * Test ids whose `value` is author-annotated. The role gate in rule 5
+     * bounds *derived* values; an annotation may put one on any role, and only
+     * the registration knows which is which.
+     */
+    readonly annotatedValues?: readonly string[];
+    /** Rule number → why this adapter cannot follow it. */
+    readonly deviations?: Readonly<Record<string, string>>;
+    /** The adapter's README, for the advisory `## Deviations` check (rule 6). */
+    readonly readmePath?: string;
+  };
   readonly logs?: {
     /**
      * Input that makes the application write a record. Omit it for an app that
@@ -147,6 +176,16 @@ async function settle(probe: AdapterProbe, quietMs = 250, budgetMs = 5_000): Pro
     });
   }
 }
+
+/** Roles that are containers: never named from what they contain (rule 2). */
+const CONTAINER_ROLES: ReadonlySet<string> = new Set([
+  'region',
+  'dialog',
+  'list',
+  'table',
+  'application',
+  'menu',
+]);
 
 const snapshotsOf = (observation: ProbeObservation): SemanticSnapshot[] =>
   observation.messages
@@ -402,6 +441,144 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           previousEnd = marker.offset;
         }
       });
+
+      const conventions = options.conventions ?? {};
+      const deviation = (rule: string): string | undefined => conventions.deviations?.[rule];
+      const ruleTitle = (rule: string, what: string): string => {
+        const declared = deviation(rule);
+        return declared === undefined
+          ? `convention ${rule}: ${what}`
+          : `convention ${rule}: ${what} (declared deviation: ${declared})`;
+      };
+
+      it(
+        ruleTitle('3', 'an author-annotated test id reaches the wire'),
+        { skip: conventions.annotatedTestId === undefined || deviation('3') !== undefined },
+        () => {
+          const wanted = conventions.annotatedTestId as string;
+          const latest = snapshotsOf(beforeInput).at(-1);
+          const node = latest?.nodes.find((entry) => entry.testId === wanted);
+          expect(node, `no node carries the annotated test id ${JSON.stringify(wanted)}`).toBeDefined();
+        },
+      );
+
+      it(
+        ruleTitle('5', 'an empty textbox publishes an empty value, not an absent one'),
+        { skip: conventions.emptyTextboxTestId === undefined || deviation('5') !== undefined },
+        () => {
+          const wanted = conventions.emptyTextboxTestId as string;
+          const latest = snapshotsOf(beforeInput).at(-1);
+          const node = latest?.nodes.find((entry) => entry.testId === wanted);
+          expect(node, `no node carries the test id ${JSON.stringify(wanted)}`).toBeDefined();
+
+          // `''` means the field is empty; absent means "not a value-bearing
+          // widget". A wire format that drops empty strings turns the first
+          // into the second and makes `toHaveValue('')` unassertable.
+          expect(node?.value, 'an empty textbox published no value at all').toBe('');
+        },
+      );
+
+      it(
+        ruleTitle('5', 'value is derived only for value-bearing roles'),
+        { skip: deviation('5') !== undefined },
+        () => {
+          const annotated = new Set(conventions.annotatedValues ?? []);
+          const latest = snapshotsOf(beforeInput).at(-1);
+          const offenders = (latest?.nodes ?? []).filter(
+            (node) =>
+              node.value !== undefined &&
+              node.role !== 'textbox' &&
+              node.role !== 'progressbar' &&
+              !(node.testId !== undefined && annotated.has(node.testId)),
+          );
+          expect(
+            offenders.map((node) => `${node.role} ${JSON.stringify(node.name)}`),
+            'these nodes carry a derived value outside {textbox, progressbar}',
+          ).toEqual([]);
+
+          // A boolean is a state, not contents: publishing `value: "true"`
+          // makes a checkbox look like a textbox containing that word.
+          const booleans = (latest?.nodes ?? []).filter(
+            (node) => node.value === 'true' || node.value === 'false',
+          );
+          expect(booleans.map((node) => node.role), 'a boolean was published as a value').toEqual([]);
+        },
+      );
+
+      it(
+        ruleTitle('2', 'no container is named from the text it contains'),
+        { skip: deviation('2') !== undefined },
+        () => {
+          const latest = snapshotsOf(beforeInput).at(-1);
+          const nodes = latest?.nodes ?? [];
+          const children = new Map<string, string[]>();
+          for (const node of nodes) {
+            if (node.parentId === undefined) continue;
+            children.set(node.parentId, [...(children.get(node.parentId) ?? []), node.id]);
+          }
+          const descendantText = (id: string): string[] => {
+            const out: string[] = [];
+            const pending = [...(children.get(id) ?? [])];
+            while (pending.length > 0) {
+              const next = nodes.find((node) => node.id === pending.pop());
+              if (next === undefined) continue;
+              if (next.name.length > 0) out.push(next.name);
+              pending.push(...(children.get(next.id) ?? []));
+            }
+            return out;
+          };
+
+          // Naming containers from content is what makes
+          // getByRole('region', {name: 'Approve'}) match the dialog *around*
+          // the button, so every ancestor of a label becomes a plausible match
+          // for it and locators stop being selective. Checked without any
+          // declaration: both failure shapes — taking one descendant's label,
+          // and concatenating them all — are visible from the tree alone.
+          const offenders = nodes
+            .filter((node) => CONTAINER_ROLES.has(node.role) && node.name.length > 0)
+            .filter((node) => {
+              const texts = descendantText(node.id);
+              const joined = texts.join(' ').replace(/\s+/gu, ' ').trim();
+              return texts.includes(node.name) || (joined.length > 0 && joined === node.name);
+            });
+          expect(
+            offenders.map((node) => `${node.role} ${JSON.stringify(node.name)}`),
+            'these containers took their name from their content',
+          ).toEqual([]);
+        },
+      );
+
+      it(
+        ruleTitle('2', 'a container with no label of its own has an empty name'),
+        { skip: conventions.unnamedContainerTestId === undefined || deviation('2') !== undefined },
+        () => {
+          const wanted = conventions.unnamedContainerTestId as string;
+          const latest = snapshotsOf(beforeInput).at(-1);
+          const node = latest?.nodes.find((entry) => entry.testId === wanted);
+          expect(node, `no node carries the test id ${JSON.stringify(wanted)}`).toBeDefined();
+          expect(node?.name, 'a container took its name from its content').toBe('');
+        },
+      );
+
+      it.skipIf(conventions.readmePath === undefined)(
+        'declares its deviations in its README (advisory)',
+        () => {
+          // Rules 1, 2 and 4 cannot be judged from outside a subprocess, so the
+          // README is the only evidence that a difference was considered rather
+          // than overlooked. Advisory on purpose: a missing heading is a
+          // documentation gap, not a broken adapter, and failing here would
+          // make a conformance run red for something no user can observe.
+          const path = conventions.readmePath as string;
+          const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
+          if (!text.includes('## Deviations')) {
+            process.stderr.write(
+              `conformance: ${options.name} has no "## Deviations" section in ${path}; ` +
+                'rules 1, 2 and 4 are unverifiable from outside, so an undeclared difference is invisible\n',
+            );
+          }
+          expect(true).toBe(true);
+        },
+      );
 
       it('sends log records only if it negotiated the channel', async () => {
         const hello = beforeInput.messages[0]?.message as { capabilities: readonly string[] };

@@ -72,14 +72,21 @@ function frame(value) {
   return Buffer.concat([header, body]);
 }
 
-/** `\x1bPtwm;{revision};{mac}\x1b\\`, MAC = base64url(HMAC-SHA256)[0..16). */
-function marker(revision, forSession = sessionId) {
+/**
+ * `OSC 8487 ; twm;{revision};{mac}` closed by BEL, or by ST when asked.
+ *
+ * MAC = base64url(HMAC-SHA256(token, `${sessionId}:${revision}`))[0..16). Both
+ * terminators are legal, so the peer can emit either: a receiver that only
+ * accepted the one an implementation happens to write would reject a
+ * conforming adapter, and that is a rule worth exercising from the outside.
+ */
+function marker(revision, forSession = sessionId, terminator = '\x07') {
   const mac = createHmac('sha256', token)
     .update(`${forSession}:${revision}`, 'utf8')
     .digest()
     .subarray(0, 16)
     .toString('base64url');
-  return `\x1bPtwm;${revision};${mac}\x1b\\`;
+  return `\x1b]8487;twm;${revision};${mac}${terminator}`;
 }
 
 function tree(revision, nodes, overrides = {}) {
@@ -306,6 +313,12 @@ const SCENARIOS = {
   'delta-before-snapshot': () => {
     // Handled specially at handshake time: nothing was published first.
     sendDelta(renameDelta(1, 2, 'Premature'));
+  },
+  'marker-st-terminator': () => {
+    // ST rather than BEL. The tree must pair exactly as it does with BEL.
+    socket.write(frame({ type: 'snapshot', snapshot: tree(2, validNodes('Terminated')) }));
+    process.stdout.write(marker(2, sessionId, '\x1b\\'));
+    published = 2;
   },
   'peer-error': () => {
     // The other direction: the adapter reports a protocol error at us. The

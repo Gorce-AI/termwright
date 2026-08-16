@@ -524,6 +524,21 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expectSurvives(terminal);
   });
 
+  it('accepts a marker closed with ST as readily as one closed with BEL', async () => {
+    const terminal = await arm('marker-st-terminator');
+    expect(terminal.semanticTree()?.revision).toBe(1);
+
+    await fire(terminal);
+
+    // Both terminators are legal. An implementation emits BEL, so ST is the
+    // one that rots unnoticed unless something outside the implementation
+    // sends it.
+    await expect.poll(() => terminal.semanticTree()?.revision).toBe(2);
+    expect(await terminal.getByRole('button').textContent()).toBe('Terminated');
+    expect(codes(terminal)).not.toContain('marker-unverified');
+    await expectSurvives(terminal);
+  });
+
   it('surfaces the code an adapter reports at us, not one of its own', async () => {
     const terminal = await arm('peer-error');
     await fire(terminal);

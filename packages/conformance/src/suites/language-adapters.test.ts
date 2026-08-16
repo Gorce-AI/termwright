@@ -38,6 +38,13 @@ await runAdapterConformance({
   // Logs once at startup through the stdlib logging bridge, like the tview
   // example, so the obligation waits for the record rather than provoking it.
   logs: { expect: 'no policy loaded' },
+  conventions: {
+    // Textual exposes DOM ids natively, which rule 3 requires an adapter to
+    // accept alongside an explicit annotation.
+    annotatedTestId: 'reason',
+    emptyTextboxTestId: 'reason',
+    readmePath: repositoryPath('clients', 'python', 'README.md'),
+  },
   // `clients/README.md` documents `q`, and the app binds it — but Tab
   // eventually lands on the `Input`, which swallows it. Ctrl+Q is Textual's
   // own priority binding and quits from any focus; Ctrl+C does not.

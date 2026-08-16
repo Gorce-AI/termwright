@@ -125,6 +125,20 @@ has to delete an assertion that explains itself.
   before an earlier socket message. What is asserted instead is message order on
   the socket (snapshot before commit) and marker order within stdout (strictly
   increasing offsets, non-empty gaps, every MAC verifying).
+- **Rule 2 needs no declaration; the others do.** "A container is not named
+  from its content" is checkable from the tree alone — both failure shapes
+  (taking one descendant's label, and concatenating them all) are visible
+  without knowing anything about the fixture, so it runs for every adapter. The
+  test-id and empty-textbox rules need a node the registration can point at,
+  and the value-derivation gate needs to know which values were author-
+  annotated, since an annotation may legitimately put one on any role.
+- **A declared deviation is not a failure, and must not look like one.** The
+  reason goes in the test title rather than into a comment, so an exemption is
+  visible in the run output instead of becoming folklore. The README check for
+  rule 6 is advisory on purpose: rules 1, 2 and 4 cannot be judged from outside
+  a subprocess, so a missing heading is a documentation gap, and failing a
+  conformance run over something no user can observe would train people to
+  ignore the run.
 - **Delta composition is checked against an oracle, not a self-check.** The
   probe composes with the protocol's own `applyTreeDelta` and compares the
   result against a tree the adapter builds itself in answer to `get-tree`. An
