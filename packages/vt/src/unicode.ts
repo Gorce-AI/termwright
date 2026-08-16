@@ -123,6 +123,82 @@ export function canOverrideWidths(base: IUnicodeVersionProvider): boolean {
   return true;
 }
 
+/**
+ * The half of an xterm terminal a profile needs to touch.
+ *
+ * Structural on purpose: the browser build (`@xterm/xterm`) and the headless
+ * build are different classes with the same shape here, and this package should
+ * not force a consumer to pick one.
+ */
+export interface UnicodeHandlingLike {
+  register(provider: IUnicodeVersionProvider): void;
+  activeVersion: string;
+}
+
+/** An xterm addon, as far as capturing its provider is concerned. */
+export interface UnicodeAddonLike {
+  activate(terminal: never): void;
+}
+
+/**
+ * Reads the provider out of a Unicode addon without registering it anywhere.
+ *
+ * The addons do not export their providers and xterm has no getter for a
+ * registered one, but `activate(terminal)` only ever calls
+ * `terminal.unicode.register(...)`. Handing it a stub that records the call
+ * yields the provider through public API — no private fields, and no versions
+ * registered on a real terminal that nobody asked for.
+ *
+ * @param version - which provider to pick when an addon registers several
+ * (the grapheme addon registers both `15` and `15-graphemes`); the last one
+ * registered is used when it does not match.
+ */
+export function captureAddonProvider(
+  addon: UnicodeAddonLike,
+  version?: string,
+): IUnicodeVersionProvider {
+  const captured: IUnicodeVersionProvider[] = [];
+  const sink = {
+    unicode: {
+      register(provider: IUnicodeVersionProvider): void {
+        captured.push(provider);
+      },
+      versions: [] as string[],
+      activeVersion: '',
+    },
+  };
+  addon.activate(sink as never);
+  const provider =
+    (version === undefined ? undefined : captured.find((candidate) => candidate.version === version)) ??
+    captured.at(-1);
+  if (provider === undefined) {
+    throw new Error('@termwright/vt: the xterm addon registered no Unicode provider');
+  }
+  return provider;
+}
+
+/**
+ * Applies a profile to any xterm terminal, browser or headless.
+ *
+ * Registering a provider is only half of it — a provider that is not made
+ * active changes nothing, which is the half that is easy to miss and produced
+ * the bug this package exists to prevent.
+ */
+export function applyProfile(
+  unicode: UnicodeHandlingLike,
+  baseAddon: UnicodeAddonLike,
+  profile: { id: string; unicodeVersion: string; ambiguousWide: boolean; variationSelectors: boolean },
+): void {
+  const base = captureAddonProvider(baseAddon, profile.unicodeVersion);
+  unicode.register(
+    createProfileProvider(base, profile.id, {
+      ambiguousWide: profile.ambiguousWide,
+      variationSelectors: profile.variationSelectors,
+    }),
+  );
+  unicode.activeVersion = profile.id;
+}
+
 /** The switches a profile applies on top of a base Unicode version. */
 export interface UnicodeOverrides {
   /** Count East Asian Ambiguous characters as two columns. */

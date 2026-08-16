@@ -35,6 +35,24 @@ console.log(terminal.unicode.activeVersion); // the same id: ask a terminal what
 console.log(Object.keys(TERMINAL_PROFILES));
 ```
 
+## In a browser
+
+The main entry builds a `@xterm/headless` terminal, which pulls Node into a
+bundle. A browser consumer imports the other half instead — profiles, width
+tables and the provider that applies them, with no headless in the runtime path:
+
+```ts
+import { Unicode11Addon } from '@xterm/addon-unicode11';
+import { applyProfile, resolveProfileId, DEFAULT_PROFILE } from '@termwright/vt/unicode';
+
+const profile = resolveProfileId(recording.terminalProfile) ?? DEFAULT_PROFILE;
+applyProfile(term.unicode, new Unicode11Addon(), profile);
+```
+
+`applyProfile` registers the profile's provider AND activates it. Registering
+alone changes nothing — that is the half of the trap that produced the bug this
+package exists to prevent.
+
 ## What a profile is
 
 Terminals disagree about a handful of things that decide whether a bordered box

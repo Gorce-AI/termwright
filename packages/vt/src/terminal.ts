@@ -24,7 +24,7 @@ import type {
   Terminal,
 } from '@xterm/headless';
 import { resolveProfile, type TerminalProfile, type TerminalProfileLike } from './profiles.js';
-import { createProfileProvider } from './unicode.js';
+import { captureAddonProvider, createProfileProvider, type UnicodeAddonLike } from './unicode.js';
 
 /** Options for {@link createTerminal}. */
 export interface CreateTerminalOptions {
@@ -83,29 +83,10 @@ export function createTerminal(options: CreateTerminalOptions): ProfiledTerminal
  * asked for.
  */
 function loadBaseProvider(profile: TerminalProfile): IUnicodeVersionProvider {
-  const captured: IUnicodeVersionProvider[] = [];
-  const sink = {
-    unicode: {
-      register(provider: IUnicodeVersionProvider): void {
-        captured.push(provider);
-      },
-      versions: [] as string[],
-      activeVersion: '',
-    },
-  };
-
-  const addon = new unicode11Addon.Unicode11Addon() as unknown as ITerminalAddon;
-  addon.activate(sink as unknown as Terminal);
-
-  const wanted = profile.unicodeVersion;
-  const provider = captured.find((candidate) => candidate.version === wanted) ?? captured.at(-1);
-  if (provider === undefined) {
-    throw new Error(
-      `@termwright/vt could not obtain a Unicode ${wanted} provider; ` +
-        'the installed xterm addon registered nothing',
-    );
-  }
-  return provider;
+  return captureAddonProvider(
+    new unicode11Addon.Unicode11Addon() as unknown as UnicodeAddonLike,
+    profile.unicodeVersion,
+  );
 }
 
 /**

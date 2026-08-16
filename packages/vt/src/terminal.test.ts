@@ -129,3 +129,46 @@ describe('isAmbiguousWidth', () => {
     }
   });
 });
+
+describe('the portable half', () => {
+  it('applies a profile to any terminal-shaped object, browser or headless', async () => {
+    // What a browser consumer does: its own addon, its own terminal, our
+    // profile — no @xterm/headless anywhere in the path.
+    const { applyProfile } = await import('./unicode.js');
+    const unicode11 = (await import('@xterm/addon-unicode11')).default;
+
+    const registered: { version: string; wcwidth(cp: number): number }[] = [];
+    let active = '';
+    const unicode = {
+      register(provider: { version: string; wcwidth(cp: number): number }): void {
+        registered.push(provider);
+      },
+      get activeVersion(): string {
+        return active;
+      },
+      set activeVersion(value: string) {
+        active = value;
+      },
+    };
+
+    applyProfile(unicode as never, new unicode11.Unicode11Addon() as never, TERMINAL_PROFILES['iterm2-ambiguous-wide']);
+
+    // Registering alone changes nothing: the provider must also be activated.
+    expect(active).toBe('iterm2-ambiguous-wide');
+    expect(registered).toHaveLength(1);
+    // And it is the profile's provider, not the addon's own.
+    expect(registered[0]?.wcwidth(0x2502)).toBe(2);
+    expect(registered[0]?.wcwidth(0x0061)).toBe(1);
+  });
+
+  it('reads a provider out of an addon without registering it anywhere', async () => {
+    const { captureAddonProvider } = await import('./unicode.js');
+    const unicode11 = (await import('@xterm/addon-unicode11')).default;
+
+    const base = captureAddonProvider(new unicode11.Unicode11Addon() as never, '11');
+    expect(base.version).toBe('11');
+    expect(base.wcwidth(0x4e00)).toBe(2);
+    // Untouched by the profile: the box character is still narrow here.
+    expect(base.wcwidth(0x2502)).toBe(1);
+  });
+});
