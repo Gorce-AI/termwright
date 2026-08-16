@@ -246,6 +246,30 @@ ignored rather than failing the call. Format agreed with that package's owner:
 the driver's `CrashReport` minus the semantic tree, which already lives verbatim
 in `semantics.jsonl`, plus `lastSemanticRevision` to reach it.
 
+## Idle TTL, because HTTP never says goodbye
+
+A Streamable HTTP client that crashes, is killed, or simply walks away leaves
+nothing behind to notice: no close frame, no EOF, no event. Its session stays
+registered, its terminals keep running, their children keep running, and its
+slot stays taken. Enough repeats and an agent that crash-loops has quietly
+denial-of-serviced the operator's own machine — which is how conformance found
+this (#27d).
+
+Idleness is therefore the only liveness signal available, and `SessionRegistry`
+treats it as one: every request naming a session calls `touch()`, and
+`sweepIdle()` tears down anything past `idleTtlMs` (10 minutes by default). The
+teardown is the full one — stores closed, transport disposed, slot freed — and
+it logs to **stderr**, never stdout, which may be a protocol stream.
+
+Two details worth keeping. The sweeper's interval is `unref`'d, so it cannot by
+itself hold a process open. And the clock is injectable: the tests advance a
+fake one to prove expiry and refresh deterministically, then one test runs on the
+real timer to prove the sweeper is actually scheduled — a fake-clock-only suite
+would pass just as happily with the interval never started.
+
+stdio gets no TTL. There, EOF on the pipe *is* the disconnect signal, and a
+session that idles while its host thinks it owns a terminal is a bug, not a leak.
+
 ## Session ownership
 
 `SessionRegistry` maps a session key (`stdio`, `in-memory`, or an

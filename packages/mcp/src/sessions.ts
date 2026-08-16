@@ -312,6 +312,25 @@ export interface RegisteredSession<T> {
   readonly key: string;
   readonly stores: SessionStores;
   readonly attachment: T;
+  /** Clock reading of the last request that named this session. */
+  lastSeenAt: number;
+}
+
+/** Options for {@link SessionRegistry}. */
+export interface SessionRegistryOptions<T> {
+  readonly maxSessions?: number;
+  readonly storageDir?: string;
+  /**
+   * Milliseconds a session may sit idle before it is torn down. `0` disables
+   * expiry, which is what stdio wants: there, EOF on the pipe is the signal.
+   */
+  readonly idleTtlMs?: number;
+  /** Injectable clock, for tests. */
+  readonly now?: () => number;
+  /** Released alongside the stores — the transport, for a socket-backed session. */
+  readonly disposeAttachment?: (attachment: T) => Promise<void> | void;
+  /** Called after an idle session was torn down, for the server log. */
+  readonly onExpired?: (key: string) => void;
 }
 
 /**
@@ -322,10 +341,75 @@ export class SessionRegistry<T> {
   readonly #sessions = new Map<string, RegisteredSession<T>>();
   readonly #maxSessions: number;
   readonly #storageDir: string | undefined;
+  readonly #idleTtlMs: number;
+  readonly #now: () => number;
+  readonly #disposeAttachment: ((attachment: T) => Promise<void> | void) | undefined;
+  readonly #onExpired: ((key: string) => void) | undefined;
+  #sweeper: NodeJS.Timeout | undefined;
 
-  constructor(options: { readonly maxSessions?: number; readonly storageDir?: string } = {}) {
+  constructor(options: SessionRegistryOptions<T> = {}) {
     this.#maxSessions = options.maxSessions ?? MCP_LIMITS.maxSessions;
     this.#storageDir = options.storageDir;
+    this.#idleTtlMs = options.idleTtlMs ?? 0;
+    this.#now = options.now ?? Date.now;
+    this.#disposeAttachment = options.disposeAttachment;
+    this.#onExpired = options.onExpired;
+  }
+
+  /** The configured idle ceiling; `0` when expiry is disabled. */
+  get idleTtlMs(): number {
+    return this.#idleTtlMs;
+  }
+
+  /**
+   * Marks a session as used. Called for **every** request that names one, so a
+   * session stays alive exactly as long as someone is talking to it.
+   */
+  touch(key: string): void {
+    const session = this.#sessions.get(key);
+    if (session !== undefined) session.lastSeenAt = this.#now();
+  }
+
+  /**
+   * Tears down every session idle past the TTL and returns their keys.
+   *
+   * Streamable HTTP has no disconnect signal: a client that crashes or walks
+   * away leaves its session, its terminals and their children running, and its
+   * slot taken. Repeated agent failures would then add up to an accidental
+   * denial of service against the operator's own machine, so idleness is the
+   * only honest liveness signal available here.
+   */
+  async sweepIdle(): Promise<readonly string[]> {
+    if (this.#idleTtlMs <= 0) return [];
+    const deadline = this.#now() - this.#idleTtlMs;
+    const expired = [...this.#sessions.values()]
+      .filter((session) => session.lastSeenAt <= deadline)
+      .map((session) => session.key);
+    for (const key of expired) {
+      await this.delete(key);
+      this.#onExpired?.(key);
+    }
+    return expired;
+  }
+
+  /**
+   * Runs {@link sweepIdle} on a timer until the returned function is called.
+   * The timer is unref'd, so it never keeps a process alive on its own.
+   */
+  startIdleSweeper(intervalMs = Math.min(Math.max(this.#idleTtlMs / 4, 1_000), 60_000)): () => void {
+    if (this.#idleTtlMs <= 0) return () => undefined;
+    this.#sweeper = setInterval(() => {
+      void this.sweepIdle();
+    }, intervalMs);
+    this.#sweeper.unref?.();
+    return () => this.stopIdleSweeper();
+  }
+
+  /** Stops the sweeper started by {@link startIdleSweeper}. Idempotent. */
+  stopIdleSweeper(): void {
+    if (this.#sweeper === undefined) return;
+    clearInterval(this.#sweeper);
+    this.#sweeper = undefined;
   }
 
   get size(): number {
@@ -348,7 +432,12 @@ export class SessionRegistry<T> {
       );
     }
     const stores = createSessionStores({ sessionKey: key, storageDir: this.#storageDir });
-    const session: RegisteredSession<T> = { key, stores, attachment: attach(stores) };
+    const session: RegisteredSession<T> = {
+      key,
+      stores,
+      attachment: attach(stores),
+      lastSeenAt: this.#now(),
+    };
     this.#sessions.set(key, session);
     return session;
   }
@@ -363,10 +452,16 @@ export class SessionRegistry<T> {
     if (session === undefined) return;
     this.#sessions.delete(key);
     await closeSessionStores(session.stores);
+    try {
+      await this.#disposeAttachment?.(session.attachment);
+    } catch {
+      // A transport that already closed is not a failure to report.
+    }
   }
 
-  /** Closes every session. */
+  /** Closes every session and stops the sweeper. */
   async closeAll(): Promise<void> {
+    this.stopIdleSweeper();
     const keys = [...this.#sessions.keys()];
     await Promise.all(keys.map(async (key) => this.delete(key)));
   }

@@ -69,6 +69,12 @@ not inside transport objects: each session owns its terminals, `DELETE` disposes
 them, and the ceiling (16 sessions, 16 terminals each) is enforced before a
 transport exists.
 
+Streamable HTTP gives no disconnect signal, so a session also expires after
+`idleTtlMs` without a request (10 minutes by default, `0` to disable). Every
+request naming a session refreshes it; expiry runs the full teardown — terminals
+closed, children gone, traces released, slot returned — and writes a line to
+stderr. stdio has no TTL: there, EOF on the pipe is the signal.
+
 ## Tools
 
 `terminal.launch`, `capabilities`, `snapshot`, `capture_since`, `query`,

@@ -177,12 +177,24 @@ export interface HttpServerHandle {
   close(): Promise<void>;
 }
 
+/** Default idle ceiling for an HTTP session. */
+export const DEFAULT_IDLE_TTL_MS = 10 * 60_000;
+
 /** Options for {@link serveHttp}. */
 export interface HttpServeOptions extends ServeOptions {
   readonly port?: number;
   readonly host?: string;
   /** Path the MCP endpoint listens on. Defaults to `/mcp`. */
   readonly path?: string;
+  /**
+   * Milliseconds a session may sit idle before it is torn down. Defaults to
+   * {@link DEFAULT_IDLE_TTL_MS}; `0` disables expiry.
+   */
+  readonly idleTtlMs?: number;
+  /** Injectable clock, for tests. */
+  readonly now?: () => number;
+  /** Where an expiry is reported. Defaults to stderr. */
+  readonly log?: (message: string) => void;
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
@@ -214,13 +226,24 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
  */
 export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpServerHandle> {
   const path = options.path ?? '/mcp';
+  // stdout may be a protocol stream elsewhere; server-level notes go to stderr.
+  const log = options.log ?? ((message: string): void => void process.stderr.write(`${message}\n`));
   const registry = new SessionRegistry<{
     transport: StreamableHTTPServerTransport;
     server: McpServer;
   }>({
     ...(options.maxSessions === undefined ? {} : { maxSessions: options.maxSessions }),
     ...(options.storageDir === undefined ? {} : { storageDir: options.storageDir }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+    idleTtlMs: options.idleTtlMs ?? DEFAULT_IDLE_TTL_MS,
+    disposeAttachment: async (attachment) => {
+      await attachment.transport.close();
+    },
+    onExpired: (key) => {
+      log(`termwright: session ${key} expired after idling; terminals and traces released`);
+    },
   });
+  registry.startIdleSweeper();
 
   const http = createServer((request, response) => {
     void (async () => {
@@ -247,6 +270,8 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
             sendJson(response, 404, { error: 'unknown session', kind: 'no-session' });
             return;
           }
+          // Every request that names a session is proof the client is alive.
+          registry.touch(key);
           await session.attachment.transport.handleRequest(request, response, body);
           return;
         }
@@ -288,6 +313,7 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
     registry,
     port,
     close: async (): Promise<void> => {
+      registry.stopIdleSweeper();
       await registry.closeAll();
       await new Promise<void>((resolve) => {
         http.close(() => {
