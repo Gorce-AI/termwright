@@ -515,8 +515,9 @@ looking for a failure that is not there.
 The count is required in a manifest rather than optional, because "nothing was
 dropped" and "nobody counted" are different facts and only one of them is
 reassuring — which is why the format went to v2 instead of quietly reading a
-v1 entry as zero. Live runs do not carry the count yet: `test-end` would need
-the field, and that is a change to the normative §UI events contract.
+v1 entry as zero. Live runs carry it too: `test-end` gained a required `lostLogRecords` once the
+contract was updated, so the badge means the same thing in a live run, in a
+replayed archive and in the history — one row, one rule.
 
 ## Open threads
 

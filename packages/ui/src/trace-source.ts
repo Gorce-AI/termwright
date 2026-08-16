@@ -51,6 +51,12 @@ export interface TraceOverview {
    */
   readonly terminalProfile: string | null;
   readonly exit: { readonly code: number | null; readonly signal: string | null } | null;
+  /**
+   * Log records the writer evicted while recording, per `meta.logs.dropped`.
+   * Zero for an archive that logged nothing: `meta.logs` is absent exactly when
+   * there was nothing to log, so zero is a fact here rather than a guess.
+   */
+  readonly lostLogRecords: number;
   readonly steps: readonly StepSummary[];
   /**
    * The crash section, when the recorded program died on its own and the
@@ -113,6 +119,7 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
     semanticTree: meta.semanticTree,
     terminalProfile,
     exit: meta.exit ?? null,
+    lostLogRecords: meta.logs?.dropped ?? 0,
     steps,
     crash,
     markers,
@@ -175,6 +182,7 @@ export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void 
     durationMs: overview.durationMs,
     // A recording is one outcome; a retry would have been its own archive.
     flaky: false,
+    lostLogRecords: overview.lostLogRecords,
     traceRef: overview.path,
   });
   messages.push({

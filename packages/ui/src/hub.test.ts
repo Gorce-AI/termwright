@@ -252,7 +252,7 @@ describe('what survives a new run', () => {
       type: 'tests-discovered',
       tests: [{ id: '/repo/a.test.ts::logs in', title: 'logs in', file: '/repo/a.test.ts' }],
     });
-    hub.publish({ v: 1, type: 'test-end', id: 't1', status: 'passed', durationMs: 1, flaky: false });
+    hub.publish({ v: 1, type: 'test-end', id: 't1', status: 'passed', durationMs: 1, flaky: false, lostLogRecords: 0 });
 
     hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 2 });
 

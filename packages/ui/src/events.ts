@@ -127,6 +127,12 @@ export type ServerMessage =
       readonly durationMs: number;
       /** Passed only after a retry — a different problem from a failure. */
       readonly flaky: boolean;
+      /**
+       * Application log records the harness could not keep; `0` when none were
+       * dropped. Required: "nothing was lost" and "nobody counted" are
+       * different facts, and only one of them is reassuring.
+       */
+      readonly lostLogRecords: number;
       /** Absent when no archive was retained for this test. */
       readonly traceRef?: string;
       /** Absent on a pass. */
@@ -392,6 +398,7 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       if (typeof value['flaky'] !== 'boolean') {
         throw new UiProtocolError('test-end: flaky must be a boolean');
       }
+      const lostLogRecords = requireNumber(value, 'lostLogRecords', 'test-end');
       return {
         v: 1,
         type: 'test-end',
@@ -399,6 +406,7 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         status,
         durationMs,
         flaky: value['flaky'],
+        lostLogRecords,
         ...(traceRef === undefined ? {} : { traceRef }),
         ...(error === undefined ? {} : { error }),
       };

@@ -60,6 +60,7 @@ interface MutableTest {
   startedAt?: number;
   durationMs?: number;
   flaky?: boolean;
+  lostLogRecords?: number;
   error?: string;
   traceRef?: string;
   sessionId?: string;
@@ -1000,6 +1001,7 @@ function handle(message: ServerMessage): void {
       if (message.error !== undefined) test.error = message.error;
       test.flaky = message.flaky;
       test.durationMs = message.durationMs;
+      test.lostLogRecords = message.lostLogRecords;
       retick();
       break;
     }

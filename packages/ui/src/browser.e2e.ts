@@ -273,6 +273,7 @@ describe('the runner UI against a live run', () => {
       status: 'failed',
       durationMs: 12,
       flaky: false,
+      lostLogRecords: 0,
       error: 'button stayed disabled',
     });
 

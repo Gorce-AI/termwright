@@ -169,6 +169,7 @@ export class TermwrightUiReporter {
       // flakiness is a fact about the result, not an optional annotation.
       durationMs: diagnostic?.duration ?? 0,
       flaky,
+      lostLogRecords,
       ...(trace === undefined ? {} : { traceRef: trace }),
       ...(error === undefined ? {} : { error }),
     });

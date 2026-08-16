@@ -40,6 +40,7 @@ describe('server messages', () => {
         traceRef: 'out/login.twtrace',
         durationMs: 1_234,
         flaky: true,
+        lostLogRecords: 0,
       },
       { v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 1, durationMs: 900 } },
     ];
@@ -118,6 +119,11 @@ describe('server messages', () => {
     expect(() =>
       parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"passed","durationMs":5}'),
     ).toThrow(/flaky must be a boolean/);
+    expect(() =>
+      parseServerMessage(
+        '{"v":1,"type":"test-end","id":"t1","status":"passed","durationMs":5,"flaky":false}',
+      ),
+    ).toThrow(/lostLogRecords must be a finite number/);
     expect(() =>
       parseServerMessage('{"v":1,"type":"run-end","summary":{"total":1,"passed":1,"failed":0,"skipped":0}}'),
     ).toThrow(/summary.flaky must be a finite number/);

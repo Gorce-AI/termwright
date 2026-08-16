@@ -25,6 +25,7 @@ function testCase(options: {
   error?: string;
   duration?: number;
   retryCount?: number;
+  lostLogRecords?: number;
 }): Parameters<TermwrightUiReporter['onTestCaseResult']>[0] {
   return {
     id: options.id,
@@ -35,7 +36,13 @@ function testCase(options: {
       ...(options.error === undefined ? {} : { errors: [{ message: options.error }] }),
     }),
     diagnostic: () => ({ duration: options.duration ?? 12, retryCount: options.retryCount ?? 0 }),
-    meta: () => ({ termwright: { traces: options.traces ?? [] } }),
+    meta: () => ({
+      termwright: {
+        traces: options.traces ?? [],
+        // `@termwright/test` omits the field entirely when nothing was lost.
+        ...(options.lostLogRecords === undefined ? {} : { lostLogRecords: options.lostLogRecords }),
+      },
+    }),
   };
 }
 
@@ -97,6 +104,21 @@ describe('TermwrightUiReporter', () => {
 
     const end = sink.messages.at(-1);
     expect(end?.type === 'run-end' && end.summary.flaky).toBe(1);
+  });
+
+  it('passes on the count of log records the harness lost, and zero when it lost none', async () => {
+    const sink = new Collected();
+    const reporter = new TermwrightUiReporter({ sink, runsDir: null, stepsFromTraces: false });
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(testCase({ id: 't1', title: 'lossy', state: 'passed', lostLogRecords: 9 }));
+    reporter.onTestCaseResult(testCase({ id: 't2', title: 'clean', state: 'passed' }));
+    await reporter.onTestRunEnd();
+
+    const [lossy, clean] = sink.messages.filter((message) => message.type === 'test-end');
+    expect(lossy?.type === 'test-end' && lossy.lostLogRecords).toBe(9);
+    // The producer omits the field for zero; the message still carries it,
+    // because "nobody counted" is not something a viewer should have to guess.
+    expect(clean?.type === 'test-end' && clean.lostLogRecords).toBe(0);
   });
 
   it('puts the steps of a finished test on the timeline, from its trace', async () => {
