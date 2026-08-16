@@ -22,7 +22,12 @@ Changing a normative file requires: update it first, note the change in
 
 - `protocol` depends on `zod` only. Never on React, Ink, MCP, PTY, driver.
 - `driver` depends on `protocol` + PTY/VT libs. Never on Ink, Vitest, MCP.
-- `ink`, `opentui` (adapters) depend on `protocol` + their framework. Never on driver.
+- `ink`, `opentui` (adapters) depend on `protocol` + their framework. Never
+  on driver — from the ROOT entry. An adapter MAY ship a `/testing` subpath
+  whose deps (driver, ink-testing) are OPTIONAL peers, provided a test proves
+  the built root entry references neither (opentui does this; ink uses the
+  separate `ink-testing` package — both satisfy the same goal: a production
+  install never resolves the pty binary).
 - `test` depends on `driver` (+ `trace`, + `protocol` constants/types) and
   declares `vitest` as peer.
 - `ink-testing` depends on `driver`, `ink` (adapter), `protocol`.
