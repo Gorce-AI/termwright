@@ -138,3 +138,48 @@ forwarding the parent's value would describe the wrong terminal — and on POSIX
 `node-pty` was already overriding it anyway, so this makes the platforms agree
 rather than introducing a new policy. An explicit `env: { TERM }` still wins,
 for a caller testing their program under something else.
+
+## Draft: where per-property provenance could live (campaign #34, question 2)
+
+Not a proposal — variants with their measured costs, so the decision is made
+against arithmetic. Sizes come from a real session (`semantic-app` fixture,
+4 nodes, 870 B snapshot, **217.5 B/node**; the button node is 186 B with 8
+fields). Percentages are against that button node, measured by serialising the
+variant, not estimated.
+
+**The finding that reframes the question: there is no headroom left.** At
+`maxNodes` (5 000) and this sample's average node, a maximal tree is **1062 KiB
+against a `maxSnapshotBytes` of 1024 KiB** — the two default limits already
+contradict each other before provenance is added. Whatever encoding is chosen,
+one of the two ceilings has to move, or trees have to get smaller. Worth
+stating plainly rather than discovering it when a real app hits it.
+
+| Variant | Per node | Node +% | 5 000 nodes | Notes |
+|---|---|---|---|---|
+| Verbose strings (`provenance: {role: 'component-recognizer', …}`) | +169 B | +91 % | 1887 KiB | Self-describing on the wire, and unaffordable. Rejected by arithmetic, not by taste |
+| Per-field enum ints (`p: {r: 2, n: 3}`) | +36 B | +19 % | 1238 KiB | Readable in a debugger; still nearly doubles the overrun |
+| Packed bitfield (3 bits × 8 properties in one int) | +12 B | +6 % | 1121 KiB | Cheapest that keeps provenance in the tree; unreadable without a decoder, so every consumer needs one |
+| Uniform default (`p: 2`, one source for the whole node) | +6 B | +3 % | 1091 KiB | Fits the common case: most nodes get every fact from one recognizer |
+| Uniform + exceptions (`p: 2, px: {name: 4}`) | +22 B | +12 % | — | The realistic shape of the one above: the exception is the interesting node, and it pays only where it occurs |
+| Side channel, read lazily | 0 B | 0 % | 1062 KiB | Costs nothing in the tree and buys a different problem — see below |
+
+The uniform-plus-exceptions row is the one worth taking seriously if provenance
+stays in the tree. It matches what the adapters already do: a node's facts
+overwhelmingly come from a single source, and the cases worth inspecting are
+exactly the ones where they do not. It also degrades honestly — a node with
+mixed provenance costs more, which is the node someone is about to ask about.
+
+The lazy side channel is not free, it relocates the cost. Provenance for
+revision N has to be answerable *after* N is superseded, or the inspector shows
+"unknown" for everything the user is looking at, so the probe has to retain
+history. There is precedent: the Python client already keeps
+`_SNAPSHOT_HISTORY = 8` for `get-tree`. The open question is what the retention
+contract is and what an inspector shows when it falls off the end — and
+"unknown" there means something different from `'unknown'` in `TerminalModes`,
+which is a distinction worth not blurring.
+
+One thing measured elsewhere argues for keeping *something* in the tree:
+`TerminalModes` reports `'unknown'` inline rather than making a caller ask, and
+that is what makes the refusal logic honest at the point of decision. A gate
+that has to make a round trip to learn how much to trust a fact will not make
+it.
