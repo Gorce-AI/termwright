@@ -1,14 +1,14 @@
 --- a/Cargo.toml	2026-08-17 01:17:39
 +++ b/Cargo.toml	2026-08-17 01:17:39
-@@ -73,6 +73,7 @@
-     "dep:serde",
+@@ -62,6 +62,7 @@
+     "ratatui-core/serde",
  ]
  std = [
 +    "dep:termwright-probe-ratatui",
-     "bitflags/std",
-     "compact_str/std",
-     "itertools/use_std",
-@@ -212,3 +213,7 @@
+     "serde?/std",
+     "time?/local-offset",
+ ]
+@@ -243,3 +244,7 @@
  
  [lints.rust]
  unsafe_code = "forbid"

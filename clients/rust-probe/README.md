@@ -22,7 +22,9 @@ rendered alone.
 ## What it can and cannot report
 
 Ratatui is immediate mode, and the honest consequences are these. Each line is
-a finding from `docs/architecture/audit/ratatui.md`, not a to-do.
+a finding from `docs/architecture/audit/ratatui.md`, not a to-do — with one
+correction the audit could not have made, marked below: it measured the public
+API from outside the crate, and a patch runs inside it.
 
 | Fact | Reported? |
 |---|---|
@@ -31,7 +33,8 @@ a finding from `docs/architecture/audit/ratatui.md`, not a to-do.
 | whether those cells are still the widget's | **no** — every node says `occlusion: "unknown"` |
 | identity across frames | **no** — ids are frame-local and carry the frame number |
 | parent/child structure | **no** — the tree is flat; nesting happens inside `render`, where we cannot see |
-| number of items in a list | **no** — `List::items` is `pub(crate)` with no length accessor, so `setSize` is unobtainable |
+| number of items in a list, and their text | **yes, but only from inside** — `List::items` is `pub(crate)`, so this is reachable from the patched `ratatui-widgets` and from nowhere else |
+| which row is selected | yes, read *after* the render, because rendering clamps the state to what was actually drawn |
 | scroll extent | **no** — `ScrollbarState`'s `content_length()` is a setter returning `Self`; only `get_position()` reads |
 | author annotations | **no** — Ratatui has nowhere to put one |
 

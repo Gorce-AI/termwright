@@ -27,7 +27,7 @@
 //! not ownership — a later write silently wins — and `occlusion` is exactly
 //! the field that says so.
 
-use termwright_protocol::tree::{Node, Occlusion, Provenance, Rect, Snapshot};
+use termwright_protocol::tree::{Node, Occlusion, Provenance, Rect, Snapshot, State};
 use termwright_protocol::Role;
 
 use crate::RenderCall;
@@ -113,9 +113,50 @@ pub fn snapshot_from(calls: &[RenderCall], frame: u64, columns: u16, rows: u16) 
             // which is what a `generic` node needs to stay distinguishable.
             node.framework_type = Some(type_path.to_owned());
         }
+        let node_id = node.id.clone();
         snapshot.push(node);
+
+        // A collection's rows are the only children this framework lets the
+        // probe see, and only because the patch runs inside the widget crate:
+        // `List::items` is `pub(crate)`, so the item text and the item count
+        // are unreachable from outside and reachable from within.
+        if let Some(collection) = &call.collection {
+            push_items(&mut snapshot, &node_id, collection, frame, call.ordinal);
+        }
     }
     snapshot
+}
+
+/// Publish one node per item the collection reported.
+///
+/// `setSize` is the widget's own count, not the number published: a list of a
+/// thousand rows says a thousand even when only [`crate::MAX_ITEMS`] of them
+/// are carried, because the count is a fact about the list and the cap is a
+/// fact about us.
+fn push_items(
+    snapshot: &mut Snapshot,
+    parent: &str,
+    collection: &crate::Collection,
+    frame: u64,
+    ordinal: u32,
+) {
+    for (index, text) in collection.items.iter().enumerate() {
+        let mut item = Node::new(
+            format!("f{frame}:{ordinal}:{index}"),
+            Role::ListItem,
+            text.clone(),
+        );
+        item.parent_id = Some(parent.to_owned());
+        item.occlusion = Some(Occlusion::Unknown);
+        item.p = Some(Provenance::Framework);
+        item.state = Some(State {
+            selected: Some(collection.selected == Some(index)),
+            position_in_set: Some((index + 1) as i64),
+            set_size: Some(collection.item_count as i64),
+            ..State::default()
+        });
+        snapshot.push(item);
+    }
 }
 
 #[cfg(test)]
@@ -132,6 +173,7 @@ mod tests {
             y: ordinal as u16,
             width: 20,
             height: 1,
+            collection: None,
         }
     }
 
@@ -223,6 +265,7 @@ mod tests {
             y: 4,
             width: 10,
             height: 2,
+            collection: None,
         }];
         let snapshot = snapshot_from(&calls, 1, 80, 24);
         let bounds = snapshot.nodes[0].bounds.expect("bounds");

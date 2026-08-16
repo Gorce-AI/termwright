@@ -16,11 +16,18 @@ use std::process::Command;
 use termwright_probe_ratatui::patchset::{apply, copy_out, digest_file, read_manifest};
 
 const VERSION: &str = "0.1.2";
+const WIDGETS_VERSION: &str = "0.3.2";
 
 fn patch_set_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("upstream-patches/ratatui-core")
         .join(VERSION)
+}
+
+fn widgets_patch_set_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("upstream-patches/ratatui-widgets")
+        .join(WIDGETS_VERSION)
 }
 
 fn probe_dir() -> PathBuf {
@@ -33,12 +40,19 @@ fn probe_dir() -> PathBuf {
 /// depending on Ratatui has nothing to patch, and that is not a defect in the
 /// patch set.
 fn registry_source() -> Option<PathBuf> {
+    unpacked(&format!("ratatui-core-{VERSION}"))
+}
+
+fn widgets_source() -> Option<PathBuf> {
+    unpacked(&format!("ratatui-widgets-{WIDGETS_VERSION}"))
+}
+
+fn unpacked(name: &str) -> Option<PathBuf> {
     let home = std::env::var_os("CARGO_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))?;
-    let registries = home.join("registry/src");
-    for entry in std::fs::read_dir(registries).ok()? {
-        let candidate = entry.ok()?.path().join(format!("ratatui-core-{VERSION}"));
+    for entry in std::fs::read_dir(home.join("registry/src")).ok()? {
+        let candidate = entry.ok()?.path().join(name);
         if candidate.is_dir() {
             return Some(candidate);
         }
@@ -169,6 +183,34 @@ fn the_patched_copy_still_builds_without_std() {
         with_std.status.success(),
         "a std build of the patched crate failed:\n{}",
         String::from_utf8_lossy(&with_std.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&copy);
+}
+
+/// The same constraint for the second crate. `ratatui-widgets` is `#![no_std]`
+/// too, and a probe that broke an embedded build would be doing more harm than
+/// the semantics are worth.
+#[test]
+fn the_patched_widgets_still_build_without_std() {
+    let Some(source) = widgets_source() else {
+        eprintln!("skipped: ratatui-widgets {WIDGETS_VERSION} is not unpacked in this registry");
+        return;
+    };
+    let copy = scratch("widgets-nostd");
+    copy_out(&source, &copy).expect("copy out");
+    let manifest = read_manifest(&widgets_patch_set_dir().join("manifest.json")).expect("manifest");
+    apply(&manifest, &widgets_patch_set_dir(), &copy, &probe_dir()).expect("applies");
+
+    let built = cargo(&["build", "--quiet", "--no-default-features"], &copy);
+    assert!(
+        built.status.success(),
+        "a no_std build of the patched widgets failed:\n{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let tree = cargo(&["tree", "--no-default-features"], &copy);
+    assert!(
+        !String::from_utf8_lossy(&tree.stdout).contains("termwright-probe-ratatui"),
+        "a no_std build pulled the probe in"
     );
     let _ = std::fs::remove_dir_all(&copy);
 }
@@ -458,4 +500,154 @@ fn main() {
     let _ = std::fs::remove_file(&socket);
     let _ = std::fs::remove_dir_all(&copy);
     let _ = std::fs::remove_dir_all(&app);
+}
+
+/// The core of Ratatui's semantics: a selected row in a real list.
+///
+/// This is the test that justifies patching a second crate. `ratatui-core`
+/// sees the stateful render happen but cannot read the state —
+/// `StatefulWidget::State` is `?Sized`, so it cannot even be downcast — while
+/// `ratatui-widgets` knows the concrete `ListState` and, being inside the
+/// crate, can reach `List::items`, which is `pub(crate)`. The item names and
+/// the item count come from there and nowhere else.
+#[test]
+fn a_list_publishes_its_items_and_the_selected_row() {
+    use std::time::{Duration, Instant};
+
+    let (Some(core_source), Some(widgets_source)) = (registry_source(), widgets_source()) else {
+        eprintln!("skipped: the Ratatui crates are not unpacked in this registry");
+        return;
+    };
+
+    let core_copy = scratch("list-core");
+    copy_out(&core_source, &core_copy).expect("copy out core");
+    let core_manifest = read_manifest(&patch_set_dir().join("manifest.json")).expect("manifest");
+    apply(&core_manifest, &patch_set_dir(), &core_copy, &probe_dir()).expect("core applies");
+
+    let widgets_copy = scratch("list-widgets");
+    copy_out(&widgets_source, &widgets_copy).expect("copy out widgets");
+    let widgets_manifest =
+        read_manifest(&widgets_patch_set_dir().join("manifest.json")).expect("widgets manifest");
+    apply(
+        &widgets_manifest,
+        &widgets_patch_set_dir(),
+        &widgets_copy,
+        &probe_dir(),
+    )
+    .expect("widgets applies");
+
+    let app = scratch("list-app");
+    std::fs::create_dir_all(app.join("src")).expect("app dir");
+    std::fs::write(
+        app.join("Cargo.toml"),
+        "[package]\nname = \"list-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\
+         \n[dependencies]\nratatui = \"0.30\"\n",
+    )
+    .expect("manifest");
+    std::fs::write(
+        app.join("src/main.rs"),
+        r#"use ratatui::widgets::{List, ListState};
+
+fn main() {
+    let backend = ratatui::backend::TestBackend::new(30, 6);
+    let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
+    let mut state = ListState::default();
+    state.select(Some(1));
+    terminal
+        .draw(|frame| {
+            let list = List::new(["Approve", "Reject", "Postpone"]);
+            frame.render_stateful_widget(list, frame.area(), &mut state);
+        })
+        .expect("draw");
+    println!("drew a frame");
+}
+"#,
+    )
+    .expect("source");
+
+    let socket = format!("/tmp/tw-ratatui-list-{}.sock", std::process::id());
+    let _ = std::fs::remove_file(&socket);
+    let received = start_driver(&socket);
+
+    let run = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+        .args([
+            "run",
+            "--quiet",
+            "--config",
+            &format!(
+                "patch.crates-io.ratatui-core.path='{}'",
+                core_copy.display()
+            ),
+            "--config",
+            &format!(
+                "patch.crates-io.ratatui-widgets.path='{}'",
+                widgets_copy.display()
+            ),
+        ])
+        .current_dir(&app)
+        .env("TERMWRIGHT_ENDPOINT", &socket)
+        .env("TERMWRIGHT_TOKEN", "test-token")
+        .output()
+        .expect("cargo runs");
+    assert!(
+        run.status.success(),
+        "the instrumented app failed:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut snapshot = None;
+    while Instant::now() < deadline && snapshot.is_none() {
+        match received.recv_timeout(Duration::from_millis(200)) {
+            Ok(message) => {
+                if message.get("type").and_then(serde_json::Value::as_str) == Some("snapshot") {
+                    snapshot = Some(message);
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    let snapshot = snapshot.expect("no tree reached the driver");
+    let tree = &snapshot["snapshot"];
+    let result = termwright_protocol::validate_snapshot(tree, &termwright_protocol::DEFAULT_LIMITS);
+    assert!(result.is_ok(), "the published tree is invalid: {result:?}");
+
+    let nodes = tree["nodes"].as_array().expect("nodes");
+    let items: Vec<&serde_json::Value> = nodes
+        .iter()
+        .filter(|node| node["role"] == "listitem")
+        .collect();
+    assert_eq!(
+        items.len(),
+        3,
+        "the list's rows did not reach the tree: {tree}"
+    );
+
+    let names: Vec<&str> = items
+        .iter()
+        .filter_map(|item| item["name"].as_str())
+        .collect();
+    assert_eq!(names, ["Approve", "Reject", "Postpone"], "{tree}");
+
+    // setSize is the widget's own count, and positionInSet is one-based.
+    for (index, item) in items.iter().enumerate() {
+        assert_eq!(item["state"]["setSize"], 3, "{item}");
+        assert_eq!(item["state"]["positionInSet"], index as i64 + 1, "{item}");
+    }
+
+    let selected: Vec<&str> = items
+        .iter()
+        .filter(|item| item["state"]["selected"] == true)
+        .filter_map(|item| item["name"].as_str())
+        .collect();
+    assert_eq!(
+        selected,
+        ["Reject"],
+        "the selected row is wrong, or the state was read before the render mutated it: {tree}"
+    );
+
+    let _ = std::fs::remove_file(&socket);
+    for path in [&core_copy, &widgets_copy, &app] {
+        let _ = std::fs::remove_dir_all(path);
+    }
 }

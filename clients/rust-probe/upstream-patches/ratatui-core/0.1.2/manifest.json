@@ -1,8 +1,8 @@
 {
   "framework": "ratatui-core",
   "frameworkVersion": "0.1.2",
-  "patchSetVersion": 2,
-  "note": "Two anchors. Frame::render_widget reports each call; Terminal::apply_buffer_with_cursor reports the frame boundary immediately after Backend::flush, which is the only point at which the frame's bytes are on the terminal and a render-commit marker may therefore be written. Both are behind #[cfg(feature = \"std\")]: ratatui-core is #![no_std] and gets std only because the ratatui facade enables it, so everything needing a socket lives in termwright-probe-ratatui instead. Measured: a --no-default-features build compiles and does not pull the probe crate in at all.",
+  "patchSetVersion": 3,
+  "note": "Three anchors. Frame::render_widget and Frame::render_stateful_widget report each call; Terminal::apply_buffer_with_cursor reports the frame boundary immediately after Backend::flush, the only point at which the frame's bytes are on the terminal and a render-commit marker may be written. All behind #[cfg(feature = \"std\")]: ratatui-core is #![no_std] and gets std only because the ratatui facade enables it. A stateful render is reported here but its state is not: StatefulWidget::State is ?Sized, so it cannot even be downcast \u2014 see the ratatui-widgets patch set for where the concrete state is readable.",
   "requires": [
     {
       "crate": "termwright-probe-ratatui",
@@ -21,7 +21,7 @@
       "path": "src/terminal/frame.rs",
       "patch": "patches/src_terminal_frame.rs.patch",
       "sha256Before": "sha256:bef3c314fa46b38e3d5a881d48c53b29b8952910fbc7892681b2ba5c8370a936",
-      "sha256After": "sha256:49b6bd6a9b7f538f8c6108fce731450d46ea0535f49f0353f824bc6c3c025829"
+      "sha256After": "sha256:f4992d0bab7fef4dcf7588563a792b1ad9e26f5584659abefee461535bdac700"
     },
     {
       "path": "src/terminal/render.rs",

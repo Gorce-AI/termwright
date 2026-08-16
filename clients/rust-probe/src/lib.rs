@@ -35,6 +35,33 @@ use termwright_protocol::client::{ENV_ENDPOINT, ENV_TOKEN};
 use termwright_protocol::debug::{Category, DebugLog};
 use termwright_protocol::{ProbeIdentityKind, ProbeInfo};
 
+/// What a collection widget reported about its own contents.
+///
+/// Read *after* the widget rendered, which is the only time it is true:
+/// rendering mutates the state to reflect what was actually drawn — `List`
+/// assigns `state.offset = first_visible_index` partway through — so a
+/// pre-render read would report what the application asked for rather than
+/// what the user is looking at.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Collection {
+    /// Highlighted row, if any. An index into the widget's own items.
+    pub selected: Option<usize>,
+    /// First visible row after the widget clamped it.
+    pub offset: usize,
+    /// How many items the widget holds.
+    pub item_count: usize,
+    /// Item text, in order, capped at [`MAX_ITEMS`].
+    pub items: Vec<String>,
+}
+
+/// How many items of a collection the probe will carry per frame.
+///
+/// A list can hold more rows than a terminal will ever show, and every one of
+/// them would be allocated, copied and validated on every frame. The cap is
+/// generous enough for a test to find what it is looking for and small enough
+/// that a hundred-thousand-row table costs nothing.
+pub const MAX_ITEMS: usize = 200;
+
 /// One `render_widget` call, as the patched crate reported it.
 ///
 /// `type_name` is what `core::any::type_name` produced — a path like
@@ -49,6 +76,8 @@ pub struct RenderCall {
     pub y: u16,
     pub width: u16,
     pub height: u16,
+    /// Present when the widget is a collection that reported its contents.
+    pub collection: Option<Collection>,
 }
 
 /// What the probe collected for the frame currently being drawn.
@@ -121,6 +150,37 @@ pub fn on_render(type_name: &'static str, x: u16, y: u16, width: u16, height: u1
         y,
         width,
         height,
+        collection: None,
+    });
+}
+
+/// Called by a patched `ratatui-widgets` once a collection has rendered.
+///
+/// Attaches to the call the core hook recorded a moment earlier: rendering is
+/// sequential, so the widget currently drawing is the last one announced. The
+/// two hooks are in different crates because that is where the two facts live
+/// — `ratatui-core` sees every call but cannot name the state type
+/// (`StatefulWidget::State` is `?Sized`, so it cannot even be downcast), while
+/// `ratatui-widgets` knows the concrete `ListState` and can read the items
+/// themselves.
+pub fn on_collection(selected: Option<usize>, offset: usize, item_count: usize, items: &[String]) {
+    if !instrumented() || DISABLED.load(Ordering::Relaxed) {
+        return;
+    }
+    let Ok(mut frame) = buffer().lock() else {
+        DISABLED.store(true, Ordering::Relaxed);
+        return;
+    };
+    let Some(call) = frame.calls.last_mut() else {
+        // A collection rendered without the call being announced first. Not a
+        // shape we can attribute, so it is dropped rather than guessed at.
+        return;
+    };
+    call.collection = Some(Collection {
+        selected,
+        offset,
+        item_count,
+        items: items.iter().take(MAX_ITEMS).cloned().collect(),
     });
 }
 
@@ -196,6 +256,7 @@ mod tests {
             y: 2,
             width: 3,
             height: 4,
+            collection: None,
         };
         // The ordinal is the only identity available, and it is frame-local.
         assert_eq!(call.ordinal, 0);

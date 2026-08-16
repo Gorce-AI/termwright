@@ -1,0 +1,28 @@
+{
+  "framework": "ratatui-widgets",
+  "frameworkVersion": "0.3.2",
+  "patchSetVersion": 1,
+  "note": "One anchor, in List's own render, immediately after the line that clamps state.offset to what was actually drawn. Read there and not earlier: rendering mutates the state, so a pre-render read reports what the application asked for rather than what the user sees. This crate is patched at all because List::items is pub(crate) \u2014 the item text and the item count are unreachable from outside and reachable from within, which is what makes setSize and item names obtainable.",
+  "requires": [
+    {
+      "crate": "termwright-probe-ratatui",
+      "suppliedBy": "path",
+      "reason": "The dependency's path is machine-specific, so the applier writes it in."
+    }
+  ],
+  "patched": [
+    {
+      "path": "Cargo.toml",
+      "patch": "patches/Cargo.toml.patch",
+      "sha256Before": "sha256:8a7ee8e4c04aecb49b16233ee26d72db62b388971683bf8f960a39d57c44b65a",
+      "sha256After": "sha256:d5807ab32f61d8079da26893cceb30955452a0c5cd6882800d2871050cd9fcdc"
+    },
+    {
+      "path": "src/list/rendering.rs",
+      "patch": "patches/src_list_rendering.rs.patch",
+      "sha256Before": "sha256:5b35ca35bbd9ee81fac08ece14f810b78a937733ffed093a9ee88a00a5fb3893",
+      "sha256After": "sha256:40b8589cdd4abe7ae664194f441917a98e13d66ca25a9c896ce76b6a1a92c858"
+    }
+  ],
+  "added": []
+}

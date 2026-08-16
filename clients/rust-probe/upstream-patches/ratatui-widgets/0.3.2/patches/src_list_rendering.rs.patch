@@ -1,0 +1,28 @@
+--- a/src/list/rendering.rs	2026-08-17 01:17:39
++++ b/src/list/rendering.rs	2026-08-17 01:20:55
+@@ -57,6 +57,25 @@
+         // Important: this changes the state's offset to be the beginning of the now viewable items
+         state.offset = first_visible_index;
+ 
++        // termwright: read the state here and not earlier. Rendering mutates
++        // it to reflect what was actually drawn — the assignment above is
++        // exactly that — so a pre-render read would report what the
++        // application asked for rather than what the user is looking at.
++        // `self.items` is `pub(crate)`: reachable here, unreachable from
++        // outside the crate, which is why this hook is in this file.
++        #[cfg(feature = "std")]
++        termwright_probe_ratatui::on_collection(
++            state.selected,
++            state.offset,
++            self.items.len(),
++            &self
++                .items
++                .iter()
++                .take(termwright_probe_ratatui::MAX_ITEMS)
++                .map(|item| std::string::ToString::to_string(&item.content))
++                .collect::<std::vec::Vec<_>>(),
++        );
++
+         // Get our set highlighted symbol (if one was set)
+         let default_highlight_symbol = Line::default();
+         let highlight_symbol = self
