@@ -54,6 +54,9 @@ await runAdapterConformance({
   },
   spawn: () => ({ command: [GO_BINARY] }),
   ready: 'Permission required',
+  // The tview example logs at startup rather than on a keystroke, so the
+  // obligation waits for the record instead of provoking one.
+  logs: { expect: 'no policy loaded' },
   interaction: { input: '\t', expect: 'focus: reject' },
   // `clients/README.md` documents `q`, and `q` does quit — but only while the
   // focus has not cycled onto the reason field, where it types normally. The

@@ -23,6 +23,16 @@ Round 1 (driver f78174f):
 3. **Channel diagnostics were unreachable** — `harness.diagnostics()` and the
    `diagnostic` event landed with a closed `DiagnosticCode` set.
 
+Round 5 (mcp a296dca):
+
+10. **A lost MCP transport leaked a terminal and a session slot.** Streamable
+    HTTP never signals that a client vanished, and there was no idle deadline,
+    so a crashed agent cost a real PTY *and* a session slot until the server
+    exited — repeated crashes exhausted `maxSessions` and locked out new
+    agents. `SessionRegistry` now expires idle sessions with a full teardown.
+    The suite drives it through an injected clock, because a test that slept
+    out a real TTL would be slow and would still pass if the sweeper never ran.
+
 Round 4 (clients 670b60d):
 
 9. **`clients/README.md` documented a state-dependent quit key.** The tview
@@ -76,18 +86,7 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
-1. **A lost MCP transport leaks a terminal and a session slot.** Streamable HTTP
-   gives the server no signal when a client stops talking, and there is no idle
-   deadline, so a session whose client crashed stays registered forever and its
-   child process keeps running. Measured: after `client.close()` the registry
-   still holds the session and the pid is alive 5 s later; only `serveHttp`'s
-   own `close()` reclaims them. Two consequences, the second worse than the
-   first: a crashed agent leaks a real PTY per crash, and because the slot is
-   never freed, repeated crashes exhaust `maxSessions` and lock out new agents —
-   an accidental denial of service. A session TTL (close a session with no
-   request for N minutes) would bound it the way everything else in this project
-   is bounded. Pinned as observed in `mcp-sessions.test.ts`.
-2. **Ink can re-render after a resize before `process.stdout.columns` catches
+1. **Ink can re-render after a resize before `process.stdout.columns` catches
    up.** A component that renders its own size (`size: 60x16`) sometimes keeps
    the old numbers in the frame that already reflects the new layout — measured
    at 2 of 6 resizes, while the republished bounds were correct 6 of 6. A

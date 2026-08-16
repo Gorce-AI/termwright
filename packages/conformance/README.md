@@ -69,6 +69,10 @@ and the obligations above are then asserted rather than skipped:
 logs: { input: 'l', expect: 'conformance log record' },
 ```
 
+`input` is optional: omit it for an app that logs on its own, as the tview
+example does at startup, and the obligation waits for the record instead of
+provoking one.
+
 It checks the five obligations an adapter has:
 
 | Obligation | What is asserted |
@@ -79,7 +83,7 @@ It checks the five obligations an adapter has:
 | Snapshot validity | Every snapshot passes `validateSnapshot`, carries this session's id, has resolvable parents and monotonic revisions |
 | Revision ordering | For each revision: snapshot → `revision-commit` → a marker that verifies against the session token, markers strictly increasing |
 | Channel loss | Cutting the socket leaves the application rendering and alive, and the adapter does not reconnect |
-| Logs (when declared) | A record reaches the driver, `seq` is unique and increasing, and the message never appears on the terminal |
+| Logs | An adapter that did not announce `logs` sends none. One that declares them in the registration must deliver a record whose `seq` is unique and increasing and whose message never appears on the terminal |
 
 `await` it at the top level: `vitest` is imported dynamically so the package can
 also be used from a plain script.

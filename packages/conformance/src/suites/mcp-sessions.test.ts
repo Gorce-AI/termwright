@@ -10,9 +10,9 @@
  * What is asserted: sessions are isolated (a terminal handle from one is
  * unknown in another), close ownership is exact (deleting one session kills its
  * children and only its children), the session ceiling is refused with a
- * readable reason and reopens once a slot is freed, a lost transport is *not* a
- * teardown (pinned as observed — see NOTES.md), and `capture_since` cursors do
- * not cross sessions.
+ * readable reason and reopens once a slot is freed, an idle session is reclaimed
+ * in full while a working one is spared, and `capture_since` cursors do not
+ * cross sessions.
  */
 import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -34,9 +34,13 @@ interface Session {
   readonly transport: StreamableHTTPClientTransport;
 }
 
-async function serve(options: { maxSessions?: number } = {}): Promise<HttpServerHandle> {
+async function serve(
+  options: { maxSessions?: number; idleTtlMs?: number; now?: () => number } = {},
+): Promise<HttpServerHandle> {
   const handle = await serveHttp({
     ...(options.maxSessions === undefined ? {} : { maxSessions: options.maxSessions }),
+    ...(options.idleTtlMs === undefined ? {} : { idleTtlMs: options.idleTtlMs }),
+    ...(options.now === undefined ? {} : { now: options.now }),
   });
   servers.push(handle);
   return handle;
@@ -211,39 +215,54 @@ describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 },
     expect(JSON.stringify(snapshot.structuredContent)).toContain('GENERIC READY');
   });
 
-  it('outlives a lost transport, and is only reclaimed when the server stops', async () => {
-    const handle = await serve();
-    const [first, second] = [await connect(handle), await connect(handle)];
-    const abandoned = await launch(first);
-    const kept = await launch(second);
+  it('reclaims a session whose client went away, and spares one still working', async () => {
+    // Streamable HTTP never signals that a client vanished, so idleness is the
+    // only evidence a server has. The clock is injected rather than waited on:
+    // a test that slept out a real TTL would be slow *and* would still pass if
+    // the sweeper never ran on its own.
+    let clock = Date.now();
+    const handle = await serve({ idleTtlMs: 60_000, now: () => clock });
+    const [abandonedSession, busySession] = [await connect(handle), await connect(handle)];
+    const abandoned = await launch(abandonedSession);
+    const busy = await launch(busySession);
 
-    // Pinned as observed, not as desired. Streamable HTTP gives the server no
-    // signal when a client simply stops talking, so losing the transport is not
-    // a teardown: the session stays registered and its child keeps running,
-    // with no deadline. An agent that crashes therefore leaks a terminal *and*
-    // a session slot until the server exits — reported, see NOTES.md.
-    await first.client.close();
-    await delay(1_000);
+    await abandonedSession.client.close();
 
-    expect(alive(abandoned.pid)).toBe(true);
-    expect(handle.registry.size).toBe(2);
-    expect(handle.registry.get(first.sessionId)).toBeDefined();
+    // Time passes for both sessions; only one of them keeps talking.
+    clock += 90_000;
+    const busyStillThere = await call(busySession, 'terminal.snapshot', { terminal: 't1' });
+    expect(busyStillThere.isError).toBeFalsy();
 
-    // The survivor is unaffected either way.
-    expect(alive(kept.pid)).toBe(true);
-    expect((await call(second, 'terminal.snapshot', { terminal: 't1' })).isError).toBeFalsy();
+    const swept = await handle.registry.sweepIdle();
+    expect(swept).toEqual([abandonedSession.sessionId]);
 
-    // What *is* guaranteed: nothing outlives the server. Closing it reclaims
-    // the abandoned child as well as the live one, so the leak is bounded by
-    // the process rather than being permanent.
-    //
-    // The live client is closed first: `http.close()` waits for open
-    // connections, and a keep-alive socket from a still-connected client would
-    // hold the shutdown open indefinitely.
-    await second.client.close();
-    await (servers.pop() as HttpServerHandle).close();
+    // A full teardown, not just an unregistration: the child is gone and the
+    // slot is free. The leak this pinned before — a crashed agent costing a PTY
+    // and a session slot until the server exited — is closed.
     await expectDies(abandoned.pid);
-    await expectDies(kept.pid);
+    expect(handle.registry.get(abandonedSession.sessionId)).toBeUndefined();
+    expect(handle.registry.size).toBe(1);
+
+    // Working is what spares a session: the busy one keeps its child and still
+    // answers after the sweep.
+    expect(alive(busy.pid)).toBe(true);
+    expect((await call(busySession, 'terminal.snapshot', { terminal: 't1' })).isError).toBeFalsy();
+  });
+
+  it('never expires a session when the ttl is disabled', async () => {
+    let clock = Date.now();
+    const handle = await serve({ idleTtlMs: 0, now: () => clock });
+    const session = await connect(handle);
+    const launched = await launch(session);
+
+    await session.client.close();
+    clock += 24 * 60 * 60 * 1000;
+
+    // Opting out has to mean opting out: a host that manages lifetimes itself
+    // must not have sessions disappear under it.
+    expect(await handle.registry.sweepIdle()).toEqual([]);
+    expect(handle.registry.size).toBe(1);
+    expect(alive(launched.pid)).toBe(true);
   });
 
   it('refuses a session past the ceiling, with a reason and a way out', async () => {

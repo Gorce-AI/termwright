@@ -71,8 +71,12 @@ export interface AdapterConformanceOptions {
    * fails here rather than in a user's test.
    */
   readonly logs?: {
-    /** Input that makes the application write one log record. */
-    readonly input: string;
+    /**
+     * Input that makes the application write a record. Omit it for an app that
+     * logs on its own (at startup, say) — the obligation then waits for a
+     * record rather than provoking one.
+     */
+    readonly input?: string;
     /** A substring of the logged message, used to prove it stayed off-screen. */
     readonly expect: string;
   };
@@ -235,6 +239,11 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         expect(hello.capabilities).toContain('tree');
         // A second hello, or a hello after other traffic, is a protocol fault.
         expect(messages.filter((entry) => entry.message.type === 'hello')).toHaveLength(1);
+
+        // Nothing may precede the handshake, log records least of all: their
+        // budget is granted *in* the reply to this message.
+        const firstLog = messages.findIndex((entry) => entry.message.type === 'log');
+        expect(firstLog === -1 || firstLog > 0).toBe(true);
       });
 
       it(
@@ -342,6 +351,23 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         }
       });
 
+      it('sends log records only if it negotiated the channel', async () => {
+        const hello = beforeInput.messages[0]?.message as { capabilities: readonly string[] };
+        if (hello.capabilities.includes('logs')) return;
+
+        // An adapter is free not to support logs. What it is not free to do is
+        // send records anyway: the budget granted in the handshake is what
+        // bounds them, and one that was never granted cannot bound anything.
+        // The driver closes the channel over this, so an adapter that does it
+        // is broken in production rather than merely untidy.
+        await probe.write(options.interaction.input);
+        await probe.waitForText(options.interaction.expect, timeout);
+        expect(
+          probe.observe().logs,
+          'the adapter sent log records without announcing the logs capability',
+        ).toEqual([]);
+      });
+
       it.skipIf(options.logs === undefined)('carries a log record without printing it', async () => {
         const logs = options.logs as NonNullable<AdapterConformanceOptions['logs']>;
         const hello = probe.observe().messages[0]?.message as { capabilities: readonly string[] };
@@ -351,12 +377,17 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         ).toBe(true);
 
         const before = probe.observe().logs.length;
-        await probe.write(logs.input);
-        await probe.waitFor((observation) => observation.logs.length > before, timeout);
+        if (logs.input !== undefined) await probe.write(logs.input);
+        // An app that logs on its own may already have; one that logs on demand
+        // has just been asked to. Either way the wait is for a record.
+        await probe.waitFor(
+          (observation) => observation.logs.length > (logs.input === undefined ? 0 : before),
+          timeout,
+        );
 
         const observation = probe.observe();
-        const record = observation.logs.at(-1);
-        expect(record?.message).toContain(logs.expect);
+        const record = observation.logs.find((entry) => entry.message.includes(logs.expect));
+        expect(record, `no log record matched ${JSON.stringify(logs.expect)}`).toBeDefined();
         // `seq` is a non-negative counter, so the first record of a session is
         // legitimately 0; what matters is the relation between records.
         expect(record?.seq).toBeGreaterThanOrEqual(0);
