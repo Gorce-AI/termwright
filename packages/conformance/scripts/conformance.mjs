@@ -11,6 +11,7 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, basename } from 'node:path';
@@ -19,24 +20,30 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /**
- * The workspace's own vitest, never `npx vitest`.
+ * The workspace's own vitest, as a script this Node runs directly.
  *
- * `npx` falls back to downloading the latest release when the local binary is
- * not on its lookup path, which silently runs the matrix on a different major
- * than the suites were written against — and reports the resulting startup
- * crash as a failed conformance run.
+ * Two traps, both met the hard way. `npx vitest` downloads the latest release
+ * when the local binary is not on its lookup path, so a workspace change
+ * elsewhere silently runs the matrix on a different major. And
+ * `node_modules/.bin/vitest` is a shell script on POSIX but a `.CMD` shim on
+ * Windows, where spawning it without a shell is ENOENT. Resolving the package's
+ * own `bin` entry and running it with `process.execPath` sidesteps both: no
+ * download, no shim, no platform branch.
  */
-function vitestBinary() {
-  for (const candidate of [
-    join(ROOT, 'node_modules', '.bin', 'vitest'),
-    join(ROOT, '..', '..', 'node_modules', '.bin', 'vitest'),
-  ]) {
-    if (existsSync(candidate)) return candidate;
+function vitestEntry() {
+  for (const root of [ROOT, join(ROOT, '..', '..')]) {
+    const manifest = join(root, 'node_modules', 'vitest', 'package.json');
+    if (!existsSync(manifest)) continue;
+    const bin = JSON.parse(readFileSync(manifest, 'utf8')).bin;
+    const relative = typeof bin === 'string' ? bin : bin?.vitest;
+    if (typeof relative !== 'string') continue;
+    const entry = join(root, 'node_modules', 'vitest', relative);
+    if (existsSync(entry)) return entry;
   }
   throw new Error('conformance: vitest is not installed in this workspace; run `pnpm install` first');
 }
 
-const VITEST = vitestBinary();
+const VITEST = vitestEntry();
 
 /** Suite file → what it certifies, in the order the matrix prints them. */
 const SUITES = [
@@ -53,15 +60,37 @@ const SUITES = [
 
 function run(args) {
   return new Promise((resolve) => {
-    const child = spawn(VITEST, ['run', ...args], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
-    child.on('close', (code) => resolve(code ?? 1));
+    // Captured rather than discarded: when a suite fails, the matrix prints
+    // tallies and the reason lives in this output. Throwing it away made a CI
+    // failure unreadable without re-running locally.
+    const child = spawn(process.execPath, [VITEST, 'run', ...args], {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      output += String(chunk);
+      process.stderr.write(chunk);
+    });
+    child.on('close', (code) => resolve({ code: code ?? 1, output }));
   });
 }
 
 /** Runs vitest with the JSON reporter and returns per-file tallies. */
 async function tally(configArgs, files) {
   const output = join(tmpdir(), `termwright-conformance-${process.pid}-${Math.random().toString(36).slice(2)}.json`);
-  const code = await run([...configArgs, ...files, '--reporter=json', `--outputFile=${output}`]);
+  const { code, output: runnerOutput } = await run([
+    ...configArgs,
+    ...files,
+    '--reporter=json',
+    `--outputFile=${output}`,
+  ]);
+  if (code !== 0) {
+    process.stdout.write(`\n--- vitest output (exit ${code}) ---\n${runnerOutput}\n`);
+  }
   let report;
   try {
     report = JSON.parse(await readFile(output, 'utf8'));

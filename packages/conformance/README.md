@@ -141,6 +141,10 @@ adapter contract (py/go)    §7       pass, 8 skip   6/14     0.6s
 hostile peer @ 128 MB heap  §10      pass           25/25    14.4s
 ```
 
+Certifying the py/go rows needs their toolchains on the runner
+(`pip install -e clients/python[dev]` and a Go toolchain); without them those
+rows skip honestly, with the probe's failure on stderr.
+
 A partly-skipped area is reported as such rather than as a clean pass: the
 language adapters skip their whole registration when the toolchain is absent,
 and a matrix that hid it would claim coverage the machine never produced.

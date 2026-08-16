@@ -86,7 +86,16 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
-1. **Ink can re-render after a resize before `process.stdout.columns` catches
+1. **The Textual example cannot be quit from every focus state.** It binds only
+   `q`, and Tab eventually lands on its `Input`, which swallows the key —
+   Ctrl+C does not quit either. Measured: `q`, Ctrl+D, Escape+`q` and
+   Shift+Tab+`q` all fail once focus reaches the field; only Ctrl+Q (Textual's
+   own priority binding) works. The registration uses Ctrl+Q, but the example
+   would be better with an explicit priority binding, and `clients/README.md`
+   still documents `q`. Same shape as the tview finding closed in 670b60d: a
+   user whose test cycles focus and then sends the documented quit key waits
+   out a timeout for reasons the app never explains.
+2. **Ink can re-render after a resize before `process.stdout.columns` catches
    up.** A component that renders its own size (`size: 60x16`) sometimes keeps
    the old numbers in the frame that already reflects the new layout — measured
    at 2 of 6 resizes, while the republished bounds were correct 6 of 6. A
@@ -180,13 +189,26 @@ has to delete an assertion that explains itself.
   disappear*, this one is *waiting for something that arrives twice*. Both look
   like flakiness and neither is — the test was wrong, and the machine's timing
   only decided when it would say so.
-- **The report script must use the workspace's vitest, never `npx vitest`.**
-  `npx` downloads the latest release when the local binary is not on its lookup
-  path, so a workspace change elsewhere in the repo turned `pnpm conformance`
-  into a run against a different vitest major — reported as a startup crash and
-  read at first glance as a conformance failure. `scripts/conformance.mjs`
-  resolves `node_modules/.bin/vitest` explicitly and fails loudly if it is
-  missing.
+- **Run vitest as a script, not as a shim or through `npx`.** Two ways this
+  broke. `npx vitest` downloads the latest release when the local binary is not
+  on its lookup path, so a workspace change elsewhere turned `pnpm conformance`
+  into a run against a different major. Then `node_modules/.bin/vitest` — the
+  obvious fix — is a shell script on POSIX and a `.CMD` shim on Windows, where
+  spawning it without a shell is ENOENT, which is how the first real Windows CI
+  run failed. The script now reads the `bin` entry out of vitest's own
+  `package.json` and runs that file with `process.execPath`: no download, no
+  shim, no platform branch.
+- **A runner whose output is discarded cannot be diagnosed from CI.** The
+  matrix used to spawn vitest with stdout ignored, so a failing suite printed
+  tallies and nothing else — the first CI failure said `FAIL (1)` with no way to
+  tell which assertion, and had to be reproduced locally. The output is captured
+  now and printed whenever a run exits non-zero.
+- **Cross-stream arrival order is not the contract.** The ordering obligation
+  compared markers against the snapshots observed at that instant, and a marker
+  read off stdout can precede the socket frame for the same revision — the same
+  independence documented under Deliberate choices. It now waits until every
+  observed marker has its snapshot and commit, which is what "each revision has
+  all three parts" actually means.
 - **The generic fixture's frame is 14 rows tall.** A suite that asks for fewer
   (the scrollback test uses 10) pushes the top of the frame off the grid as the
   rest of it is drawn, so waiting for the banner is waiting for something that

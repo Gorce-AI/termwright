@@ -346,6 +346,25 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         await probe.waitForText(options.interaction.expect, timeout);
         await probe.waitFor((observation) => observation.markers.length >= 2, timeout);
 
+        // The socket and the terminal are independent streams, so a marker can
+        // be read before the frame describing the same revision has been
+        // parsed. The contract is that each revision *eventually* has all
+        // three parts; waiting for that is not leniency, it is the difference
+        // between asserting the contract and asserting arrival order.
+        const complete = (observation: ProbeObservation): boolean =>
+          observation.markers.every(
+            (marker) =>
+              observation.messages.some(
+                (entry) =>
+                  entry.message.type === 'snapshot' &&
+                  (entry.message as { snapshot: SemanticSnapshot }).snapshot.revision === marker.revision,
+              ) &&
+              observation.messages.some(
+                (entry) => entry.message.type === 'revision-commit' && entry.message.revision === marker.revision,
+              ),
+          );
+        await probe.waitFor(complete, timeout);
+
         const observation = probe.observe();
         const markers = observation.markers;
         expect(markers.length).toBeGreaterThan(0);

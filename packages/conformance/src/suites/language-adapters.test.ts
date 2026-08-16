@@ -35,7 +35,13 @@ await runAdapterConformance({
   spawn: () => ({ command: ['python3', PYTHON_APP] }),
   ready: 'Permission required',
   interaction: { input: '\t', expect: 'focus: reject' },
-  quit: { input: 'q', exitCode: 0 },
+  // Logs once at startup through the stdlib logging bridge, like the tview
+  // example, so the obligation waits for the record rather than provoking it.
+  logs: { expect: 'no policy loaded' },
+  // `clients/README.md` documents `q`, and the app binds it — but Tab
+  // eventually lands on the `Input`, which swallows it. Ctrl+Q is Textual's
+  // own priority binding and quits from any focus; Ctrl+C does not.
+  quit: { input: '\u0011', exitCode: 0 },
   columns: 80,
   rows: 24,
   expectAbsoluteBounds: true,
