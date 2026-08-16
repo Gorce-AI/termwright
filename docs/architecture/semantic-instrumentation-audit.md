@@ -125,3 +125,14 @@ D6. **Probe IR is a new layer in `packages/protocol`** (facts, not
 Phase order stays as specified: 1 IR+transport → 2 OpenTUI slice → 3 Textual
 → 4 Ink → 5 tview → 6 Ratatui → 7 Charm → 8 annotation SDKs → 9
 inspector/CI/docs/legacy removal.
+
+- **D5 amended (addressee, not content)**: FULL_SNAPSHOT under backpressure
+  is a NORMATIVE PRODUCER OBLIGATION — a probe that dropped anything from its
+  fact stream must send a full snapshot instead of the next delta. The driver
+  cannot detect this case (it receives a well-based delta describing a
+  silently truncated state) and, measured under both pressure knobs, its
+  composed chain stays correct without any new trigger (delta composition is
+  independent of pairing — a #25 decision whose consequence is that eviction
+  costs visibility of intermediate revisions, never final-state
+  correctness). The existing driver-side `get-tree` resync remains for its
+  own case (bad base / missing parent), which is not backpressure.
