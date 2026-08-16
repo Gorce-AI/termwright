@@ -422,3 +422,23 @@
   projekcie (mtime, średnie czasy, ostatnie wyniki) idą przez niekontraktowe
   GET /api/specs, nie przez §UI events — strumień zdarzeń opisuje przebieg,
   nie stan dysku.
+- 2026-08-16 (protocol, kampania #34 Phase 1): warstwa Probe IR w
+  packages/protocol/src/probe/ — fakty przed interpretacją. Reguły
+  normatywne: (a) tożsamość = typowana zdolność `stable | frame-local`
+  (frame-local pełnoprawne; para „frame-local + stable-identity" odrzucana na
+  wire; zakaz korelacji frame-local między klatkami); (b) `intendedRect`
+  osobno od `visibleRect` (wyprowadzanie drugiego z pierwszego = wymyślanie
+  faktu; słowa region/area zakazane w IR); (c) trójwartościowość: jawna
+  lista `unobservable`, zgłoszenie pola zadeklarowanego jako nieobserwowalne
+  odrzucane. `selection` rozdzielone na selectedIndex/textSelection. D1:
+  `frameworkType` wymagany na `generic`. D2: provenance `p`+`px` nad
+  zamkniętym zbiorem annotation|recognizer|framework|correlation|heuristic;
+  merge annotation > recognizer > framework > render-inference > heuristic,
+  fakty fizyczne nieprzesłanialne adnotacją. D3=(a): retrakcja przez
+  podmianę węzła w całości; częściowe patche tylko z pomiarami kosztu px.
+  D4: maxSnapshotBytes 1 → 2 MiB. D5: `hello` + opcjonalny blok `probe`;
+  `frame-begin` OPCJONALNE za capability (brak ≠ „nie ma klatki"); begin dla
+  N domyka klatki niższe; FRAME_END = doradczy revision-commit; producent,
+  który pod backpressure porzucił fakty, MUSI wysłać pełny snapshot.
+  `paintOrder` opcjonalne z capability (3/6 frameworków); własność komórki
+  poza IR.
