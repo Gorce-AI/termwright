@@ -119,9 +119,10 @@ click. What is not identical:
   as a timeout on the next locator. The boundary renders `null` rather than a
   fallback message, so the failed frame cannot be matched by a text locator, and
   it is keyed by a generation counter so `rerender` gets a fresh boundary.
-- **Fixtures are argv-driven, not env-driven.** The payload is one JSON argument
-  capped at 64 KiB; the runner re-validates it from scratch and refuses anything
-  that is not a `file:` URL. It never evaluates a string.
+- **Fixtures are argv-driven, not env-driven.** The payload is one JSON
+  argument, capped at 24 KiB by the narrowest platform's command line (see
+  below); the runner re-validates it from scratch and refuses anything that is
+  not a `file:` URL. It never evaluates a string.
 
 ## "First frame" means painted *and* described
 
@@ -237,6 +238,17 @@ reached: props between the two limits passed the encoder and then died as a raw
 `ENAMETOOLONG` with nothing to say about what went wrong, on one OS only. A
 limit whose gate cannot fire is not a limit. It is now **24 KiB**, which leaves
 roughly 8 KiB for the interpreter path, the runner path and quoting.
+
+### The control channel keeps 64 KiB
+
+The asymmetry is deliberate. A rerender travels over a socket, which has no
+command line to fit inside, so the argv ceiling simply does not apply there —
+copying it over would be cargo-culting a constraint from another transport.
+
+The visible consequence is worth knowing before it surprises someone: props too
+large to *launch* with may still be small enough to `rerender` with. Both errors
+name their own limit, and the way out of either is the one the message
+suggests — pass an identifier and let the fixture module load the bulk itself.
 
 ### If 24 KiB turns out to be too tight
 
