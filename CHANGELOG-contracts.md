@@ -349,3 +349,12 @@
   is a conformance property"). Coordinated round: protocol (encodeMarker/
   verifyMarkerPayload + docs), driver (OSC handler), ink + py/go clients
   (emission), conformance (fixtures + asserts).
+- 2026-08-16 (Windows mouse, DECIDED on probe evidence): ConPTY consumes
+  mouse DECSET (1000/1002/1006) on the way to the observer while the child
+  still enables and decodes mouse (probe: mouseTracking=none,
+  childDecodedReport=true; 2004/1049 pass). TerminalModes.mouseTracking and
+  mouseEncoding gain the value 'unknown', reported when the platform makes
+  the mode unobservable (win32/ConPTY). The pointer gate refuses only a
+  KNOWN-off mode; on 'unknown' it sends SGR-encoded input and records a new
+  diagnostic 'mouse-mode-unverifiable' (closed set: 18). POSIX behavior
+  unchanged ('none' remains known-off).
