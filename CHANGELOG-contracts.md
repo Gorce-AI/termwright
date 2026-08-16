@@ -472,3 +472,14 @@
   (dosłowna wersja wyłączyłaby klikanie w 4 istniejących adapterach za zero
   nowej informacji, zmierzone: 4 padnięte suity w samym driverze). Odmowa
   wskaźnika nazywa drogę klawiaturową.
+- 2026-08-16 (protocol): nowe pole `SemanticState.offscreen?: boolean` —
+  węzeł istnieje w układzie, ale wszystkie komórki poza widocznym obszarem
+  (doscrollowywalny). Nazwa od twierdzenia autora testu, nie mechanizmu.
+  Brak pola = „nie twierdzę". `offscreen: true` IMPLIKUJE `hidden: true`
+  (walidacja odrzuca parę bez hidden — inaczej offscreen byłby słabszym
+  synonimem hidden rozłażącym się po producentach). Kodowanie: przewinięty =
+  hidden+offscreen+prostokąt zerowy w punkcie zaczepienia; niewyświetlany =
+  hidden bez offscreen. `bounds: undefined` wraca do JEDYNEGO znaczenia
+  „producent nie zna geometrii". clippedAway → hidden+offscreen w
+  normalizatorze. Zgłoszone z działającej sondy Textuala (jedyny framework
+  liczący clip ∩ region).
