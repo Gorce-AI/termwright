@@ -315,11 +315,16 @@ describe('the runner UI with discovered tests', () => {
 
     await expect.poll(() => page.locator(testId('test')).count(), { timeout: 15_000 }).toBe(2);
 
+    // A run resets results, not the project: the discovered rows survive
+    // `run-start` and go back to "not run yet", because those tests still exist
+    // and the user still wants to click them while the run goes.
+    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
+
+    await expect.poll(() => page.locator(testId('test')).count(), { timeout: 15_000 }).toBe(2);
+    expect(await page.locator('.badge.not-run').count()).toBe(2);
+
     // Same file and title as a discovered row: this is that test running, not a
     // third one. Two rows for one test is the bug this asserts against.
-    //
-    // Deliberately no `run-start` first: that clears the list by design, so a
-    // reconciliation test that sent one would be testing the clear instead.
     server.hub.publish({
       v: 1,
       type: 'test-start',
@@ -333,6 +338,23 @@ describe('the runner UI with discovered tests', () => {
       .poll(() => page.locator('.badge.not-run').count(), { timeout: 15_000 })
       .toBe(1);
     expect(await page.locator(testId('test')).count()).toBe(2);
+  });
+
+  it('keeps the listing for a tab that connects mid-run', async () => {
+    const { server } = await serve({
+      discovery: { cwd: '/repo', run: async () => listing },
+    });
+
+    // The listing has to survive the backlog reset a run performs, or a tab
+    // opened after the run started sees an empty project.
+    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
+
+    const late = await browser.newPage();
+    pages.push(late);
+    Object.assign(late, { __errors: [] });
+    await late.goto(server.url, { waitUntil: 'domcontentloaded' });
+
+    await expect.poll(() => late.locator(testId('test')).count(), { timeout: 15_000 }).toBe(2);
   });
 });
 
