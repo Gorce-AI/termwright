@@ -175,6 +175,11 @@ if (!composed.ok) {
   list and validation rejects it.
 - Removals are applied **before** upserts, so one delta can rescue a node out
   of a subtree it also removes.
+- `cursor`, when present, replaces the cursor; absent means **unchanged**.
+  Without it a diffs-only session could never move the cursor, which in a TUI
+  moves on nearly every keystroke — the mode would be useless for exactly the
+  interactive applications it exists to make cheap. A delta cannot *remove* a
+  cursor and does not need to: hiding it is `visible: false`.
 
 **The validation split matters.** `validateTreeDelta` checks only what is
 knowable without the base: bounded sizes, well-formed nodes, unique ids, a
@@ -190,8 +195,8 @@ return a failure telling the caller to request a full snapshot via `get-tree`.
 A speculative patch would produce a tree that looks fine and is wrong, and
 every assertion downstream would inherit that error silently.
 
-A delta cannot change the cursor, the viewport or the session id; those are
-inherited from the base snapshot.
+A delta cannot change the viewport or the session id; those are inherited from
+the base snapshot, and changing them requires a full one.
 
 ## AccessKit export (bridge-ready)
 

@@ -213,6 +213,47 @@ describe('applyTreeDelta — composition', () => {
     expect(result.detail).toContain('resynchronised');
   });
 
+  it('replaces the cursor when the delta carries one', () => {
+    const result = applyTreeDelta(
+      baseSnapshot(),
+      { baseRevision: 4, revision: 5, changed: [], removed: [], cursor: { row: 9, column: 12, visible: true } },
+      DEFAULT_LIMITS,
+    );
+    if (!result.ok) throw new Error(`${result.code}: ${result.detail}`);
+    expect(result.snapshot.cursor).toEqual({ row: 9, column: 12, visible: true });
+  });
+
+  it('hides the cursor through visible:false, since a delta cannot remove it', () => {
+    const result = applyTreeDelta(
+      baseSnapshot(),
+      { baseRevision: 4, revision: 5, changed: [], removed: [], cursor: { row: 1, column: 2, visible: false } },
+      DEFAULT_LIMITS,
+    );
+    if (!result.ok) throw new Error(result.detail);
+    expect(result.snapshot.cursor?.visible).toBe(false);
+  });
+
+  it('rejects a cursor outside the viewport, which only composition can see', () => {
+    // The delta carries no columns/rows, so this passes the shape check.
+    const value = {
+      baseRevision: 4,
+      revision: 5,
+      changed: [],
+      removed: [],
+      cursor: { row: 900, column: 0, visible: true },
+    };
+    expect(shapeCode(value)).toBe('ok');
+    expect(applyCode(baseSnapshot(), value)).toBe('bad-rect');
+  });
+
+  it('rejects a malformed cursor at the shape check', () => {
+    expect(shapeCode(delta({ cursor: { row: -1, column: 0, visible: true } }))).toBe('schema');
+    expect(shapeCode(delta({ cursor: { row: 0, column: 0 } }))).toBe('schema');
+    expect(shapeCode(delta({ cursor: { row: 0, column: 0, visible: true, blink: true } }))).toBe(
+      'schema',
+    );
+  });
+
   it('inherits the cursor and viewport from the base', () => {
     const result = applyTreeDelta(baseSnapshot(), { baseRevision: 4, revision: 5, changed: [], removed: [] }, DEFAULT_LIMITS);
     if (!result.ok) throw new Error(result.detail);

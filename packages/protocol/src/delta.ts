@@ -22,6 +22,9 @@
  *   descendant — and it is the only rule that cannot leave orphans behind.
  * - **`rootIds`**, when present, replaces the root list outright. When absent
  *   the base roots carry over, minus anything the removals took.
+ * - **`cursor`**, when present, replaces the cursor. When absent it is
+ *   unchanged. Everything else about the viewport — columns, rows, session id
+ *   — is inherited and cannot be changed by a delta.
  *
  * Order matters: removals are applied first, then upserts. That lets one delta
  * move a node out of a removed subtree by re-adding it in `changed`.
@@ -30,7 +33,7 @@
 import { Buffer } from 'node:buffer';
 import { z } from 'zod';
 import type { ProtocolLimits } from './limits.js';
-import type { SemanticNode, SemanticSnapshot } from './tree.js';
+import type { CursorInfo, SemanticNode, SemanticSnapshot } from './tree.js';
 import type { ValidationErrorCode, ValidationResult } from './validate.js';
 import { validateSnapshot } from './validate.js';
 import { ProtocolViolation } from './errors.js';
@@ -40,8 +43,9 @@ import { treeSchemas } from './node-schema.js';
 /**
  * An incremental update to a semantic tree.
  *
- * Carries no viewport, cursor or session id: those belong to the snapshot the
- * delta is composed onto. A change that needs them requires a full snapshot.
+ * Carries no viewport or session id: those belong to the snapshot the delta is
+ * composed onto, and a change to them requires a full snapshot. The cursor is
+ * the exception — it moves far too often to be worth a snapshot each time.
  */
 export interface TreeDelta {
   /** The revision this delta is composed onto. Must match exactly. */
@@ -54,6 +58,16 @@ export interface TreeDelta {
   readonly removed: readonly string[];
   /** Replacement root list; absent means the base roots carry over. */
   readonly rootIds?: readonly string[];
+  /**
+   * Replacement cursor; **absent means unchanged**.
+   *
+   * Without this a diffs-only session could never move the cursor, which in a
+   * TUI moves on nearly every keystroke — the mode would be useless for
+   * exactly the interactive applications it exists to make cheap. There is no
+   * way to *remove* a cursor, and none is needed: hiding it is
+   * `visible: false`.
+   */
+  readonly cursor?: CursorInfo;
 }
 
 /** Structured result: never throws hostile data onward. */
@@ -65,7 +79,7 @@ function fail(code: ValidationErrorCode, detail: string): DeltaValidationResult 
   return { ok: false, code, detail };
 }
 
-const DELTA_KEYS = ['baseRevision', 'revision', 'changed', 'removed', 'rootIds'];
+const DELTA_KEYS = ['baseRevision', 'revision', 'changed', 'removed', 'rootIds', 'cursor'];
 
 /**
  * Validate the **shape** of an untrusted delta.
@@ -109,8 +123,8 @@ export function validateTreeDelta(value: unknown, limits: ProtocolLimits): Delta
     if (!DELTA_KEYS.includes(key)) return fail('schema', `unknown delta property "${key}"`);
   }
 
-  const { text, node } = treeSchemas(limits);
-  const parsed = deltaSchema(text, node, limits).safeParse(delta);
+  const { text, node, cursor } = treeSchemas(limits);
+  const parsed = deltaSchema(text, node, cursor, limits).safeParse(delta);
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
     const path = issue.path.map(String);
@@ -177,6 +191,7 @@ const deltaCache = new WeakMap<ProtocolLimits, z.ZodType>();
 function deltaSchema(
   text: z.ZodType<string>,
   node: z.ZodType,
+  cursor: z.ZodType,
   limits: ProtocolLimits,
 ): z.ZodType {
   const cached = deltaCache.get(limits);
@@ -187,6 +202,7 @@ function deltaSchema(
     changed: z.array(node).max(limits.maxNodes),
     removed: z.array(text).max(limits.maxNodes),
     rootIds: z.array(text).max(limits.maxNodes).optional(),
+    cursor: cursor.optional(),
   });
   deltaCache.set(limits, built);
   return built;
@@ -269,8 +285,10 @@ export function applyTreeDelta(
     revision: delta.revision,
     columns: base.columns,
     rows: base.rows,
-    // A delta carries no cursor; it is inherited from the base snapshot.
-    ...(base.cursor === undefined ? {} : { cursor: base.cursor }),
+    // Absent cursor means unchanged, so the base's carries over.
+    ...(delta.cursor ?? base.cursor) === undefined
+      ? {}
+      : { cursor: delta.cursor ?? base.cursor },
     rootIds,
     nodes: [...byId.values()],
   };
