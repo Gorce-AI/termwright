@@ -11,11 +11,16 @@
  * space capped at 128 MB, so exhaustion cases cannot pass on a roomy heap.
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import { DEFAULT_LIMITS } from '@termwright/protocol';
 import type { SessionDiagnostic, TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
 import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from '../support/pty.js';
 
 const sessions = createSessionPool();
+
+/** The `flood` scenario publishes revisions 2..100 without markers. */
+const FIRST_FLOOD_REVISION = 2;
+const FLOOD_REVISIONS = 99;
 
 /** Launches the peer, lets it publish a valid revision 1, and returns it armed. */
 async function arm(scenario: string): Promise<TerminalHarness> {
@@ -254,11 +259,21 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect((truncated as TermwrightError).code).toBe('history-truncated');
     // 99 trees with no markers behind them: the pairing ceiling has to evict,
     // and has to say which revisions it evicted rather than leaking them.
+    // The peer pushes revisions 2..100 with no markers behind them, so all of
+    // them stay pending against a ceiling of `maxQueuedFrames`. Which ones get
+    // evicted is not a matter of degree: the oldest go, in order, until the
+    // ceiling is met — so the exact set is derivable and worth pinning. A
+    // change of ceiling, or an eviction policy that dropped the newest, fails
+    // here rather than passing as "something was dropped".
+    const evicted = FLOOD_REVISIONS - DEFAULT_LIMITS.maxQueuedFrames;
     const dropped = entriesFor(terminal, 'revision-dropped');
-    // Far more revisions than the pairing ceiling allows, so the evictions here
-    // are the in-flight kind rather than the already-published kind.
-    expect(dropped.length).toBeGreaterThan(0);
-    expect(dropped.map((entry) => entry.revision ?? 0).some((revision) => revision > 1)).toBe(true);
+    expect(dropped.map((entry) => entry.revision)).toEqual(
+      Array.from({ length: evicted }, (_, index) => index + FIRST_FLOOD_REVISION),
+    );
+
+    // A dropped revision names itself; it does not aggregate. `count` belongs
+    // to entries that stand for several lost things at once.
+    expect(dropped.every((entry) => entry.count === undefined)).toBe(true);
     expect(terminal.diagnostics().length).toBeLessThanOrEqual(200);
     await expectSurvives(terminal);
   });
