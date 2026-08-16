@@ -19,6 +19,7 @@ from .errors import ProtocolViolation, TermwrightError
 from .framing import FrameDecoder, encode_frame
 from .limits import DEFAULT_LIMITS, ProtocolLimits
 from .marker import encode_marker
+from .diffing import build_delta
 from .logs import LogRecord, flatten_attrs, validate_log_record
 from .messages import (
     PROTOCOL_ID,
@@ -112,6 +113,11 @@ class SemanticClient:
         self._reader_task: Optional[asyncio.Task] = None
         self._ready: Optional[asyncio.Future] = None
         self._history: MutableMapping[int, Dict[str, Any]] = OrderedDict()
+        #: The last tree the driver has, which every delta is based on.
+        self._published: Optional[Dict[str, Any]] = None
+        #: Counters a test or a diagnostic can read.
+        self.deltas_sent = 0
+        self.snapshots_sent = 0
 
         self.session_id: Optional[str] = None
         self.revision = 0
@@ -235,13 +241,30 @@ class SemanticClient:
         return self.marker(wire["revision"])
 
     async def _send_snapshot(self, wire: Dict[str, Any]) -> None:
-        # `diffs` is answered with whole trees: this client does not announce
-        # `tree-diffs`, so a conforming driver will not ask for them, and
-        # sending the full tree is a superset of what a delta would carry.
-        # Staying silent would leave the driver with no tree at all.
         if self.subscribe != "revisions":
-            await self._send(snapshot_message(wire))
+            await self._send(self._tree_message(wire))
         await self._send(revision_commit(wire["revision"]))
+
+    def _tree_message(self, wire: Dict[str, Any]) -> Dict[str, Any]:
+        """A delta when the driver asked for one and it is worth sending.
+
+        Falls back to the whole tree on the first publish, when the driver
+        wants snapshots, and whenever the delta would carry more than about
+        half the tree — past that a patch costs more than the thing it
+        replaces. The base is only advanced once a message is built from it,
+        so a skipped publish cannot leave the driver applying a delta onto a
+        tree it never received.
+        """
+        delta = None
+        if self.subscribe == "diffs" and self._published is not None:
+            delta = build_delta(self._published, wire)
+
+        self._published = wire
+        if delta is None:
+            self.snapshots_sent += 1
+            return snapshot_message(wire)
+        self.deltas_sent += 1
+        return delta
 
     def log(
         self,

@@ -94,12 +94,25 @@ whether the tree stays acyclic and within the depth ceiling, and whether bounds
 or the cursor fall inside the viewport can only be judged against the base it
 applies to. Those are snapshot checks, run on the assembled tree.
 
-None of the three **produces** deltas — they do not announce `tree-diffs`, so a
-conforming driver will not request them. A driver that asks for
-`subscribe: 'diffs'` anyway is answered with whole trees, which is a superset
-of what a delta would carry; publishing nothing would leave it holding
-`semanticTree: true` and no tree, which is the failure mode hardest to
-diagnose from outside.
+All three also **compose** deltas (`apply_tree_delta` / `ApplyTreeDelta`) and
+**produce** them: under `subscribe: 'diffs'` a publish sends a patch against
+the last tree the driver received. The first publish, a snapshots
+subscription, a change touching more than about half the tree, and a cursor
+that disappears all fall back to the whole snapshot — the last because a delta
+can replace a cursor but never remove one.
+
+Producing and composing are mirrors, so each language tests its producer
+against its composer: every emitted delta is applied back onto its base and
+must reproduce exactly the tree the client meant to publish. That oracle is
+what catches the two rules easiest to get wrong — a node surviving under a
+removed parent has to be re-sent even though nothing about it changed, and
+`rootIds` has to travel whenever the inherited list is not the one the new
+tree wants.
+
+The order of `nodes` in a composed tree is **not** normative: the reference
+composes through an insertion-ordered map, a client backed by a hash map
+reports another order, and both are correct. Compare them as a set keyed by
+id — the vectors say so, and the tests here do it.
 
 ## Protocol evolution
 

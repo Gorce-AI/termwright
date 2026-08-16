@@ -591,3 +591,87 @@ def validate_snapshot(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> Va
             )
 
     return ValidationResult(ok=True, snapshot=snapshot)
+
+
+def apply_tree_delta(
+    base: Mapping[str, Any], delta: Mapping[str, Any], limits: ProtocolLimits = DEFAULT_LIMITS
+) -> ValidationResult:
+    """Compose a delta onto the snapshot it names, then validate the result.
+
+    The four composition rules, in the order they are applied:
+
+    1. ``removed`` takes each id **with its whole subtree**. The cascade is
+       what keeps a delta small — dropping a dialog is one id, not one per
+       descendant — and it is the only rule that leaves no orphans behind.
+    2. Removals happen **before** upserts, so one delta can move a node out of
+       a subtree it is deleting.
+    3. ``changed`` upserts by id, **replacing a node wholesale**. Merging would
+       need a third state meaning "clear this optional field", which the wire
+       cannot express.
+    4. ``rootIds`` present replaces the list; absent inherits the base's minus
+       whatever the removals took. Adding a new root therefore *requires*
+       sending ``rootIds`` — otherwise the parentless node is missing from the
+       root list and validation says so, loudly.
+
+    An absent ``cursor`` is inherited; there is no way to remove one, and none
+    is needed, because hiding it is ``visible: false``.
+
+    A base that disagrees is reported rather than patched around: the caller
+    asks for a full snapshot instead of guessing (§8.3).
+
+    The composed tree then goes through :func:`validate_snapshot`, because a
+    delta is trusted to *describe* a valid tree, never to produce one.
+    """
+    if delta.get("baseRevision") != base.get("revision"):
+        return _fail(
+            "revision",
+            f"delta is based on revision {delta.get('baseRevision')} but the held snapshot "
+            f"is revision {base.get('revision')}; request a full snapshot instead of patching",
+        )
+
+    by_id: Dict[str, Any] = {node["id"]: node for node in base["nodes"]}
+
+    children_of: Dict[str, List[str]] = {}
+    for node in base["nodes"]:
+        parent = node.get("parentId")
+        if parent is not None:
+            children_of.setdefault(parent, []).append(node["id"])
+
+    for node_id in delta["removed"]:
+        if node_id not in by_id:
+            return _fail(
+                "missing-parent",
+                f"delta removes unknown node {node_id}; the producer's base disagrees with "
+                "ours, so the tree must be resynchronised rather than patched",
+            )
+        # Iterative descent: a hostile delta must not be able to blow the stack.
+        pending = [node_id]
+        while pending:
+            current = pending.pop()
+            if by_id.pop(current, None) is None:
+                continue
+            pending.extend(children_of.get(current, ()))
+
+    for node in delta["changed"]:
+        by_id[node["id"]] = node
+
+    if "rootIds" in delta:
+        root_ids = list(delta["rootIds"])
+    else:
+        root_ids = [node_id for node_id in base["rootIds"] if node_id in by_id]
+
+    cursor = delta.get("cursor", base.get("cursor"))
+
+    composed: Dict[str, Any] = {
+        "v": 1,
+        "sessionId": base["sessionId"],
+        "revision": delta["revision"],
+        "columns": base["columns"],
+        "rows": base["rows"],
+    }
+    if cursor is not None:
+        composed["cursor"] = cursor
+    composed["rootIds"] = root_ids
+    composed["nodes"] = list(by_id.values())
+
+    return validate_snapshot(composed, limits)

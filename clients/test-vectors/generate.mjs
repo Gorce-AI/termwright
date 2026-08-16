@@ -36,7 +36,9 @@ import {
   encodeMarker,
   parseAdapterMessage,
   parseDriverMessage,
+  applyTreeDelta,
   validateSnapshot,
+  validateTreeDelta,
   verifyMarkerPayload,
 } from '../../packages/protocol/dist/index.js';
 
@@ -690,4 +692,162 @@ write('messages.json', {
     accept: annotate(driverAccept, parseDriverMessage, true),
     reject: annotate(driverReject, parseDriverMessage, false),
   },
+});
+
+// --------------------------------------------------------------------------
+// deltas.json — composition: `delta + base → snapshot | error`
+//
+// Message-shape vectors cannot reach these: the four composition rules, both
+// resynchronisation paths and the cursor only show up once a delta meets the
+// tree it applies to. Five implementations agreeing on the shape and
+// disagreeing here is the failure this file exists to prevent.
+//
+// NOTE ON ORDER: the order of `nodes` in a composed snapshot is NOT normative.
+// The reference composes through a Map and so reports base order with new
+// nodes appended; a client backed by a hash map will report another order and
+// is equally correct. Compare `nodes` as a set keyed by id.
+// --------------------------------------------------------------------------
+
+/** root → dialog → { prompt, approve, cancel }. */
+const composeBase = (over = {}) => ({
+  v: 1,
+  sessionId: 's-0001',
+  revision: 4,
+  columns: 80,
+  rows: 24,
+  cursor: { row: 1, column: 2, visible: true },
+  rootIds: ['root'],
+  nodes: [
+    { id: 'root', role: 'region', name: 'main' },
+    { id: 'dialog', parentId: 'root', role: 'dialog', name: 'Permission', state: { modal: true } },
+    { id: 'prompt', parentId: 'dialog', role: 'text', name: 'Allow bash to run?' },
+    { id: 'approve', parentId: 'dialog', role: 'button', name: 'Approve', state: { focused: true } },
+    { id: 'cancel', parentId: 'dialog', role: 'button', name: 'Reject' },
+  ],
+  ...over,
+});
+
+const withAside = (over = {}) =>
+  composeBase({
+    rootIds: ['root', 'aside'],
+    nodes: [...composeBase().nodes, { id: 'aside', role: 'region', name: 'Aside' }],
+    ...over,
+  });
+
+const composeDelta = (over = {}) => ({ baseRevision: 4, revision: 5, changed: [], removed: [], ...over });
+
+/** [name, rule, base, delta, limitsOverride?] */
+const composeCases = [
+  // Rule (a): `changed` upserts, replacing a node WHOLESALE rather than merging.
+  ['upsert-inserts-a-new-node', 'changed-upsert', composeBase(),
+    composeDelta({ changed: [{ id: 'note', parentId: 'dialog', role: 'text', name: 'Note' }] })],
+  // `approve` carries state.focused in the base and the replacement omits
+  // state, so state must be GONE afterwards. An implementation that merges
+  // fields passes every other case and fails only this one.
+  ['upsert-replaces-node-wholesale', 'changed-upsert', composeBase(),
+    composeDelta({ changed: [{ id: 'approve', parentId: 'dialog', role: 'button', name: 'Approve' }] })],
+  ['upsert-can-reparent-a-node', 'changed-upsert', composeBase(),
+    composeDelta({ changed: [{ id: 'cancel', parentId: 'root', role: 'button', name: 'Reject' }] })],
+
+  // Rule (b): `removed` takes the whole subtree, which is what keeps a delta small.
+  ['remove-cascades-to-the-subtree', 'removed-cascade', composeBase(), composeDelta({ removed: ['dialog'] })],
+  ['remove-a-leaf', 'removed-cascade', composeBase(), composeDelta({ removed: ['cancel'] })],
+  ['remove-unknown-node-resyncs', 'resync-unknown-removal', composeBase(), composeDelta({ removed: ['ghost'] })],
+
+  // Rule (c): rootIds absent inherits the base's minus removals; present replaces.
+  ['roots-carry-over-minus-removals', 'rootids', withAside(), composeDelta({ removed: ['aside'] })],
+  ['explicit-rootids-replace-the-list', 'rootids', withAside(),
+    composeDelta({ rootIds: ['root'], removed: ['aside'] })],
+  // A new root without `rootIds` is a parentless node outside the root list,
+  // which is exactly what snapshot validation refuses — loudly, by design.
+  ['new-root-without-rootids-fails-loudly', 'rootids', composeBase(),
+    composeDelta({ changed: [{ id: 'aside', role: 'region', name: 'Aside' }] })],
+  ['new-root-with-rootids', 'rootids', composeBase(),
+    composeDelta({ changed: [{ id: 'aside', role: 'region', name: 'Aside' }], rootIds: ['root', 'aside'] })],
+
+  // Rule (d): removals apply BEFORE upserts, so one delta can move a node out
+  // of a subtree it is deleting.
+  ['rescue-a-node-out-of-a-removed-subtree', 'remove-before-insert', composeBase(),
+    composeDelta({
+      removed: ['dialog'],
+      changed: [{ id: 'approve', parentId: 'root', role: 'button', name: 'Approve' }],
+    })],
+
+  // Resynchronisation: a disagreeing base is reported, never patched around.
+  ['base-revision-mismatch-resyncs', 'resync-bad-base', composeBase(),
+    { baseRevision: 3, revision: 5, changed: [], removed: [] }],
+  ['base-revision-ahead-resyncs', 'resync-bad-base', composeBase(),
+    { baseRevision: 9, revision: 10, changed: [], removed: [] }],
+
+  // Cursor: absent inherits, present replaces, and there is no way to remove
+  // one — hiding it is `visible: false`.
+  ['cursor-absent-is-inherited', 'cursor', composeBase(), composeDelta()],
+  ['cursor-present-replaces', 'cursor', composeBase(),
+    composeDelta({ cursor: { row: 9, column: 12, visible: true } })],
+  ['cursor-hidden-via-visible-false', 'cursor', composeBase(),
+    composeDelta({ cursor: { row: 1, column: 2, visible: false } })],
+  ['cursor-outside-viewport-rejected-on-composition', 'cursor', composeBase(),
+    composeDelta({ cursor: { row: 900, column: 0, visible: true } })],
+
+  // Invariants only the composed tree can show: the delta carries no viewport
+  // and no parents, so these pass shape validation and fail here.
+  ['cycle-after-composition', 'composed-invariants', composeBase(),
+    composeDelta({
+      changed: [
+        { id: 'dialog', parentId: 'approve', role: 'dialog', name: 'Permission' },
+        { id: 'approve', parentId: 'dialog', role: 'button', name: 'Approve' },
+      ],
+    })],
+  ['unknown-parent-after-composition', 'composed-invariants', composeBase(),
+    composeDelta({ changed: [{ id: 'orphan', parentId: 'nowhere', role: 'text', name: 'Orphan' }] })],
+  ['bounds-outside-viewport-after-composition', 'composed-invariants', composeBase(),
+    composeDelta({
+      changed: [{
+        id: 'approve', parentId: 'dialog', role: 'button', name: 'Approve',
+        bounds: { row: 900, column: 900, width: 4, height: 1 },
+      }],
+    })],
+  ['node-ceiling-crossed-by-composition', 'composed-invariants', composeBase(),
+    composeDelta({
+      changed: Array.from({ length: 3 }, (_, index) => ({
+        id: `n${index}`, parentId: 'root', role: 'text', name: 'x',
+      })),
+    }),
+    { maxNodes: 7 }],
+];
+
+const composed = composeCases.map(([name, rule, baseValue, deltaValue, limitsOverride]) => {
+  const limits = { ...DEFAULT_LIMITS, ...(limitsOverride ?? {}) };
+
+  const checkedBase = validateSnapshot(baseValue, limits);
+  if (!checkedBase.ok) {
+    throw new Error(`compose fixture ${name}: base invalid (${checkedBase.code} ${checkedBase.detail})`);
+  }
+  const checkedDelta = validateTreeDelta(deltaValue, limits);
+  if (!checkedDelta.ok) {
+    throw new Error(`compose fixture ${name}: delta shape invalid (${checkedDelta.code} ${checkedDelta.detail})`);
+  }
+
+  const result = applyTreeDelta(checkedBase.snapshot, checkedDelta.delta, limits);
+  return {
+    name,
+    rule,
+    base: baseValue,
+    delta: deltaValue,
+    ...(limitsOverride === undefined ? {} : { limitsOverride }),
+    expect: result.ok
+      ? { ok: true, snapshot: result.snapshot }
+      : { ok: false, code: result.code, detail: result.detail },
+  };
+});
+
+write('deltas.json', {
+  note:
+    'Apply `delta` to `base` and compare. `limits` is DEFAULT_LIMITS merged ' +
+    'with the per-case `limitsOverride` when present. `code` is the VALIDATION ' +
+    'taxonomy (revision | missing-parent | cycle | depth | count | bad-rect | ' +
+    'schema), not the wire taxonomy: composition is an operation on session ' +
+    'state, and the transport maps it onto malformed/limit-exceeded later. ' +
+    'The order of `nodes` is NOT normative — compare them as a set keyed by id.',
+  cases: composed,
 });

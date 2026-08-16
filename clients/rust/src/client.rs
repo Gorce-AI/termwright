@@ -19,6 +19,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde_json::value::RawValue;
 use serde_json::Value;
 
+use crate::diffing::build_delta;
 use crate::error::Error;
 use crate::framing::{encode_frame, FrameDecoder};
 use crate::limits::{Limits, DEFAULT_LIMITS};
@@ -146,6 +147,9 @@ pub struct Client {
     revision: i64,
     marker_enabled: bool,
     log_budget: Option<crate::messages::LogBudget>,
+    published: Option<Value>,
+    deltas_sent: u64,
+    snapshots_sent: u64,
     log_seq: i64,
     log_bucket: Option<TokenBucket>,
     logs_dropped: u64,
@@ -168,6 +172,9 @@ impl Client {
             revision: 0,
             marker_enabled: false,
             log_budget: None,
+            published: None,
+            deltas_sent: 0,
+            snapshots_sent: 0,
             log_seq: 0,
             log_bucket: None,
             logs_dropped: 0,
@@ -319,12 +326,30 @@ impl Client {
         self.revision = revision;
         self.remember(revision, RawValue::from_string(body).expect("valid JSON"));
 
-        // `diffs` is answered with whole trees: this client does not announce
-        // `tree-diffs`, so a conforming driver will not ask for them, and
-        // sending the full tree is a superset of what a delta would carry.
-        // Staying silent would leave the driver with no tree at all.
         if self.subscribe != "revisions" {
-            self.send(&SnapshotMessage::new(snapshot))?;
+            // A delta when the driver asked for one and it is worth sending;
+            // a whole tree on the first publish, under a snapshots
+            // subscription, or past roughly half the tree. The base advances
+            // only once a message has been built from it, so a skipped
+            // publish cannot leave the driver patching a tree it never got.
+            let delta = if self.subscribe == "diffs" {
+                self.published
+                    .as_ref()
+                    .and_then(|base| build_delta(base, &parsed))
+            } else {
+                None
+            };
+            self.published = Some(parsed.clone());
+            match delta {
+                Some(delta) => {
+                    self.deltas_sent += 1;
+                    self.send(&delta)?;
+                }
+                None => {
+                    self.snapshots_sent += 1;
+                    self.send(&SnapshotMessage::new(snapshot))?;
+                }
+            }
         }
         self.send(&RevisionCommit::new(revision))?;
 
@@ -332,6 +357,16 @@ impl Client {
             return Ok(None);
         }
         Ok(Some(encode_marker(&self.token, &session_id, revision)?))
+    }
+
+    /// Patches this client has published.
+    pub fn deltas_sent(&self) -> u64 {
+        self.deltas_sent
+    }
+
+    /// Whole trees this client has published.
+    pub fn snapshots_sent(&self) -> u64 {
+        self.snapshots_sent
     }
 
     /// Records this adapter dropped locally, for being over budget or over a

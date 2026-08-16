@@ -68,6 +68,9 @@ type Client struct {
 	closed      bool
 	history     map[int64]json.RawMessage
 	order       []int64
+	published   map[string]any
+	deltasSent  int64
+	snapsSent   int64
 	logSeq      int64
 	logBucket   *tokenBucket
 	logsDropped int64
@@ -255,12 +258,12 @@ func (c *Client) Publish(snapshot *Snapshot) (string, error) {
 	}
 	c.remember(revision, body)
 
-	// `diffs` is answered with whole trees: this client does not announce
-	// `tree-diffs`, so a conforming driver will not ask for them, and sending
-	// the full tree is a superset of what a delta would carry. Staying silent
-	// would leave the driver with no tree at all.
 	if subscribe != "revisions" {
-		if err := c.send(SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, limits); err != nil {
+		message, err := c.treeMessage(snapshot, subscribe, body)
+		if err != nil {
+			return "", err
+		}
+		if err := c.send(message, limits); err != nil {
 			return "", err
 		}
 	}
@@ -432,6 +435,52 @@ func withOriginSeq(attrs map[string]any, origin int64, limits Limits, record *Lo
 	}
 	record.Attrs = before
 	return next
+}
+
+// treeMessage picks a delta when the driver asked for one and it is worth
+// sending, and a whole tree otherwise: on the first publish there is no base,
+// under a snapshots subscription no delta is wanted, and past roughly half the
+// tree a patch costs more than the thing it replaces.
+//
+// The base advances only once a message has been built from it, so a skipped
+// publish cannot leave the driver applying a delta onto a tree it never got.
+func (c *Client) treeMessage(snapshot *Snapshot, subscribe string, body json.RawMessage) (any, error) {
+	var wire map[string]any
+	if err := json.Unmarshal(body, &wire); err != nil {
+		return nil, err
+	}
+
+	c.mu.Lock()
+	previous := c.published
+	c.published = wire
+	c.mu.Unlock()
+
+	if subscribe == "diffs" && previous != nil {
+		if delta := BuildDelta(previous, wire); delta != nil {
+			c.mu.Lock()
+			c.deltasSent++
+			c.mu.Unlock()
+			return delta, nil
+		}
+	}
+	c.mu.Lock()
+	c.snapsSent++
+	c.mu.Unlock()
+	return SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, nil
+}
+
+// DeltasSent counts the patches this client has published.
+func (c *Client) DeltasSent() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.deltasSent
+}
+
+// SnapshotsSent counts the whole trees this client has published.
+func (c *Client) SnapshotsSent() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.snapsSent
 }
 
 func (c *Client) remember(revision int64, body json.RawMessage) {

@@ -918,3 +918,174 @@ pub fn validate_snapshot(value: &Value, limits: &Limits) -> Result<(), Validatio
 
     Ok(())
 }
+
+/// Compose a delta onto the snapshot it names, then validate the result.
+///
+/// The four composition rules, in the order they are applied:
+///
+/// 1. `removed` takes each id **with its whole subtree**. The cascade is what
+///    keeps a delta small — dropping a dialog is one id, not one per
+///    descendant — and it is the only rule that leaves no orphans behind.
+/// 2. Removals happen **before** upserts, so one delta can move a node out of
+///    a subtree it is deleting.
+/// 3. `changed` upserts by id, **replacing a node wholesale**. Merging would
+///    need a third state meaning "clear this optional field", which the wire
+///    cannot express.
+/// 4. `rootIds` present replaces the list; absent inherits the base's minus
+///    whatever the removals took. Adding a new root therefore *requires*
+///    sending `rootIds` — otherwise the parentless node is missing from the
+///    root list and validation says so, loudly.
+///
+/// An absent `cursor` is inherited; there is no way to remove one, and none is
+/// needed, because hiding it is `visible: false`.
+///
+/// A base that disagrees is reported rather than patched around: the caller
+/// asks for a full snapshot instead of guessing (§8.3). The composed tree then
+/// goes through [`validate_snapshot`], because a delta is trusted to
+/// *describe* a valid tree, never to produce one.
+///
+/// The order of the composed `nodes` is not normative; this implementation
+/// keeps base order with new nodes appended, which makes output deterministic.
+///
+/// # Errors
+/// Returns a [`ValidationError`] whose `code` matches the reference.
+pub fn apply_tree_delta(
+    base: &Value,
+    delta: &Value,
+    limits: &Limits,
+) -> Result<Value, ValidationError> {
+    let base_revision = delta
+        .get("baseRevision")
+        .and_then(Value::as_i64)
+        .unwrap_or(-1);
+    let held = base.get("revision").and_then(Value::as_i64).unwrap_or(-2);
+    if base_revision != held {
+        return Err(ValidationError::new(
+            "revision",
+            format!(
+                "delta is based on revision {base_revision} but the held snapshot is revision \
+                 {held}; request a full snapshot instead of patching"
+            ),
+        ));
+    }
+
+    let empty = Vec::new();
+    let base_nodes = base
+        .get("nodes")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
+
+    let mut order: Vec<String> = Vec::with_capacity(base_nodes.len());
+    let mut by_id: HashMap<String, Value> = HashMap::with_capacity(base_nodes.len());
+    let mut children_of: HashMap<String, Vec<String>> = HashMap::new();
+    for node in base_nodes {
+        let id = node
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        if let Some(parent) = node.get("parentId").and_then(Value::as_str) {
+            children_of
+                .entry(parent.to_owned())
+                .or_default()
+                .push(id.clone());
+        }
+        order.push(id.clone());
+        by_id.insert(id, node.clone());
+    }
+
+    for raw in delta
+        .get("removed")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty)
+    {
+        let id = raw.as_str().unwrap_or_default();
+        if !by_id.contains_key(id) {
+            return Err(ValidationError::new(
+                "missing-parent",
+                format!(
+                    "delta removes unknown node {id}; the producer's base disagrees with ours, \
+                     so the tree must be resynchronised rather than patched"
+                ),
+            ));
+        }
+        // Iterative descent: a hostile delta must not be able to blow the stack.
+        let mut pending = vec![id.to_owned()];
+        while let Some(current) = pending.pop() {
+            if by_id.remove(&current).is_none() {
+                continue;
+            }
+            if let Some(children) = children_of.get(&current) {
+                pending.extend(children.iter().cloned());
+            }
+        }
+    }
+
+    for node in delta
+        .get("changed")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty)
+    {
+        let id = node
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        if !by_id.contains_key(&id) {
+            order.push(id.clone());
+        }
+        by_id.insert(id, node.clone());
+    }
+
+    let root_ids: Vec<Value> = match delta.get("rootIds").and_then(Value::as_array) {
+        Some(explicit) => explicit.clone(),
+        None => base
+            .get("rootIds")
+            .and_then(Value::as_array)
+            .unwrap_or(&empty)
+            .iter()
+            .filter(|raw| by_id.contains_key(raw.as_str().unwrap_or_default()))
+            .cloned()
+            .collect(),
+    };
+
+    let mut nodes: Vec<Value> = Vec::with_capacity(by_id.len());
+    let mut seen: HashSet<&str> = HashSet::new();
+    for id in &order {
+        if !seen.insert(id.as_str()) {
+            continue;
+        }
+        if let Some(node) = by_id.get(id) {
+            nodes.push(node.clone());
+        }
+    }
+
+    let mut composed = serde_json::Map::new();
+    composed.insert("v".into(), Value::from(1));
+    composed.insert(
+        "sessionId".into(),
+        base.get("sessionId").cloned().unwrap_or(Value::Null),
+    );
+    composed.insert(
+        "revision".into(),
+        delta.get("revision").cloned().unwrap_or(Value::Null),
+    );
+    composed.insert(
+        "columns".into(),
+        base.get("columns").cloned().unwrap_or(Value::Null),
+    );
+    composed.insert(
+        "rows".into(),
+        base.get("rows").cloned().unwrap_or(Value::Null),
+    );
+    // Absent cursor means unchanged, so the base's carries over.
+    if let Some(cursor) = delta.get("cursor").or_else(|| base.get("cursor")) {
+        composed.insert("cursor".into(), cursor.clone());
+    }
+    composed.insert("rootIds".into(), Value::Array(root_ids));
+    composed.insert("nodes".into(), Value::Array(nodes));
+
+    let composed = Value::Object(composed);
+    validate_snapshot(&composed, limits)?;
+    Ok(composed)
+}

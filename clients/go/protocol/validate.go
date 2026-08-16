@@ -823,3 +823,134 @@ func (s *Snapshot) Validate(limits Limits) error {
 	}
 	return ValidateSnapshot(parsed, limits)
 }
+
+// ApplyTreeDelta composes a delta onto the snapshot it names, then validates
+// the result. The composed snapshot is returned as a generic wire value.
+//
+// The four composition rules, in the order they are applied:
+//
+//  1. `removed` takes each id WITH ITS WHOLE SUBTREE. The cascade is what
+//     keeps a delta small — dropping a dialog is one id, not one per
+//     descendant — and it is the only rule that leaves no orphans behind.
+//  2. Removals happen BEFORE upserts, so one delta can move a node out of a
+//     subtree it is deleting.
+//  3. `changed` upserts by id, REPLACING a node wholesale. Merging would need
+//     a third state meaning "clear this optional field", which the wire cannot
+//     express.
+//  4. `rootIds` present replaces the list; absent inherits the base's minus
+//     whatever the removals took. Adding a new root therefore REQUIRES sending
+//     `rootIds` — otherwise the parentless node is missing from the root list
+//     and validation says so, loudly.
+//
+// An absent cursor is inherited; there is no way to remove one, and none is
+// needed, because hiding it is `visible: false`.
+//
+// A base that disagrees is reported rather than patched around: the caller
+// asks for a full snapshot instead of guessing (§8.3). The composed tree then
+// goes through ValidateSnapshot, because a delta is trusted to DESCRIBE a
+// valid tree, never to produce one.
+//
+// The order of the composed `nodes` is not normative; this implementation
+// keeps base order with new nodes appended, which makes output deterministic.
+func ApplyTreeDelta(base, delta map[string]any, limits Limits) (map[string]any, error) {
+	baseRevision, _ := delta["baseRevision"].(float64)
+	held, _ := base["revision"].(float64)
+	if baseRevision != held {
+		return nil, invalid("revision",
+			"delta is based on revision %g but the held snapshot is revision %g; "+
+				"request a full snapshot instead of patching", baseRevision, held)
+	}
+
+	baseNodes, _ := base["nodes"].([]any)
+	order := make([]string, 0, len(baseNodes))
+	byID := make(map[string]map[string]any, len(baseNodes))
+	childrenOf := make(map[string][]string)
+	for _, raw := range baseNodes {
+		node, _ := raw.(map[string]any)
+		id := stringOr(node["id"])
+		order = append(order, id)
+		byID[id] = node
+		if parent, ok := node["parentId"].(string); ok {
+			childrenOf[parent] = append(childrenOf[parent], id)
+		}
+	}
+
+	removed, _ := delta["removed"].([]any)
+	for _, raw := range removed {
+		id := stringOr(raw)
+		if _, known := byID[id]; !known {
+			return nil, invalid("missing-parent",
+				"delta removes unknown node %s; the producer's base disagrees with ours, "+
+					"so the tree must be resynchronised rather than patched", id)
+		}
+		// Iterative descent: a hostile delta must not be able to blow the stack.
+		pending := []string{id}
+		for len(pending) > 0 {
+			current := pending[len(pending)-1]
+			pending = pending[:len(pending)-1]
+			if _, present := byID[current]; !present {
+				continue
+			}
+			delete(byID, current)
+			pending = append(pending, childrenOf[current]...)
+		}
+	}
+
+	changed, _ := delta["changed"].([]any)
+	for _, raw := range changed {
+		node, _ := raw.(map[string]any)
+		id := stringOr(node["id"])
+		if _, present := byID[id]; !present {
+			order = append(order, id)
+		}
+		byID[id] = node
+	}
+
+	var rootIDs []any
+	if explicit, present := delta["rootIds"]; present {
+		rootIDs, _ = explicit.([]any)
+	} else {
+		baseRoots, _ := base["rootIds"].([]any)
+		rootIDs = make([]any, 0, len(baseRoots))
+		for _, raw := range baseRoots {
+			if _, survives := byID[stringOr(raw)]; survives {
+				rootIDs = append(rootIDs, raw)
+			}
+		}
+	}
+
+	nodes := make([]any, 0, len(byID))
+	seen := make(map[string]struct{}, len(byID))
+	for _, id := range order {
+		node, present := byID[id]
+		if !present {
+			continue
+		}
+		if _, duplicate := seen[id]; duplicate {
+			continue
+		}
+		seen[id] = struct{}{}
+		nodes = append(nodes, node)
+	}
+
+	composed := map[string]any{
+		"v":         float64(1),
+		"sessionId": base["sessionId"],
+		"revision":  delta["revision"],
+		"columns":   base["columns"],
+		"rows":      base["rows"],
+		"rootIds":   rootIDs,
+		"nodes":     nodes,
+	}
+	// Absent cursor means unchanged, so the base's carries over.
+	if cursor, present := delta["cursor"]; present {
+		composed["cursor"] = cursor
+	} else if cursor, present := base["cursor"]; present {
+		composed["cursor"] = cursor
+	}
+
+	if err := ValidateSnapshot(composed, limits); err != nil {
+		return nil, err
+	}
+	return composed, nil
+}

@@ -44,6 +44,7 @@
 #![warn(missing_docs)]
 
 pub mod client;
+pub mod diffing;
 pub mod error;
 pub mod framing;
 pub mod limits;
@@ -59,6 +60,7 @@ pub mod tree;
 pub mod validate;
 
 pub use client::{Client, Options, DIAL_TIMEOUT, ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN};
+pub use diffing::{build_delta, diff_trees, DELTA_SHARE_CEILING};
 pub use error::{Error, ParseError, ValidationError, Violation};
 pub use framing::{encode_frame, project_dto, Frame, FrameDecoder, FRAME_HEADER_BYTES};
 pub use limits::{Limits, ABSOLUTE_LIMITS, DEFAULT_LIMITS, DEFAULT_NEGOTIATION_MS};
@@ -70,4 +72,4 @@ pub use marker::{
 pub use messages::{parse_adapter_message, parse_driver_message, PROTOCOL_ID, PROTOCOL_VERSION};
 pub use roles::{Action, Capability, Role};
 pub use tree::{Cursor, CursorShape, Node, Orientation, Rect, Snapshot, State, TextRange};
-pub use validate::{validate_snapshot, validate_tree_delta};
+pub use validate::{apply_tree_delta, validate_snapshot, validate_tree_delta};

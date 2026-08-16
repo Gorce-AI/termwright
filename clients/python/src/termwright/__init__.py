@@ -63,7 +63,7 @@ from .tree import (
     SemanticState,
     SemanticTextRange,
 )
-from .validate import ValidationResult, validate_snapshot
+from .validate import ValidationResult, apply_tree_delta, validate_snapshot, validate_tree_delta
 
 __version__ = "0.1.0"
 
@@ -116,7 +116,9 @@ __all__ = [
     "parse_adapter_message",
     "parse_driver_message",
     "project_dto",
+    "apply_tree_delta",
     "validate_snapshot",
+    "validate_tree_delta",
     "verify_marker_payload",
 ]
 
