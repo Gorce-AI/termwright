@@ -38,6 +38,7 @@ import {
 } from '@termwright/protocol';
 import type { DiagnosticCode } from './api.js';
 import { ProtocolViolationError } from './errors.js';
+import { endAfterFlush } from './internal/socket.js';
 import { tokenMatches } from './internal/token.js';
 
 /** Everything the driver learns from a successful handshake. */
@@ -217,13 +218,12 @@ export class SemanticChannel {
     }
     if (this.#attached !== null) {
       // One adapter per session; a second connection is refused, not raced.
-      this.#sendError(socket, 'internal', 'a semantic adapter is already attached');
+      this.#refuse(socket, 'internal', 'a semantic adapter is already attached');
       this.#options.hooks.onDiagnostic(
         'adapter-capability',
         'refused a second adapter connection: this session already has one attached',
         { wireCode: 'internal' },
       );
-      socket.destroy();
       return;
     }
 
@@ -271,12 +271,11 @@ export class SemanticChannel {
 
   #handleHello(socket: Socket, hello: HelloMessage): boolean {
     if (!this.#options.acceptHello()) {
-      this.#sendError(
+      this.#refuse(
         socket,
         'internal',
         'the negotiation window has closed; this session already settled as generic',
       );
-      socket.destroy();
       this.#options.hooks.onDiagnostic(
         'adapter-capability',
         `refusing a hello from ${hello.adapter.name}: the session settled as generic before it connected`,
@@ -380,9 +379,20 @@ export class SemanticChannel {
     }
   }
 
-  #sendError(socket: Socket, code: ErrorCode, message: string): void {
+  /**
+   * Sends a refusal and closes the socket only once the frame is on its way.
+   *
+   * Writing and destroying in the same turn drops whatever has not flushed
+   * yet, which loses exactly the message an adapter author needs: the reason
+   * their connection was refused.
+   */
+  #refuse(socket: Socket, code: ErrorCode, message: string): void {
     const error: ProtocolErrorMessage = { type: 'error', code, message };
-    this.#send(socket, error);
+    try {
+      endAfterFlush(socket, encodeFrame(error, this.#options.limits.maxFrameBytes));
+    } catch {
+      socket.destroy();
+    }
   }
 
   #fail(
@@ -391,8 +401,7 @@ export class SemanticChannel {
     detail: string,
     violation?: string,
   ): void {
-    this.#sendError(socket, code as ErrorCode, detail);
-    socket.destroy();
+    this.#refuse(socket, code as ErrorCode, detail);
     if (this.#attached === socket) this.#attached = null;
     const wireCode = code as ErrorCode;
     this.#options.hooks.onProtocolViolation(
