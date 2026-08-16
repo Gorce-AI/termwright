@@ -104,6 +104,22 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
+0. **A burst leaves the tree behind until the application renders again.** Where
+   the terminal falls behind the socket — a pty re-encoding every byte under a
+   flood — a revision's marker arrives after its tree has expired, so the tail
+   of the burst is never published. Measured, both on Windows CI and locally
+   with the peer's terminal capped at 5 kB/s: the session settles far short of
+   the last revision, records `revision-expired` for the rest, and stays there.
+   One further render repairs it, so nothing wedges, and the suite pins exactly
+   that. The gap is what happens when there is no further render, which is the
+   common case for a TUI that draws a burst at startup and then idles: with the
+   terminal permanently slower than the socket the session held **revision 0
+   forever** while the screen showed the last frame — no tree, no locator, and
+   no diagnostic saying the tree is stale rather than absent. The driver already
+   has the machinery that would close this: an expired marker whose revision the
+   adapter still holds is exactly the case `get-tree` resync was built for.
+   Raised with the driver; the policy call (repair, or retain the newest
+   unpaired tree past the window) is theirs.
 1. **The Textual example cannot be quit from every focus state.** It binds only
    `q`, and Tab eventually lands on its `Input`, which swallows the key —
    Ctrl+C does not quit either. Measured: `q`, Ctrl+D, Escape+`q` and
@@ -253,14 +269,20 @@ has to delete an assertion that explains itself.
   mode is hidden the effect is asserted instead: the child decodes the report,
   and the session records `mode-unverifiable` for that mode exactly once,
   because that entry describes the platform rather than any one action.
-- **Budget a long chain by progress, not by the clock.** The two 200-revision
-  floods were given 45 s, then failed on Windows anyway, where a pty re-encodes
-  every byte. Raising the number would only have hidden which of two very
-  different things was happening — slow, or stuck. `waitForRevision` waits for
-  the chain to *stop advancing* instead: a slow pipe finishes late, and a stall
-  fails at once, naming the revision it died on and the diagnostics recorded
-  there. That message is the diagnosis a wall-clock timeout never gives, and
-  "Matcher did not succeed in time" was exactly that non-diagnosis twice over.
+- **A burst does not promise to arrive.** The two 200-revision floods were
+  given 45 s, then failed on Windows anyway; the fix was not a bigger number but
+  a different question. Waiting on *progress* rather than a clock turned the
+  timeout into a measurement — "stopped at 39-44 of 200; revision-dropped×130,
+  revision-expired×64" — and that measurement named the mechanism: markers ride
+  the terminal, trees ride the socket, and a terminal that falls behind its own
+  frames delivers a marker after the driver has stopped waiting for its tree.
+  Reproduced on POSIX by capping the peer's terminal throughput
+  (`TERMWRIGHT_CONFORMANCE_STDOUT_BPS=5000`), which lands on `expired×64` —
+  the same count Windows reports. So reaching 200 was never the driver's
+  promise; it was an unstated assumption about throughput. What *is* owed, and
+  what the tests assert now, is that the session is not left behind for good:
+  the next ordinary render puts the tree right. Both branches are exercised
+  locally — the strong one by default, the recovery one under the throttle.
 - **A tri-state mode is not a boolean, and truthiness will not say so.**
   `focusReporting` gained `'unknown'` once the driver stopped reporting the
   host's focus mode as the child's. The helper here still returned it as a

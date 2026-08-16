@@ -47,6 +47,19 @@ const helloDelayMs = delayArg === undefined ? 0 : Number(delayArg.slice('--hello
  */
 const lagArg = process.argv.find((argument) => argument.startsWith('--socket-lag='));
 const socketLagMs = lagArg === undefined ? 0 : Number(lagArg.slice('--socket-lag='.length));
+/**
+ * The mirror image: throttles the *terminal* stream instead of the socket.
+ *
+ * Markers ride stdout and trees ride the socket, so a terminal slower than the
+ * socket means a revision's marker can arrive after the driver has given up
+ * waiting for it. A ceiling on bytes per second — rather than a fixed delay —
+ * is the faithful model of a pty that re-encodes everything: under a flood a
+ * backlog builds and markers fall seconds behind their trees, and once the
+ * flood stops the backlog drains and ordinary pairing should resume. Whether it
+ * does is the whole question.
+ */
+const bpsArg = process.argv.find((argument) => argument.startsWith('--stdout-bps='));
+const stdoutBps = bpsArg === undefined ? 0 : Number(bpsArg.slice('--stdout-bps='.length));
 const endpoint = process.env['TERMWRIGHT_ENDPOINT'];
 const token = process.env['TERMWRIGHT_TOKEN'];
 
@@ -75,6 +88,22 @@ let logBudget = null;
 let sessionId = null;
 let socket = null;
 let published = 0;
+
+if (stdoutBps > 0) {
+  const write = process.stdout.write.bind(process.stdout);
+  const TICK_MS = 50;
+  const perTick = Math.max(1, Math.floor((stdoutBps * TICK_MS) / 1000));
+  let pending = '';
+  setInterval(() => {
+    if (pending.length === 0) return;
+    write(pending.slice(0, perTick));
+    pending = pending.slice(perTick);
+  }, TICK_MS);
+  process.stdout.write = (chunk) => {
+    pending += chunk;
+    return true;
+  };
+}
 
 const say = (line) => process.stdout.write(`${line}\r\n`);
 

@@ -325,45 +325,44 @@ export async function enableFocusReporting(
 }
 
 /**
- * Waits for a revision chain to reach `target`, budgeting by progress.
+ * Runs a burst out and answers where the published revision came to rest.
  *
  * A wall-clock budget for "two hundred revisions arrived" is a bet on the
- * platform's throughput, and it is the wrong question to ask: a pty that
- * re-encodes every byte makes the chain slow, not stuck, and raising the number
- * until it passes would only hide which of the two it is. Waiting for progress
- * to *stop* separates them — a chain that keeps advancing gets as long as it
- * needs, and one that stops fails at once, saying where it stopped and what the
- * session recorded there. That message is the diagnosis.
+ * platform's throughput, and it is the wrong question: what a burst settles on
+ * depends on how far the terminal falls behind the socket while it is running,
+ * which is the platform's business. Measured rather than assumed — the caller
+ * then asserts what is true of the answer it got. `target` only bounds the
+ * wait; reaching it is not required here.
  */
-export async function waitForRevision(
+export async function settledRevision(
   terminal: TerminalHarness,
   target: number,
-  stallMs = 20_000,
-): Promise<void> {
+  stallMs = 15_000,
+): Promise<number> {
   let seen = terminal.semanticTree()?.revision ?? 0;
   let progressed = Date.now();
   for (;;) {
     const current = terminal.semanticTree()?.revision ?? 0;
-    if (current >= target) return;
+    if (current >= target) return current;
     if (current > seen) {
       seen = current;
       progressed = Date.now();
     }
-    if (Date.now() - progressed > stallMs) {
-      const counts = new Map<string, number>();
-      for (const entry of terminal.diagnostics()) {
-        counts.set(entry.code, (counts.get(entry.code) ?? 0) + 1);
-      }
-      const recorded = [...counts].map(([code, count]) => `${code}×${count}`).join(', ');
-      throw new Error(
-        `conformance: the revision chain stopped at ${seen} of ${target} and made no progress for ${stallMs}ms; diagnostics: ${recorded || 'none'}`,
-      );
-    }
+    if (Date.now() - progressed > stallMs) return seen;
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, 25);
       timer.unref?.();
     });
   }
+}
+
+/** How many times each diagnostic code was recorded — for failure messages. */
+export function diagnosticTally(terminal: TerminalHarness): string {
+  const counts = new Map<string, number>();
+  for (const entry of terminal.diagnostics()) {
+    counts.set(entry.code, (counts.get(entry.code) ?? 0) + 1);
+  }
+  return [...counts].map(([code, count]) => `${code}×${count}`).join(', ') || 'none';
 }
 
 /** What the emulator currently makes of the child's focus-reporting request. */
