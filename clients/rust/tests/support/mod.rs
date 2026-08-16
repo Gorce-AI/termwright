@@ -30,6 +30,18 @@ pub fn socket_path() -> String {
     format!("/tmp/tw-{stamp}-{:?}.sock", thread::current().id())
 }
 
+/// A fresh directory under `/tmp`, short enough to hold a bindable socket
+/// path, for tests that need somewhere to write.
+pub fn temp_dir() -> PathBuf {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let path = PathBuf::from(format!("/tmp/tw-{stamp}-{:?}", thread::current().id()));
+    std::fs::create_dir_all(&path).expect("creating the temporary directory");
+    path
+}
+
 /// Load one shared vector file.
 pub fn vectors(name: &str) -> Value {
     let path: PathBuf = [

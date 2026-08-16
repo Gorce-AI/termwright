@@ -3,9 +3,11 @@ package protocol
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -44,6 +46,11 @@ type Options struct {
 	Capabilities []Capability
 	// Limits applies until hello-ack replaces it.
 	Limits *Limits
+	// Debug receives the adapter-side diagnostic lines. Nil means silent, and
+	// nil is what FromEnv leaves here unless TERMWRIGHT_DEBUG_FILE names a
+	// file. Every use is on a nil-safe method, so the client behaves
+	// identically with and without one.
+	Debug *DebugLog
 }
 
 // Client is one semantic session: handshake, snapshot publishing, markers.
@@ -103,7 +110,14 @@ func New(endpoint, token string, options Options) *Client {
 //
 // This is the dormant rule in one function: no endpoint or no token means no
 // client, and the caller must then open nothing and emit nothing.
+// When diagnostics are enabled — by TERMWRIGHT_DEBUG_FILE, or by an Options
+// that already carries a log — the *reason* for staying dormant is written to
+// the log before returning nil. That line is the whole point of the file: a
+// run where the adapter never attached otherwise leaves no trace anywhere.
 func FromEnv(options Options) *Client {
+	if options.Debug == nil {
+		options.Debug = DebugFromEnv(options.AdapterName)
+	}
 	endpoint := os.Getenv(EnvEndpoint)
 	token := os.Getenv(EnvToken)
 	return fromEnvValues(endpoint, token, os.Getenv(EnvProtocol), options)
@@ -111,9 +125,18 @@ func FromEnv(options Options) *Client {
 
 func fromEnvValues(endpoint, token, protocol string, options Options) *Client {
 	if endpoint == "" || token == "" {
+		missing := []string{}
+		if endpoint == "" {
+			missing = append(missing, EnvEndpoint)
+		}
+		if token == "" {
+			missing = append(missing, EnvToken)
+		}
+		options.Debug.Line("diag", "dormant: "+strings.Join(missing, " and ")+" not set")
 		return nil
 	}
 	if protocol != "" && protocol != ProtocolID && protocol != "1" {
+		options.Debug.Line("diag", fmt.Sprintf("dormant: %s=%q is not %q", EnvProtocol, protocol, ProtocolID))
 		return nil
 	}
 	// The endpoint's shape is not the constructor's business: on Windows the
@@ -127,8 +150,10 @@ func fromEnvValues(endpoint, token, protocol string, options Options) *Client {
 // A side-channel failure must never take the application down, so callers are
 // expected to ignore the error and carry on rendering.
 func (c *Client) Start(timeout time.Duration) error {
+	c.options.Debug.Line("sem", fmt.Sprintf("dial %s timeout=%dms", DescribeEndpoint(c.endpoint), timeout.Milliseconds()))
 	conn, err := dialEndpoint(c.endpoint, timeout)
 	if err != nil {
+		c.options.Debug.Line("diag", "dial failed, staying dormant: "+errorLabel(err))
 		c.mu.Lock()
 		c.closed = true
 		c.mu.Unlock()
@@ -148,17 +173,22 @@ func (c *Client) Start(timeout time.Duration) error {
 		return err
 	}
 	if err := c.send(hello, limits); err != nil {
+		c.options.Debug.Line("diag", "hello could not be sent, staying dormant: "+errorLabel(err))
 		c.Close()
 		return err
 	}
+	c.options.Debug.Line("sem", fmt.Sprintf("hello sent adapter=%s/%s caps=%s",
+		c.options.AdapterName, c.options.AdapterVersion, joinCapabilities(c.options.Capabilities)))
 
 	select {
 	case err := <-c.ready:
 		if err != nil {
+			c.options.Debug.Line("diag", "handshake failed, staying dormant: "+errorLabel(err))
 			c.Close()
 		}
 		return err
 	case <-time.After(timeout):
+		c.options.Debug.Line("diag", fmt.Sprintf("no hello-ack within %dms, staying dormant", timeout.Milliseconds()))
 		c.Close()
 		return errors.New("termwright: timed out waiting for hello-ack")
 	}
@@ -168,9 +198,15 @@ func (c *Client) Start(timeout time.Duration) error {
 func (c *Client) Close() error {
 	c.mu.Lock()
 	conn := c.conn
+	wasOpen := !c.closed
+	summary := fmt.Sprintf("close r%d snapshots=%d deltas=%d logs_dropped=%d",
+		c.revision, c.snapsSent, c.deltasSent, c.logsDropped)
 	c.conn = nil
 	c.closed = true
 	c.mu.Unlock()
+	if wasOpen {
+		c.options.Debug.Line("sem", summary)
+	}
 	c.once.Do(func() {
 		select {
 		case c.ready <- errors.New("termwright: session closed"):
@@ -457,12 +493,15 @@ func (c *Client) treeMessage(snapshot *Snapshot, subscribe string, body json.Raw
 			c.mu.Lock()
 			c.deltasSent++
 			c.mu.Unlock()
+			c.options.Debug.Line("io", fmt.Sprintf("r%d delta changed=%d removed=%d",
+				snapshot.Revision, countIn(delta, "changed"), countIn(delta, "removed")))
 			return delta, nil
 		}
 	}
 	c.mu.Lock()
 	c.snapsSent++
 	c.mu.Unlock()
+	c.options.Debug.Line("io", fmt.Sprintf("r%d snapshot nodes=%d", snapshot.Revision, len(snapshot.Nodes)))
 	return SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, nil
 }
 
@@ -538,6 +577,7 @@ func (c *Client) readLoop(conn net.Conn) {
 func (c *Client) handle(frame Frame) bool {
 	message, err := ParseDriverMessage(frame.Value, c.Limits())
 	if err != nil {
+		c.options.Debug.Line("diag", "rejected a driver message: "+err.Error())
 		_ = c.send(ProtocolErrorMessage{Type: "error", Code: "malformed", Message: err.Error()}, c.Limits())
 		c.Close()
 		return false
@@ -561,7 +601,11 @@ func (c *Client) handle(frame Frame) bool {
 			c.logBucket = nil
 		}
 		c.subscribe = ack.Subscribe
+		logs := c.logBucket != nil
 		c.mu.Unlock()
+		c.options.Debug.SetLabel(ack.SessionID)
+		c.options.Debug.Line("sem", fmt.Sprintf("hello-ack session=%s marker=%s subscribe=%s logs=%s",
+			ack.SessionID, onOff(ack.Marker.Enabled), ack.Subscribe, onOff(logs)))
 		c.once.Do(func() {
 			select {
 			case c.ready <- nil:
@@ -575,6 +619,7 @@ func (c *Client) handle(frame Frame) bool {
 		}
 		c.answerGetTree(request)
 	case "error":
+		c.options.Debug.Line("diag", fmt.Sprintf("driver ended the session: %v", message["code"]))
 		c.Close()
 		return false
 	}

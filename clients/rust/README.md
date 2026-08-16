@@ -84,6 +84,50 @@ adapters that do not want a logging framework. Without it, `Client::log` takes
 a `LogRecord` directly. Either way the client owns the sequence numbers and the
 budget, and a dropped record leaves a gap in `seq` rather than being renumbered.
 
+## Diagnostics
+
+When the adapter does not attach, nothing anywhere says why: the dormant rule
+means a process with no endpoint behaves exactly like a process that never
+heard of termwright. Point `TERMWRIGHT_DEBUG_FILE` at a file and the adapter
+writes down what it decided.
+
+```
+TERMWRIGHT_DEBUG_FILE=/tmp/adapter.log
+```
+
+```text
+  tw:diag [p41207]   0.000s open adapter=my-tui pid=41207 platform=linux/x86_64 argv0=my-tui
+  tw:diag [p41207]   0.001s dormant: TERMWRIGHT_TOKEN not set
+```
+
+or, on a session that came up:
+
+```text
+  tw:sem  [p41207]   0.002s dial unix:/tmp/tw-8f21/s timeout=5000ms
+  tw:sem  [p41207]   0.003s hello sent adapter=my-tui/1.0.0 caps=tree,bounds,…
+  tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=diffs logs=off
+  tw:io   [3f9c1a04]  0.048s r1 snapshot nodes=17
+```
+
+Three properties are worth knowing before you rely on it:
+
+- **It never writes to stderr.** The application owns the terminal, and a
+  diagnostic line in the middle of a render corrupts the screen the driver is
+  asserting on. There is no stderr mode to turn on by mistake.
+- **It never fails the application.** An unwritable path, a full disk or a
+  closed file turns the log off and changes nothing else.
+- **The token never appears in it.** The endpoint does, because the endpoint
+  is how you tell one session's socket from another's.
+
+`TERMWRIGHT_DEBUG=<path>` works too, for symmetry with the driver's own
+switch. `TERMWRIGHT_DEBUG=1` does **not**: that value means "log to stderr" to
+the driver, it reaches this process as well, and stderr is the one destination
+an adapter cannot use. Set the value to a path or the adapter stays silent.
+
+The line format is the driver's, so `TERMWRIGHT_DEBUG=1` on the driver and
+`TERMWRIGHT_DEBUG_FILE=…` on the app produce two halves of one story that a
+single reader can take.
+
 ## Deviations
 
 Rules 1–5 of the adapter semantics conventions do not apply here: they govern

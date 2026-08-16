@@ -15,6 +15,7 @@ import time
 from collections import OrderedDict
 from typing import Any, Dict, Mapping, MutableMapping, Optional, Sequence
 
+from .debug import DebugLog, describe_endpoint
 from .errors import ProtocolViolation, TermwrightError
 from .framing import FrameDecoder, encode_frame
 from .limits import DEFAULT_LIMITS, ProtocolLimits
@@ -128,6 +129,7 @@ class SemanticClient:
         adapter_version: str,
         capabilities: Sequence[str] = DEFAULT_CAPABILITIES,
         limits: ProtocolLimits = DEFAULT_LIMITS,
+        debug: Optional[DebugLog] = None,
     ) -> None:
         self._endpoint = endpoint
         self._token = token
@@ -135,6 +137,9 @@ class SemanticClient:
         self._adapter_version = adapter_version
         self._capabilities = tuple(capabilities)
         self._limits = limits
+        #: Diagnostic log, or None. Every use is guarded; the client behaves
+        #: identically with and without one.
+        self._debug = debug
 
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
@@ -174,14 +179,16 @@ class SemanticClient:
             raises — when the endpoint is unreachable or the driver rejects us:
             a failed side-channel must not take the application down with it.
         """
+        self._log("sem", f"dial {describe_endpoint(self._endpoint)} timeout={int(timeout * 1000)}ms")
         try:
             self._reader, self._writer = await asyncio.wait_for(
                 _open_connection(self._endpoint), timeout
             )
-        except (OSError, asyncio.TimeoutError, NotImplementedError, AttributeError):
+        except (OSError, asyncio.TimeoutError, NotImplementedError, AttributeError) as error:
             # AttributeError belongs here: `asyncio.open_unix_connection` does
             # not exist on Windows at all, so a wrong transport choice raises
             # rather than failing to connect, and that must not reach the app.
+            self._log("diag", f"dial failed, staying dormant: {_error_label(error)}")
             self.closed = True
             return False
 
@@ -193,14 +200,28 @@ class SemanticClient:
             await self._send(
                 hello(self._token, self._adapter_name, self._adapter_version, self._capabilities)
             )
+            self._log(
+                "sem",
+                f"hello sent adapter={self._adapter_name}/{self._adapter_version} "
+                f"caps={','.join(self._capabilities)}",
+            )
             await asyncio.wait_for(asyncio.shield(self._ready), timeout)
-        except (asyncio.TimeoutError, asyncio.CancelledError, OSError, TermwrightError):
+        except (asyncio.TimeoutError, asyncio.CancelledError, OSError, TermwrightError) as error:
+            self._log("diag", f"handshake failed, staying dormant: {_error_label(error)}")
             await self.close()
             return False
+        if self.session_id is None:
+            self._log("diag", "handshake ended without a session, staying dormant")
         return self.session_id is not None
 
     async def close(self) -> None:
         """Close the channel. Safe to call more than once."""
+        if not self.closed:
+            self._log(
+                "sem",
+                f"close r{self.revision} snapshots={self.snapshots_sent} "
+                f"deltas={self.deltas_sent} logs_dropped={self.logs_dropped}",
+            )
         self.closed = True
         if self._reader_task is not None:
             self._reader_task.cancel()
@@ -291,8 +312,14 @@ class SemanticClient:
         self._published = wire
         if delta is None:
             self.snapshots_sent += 1
+            self._log("io", f"r{wire['revision']} snapshot nodes={len(wire.get('nodes', ()))}")
             return snapshot_message(wire)
         self.deltas_sent += 1
+        self._log(
+            "io",
+            f"r{wire['revision']} delta changed={len(delta.get('changed', ()))} "
+            f"removed={len(delta.get('removed', ()))}",
+        )
         return delta
 
     def log(
@@ -349,6 +376,11 @@ class SemanticClient:
             return None
         return encode_marker(self._token, self.session_id, revision)
 
+    def _log(self, category: str, message: str) -> None:
+        """Write one diagnostic line, when diagnostics are on."""
+        if self._debug is not None:
+            self._debug.line(category, message)
+
     def _remember(self, revision: int, wire: Dict[str, Any]) -> None:
         self._history[revision] = wire
         while len(self._history) > _SNAPSHOT_HISTORY:
@@ -387,6 +419,7 @@ class SemanticClient:
     async def _handle(self, raw: Any) -> None:
         parsed = parse_driver_message(raw, self._limits)
         if not parsed.ok:
+            self._log("diag", f"rejected a driver message: {parsed.detail[:200]}")
             await self._send(protocol_error("malformed", parsed.detail[:512]))
             await self.close()
             return
@@ -406,6 +439,13 @@ class SemanticClient:
                 self._log_bucket = None
             self.subscribe = message["subscribe"]
             self._limits = ProtocolLimits.from_wire(message["limits"])
+            if self._debug is not None:
+                self._debug.label = self.session_id or ""
+                self._log(
+                    "sem",
+                    f"hello-ack session={self.session_id} marker={'on' if self.marker_enabled else 'off'} "
+                    f"subscribe={self.subscribe} logs={'on' if self._log_bucket is not None else 'off'}",
+                )
             if self._ready is not None and not self._ready.done():
                 self._ready.set_result(True)
         elif message["type"] == "get-tree":
@@ -418,6 +458,7 @@ class SemanticClient:
             else:
                 await self._send(get_tree_result(message["requestId"], snapshot=held))
         elif message["type"] == "error":
+            self._log("diag", f"driver ended the session: {message.get('code')}")
             await self.close()
 
 
@@ -428,19 +469,38 @@ def client_from_env(
     capabilities: Sequence[str] = DEFAULT_CAPABILITIES,
     env: Optional[Mapping[str, str]] = None,
     limits: ProtocolLimits = DEFAULT_LIMITS,
+    debug: Optional[DebugLog] = None,
 ) -> Optional[SemanticClient]:
     """Build a client from ``TERMWRIGHT_*``, or ``None`` when not instrumented.
 
     This is the dormant rule in one function: no endpoint or no token means no
     client, and the caller must then do nothing at all.
+
+    When diagnostics are enabled — by ``TERMWRIGHT_DEBUG_FILE``, or by passing
+    ``debug`` — the *reason* for staying dormant is written to the log before
+    returning ``None``. That line is the whole point of the file: a run where
+    the adapter never attached otherwise leaves no trace anywhere.
     """
     source: Mapping[str, str] = os.environ if env is None else env
+    log = DebugLog.from_env(source, adapter=adapter_name) if debug is None else debug
     endpoint = source.get(ENV_ENDPOINT)
     token = source.get(ENV_TOKEN)
     if not endpoint or not token:
+        if log is not None:
+            missing = [
+                name
+                for name, value in ((ENV_ENDPOINT, endpoint), (ENV_TOKEN, token))
+                if not value
+            ]
+            log.line("diag", f"dormant: {' and '.join(missing)} not set")
         return None
     protocol = source.get(ENV_PROTOCOL)
     if protocol is not None and protocol not in ("", PROTOCOL_ID, "1"):
+        if log is not None:
+            log.line(
+                "diag",
+                f"dormant: {ENV_PROTOCOL}={protocol!r} is not {PROTOCOL_ID!r}",
+            )
         return None
     return SemanticClient(
         endpoint,
@@ -449,4 +509,19 @@ def client_from_env(
         adapter_version=adapter_version,
         capabilities=capabilities,
         limits=limits,
+        debug=log,
     )
+
+
+def _error_label(error: BaseException) -> str:
+    """One-line description of a failure: class, errno and first message line.
+
+    The class alone is what usually settles a Windows question — a
+    ``FileNotFoundError`` on a pipe path means the driver was never listening,
+    while a ``NotImplementedError`` means the loop could not open one at all —
+    so it is always printed, even when the message is empty.
+    """
+    code = getattr(error, "errno", None)
+    suffix = f" [errno {code}]" if code is not None else ""
+    text = str(error).split("\n")[0]
+    return f"{type(error).__name__}{suffix}" + (f": {text}" if text else "")

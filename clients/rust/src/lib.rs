@@ -44,6 +44,7 @@
 #![warn(missing_docs)]
 
 pub mod client;
+pub mod debug;
 pub mod diffing;
 pub mod error;
 pub mod framing;
@@ -60,6 +61,7 @@ pub mod tree;
 pub mod validate;
 
 pub use client::{Client, Options, DIAL_TIMEOUT, ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN};
+pub use debug::{debug_path, Category, DebugLog, ENV_DEBUG, ENV_DEBUG_FILE};
 pub use diffing::{build_delta, diff_trees, DELTA_SHARE_CEILING};
 pub use error::{Error, ParseError, ValidationError, Violation};
 pub use framing::{encode_frame, project_dto, Frame, FrameDecoder, FRAME_HEADER_BYTES};

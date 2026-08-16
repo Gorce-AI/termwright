@@ -27,6 +27,7 @@ from .client import (
     SemanticClient,
     client_from_env,
 )
+from .debug import ENV_DEBUG, ENV_DEBUG_FILE, DebugLog, debug_path
 from .errors import ProtocolViolation, TermwrightError
 from .framing import FRAME_HEADER_BYTES, FrameDecoder, encode_frame, project_dto
 from .limits import ABSOLUTE_LIMITS, DEFAULT_LIMITS, ProtocolLimits
@@ -82,6 +83,9 @@ __all__ = [
     "ADAPTER_CAPABILITIES",
     "DEFAULT_CAPABILITIES",
     "DEFAULT_LIMITS",
+    "DebugLog",
+    "ENV_DEBUG",
+    "ENV_DEBUG_FILE",
     "ENV_ENDPOINT",
     "ENV_PROTOCOL",
     "ENV_TOKEN",
@@ -110,6 +114,7 @@ __all__ = [
     "TextualSemantics",
     "ValidationResult",
     "client_from_env",
+    "debug_path",
     "enable_semantics",
     "encode_frame",
     "encode_marker",

@@ -14,11 +14,13 @@
 use std::collections::VecDeque;
 use std::io::{ErrorKind, Read, Write};
 use std::os::unix::net::UnixStream;
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::value::RawValue;
 use serde_json::Value;
 
+use crate::debug::{describe_endpoint, error_label, join_capabilities, on_off, Category, DebugLog};
 use crate::diffing::build_delta;
 use crate::error::Error;
 use crate::framing::{encode_frame, FrameDecoder};
@@ -57,6 +59,11 @@ pub struct Options {
     pub capabilities: Vec<Capability>,
     /// Limits in force until `hello-ack` replaces them.
     pub limits: Limits,
+    /// Adapter-side diagnostic log, or `None` for silence — which is what
+    /// [`Options::new`] leaves here unless `TERMWRIGHT_DEBUG_FILE` names a
+    /// file. Shared rather than owned so an adapter can log alongside the
+    /// client on the same file.
+    pub debug: Option<Arc<DebugLog>>,
 }
 
 impl Options {
@@ -77,6 +84,10 @@ impl Options {
             adapter_version: adapter_version.into(),
             capabilities: default_capabilities(),
             limits: DEFAULT_LIMITS,
+            // Left silent on purpose: opening a file is a side effect, and a
+            // constructor is the wrong place for one. `Client::from_env` is
+            // where the environment is read, here and in the other clients.
+            debug: None,
         }
     }
 }
@@ -187,7 +198,10 @@ impl Client {
     ///
     /// This is the dormant rule in one function: no endpoint or no token means
     /// no client, and the caller must then open nothing and emit nothing.
-    pub fn from_env(options: Options) -> Option<Self> {
+    pub fn from_env(mut options: Options) -> Option<Self> {
+        if options.debug.is_none() {
+            options.debug = DebugLog::from_env(&options.adapter_name).map(Arc::new);
+        }
         Self::from_values(
             std::env::var(ENV_ENDPOINT).ok().as_deref(),
             std::env::var(ENV_TOKEN).ok().as_deref(),
@@ -208,16 +222,50 @@ impl Client {
         protocol: Option<&str>,
         options: Options,
     ) -> Option<Self> {
-        let endpoint = endpoint.filter(|value| !value.is_empty())?;
-        let token = token.filter(|value| !value.is_empty())?;
+        let endpoint = endpoint.filter(|value| !value.is_empty());
+        let token = token.filter(|value| !value.is_empty());
+        let (Some(endpoint), Some(token)) = (endpoint, token) else {
+            if let Some(log) = options.debug.as_ref() {
+                let mut missing = Vec::new();
+                if endpoint.is_none() {
+                    missing.push(ENV_ENDPOINT);
+                }
+                if token.is_none() {
+                    missing.push(ENV_TOKEN);
+                }
+                log.line(
+                    Category::Diag,
+                    &format!("dormant: {} not set", missing.join(" and ")),
+                );
+            }
+            return None;
+        };
         if let Some(protocol) = protocol.filter(|value| !value.is_empty()) {
             if protocol != crate::messages::PROTOCOL_ID && protocol != "1" {
+                if let Some(log) = options.debug.as_ref() {
+                    log.line(
+                        Category::Diag,
+                        &format!(
+                            "dormant: {ENV_PROTOCOL}={protocol:?} is not {:?}",
+                            crate::messages::PROTOCOL_ID
+                        ),
+                    );
+                }
                 return None;
             }
         }
         if endpoint.starts_with(r"\\.\pipe\") || endpoint.starts_with(r"\\?\pipe\") {
             // Named pipes need a Windows-only transport; stay dormant rather
             // than half-working.
+            if let Some(log) = options.debug.as_ref() {
+                log.line(
+                    Category::Diag,
+                    &format!(
+                        "dormant: {} needs a Windows transport this client does not have",
+                        describe_endpoint(endpoint)
+                    ),
+                );
+            }
             return None;
         }
         Some(Self::new(endpoint, token, options))
@@ -231,7 +279,24 @@ impl Client {
     /// side-channel must not take the application down: callers are expected
     /// to carry on rendering.
     pub fn connect(&mut self, timeout: Duration) -> Result<(), Error> {
-        let stream = UnixStream::connect(&self.endpoint)?;
+        self.debug_line(
+            Category::Sem,
+            &format!(
+                "dial {} timeout={}ms",
+                describe_endpoint(&self.endpoint),
+                timeout.as_millis()
+            ),
+        );
+        let stream = match UnixStream::connect(&self.endpoint) {
+            Ok(stream) => stream,
+            Err(error) => {
+                self.debug_line(
+                    Category::Diag,
+                    &format!("dial failed, staying dormant: {}", error_label(&error)),
+                );
+                return Err(error.into());
+            }
+        };
         stream.set_read_timeout(Some(Duration::from_millis(50)))?;
         self.stream = Some(stream);
 
@@ -242,16 +307,44 @@ impl Client {
             self.options.capabilities.clone(),
         );
         self.send(&hello)?;
+        self.debug_line(
+            Category::Sem,
+            &format!(
+                "hello sent adapter={}/{} caps={}",
+                self.options.adapter_name,
+                self.options.adapter_version,
+                join_capabilities(&self.options.capabilities)
+            ),
+        );
 
         let deadline = Instant::now() + timeout;
         while self.session_id.is_none() {
             if Instant::now() >= deadline {
+                self.debug_line(
+                    Category::Diag,
+                    &format!(
+                        "no hello-ack within {}ms, staying dormant",
+                        timeout.as_millis()
+                    ),
+                );
                 self.close();
                 return Err(Error::HandshakeTimeout);
             }
             self.poll()?;
         }
         Ok(())
+    }
+
+    /// Write one diagnostic line, when diagnostics are on.
+    ///
+    /// Named apart from [`Client::log`], which is the application's own log
+    /// channel to the driver: these two go to different places for different
+    /// readers, and confusing them would put application text in a CI artifact
+    /// or diagnostics on the wire.
+    fn debug_line(&self, category: Category, message: &str) {
+        if let Some(log) = self.options.debug.as_ref() {
+            log.line(category, message);
+        }
     }
 
     /// Whether the handshake completed and the link is still up.
@@ -283,6 +376,13 @@ impl Client {
     /// Drop the session. The application keeps running.
     pub fn close(&mut self) {
         if let Some(stream) = self.stream.take() {
+            self.debug_line(
+                Category::Sem,
+                &format!(
+                    "close r{} snapshots={} deltas={} logs_dropped={}",
+                    self.revision, self.snapshots_sent, self.deltas_sent, self.logs_dropped
+                ),
+            );
             let _ = stream.shutdown(std::net::Shutdown::Both);
         }
         self.session_id = None;
@@ -481,6 +581,10 @@ impl Client {
 
     fn handle(&mut self, value: &Value) -> Result<(), Error> {
         if let Err(error) = parse_driver_message(value, &self.limits) {
+            self.debug_line(
+                Category::Diag,
+                &format!("rejected a driver message: {error}"),
+            );
             let _ = self.send(&ProtocolErrorMessage::new("malformed", error.to_string()));
             self.close();
             return Err(Error::Parse(error));
@@ -502,6 +606,19 @@ impl Client {
                     _ => None,
                 };
                 self.subscribe = ack.subscribe;
+                if let Some(log) = self.options.debug.as_ref() {
+                    let session = self.session_id.clone().unwrap_or_default();
+                    log.set_label(&session);
+                    log.line(
+                        Category::Sem,
+                        &format!(
+                            "hello-ack session={session} marker={} subscribe={} logs={}",
+                            on_off(self.marker_enabled),
+                            self.subscribe,
+                            on_off(self.log_bucket.is_some())
+                        ),
+                    );
+                }
             }
             Some("get-tree") => {
                 let request: GetTree =
@@ -521,7 +638,16 @@ impl Client {
                 };
                 self.send(&answer)?;
             }
-            Some("error") => self.close(),
+            Some("error") => {
+                self.debug_line(
+                    Category::Diag,
+                    &format!(
+                        "driver ended the session: {}",
+                        value.get("code").and_then(Value::as_str).unwrap_or("?")
+                    ),
+                );
+                self.close();
+            }
             _ => {}
         }
         Ok(())

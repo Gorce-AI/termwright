@@ -4,7 +4,6 @@ package protocol
 
 import (
 	"net"
-	"strings"
 	"time"
 
 	"github.com/Microsoft/go-winio"
@@ -24,10 +23,4 @@ func dialEndpoint(endpoint string, timeout time.Duration) (net.Conn, error) {
 		return net.DialTimeout("unix", endpoint, timeout)
 	}
 	return winio.DialPipe(endpoint, &timeout)
-}
-
-// isPipePath reports whether the endpoint names a Windows pipe. Both prefixes
-// are accepted because either can appear depending on how the path was built.
-func isPipePath(endpoint string) bool {
-	return strings.HasPrefix(endpoint, `\\.\pipe\`) || strings.HasPrefix(endpoint, `\\?\pipe\`)
 }

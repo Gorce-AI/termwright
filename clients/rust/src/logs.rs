@@ -326,7 +326,9 @@ pub fn validate_log_record(value: &Value, limits: &Limits) -> Result<(), Validat
             match attr {
                 Value::Null | Value::Bool(_) => {}
                 Value::Number(number) => {
-                    if number.as_f64().is_none_or(|value| !value.is_finite()) {
+                    // `map_or`, not `is_none_or`: the latter is stable only
+                    // since 1.82 and this crate's MSRV is 1.74.
+                    if number.as_f64().map_or(true, |value| !value.is_finite()) {
                         return Err(fail(
                             "schema",
                             format!("attribute \"{key}\" must be a finite number"),
