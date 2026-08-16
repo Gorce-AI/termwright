@@ -319,7 +319,11 @@ impl Client {
         self.revision = revision;
         self.remember(revision, RawValue::from_string(body).expect("valid JSON"));
 
-        if self.subscribe == "snapshots" {
+        // `diffs` is answered with whole trees: this client does not announce
+        // `tree-diffs`, so a conforming driver will not ask for them, and
+        // sending the full tree is a superset of what a delta would carry.
+        // Staying silent would leave the driver with no tree at all.
+        if self.subscribe != "revisions" {
             self.send(&SnapshotMessage::new(snapshot))?;
         }
         self.send(&RevisionCommit::new(revision))?;

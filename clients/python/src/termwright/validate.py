@@ -401,6 +401,116 @@ def _compute_depths(
     return depths, None
 
 
+DELTA_KEYS = ("type", "baseRevision", "revision", "changed", "removed", "rootIds", "cursor")
+
+
+def validate_tree_delta(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> ValidationResult:
+    """Validate the SHAPE of a `tree-delta` message.
+
+    Only the shape is checkable here. A delta carries no ``columns``/``rows``,
+    so whether a parent exists, whether the tree stays acyclic and within the
+    depth ceiling, and whether bounds or the cursor fall inside the viewport
+    can only be judged once the delta is applied to its base — put the
+    assembled tree through :func:`validate_snapshot` for that.
+
+    What is checkable without the base: sizes, node shape, unique ids, a
+    revision that moves forward, and the same id never both upserted and
+    removed by one delta.
+    """
+    try:
+        projected = project_dto(value, limits.maxDepth)
+    except ProtocolViolation as error:
+        return _fail("depth" if error.code == "dto-depth" else "schema", str(error))
+
+    try:
+        serialised = encode_json(projected)
+    except ProtocolViolation:
+        return _fail("schema", "delta is not JSON-serialisable")
+    if len(serialised) > limits.maxSnapshotBytes:
+        return _fail(
+            "bytes", f"delta is {len(serialised)} bytes, ceiling is {limits.maxSnapshotBytes}"
+        )
+
+    try:
+        _tree_delta_schema(projected, limits)
+    except _Issue as issue:
+        return _fail(issue.code, issue.detail)
+
+    delta: Dict[str, Any] = projected
+    changed_ids: Set[str] = set()
+    for index, node in enumerate(delta["changed"]):
+        if node["id"] in changed_ids:
+            return _fail("duplicate-id", f"node id {node['id']} appears twice in changed")
+        changed_ids.add(node["id"])
+        if node.get("parentId") == node["id"]:
+            return _fail("cycle", f"node {node['id']} is its own parent")
+        _ = index
+
+    removed_ids: Set[str] = set()
+    for node_id in delta["removed"]:
+        if node_id in removed_ids:
+            return _fail("duplicate-id", f"node id {node_id} appears twice in removed")
+        removed_ids.add(node_id)
+
+    both = changed_ids & removed_ids
+    if both:
+        # Removals apply before upserts, so this would be a delta arguing with
+        # itself about one id rather than moving a node between parents.
+        return _fail(
+            "schema", f"node id {sorted(both)[0]} is both changed and removed by one delta"
+        )
+
+    if "rootIds" in delta:
+        seen: Set[str] = set()
+        for node_id in delta["rootIds"]:
+            if node_id in seen:
+                return _fail("duplicate-id", f"root id {node_id} appears more than once")
+            seen.add(node_id)
+
+    return ValidationResult(ok=True, snapshot=delta)
+
+
+def _tree_delta_schema(value: Any, limits: ProtocolLimits) -> None:
+    delta = _obj(value, ())
+    _strict(delta, DELTA_KEYS, ())
+
+    base = _positive_int(delta.get("baseRevision"), ("baseRevision",))
+    revision = _positive_int(delta.get("revision"), ("revision",))
+    if revision <= base:
+        raise _Issue(
+            ("revision",), f"revision {revision} must move forward from base {base}"
+        )
+
+    changed = delta.get("changed")
+    if not isinstance(changed, list):
+        raise _Issue(("changed",), "expected an array")
+    if len(changed) > limits.maxNodes:
+        raise _Issue(("changed",), f"expected at most {limits.maxNodes} items", too_big=True)
+    for index, node in enumerate(changed):
+        _node_schema(node, ("changed", str(index)), limits)
+
+    removed = delta.get("removed")
+    if not isinstance(removed, list):
+        raise _Issue(("removed",), "expected an array")
+    if len(removed) > limits.maxNodes:
+        raise _Issue(("removed",), f"expected at most {limits.maxNodes} items", too_big=True)
+    for index, node_id in enumerate(removed):
+        if _text(node_id, ("removed", str(index)), limits) == "":
+            raise _Issue(("removed", str(index)), "node id must not be empty")
+
+    if "rootIds" in delta:
+        root_ids = delta["rootIds"]
+        if not isinstance(root_ids, list):
+            raise _Issue(("rootIds",), "expected an array")
+        if len(root_ids) > limits.maxNodes:
+            raise _Issue(("rootIds",), f"expected at most {limits.maxNodes} items", too_big=True)
+        for index, node_id in enumerate(root_ids):
+            _text(node_id, ("rootIds", str(index)), limits)
+
+    if "cursor" in delta:
+        _cursor(delta["cursor"], ("cursor",))
+
+
 def validate_snapshot(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> ValidationResult:
     """Validate an untrusted snapshot against ``limits``.
 

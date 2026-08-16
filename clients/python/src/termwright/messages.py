@@ -16,13 +16,13 @@ from .framing import project_dto
 from .limits import DEFAULT_LIMITS, LIMIT_FIELDS, ProtocolLimits
 from .logs import LogRecord, validate_log_record
 from .roles import CAPABILITY_SET
-from .validate import validate_snapshot
+from .validate import validate_snapshot, validate_tree_delta
 
 PROTOCOL_ID = "termwright/1"
 PROTOCOL_VERSION = 1
 
 ERROR_CODES = ("bad-token", "bad-version", "malformed", "limit-exceeded", "internal")
-SUBSCRIBE_MODES = ("snapshots", "revisions")
+SUBSCRIBE_MODES = ("snapshots", "revisions", "diffs")
 
 MAX_IDENTIFIER_LENGTH = 1024
 _MAX_SAFE_INTEGER = 2**53 - 1
@@ -145,6 +145,19 @@ def _exact_keys(message: Mapping[str, Any], required: Sequence[str], optional: S
     if unknown:
         return f"unrecognized key(s): {', '.join(unknown)}"
     return None
+
+
+def _check_tree_delta(value: Any, limits: ProtocolLimits) -> Optional[ParseResult]:
+    """Map a delta shape failure onto the wire taxonomy."""
+    result = validate_tree_delta(value, limits)
+    if result.ok:
+        return None
+    over_capacity = result.code in ("bytes", "count", "depth", "string-bytes")
+    return ParseResult(
+        ok=False,
+        code="limit-exceeded" if over_capacity else "malformed",
+        detail=f"tree-delta {result.code}: {result.detail}",
+    )
 
 
 def _check_log_record(value: Any, limits: ProtocolLimits) -> Optional[ParseResult]:
@@ -277,6 +290,10 @@ def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -
         bad = _check_snapshot(message["snapshot"], limits)
         return bad if bad is not None else ParseResult(ok=True, message=message)
 
+    if kind == "tree-delta":
+        bad = _check_tree_delta(message, limits)
+        return bad if bad is not None else ParseResult(ok=True, message=message)
+
     if kind == "log":
         issue = _exact_keys(message, ("type", "record"))
         if issue:
@@ -343,7 +360,7 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
             if issue:
                 return _malformed(issue)
         if message["subscribe"] not in SUBSCRIBE_MODES:
-            return _malformed("subscribe: expected 'snapshots' or 'revisions'")
+            return _malformed("subscribe: expected 'snapshots', 'revisions' or 'diffs'")
         marker = message["marker"]
         if not isinstance(marker, dict):
             return _malformed("marker: expected an object")

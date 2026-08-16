@@ -437,6 +437,30 @@ const helloAckMessage = {
   marker: { enabled: true },
 };
 
+/** A node as it appears inside a delta's `changed` list. */
+const deltaNode = (id, parentId, extra = {}) => ({
+  id,
+  ...(parentId === undefined ? {} : { parentId }),
+  role: 'button',
+  name: 'Approve',
+  ...extra,
+});
+
+/**
+ * A delta on the minimal shape. Only the shape is checkable here: a receiver
+ * cannot judge parents, depth or whether bounds fall inside the viewport
+ * without the base it applies to, because the delta carries no columns/rows.
+ * Those are caught when the assembled tree goes through snapshot validation.
+ */
+const treeDelta = (over = {}) => ({
+  type: 'tree-delta',
+  baseRevision: 4,
+  revision: 5,
+  changed: [deltaNode('ok', 'dialog')],
+  removed: ['stale'],
+  ...over,
+});
+
 const adapterAccept = [
   { name: 'hello', message: helloMessage },
   { name: 'revision-commit', message: { type: 'revision-commit', revision: 3 } },
@@ -464,6 +488,13 @@ const adapterAccept = [
       },
     },
   },
+  { name: 'tree-delta', message: treeDelta() },
+  { name: 'tree-delta-empty', message: treeDelta({ changed: [], removed: [] }) },
+  { name: 'tree-delta-with-root-ids', message: treeDelta({ rootIds: ['root', 'aside'] }) },
+  { name: 'tree-delta-with-cursor', message: treeDelta({ cursor: { row: 3, column: 9, visible: true } }) },
+  { name: 'tree-delta-cursor-hidden', message: treeDelta({ cursor: { row: 0, column: 0, visible: false } }) },
+  { name: 'tree-delta-cursor-shape', message: treeDelta({ cursor: { row: 1, column: 1, visible: true, shape: 'bar' } }) },
+  { name: 'tree-delta-node-without-bounds', message: treeDelta({ changed: [deltaNode('ok', 'dialog')] }) },
   {
     name: 'log-attrs-at-the-ceiling',
     message: {
@@ -542,6 +573,43 @@ const adapterReject = [
     message: { type: 'log', record: logRecord({}), priority: 'high' },
   },
   { name: 'log-record-not-an-object', message: { type: 'log', record: 'oops' } },
+  // A revision must move forward, and never onto or behind its own base.
+  { name: 'tree-delta-revision-not-forward', message: treeDelta({ baseRevision: 5, revision: 5 }) },
+  { name: 'tree-delta-revision-backwards', message: treeDelta({ baseRevision: 6, revision: 5 }) },
+  { name: 'tree-delta-base-revision-zero', message: treeDelta({ baseRevision: 0, revision: 1 }) },
+  { name: 'tree-delta-unknown-envelope-field', message: treeDelta({ speculative: true }) },
+  { name: 'tree-delta-duplicate-changed-id', message: treeDelta({ changed: [deltaNode('a', 'r'), deltaNode('a', 'r')] }) },
+  { name: 'tree-delta-duplicate-removed-id', message: treeDelta({ removed: ['a', 'a'] }) },
+  // One id cannot be upserted and cascaded away by the same delta.
+  { name: 'tree-delta-changed-and-removed', message: treeDelta({ changed: [deltaNode('a', 'r')], removed: ['a'] }) },
+  { name: 'tree-delta-self-parent', message: treeDelta({ changed: [deltaNode('a', 'a')] }) },
+  { name: 'tree-delta-unknown-role', message: treeDelta({ changed: [{ id: 'a', role: 'supervillain', name: 'A' }] }) },
+  { name: 'tree-delta-unknown-node-field', message: treeDelta({ changed: [{ id: 'a', role: 'button', name: 'A', onClick: 'x' }] }) },
+  {
+    name: 'tree-delta-bad-rect',
+    message: treeDelta({
+      changed: [{ id: 'a', role: 'button', name: 'A', bounds: { row: 0.5, column: 0, width: 1, height: 1 } }],
+    }),
+  },
+  { name: 'tree-delta-bad-cursor', message: treeDelta({ cursor: { row: -1, column: 0, visible: true } }) },
+  { name: 'tree-delta-cursor-unknown-field', message: treeDelta({ cursor: { row: 0, column: 0, visible: true, blink: true } }) },
+  { name: 'tree-delta-duplicate-root-id', message: treeDelta({ rootIds: ['r', 'r'] }) },
+  {
+    // Projection depth bites before any shape check, which buys
+    // `limit-exceeded` coverage for the price of a nested value rather than
+    // the 5 001 nodes it would take to cross maxNodes.
+    name: 'tree-delta-depth-over-ceiling',
+    message: treeDelta({
+      nested: Array.from({ length: 70 }).reduce((deep) => ({ deep }), 'leaf'),
+    }),
+  },
+  {
+    name: 'tree-delta-missing-removed',
+    message: (() => {
+      const { removed: _removed, ...rest } = treeDelta();
+      return rest;
+    })(),
+  },
 ];
 
 const driverAccept = [
@@ -572,6 +640,8 @@ const driverAccept = [
     name: 'get-tree-unknown-envelope-field',
     message: { type: 'get-tree', requestId: 3, priority: 'high' },
   },
+  { name: 'hello-ack-subscribe-diffs', message: { ...helloAckMessage, subscribe: 'diffs' } },
+  { name: 'hello-ack-subscribe-revisions', message: { ...helloAckMessage, subscribe: 'revisions' } },
   { name: 'get-tree-latest', message: { type: 'get-tree', requestId: 0 } },
   { name: 'get-tree-revision', message: { type: 'get-tree', requestId: 4, revision: 12 } },
   { name: 'error', message: { type: 'error', code: 'bad-token', message: 'nope' } },

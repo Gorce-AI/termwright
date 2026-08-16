@@ -235,7 +235,11 @@ class SemanticClient:
         return self.marker(wire["revision"])
 
     async def _send_snapshot(self, wire: Dict[str, Any]) -> None:
-        if self.subscribe == "snapshots":
+        # `diffs` is answered with whole trees: this client does not announce
+        # `tree-diffs`, so a conforming driver will not ask for them, and
+        # sending the full tree is a superset of what a delta would carry.
+        # Staying silent would leave the driver with no tree at all.
+        if self.subscribe != "revisions":
             await self._send(snapshot_message(wire))
         await self._send(revision_commit(wire["revision"]))
 

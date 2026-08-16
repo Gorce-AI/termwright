@@ -577,6 +577,184 @@ fn compute_depths<'a>(
     Ok(depths)
 }
 
+const DELTA_KEYS: [&str; 7] = [
+    "type",
+    "baseRevision",
+    "revision",
+    "changed",
+    "removed",
+    "rootIds",
+    "cursor",
+];
+
+/// Validate the SHAPE of a `tree-delta` message.
+///
+/// Only the shape is checkable here. A delta carries no `columns`/`rows`, so
+/// whether a parent exists, whether the tree stays acyclic and inside the
+/// depth ceiling, and whether bounds or the cursor fall within the viewport
+/// can only be judged once the delta is applied to its base — put the
+/// assembled tree through [`validate_snapshot`] for that.
+///
+/// What is checkable without the base: sizes, node shape, unique ids, a
+/// revision that moves forward, and the same id never both upserted and
+/// removed by one delta.
+///
+/// # Errors
+/// Returns a [`ValidationError`] whose `code` matches the reference.
+pub fn validate_tree_delta(value: &Value, limits: &Limits) -> Result<(), ValidationError> {
+    if let Err(violation) = project_dto(value, limits.max_depth) {
+        let code = if violation.code == "dto-depth" {
+            "depth"
+        } else {
+            "schema"
+        };
+        return Err(ValidationError::new(code, violation.to_string()));
+    }
+
+    let serialised = serde_json::to_vec(value)
+        .map_err(|_| ValidationError::new("schema", "delta is not JSON-serialisable"))?;
+    if serialised.len() > limits.max_snapshot_bytes {
+        return Err(ValidationError::new(
+            "bytes",
+            format!(
+                "delta is {} bytes, ceiling is {}",
+                serialised.len(),
+                limits.max_snapshot_bytes
+            ),
+        ));
+    }
+
+    check_tree_delta_schema(value, limits).map_err(Issue::into_error)?;
+    let delta = value.as_object().expect("schema layer checked the shape");
+
+    let mut changed_ids: HashSet<&str> = HashSet::new();
+    for raw in delta["changed"]
+        .as_array()
+        .expect("checked by the schema layer")
+    {
+        let node = raw.as_object().expect("checked by the schema layer");
+        let id = node_id(node);
+        if !changed_ids.insert(id) {
+            return Err(ValidationError::new(
+                "duplicate-id",
+                format!("node id {id} appears twice in changed"),
+            ));
+        }
+        if node.get("parentId").and_then(Value::as_str) == Some(id) {
+            return Err(ValidationError::new(
+                "cycle",
+                format!("node {id} is its own parent"),
+            ));
+        }
+    }
+
+    let mut removed_ids: HashSet<&str> = HashSet::new();
+    for raw in delta["removed"]
+        .as_array()
+        .expect("checked by the schema layer")
+    {
+        let id = raw.as_str().unwrap_or_default();
+        if !removed_ids.insert(id) {
+            return Err(ValidationError::new(
+                "duplicate-id",
+                format!("node id {id} appears twice in removed"),
+            ));
+        }
+    }
+
+    if let Some(id) = changed_ids.intersection(&removed_ids).next() {
+        // Removals apply before upserts, so this would be a delta arguing with
+        // itself about one id rather than moving a node elsewhere.
+        return Err(ValidationError::new(
+            "schema",
+            format!("node id {id} is both changed and removed by one delta"),
+        ));
+    }
+
+    if let Some(root_ids) = delta.get("rootIds").and_then(Value::as_array) {
+        let mut seen: HashSet<&str> = HashSet::new();
+        for raw in root_ids {
+            let id = raw.as_str().unwrap_or_default();
+            if !seen.insert(id) {
+                return Err(ValidationError::new(
+                    "duplicate-id",
+                    format!("root id {id} appears more than once"),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn check_tree_delta_schema(value: &Value, limits: &Limits) -> Result<(), Issue> {
+    let root: Vec<String> = Vec::new();
+    let delta = as_object(value, &root)?;
+    strict(delta, &DELTA_KEYS, &root)?;
+
+    let base = positive(delta.get("baseRevision"), vec!["baseRevision".into()])?;
+    let revision = positive(delta.get("revision"), vec!["revision".into()])?;
+    if revision <= base {
+        return Err(Issue::new(
+            vec!["revision".into()],
+            format!("revision {revision} must move forward from base {base}"),
+        ));
+    }
+
+    let Some(changed) = delta.get("changed").and_then(Value::as_array) else {
+        return Err(Issue::new(vec!["changed".into()], "expected an array"));
+    };
+    if changed.len() > limits.max_nodes {
+        return Err(Issue::too_big(
+            vec!["changed".into()],
+            format!("expected at most {} items", limits.max_nodes),
+        ));
+    }
+    for (index, node) in changed.iter().enumerate() {
+        check_node_schema(node, &["changed".to_owned(), index.to_string()], limits)?;
+    }
+
+    let Some(removed) = delta.get("removed").and_then(Value::as_array) else {
+        return Err(Issue::new(vec!["removed".into()], "expected an array"));
+    };
+    if removed.len() > limits.max_nodes {
+        return Err(Issue::too_big(
+            vec!["removed".into()],
+            format!("expected at most {} items", limits.max_nodes),
+        ));
+    }
+    for (index, id) in removed.iter().enumerate() {
+        let at = vec!["removed".to_owned(), index.to_string()];
+        if text(Some(id), at.clone(), limits)?.is_empty() {
+            return Err(Issue::new(at, "node id must not be empty"));
+        }
+    }
+
+    if let Some(root_ids) = delta.get("rootIds") {
+        let Some(items) = root_ids.as_array() else {
+            return Err(Issue::new(vec!["rootIds".into()], "expected an array"));
+        };
+        if items.len() > limits.max_nodes {
+            return Err(Issue::too_big(
+                vec!["rootIds".into()],
+                format!("expected at most {} items", limits.max_nodes),
+            ));
+        }
+        for (index, id) in items.iter().enumerate() {
+            text(
+                Some(id),
+                vec!["rootIds".to_owned(), index.to_string()],
+                limits,
+            )?;
+        }
+    }
+
+    if let Some(cursor) = delta.get("cursor") {
+        check_cursor(cursor, &["cursor".to_owned()])?;
+    }
+    Ok(())
+}
+
 /// Validate an untrusted snapshot against `limits`.
 ///
 /// Checks unique ids, existing and acyclic parents, the closed role, action

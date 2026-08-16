@@ -15,7 +15,7 @@ use crate::logs::{validate_log_record, LogRecord};
 use crate::marker::MAX_SAFE_INTEGER;
 use crate::roles::{valid_capability, Capability, ADAPTER_CAPABILITIES};
 use crate::tree::Snapshot;
-use crate::validate::validate_snapshot;
+use crate::validate::{validate_snapshot, validate_tree_delta};
 
 /// The wire protocol identifier both sides must agree on.
 pub const PROTOCOL_ID: &str = "termwright/1";
@@ -483,6 +483,16 @@ pub fn parse_adapter_message(value: &Value, limits: &Limits) -> Result<(), Parse
             }
             check_embedded_snapshot(&object["snapshot"], limits)
         }
+        "tree-delta" => match validate_tree_delta(value, limits) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                let code = match error.code {
+                    "bytes" | "count" | "depth" | "string-bytes" => "limit-exceeded",
+                    _ => "malformed",
+                };
+                Err(ParseError::new(code, format!("tree-delta {error}")))
+            }
+        },
         "log" => {
             require_keys(object, &["type", "record"], &[])?;
             check_embedded_log_record(&object["record"], limits)
@@ -553,10 +563,10 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
                 whole_number(limits_object, field, true)?;
             }
             match object.get("subscribe").and_then(Value::as_str) {
-                Some("snapshots") | Some("revisions") => {}
+                Some("snapshots") | Some("revisions") | Some("diffs") => {}
                 _ => {
                     return Err(ParseError::malformed(
-                        "subscribe: expected 'snapshots' or 'revisions'",
+                        "subscribe: expected 'snapshots', 'revisions' or 'diffs'",
                     ))
                 }
             }

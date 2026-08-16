@@ -549,6 +549,160 @@ func computeDepths(nodes []map[string]any, byID map[string]map[string]any) (map[
 	return depths, ""
 }
 
+var deltaKeys = []string{"type", "baseRevision", "revision", "changed", "removed", "rootIds", "cursor"}
+
+// ValidateTreeDelta checks the SHAPE of a tree-delta message.
+//
+// Only the shape is checkable here. A delta carries no columns/rows, so
+// whether a parent exists, whether the tree stays acyclic and inside the depth
+// ceiling, and whether bounds or the cursor fall within the viewport can only
+// be judged once the delta is applied to its base — put the assembled tree
+// through ValidateSnapshot for that.
+//
+// What is checkable without the base: sizes, node shape, unique ids, a
+// revision that moves forward, and the same id never both upserted and removed
+// by one delta.
+func ValidateTreeDelta(value any, limits Limits) error {
+	projected, err := ProjectDTO(value, limits.MaxDepth)
+	if err != nil {
+		code := "schema"
+		if ViolationCode(err) == "dto-depth" {
+			code = "depth"
+		}
+		return invalid(code, "%s", err.Error())
+	}
+
+	serialised, err := marshalCanonical(projected)
+	if err != nil {
+		return invalid("schema", "delta is not JSON-serialisable")
+	}
+	if len(serialised) > limits.MaxSnapshotBytes {
+		return invalid("bytes", "delta is %d bytes, ceiling is %d", len(serialised), limits.MaxSnapshotBytes)
+	}
+
+	if problem := checkTreeDeltaSchema(projected, limits); problem != nil {
+		return problem.toError()
+	}
+	delta := projected.(map[string]any)
+
+	changedIDs := map[string]struct{}{}
+	for _, raw := range delta["changed"].([]any) {
+		node := raw.(map[string]any)
+		id := stringOr(node["id"])
+		if _, duplicate := changedIDs[id]; duplicate {
+			return invalid("duplicate-id", "node id %s appears twice in changed", id)
+		}
+		changedIDs[id] = struct{}{}
+		if parent, ok := node["parentId"].(string); ok && parent == id {
+			return invalid("cycle", "node %s is its own parent", id)
+		}
+	}
+
+	removedIDs := map[string]struct{}{}
+	for _, raw := range delta["removed"].([]any) {
+		id := stringOr(raw)
+		if _, duplicate := removedIDs[id]; duplicate {
+			return invalid("duplicate-id", "node id %s appears twice in removed", id)
+		}
+		removedIDs[id] = struct{}{}
+	}
+
+	for id := range changedIDs {
+		if _, both := removedIDs[id]; both {
+			// Removals apply before upserts, so this would be a delta arguing
+			// with itself about one id rather than moving a node elsewhere.
+			return invalid("schema", "node id %s is both changed and removed by one delta", id)
+		}
+	}
+
+	if rootIDs, present := delta["rootIds"]; present {
+		seen := map[string]struct{}{}
+		for _, raw := range rootIDs.([]any) {
+			id := stringOr(raw)
+			if _, duplicate := seen[id]; duplicate {
+				return invalid("duplicate-id", "root id %s appears more than once", id)
+			}
+			seen[id] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func checkTreeDeltaSchema(value any, limits Limits) *issue {
+	delta, problem := checkObject(value, nil)
+	if problem != nil {
+		return problem
+	}
+	if problem := checkStrict(delta, deltaKeys, nil); problem != nil {
+		return problem
+	}
+
+	base, problem := checkPositive(delta["baseRevision"], []string{"baseRevision"})
+	if problem != nil {
+		return problem
+	}
+	revision, problem := checkPositive(delta["revision"], []string{"revision"})
+	if problem != nil {
+		return problem
+	}
+	if revision <= base {
+		return fail([]string{"revision"},
+			fmt.Sprintf("revision %g must move forward from base %g", revision, base))
+	}
+
+	changed, ok := delta["changed"].([]any)
+	if !ok {
+		return fail([]string{"changed"}, "expected an array")
+	}
+	if len(changed) > limits.MaxNodes {
+		return failBig([]string{"changed"}, fmt.Sprintf("expected at most %d items", limits.MaxNodes))
+	}
+	for index, node := range changed {
+		if problem := checkNodeSchema(node, []string{"changed", fmt.Sprint(index)}, limits); problem != nil {
+			return problem
+		}
+	}
+
+	removed, ok := delta["removed"].([]any)
+	if !ok {
+		return fail([]string{"removed"}, "expected an array")
+	}
+	if len(removed) > limits.MaxNodes {
+		return failBig([]string{"removed"}, fmt.Sprintf("expected at most %d items", limits.MaxNodes))
+	}
+	for index, id := range removed {
+		text, problem := checkText(id, []string{"removed", fmt.Sprint(index)}, limits)
+		if problem != nil {
+			return problem
+		}
+		if text == "" {
+			return fail([]string{"removed", fmt.Sprint(index)}, "node id must not be empty")
+		}
+	}
+
+	if rootIDs, present := delta["rootIds"]; present {
+		items, ok := rootIDs.([]any)
+		if !ok {
+			return fail([]string{"rootIds"}, "expected an array")
+		}
+		if len(items) > limits.MaxNodes {
+			return failBig([]string{"rootIds"}, fmt.Sprintf("expected at most %d items", limits.MaxNodes))
+		}
+		for index, id := range items {
+			if _, problem := checkText(id, []string{"rootIds", fmt.Sprint(index)}, limits); problem != nil {
+				return problem
+			}
+		}
+	}
+
+	if cursor, present := delta["cursor"]; present {
+		if problem := checkCursor(cursor, []string{"cursor"}); problem != nil {
+			return problem
+		}
+	}
+	return nil
+}
+
 // ValidateSnapshot checks an untrusted snapshot against limits: unique ids,
 // existing and acyclic parents, closed role/action/state vocabularies, bounded
 // strings and counts, and rects that intersect the viewport unless hidden.

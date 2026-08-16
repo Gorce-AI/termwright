@@ -360,6 +360,12 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 		}
 		return object, nil
 
+	case "tree-delta":
+		if problem := checkTreeDelta(object, limits); problem != nil {
+			return nil, problem
+		}
+		return object, nil
+
 	case "log":
 		if problem := requireKeys(object, []string{"type", "record"}, nil); problem != nil {
 			return nil, problem
@@ -376,6 +382,20 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 		return object, nil
 	}
 	return nil, malformed("unknown or missing message type")
+}
+
+// checkTreeDelta maps a delta shape failure onto the wire taxonomy.
+func checkTreeDelta(value any, limits Limits) *ParseError {
+	err := ValidateTreeDelta(value, limits)
+	if err == nil {
+		return nil
+	}
+	wire := "malformed"
+	switch ValidationCode(err) {
+	case "bytes", "count", "depth", "string-bytes":
+		wire = "limit-exceeded"
+	}
+	return &ParseError{Code: wire, Detail: "tree-delta " + err.Error()}
 }
 
 // checkLogRecord maps a record failure onto the wire taxonomy: capacity
@@ -444,8 +464,8 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 			}
 		}
 		subscribe, _ := object["subscribe"].(string)
-		if subscribe != "snapshots" && subscribe != "revisions" {
-			return nil, malformed("subscribe: expected 'snapshots' or 'revisions'")
+		if subscribe != "snapshots" && subscribe != "revisions" && subscribe != "diffs" {
+			return nil, malformed("subscribe: expected 'snapshots', 'revisions' or 'diffs'")
 		}
 		marker, ok := object["marker"].(map[string]any)
 		if !ok {

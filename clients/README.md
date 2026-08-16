@@ -85,6 +85,22 @@ arrives already formatted by it.
 when the driver considers the session to have started, so the wall clock is the
 only clock both sides agree on without negotiating. The driver rebases it.
 
+## Tree deltas
+
+The clients validate the **shape** of a `tree-delta` (sizes, node shape, unique
+ids, a revision that moves forward, no id both upserted and removed) and stop
+there, because a delta carries no `columns`/`rows`: whether a parent exists,
+whether the tree stays acyclic and within the depth ceiling, and whether bounds
+or the cursor fall inside the viewport can only be judged against the base it
+applies to. Those are snapshot checks, run on the assembled tree.
+
+None of the three **produces** deltas — they do not announce `tree-diffs`, so a
+conforming driver will not request them. A driver that asks for
+`subscribe: 'diffs'` anyway is answered with whole trees, which is a superset
+of what a delta would carry; publishing nothing would leave it holding
+`semanticTree: true` and no tree, which is the failure mode hardest to
+diagnose from outside.
+
 ## Protocol evolution
 
 Capacity is negotiated and therefore extensible; vocabulary is closed and

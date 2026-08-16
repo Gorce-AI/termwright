@@ -255,7 +255,11 @@ func (c *Client) Publish(snapshot *Snapshot) (string, error) {
 	}
 	c.remember(revision, body)
 
-	if subscribe == "snapshots" {
+	// `diffs` is answered with whole trees: this client does not announce
+	// `tree-diffs`, so a conforming driver will not ask for them, and sending
+	// the full tree is a superset of what a delta would carry. Staying silent
+	// would leave the driver with no tree at all.
+	if subscribe != "revisions" {
 		if err := c.send(SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, limits); err != nil {
 			return "", err
 		}

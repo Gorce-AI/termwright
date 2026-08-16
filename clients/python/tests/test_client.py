@@ -40,9 +40,15 @@ def sample_snapshot() -> SemanticSnapshot:
 class FakeDriver:
     """Minimal driver end: completes the handshake, records adapter frames."""
 
-    def __init__(self, path: str, logs: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        path: str,
+        logs: Optional[Dict[str, Any]] = None,
+        subscribe: str = "snapshots",
+    ) -> None:
         self.path = path
         self.logs = logs
+        self.subscribe = subscribe
         self.received: List[Dict[str, Any]] = []
         self._server: Optional[asyncio.AbstractServer] = None
         self._writer: Optional[asyncio.StreamWriter] = None
@@ -68,7 +74,7 @@ class FakeDriver:
                             "protocol": "termwright/1",
                             "sessionId": SESSION,
                             "limits": DEFAULT_LIMITS.to_wire(),
-                            "subscribe": "snapshots",
+                            "subscribe": self.subscribe,
                             "marker": {"enabled": True},
                         }
                         # Absent unless the test asks for it: no budget means
@@ -206,6 +212,47 @@ async def test_revisions_increase_by_one_per_publish(endpoint):
     await driver.wait_for(6)
     commits = [frame["revision"] for frame in driver.received if frame["type"] == "revision-commit"]
     assert commits == [1, 2, 3]
+
+    await client.close()
+    await driver.close()
+
+
+async def test_a_driver_asking_for_diffs_still_gets_a_tree(endpoint):
+    """This client cannot produce deltas, so it answers with whole trees.
+
+    It never announces `tree-diffs`, so a conforming driver will not ask; if
+    one does anyway, a full tree is a superset of what a delta would carry.
+    Publishing nothing would leave the driver with `semanticTree: true` and no
+    tree — the failure mode that is hardest to diagnose from the outside.
+    """
+    driver = FakeDriver(endpoint, subscribe="diffs")
+    await driver.start()
+    client = SemanticClient(endpoint, TOKEN, adapter_name="pytest", adapter_version="0.1.0")
+    assert await client.start(timeout=2.0) is True
+    assert client.subscribe == "diffs"
+
+    await client.publish(sample_snapshot())
+    await driver.wait_for(2)
+
+    kinds = [frame["type"] for frame in driver.received]
+    assert "snapshot" in kinds, f"a diffs subscription produced no tree: {kinds}"
+    assert "revision-commit" in kinds
+
+    await client.close()
+    await driver.close()
+
+
+async def test_a_revisions_subscription_gets_commits_only(endpoint):
+    driver = FakeDriver(endpoint, subscribe="revisions")
+    await driver.start()
+    client = SemanticClient(endpoint, TOKEN, adapter_name="pytest", adapter_version="0.1.0")
+    assert await client.start(timeout=2.0) is True
+
+    await client.publish(sample_snapshot())
+    await driver.wait_for(1)
+
+    kinds = [frame["type"] for frame in driver.received]
+    assert kinds == ["revision-commit"], kinds
 
     await client.close()
     await driver.close()
