@@ -183,3 +183,74 @@ One thing measured elsewhere argues for keeping *something* in the tree:
 that is what makes the refusal logic honest at the point of decision. A gate
 that has to make a round trip to learn how much to trust a fact will not make
 it.
+
+## Draft: what the IR rules force onto `api.ts` (campaign #34, contract batch)
+
+Not implemented — a list for the batch, written while the protocol types are
+being built, so the driver's side of each rule is decided rather than
+discovered. Each entry names the failure it prevents.
+
+### 1. Identity: a ref is only meaningful when identity is `stable`
+
+IR encodes identity as `{ kind: 'stable' | 'frame-local' }`, and Ratatui has no
+stable identity at all. Our `ResolvedTarget.ref` is `n8@42` — a node id at a
+revision — and `locatorForRef` re-resolves it later. Under frame-local
+identity that re-resolution is **not** "did this node change?" but "does the
+number 8 mean anything in this frame?", and the honest answer is no.
+
+Proposed: `ResolvedTarget` gains `identity: 'stable' | 'frame-local'`, and
+`locatorForRef` refuses with `unsupported-action` for a frame-local ref,
+suggesting role/name/testId instead. The failure this prevents is the worst
+kind: a ref that silently resolves to a *different widget* between frames, so
+a passing test asserts about something it never targeted.
+
+Note the precedent this follows: `'unknown'` in `TerminalModes` exists because
+reporting a definite value we cannot back is what makes a wrong decision look
+right. Same shape, different subject.
+
+### 2. Geometry: `rect` has to say which rectangle it is
+
+IR separates `intendedRect` (where the object asked to draw — all Ratatui has)
+from `visibleRect` (after clipping — only Textual computes it). Our
+`ResolvedTarget.rect` is one unnamed rectangle used for two different jobs:
+reporting bounds, and deciding *where to click*.
+
+Those jobs have different requirements. Clicking needs the cells the user can
+actually reach; `intendedRect` is not a claim to cells, because a modal, popup
+or shadow may own them. Without a paint-order model, clicking the centre of an
+`intendedRect` sends real input to whatever is on top and attributes the result
+to the wrong widget — a test that passes while testing nothing.
+
+Open decision for the batch, and I do not think I should make it alone: with
+only an `intendedRect` and no paint order, does a pointer action refuse, or
+proceed with a diagnostic? The mouse-mode precedent says "act, and say you
+could not verify", but it is not the same case — there the input was known to
+reach the child, and only our knowledge of the mode was missing. Here the input
+lands somewhere real and may land on the wrong thing.
+
+### 3. `frameworkType` has to reach the user, or `generic` is a downgrade
+
+D1 keeps the closed role vocabulary and lets unknown widgets survive as
+`generic` + required `frameworkType`. If the driver drops `frameworkType`,
+every previously-invisible widget becomes an indistinguishable `generic` node
+and the tree gets *harder* to read, not easier. It belongs on the exposed node
+and in `ResolvedTarget`, and it wants a locator filter
+(`getByRole('generic', { frameworkType: … })`) or the role is unusable for
+selection.
+
+### 4. Provenance is diagnostic surface, not just data
+
+`p`/`px` are most valuable exactly when something went wrong: an assertion
+failed against a name that came from a heuristic rather than an annotation.
+Errors already carry `candidates: ResolvedTarget[]`; carrying provenance with
+them turns "no such button" into "there is a button whose name was guessed by a
+heuristic". That is a small change with a large effect on how debuggable the
+zero-config model is, and it is the argument for keeping provenance in the tree
+rather than behind a lazy inspector channel.
+
+### 5. Still open, deliberately not assumed
+
+Progressive levels (spec c: "no more binary `semanticTree`") are **not** in the
+D1-D6 series. `capabilities().semanticTree` is a boolean today and the audit
+lists it as delete-on-replacement, but no decision has replaced it yet. Not
+touching it until one does.
