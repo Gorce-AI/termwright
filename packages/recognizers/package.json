@@ -1,0 +1,16 @@
+{
+  "name": "@termwright/recognizers",
+  "version": "0.1.0",
+  "description": "Probe IR to semantic tree: the rules that turn observed facts into roles, names and states",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "@termwright/protocol": "workspace:*" }
+}
