@@ -13,6 +13,7 @@ import { TermwrightError } from '@termwright/driver';
 import {
   CONFORMANCE_FIXTURES,
   createSessionPool,
+  enableFocusReporting,
   enableMouseReporting,
   mouseModeHidden,
   ptyAvailable,
@@ -192,8 +193,13 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     const before = (await rejection(terminal.focus())) as TermwrightError;
     expect(before.code).toBe('unsupported-action');
 
-    await terminal.press('f');
-    await expect.poll(() => terminal.screen().modes.focusReporting).toBe(true);
+    if (!(await enableFocusReporting(terminal))) {
+      // The platform hides the DECSET, so the driver cannot tell that the child
+      // asked; refusing is all it can do, and focus reporting is unusable here.
+      expect(((await rejection(terminal.focus())) as TermwrightError).code).toBe('unsupported-action');
+      return;
+    }
+
     await terminal.focus();
     await terminal.waitForText('ev: FOCUS:in');
     await terminal.blur();

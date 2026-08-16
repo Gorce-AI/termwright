@@ -110,8 +110,11 @@ describe.skipIf(!ptyAvailable())('a component mounted in a real terminal', () =>
     await terminal.getByRole('alert').waitFor();
 
     expect(await terminal.getByRole('alert').textContent()).toBe('Component crashed');
-    // The error boundary swallowed the throw: the process is still running.
-    expect(terminal.screen().text()).toContain('Component crashed');
+
+    // The tree can arrive before the frame it describes has been parsed, so
+    // the screen is polled rather than read once — this failed on Windows
+    // showing the *first* frame, which is what an un-polled read catches.
+    await expect.poll(() => terminal.screen().text()).toContain('Component crashed');
     expect(await terminal.getByRole('button').count()).toBe(0);
   });
 

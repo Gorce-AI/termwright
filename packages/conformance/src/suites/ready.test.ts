@@ -130,7 +130,15 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
     // Withholding secrets must not cost the child the variables it genuinely
     // needs: a program that lost PATH or TERM fails much later, in ways that
     // look like a driver bug rather than a missing environment.
-    await terminal.waitForText('allow: PATH=yes HOME=yes TERM=yes');
+    //
+    // The allowlist can only forward what the parent had. `HOME` is a POSIX
+    // convention — Windows uses `USERPROFILE` — so it is asserted only where
+    // this process has one, rather than pinning the suite to one platform's
+    // environment.
+    await terminal.waitForText('allow: PATH=yes');
+    const line = terminal.screen().text().split('\n').find((row) => row.startsWith('allow: ')) ?? '';
+    expect(line).toContain('TERM=yes');
+    if (process.env['HOME'] !== undefined) expect(line).toContain('HOME=yes');
     expect(terminal.screen().text()).toContain('env: unset');
   });
 

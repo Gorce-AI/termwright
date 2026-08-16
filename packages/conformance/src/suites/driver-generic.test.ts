@@ -11,6 +11,7 @@ import { TermwrightError, UnsupportedActionError } from '@termwright/driver';
 import {
   CONFORMANCE_FIXTURES,
   createSessionPool,
+  enableFocusReporting,
   enableMouseReporting,
   mouseModeHidden,
   ptyAvailable,
@@ -201,12 +202,19 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
       await drag;
     }
 
-    await terminal.press('f');
-    await expect.poll(() => terminal.screen().modes.focusReporting).toBe(true);
-    await terminal.focus();
-    await terminal.waitForText('ev: FOCUS:in');
-    await terminal.blur();
-    await terminal.waitForText('ev: FOCUS:out');
+    if (await enableFocusReporting(terminal)) {
+      await terminal.focus();
+      await terminal.waitForText('ev: FOCUS:in');
+      await terminal.blur();
+      await terminal.waitForText('ev: FOCUS:out');
+    } else {
+      // The child asked for focus reports and the terminal never saw it ask.
+      // The driver refuses, which is the only thing it can honestly do with
+      // what it observes — and the consequence is that focus reporting is
+      // unusable on such a platform. Recorded rather than asserted away.
+      const refused = (await rejection(terminal.focus())) as TermwrightError;
+      expect(refused.code).toBe('unsupported-action');
+    }
   });
 
   it('reports exit status and close exactly', async () => {

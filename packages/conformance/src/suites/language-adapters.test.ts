@@ -17,22 +17,25 @@
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runAdapterConformance } from '../adapter-conformance.js';
-import { repositoryPath } from '../support/pty.js';
+import { pythonWith, repositoryPath } from '../support/pty.js';
 
 const PYTHON_APP = repositoryPath('clients', 'python', 'examples', 'permission_app.py');
+/** `null` when no interpreter here can import the client; the row then skips. */
+const PYTHON = pythonWith(['termwright', 'textual']);
 const GO_MODULE = repositoryPath('clients', 'go');
 /** Built once by the toolchain probe, so no `go run` wrapper outlives a test. */
 const GO_BINARY = join(tmpdir(), 'termwright-conformance-permission');
 
 await runAdapterConformance({
   name: 'termwright (Textual)',
-  // `python3` rather than `python`: the bare name is Python 2 or absent on
-  // several supported platforms.
+  // Resolved to an absolute interpreter path: the name differs by platform and
+  // `node-pty` could not spawn `python3` on Windows even where a plain probe
+  // of the same name succeeded.
   requires: {
-    probe: ['python3', '-c', 'import termwright, textual'],
-    label: 'python3 with termwright and textual installed',
+    probe: [PYTHON ?? 'python3', '-c', 'import termwright, textual'],
+    label: 'a python with termwright and textual installed',
   },
-  spawn: () => ({ command: ['python3', PYTHON_APP] }),
+  spawn: () => ({ command: [PYTHON ?? 'python3', PYTHON_APP] }),
   ready: 'Permission required',
   interaction: { input: '\t', expect: 'focus: reject' },
   // Logs once at startup through the stdlib logging bridge, like the tview

@@ -205,6 +205,19 @@ has to delete an assertion that explains itself.
 
 ## Traps
 
+- **A killed child is reported differently per platform.** POSIX gives a
+  signal; ConPTY gives neither a signal nor a non-zero code, so "it was killed"
+  is not assertable from the exit status. What is invariant is the session's
+  obligation: it notices the death and stops pretending the program can be
+  driven. That is what the peer-crash test asserts.
+- **`HOME` is a POSIX convention.** The env allowlist can only forward what the
+  parent had, and Windows uses `USERPROFILE`, so the allowlist test asserts
+  `PATH` and `TERM` unconditionally and `HOME` only where this process has one.
+- **Resolve an interpreter to an absolute path before handing it to a pty.**
+  `python3` on POSIX is often only `python` on Windows, and `node-pty` failed
+  with `File not found:` for a name a `spawnSync` probe had just accepted.
+  Asking the interpreter for `sys.executable` turns whichever name works into a
+  path a pty can spawn.
 - **Branch on the observed mouse mode, never on `process.platform`.** ConPTY
   consumes the child's mouse DECSET, so the mode reads `'unknown'` on Windows
   while the child is in fact tracking and decoding SGR reports. Any assertion

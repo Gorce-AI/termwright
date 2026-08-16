@@ -106,6 +106,28 @@ export function environment(extra?: Readonly<Record<string, string>>): Record<st
   return { ...env, ...extra };
 }
 
+/**
+ * Absolute path of a Python interpreter that can import the given modules.
+ *
+ * Two problems at once. The executable is `python3` on POSIX and often only
+ * `python` on Windows, and `node-pty` resolves neither reliably — the first
+ * Windows run failed with `File not found:` while a `spawnSync` probe of the
+ * same name had just succeeded. Asking the interpreter for `sys.executable`
+ * turns whichever name works into an absolute path a pty can spawn.
+ *
+ * @returns the interpreter path, or `null` when no candidate can import them.
+ */
+export function pythonWith(modules: readonly string[]): string | null {
+  const script = `import ${modules.join(', ')}, sys; print(sys.executable)`;
+  for (const candidate of ['python3', 'python']) {
+    if (!commandAvailable([candidate, '-c', `import ${modules.join(', ')}`], { quiet: true })) continue;
+    const resolved = spawnSync(candidate, ['-c', script], { encoding: 'utf8', env: environment() });
+    const path = (resolved.stdout ?? '').trim();
+    if (resolved.status === 0 && path.length > 0) return path;
+  }
+  return null;
+}
+
 /** Options every conformance session shares; suites override what they need. */
 export interface FixtureLaunchOptions extends Partial<Omit<LaunchOptions, 'command'>> {
   /** Extra arguments appended to `node <fixture>`. */
@@ -221,7 +243,7 @@ async function waitForStart(
  */
 export function commandAvailable(
   command: readonly string[],
-  options: { readonly cwd?: string; readonly timeoutMs?: number } = {},
+  options: { readonly cwd?: string; readonly timeoutMs?: number; readonly quiet?: boolean } = {},
 ): boolean {
   const [binary, ...args] = command;
   if (binary === undefined) return false;
@@ -236,6 +258,7 @@ export function commandAvailable(
     if (result.status === 0) return true;
     // A skipped suite has to say *why* it skipped, or a probe that broke looks
     // exactly like a toolchain that was never installed.
+    if (options.quiet === true) return false;
     const reason =
       result.error?.message ??
       (result.signal === null ? `exit ${String(result.status)}` : `signal ${result.signal}`);
@@ -245,9 +268,11 @@ export function commandAvailable(
     );
     return false;
   } catch (error) {
-    process.stderr.write(
-      `conformance: probe \`${printable}\` could not run: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
+    if (options.quiet !== true) {
+      process.stderr.write(
+        `conformance: probe \`${printable}\` could not run: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    }
     return false;
   }
 }
@@ -276,6 +301,22 @@ export async function enableMouseReporting(
     return tracking === expected || tracking === 'unknown';
   });
   return terminal.screen().modes.mouseTracking === expected;
+}
+
+/**
+ * Asks the child to enable focus reporting and reports whether the emulator
+ * saw it happen.
+ *
+ * Same shape as the mouse: ConPTY consumes the DECSET, and unlike the mouse
+ * fields `focusReporting` has no `'unknown'` state — it simply stays `false`,
+ * so the driver refuses `focus()` on a child that did enable it. Waiting a
+ * bounded moment and branching on what the emulator ended up seeing keeps the
+ * suite honest about both platforms without asserting either one.
+ */
+export async function enableFocusReporting(terminal: TerminalHarness): Promise<boolean> {
+  await terminal.press('f');
+  await pollUntil(() => terminal.screen().modes.focusReporting, 3_000).catch(() => undefined);
+  return terminal.screen().modes.focusReporting;
 }
 
 /** True while the emulator cannot see which mouse mode the child asked for. */
