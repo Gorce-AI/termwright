@@ -483,3 +483,11 @@
   „producent nie zna geometrii". clippedAway → hidden+offscreen w
   normalizatorze. Zgłoszone z działającej sondy Textuala (jedyny framework
   liczący clip ∩ region).
+- 2026-08-17 (driver): `CellSnapshot.link?: { uri: string; id?: string;
+  truncated?: true }` — hiperlink OSC 8 pokrywający komórkę. `id` to JEDYNY
+  parametr sekwencji zachowywany przez emulator (zmierzone: xterm parsuje i
+  wyrzuca resztę params — kanał „fragmenty w params" nie istnieje po stronie
+  odbiorczej; przyszła prowieniencja Lip Gloss musi kodować w id).
+  `truncated` obecne wyłącznie gdy URI przekroczyło maxStringBytes — ucięte
+  URI to URI błędne i asercja ma prawo to wiedzieć. Dostęp do prywatnych pól
+  xterma mieszka w @termwright/vt z degradacją do null przy zmianie wersji.
