@@ -82,6 +82,7 @@ await app.close();
 termwright ui                            # runner + Vitest in watch mode, opens a browser
 termwright ui --no-open                  # …or just print the URL
 termwright ui --trace out/login.twtrace  # open a recording from CI and scrub it
+termwright report --trace out/login.twtrace  # …or write it as one shareable HTML file
 termwright codegen -- node agent.js      # drive a program, get a test back
 termwright mcp                           # serve the MCP tools to an agent
 termwright agent-context                 # versioned JSON: tools, params, exit codes
@@ -118,6 +119,17 @@ termwright ui -- src/login.test.ts --reporter=dot
 
 For the live panes to fill in, configure `termwright/ui-reporter` as shown
 above.
+
+`termwright report` writes the same viewer as `ui --trace`, but as one HTML file
+with the bundle and the recording inlined — no server, no network requests, so
+it travels as a CI artifact or an attachment. `--json` prints
+`{path, bytes, cut}`; when an archive exceeds the budget (8 MiB by default) both
+the CLI and the page say exactly how many frames and log records were left out,
+because a truncated artifact that looks complete is worse than a large one.
+
+That is a different artifact from the failure report `@termwright/trace`
+generates: this one is the whole viewer over one archive, that one is the visual
+and semantic diff around a single failing step.
 
 `termwright mcp` forwards every argument to `@termwright/mcp` untouched, so
 `termwright mcp --http --port 7333` and `termwright-mcp --http --port 7333` are

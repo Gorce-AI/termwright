@@ -63,6 +63,7 @@ await app.close();
 ```
 termwright ui [--trace <file>] [--port N] [--host H] [--no-watch] [--no-open] [-- <vitest args>]
 termwright ui --record [--out-file <file>] -- <command>
+termwright report --trace <file> [--out-file <file>]
 termwright codegen [--out-file <file>] -- <command>
 termwright mcp [--http] [--port N]
 termwright agent-context | usage | skill [--out <dir>]
@@ -71,6 +72,7 @@ termwright agent-context | usage | skill [--out <dir>]
 | Command | What it does |
 |---|---|
 | `ui` | opens the [runner](../../guides/runner-ui/): live terminal, semantic inspector, timeline. With no flags it starts your project's own Vitest in watch mode, points it at the runner through `TERMWRIGHT_UI_URL`, and opens the page in your browser; `--no-open` prints the URL instead; `--no-watch` opens the runner without starting a suite; `--trace` opens a `.twtrace` archive instead; `--record` drives a program you name and writes the test. Runner arguments go after `--`: `termwright ui -- src/login.test.ts --reporter=dot`. |
+| `report` | writes the viewer and one archive as a **single HTML file**, openable from disk — a CI artifact rather than a server. `--json` prints `{path, bytes, cut}`. See [Runner UI](../../guides/runner-ui/). |
 | `codegen` | `ui --record`, for when recording is the whole point. |
 | `mcp` | serves the [MCP tools](../../guides/mcp/); every argument is forwarded to `@termwright/mcp` untouched. |
 | `agent-context` | versioned JSON describing every tool, parameter and exit code. |

@@ -117,6 +117,17 @@ const server = await startUiServer();
 console.log(server.url); // http://127.0.0.1:53219/?token=…
 ```
 
+## The project's tests, before anything runs
+
+The runner lists your project's tests as soon as it opens, rather than filling
+the panel in as results arrive. A test nobody has run yet shows as **not run
+yet**, and clicking it runs exactly that one.
+
+Listing happens in live mode only — a replayed archive and a recording already
+know what they contain, so a list of the project's tests would mean nothing
+there. Re-listing follows watch mode, which is when files change: with
+`--no-watch` you get one listing at startup and that is it.
+
 ## Past runs
 
 Finished runs are written to `.termwright/runs` and the runner reads them back,
@@ -150,6 +161,40 @@ viewport after every resize up to that point, and the newest semantic tree at or
 before it. Step boundaries and semantic revisions are the markers the jump
 buttons snap to — which is what makes "show me the frame where the button went
 disabled" a click rather than an archaeology session.
+
+## Sending someone a failure, without a server
+
+```sh
+termwright report --trace out/login.twtrace --out-file report.html
+```
+
+That writes **one HTML file** you can open from disk: the same viewer, with the
+bundle, the stylesheet and the recording inlined. No server, no network
+requests, nothing to install — attach it to a CI job, drop it in a ticket, mail
+it. A typical archive lands around 400 KiB.
+
+`--json` prints `{path, bytes, cut}` for a script to read.
+
+Because everything is inlined, a very large archive would produce a file no
+browser enjoys. There is a budget — 8 MiB by default — and when it bites, the
+CLI says exactly what was left out:
+
+```
+  the recording is cut: 214 frames left out to fit the budget
+  the log is cut: the 1200 oldest records left out to fit the budget
+```
+
+The page says the same rather than quietly showing less: a **recording cut**
+marker sits by the clock, and the log panel carries its own notice. A truncated
+artifact that looks complete is the one thing worse than a large file.
+
+:::note[Not the same as the HTML failure report]
+[`@termwright/trace`](../traces/) generates a report *about a failure*: the
+visual and semantic diff around the step that broke, for one test.
+`termwright report` emits the *whole viewer* over one archive — scrubbing, the
+inspector, the log and command panels. Use the first to see what changed, the
+second to explore what happened.
+:::
 
 ## Recorder and codegen
 
@@ -219,10 +264,6 @@ all bounded, and the hostile-input suite runs under
 
 ## What is not there yet
 
-- **Discovery from the CLI.** The server can list a project's tests before
-  anything has run — rows appear as "not run yet" and clicking one runs exactly
-  that test — but only through `startUiServer({discovery})`. `termwright ui`
-  does not pass it yet, so from the CLI the list fills in as tests execute.
 - **A "logs incomplete" warning during a live run.** It shows in run history,
   where the count is recorded; the live `test-end` message does not carry one
   yet.

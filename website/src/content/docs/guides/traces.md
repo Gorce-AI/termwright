@@ -145,6 +145,14 @@ dialog "Permission" removed
 Nodes are matched by id, then by role and name, so frameworks that regenerate
 ids still produce a readable diff.
 
+:::note[Two different HTML artifacts]
+This report is *about a failure*: the diff around the step that broke, for one
+test. `termwright report --trace <archive>` writes something else — the whole
+[runner UI](../runner-ui/) over one archive, inlined into a single file, for
+exploring what happened rather than seeing what changed. Both open from disk
+with no server.
+:::
+
 With the Vitest preset you get this for free — add `TermwrightReporter` and the
 run writes `<outputDir>/index.html`. Tests that only passed after a retry are
 listed separately as **flaky**: a flaky test is a different problem from a
