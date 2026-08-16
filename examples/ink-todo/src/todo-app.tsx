@@ -7,23 +7,19 @@
  * callbacks, no `if (process.env.NODE_ENV === 'test')`.
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, type DOMElement } from 'ink';
 import { useSemantic } from '@termwright/ink';
 import { ConfirmDialog } from './confirm-dialog.js';
 import { hits, isMouseReport, parseMousePress, useMouseReporting } from './mouse.js';
+import { SEED_TODOS, type Todo } from './store.js';
 
-interface Todo {
-  readonly id: number;
-  readonly text: string;
-  readonly done: boolean;
+export interface TodoAppProps {
+  /** Where the list starts. Defaults to the seed, as a first run would. */
+  readonly todos?: readonly Todo[];
+  /** Called with the whole list whenever it changes, for the caller to persist. */
+  readonly onTodosChange?: (todos: readonly Todo[]) => void;
 }
-
-const INITIAL: readonly Todo[] = [
-  { id: 1, text: 'write the README', done: true },
-  { id: 2, text: 'record a demo', done: false },
-  { id: 3, text: 'ship 1.0', done: false },
-];
 
 type Focus = 'filter' | 'list' | 'add' | 'remove';
 /** Where Tab goes from each widget. Total, so the ring needs no bounds check. */
@@ -34,13 +30,13 @@ const NEXT_FOCUS: Record<Focus, Focus> = {
   remove: 'filter',
 };
 
-export function TodoApp() {
+export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppProps = {}) {
   const filterRef = useRef<DOMElement>(null);
   const listRef = useRef<DOMElement>(null);
   const addRef = useRef<DOMElement>(null);
   const removeRef = useRef<DOMElement>(null);
 
-  const [todos, setTodos] = useState<readonly Todo[]>(INITIAL);
+  const [todos, setTodos] = useState<readonly Todo[]>(initial);
   const [filter, setFilter] = useState('');
   const [focus, setFocus] = useState<Focus>('filter');
   const [selected, setSelected] = useState(0);
@@ -51,6 +47,17 @@ export function TodoApp() {
   const current = visible[Math.min(selected, visible.length - 1)];
 
   useMouseReporting();
+
+  // Persist on change, not on mount: a run that only looks at the list must
+  // leave the file exactly as it found it.
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    onTodosChange?.(todos);
+  }, [todos, onTodosChange]);
 
   useSemantic(filterRef, {
     role: 'textbox',

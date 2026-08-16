@@ -59,6 +59,9 @@ pnpm test
   snapshot oracles.
 - `tests/components.test.tsx` — the dialog alone under `mountInk`, with spies
   as props and a physical click on its stdin.
+- `tests/fixtures.test.ts` — a suite that composes its own `app` fixture on top
+  of the preset's, seeding the app's `todos.json` with `launch({ files })` and
+  asserting the saved result in teardown.
 
 ## textual-notes
 
@@ -105,6 +108,9 @@ integration.
 - **Assert both oracles for anything important.** A semantic snapshot is
   published by the adapter, so it can pass on a screen nobody painted. The cell
   snapshot is the second opinion.
+- **Declare the files a test needs, per test.** `launch({ files })` writes them
+  into the test's private directory — the program's `cwd` — before it starts, so
+  no suite depends on a shared fixtures directory or on what ran before it.
 - **A click needs the frame to hold still.** Matchers only read the tree, but a
   click aims at coordinates. After anything animated — a modal fading in —
   `waitForStable()` before clicking.

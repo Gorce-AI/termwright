@@ -66,6 +66,20 @@ workaround in this directory.
   exist at coordinates that are still moving — `waitForStable()` before the
   click. This is the one wait in these suites that is *not* about the tree, and
   the reason it survives the rest of them being deleted.
+- **Two keys in one `press()` can be handled before the app re-renders.**
+  `press('Tab Space')` writes both at once; an Ink app batches the two events,
+  so the space is handled against the focus Tab was leaving and lands in the
+  field being left rather than toggling the list. Splitting the call and
+  asserting the focus in between fixes it and costs nothing, because the
+  matcher polls — `fixtures.test.ts` does exactly that. This is the
+  assertion-as-wait pattern earning its keep, not decoration.
+- **An installed language client goes stale silently.** The Textual example
+  runs against `termwright` as installed in the environment, not against
+  `clients/python` in the tree. When the render-commit marker moved from DCS to
+  OSC 8487, an environment holding the older client kept announcing revisions
+  whose markers the driver no longer recognised: every revision expired after
+  1000 ms and no tree was ever published. It reads exactly like an adapter
+  regression. Reinstall the client before believing one.
 - **Renaming a test orphans its stored snapshot.** Wrapping these files in
   `describe(...)` changed every snapshot key; the old entries stayed in the
   files and no update mode removed them. Regenerating from scratch (delete the
