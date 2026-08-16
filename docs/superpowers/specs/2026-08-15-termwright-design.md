@@ -1,7 +1,12 @@
 # termwright — design
 
-Date: 2026-08-15
-Status: approved design, pre-implementation
+Date: 2026-08-15 (as-built addendum: 2026-08-16)
+Status: IMPLEMENTED — 1.0 scope delivered; this document is the design of
+record, `CONTRACTS.md` + `CHANGELOG-contracts.md` record every contract
+decision made during implementation (tree deltas, app logs, crash reports,
+terminal profiles, ARIA/AccessKit a11y, TTL, tolerant-reader evolution rules).
+Windows/ConPTY and the release pipelines are code-complete but first verified
+by the initial GitHub Actions runs.
 Repo: github.com/gorce-ai/termwright (npm scope `@termwright`, brand: **termwright**)
 Origin spec: `gorce-eco/docs/TUI-SEMANTICS-DRIVER-SPEC.md` (this design supersedes its
 working names and refines its protocol; all its invariants remain binding unless
