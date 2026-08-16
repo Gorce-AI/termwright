@@ -173,31 +173,27 @@ describe('a crashed recording', () => {
 
 describe('the terminal profile', () => {
   /**
-   * The real reader keeps private state, so overriding one method means
+   * The real reader keeps private state, so overriding one field means
    * forwarding the rest to the original instance rather than copying it.
    */
-  const withCastHeader = (header: () => Promise<unknown>): TraceReader =>
+  const withMeta = (extra: Record<string, unknown>): TraceReader =>
     new Proxy(reader, {
       get(target, property) {
-        if (property === 'castHeader') return header;
+        if (property === 'meta') return { ...target.meta, ...extra };
         const value = Reflect.get(target, property, target) as unknown;
         return typeof value === 'function' ? (value as (...args: never[]) => unknown).bind(target) : value;
       },
     });
 
-  it('comes from the cast header when the writer recorded one', async () => {
+  it('comes from meta.terminalProfile, where the writer records it', async () => {
     const overviewWithProfile = await readTraceOverview(
-      withCastHeader(async () => ({ version: 3, term: { cols: 80, rows: 24, profile: 'iterm2-ambiguous-wide' } })),
+      withMeta({ terminalProfile: 'iterm2-ambiguous-wide' }),
     );
     expect(overviewWithProfile.terminalProfile).toBe('iterm2-ambiguous-wide');
   });
 
-  it('is null rather than guessed when the header cannot be read', async () => {
-    const overviewWithoutHeader = await readTraceOverview(
-      withCastHeader(async () => {
-        throw new Error('header is not JSON');
-      }),
-    );
-    expect(overviewWithoutHeader.terminalProfile).toBeNull();
+  it('is null rather than guessed when the recording predates profiles', async () => {
+    expect((await readTraceOverview(withMeta({ terminalProfile: undefined }))).terminalProfile).toBeNull();
+    expect((await readTraceOverview(withMeta({ terminalProfile: '' }))).terminalProfile).toBeNull();
   });
 });

@@ -43,6 +43,13 @@ export class TerminalPane {
   readonly #overlay: HTMLDivElement;
   readonly #host: HTMLElement;
   #handlers: TerminalPaneHandlers = {};
+  /**
+   * True once a session or recording declared its viewport. From then on the
+   * grid mirrors the session and the browser window does not get to reshape it:
+   * a pane that reflows to its own size is showing a layout the program never
+   * produced.
+   */
+  #pinned = false;
   #highlights: readonly Highlight[] = [];
   #picking = false;
 
@@ -108,18 +115,25 @@ export class TerminalPane {
     this.#terminal.clear();
   }
 
-  /** Resizes the emulator to a recorded viewport. */
+  /** Resizes the emulator to the session's viewport, and pins it there. */
   resize(columns: number, rows: number): void {
+    this.#pinned = true;
     this.#terminal.resize(columns, rows);
     this.#drawOverlay();
   }
 
-  /** Refits the emulator to the pane; only in live modes, where size is ours. */
+  /**
+   * Refits the emulator to the pane — only while no session has declared a
+   * viewport. Once one has, resizing the browser moves the overlay, not the
+   * grid.
+   */
   refit(): void {
-    try {
-      this.#fit.fit();
-    } catch {
-      // The pane can be measured as zero-sized while the layout settles.
+    if (!this.#pinned) {
+      try {
+        this.#fit.fit();
+      } catch {
+        // The pane can be measured as zero-sized while the layout settles.
+      }
     }
     this.#drawOverlay();
   }

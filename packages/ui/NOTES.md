@@ -60,8 +60,21 @@ headless-free export exists, a recording made with that profile shows a notice
 saying this view measures with Unicode 11 widths, because measuring against a
 silent mismatch is exactly the failure this section is about.
 
-The profile itself comes from the cast header (`term.profile`), read once when
-the archive is opened. `null` means the recording predates profiles.
+Where the profile comes from differs by mode, and both are deliberate:
+
+- **live** — the `session` message, published by `attachSession` before any
+  output. The profile describes the *session*, not a test: a Vitest reporter
+  often does not know which session a test drives, and the browser needs the
+  profile before the first byte regardless. The message also carries the
+  viewport, and once a session declares one the grid is **pinned** to it —
+  `refit()` stops resizing the terminal and only moves the overlay, because a
+  pane that reflows to the browser window is showing a layout the program never
+  produced. (The browser check caught this: the grid came up one row taller than
+  the session's, because the resize observer refit right after the resize.)
+- **post-mortem** — `meta.terminalProfile`. Not the cast header: asciicast is
+  somebody else's format and termwright does not litter it with its own fields.
+
+`null` in a replay means the recording predates profiles.
 
 ## Cell metrics without reaching into xterm
 

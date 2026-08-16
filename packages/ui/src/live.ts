@@ -21,6 +21,14 @@ import type { UiHub } from './hub.js';
 export interface UiSessionSource {
   readonly sessionId: string;
   readonly events: SessionEvents;
+  /**
+   * Session facts the browser needs before the first byte arrives: the profile
+   * decides how it measures characters, the viewport how it sizes the grid.
+   * Required, not optional — a terminal built on a guess is a terminal that
+   * disagrees with the session it is showing.
+   */
+  capabilities(): { readonly terminalProfile: string };
+  screen(): { readonly columns: number; readonly rows: number };
   /** Current tree, when the session has an adapter. */
   semanticTree?(): SemanticSnapshot | null;
 }
@@ -44,6 +52,16 @@ export interface UiSessionSource {
  */
 export function attachSession(hub: UiHub, source: UiSessionSource): () => void {
   const sessionId = source.sessionId;
+  // Announced before any output: the browser builds its terminal from this.
+  const screen = source.screen();
+  hub.publish({
+    v: 1,
+    type: 'session',
+    sessionId,
+    terminalProfile: source.capabilities().terminalProfile,
+    columns: screen.columns,
+    rows: screen.rows,
+  });
   const offOutput = source.events.on('output', ({ data, timeMs }) => {
     hub.publish({ v: 1, type: 'output', sessionId, dataB64: toBase64(data), t: timeMs });
   });

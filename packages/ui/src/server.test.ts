@@ -119,8 +119,17 @@ describe('live mode', () => {
     session.semantic(tree);
 
     await viewer.until((messages) => messages.some((m) => m.type === 'semantic'), 'the tree');
-    expect(viewer.received.map((message) => message.type)).toEqual(['run-start', 'output', 'semantic']);
-    const output = viewer.received[1];
+    // `session` comes first: the browser sizes its terminal from it.
+    expect(viewer.received.map((message) => message.type)).toEqual([
+      'run-start',
+      'session',
+      'output',
+      'semantic',
+    ]);
+    const announced = viewer.received[1];
+    expect(announced?.type === 'session' && announced.terminalProfile).toBe('default');
+    expect(announced?.type === 'session' && announced.columns).toBe(80);
+    const output = viewer.received[2];
     expect(output?.type === 'output' && output.dataB64).toBe(
       toBase64(new TextEncoder().encode('Permission required')),
     );
@@ -196,14 +205,21 @@ describe('live mode', () => {
   it('lists attached sessions over HTTP', async () => {
     const server = await start();
     const session = new FakeHarness('s1');
-    const detach = server.attach({ source: session, command: ['node', 'app.js'], columns: 80, rows: 24 });
+    const detach = server.attach({ source: session, command: ['node', 'app.js'] });
     const body = (await (await api(server, '/api/state')).json()) as {
       mode: string;
       sessions: { sessionId: string; writable: boolean }[];
     };
     expect(body.mode).toBe('live');
     expect(body.sessions).toEqual([
-      { sessionId: 's1', command: ['node', 'app.js'], columns: 80, rows: 24, writable: false },
+      {
+        sessionId: 's1',
+        command: ['node', 'app.js'],
+        columns: 80,
+        rows: 24,
+        terminalProfile: 'default',
+        writable: false,
+      },
     ]);
     detach();
     const after = (await (await api(server, '/api/state')).json()) as { sessions: unknown[] };

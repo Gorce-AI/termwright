@@ -46,6 +46,20 @@ export type UiServerMode = 'live' | 'post-mortem' | 'record';
 
 /** server → client. */
 export type ServerMessage =
+  | {
+      readonly v: 1;
+      readonly type: 'session';
+      readonly sessionId: string;
+      /**
+       * Terminal profile the session runs with. The browser has to measure
+       * characters the way the session does, or say which widths it used —
+       * a frame that lands a column apart with nothing to explain it is the
+       * expensive kind of wrong.
+       */
+      readonly terminalProfile: string;
+      readonly columns: number;
+      readonly rows: number;
+    }
   | { readonly v: 1; readonly type: 'run-start'; readonly mode: UiServerMode; readonly startedAt: number }
   | {
       readonly v: 1;
@@ -143,6 +157,7 @@ export type ClientMessage =
 export type UiMessage = ServerMessage | ClientMessage;
 
 const SERVER_TYPES = new Set([
+  'session',
   'run-start',
   'test-start',
   'step',
@@ -249,6 +264,15 @@ export function parseClientMessage(raw: string | Uint8Array): ClientMessage {
 export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
   const value = parseEnvelope(raw, SERVER_TYPES);
   switch (value.type) {
+    case 'session':
+      return {
+        v: 1,
+        type: 'session',
+        sessionId: requireString(value, 'sessionId', 'session'),
+        terminalProfile: requireString(value, 'terminalProfile', 'session'),
+        columns: requireNumber(value, 'columns', 'session'),
+        rows: requireNumber(value, 'rows', 'session'),
+      };
     case 'run-start': {
       const mode = value['mode'];
       if (mode !== 'live' && mode !== 'post-mortem' && mode !== 'record') {

@@ -71,6 +71,8 @@ interface MutableStep {
 }
 
 interface SessionView {
+  /** Profile the session runs with, from the `session` message. */
+  terminalProfile?: string;
   snapshot: SemanticSnapshot | null;
   revision: number | null;
 }
@@ -693,17 +695,25 @@ async function seek(timeMs: number): Promise<void> {
 }
 
 /**
- * Says so when a recording was made with a profile this pane cannot reproduce.
+ * Says so when a session or recording uses a profile this pane cannot reproduce.
  *
  * The pane measures with Unicode 11, which covers the `default` and `kitty`
  * profiles. `iterm2-ambiguous-wide` counts East Asian Ambiguous characters as
  * two columns, and the stock browser addon has no switch for that — so a box
- * drawn with ambiguous glyphs would line up here and not in the session. Saying
- * it out loud beats letting someone measure against a lie.
+ * drawn with ambiguous glyphs would line up here and not in the session.
+ *
+ * The notice stays up rather than fading: this is a standing property of what
+ * you are looking at, not a confirmation that something happened, and a warning
+ * that disappears after four seconds is a warning nobody reads.
  */
 function warnAboutProfile(profile: string | null): void {
-  if (profile === null || profile === 'default' || profile === 'kitty') return;
-  note(`recorded with the "${profile}" terminal profile; this view measures with Unicode 11 widths`);
+  const notice = document.querySelector<HTMLElement>('#profile-notice');
+  if (notice === null) return;
+  const mismatched = profile !== null && profile !== 'default' && profile !== 'kitty';
+  notice.hidden = !mismatched;
+  notice.textContent = mismatched
+    ? `profile "${profile}" — this view measures with Unicode 11 widths`
+    : '';
 }
 
 function note(message: string): void {
@@ -797,6 +807,23 @@ function handle(message: ServerMessage): void {
       }
       break;
     }
+    case 'session': {
+      state.activeSessionId ??= message.sessionId;
+      const existing = state.sessions.get(message.sessionId);
+      state.sessions.set(message.sessionId, {
+        snapshot: existing?.snapshot ?? null,
+        revision: existing?.revision ?? null,
+        terminalProfile: message.terminalProfile,
+      });
+      if (message.sessionId === state.activeSessionId) {
+        // Size the grid to the session rather than to the pane: a live view
+        // that reflows differently from the session is showing a layout the
+        // program never produced.
+        pane.resize(message.columns, message.rows);
+        warnAboutProfile(message.terminalProfile);
+      }
+      break;
+    }
     case 'output': {
       state.activeSessionId ??= message.sessionId;
       if (message.sessionId !== state.activeSessionId) break;
@@ -805,7 +832,11 @@ function handle(message: ServerMessage): void {
     }
     case 'semantic': {
       state.activeSessionId ??= message.sessionId;
-      state.sessions.set(message.sessionId, { snapshot: message.snapshot, revision: message.revision });
+      state.sessions.set(message.sessionId, {
+        ...state.sessions.get(message.sessionId),
+        snapshot: message.snapshot,
+        revision: message.revision,
+      });
       break;
     }
     case 'test-end': {

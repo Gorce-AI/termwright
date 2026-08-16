@@ -34,6 +34,17 @@ export class FakeSession implements UiSessionSource {
     },
   };
 
+  /** Profile the fake reports; tests override it to check the wiring. */
+  terminalProfile = 'default';
+
+  capabilities(): { terminalProfile: string } {
+    return { terminalProfile: this.terminalProfile };
+  }
+
+  screen(): { columns: number; rows: number } {
+    return { columns: 80, rows: 24 };
+  }
+
   semanticTree(): SemanticSnapshot | null {
     return this.#tree;
   }
@@ -103,10 +114,6 @@ export class FakeHarness extends FakeSession {
 
   async write(bytes: Uint8Array | string): Promise<void> {
     this.written.push(typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes);
-  }
-
-  screen(): { columns: number; rows: number } {
-    return { columns: 80, rows: 24 };
   }
 
   async close(): Promise<void> {

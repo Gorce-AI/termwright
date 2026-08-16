@@ -86,8 +86,6 @@ export interface AttachedSession {
   /** Turns pick mode on or off. Absent when the session is not recordable. */
   setPickMode?(enabled: boolean): void;
   readonly command?: readonly string[];
-  readonly columns?: number;
-  readonly rows?: number;
 }
 
 /** A running server. */
@@ -178,7 +176,6 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   let detachRecorder: (() => void) | undefined;
   if (recorder !== undefined) {
     const live = recorder;
-    const screen = live.harness.screen();
     detachRecorder = attach({
       source: live.harness,
       write: (bytes) => live.handleInput(bytes),
@@ -186,8 +183,6 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         live.setPickMode(enabled);
       },
       command: options.record?.command ?? [],
-      columns: screen.columns,
-      rows: screen.rows,
     });
   }
 
@@ -288,8 +283,9 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           sessions: [...sessions.values()].map((session) => ({
             sessionId: session.source.sessionId,
             command: session.command ?? [],
-            columns: session.columns ?? null,
-            rows: session.rows ?? null,
+            columns: session.source.screen().columns,
+            rows: session.source.screen().rows,
+            terminalProfile: session.source.capabilities().terminalProfile,
             writable: session.write !== undefined,
           })),
           trace: overview ?? null,

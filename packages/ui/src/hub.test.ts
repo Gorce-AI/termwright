@@ -11,6 +11,13 @@ class RecordingClient {
   }
 }
 
+/**
+ * Everything a session publishes comes after its `session` announcement, which
+ * is the first thing on the wire so the browser can build a terminal that
+ * measures the way the session does.
+ */
+const afterAnnouncement = (hub: UiHub): readonly ServerMessage[] => hub.backlog.slice(1);
+
 const output = (text: string, t = 0): ServerMessage => ({
   v: 1,
   type: 'output',
@@ -90,13 +97,28 @@ describe('UiHub', () => {
 });
 
 describe('attachSession', () => {
+  it('announces the session before anything it produces', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    session.terminalProfile = 'iterm2-ambiguous-wide';
+    attachSession(hub, session);
+    expect(hub.backlog[0]).toEqual({
+      v: 1,
+      type: 'session',
+      sessionId: 's1',
+      terminalProfile: 'iterm2-ambiguous-wide',
+      columns: 80,
+      rows: 24,
+    });
+  });
+
   it('publishes output as base64 with the session clock', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
     attachSession(hub, session);
     session.clock = 42;
     session.output('ready');
-    expect(hub.backlog).toEqual([
+    expect(afterAnnouncement(hub)).toEqual([
       { v: 1, type: 'output', sessionId: 's1', dataB64: toBase64(new TextEncoder().encode('ready')), t: 42 },
     ]);
   });
@@ -107,11 +129,13 @@ describe('attachSession', () => {
     attachSession(hub, session);
 
     session.announceRevision(7); // announced, not yet observable
-    expect(hub.backlog).toHaveLength(0);
+    expect(afterAnnouncement(hub)).toHaveLength(0);
 
     const tree = snapshot(7, [node({ id: 'n1', role: 'button', name: 'Go' })]);
     session.semantic(tree);
-    expect(hub.backlog).toEqual([{ v: 1, type: 'semantic', sessionId: 's1', revision: 7, snapshot: tree }]);
+    expect(afterAnnouncement(hub)).toEqual([
+      { v: 1, type: 'semantic', sessionId: 's1', revision: 7, snapshot: tree },
+    ]);
   });
 
   it('stops publishing after detaching', () => {
@@ -119,7 +143,7 @@ describe('attachSession', () => {
     const session = new FakeSession('s1');
     attachSession(hub, session)();
     session.output('ignored');
-    expect(hub.backlog).toHaveLength(0);
+    expect(afterAnnouncement(hub)).toHaveLength(0);
   });
 });
 
@@ -131,7 +155,7 @@ describe('application logs', () => {
     session.clock = 120;
     session.logLine('ERROR: disk full');
 
-    expect(hub.backlog).toEqual([
+    expect(afterAnnouncement(hub)).toEqual([
       {
         v: 1,
         type: 'app-log',
@@ -151,7 +175,7 @@ describe('application logs', () => {
     attachSession(hub, session);
     session.logRecord({ level: 'warn', message: 'pool exhausted', logger: 'db.pool', attrs: { size: 10 } });
 
-    const message = hub.backlog[0];
+    const message = afterAnnouncement(hub)[0];
     expect(message?.type === 'app-log' && message.level).toBe('warn');
     expect(message?.type === 'app-log' && message.logger).toBe('db.pool');
     expect(message?.type === 'app-log' && message.attrs).toEqual({ size: 10 });
@@ -162,7 +186,7 @@ describe('application logs', () => {
     const session = new FakeSession('s1');
     attachSession(hub, session);
     session.logLine('');
-    expect(hub.backlog).toHaveLength(0);
+    expect(afterAnnouncement(hub)).toHaveLength(0);
   });
 
   it('evicts logs before lifecycle messages, and never run-start', () => {
@@ -184,7 +208,7 @@ describe('driver actions', () => {
     session.clock = 120;
     session.action({ api: 'click', ok: true, selector: 'getByRole("button")', ref: 'n8@42' });
 
-    expect(hub.backlog).toEqual([
+    expect(afterAnnouncement(hub)).toEqual([
       {
         v: 1,
         type: 'action',
@@ -205,7 +229,7 @@ describe('driver actions', () => {
     attachSession(hub, session);
     session.action({ api: 'click', ok: false, error: 'unsupported-action' });
 
-    const message = hub.backlog[0];
+    const message = afterAnnouncement(hub)[0];
     expect(message?.type === 'action' && message.ok).toBe(false);
     expect(message?.type === 'action' && message.error).toBe('unsupported-action');
     expect(message?.type === 'action' && message.ref).toBeUndefined();
@@ -216,6 +240,6 @@ describe('driver actions', () => {
     const session = new FakeSession('s1');
     attachSession(hub, session)();
     session.action({ api: 'press', ok: true });
-    expect(hub.backlog).toHaveLength(0);
+    expect(afterAnnouncement(hub)).toHaveLength(0);
   });
 });

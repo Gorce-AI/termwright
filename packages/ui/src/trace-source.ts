@@ -45,10 +45,9 @@ export interface TraceOverview {
   readonly durationMs: number;
   readonly semanticTree: boolean;
   /**
-   * Terminal profile the session was recorded with, from the cast header, when
-   * the writer recorded one. The panel needs it to measure characters the way
-   * the driver did; `null` means the recording predates profiles and the
-   * conservative default applies.
+   * Terminal profile the session was recorded with, from `meta.terminalProfile`.
+   * The panel needs it to measure characters the way the driver did; `null`
+   * means the recording predates profiles and the conservative default applies.
    */
   readonly terminalProfile: string | null;
   readonly exit: { readonly code: number | null; readonly signal: string | null } | null;
@@ -90,16 +89,11 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
     last = Math.max(last, meta.durationMs);
   }
 
-  // The profile lives on the cast header, which is also where a player looks
-  // for it; reading it here keeps the browser from parsing the cast itself.
-  let terminalProfile: string | null = null;
-  try {
-    const header = (await reader.castHeader()) as { term?: { profile?: unknown } };
-    const profile = header.term?.profile;
-    if (typeof profile === 'string' && profile !== '') terminalProfile = profile;
-  } catch {
-    // A header we cannot read costs the profile, not the archive.
-  }
+  // The profile lives in `meta.json`, not on the cast header: asciicast is
+  // somebody else's format and termwright does not litter it with its own
+  // fields.
+  const recorded = meta.terminalProfile;
+  const terminalProfile = typeof recorded === 'string' && recorded !== '' ? recorded : null;
 
   const crash = parseCrash(meta.crash);
   if (crash !== null) {

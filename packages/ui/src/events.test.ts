@@ -12,6 +12,7 @@ import {
 describe('server messages', () => {
   it('round-trips every message the contract lists', () => {
     const messages: ServerMessage[] = [
+      { v: 1, type: 'session', sessionId: 's1', terminalProfile: 'default', columns: 80, rows: 24 },
       { v: 1, type: 'run-start', mode: 'live', startedAt: 1_700_000_000_000 },
       {
         v: 1,
@@ -85,6 +86,20 @@ describe('server messages', () => {
         '{"v":1,"type":"test-start","id":"t1","title":"x","file":"a.ts","startedAt":"now"}',
       ),
     ).toThrow(/startedAt must be a finite number/);
+  });
+
+  it('rejects a session message missing what the browser needs to build a terminal', () => {
+    expect(() => parseServerMessage('{"v":1,"type":"session","sessionId":"s1"}')).toThrow(
+      /terminalProfile must be a string/,
+    );
+    expect(() =>
+      parseServerMessage('{"v":1,"type":"session","sessionId":"s1","terminalProfile":"default"}'),
+    ).toThrow(/columns must be a finite number/);
+    expect(() =>
+      parseServerMessage(
+        '{"v":1,"type":"session","sessionId":"s1","terminalProfile":"default","columns":80}',
+      ),
+    ).toThrow(/rows must be a finite number/);
   });
 
   it('rejects a message missing a required field instead of filling it in', () => {
