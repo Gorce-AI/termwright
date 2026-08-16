@@ -500,6 +500,18 @@ describe('a crash recorded in the archive', () => {
     expect(overview.text).toContain('diagnostic pairing-timeout');
   });
 
+  it('hands back a cast offset that frame_at can seek to', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await withCrashMeta(await recordSample()) });
+    const traceId = data['traceId'];
+    const overview = await call('trace.overview', { traceId });
+    const crash = overview.data['crash'] as { timeMs: number };
+
+    const frame = await call('trace.frame_at', { traceId, timeMs: crash.timeMs });
+    expect(frame.isError, frame.text).toBe(false);
+    expect(frame.text).toContain('semanticTree:');
+  });
+
   it('says nothing about crashes for a recording that carries none', async () => {
     const call = await connectSession();
     const { data } = await call('trace.open', { path: await recordSample() });

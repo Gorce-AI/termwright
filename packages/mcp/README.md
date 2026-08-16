@@ -147,6 +147,31 @@ that changed. Cursors the server never handed out fail with `history-truncated`
 Programs without a termwright adapter report `semanticTree: unavailable`. There
 are no invented roles: target them by text.
 
+## Application logs
+
+A terminal shows what a program drew; its log says what it decided. Follow one
+at launch and read it alongside the screen:
+
+```jsonc
+// terminal.launch
+{ "command": ["node", "app.js"], "logs": [{ "path": "out/app.log", "label": "app" }] }
+
+// terminal.capture_since -> changed rows, changed subtrees, and:
+logs: 2
+  1840ms [app] ERROR upstream refused the token
+  1841ms [app] WARN falling back to cached profile
+```
+
+An existing file is followed from its end, so a session never replays the
+previous run. Entries are buffered per terminal (1000 deep) and returned since
+your cursor, with `logsOmitted` counting anything that fell out in between —
+computed when you read, so a program that went quiet still reports its last
+drops. Files are polled, so a line written moments ago may arrive on the next
+call; re-asking with the same cursor is lossless.
+
+Structured records from an instrumented adapter keep their level, logger and
+attributes; a followed file yields the raw line.
+
 ## Crashes
 
 When a child dies on its own, the driver records what the session knew and this
@@ -165,9 +190,14 @@ Error: boom
 That matters because a locator which never resolved because the program is gone
 otherwise reports a plain `timeout`, and an agent reading a timeout waits longer.
 
+In a recording, `crash.timeMs` is the cast offset, so
+`trace.frame_at { traceId, timeMs }` jumps to the moment of death with the screen
+and the semantic tree of that revision.
+
 The screen tail is **unredacted** — it is what the terminal displayed, secrets
 included. It is bounded (40 lines, 500 characters each) and never logged, but
-treat it like a screenshot when storing or forwarding a result.
+treat it like a screenshot when storing or forwarding a result. Paste contents
+are the one thing never recorded: the driver keeps their size only.
 
 ## Errors
 

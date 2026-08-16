@@ -182,6 +182,28 @@ Three deliberate choices:
 `trace.diff` deliberately has no screenshot flag: it spans two moments, and an
 image of "the difference" would be an invention. Ask for the two frames.
 
+## The log cursor is a sequence, not a timestamp
+
+`capture_since` anchors logs to the log sequence number recorded in the baseline
+capture, not to wall-clock time. Two properties follow, both of which an agent
+depends on: re-asking with the same cursor returns the same window plus whatever
+arrived since (so a polled file that lands late is never lost), and the screen
+view and the log view of "since the cursor" describe the same interval.
+
+`LogBuffer.since()` computes `omitted` **at read time** from sequence numbers,
+rather than accumulating a counter as entries are evicted. The driver flagged
+this pattern: a counter that is only published with the next event silently
+loses the final window — which is precisely the case where a program went quiet
+because it died, and the count matters most. Here, `omitted` is
+`(oldest retained seq - 1) - cursor` plus whatever the response ceiling trimmed,
+so it is correct even if nothing ever arrives again.
+
+Reads do not wait for the log tail the way they wait for semantic pairing
+(`settleSemantics`). A pairing that has not landed makes the *same* revision
+inconsistent, while a log line is an independent event: taxing every call with a
+poll interval to catch one that may not exist buys less than it costs, and the
+next capture picks it up without loss.
+
 ## Crash reporting happens in one place
 
 `server.ts: withCrashContext()` attaches the crash to *any* failed tool call

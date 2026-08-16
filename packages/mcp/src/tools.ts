@@ -20,6 +20,7 @@ import { formatCompactSnapshot, refEntries, toRefEntry } from './format.js';
 import type { RefEntry } from './format.js';
 import { crashSchema, describeCrash, renderCrash } from './crash.js';
 import { diffRows, diffSemantic } from './diff.js';
+import { LOG_LIMITS, logEntrySchema, renderLogs } from './logs.js';
 import { usageError } from './errors.js';
 import {
   buttonSchema,
@@ -176,6 +177,19 @@ const launch = defineTool({
     rows: z.number().int().min(1).max(1000).optional().describe('default 30'),
     scrollbackLines: z.number().int().min(0).max(100_000).optional(),
     semanticNegotiationMs: z.number().int().min(0).max(60_000).optional(),
+    logs: z
+      .array(
+        z.object({
+          path: z.string().min(1).describe('log file to follow for the life of the session'),
+          label: z.string().optional().describe('short name shown on each entry'),
+        }),
+      )
+      .max(8)
+      .optional()
+      .describe(
+        'application log files to follow. An existing file is followed from its end, so a session ' +
+          'never replays a previous run; a missing one is waited for',
+      ),
     timeouts: z
       .object({
         action: z.number().int().positive().optional(),
@@ -404,6 +418,13 @@ const captureSince = defineTool({
     cursor: z.number().int().min(0).describe('revision returned by an earlier snapshot'),
     maxRows: z.number().int().min(1).max(10_000).optional(),
     maxSubtrees: z.number().int().min(1).max(1_000).optional(),
+    maxLogs: z
+      .number()
+      .int()
+      .min(0)
+      .max(500)
+      .optional()
+      .describe(`application log entries to return; default ${LOG_LIMITS.maxPerResponse}, 0 to skip`),
   },
   outputSchema: {
     ...semanticFields,
@@ -418,6 +439,12 @@ const captureSince = defineTool({
         compact: z.string(),
       }),
     ),
+    logs: z.array(logEntrySchema),
+    logsOmitted: z
+      .number()
+      .int()
+      .describe('entries dropped between the cursor and the oldest one still buffered'),
+    logCursor: z.number().int().describe('newest log sequence seen; advances with every capture'),
     compact: z.string(),
   },
   annotations: { readOnlyHint: true },
@@ -430,6 +457,9 @@ const captureSince = defineTool({
     const subtreeLimit = args.maxSubtrees ?? 100;
     const changedRows = diffRows(before.rows, after.rows).slice(0, rowLimit);
     const changedSubtrees = diffSemantic(before.semantic, after.semantic).slice(0, subtreeLimit);
+    // Logs resume from the sequence the baseline capture recorded, so the two
+    // views of "since the cursor" — screen and log — line up.
+    const logs = entry.logs.since(before.logSeq, args.maxLogs ?? LOG_LIMITS.maxPerResponse);
 
     const lines = [
       `Terminal ${entry.id} revision ${after.revision} (since ${args.cursor})`,
@@ -442,6 +472,7 @@ const captureSince = defineTool({
       const marker = subtree.change === 'added' ? '+' : subtree.change === 'removed' ? '-' : '~';
       for (const line of subtree.compact.split('\n')) lines.push(`  ${marker} ${line}`);
     }
+    lines.push(renderLogs(logs));
     return {
       text: lines.join('\n'),
       data: {
@@ -452,6 +483,9 @@ const captureSince = defineTool({
         since: args.cursor,
         changedRows: changedRows.map((row) => ({ ...row })),
         changedSubtrees: changedSubtrees.map((subtree) => ({ ...subtree })),
+        logs: logs.entries.map((log) => ({ ...log })),
+        logsOmitted: logs.omitted,
+        logCursor: logs.cursor,
         compact: lines.join('\n'),
       },
     };

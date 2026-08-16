@@ -12,9 +12,16 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchTerminal } from '@termwright/driver';
-import type { EnvMode, ExitStatus, LaunchOptions, TerminalHarness } from '@termwright/driver';
+import type {
+  AppLogSource,
+  EnvMode,
+  ExitStatus,
+  LaunchOptions,
+  TerminalHarness,
+} from '@termwright/driver';
 import { DEFAULT_LIMITS } from '@termwright/protocol';
 import { McpError, noSessionError, usageError } from './errors.js';
+import { LogBuffer } from './logs.js';
 import { definedOnly } from './objects.js';
 import type { Loose } from './objects.js';
 import type { SemanticSnapshot } from './model.js';
@@ -43,6 +50,8 @@ export interface RevisionRecord {
   readonly semanticRevision: number | null;
   readonly rows: readonly string[];
   readonly semantic: SemanticSnapshot | null;
+  /** Log sequence at capture time, so a later diff knows where to resume. */
+  readonly logSeq: number;
   readonly capturedAt: number;
 }
 
@@ -57,6 +66,8 @@ export interface TerminalEntry {
   exit: ExitStatus | null;
   closed: boolean;
   history: RevisionRecord[];
+  /** The application's own log, buffered for `terminal.capture_since`. */
+  readonly logs: LogBuffer;
 }
 
 /** Options for {@link TerminalStore}. */
@@ -84,6 +95,8 @@ export interface LaunchRequest {
   readonly scrollbackLines?: number | undefined;
   readonly semanticNegotiationMs?: number | undefined;
   readonly timeouts?: Loose<NonNullable<LaunchOptions['timeouts']>> | undefined;
+  /** Log files to follow for the lifetime of the session. */
+  readonly logs?: readonly Loose<AppLogSource>[] | undefined;
 }
 
 /** The terminals of a single MCP session, plus their capture history. */
@@ -135,6 +148,14 @@ export class TerminalStore {
         ? {}
         : { semanticNegotiationMs: request.semanticNegotiationMs }),
       ...(request.timeouts === undefined ? {} : { timeouts: definedOnly(request.timeouts) }),
+      ...(request.logs === undefined
+        ? {}
+        : {
+            logs: request.logs.flatMap((source) => (source.path === undefined ? [] : [{
+              path: source.path,
+              ...(source.label === undefined ? {} : { label: source.label }),
+            }])),
+          }),
     };
 
     const harness = await launchTerminal(options);
@@ -148,7 +169,13 @@ export class TerminalStore {
       exit: null,
       closed: false,
       history: [],
+      logs: new LogBuffer(),
     };
+    // Buffered from launch, so a log written before the first capture is not
+    // lost: the driver only publishes each line once.
+    harness.events.on('app-log', (event) => {
+      entry.logs.append(event);
+    });
     // The exit promise is observed here so `terminal.close` can report a status
     // without racing, and so an exited child never leaves an unhandled rejection.
     void harness.exit.then(
@@ -195,6 +222,7 @@ export class TerminalStore {
       semanticRevision: semantic?.revision ?? null,
       rows: screen.text().split('\n'),
       semantic,
+      logSeq: entry.logs.sequence,
       capturedAt: this.#now(),
     };
     entry.history = [...entry.history.filter((item) => item.revision !== record.revision), record].slice(

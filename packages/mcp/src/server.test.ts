@@ -8,7 +8,7 @@
  */
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createNodePtyBackend } from '@termwright/driver';
@@ -291,6 +291,77 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     const caps = await call('terminal.capabilities', { terminal });
     expect(caps.data['crash']).toBeUndefined();
     expect(caps.text).not.toContain('crash:');
+  });
+
+  it('follows an application log file and reports it with capture_since', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-mcp-logs-'));
+    const logPath = join(directory, 'app.log');
+    await writeFile(logPath, '', 'utf8');
+
+    const { call } = await connectSession();
+    // The program writes to its log after the terminal is already up, which is
+    // the case that matters: the screen says nothing, the log explains why.
+    const launched = await call('terminal.launch', {
+      command: [
+        process.execPath,
+        '-e',
+        `const { appendFileSync } = require('node:fs');
+         process.stdout.write('working...\\r\\n');
+         setTimeout(() => {
+           appendFileSync(${JSON.stringify(logPath)}, 'ERROR upstream refused the token\\n');
+           process.stdout.write('done\\r\\n');
+         }, 150);
+         setTimeout(() => process.exit(0), 3000);`,
+      ],
+      columns: 50,
+      rows: 8,
+      logs: [{ path: logPath, label: 'app' }],
+    });
+    expect(launched.isError, launched.text).toBe(false);
+    const terminal = launched.data['terminal'] as string;
+
+    const first = await call('terminal.snapshot', { terminal });
+    const cursor = first.data['revision'] as number;
+    await call('terminal.wait_for', { terminal, wait: 'text', text: 'done', timeout: 10_000 });
+
+    // A followed file is polled, so the line lands a beat after the screen said
+    // "done" — measured at roughly one poll interval. Re-asking with the SAME
+    // cursor is lossless, because the window is anchored to the baseline's log
+    // sequence rather than to when the call happened; this is exactly what an
+    // agent polling after an action does.
+    let since = await call('terminal.capture_since', { terminal, cursor });
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const found = (since.data['logs'] as { message: string }[]).some((entry) =>
+        entry.message.includes('upstream refused the token'),
+      );
+      if (found) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      since = await call('terminal.capture_since', { terminal, cursor });
+    }
+
+    expect(since.isError, since.text).toBe(false);
+    const logs = since.data['logs'] as { message: string; label?: string }[];
+    expect(logs.some((entry) => entry.message.includes('upstream refused the token'))).toBe(true);
+    expect(logs[0]?.label).toBe('app');
+    expect(since.data['logsOmitted']).toBe(0);
+    expect(since.data['logCursor']).toBeGreaterThan(0);
+    expect(since.text).toContain('upstream refused the token');
+
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it('reports no logs for a session that follows none', async () => {
+    const { call } = await connectSession();
+    const terminal = await launchSemantic(call);
+    const snapshot = await call('terminal.snapshot', { terminal });
+    const since = await call('terminal.capture_since', {
+      terminal,
+      cursor: snapshot.data['revision'],
+    });
+
+    expect(since.data['logs']).toEqual([]);
+    expect(since.data['logsOmitted']).toBe(0);
+    expect(since.text).toContain('logs: none');
   });
 
   it('keeps one session’s terminals invisible to another', async () => {
