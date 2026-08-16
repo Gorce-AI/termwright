@@ -56,6 +56,7 @@ import { SessionEventEmitter } from './events.js';
 import { LogTailer } from './logs.js';
 import { encodeFocus, encodeKeys, encodePaste, encodeText } from './keys.js';
 import { LocatorImpl, type LocatorContext } from './locator.js';
+import { mouseModeUnverifiable } from './mouse.js';
 import { SemanticIndex, textInRect } from './matching.js';
 import { RevisionPairing } from './pairing.js';
 import { createNodePtyBackend, type PtyBackend, type PtyProcess } from './pty.js';
@@ -150,6 +151,13 @@ const CLOSE_GRACE_MS = 2_000;
 export interface LaunchTerminalOptions extends LaunchOptions {
   /** Defaults to `@lydell/node-pty`; swapped by component-testing harnesses. */
   readonly backend?: PtyBackend;
+  /**
+   * Whether the child's mouse mode requests are observable. Defaults to the
+   * platform's answer (false under ConPTY). Overridable so the unobservable
+   * path can be exercised on a machine where modes do arrive — a behaviour
+   * only one OS reaches is a behaviour only one OS tests.
+   */
+  readonly mouseModesObservable?: boolean;
 }
 
 function resolveTimeouts(overrides: TimeoutClasses | undefined): Required<TimeoutClasses> {
@@ -236,6 +244,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #lastOutputAt = Date.now();
   #violation: ProtocolViolationError | null = null;
   #crash: CrashReport | null = null;
+  #mouseUnverifiableLogged = false;
   /** Inputs kept for a crash report; a bounded ring, oldest first. */
   readonly #recentInputs: CrashInput[] = [];
   /** True once the harness itself asked the child to go away. */
@@ -267,6 +276,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       rows: options.rows ?? 30,
       scrollbackLines: options.scrollbackLines ?? 2_000,
       ...(options.terminalProfile !== undefined ? { profile: options.terminalProfile } : {}),
+      ...(options.mouseModesObservable !== undefined
+        ? { mouseModesObservable: options.mouseModesObservable }
+        : {}),
     });
     this.#pairing = new RevisionPairing({
       maxPending: DEFAULT_LIMITS.maxQueuedFrames,
@@ -784,6 +796,15 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       throw new ProcessExitedError(
         `cannot send input: the program exited with code ${String(this.#exitStatus.code)}`,
         this.errorDiagnostics(),
+      );
+    }
+    if (kind === 'mouse' && !this.#mouseUnverifiableLogged && mouseModeUnverifiable(this.modes())) {
+      // Once per session: this describes the platform, not the action, and an
+      // entry per click would bury everything else in the log.
+      this.#mouseUnverifiableLogged = true;
+      this.#diagnostic(
+        'mouse-mode-unverifiable',
+        'this platform hides the mouse mode the child asked for, so pointer input is sent in SGR without confirming the child enabled tracking',
       );
     }
     this.#pty?.write(data);

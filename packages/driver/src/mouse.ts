@@ -6,6 +6,14 @@
  *
  * If the child never enabled mouse tracking there is nothing to send: the
  * driver reports a typed `unsupported-action` instead of inventing input.
+ *
+ * That refusal needs the mode to be *known* off. Where the platform hides it
+ * (`'unknown'`, ConPTY) the mode is sent anyway, in SGR: the probe in
+ * `escapes.pty.test.ts` measured a child decoding a report whose own DECSET
+ * had been swallowed on the way out, so refusing there would deny an input
+ * that works. Level-dependent refusals (x10 has no release, vt200 has no
+ * motion) are skipped for the same reason — the level is exactly what is not
+ * known — and the caller records `mouse-mode-unverifiable`.
  */
 import type { TerminalModes } from './api.js';
 import { UnsupportedActionError } from './errors.js';
@@ -50,6 +58,14 @@ function buttonCode(event: MouseEvent): number {
   }
 }
 
+/**
+ * True when the platform hid the child's mouse mode, so neither a refusal nor
+ * an encoding choice can be made from what was observed.
+ */
+export function mouseModeUnverifiable(modes: TerminalModes): boolean {
+  return modes.mouseTracking === 'unknown' || modes.mouseEncoding === 'unknown';
+}
+
 function unsupported(message: string, suggestion: string): never {
   throw new UnsupportedActionError(message, { semanticTree: false, suggestion });
 }
@@ -63,6 +79,11 @@ function unsupported(message: string, suggestion: string): never {
  * or when the coordinates cannot be expressed in the negotiated encoding.
  */
 export function encodeMouse(event: MouseEvent, modes: TerminalModes): Uint8Array {
+  if (mouseModeUnverifiable(modes)) {
+    const code = buttonCode(event);
+    const final = event.kind === 'release' ? 'm' : 'M';
+    return encode(`${CSI}<${code};${event.column + 1};${event.row + 1}${final}`);
+  }
   if (modes.mouseTracking === 'none') {
     unsupported(
       'the child program has not enabled mouse tracking, so a mouse event cannot be delivered',

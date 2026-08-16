@@ -41,3 +41,27 @@ to the shell pid after a 5 s timeout. That makes it a slowness risk on Windows
 rather than a correctness one — if teardown turns out to cost seconds per
 session there, the fix is to stop routing Windows teardown through
 `pty.kill()`, and that needs a Windows run to justify rather than a guess.
+
+## Windows: the mouse mode is hidden, not absent
+
+ConPTY is an emulator sitting between the child and the driver, so it consumes
+the child's `CSI ? 1000/1002/1006 h` instead of forwarding it — measured by the
+permeability probe in `escapes.pty.test.ts`, which also found DCS, APC and
+OSC 8 dropped while private OSC (either terminator) and OSC 133 pass. That is
+why the render marker rides OSC 8487.
+
+The mouse needed a different answer, because a second probe measured the other
+direction: a child whose DECSET was swallowed **still decodes a report the
+driver writes**. The driver is blind, not powerless. So `mouseTracking` and
+`mouseEncoding` report `'unknown'` where the platform hides them, pointer
+actions refuse only on a mode known to be off, input is sent in SGR, and the
+session records `mouse-mode-unverifiable` once.
+
+`'unknown'` is not revised by a request that does arrive: that would prove only
+that one arrived, and treating it as proof about the rest would report a
+partial view as a complete one. If ConPTY ever starts forwarding these, the
+probe table says so and the default flips deliberately.
+
+`mouseModesObservable` on `launchTerminal` forces the verdict, so the Windows
+path is exercised on every platform — a behaviour only one OS reaches is a
+behaviour only one OS tests.

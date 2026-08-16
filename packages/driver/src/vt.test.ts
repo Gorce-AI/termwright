@@ -91,6 +91,39 @@ describe('VtScreen', () => {
     expect(screen.modes().synchronizedOutput).toBe(false);
   });
 
+  it('reports unknown mouse modes where the platform hides them', () => {
+    // ConPTY consumes the child's mouse DECSET, so 'none' would be a claim the
+    // driver cannot make — and it is that claim that makes pointer actions
+    // refuse. Driven by the option rather than the platform so the Windows
+    // behaviour is covered on every machine that runs the suite.
+    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, mouseModesObservable: false });
+
+    expect(vt.modes().mouseTracking).toBe('unknown');
+    expect(vt.modes().mouseEncoding).toBe('unknown');
+  });
+
+  it('keeps modes unknown when a mode arrives that says nothing about the mouse', async () => {
+    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, mouseModesObservable: false });
+
+    await vt.write('\x1b[?2004h');
+
+    expect(vt.modes().bracketedPaste).toBe(true);
+    expect(vt.modes().mouseTracking).toBe('unknown');
+  });
+
+  it('stays unknown even if a mouse mode does arrive', async () => {
+    // Deliberate: one request getting through proves only that one did.
+    // Promoting that to "the modes are observable" would report a partial view
+    // as a complete one, and a partial view is what makes a driver refuse a
+    // click the child would have understood.
+    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, mouseModesObservable: false });
+
+    await vt.write('\x1b[?1000h\x1b[?1006h');
+
+    expect(vt.modes().mouseTracking).toBe('unknown');
+    expect(vt.modes().mouseEncoding).toBe('unknown');
+  });
+
   it('tracks mouse encoding, which Terminal.modes does not report', async () => {
     const screen = createVt();
     expect(screen.modes().mouseEncoding).toBe('default');

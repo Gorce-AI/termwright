@@ -704,7 +704,10 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
   it('sends an SGR mouse report the child can decode', async () => {
     const terminal = await launch('mouse-app.mjs');
     await terminal.waitForText('MOUSE ON');
-    expect(terminal.screen().modes.mouseEncoding).toBe('sgr');
+    // ConPTY consumes the child's DECSET, so on Windows the encoding is
+    // unobservable rather than absent. Either way the child must receive SGR —
+    // which the waits below, not this assertion, are what actually prove.
+    expect(['sgr', 'unknown']).toContain(terminal.screen().modes.mouseEncoding);
 
     await terminal.getByText('MOUSE ON').click();
     await terminal.waitForText('MOUSE press b=0');
@@ -722,26 +725,76 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
     await terminal.waitForText('MOUSE press b=2');
   });
 
-  it('refuses a drag when the child only asked for click reporting', async () => {
+  it('refuses a drag the tracking level does not report, unless the level is hidden', async () => {
+    // Branching on the observed mode rather than on the platform: the contract
+    // is "refuse what is known off, send what cannot be seen", and a test that
+    // says `process.platform` instead stops describing the contract.
     const terminal = await launch('mouse-app.mjs');
     await terminal.waitForText('MOUSE ON');
-    expect(terminal.screen().modes.mouseTracking).toBe('vt200');
+    const tracking = terminal.screen().modes.mouseTracking;
 
-    const error = await terminal
+    const outcome = await terminal
       .getByText('MOUSE ON')
       .drag({ from: { row: 0, column: 0 }, to: { row: 1, column: 4 } })
+      .then(() => null)
       .catch((cause: unknown) => cause as TermwrightError);
-    expect((error as TermwrightError).code).toBe('unsupported-action');
-    expect((error as TermwrightError).diagnostics.suggestion).toContain('1002');
+
+    if (tracking === 'unknown') {
+      expect(outcome).toBeNull();
+      expect(terminal.diagnostics().map((entry) => entry.code)).toContain(
+        'mouse-mode-unverifiable',
+      );
+      return;
+    }
+    expect(tracking).toBe('vt200');
+    expect(outcome?.code).toBe('unsupported-action');
+    expect(outcome?.diagnostics.suggestion).toContain('1002');
   });
 
-  it('refuses focus reports the child never asked for', async () => {
+  it('clicks through a hidden mouse mode, and says in the log that it could not verify it', async () => {
+    // The whole Windows path, exercised where mouse modes do arrive: the
+    // session is told they are unobservable, so it must behave exactly as it
+    // does under ConPTY — send SGR, land on the child, and record why.
+    const terminal = await launch('mouse-app.mjs', { mouseModesObservable: false });
+    await terminal.waitForText('MOUSE ON');
+    expect(terminal.screen().modes.mouseTracking).toBe('unknown');
+    expect(terminal.diagnostics().map((entry) => entry.code)).not.toContain(
+      'mouse-mode-unverifiable',
+    );
+
+    await terminal.getByText('MOUSE ON').click();
+    await terminal.waitForText('MOUSE press b=0');
+    await terminal.waitForText('MOUSE release b=0');
+
+    const unverifiable = terminal
+      .diagnostics()
+      .filter((entry) => entry.code === 'mouse-mode-unverifiable');
+    // Once per session: it describes the platform, not the click.
+    expect(unverifiable).toHaveLength(1);
+    await terminal.getByText('MOUSE ON').click({ button: 'right' });
+    await terminal.waitForText('MOUSE press b=2');
+    expect(
+      terminal.diagnostics().filter((entry) => entry.code === 'mouse-mode-unverifiable'),
+    ).toHaveLength(1);
+  });
+
+  it('refuses focus reports the child never asked for, unless the terminal enabled them', async () => {
+    // ConPTY turns focus reporting on by itself, and that is observable — so
+    // the expectation follows the mode the session reports, not the OS.
     const terminal = await launch('mouse-app.mjs');
     await terminal.waitForText('MOUSE ON');
 
-    const error = await terminal.focus().catch((cause: unknown) => cause as TermwrightError);
-    expect((error as TermwrightError).code).toBe('unsupported-action');
-    expect((error as TermwrightError).diagnostics.suggestion).toContain('1004');
+    const outcome = await terminal
+      .focus()
+      .then(() => null)
+      .catch((cause: unknown) => cause as TermwrightError);
+
+    if (terminal.screen().modes.focusReporting) {
+      expect(outcome).toBeNull();
+      return;
+    }
+    expect(outcome?.code).toBe('unsupported-action');
+    expect(outcome?.diagnostics.suggestion).toContain('1004');
   });
 });
 

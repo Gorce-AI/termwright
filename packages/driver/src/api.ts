@@ -214,8 +214,23 @@ export interface CellAttributes {
 }
 
 export interface TerminalModes {
-  readonly mouseTracking: 'none' | 'x10' | 'vt200' | 'drag' | 'any';
-  readonly mouseEncoding: 'default' | 'sgr' | 'urxvt' | 'utf8';
+  /**
+   * Mouse tracking level the child asked for, or `'unknown'`.
+   *
+   * `'none'` means observed off — the child enabled nothing. `'unknown'` means
+   * the platform makes the mode unobservable: ConPTY is an emulator, so it
+   * consumes the child's `CSI ? 1000/1002/1006 h` instead of forwarding it, and
+   * the driver never learns what was asked for. The distinction is load-bearing
+   * for pointer actions: `'none'` is a reason to refuse, `'unknown'` is not,
+   * because the child still has tracking on and still decodes reports.
+   */
+  readonly mouseTracking: 'none' | 'x10' | 'vt200' | 'drag' | 'any' | 'unknown';
+  /**
+   * Mouse report encoding, or `'unknown'` when the platform hides it (see
+   * {@link TerminalModes.mouseTracking}). Input sent under `'unknown'` uses
+   * SGR, the encoding every program that enables mouse reporting understands.
+   */
+  readonly mouseEncoding: 'default' | 'sgr' | 'urxvt' | 'utf8' | 'unknown';
   readonly bracketedPaste: boolean;
   readonly applicationCursorKeys: boolean;
   readonly applicationKeypad: boolean;
@@ -380,7 +395,12 @@ export type DiagnosticCode =
   /** `waitForReady` observed an OSC 133 prompt mark: a fact, not a guess. */
   | 'ready-shell-integration'
   /** `waitForReady` fell back to "the screen settled": a heuristic. */
-  | 'ready-settled-screen';
+  | 'ready-settled-screen'
+  /**
+   * Pointer input was sent while the mouse mode was unobservable — recorded
+   * once per session, since it describes the platform rather than the action.
+   */
+  | 'mouse-mode-unverifiable';
 
 /** A log file the session follows. */
 export interface AppLogSource {
