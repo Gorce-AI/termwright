@@ -18,10 +18,7 @@
  * private DCS sequence (`ESC P twm;{rev};{mac} ST`) and is consumed here before
  * it can reach the grid.
  */
-import xh from '@xterm/headless';
-import serializeAddon from '@xterm/addon-serialize';
-import unicode11Addon from '@xterm/addon-unicode11';
-import type { ITerminalAddon, Terminal } from '@xterm/headless';
+import { createTerminal, loadSerializeAddon, type Terminal, type TerminalProfile } from '@termwright/vt';
 import { MARKER_DCS_FINAL, type CursorInfo } from '@termwright/protocol';
 import type { TerminalModes } from './api.js';
 
@@ -31,6 +28,8 @@ export interface VtOptions {
   readonly columns: number;
   readonly rows: number;
   readonly scrollbackLines: number;
+  /** Terminal profile; decides how characters are counted. */
+  readonly profile?: TerminalProfile | string;
 }
 
 type Unsubscribe = () => void;
@@ -77,6 +76,8 @@ export interface MarkerSighting {
  */
 export class VtScreen {
   readonly terminal: Terminal;
+  /** The profile this emulator counts characters with. */
+  readonly profile: TerminalProfile;
 
   #revision = 0;
   #queue: Promise<void> = Promise.resolve();
@@ -104,22 +105,18 @@ export class VtScreen {
 
   constructor(options: VtOptions) {
     this.#scrollbackLines = options.scrollbackLines;
-    this.terminal = new xh.Terminal({
-      cols: options.columns,
+    // The emulator is built by @termwright/vt, not here: a session, its replay
+    // and a screenshot of that replay must count characters identically, and
+    // they only do that if one factory builds all three.
+    const built = createTerminal({
+      columns: options.columns,
       rows: options.rows,
       scrollback: options.scrollbackLines,
-      allowProposedApi: true,
-      convertEol: false,
+      ...(options.profile !== undefined ? { profile: options.profile as never } : {}),
     });
-
-    const unicode = new unicode11Addon.Unicode11Addon();
-    this.terminal.loadAddon(unicode as unknown as ITerminalAddon);
-    // Explicit activation: loading the addon only registers the tables.
-    this.terminal.unicode.activeVersion = '11';
-
-    const serialize = new serializeAddon.SerializeAddon();
-    this.terminal.loadAddon(serialize as unknown as ITerminalAddon);
-    this.#serialize = serialize;
+    this.terminal = built.terminal;
+    this.profile = built.profile;
+    this.#serialize = loadSerializeAddon(this.terminal);
 
     this.#registerHandlers();
   }

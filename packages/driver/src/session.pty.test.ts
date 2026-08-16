@@ -334,6 +334,76 @@ describe.skipIf(!ptyAvailable())('crash reports', { timeout: 20_000 }, () => {
   });
 });
 
+describe.skipIf(!ptyAvailable())('terminal profiles', { timeout: 20_000 }, () => {
+  /** Launches a program that prints one box-drawing character. */
+  async function printBoxChar(profile?: string): Promise<TerminalHarness> {
+    const terminal = await launchTerminal({
+      command: [process.execPath, '-e', 'process.stdout.write("\u2502x")'],
+      columns: 20,
+      rows: 4,
+      ...(profile !== undefined ? { terminalProfile: profile } : {}),
+    });
+    sessions.push(terminal);
+    await terminal.waitForText('x');
+    return terminal;
+  }
+
+  it('reports the profile it is counting characters with', async () => {
+    const terminal = await printBoxChar();
+    expect(terminal.capabilities().terminalProfile).toBe('default');
+
+    const chosen = await printBoxChar('iterm2-ambiguous-wide');
+    expect(chosen.capabilities().terminalProfile).toBe('iterm2-ambiguous-wide');
+  });
+
+  it('measures an ambiguous character the way the profile says', async () => {
+    // The same byte, two profiles, two layouts: this is the whole point of
+    // recording the profile alongside a session.
+    const narrow = await printBoxChar('default');
+    expect(narrow.screen().cell(0, 0).width).toBe(1);
+    expect(narrow.screen().cell(0, 1).char).toBe('x');
+
+    const wide = await printBoxChar('iterm2-ambiguous-wide');
+    expect(wide.screen().cell(0, 0).width).toBe(2);
+    expect(wide.screen().cell(0, 2).char).toBe('x');
+  });
+
+  it('refuses an unknown profile instead of quietly picking one', async () => {
+    const error = await launchTerminal({
+      command: [process.execPath, '-e', '0'],
+      terminalProfile: 'konsole',
+    }).catch((cause: unknown) => cause as Error);
+    expect((error as Error).message).toContain('unknown terminal profile');
+  });
+});
+
+describe.skipIf(!ptyAvailable())('settled()', { timeout: 20_000 }, () => {
+  it('resolves with the final verdict for a generic program', async () => {
+    const terminal = await launch('echo-app.mjs', { semanticNegotiationMs: 30 });
+    const capabilities = await terminal.settled({ timeout: 10_000 });
+
+    expect(capabilities.semanticTree).toBe(false);
+    // Final means final: a semantic locator now fails immediately.
+    const error = await terminal
+      .getByTestId('nothing')
+      .resolve({ timeout: 100 })
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('unsupported-action');
+  });
+
+  it('waits for the first tree of an adapter that attached late', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 50,
+      env: { TERMWRIGHT_FIXTURE_HELLO_DELAY: '400' },
+    });
+
+    const capabilities = await terminal.settled({ timeout: 10_000 });
+    expect(capabilities.semanticTree).toBe(true);
+    // The tree is there when it resolves, not a beat later.
+    expect(terminal.semanticTree()?.nodes.map((node) => node.name)).toContain('Approve');
+  });
+});
+
 describe.skipIf(!ptyAvailable())('the debug log', { timeout: 20_000 }, () => {
   it('narrates the session to stderr without leaking the session token', async () => {
     const lines: string[] = [];

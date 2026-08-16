@@ -92,6 +92,25 @@ await terminal.close();
   `TERMWRIGHT_ENDPOINT` / `TERMWRIGHT_TOKEN` / `TERMWRIGHT_PROTOCOL`; without
   them a conforming adapter opens nothing and the run is byte-identical.
 
+## Terminal profiles
+
+A session counts characters according to a terminal profile, and records which
+one it used:
+
+```ts
+const terminal = await launchTerminal({
+  command: ['node', 'app.js'],
+  terminalProfile: 'iterm2-ambiguous-wide', // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
+});
+console.log(terminal.capabilities().terminalProfile);
+```
+
+The profile decides whether an ambiguous character takes one column or two, and
+whether ❤️ is one column or two — the differences that make a bordered layout
+line up or drift. Emulators are built by `@termwright/vt`, so a replay and a
+screenshot of a session count exactly as the session did. See that package for
+what each profile answers.
+
 ## The child's environment
 
 `envMode` defaults to `'replace'`: the child gets `PATH`, `HOME`, `LANG`,

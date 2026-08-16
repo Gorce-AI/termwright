@@ -37,7 +37,7 @@ import type { GenericQuery, LocatorQuery, RefQuery, SemanticQuery } from './sele
 export interface LocatorContext {
   readonly timeouts: Required<TimeoutClasses>;
   /** Resolves once semantic negotiation has settled one way or the other. */
-  settled(): Promise<void>;
+  negotiationSettled(): Promise<void>;
   semanticIndex(): SemanticIndex | null;
   /** True once an adapter completed the handshake, even before its first tree. */
   semanticAttached(): boolean;
@@ -134,14 +134,14 @@ export class LocatorImpl implements Locator {
 
   async count(): Promise<number> {
     this.#ctx.assertOpen();
-    await this.#ctx.settled();
+    await this.#ctx.negotiationSettled();
     const scope = await this.#resolveScope(Date.now() + this.#ctx.timeouts.action);
     return this.#evaluate(scope).length;
   }
 
   async resolve(opts?: WaitOptions): Promise<ResolvedTarget> {
     this.#ctx.assertOpen();
-    await this.#ctx.settled();
+    await this.#ctx.negotiationSettled();
     const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
     for (;;) {
       const scope = await this.#resolveScope(deadline);
@@ -166,7 +166,7 @@ export class LocatorImpl implements Locator {
 
   async waitFor(opts?: { state?: 'visible' | 'hidden' | 'attached' } & WaitOptions): Promise<void> {
     this.#ctx.assertOpen();
-    await this.#ctx.settled();
+    await this.#ctx.negotiationSettled();
     const wanted = opts?.state ?? 'visible';
     const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
     for (;;) {
@@ -190,7 +190,7 @@ export class LocatorImpl implements Locator {
 
   async isVisible(): Promise<boolean> {
     this.#ctx.assertOpen();
-    await this.#ctx.settled();
+    await this.#ctx.negotiationSettled();
     const matches = await this.#tryEvaluate(Date.now() + this.#ctx.timeouts.action);
     return matches.some((match) => this.#isVisibleTarget(match));
   }

@@ -1,7 +1,7 @@
 {
-  "name": "@termwright/driver",
+  "name": "@termwright/vt",
   "version": "0.1.0",
-  "description": "termwright driver: PTY + VT sessions, locators, actions, waits",
+  "description": "termwright VT core: one terminal factory and one terminal profile, shared by driver, trace, screenshot and ui",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -22,10 +22,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@termwright/protocol": "workspace:*",
-    "@lydell/node-pty": "1.1.0",
-    "@xterm/headless": "^6.0.0",
     "@xterm/addon-serialize": "^0.14.0",
-    "@termwright/vt": "workspace:*"
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/headless": "^6.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.0"
   }
 }

@@ -264,6 +264,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       columns: options.columns ?? 100,
       rows: options.rows ?? 30,
       scrollbackLines: options.scrollbackLines ?? 2_000,
+      ...(options.terminalProfile !== undefined ? { profile: options.terminalProfile } : {}),
     });
     this.#pairing = new RevisionPairing({
       maxPending: DEFAULT_LIMITS.maxQueuedFrames,
@@ -384,6 +385,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   capabilities(): SessionCapabilities {
     return Object.freeze({
       semanticTree: this.#attachment !== null,
+      terminalProfile: this.#vt.profile.id,
       ...(this.#attachment !== null ? { adapter: this.#attachment.adapter } : {}),
       capabilities: this.#attachment?.capabilities ?? Object.freeze([]),
       platform: process.platform,
@@ -667,9 +669,42 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   // -------------------------------------------------------------------------
   // LocatorContext
 
-  settled(): Promise<void> {
+  negotiationSettled(): Promise<void> {
     if (this.#settled) return Promise.resolve();
     return new Promise<void>((resolve) => this.#settleWaiters.push(resolve));
+  }
+
+  /**
+   * Waits until the capabilities stop changing.
+   *
+   * Three things can still be pending after `launchTerminal` resolves: the
+   * negotiation window, the grace a slow adapter gets to attach after it, and
+   * the first tree of an adapter that did attach. Callers that branch on
+   * `semanticTree` need all three settled, and polling `capabilities()` for
+   * them is exactly the workaround this replaces.
+   */
+  async settled(opts?: WaitOptions): Promise<SessionCapabilities> {
+    this.assertOpen();
+    const deadline = Date.now() + (opts?.timeout ?? this.timeouts.action);
+    await this.negotiationSettled();
+
+    for (;;) {
+      const attached = this.#attachment !== null;
+      if (!attached && !this.semanticPossible()) return this.capabilities();
+      if (attached && this.#index !== null) return this.capabilities();
+      if (Date.now() >= deadline) {
+        if (!attached) return this.capabilities();
+        // Attached but silent: reporting a semantic session whose tree never
+        // arrived would be a lie the caller cannot act on.
+        throw new TimeoutError(
+          'an adapter attached but published no tree before the deadline',
+          this.errorDiagnostics({
+            suggestion: 'the adapter negotiated the semantic channel; check that it publishes a snapshot and a render marker',
+          }),
+        );
+      }
+      await this.waitForChange(deadline);
+    }
   }
 
   semanticIndex(): SemanticIndex | null {

@@ -59,6 +59,15 @@ export interface LaunchOptions {
    * current end, so a session never replays a previous run.
    */
   readonly logs?: readonly AppLogSource[];
+  /**
+   * Terminal profile: which width tables and which of the switches terminals
+   * disagree on this session uses. A built-in id (`'default'`, `'kitty'`,
+   * `'iterm2-ambiguous-wide'`) or a profile object from `@termwright/vt`.
+   *
+   * It is recorded with the session so a replay, a screenshot and the runner
+   * pane can count characters exactly as the live session did.
+   */
+  readonly terminalProfile?: string;
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
   readonly semanticNegotiationMs?: number; // default 250
@@ -76,6 +85,16 @@ export interface TerminalHarness {
   readonly sessionId: string;
 
   capabilities(): SessionCapabilities;
+  /**
+   * The capabilities, once they are final.
+   *
+   * `capabilities()` answers immediately with what is known so far, which is
+   * what a synchronous caller needs. This waits for the negotiation to reach
+   * its verdict — including the grace an adapter gets to attach late — and, for
+   * a semantic session, for the first tree to be published. After it resolves,
+   * `semanticTree` will not change again.
+   */
+  settled(opts?: WaitOptions): Promise<SessionCapabilities>;
   screen(): ScreenSnapshot;
   semanticTree(): SemanticSnapshot | null;
   cell(pos: { row: number; column: number }): CellSnapshot;
@@ -148,6 +167,8 @@ export interface TerminalHarness {
 
 export interface SessionCapabilities {
   readonly semanticTree: boolean;
+  /** Id of the terminal profile this session counts characters with. */
+  readonly terminalProfile: string;
   readonly adapter?: { readonly name: string; readonly version: string };
   readonly capabilities: readonly string[];
   readonly platform: NodeJS.Platform;
