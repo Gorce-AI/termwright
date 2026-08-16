@@ -61,7 +61,7 @@ package boundaries must be `TermwrightError` subclasses. All I/O bounded per
 A directory (zipped for transport) containing:
 
 - `meta.json` — `{ v: 1, sessionId, command, columns, rows, startedAt,
-  platform, semanticTree: boolean, exit?: {code, signal},
+  platform, terminalProfile?, semanticTree: boolean, exit?: {code, signal},
   crash?: {t, castOffset, exit, screenTail, lastSemanticRevision,
   recentInputs, diagnosticsTail} }`. `crash` mirrors the driver's
   `CrashReport` with two changes: it carries `castOffset`, and it stores the
@@ -78,6 +78,14 @@ A directory (zipped for transport) containing:
   `{ api, selector?, ref?, ok, error? }`. `castOffset` is REQUIRED and
   positions the event on the (idle-trimmed, hide-window-adjusted) recording
   timeline. There is no reader fallback — one writer generation exists.
+
+`terminalProfile` is `capabilities().terminalProfile`; absent means
+`'default'`. Replay MUST construct its emulator through `@termwright/vt`'s
+`createTerminal` with that profile — a session and its replay measuring
+characters differently place wide characters a column apart with nothing
+failing. A profile the reader does not know is a `protocol-violation`, never a
+fallback to default. It lives in `meta.json`, not in the asciicast header: it
+describes the session, and `meta.json` is ours to extend.
 
 `SessionEventMap` `timeMs` semantics (binding for the driver): milliseconds
 since session start, monotonic, never resets for the lifetime of a session

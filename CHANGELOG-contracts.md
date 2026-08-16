@@ -304,3 +304,11 @@
   capabilities once they stop changing (negotiation + grace + first tree);
   bare capabilities() stays sync. Field rename approved: reflowOnResize →
   reflowCursorLineOnResize (the name must not promise what xterm cannot do).
+- 2026-08-16 (#19 trace side): §Trace — `meta.json` gains `terminalProfile?`
+  (absent = 'default'), and replay must build its emulator through
+  `@termwright/vt`'s `createTerminal` with it. Closes a silent inconsistency:
+  the driver activated Unicode 11 and trace's own replay did not, so a session
+  counted an emoji as two columns and its replay as one. An unknown profile is
+  a `protocol-violation` — wrong width tables produce a frame that looks right
+  and is not. Stored in `meta.json` rather than the asciicast header: it
+  describes the session, and our file has no collision risk with the format.

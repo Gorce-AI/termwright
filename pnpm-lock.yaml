@@ -124,6 +124,9 @@ importers:
       '@termwright/ink':
         specifier: workspace:*
         version: link:../ink
+      '@termwright/logs':
+        specifier: workspace:*
+        version: link:../logs
       '@termwright/mcp':
         specifier: workspace:*
         version: link:../mcp
@@ -375,6 +378,9 @@ importers:
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
+      '@xterm/addon-unicode11':
+        specifier: ^0.9.0
+        version: 0.9.0
       '@xterm/xterm':
         specifier: ^5.5.0
         version: 5.5.0
