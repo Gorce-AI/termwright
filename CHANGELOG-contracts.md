@@ -319,3 +319,7 @@
   too. Approved for #25 reception round: new DiagnosticCode 'delta-resync'
   (set: 17) — resync is the opposite of loss; subscribe defaults to 'diffs'
   for tree-diffs adapters with a LaunchOptions override to force snapshots.
+- 2026-08-16: §UI events gains `session {sessionId, terminalProfile, columns,
+  rows}` emitted on live attach — profile describes a session, not a test.
+  Post-mortem reads the profile from TraceMeta.terminalProfile (NOT from the
+  cast header — trace deliberately keeps foreign formats clean).

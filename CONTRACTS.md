@@ -113,6 +113,9 @@ those readers.
 
 WebSocket, JSON messages `{ v: 1, type, ... }`:
 - server→client: `run-start`,
+  `session {sessionId, terminalProfile, columns, rows}` (sent when a live
+  session attaches; the browser MUST build its terminal via the session's
+  profile or state the widths it renders with),
   `test-start {id, title, file, startedAt, sessionId?}`,
   `step {testId, title, phase}`, `output {sessionId, dataB64, t}`,
   `semantic {sessionId, revision, snapshot}`,
