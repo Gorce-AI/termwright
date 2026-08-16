@@ -104,6 +104,8 @@ WebSocket, JSON messages `{ v: 1, type, ... }`:
   `semantic {sessionId, revision, snapshot}`,
   `app-log {sessionId, t, source, level, message, label?, logger?, seq?,
   revision?, attrs?}`,
+  `action {kind, api, t, ok, testId?, sessionId?, selector?, ref?, error?,
+  stepId?}`,
   `test-end {id, status, durationMs, flaky, traceRef?, error?}`,
   `run-end {summary: {total, passed, failed, skipped, flaky, durationMs}}`.
   All fields are REQUIRED except: `sessionId` (a Vitest reporter genuinely
@@ -119,6 +121,12 @@ session-clock milliseconds, `level` is a protocol `LogLevel` or **`null`** —
 a file line has no level and none may be inferred from its text. `attrs` are
 flat scalars. Receivers mark only `warn`/`error`/`fatal` on the timeline;
 level-less entries produce no markers but are always listed.
+
+`action` carries one driver call (`kind: 'action'`) or one assertion
+(`kind: 'assert'`), exactly as `events.jsonl` records them: `api` is the
+API/matcher name, `t` is session-clock ms, `ok` is the outcome, `ref` is the
+resolved target as `n8@42`. Receivers build a command log identical to what
+replay reads from the archive.
 - client→server: `rerun {testIds?}`, `stop`, `pick {sessionId}` (inspector
   pick-mode), `input {sessionId, dataB64}` (recorder mode only).
 The Vitest bridge is a reporter translating Vitest lifecycle into these

@@ -259,3 +259,6 @@
   the suite. Adapters in general remain bound by the rule as written; if a second
   consumer needs these at the adapter's root, split out
   `@termwright/opentui-testing` and mirror Ink.
+- 2026-08-16 (ui e6e4403): §UI events gains `action` (driver call/assertion
+  mirror of events.jsonl); live producer is the reporter via Vitest 3.2
+  onTestAnnotate.
