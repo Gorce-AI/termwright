@@ -50,6 +50,38 @@ describe('readTraceLogs', () => {
     expect(logs.records).toEqual([]);
   });
 
+  it('shows what the file holds when the summary is missing', async () => {
+    // `meta.logs` is absent exactly when nothing was logged, so this archive is
+    // damaged — hand-edited, or written by something else. The records are
+    // evidence; the missing summary is not a reason to hide them.
+    const reader = {
+      meta: {},
+      async *logs(): AsyncIterable<unknown> {
+        yield record({ message: 'still here' });
+      },
+    } as unknown as TraceReader;
+
+    const logs = await readTraceLogs(reader);
+    expect(logs.available).toBe(true);
+    expect(logs.records.map((entry) => entry.message)).toEqual(['still here']);
+    expect(logs.total).toBe(1);
+  });
+
+  it('does not call the list complete when the summary and the file disagree', async () => {
+    const reader = {
+      meta: { logs: { count: 9, dropped: 0, sources: [], levels: {} } },
+      async *logs(): AsyncIterable<unknown> {
+        yield record();
+      },
+    } as unknown as TraceReader;
+
+    const logs = await readTraceLogs(reader);
+    expect(logs.truncated).toBe(true);
+    // The count is a claim about the file; the file is the evidence.
+    expect(logs.total).toBe(9);
+    expect(logs.records).toHaveLength(1);
+  });
+
   it('reports what the writer evicted as missing, not as all there is', async () => {
     const logs = await readTraceLogs(
       readerWith([record()], { dropped: 42, sources: [{ label: 'app.log', path: '/var/log/app.log' }] }),

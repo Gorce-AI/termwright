@@ -81,18 +81,6 @@ export interface TraceLogs {
   readonly levels: Readonly<Partial<Record<LogLevel, number>>>;
 }
 
-const EMPTY: TraceLogs = {
-  records: [],
-  hasMoreBefore: false,
-  hasMoreAfter: false,
-  total: 0,
-  truncated: false,
-  dropped: 0,
-  available: false,
-  sources: [],
-  levels: {},
-};
-
 /**
  * Reads one window of the archive's log stream.
  *
@@ -112,19 +100,16 @@ export async function readTraceLogs(
   reader: TraceReader,
   query: LogWindowQuery = {},
 ): Promise<TraceLogs> {
+  // The summary is read for the counters it holds, not as permission to read
+  // the file. `meta.logs` is absent exactly when nothing was logged and nothing
+  // was dropped, so streaming an archive without it costs one empty read — and
+  // gating on it would mean an archive whose summary and file disagree shows
+  // the reassuring half. (`@termwright/trace` removed the same gate from
+  // `stateAt().logs` for the same reason.)
   const summary = reader.meta.logs;
-  if (summary === undefined) return EMPTY;
-
   const limit = Math.min(Math.max(Math.trunc(query.limit ?? DEFAULT_WINDOW), 1), MAX_WINDOW);
-  const dropped = Number.isFinite(summary.dropped) ? summary.dropped : 0;
-  const total = Number.isFinite(summary.count) ? summary.count : 0;
-  const base = {
-    total,
-    dropped,
-    available: true,
-    sources: parseSources(summary.sources),
-    levels: countsByLevel(summary.levels),
-  };
+  const dropped = Number.isFinite(summary?.dropped) ? (summary?.dropped ?? 0) : 0;
+  const counted = Number.isFinite(summary?.count) ? (summary?.count ?? 0) : 0;
 
   // `before` keeps the last `limit` entries under the cursor; `after` (and the
   // default) keeps the first `limit` at or past it.
@@ -169,12 +154,23 @@ export async function readTraceLogs(
     failed = true;
   }
 
+  const scanned = skippedBefore + window.length + skippedAfter;
   return {
-    ...base,
     records: window,
+    // Believe the file over the summary when they disagree: records on disk are
+    // evidence, and a count is a claim about them.
+    total: Math.max(counted, scanned),
+    dropped,
+    // A recording that logged nothing says so; one whose summary went missing
+    // still shows what its file holds.
+    available: summary !== undefined || scanned > 0,
+    sources: parseSources(summary?.sources),
+    levels: countsByLevel(summary?.levels),
     hasMoreBefore: skippedBefore > 0,
     hasMoreAfter: skippedAfter > 0,
-    truncated: failed || dropped > 0,
+    // A summary that disagrees with the file means records are missing from
+    // one of them; either way the panel must not present the list as complete.
+    truncated: failed || dropped > 0 || (summary !== undefined && scanned !== counted),
   };
 }
 
