@@ -47,6 +47,7 @@ async function createChannel(accepting = true): Promise<Harness> {
     limits: DEFAULT_LIMITS,
     acceptHello: () => accepting,
     logBudget: { maxRecordsPerSecond: 200, burst: 500 },
+    acceptDeltas: true,
     hooks: {
       onSnapshot: (snapshot) => snapshots.push(snapshot),
       onLogRecord: (record) => records.push(record),

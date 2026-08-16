@@ -148,6 +148,24 @@ Categories are `api` (calls), `wait` (what was awaited, how long, how it ended),
 `paste`/`write` payloads are logged by size only. Switched off, nothing is
 wrapped and no listener is registered.
 
+## Incremental trees
+
+An adapter that offers deltas gets them by default: a semantic tree changes on
+nearly every keystroke, and sending the whole thing each time is what makes the
+semantic channel expensive. The driver composes each delta onto the tree it
+holds and pairs the result with its render marker exactly as it would a full
+snapshot.
+
+When a delta cannot be composed — a base revision the driver never held, a node
+it does not know — the driver asks for a full tree (`get-tree`) and ignores
+further deltas until it arrives. That is reported as `delta-resync`, not as a
+dropped revision: nothing was lost, and a repair should not read like damage.
+The last good tree stays observable throughout.
+
+`treeUpdates: 'snapshots'` declines deltas from an adapter that offers them —
+the switch to reach for when a replay and a live session disagree and the delta
+path is a suspect.
+
 ## Knowing when the verdict is final
 
 `capabilities()` answers immediately with what is known so far. Three things can

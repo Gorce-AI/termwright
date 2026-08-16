@@ -68,6 +68,15 @@ export interface LaunchOptions {
    * pane can count characters exactly as the live session did.
    */
   readonly terminalProfile?: string;
+  /**
+   * How an instrumented application should push its semantic tree.
+   *
+   * `'auto'` (default) takes deltas from any adapter that offers them, which
+   * is far cheaper for a tree that changes on every keystroke. `'snapshots'`
+   * forces full trees — the switch to reach for when a replay and a live
+   * session disagree and the delta path is a suspect.
+   */
+  readonly treeUpdates?: 'auto' | 'snapshots';
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
   readonly semanticNegotiationMs?: number; // default 250
@@ -355,6 +364,15 @@ export type DiagnosticCode =
   | 'endpoint-error'
   /** A `SessionEvents` listener threw; the session continued. */
   | 'listener-error'
+  /**
+   * A delta could not be composed, so the driver asked for a full tree.
+   *
+   * Deliberately not `revision-dropped`: nothing was lost. A resync is the
+   * driver noticing a divergence and repairing it, which is the opposite of
+   * dropping data, and conflating the two would make a healthy recovery read
+   * like damage.
+   */
+  | 'delta-resync'
   /** Lines the driver did not deliver: a log source outran its rate limit. */
   | 'log-dropped'
   /** A followed log source changed state: attached, rotated, truncated, unreadable. */

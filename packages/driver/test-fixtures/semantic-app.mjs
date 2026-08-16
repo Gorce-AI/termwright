@@ -27,6 +27,11 @@ let socket = null;
 let lastEvent = 'none';
 let logSeq = 0;
 let logBudget = null;
+// Delta mode: announced only when asked for, so the same fixture serves the
+// snapshot tests unchanged.
+const deltaMode = process.env['TERMWRIGHT_FIXTURE_DELTAS'] === '1';
+let subscribeDiffs = false;
+let cursorGone = false;
 let typed = '';
 
 function draw() {
@@ -113,11 +118,54 @@ function sendLog(level, message, extra = {}, reuseSeq = false) {
   );
 }
 
+function fullSnapshot() {
+  const snapshot = withoutBounds ? stripBounds(tree()) : tree();
+  if (!cursorGone) return snapshot;
+  // A delta can set a cursor but never clear it, so dropping one is exactly
+  // the transition the contract says must travel as a full snapshot.
+  const { cursor, ...withoutCursor } = snapshot;
+  return withoutCursor;
+}
+
+/** Sends the focus change as a delta rather than a whole tree. */
+function publishDelta() {
+  const previous = revision;
+  revision += 1;
+  draw();
+  if (socket === null || sessionId === null) return;
+  const full = fullSnapshot();
+  socket.write(
+    encodeFrame(
+      {
+        type: 'tree-delta',
+        baseRevision: previous,
+        revision,
+        changed: full.nodes.filter((node) => node.role === 'button'),
+        removed: [],
+      },
+      1024 * 1024,
+    ),
+  );
+  socket.write(encodeFrame({ type: 'revision-commit', revision }, 1024 * 1024));
+  process.stdout.write(encodeMarker(token, sessionId, revision));
+}
+
+/** Sends a delta whose base does not exist, to force a resync. */
+function publishBadDelta() {
+  if (socket === null || sessionId === null) return;
+  socket.write(
+    encodeFrame(
+      { type: 'tree-delta', baseRevision: 999, revision: 1000, changed: [], removed: [] },
+      1024 * 1024,
+    ),
+  );
+}
+
 function publish() {
   revision += 1;
   draw();
   if (socket === null || sessionId === null) return;
-  const snapshot = withoutBounds ? stripBounds(tree()) : tree();
+  const snapshot = fullSnapshot();
   socket.write(encodeFrame({ type: 'snapshot', snapshot }, 1024 * 1024));
   socket.write(encodeFrame({ type: 'revision-commit', revision }, 1024 * 1024));
   // The marker commits the render: it must follow the last byte of the frame.
@@ -173,6 +221,16 @@ process.stdin.on('data', (chunk) => {
   }
   if (text === '\t') {
     focused = focused === 'approve' ? 'reject' : 'approve';
+    if (subscribeDiffs) publishDelta();
+    else publish();
+    return;
+  }
+  if (text === 'B') {
+    publishBadDelta();
+    return;
+  }
+  if (text === 'C') {
+    cursorGone = true;
     publish();
     return;
   }
@@ -208,7 +266,15 @@ if (endpoint === undefined || token === undefined) {
           protocol: 'termwright/1',
           token,
           adapter: { name: 'fixture', version: '0.1.0' },
-          capabilities: ['tree', 'bounds', 'states', 'actions', 'render-revisions', 'logs'],
+          capabilities: [
+            'tree',
+            'bounds',
+            'states',
+            'actions',
+            'render-revisions',
+            'logs',
+            ...(deltaMode ? ['tree-diffs'] : []),
+          ],
         },
         1024 * 1024,
       ),
@@ -219,10 +285,20 @@ if (endpoint === undefined || token === undefined) {
   let pending = Buffer.alloc(0);
   socket.on('data', (chunk) => {
     pending = decodeFrames(Buffer.concat([pending, chunk]), (message) => {
+      if (message.type === 'get-tree') {
+        socket.write(
+          encodeFrame(
+            { type: 'get-tree-result', requestId: message.requestId, snapshot: fullSnapshot() },
+            1024 * 1024,
+          ),
+        );
+        return;
+      }
       if (message.type === 'hello-ack') {
         sessionId = message.sessionId;
         // Absent 'logs' means the channel was not granted: stay quiet.
         logBudget = message.logs?.enabled === true ? message.logs : null;
+        subscribeDiffs = message.subscribe === 'diffs';
         publish();
       }
     });

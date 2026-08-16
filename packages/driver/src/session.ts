@@ -300,6 +300,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       limits: DEFAULT_LIMITS,
       acceptHello: () => this.semanticPossible(),
       logBudget: { maxRecordsPerSecond: LOG_RECORDS_PER_SECOND, burst: LOG_BURST },
+      acceptDeltas: (this.#options.treeUpdates ?? 'auto') === 'auto',
       hooks: {
         onAttach: (attachment) => this.#onAttach(attachment),
         onSnapshot: (snapshot) => this.#pairing.offerSnapshot(snapshot),

@@ -22,6 +22,8 @@ import { randomBytes } from 'node:crypto';
 import {
   ADAPTER_CAPABILITIES,
   ProtocolViolation,
+  applyTreeDelta,
+  type GetTreeRequest,
   type ProtocolViolationCode,
   createFrameDecoder,
   encodeFrame,
@@ -49,6 +51,8 @@ export interface SemanticAttachment {
   readonly markerEnabled: boolean;
   /** True when the log channel was negotiated in the handshake. */
   readonly logsEnabled: boolean;
+  /** True when the adapter pushes deltas instead of full trees. */
+  readonly deltasEnabled: boolean;
 }
 
 /** Budget the driver grants an adapter that announced the `logs` capability. */
@@ -108,6 +112,8 @@ export interface SemanticChannelOptions {
   acceptHello(): boolean;
   /** Budget offered to an adapter that announced the `logs` capability. */
   readonly logBudget: LogBudget;
+  /** False forces full snapshots even from an adapter that offers deltas. */
+  readonly acceptDeltas: boolean;
   readonly hooks: SemanticChannelHooks;
 }
 
@@ -116,6 +122,12 @@ const MARKER_CAPABILITY: AdapterCapability = 'render-revisions';
 
 /** Capability that opens the application log channel. */
 const LOGS_CAPABILITY: AdapterCapability = 'logs';
+
+/** Capability that lets an adapter send deltas instead of whole trees. */
+const DIFFS_CAPABILITY: AdapterCapability = 'tree-diffs';
+
+/** How long a `get-tree` may take before the resync is abandoned. */
+const GET_TREE_TIMEOUT_MS = 2_000;
 
 const CAPABILITY_SET: ReadonlySet<string> = new Set(ADAPTER_CAPABILITIES);
 
@@ -156,6 +168,16 @@ export class SemanticChannel {
   #attached: Socket | null = null;
   #attachment: SemanticAttachment | null = null;
   #closed = false;
+  /**
+   * Head of the delta chain: the newest tree the driver holds, published or
+   * not. Pairing decides what becomes observable; composition needs the latest
+   * accepted tree regardless, because the next delta is based on it.
+   */
+  #composed: SemanticSnapshot | null = null;
+  /** While true, deltas are dropped: a full tree is on its way. */
+  #resyncing = false;
+  #requestId = 0;
+  #getTreeTimer: NodeJS.Timeout | null = null;
 
   private constructor(
     server: Server,
@@ -203,6 +225,7 @@ export class SemanticChannel {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    this.#finishResync();
     this.#attached?.destroy();
     this.#attached = null;
     await new Promise<void>((resolve) => this.#server.close(() => resolve()));
@@ -294,12 +317,13 @@ export class SemanticChannel {
     this.#attached = socket;
     const markerEnabled = capabilities.includes(MARKER_CAPABILITY);
     const logsEnabled = capabilities.includes(LOGS_CAPABILITY);
+    const deltasEnabled = this.#options.acceptDeltas && capabilities.includes(DIFFS_CAPABILITY);
     const ack: HelloAckMessage = {
       type: 'hello-ack',
       protocol: PROTOCOL_ID,
       sessionId: this.#options.sessionId,
       limits: this.#options.limits,
-      subscribe: 'snapshots',
+      subscribe: deltasEnabled ? 'diffs' : 'snapshots',
       marker: { enabled: markerEnabled },
       // Absent means disabled: an adapter without this field must stay quiet.
       ...(logsEnabled ? { logs: { enabled: true, ...this.#options.logBudget } } : {}),
@@ -310,6 +334,7 @@ export class SemanticChannel {
       capabilities: Object.freeze(capabilities),
       markerEnabled,
       logsEnabled,
+      deltasEnabled,
     });
     this.#options.hooks.onAttach(this.#attachment);
     if (!markerEnabled) {
@@ -332,7 +357,30 @@ export class SemanticChannel {
           this.#fail(socket, 'malformed', 'snapshot carries a foreign sessionId');
           return false;
         }
-        this.#options.hooks.onSnapshot(message.snapshot);
+        this.#acceptTree(message.snapshot);
+        return true;
+      }
+      case 'tree-delta': {
+        if (this.#resyncing) {
+          // A full tree is already on its way; patching onto a base we know is
+          // wrong would only produce a second wrong tree.
+          return true;
+        }
+        const base = this.#composed;
+        if (base === null) {
+          this.#resync(socket, `a delta for revision ${message.revision} arrived before any full tree`);
+          return true;
+        }
+        const composed = applyTreeDelta(base, message, this.#options.limits);
+        if (!composed.ok) {
+          this.#resync(
+            socket,
+            `delta ${message.baseRevision}→${message.revision} did not compose (${composed.code}): ${composed.detail}`,
+            message.revision,
+          );
+          return true;
+        }
+        this.#acceptTree(composed.snapshot);
         return true;
       }
       case 'log': {
@@ -358,16 +406,94 @@ export class SemanticChannel {
         socket.destroy();
         this.#attached = null;
         return false;
-      case 'get-tree-result':
-        // v1 subscribes to pushed snapshots; a response without a request is noise.
+      case 'get-tree-result': {
+        if (!this.#resyncing) {
+          this.#options.hooks.onDiagnostic(
+            'adapter-capability',
+            'ignoring a get-tree-result that answers no outstanding request',
+          );
+          return true;
+        }
+        if (message.snapshot === undefined) {
+          this.#finishResync();
+          this.#options.hooks.onDiagnostic(
+            'delta-resync',
+            `the adapter could not supply a full tree: ${message.error ?? 'no reason given'}`,
+          );
+          return true;
+        }
+        if (message.snapshot.sessionId !== this.#options.sessionId) {
+          this.#fail(socket, 'malformed', 'get-tree-result carries a foreign sessionId');
+          return false;
+        }
+        this.#finishResync();
+        const held = this.#composed;
+        const current = held !== null && message.snapshot.revision <= held.revision;
         this.#options.hooks.onDiagnostic(
-          'adapter-capability',
-          'ignoring an unsolicited get-tree-result: this driver subscribes to pushed snapshots',
+          'delta-resync',
+          current
+            ? `resynchronised: the full tree is revision ${message.snapshot.revision}, which is already held`
+            : `resynchronised on revision ${message.snapshot.revision} from a full tree`,
+          { revision: message.snapshot.revision },
         );
+        // A tree the session already published must not be offered again: the
+        // pairing would report it as a dropped revision, and a repair that
+        // reads like data loss is worse than no report at all. It still
+        // replaces the composition base, because it is the authoritative one.
+        if (current) this.#composed = message.snapshot;
+        else this.#acceptTree(message.snapshot);
         return true;
+      }
       default:
         this.#fail(socket, 'malformed', 'unknown message type');
         return false;
+    }
+  }
+
+  /** Records a tree as the newest one held, and hands it to the session. */
+  #acceptTree(snapshot: SemanticSnapshot): void {
+    this.#composed = snapshot;
+    this.#options.hooks.onSnapshot(snapshot);
+  }
+
+  /**
+   * Asks for a full tree and stops trusting deltas until it arrives.
+   *
+   * Per design §8.3 a receiver that cannot compose must rehydrate rather than
+   * patch around the gap. Nothing is lost here — the last good tree stays
+   * observable while the new one is fetched — so this is reported as a resync,
+   * not as dropped data.
+   */
+  #resync(socket: Socket, reason: string, revision?: number): void {
+    this.#options.hooks.onDiagnostic(
+      'delta-resync',
+      `requesting a full tree: ${reason}`,
+      revision === undefined ? undefined : { revision },
+    );
+    if (this.#resyncing) return;
+    this.#resyncing = true;
+    this.#requestId += 1;
+    const request: GetTreeRequest = { type: 'get-tree', requestId: this.#requestId };
+    this.#send(socket, request);
+    this.#getTreeTimer = setTimeout(() => {
+      this.#getTreeTimer = null;
+      if (!this.#resyncing) return;
+      this.#resyncing = false;
+      // Giving up on the request rather than the session: a later pushed
+      // snapshot still repairs the chain, and deltas resume from it.
+      this.#options.hooks.onDiagnostic(
+        'delta-resync',
+        `no full tree arrived within ${GET_TREE_TIMEOUT_MS} ms; waiting for the adapter to push one`,
+      );
+    }, GET_TREE_TIMEOUT_MS);
+    this.#getTreeTimer.unref?.();
+  }
+
+  #finishResync(): void {
+    this.#resyncing = false;
+    if (this.#getTreeTimer !== null) {
+      clearTimeout(this.#getTreeTimer);
+      this.#getTreeTimer = null;
     }
   }
 
