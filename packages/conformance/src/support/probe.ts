@@ -18,6 +18,7 @@
  * It is still not a second driver: it never locates and never acts.
  */
 import { createServer, type Server, type Socket } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -172,6 +173,8 @@ export class AdapterProbe {
   #connections = 0;
   #socket: Socket | null = null;
   #exit: { code: number | null; signal: string | null } | null = null;
+  /** Where the adapter writes its own account of attaching, if it writes one. */
+  #debugFile: string | null = null;
   #stopped = false;
 
   private constructor(
@@ -237,6 +240,17 @@ export class AdapterProbe {
       env[ENV_PROTOCOL] = String(PROTOCOL_VERSION);
     }
 
+    // The adapter's own account of why it did or did not attach. The probe can
+    // only see the outside — no connection arrived — which leaves "wrong
+    // transport", "driver not listening" and "never started" indistinguishable.
+    // The clients write that distinction here (1bbe0f9), and a failure quotes
+    // the file, so the attribution lands in the message rather than in an
+    // artifact somebody has to go and find. A path, never `TERMWRIGHT_DEBUG=1`:
+    // that means "log to stderr", which under a pty lands in the middle of the
+    // frame this suite makes assertions about.
+    const debugFile = join(tmpdir(), `termwright-adapter-debug-${randomBytes(8).toString('hex')}.log`);
+    env['TERMWRIGHT_DEBUG_FILE'] = debugFile;
+
     const size = { columns: options.columns ?? 80, rows: options.rows ?? 24 };
     const pty = createNodePtyBackend().spawn({
       command: command.command,
@@ -254,6 +268,7 @@ export class AdapterProbe {
       size,
       options.subscribe ?? 'snapshots',
     );
+    probe.#debugFile = debugFile;
 
     pty.onData((data) => probe.#onData(data));
     pty.onExit((status) => {
@@ -351,8 +366,8 @@ export class AdapterProbe {
   describe(): string {
     const { messages, connections } = this.observe();
     const kinds = new Map<string, number>();
-    for (const message of messages) {
-      const kind = (message as { type?: string }).type ?? 'unknown';
+    for (const recorded of messages) {
+      const kind = recorded.message.type;
       kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
     }
     const traffic =
@@ -361,8 +376,29 @@ export class AdapterProbe {
     const exit = this.#exit === null ? 'still running' : `exited ${JSON.stringify(this.#exit)}`;
     return (
       `${connections} connection(s) to the endpoint, ${traffic}; the child is ${exit}; ` +
-      `last screen line: ${JSON.stringify(screen.at(-1) ?? '')}`
+      `last screen line: ${JSON.stringify(screen.at(-1) ?? '')}\n${this.#adapterAccount()}`
     );
+  }
+
+  /**
+   * What the adapter says about its own attach, if the client writes it.
+   *
+   * The outside view cannot tell "dialled the wrong transport" from "the driver
+   * was not listening" from "the process never started" — all three look like
+   * no connection. The clients write that distinction to `TERMWRIGHT_DEBUG_FILE`,
+   * so it is quoted here rather than left in a file nobody opens. An adapter
+   * that writes nothing is itself an answer, and says so.
+   */
+  #adapterAccount(): string {
+    if (this.#debugFile === null) return 'adapter debug log: not requested';
+    let contents: string;
+    try {
+      contents = readFileSync(this.#debugFile, 'utf8');
+    } catch {
+      return `adapter debug log: nothing written to ${this.#debugFile} — the client either predates the log or never ran`;
+    }
+    const lines = contents.trimEnd().split('\n').slice(-12);
+    return `adapter debug log (last ${lines.length} line(s)):\n  ${lines.join('\n  ')}`;
   }
 
   /** Waits for the child to exit and returns its status. */
@@ -390,6 +426,7 @@ export class AdapterProbe {
     this.#terminal.dispose();
     if (this.#server !== null) await new Promise<void>((resolve) => this.#server?.close(() => resolve()));
     if (this.#directory !== null) await rm(this.#directory, { recursive: true, force: true }).catch(() => {});
+    if (this.#debugFile !== null) await rm(this.#debugFile, { force: true }).catch(() => {});
   }
 
   // -------------------------------------------------------------------------
