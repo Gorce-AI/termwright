@@ -18,3 +18,25 @@ Nothing here is called unless the application was launched with
 `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN`. Without them the hook returns on
 its first branch and the application renders exactly what it would have
 rendered alone.
+
+## What it can and cannot report
+
+Ratatui is immediate mode, and the honest consequences are these. Each line is
+a finding from `docs/architecture/audit/ratatui.md`, not a to-do.
+
+| Fact | Reported? |
+|---|---|
+| widget type | yes, from `core::any::type_name` — a hint, never a role |
+| the rectangle a widget was drawn into | yes, as `bounds` |
+| whether those cells are still the widget's | **no** — every node says `occlusion: "unknown"` |
+| identity across frames | **no** — ids are frame-local and carry the frame number |
+| parent/child structure | **no** — the tree is flat; nesting happens inside `render`, where we cannot see |
+| number of items in a list | **no** — `List::items` is `pub(crate)` with no length accessor, so `setSize` is unobtainable |
+| scroll extent | **no** — `ScrollbarState`'s `content_length()` is a setter returning `Self`; only `get_position()` reads |
+| author annotations | **no** — Ratatui has nowhere to put one |
+
+Because paint order is unavailable, the driver refuses pointer actions against
+these nodes. That is the correct outcome for this framework: `bounds` is where
+a widget *asked* to draw, a later write silently wins, and clicking into cells
+that may belong to a popup would attribute the result to the wrong widget.
+Drive Ratatui applications with keyboard input.

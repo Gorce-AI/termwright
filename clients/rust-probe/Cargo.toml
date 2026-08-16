@@ -10,3 +10,10 @@ publish = false
 
 [dependencies]
 termwright-protocol = { path = "../rust", version = "0.1.0" }
+
+# Test-only. A dev-dependency is not built when the patched framework depends
+# on this crate, so nothing here follows Ratatui into an instrumented user's
+# build — which is the reason the crate itself has no runtime dependencies
+# beyond the protocol client.
+[dev-dependencies]
+serde_json = "1"

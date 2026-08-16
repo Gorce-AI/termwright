@@ -25,6 +25,7 @@
 //! of the `no_std` crate that calls it.
 
 pub mod patchset;
+pub mod tree;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -197,5 +198,65 @@ mod tests {
         // The ordinal is the only identity available, and it is frame-local.
         assert_eq!(call.ordinal, 0);
         assert!(call.type_name.contains("Paragraph"));
+    }
+}
+
+/// What this probe tells the driver it can observe.
+///
+/// The interesting part is what is absent. Ratatui offers no stable identity,
+/// no computed visible rectangle, no paint order and no author annotations, so
+/// none of those capabilities is claimed. A driver that negotiates against
+/// this gets an accurate picture of a framework that can be read but not
+/// pointed at, rather than a floor it has to guess at.
+///
+/// `operations` *is* claimed: an immediate-mode frame is a call stream, and
+/// that stream is the only structure there is.
+#[must_use]
+pub fn probe_info(framework_version: Option<&str>) -> String {
+    let version = framework_version
+        .map(|value| format!(",\"frameworkVersion\":\"{value}\""))
+        .unwrap_or_default();
+    format!(
+        "{{\"framework\":\"ratatui\",\"probeVersion\":\"{}\",\
+         \"identityKind\":\"frame-local\",\"capabilities\":[\"operations\"]{version}}}",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+#[cfg(test)]
+mod handshake_tests {
+    use super::*;
+
+    /// The declaration must not promise anything the framework cannot do.
+    ///
+    /// Each absent capability is a fact from the Phase 0 audit: identity dies
+    /// with the frame, no visible rectangle is computed anywhere, paint order
+    /// is not exposed, and there is nowhere for an author to annotate.
+    #[test]
+    fn it_claims_only_what_ratatui_gives() {
+        let declared = probe_info(Some("0.30.2"));
+        assert!(
+            declared.contains("\"identityKind\":\"frame-local\""),
+            "{declared}"
+        );
+        for absent in [
+            "stable-identity",
+            "visible-rect",
+            "paint-order",
+            "annotations",
+            "frame-begin",
+        ] {
+            assert!(
+                !declared.contains(absent),
+                "claimed {absent}, which Ratatui does not provide: {declared}"
+            );
+        }
+        assert!(declared.contains("\"operations\""), "{declared}");
+        assert!(declared.contains("0.30.2"), "{declared}");
+    }
+
+    #[test]
+    fn the_framework_version_is_optional() {
+        assert!(!probe_info(None).contains("frameworkVersion"));
     }
 }
