@@ -148,6 +148,25 @@ Categories are `api` (calls), `wait` (what was awaited, how long, how it ended),
 `paste`/`write` payloads are logged by size only. Switched off, nothing is
 wrapped and no listener is registered.
 
+## Knowing when the verdict is final
+
+`capabilities()` answers immediately with what is known so far. Three things can
+still be pending right after launch: the negotiation window, the grace a slow
+adapter gets to attach after it, and the first tree of an adapter that did
+attach. When a caller needs to branch on `semanticTree`, it should wait for all
+three instead of polling:
+
+```ts
+const capabilities = await terminal.settled();
+if (capabilities.semanticTree) {
+  // the tree is published, not merely promised
+  await terminal.getByRole('button', { name: 'Approve' }).click();
+}
+```
+
+An adapter that attaches and then publishes nothing fails the wait with a
+timeout rather than reporting a semantic session whose tree never arrived.
+
 ## Following the program's own log
 
 A TUI's real diagnostics go to a file, not to the screen — the screen is busy
