@@ -59,6 +59,30 @@ interface Candidate {
   readonly note: string;
 }
 
+/**
+ * A private mode set (`CSI ? <code> h`), optionally followed by a sequence that
+ * undoes it. Modes are the other half of the ConPTY question: a marker only has
+ * to reach the emulator, but a mode has to reach it *and* be reflected in
+ * `Terminal.modes`, which is what the driver reports as capabilities.
+ */
+function decset(code: number, note: string, undo = ''): Candidate {
+  return {
+    name: `decset-${code}`,
+    sequence: `${ESC}[?${code}h${undo}`,
+    signature: new RegExp(`\\x1b\\[\\?[0-9;]*${code}[0-9;]*h`),
+    leak: `[?${code}h`,
+    note,
+    listen: (terminal, seen) => {
+      terminal.parser.registerCsiHandler({ prefix: '?', final: 'h' }, (params) => {
+        if (params.some((p) => (Array.isArray(p) ? p[0] : p) === code)) seen();
+        // Never exclusive: xterm must still apply the mode, since whether the
+        // mode lands in Terminal.modes is half of what is being measured.
+        return false;
+      });
+    },
+  };
+}
+
 const CANDIDATES: readonly Candidate[] = [
   {
     name: 'sgr',
@@ -158,7 +182,20 @@ const CANDIDATES: readonly Candidate[] = [
     leak: 'probe-apc',
     note: 'xterm exposes no APC handler, so only transport and leakage are measurable',
   },
+  decset(1000, 'mouse tracking: clicks'),
+  decset(1002, 'mouse tracking: drag — what the mouse fixtures enable'),
+  decset(1006, 'SGR mouse encoding; without it coordinates are unusable past column 95'),
+  decset(2004, 'bracketed paste: a mode the driver reports and paste() depends on'),
+  // Switched back immediately: on the alternate screen the sentinels and
+  // PROBE-DONE would be written to a buffer this test never reads.
+  decset(1049, 'alternate screen — believed to work, since semantic fixtures render', `${ESC}[?1049l`),
 ];
+
+/** Modes the driver reports, read straight off the emulator after the probe. */
+function modesLine(terminal: Terminal): string {
+  const modes = terminal.modes;
+  return `  modes after probe: mouseTracking=${modes.mouseTrackingMode} bracketedPaste=${modes.bracketedPasteMode}`;
+}
 
 interface Verdict {
   readonly name: string;
@@ -258,7 +295,7 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
       leaked: screen.includes(candidate.leak),
     }));
 
-    const table = renderTable(verdicts);
+    const table = `${renderTable(verdicts)}\n${modesLine(terminal)}`;
     // Printed before any assertion: a failing assertion must not take the
     // measurement down with it — the table is what this test exists to produce.
     console.log(table);
@@ -287,7 +324,59 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
 
     terminal.dispose();
   });
+
+  it('reports whether mouse input reaches a child whose DECSET we never saw', async () => {
+    // The two directions are independent and this test exists because they can
+    // disagree. If a terminal consumes the child's mouse DECSET on its way out,
+    // the driver goes blind and refuses to click — but the child still has
+    // mouse mode on and still understands a report. Whether the driver should
+    // refuse or degrade depends on this measurement, not on the table above.
+    const { terminal } = createTerminal({ columns: 60, rows: 10, scrollback: 0 });
+    let pty: PtyProcess | undefined;
+    let sawInput = false;
+    try {
+      pty = createNodePtyBackend().spawn({
+        command: [process.execPath, join(FIXTURES, 'mouse-app.mjs')],
+        env: environment(),
+        columns: 60,
+        rows: 10,
+      });
+      let queue: Promise<void> = Promise.resolve();
+      pty.onData((chunk) => {
+        queue = queue.then(
+          () => new Promise<void>((resolve) => terminal.write(chunk, () => resolve())),
+        );
+      });
+
+      await settle(() => gridText(terminal).includes('MOUSE ON'), () => queue);
+      const modesSeen = `mouseTracking=${terminal.modes.mouseTrackingMode}`;
+
+      // Exactly the bytes a click sends, written past every capability gate.
+      pty.write(Buffer.from('\x1b[<0;1;1M\x1b[<0;1;1m', 'binary'));
+      await settle(() => /MOUSE press|RAW:/.test(gridText(terminal)), () => queue);
+
+      const screen = gridText(terminal);
+      sawInput = /MOUSE press b=0/.test(screen);
+      console.log(
+        `[mouse probe] platform=${process.platform} ${modesSeen} childDecodedReport=${sawInput}\n${screen}`,
+      );
+      expect(screen, screen).toContain('MOUSE ON');
+    } finally {
+      pty?.dispose();
+      terminal.dispose();
+    }
+  });
 });
+
+/** Polls a condition, draining the emulator's write chain between attempts. */
+async function settle(done: () => boolean, drain: () => Promise<void>, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    await drain();
+    if (done() || Date.now() >= deadline) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
 
 function gridText(terminal: Terminal): string {
   const buffer = terminal.buffer.active;
