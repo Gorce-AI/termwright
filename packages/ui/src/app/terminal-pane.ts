@@ -6,9 +6,16 @@
  * cell. It is derived from the rendered screen element rather than from xterm's
  * internals: `screen.clientWidth / cols` is exact for a monospaced grid and does
  * not depend on which renderer or which version is in use.
+ *
+ * **Character widths must match the driver's.** The driver measures with
+ * Unicode 11 tables; xterm.js defaults to Unicode 6. Left alone, the same frame
+ * can land a column apart between this pane and what the test saw — and nothing
+ * errors, so the hunt starts in the application, where the bug is not. The
+ * addon below closes that gap.
  */
 
 import { FitAddon } from '@xterm/addon-fit';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { Terminal } from '@xterm/xterm';
 import type { Rect } from '@termwright/protocol';
 
@@ -50,6 +57,10 @@ export class TerminalPane {
       theme: { background: '#0e1117', foreground: '#e6e9ef' },
     });
     this.#terminal.loadAddon(this.#fit);
+    // Registering the provider is not enough: xterm keeps using the active
+    // version until it is switched, which was the second half of this trap.
+    this.#terminal.loadAddon(new Unicode11Addon());
+    this.#terminal.unicode.activeVersion = '11';
     this.#terminal.open(host);
     this.#fit.fit();
 
@@ -123,6 +134,11 @@ export class TerminalPane {
   setHighlights(highlights: readonly Highlight[]): void {
     this.#highlights = highlights;
     this.#drawOverlay();
+  }
+
+  /** Unicode width tables the pane is measuring with. */
+  get unicodeVersion(): string {
+    return this.#terminal.unicode.activeVersion;
   }
 
   /** Focuses the emulator, so typing goes to the child. */

@@ -21,6 +21,10 @@ const prefix = (state: { castPrefixB64: string }): string =>
   Buffer.from(state.castPrefixB64, 'base64').toString('utf8');
 
 describe('readTraceOverview', () => {
+  it('reports no terminal profile for a recording made before profiles existed', () => {
+    expect(overview.terminalProfile).toBeNull();
+  });
+
   it('describes the recording the timeline pane draws', () => {
     expect(overview.command).toEqual(['node', 'agent.js']);
     expect(overview.columns).toBe(80);
@@ -164,5 +168,36 @@ describe('a crashed recording', () => {
   it('leaves a clean recording without a crash or a crash marker', () => {
     expect(overview.crash).toBeNull();
     expect(overview.markers.some((marker) => marker.kind === 'crash')).toBe(false);
+  });
+});
+
+describe('the terminal profile', () => {
+  /**
+   * The real reader keeps private state, so overriding one method means
+   * forwarding the rest to the original instance rather than copying it.
+   */
+  const withCastHeader = (header: () => Promise<unknown>): TraceReader =>
+    new Proxy(reader, {
+      get(target, property) {
+        if (property === 'castHeader') return header;
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === 'function' ? (value as (...args: never[]) => unknown).bind(target) : value;
+      },
+    });
+
+  it('comes from the cast header when the writer recorded one', async () => {
+    const overviewWithProfile = await readTraceOverview(
+      withCastHeader(async () => ({ version: 3, term: { cols: 80, rows: 24, profile: 'iterm2-ambiguous-wide' } })),
+    );
+    expect(overviewWithProfile.terminalProfile).toBe('iterm2-ambiguous-wide');
+  });
+
+  it('is null rather than guessed when the header cannot be read', async () => {
+    const overviewWithoutHeader = await readTraceOverview(
+      withCastHeader(async () => {
+        throw new Error('header is not JSON');
+      }),
+    );
+    expect(overviewWithoutHeader.terminalProfile).toBeNull();
   });
 });

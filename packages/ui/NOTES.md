@@ -43,6 +43,26 @@ model to learn, no reconciler between us and a pane that redraws on every
 State lives in one object in `app/main.ts` and every message schedules one
 `requestAnimationFrame` render, so the panes cannot disagree about the run.
 
+## The pane must measure characters the way the driver does
+
+xterm.js defaults to Unicode 6 width tables; the driver measures with Unicode 11.
+Left alone, the same frame can land a column apart between this pane and what
+the test saw — and nothing throws, so the hunt starts in the application, where
+the bug is not. The pane therefore loads `@xterm/addon-unicode11` **and switches
+`unicode.activeVersion` to it**: registering a provider without activating it
+was the second half of the same trap.
+
+That covers the `default` and `kitty` profiles. `iterm2-ambiguous-wide` counts
+East Asian Ambiguous characters as two columns, which the stock browser addon
+cannot do — `@termwright/vt` has the provider that can, but its entry point
+imports `@xterm/headless` and would drag Node into the bundle. Until a
+headless-free export exists, a recording made with that profile shows a notice
+saying this view measures with Unicode 11 widths, because measuring against a
+silent mismatch is exactly the failure this section is about.
+
+The profile itself comes from the cast header (`term.profile`), read once when
+the archive is opened. `null` means the recording predates profiles.
+
 ## Cell metrics without reaching into xterm
 
 Overlay boxes need the pixel size of a cell. xterm exposes it only through

@@ -44,6 +44,13 @@ export interface TraceOverview {
   /** Length of the recording on the cast timeline. */
   readonly durationMs: number;
   readonly semanticTree: boolean;
+  /**
+   * Terminal profile the session was recorded with, from the cast header, when
+   * the writer recorded one. The panel needs it to measure characters the way
+   * the driver did; `null` means the recording predates profiles and the
+   * conservative default applies.
+   */
+  readonly terminalProfile: string | null;
   readonly exit: { readonly code: number | null; readonly signal: string | null } | null;
   readonly steps: readonly StepSummary[];
   /**
@@ -83,6 +90,17 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
     last = Math.max(last, meta.durationMs);
   }
 
+  // The profile lives on the cast header, which is also where a player looks
+  // for it; reading it here keeps the browser from parsing the cast itself.
+  let terminalProfile: string | null = null;
+  try {
+    const header = (await reader.castHeader()) as { term?: { profile?: unknown } };
+    const profile = header.term?.profile;
+    if (typeof profile === 'string' && profile !== '') terminalProfile = profile;
+  } catch {
+    // A header we cannot read costs the profile, not the archive.
+  }
+
   const crash = parseCrash(meta.crash);
   if (crash !== null) {
     markers.push({ t: crash.castOffset, label: `crash — ${crash.cause}`, kind: 'crash' });
@@ -99,6 +117,7 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
     startedAt: Number.isFinite(Date.parse(meta.startedAt)) ? Date.parse(meta.startedAt) : 0,
     durationMs: Math.max(last, steps.at(-1)?.castEndOffset ?? 0),
     semanticTree: meta.semanticTree,
+    terminalProfile,
     exit: meta.exit ?? null,
     steps,
     crash,

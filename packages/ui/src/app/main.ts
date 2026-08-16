@@ -692,6 +692,20 @@ async function seek(timeMs: number): Promise<void> {
   schedule();
 }
 
+/**
+ * Says so when a recording was made with a profile this pane cannot reproduce.
+ *
+ * The pane measures with Unicode 11, which covers the `default` and `kitty`
+ * profiles. `iterm2-ambiguous-wide` counts East Asian Ambiguous characters as
+ * two columns, and the stock browser addon has no switch for that — so a box
+ * drawn with ambiguous glyphs would line up here and not in the session. Saying
+ * it out loud beats letting someone measure against a lie.
+ */
+function warnAboutProfile(profile: string | null): void {
+  if (profile === null || profile === 'default' || profile === 'kitty') return;
+  note(`recorded with the "${profile}" terminal profile; this view measures with Unicode 11 widths`);
+}
+
 function note(message: string): void {
   state.status = message;
   schedule();
@@ -903,6 +917,7 @@ void client
     }
     if (server.trace !== null) {
       state.activeSessionId = server.trace.sessionId;
+      warnAboutProfile(server.trace.terminalProfile);
       const [commands, frames] = await Promise.all([
         client.traceCommands().catch(() => null),
         client.traceFrames().catch(() => null),
