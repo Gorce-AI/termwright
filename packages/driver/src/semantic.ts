@@ -75,7 +75,16 @@ export interface SemanticChannelHooks {
   /** One validated application log record arrived on the channel. */
   onLogRecord(record: LogRecord): void;
   /** Non-fatal channel diagnostics (negotiation, disconnects, advisory commits). */
-  onDiagnostic(code: DiagnosticCode, detail: string, revision?: number): void;
+  /**
+   * Non-fatal channel diagnostics. `wireCode` is set whenever the entry
+   * accompanies an error the driver put on the wire, whatever the diagnostic
+   * code — a reader should never have to infer which failure was sent.
+   */
+  onDiagnostic(
+    code: DiagnosticCode,
+    detail: string,
+    about?: { readonly revision?: number; readonly wireCode?: ErrorCode },
+  ): void;
   /**
    * The channel failed and was closed; the session stays on its last tree.
    * `@termwright/protocol` fails closed with its own `ProtocolViolation`; the
@@ -209,6 +218,11 @@ export class SemanticChannel {
     if (this.#attached !== null) {
       // One adapter per session; a second connection is refused, not raced.
       this.#sendError(socket, 'internal', 'a semantic adapter is already attached');
+      this.#options.hooks.onDiagnostic(
+        'adapter-capability',
+        'refused a second adapter connection: this session already has one attached',
+        { wireCode: 'internal' },
+      );
       socket.destroy();
       return;
     }
@@ -266,6 +280,7 @@ export class SemanticChannel {
       this.#options.hooks.onDiagnostic(
         'adapter-capability',
         `refusing a hello from ${hello.adapter.name}: the session settled as generic before it connected`,
+        { wireCode: 'internal' },
       );
       return false;
     }

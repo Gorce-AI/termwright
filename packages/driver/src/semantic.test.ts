@@ -18,6 +18,7 @@ interface Harness {
   records: LogRecord[];
   attachments: SemanticAttachment[];
   diagnostics: string[];
+  diagnosticWireCodes: string[];
   violations: ProtocolViolationError[];
   wireCodes: string[];
 }
@@ -37,6 +38,7 @@ async function createChannel(accepting = true): Promise<Harness> {
   const records: LogRecord[] = [];
   const attachments: SemanticAttachment[] = [];
   const diagnostics: string[] = [];
+  const diagnosticWireCodes: string[] = [];
   const violations: ProtocolViolationError[] = [];
   const wireCodes: string[] = [];
   const channel = await SemanticChannel.listen({
@@ -50,7 +52,10 @@ async function createChannel(accepting = true): Promise<Harness> {
       onLogRecord: (record) => records.push(record),
       onCommit: () => {},
       onAttach: (attachment) => attachments.push(attachment),
-      onDiagnostic: (code, detail) => diagnostics.push(`${code}: ${detail}`),
+      onDiagnostic: (code, detail, about) => {
+        diagnostics.push(`${code}: ${detail}`);
+        if (about?.wireCode !== undefined) diagnosticWireCodes.push(`${code}:${about.wireCode}`);
+      },
       onProtocolViolation: (error, wireCode) => {
         violations.push(error);
         wireCodes.push(wireCode);
@@ -58,7 +63,7 @@ async function createChannel(accepting = true): Promise<Harness> {
     },
   });
   open.push({ channel, sockets: [] });
-  return { channel, snapshots, records, attachments, diagnostics, violations, wireCodes };
+  return { channel, snapshots, records, attachments, diagnostics, diagnosticWireCodes, violations, wireCodes };
 }
 
 interface Client {
@@ -212,6 +217,7 @@ describe('SemanticChannel', () => {
     expect(error['code']).toBe('internal');
     await second.closed;
     expect(harness.attachments).toHaveLength(1);
+    expect(harness.diagnosticWireCodes).toContain('adapter-capability:internal');
   });
 
   it('fails closed on an oversized frame before decoding it', async () => {
@@ -297,6 +303,8 @@ describe('SemanticChannel', () => {
     await client.closed;
     expect(harness.attachments).toHaveLength(0);
     expect(harness.diagnostics.join('\n')).toContain('settled as generic');
+    // The log says which error went on the wire, whatever the diagnostic code.
+    expect(harness.diagnosticWireCodes).toContain('adapter-capability:internal');
   });
 
   it('grants a log budget only to an adapter that asked for logs', async () => {

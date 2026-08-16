@@ -306,8 +306,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
             `the adapter reported committing revision ${revision}; pairing still waits for its render marker`,
             { revision },
           ),
-        onDiagnostic: (code, detail, revision) =>
-          this.#diagnostic(code, detail, revision === undefined ? undefined : { revision }),
+        onDiagnostic: (code, detail, about) => this.#diagnostic(code, detail, about),
         onProtocolViolation: (error, wireCode) => {
           this.#violation = error;
           this.#diagnostic('protocol-violation', error.message, { wireCode });
