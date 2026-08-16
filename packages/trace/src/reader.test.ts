@@ -60,10 +60,24 @@ async function recordSample(dir: string): Promise<void> {
 }
 
 describe('openTrace', () => {
-  it('rejects a path that is not an archive', async () => {
+  it('separates "you named the wrong thing" from "this archive is broken"', async () => {
     const root = await workspace();
-    await expect(openTrace(join(root, 'missing'))).rejects.toThrow(TraceError);
+
+    // Nothing there at all.
+    await expect(openTrace(join(root, 'missing'))).rejects.toMatchObject({
+      code: 'not-found',
+    });
+
+    // A directory that exists but holds no archive — the caller pointed at
+    // the wrong place, so it is the same class of mistake.
+    await expect(openTrace(root)).rejects.toMatchObject({ code: 'not-found' });
+
+    // A file that exists and is not a readable zip: it might be a truncated
+    // artifact rather than a mistyped path, so it stays a protocol violation.
     await writeFile(join(root, 'notatrace'), 'nope');
+    await expect(openTrace(join(root, 'notatrace'))).rejects.toMatchObject({
+      code: 'protocol-violation',
+    });
     await expect(openTrace(join(root, 'notatrace'))).rejects.toThrow(/not a readable zip/);
   });
 
@@ -75,6 +89,9 @@ describe('openTrace', () => {
       v: number;
     };
     await writeFile(join(dir, TRACE_FILES.meta), JSON.stringify({ ...meta, v: 99 }));
+    // A real archive that lies about itself is a protocol violation, not a
+    // missing one.
+    await expect(openTrace(dir)).rejects.toMatchObject({ code: 'protocol-violation' });
     await expect(openTrace(dir)).rejects.toThrow(/unsupported trace version 99/);
   });
 
@@ -214,6 +231,9 @@ describe('zip container', () => {
 
   it('refuses to pack a directory that is not an archive', async () => {
     const root = await workspace();
+    await expect(packTrace(root, join(root, 'x.zip'))).rejects.toMatchObject({
+      code: 'not-found',
+    });
     await expect(packTrace(root, join(root, 'x.zip'))).rejects.toThrow(/not a .twtrace/);
   });
 });

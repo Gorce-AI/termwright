@@ -22,6 +22,27 @@ this is a decision for the contract owner, not a code change — if trace may ta
 a runtime dependency on the driver, `TraceError extends TermwrightError` is one
 line and no call site moves.
 
+### Naming the wrong thing is not the same as a broken archive
+
+`openTrace` used to report a missing file as `protocol-violation`, which is
+false — nothing violates a format that is not there — and it cost the CLI a
+correct exit code: a mistyped path came out as "termwright broke" instead of
+"you typed the wrong path". `TermwrightErrorCode` gained `not-found` for it.
+
+The line is *"is this a `.twtrace` at all?"* versus *"it is one, and it lies"*:
+
+- `not-found` — the path holds nothing, holds something that is not an archive,
+  or `packTrace` was pointed at a directory without `meta.json`.
+- `protocol-violation` — malformed `meta.json`, unsupported version, missing zip
+  member, corrupt `session.cast`, missing `castOffset`, unknown terminal
+  profile.
+
+The interesting case is a file that exists but does not unzip, which stays a
+protocol violation. It could be a mistyped path *or* a truncated CI artifact,
+and the costs are asymmetric: telling someone to check their path when they are
+holding a damaged artifact sends them to the wrong place entirely, while the
+reverse mistake only makes them look twice at a path they can already see.
+
 ## The archive format
 
 ### The two timelines

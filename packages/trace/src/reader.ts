@@ -86,8 +86,8 @@ export interface TraceReader {
 /**
  * Opens a `.twtrace` directory or zip.
  *
- * @throws TraceError `protocol-violation` for a missing, malformed, or
- *   future-versioned archive.
+ * @throws TraceError `not-found` when the path holds no archive, and
+ *   `protocol-violation` when it holds a malformed or future-versioned one.
  *
  * @example
  * ```ts

@@ -93,6 +93,9 @@ for (const step of await trace.steps()) console.log(step.title, step.status);
 await trace.close();
 ```
 
+Failures come back with a code that says whose mistake it was: `not-found` when
+the path holds no archive, `protocol-violation` when it holds a broken one.
+
 `stateAt` is the time-travel primitive: scrub to an offset, get everything
 needed to render that moment. `packTrace(dir, file)` and
 `unpackTrace(file, dir)` zip an archive for CI upload and read it back.

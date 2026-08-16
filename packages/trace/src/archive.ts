@@ -34,20 +34,24 @@ const MAX_ZIP_BYTES = 512 * 1024 * 1024;
 /**
  * Opens an archive from a directory path or a zip file path.
  *
- * @throws TraceError `protocol-violation` when the path is neither, or when
- *   `meta.json` is missing.
+ * @throws TraceError `not-found` when nothing is there, or when what is there
+ *   is not a `.twtrace` at all — both mean the caller named the wrong thing.
+ * @throws TraceError `protocol-violation` when it *is* an archive and is
+ *   broken: unreadable zip, missing member, malformed `meta.json`.
  */
 export async function openArchive(path: string): Promise<ArchiveFiles> {
   const info = await stat(path).catch(() => null);
   if (info === null) {
-    throw new TraceError('protocol-violation', `trace not found: ${path}`, {
+    throw new TraceError('not-found', `trace not found: ${path}`, {
       suggestion: 'Pass a .twtrace directory or a zipped .twtrace file.',
     });
   }
   const files = info.isDirectory() ? openDirectory(path) : await openZip(path);
   if (!(await files.has(TRACE_FILES.meta))) {
     await files.close();
-    throw new TraceError('protocol-violation', `${path} is not a .twtrace archive`, {
+    // Something is there, but it is not one of ours: the caller pointed at the
+    // wrong directory, not at a damaged recording.
+    throw new TraceError('not-found', `${path} is not a .twtrace archive`, {
       suggestion: `Expected ${TRACE_FILES.meta} inside the archive.`,
     });
   }
@@ -82,6 +86,11 @@ async function openZip(file: string): Promise<ArchiveFiles> {
   try {
     entries = unzipSync(new Uint8Array(raw));
   } catch (cause) {
+    // Stays `protocol-violation`, deliberately. The file exists, so
+    // `not-found` would be false — and the costs are asymmetric: telling
+    // someone to check their path when they are actually holding a truncated
+    // CI artifact sends them to the wrong place, while the reverse mistake
+    // only makes them look twice at a path they can see is wrong.
     throw new TraceError('protocol-violation', `${file} is not a readable zip archive`, {
       suggestion: cause instanceof Error ? cause.message : undefined,
     });
@@ -151,7 +160,7 @@ export async function packTrace(dir: string, outFile: string): Promise<number> {
     const bytes = await readFile(join(dir, member)).catch(() => null);
     if (bytes === null) {
       if (member === TRACE_FILES.meta) {
-        throw new TraceError('protocol-violation', `${dir} is not a .twtrace archive`);
+        throw new TraceError('not-found', `${dir} is not a .twtrace archive`);
       }
       continue;
     }

@@ -20,7 +20,7 @@ import type { TermwrightErrorCode, ErrorDiagnostics } from '@termwright/driver';
  * try {
  *   await openTrace('/tmp/broken.twtrace');
  * } catch (err) {
- *   if (err instanceof TraceError && err.code === 'protocol-violation') {
+ *   if (err instanceof TraceError && err.code === 'not-found') {
  *     console.error(err.diagnostics.suggestion);
  *   }
  * }
