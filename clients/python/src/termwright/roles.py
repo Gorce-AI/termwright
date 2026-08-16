@@ -47,6 +47,7 @@ ADAPTER_CAPABILITIES = (
     "text-ranges",
     "render-revisions",
     "tree-diffs",
+    "logs",
 )
 
 ROLE_SET = frozenset(SEMANTIC_ROLES)

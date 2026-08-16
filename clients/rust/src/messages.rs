@@ -33,7 +33,7 @@ const ERROR_CODES: [&str; 5] = [
     "internal",
 ];
 
-const LIMIT_FIELDS: [&str; 9] = [
+const LIMIT_FIELDS: [&str; 11] = [
     "maxFrameBytes",
     "maxSnapshotBytes",
     "maxNodes",
@@ -43,6 +43,8 @@ const LIMIT_FIELDS: [&str; 9] = [
     "maxQueuedFrames",
     "maxPendingWaiters",
     "maxSessions",
+    "maxLogRecordBytes",
+    "maxLogQueue",
 ];
 
 /// Identifies the adapter implementation to the driver.
@@ -93,6 +95,20 @@ pub struct MarkerConfig {
     pub enabled: bool,
 }
 
+/// The log-channel allowance, sent only when the adapter announced the `logs`
+/// capability. Absent means logs are disabled: an adapter that receives no
+/// budget must not emit log messages at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogBudget {
+    /// Whether the driver wants log records at all.
+    pub enabled: bool,
+    /// Sustained ceiling on records per second.
+    pub max_records_per_second: i64,
+    /// Records allowed in a burst on top of the sustained rate.
+    pub burst: i64,
+}
+
 /// The driver's reply: session id, negotiated limits, what to push.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -110,6 +126,9 @@ pub struct HelloAck {
     pub subscribe: String,
     /// Whether render markers are wanted.
     pub marker: MarkerConfig,
+    /// Log-channel budget; `None` means logs are disabled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logs: Option<LogBudget>,
 }
 
 /// Announces that a render was committed to the terminal.
@@ -263,6 +282,16 @@ fn as_message<'a>(value: &'a Value) -> Result<(&'a Map<String, Value>, &'a str),
     Ok((object, kind))
 }
 
+/// Check that every required key is present, tolerating unknown ones.
+fn required_keys(object: &Map<String, Value>, required: &[&str]) -> Result<(), ParseError> {
+    for key in required {
+        if !object.contains_key(*key) {
+            return Err(ParseError::malformed(format!("missing field \"{key}\"")));
+        }
+    }
+    Ok(())
+}
+
 fn require_keys(
     object: &Map<String, Value>,
     required: &[&str],
@@ -326,6 +355,19 @@ fn check_embedded_snapshot(value: &Value, limits: &Limits) -> Result<(), ParseEr
             Err(ParseError::new(code, format!("snapshot {error}")))
         }
     }
+}
+
+/// Validate the optional log-channel budget carried by `hello-ack`.
+fn check_log_budget(value: &Value) -> Result<(), ParseError> {
+    let budget = value
+        .as_object()
+        .ok_or_else(|| ParseError::malformed("logs: expected an object"))?;
+    require_keys(budget, &["enabled", "maxRecordsPerSecond", "burst"], &[])?;
+    if !budget["enabled"].is_boolean() {
+        return Err(ParseError::malformed("logs.enabled: expected a boolean"));
+    }
+    whole_number(budget, "maxRecordsPerSecond", true)?;
+    whole_number(budget, "burst", false)
 }
 
 fn check_error_message(object: &Map<String, Value>) -> Result<(), ParseError> {
@@ -440,14 +482,16 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
                     "subscribe",
                     "marker",
                 ],
-                &[],
+                &["logs"],
             )?;
             identifier(object, "sessionId", false)?;
             let limits_object = object
                 .get("limits")
                 .and_then(Value::as_object)
                 .ok_or_else(|| ParseError::malformed("limits: expected an object"))?;
-            require_keys(limits_object, &LIMIT_FIELDS, &[])?;
+            // Required keys must all be present, but unknown ones are
+            // ignored: see the note on `Limits`.
+            required_keys(limits_object, &LIMIT_FIELDS)?;
             for field in LIMIT_FIELDS {
                 whole_number(limits_object, field, true)?;
             }
@@ -466,6 +510,9 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
             require_keys(marker, &["enabled"], &[])?;
             if !marker["enabled"].is_boolean() {
                 return Err(ParseError::malformed("marker.enabled: expected a boolean"));
+            }
+            if let Some(logs) = object.get("logs") {
+                check_log_budget(logs)?;
             }
             Ok(())
         }

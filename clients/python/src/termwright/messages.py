@@ -122,6 +122,14 @@ def _revision(value: Any, field: str) -> Optional[str]:
     return None
 
 
+def _required_keys(message: Mapping[str, Any], required: Sequence[str]) -> Optional[str]:
+    """Check that every required key is present, tolerating unknown ones."""
+    missing = [key for key in required if key not in message]
+    if missing:
+        return f"missing field(s): {', '.join(missing)}"
+    return None
+
+
 def _exact_keys(message: Mapping[str, Any], required: Sequence[str], optional: Sequence[str] = ()) -> Optional[str]:
     missing = [key for key in required if key not in message]
     if missing:
@@ -130,6 +138,26 @@ def _exact_keys(message: Mapping[str, Any], required: Sequence[str], optional: S
     unknown = [key for key in message if key not in allowed]
     if unknown:
         return f"unrecognized key(s): {', '.join(unknown)}"
+    return None
+
+
+def _check_log_budget(value: Any) -> Optional[str]:
+    """Validate the optional log-channel budget carried by ``hello-ack``.
+
+    The field is absent unless the adapter announced the ``logs`` capability,
+    and absent means logs are disabled.
+    """
+    if not isinstance(value, dict):
+        return "logs: expected an object"
+    issue = _exact_keys(value, ("enabled", "maxRecordsPerSecond", "burst"))
+    if issue:
+        return f"logs: {issue}"
+    if not isinstance(value["enabled"], bool):
+        return "logs.enabled: expected a boolean"
+    if _revision(value["maxRecordsPerSecond"], "logs.maxRecordsPerSecond"):
+        return "logs.maxRecordsPerSecond: expected a positive safe integer"
+    if _index(value["burst"], "logs.burst"):
+        return "logs.burst: expected a non-negative safe integer"
     return None
 
 
@@ -243,7 +271,11 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
         protocol = message.get("protocol")
         if isinstance(protocol, str) and protocol != PROTOCOL_ID:
             return ParseResult(ok=False, code="bad-version", detail=f"unsupported protocol {protocol}")
-        issue = _exact_keys(message, ("type", "protocol", "sessionId", "limits", "subscribe", "marker"))
+        issue = _exact_keys(
+            message,
+            ("type", "protocol", "sessionId", "limits", "subscribe", "marker"),
+            ("logs",),
+        )
         if issue:
             return _malformed(issue)
         if message["protocol"] != PROTOCOL_ID:
@@ -254,7 +286,11 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
         limits_value = message["limits"]
         if not isinstance(limits_value, dict):
             return _malformed("limits: expected an object")
-        issue = _exact_keys(limits_value, LIMIT_FIELDS)
+        # Required keys must all be present, but unknown ones are ignored:
+        # `limits` is the one object on the wire that grows between versions,
+        # and a client that rejected a ceiling it had never heard of would
+        # drop the channel every time the protocol gained one.
+        issue = _required_keys(limits_value, LIMIT_FIELDS)
         if issue:
             return _malformed(f"limits: {issue}")
         for field in LIMIT_FIELDS:
@@ -271,6 +307,10 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
             return _malformed(f"marker: {issue}")
         if not isinstance(marker["enabled"], bool):
             return _malformed("marker.enabled: expected a boolean")
+        if "logs" in message:
+            issue = _check_log_budget(message["logs"])
+            if issue:
+                return _malformed(issue)
         return ParseResult(ok=True, message=message)
 
     if kind == "get-tree":

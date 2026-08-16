@@ -15,6 +15,10 @@ type Limits struct {
 	MaxQueuedFrames    int `json:"maxQueuedFrames"`
 	MaxPendingWaiters  int `json:"maxPendingWaiters"`
 	MaxSessions        int `json:"maxSessions"`
+	// MaxLogRecordBytes bounds one serialised application log record.
+	MaxLogRecordBytes int `json:"maxLogRecordBytes"`
+	// MaxLogQueue is how many log records the driver buffers per session.
+	MaxLogQueue int `json:"maxLogQueue"`
 }
 
 // DefaultLimits is what an adapter assumes until hello-ack says otherwise.
@@ -28,6 +32,8 @@ var DefaultLimits = Limits{
 	MaxQueuedFrames:    32,
 	MaxPendingWaiters:  256,
 	MaxSessions:        16,
+	MaxLogRecordBytes:  32 * 1024,
+	MaxLogQueue:        1000,
 }
 
 // AbsoluteLimits is the widest configuration any side may accept.
@@ -41,6 +47,8 @@ var AbsoluteLimits = Limits{
 	MaxQueuedFrames:    256,
 	MaxPendingWaiters:  4096,
 	MaxSessions:        128,
+	MaxLogRecordBytes:  256 * 1024,
+	MaxLogQueue:        10000,
 }
 
 // DefaultNegotiationMillis is the window a driver waits for a hello before it

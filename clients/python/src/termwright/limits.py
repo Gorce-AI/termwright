@@ -15,6 +15,8 @@ LIMIT_FIELDS = (
     "maxQueuedFrames",
     "maxPendingWaiters",
     "maxSessions",
+    "maxLogRecordBytes",
+    "maxLogQueue",
 )
 
 
@@ -31,6 +33,8 @@ class ProtocolLimits:
     maxQueuedFrames: int
     maxPendingWaiters: int
     maxSessions: int
+    maxLogRecordBytes: int
+    maxLogQueue: int
 
     def to_wire(self) -> Dict[str, int]:
         """Serialise to the JSON object shape used by ``hello-ack``."""
@@ -38,7 +42,12 @@ class ProtocolLimits:
 
     @staticmethod
     def from_wire(value: Mapping[str, Any]) -> "ProtocolLimits":
-        """Build limits from a validated ``hello-ack`` payload."""
+        """Build limits from a validated ``hello-ack`` payload.
+
+        Only the fields this version knows are read. A newer driver may send
+        ceilings that did not exist when this client was published; ignoring
+        them is what lets an old client keep talking to a new driver.
+        """
         return ProtocolLimits(**{name: int(value[name]) for name in LIMIT_FIELDS})
 
 
@@ -52,6 +61,8 @@ DEFAULT_LIMITS = ProtocolLimits(
     maxQueuedFrames=32,
     maxPendingWaiters=256,
     maxSessions=16,
+    maxLogRecordBytes=32 * 1024,
+    maxLogQueue=1_000,
 )
 
 ABSOLUTE_LIMITS = ProtocolLimits(
@@ -64,6 +75,8 @@ ABSOLUTE_LIMITS = ProtocolLimits(
     maxQueuedFrames=256,
     maxPendingWaiters=4_096,
     maxSessions=128,
+    maxLogRecordBytes=256 * 1024,
+    maxLogQueue=10_000,
 )
 
 DEFAULT_NEGOTIATION_MS = 250

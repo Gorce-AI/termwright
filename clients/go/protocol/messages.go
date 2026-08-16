@@ -38,11 +38,23 @@ type HelloAck struct {
 	Limits    Limits       `json:"limits"`
 	Subscribe string       `json:"subscribe"`
 	Marker    MarkerConfig `json:"marker"`
+	Logs      *LogBudget   `json:"logs,omitempty"`
 }
 
 // MarkerConfig says whether the adapter should emit render markers.
 type MarkerConfig struct {
 	Enabled bool `json:"enabled"`
+}
+
+// LogBudget is the log-channel allowance, sent only when the adapter
+// announced the `logs` capability. Absent means logs are disabled: an adapter
+// that receives no budget must not emit log messages at all.
+type LogBudget struct {
+	Enabled bool `json:"enabled"`
+	// MaxRecordsPerSecond is the sustained ceiling on records per second.
+	MaxRecordsPerSecond int `json:"maxRecordsPerSecond"`
+	// Burst is how many records are allowed on top of the sustained rate.
+	Burst int `json:"burst"`
 }
 
 // RevisionCommit announces that a render was committed to the terminal.
@@ -131,6 +143,16 @@ func project(value any, limits Limits) (any, *ParseError) {
 	return projected, nil
 }
 
+// requiredKeys checks that every required key is present, tolerating unknown ones.
+func requiredKeys(object map[string]any, required []string) *ParseError {
+	for _, key := range required {
+		if _, ok := object[key]; !ok {
+			return malformed("missing field %q", key)
+		}
+	}
+	return nil
+}
+
 func requireKeys(object map[string]any, required []string, optional []string) *ParseError {
 	for _, key := range required {
 		if _, ok := object[key]; !ok {
@@ -192,6 +214,24 @@ func checkEmbeddedSnapshot(value any, limits Limits) *ParseError {
 		wire = "limit-exceeded"
 	}
 	return &ParseError{Code: wire, Detail: "snapshot " + err.Error()}
+}
+
+// checkLogBudget validates the optional log-channel budget in hello-ack.
+func checkLogBudget(value any) *ParseError {
+	budget, ok := value.(map[string]any)
+	if !ok {
+		return malformed("logs: expected an object")
+	}
+	if problem := requireKeys(budget, []string{"enabled", "maxRecordsPerSecond", "burst"}, nil); problem != nil {
+		return problem
+	}
+	if _, ok := budget["enabled"].(bool); !ok {
+		return malformed("logs.enabled: expected a boolean")
+	}
+	if problem := wholeNumber(budget, "maxRecordsPerSecond", true); problem != nil {
+		return problem
+	}
+	return wholeNumber(budget, "burst", false)
 }
 
 func checkErrorMessage(object map[string]any) *ParseError {
@@ -337,7 +377,9 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 		if problem := checkProtocolField(object); problem != nil {
 			return nil, problem
 		}
-		if problem := requireKeys(object, []string{"type", "protocol", "sessionId", "limits", "subscribe", "marker"}, nil); problem != nil {
+		if problem := requireKeys(object,
+			[]string{"type", "protocol", "sessionId", "limits", "subscribe", "marker"},
+			[]string{"logs"}); problem != nil {
 			return nil, problem
 		}
 		if problem := identifier(object, "sessionId", false); problem != nil {
@@ -347,7 +389,11 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 		if !ok {
 			return nil, malformed("limits: expected an object")
 		}
-		if problem := requireKeys(limitsObject, limitFields, nil); problem != nil {
+		// Required keys must all be present, but unknown ones are ignored:
+		// `limits` is the one object on the wire that grows between versions,
+		// and a client that rejected a ceiling it had never heard of would
+		// drop the channel every time the protocol gained one.
+		if problem := requiredKeys(limitsObject, limitFields); problem != nil {
 			return nil, problem
 		}
 		for _, key := range limitFields {
@@ -368,6 +414,11 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 		}
 		if _, ok := marker["enabled"].(bool); !ok {
 			return nil, malformed("marker.enabled: expected a boolean")
+		}
+		if logs, present := object["logs"]; present {
+			if problem := checkLogBudget(logs); problem != nil {
+				return nil, problem
+			}
 		}
 		return object, nil
 
@@ -397,4 +448,5 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 var limitFields = []string{
 	"maxFrameBytes", "maxSnapshotBytes", "maxNodes", "maxDepth", "maxStringBytes",
 	"maxRelationTargets", "maxQueuedFrames", "maxPendingWaiters", "maxSessions",
+	"maxLogRecordBytes", "maxLogQueue",
 }

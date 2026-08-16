@@ -57,6 +57,7 @@ type Client struct {
 	sessionID string
 	revision  int64
 	marker    bool
+	logBudget *LogBudget
 	subscribe string
 	closed    bool
 	history   map[int64]json.RawMessage
@@ -194,6 +195,14 @@ func (c *Client) Revision() int64 {
 	return c.revision
 }
 
+// LogBudget is the log-channel allowance the driver granted, or nil when logs
+// are disabled — which is the case unless the adapter announced `logs`.
+func (c *Client) LogBudget() *LogBudget {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.logBudget
+}
+
 // Limits are the ceilings in force, as negotiated by hello-ack.
 func (c *Client) Limits() Limits {
 	c.mu.Lock()
@@ -325,6 +334,7 @@ func (c *Client) handle(frame Frame) bool {
 		c.sessionID = ack.SessionID
 		c.limits = ack.Limits
 		c.marker = ack.Marker.Enabled
+		c.logBudget = ack.Logs
 		c.subscribe = ack.Subscribe
 		c.mu.Unlock()
 		c.once.Do(func() {

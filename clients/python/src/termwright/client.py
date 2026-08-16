@@ -82,6 +82,8 @@ class SemanticClient:
         self.session_id: Optional[str] = None
         self.revision = 0
         self.marker_enabled = False
+        #: Log-channel budget from ``hello-ack``; ``None`` means logs are off.
+        self.log_budget: Optional[Dict[str, Any]] = None
         self.subscribe = "snapshots"
         self.closed = False
 
@@ -252,6 +254,7 @@ class SemanticClient:
         if message["type"] == "hello-ack":
             self.session_id = message["sessionId"]
             self.marker_enabled = bool(message["marker"]["enabled"])
+            self.log_budget = message.get("logs")
             self.subscribe = message["subscribe"]
             self._limits = ProtocolLimits.from_wire(message["limits"])
             if self._ready is not None and not self._ready.done():

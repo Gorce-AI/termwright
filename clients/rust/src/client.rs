@@ -84,6 +84,7 @@ pub struct Client {
     session_id: Option<String>,
     revision: i64,
     marker_enabled: bool,
+    log_budget: Option<crate::messages::LogBudget>,
     subscribe: String,
     history: VecDeque<(i64, Box<RawValue>)>,
 }
@@ -102,6 +103,7 @@ impl Client {
             session_id: None,
             revision: 0,
             marker_enabled: false,
+            log_budget: None,
             subscribe: "snapshots".to_owned(),
             history: VecDeque::new(),
         }
@@ -191,6 +193,12 @@ impl Client {
     /// The last revision this client published.
     pub fn revision(&self) -> i64 {
         self.revision
+    }
+
+    /// The log-channel allowance the driver granted, or `None` when logs are
+    /// disabled — which is the case unless the adapter announced `logs`.
+    pub fn log_budget(&self) -> Option<crate::messages::LogBudget> {
+        self.log_budget
     }
 
     /// The ceilings in force, as negotiated by `hello-ack`.
@@ -308,6 +316,7 @@ impl Client {
                 self.session_id = Some(ack.session_id);
                 self.limits = ack.limits;
                 self.marker_enabled = ack.marker.enabled;
+                self.log_budget = ack.logs;
                 self.subscribe = ack.subscribe;
             }
             Some("get-tree") => {

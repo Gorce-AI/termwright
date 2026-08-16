@@ -129,10 +129,12 @@ pub enum Capability {
     RenderRevisions,
     /// Can publish subtree diffs instead of full trees.
     TreeDiffs,
+    /// Can forward application log records over the channel.
+    Logs,
 }
 
 /// Every v1 capability.
-pub const ADAPTER_CAPABILITIES: [&str; 8] = [
+pub const ADAPTER_CAPABILITIES: [&str; 9] = [
     "tree",
     "bounds",
     "absolute-bounds",
@@ -141,6 +143,7 @@ pub const ADAPTER_CAPABILITIES: [&str; 8] = [
     "text-ranges",
     "render-revisions",
     "tree-diffs",
+    "logs",
 ];
 
 /// Whether `role` is one of the v1 roles.

@@ -376,3 +376,79 @@ fn message_vectors() {
         }
     }
 }
+
+// -- forward compatibility -------------------------------------------------
+
+fn hello_ack_with(limits: Value, extra: Option<(&str, Value)>) -> Value {
+    let mut ack = serde_json::json!({
+        "type": "hello-ack",
+        "protocol": PROTOCOL_ID,
+        "sessionId": "s-1",
+        "limits": limits,
+        "subscribe": "snapshots",
+        "marker": { "enabled": true },
+    });
+    if let Some((key, value)) = extra {
+        ack[key] = value;
+    }
+    ack
+}
+
+/// `limits` is the one object on the wire that grows between versions. A
+/// client that rejected a ceiling it had never heard of would close the
+/// channel every time the protocol gained one.
+#[test]
+fn limits_tolerate_unknown_ceilings() {
+    let mut limits = serde_json::to_value(DEFAULT_LIMITS).expect("limits serialise");
+    limits["maxQuantumFlux"] = serde_json::json!(7);
+    limits["maxTeaPots"] = serde_json::json!(1);
+
+    let ack = hello_ack_with(limits.clone(), None);
+    parse_driver_message(&ack, &DEFAULT_LIMITS)
+        .expect("a forward-compatible hello-ack was rejected");
+
+    // The unknown ceilings are ignored, not carried into the typed limits.
+    let parsed: Limits = serde_json::from_value(limits).expect("unknown ceilings broke the decode");
+    assert_eq!(parsed, DEFAULT_LIMITS);
+}
+
+#[test]
+fn limits_still_require_every_known_ceiling() {
+    let mut limits = serde_json::to_value(DEFAULT_LIMITS).expect("limits serialise");
+    limits.as_object_mut().unwrap().remove("maxNodes");
+    let error = parse_driver_message(&hello_ack_with(limits, None), &DEFAULT_LIMITS)
+        .expect_err("a hello-ack missing a known ceiling was accepted");
+    assert_eq!(error.code, "malformed");
+}
+
+#[test]
+fn unknown_keys_are_still_rejected_outside_limits() {
+    let limits = serde_json::to_value(DEFAULT_LIMITS).expect("limits serialise");
+    let ack = hello_ack_with(limits, Some(("surprise", serde_json::json!(1))));
+    assert!(
+        parse_driver_message(&ack, &DEFAULT_LIMITS).is_err(),
+        "an unknown envelope field was accepted"
+    );
+}
+
+#[test]
+fn the_optional_log_budget_is_understood() {
+    let limits = serde_json::to_value(DEFAULT_LIMITS).expect("limits serialise");
+    let budget = serde_json::json!({ "enabled": true, "maxRecordsPerSecond": 200, "burst": 50 });
+    let ack = hello_ack_with(limits.clone(), Some(("logs", budget)));
+    parse_driver_message(&ack, &DEFAULT_LIMITS).expect("a hello-ack carrying a log budget");
+
+    let decoded: termwright_protocol::messages::HelloAck =
+        serde_json::from_value(ack).expect("typed decode");
+    let logs = decoded.logs.expect("the budget reached the typed message");
+    assert_eq!(logs.max_records_per_second, 200);
+    assert_eq!(logs.burst, 50);
+
+    // A malformed budget is still a malformed message.
+    let broken = serde_json::json!({ "enabled": true, "maxRecordsPerSecond": 0, "burst": 50 });
+    assert!(parse_driver_message(
+        &hello_ack_with(limits, Some(("logs", broken))),
+        &DEFAULT_LIMITS
+    )
+    .is_err());
+}

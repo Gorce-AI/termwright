@@ -3,8 +3,12 @@
 use serde::{Deserialize, Serialize};
 
 /// Per-session capacity ceilings, named as they appear on the wire.
+/// `limits` is the one object on the wire that grows between protocol
+/// versions, so unknown fields are ignored rather than rejected: a client that
+/// refused a ceiling it had never heard of would drop the channel every time
+/// the protocol gained one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct Limits {
     /// Per-frame byte ceiling, header excluded.
     pub max_frame_bytes: usize,
@@ -24,6 +28,10 @@ pub struct Limits {
     pub max_pending_waiters: usize,
     /// Concurrent sessions the driver will hold open.
     pub max_sessions: usize,
+    /// Byte ceiling for one serialised application log record.
+    pub max_log_record_bytes: usize,
+    /// Log records the driver buffers per session before evicting the oldest.
+    pub max_log_queue: usize,
 }
 
 /// What an adapter assumes until `hello-ack` says otherwise.
@@ -37,6 +45,8 @@ pub const DEFAULT_LIMITS: Limits = Limits {
     max_queued_frames: 32,
     max_pending_waiters: 256,
     max_sessions: 16,
+    max_log_record_bytes: 32 * 1024,
+    max_log_queue: 1_000,
 };
 
 /// The widest configuration either side may accept.
@@ -50,6 +60,8 @@ pub const ABSOLUTE_LIMITS: Limits = Limits {
     max_queued_frames: 256,
     max_pending_waiters: 4_096,
     max_sessions: 128,
+    max_log_record_bytes: 256 * 1024,
+    max_log_queue: 10_000,
 };
 
 /// Milliseconds a driver waits for a `hello` before settling the session as

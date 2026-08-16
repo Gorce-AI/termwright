@@ -457,12 +457,35 @@ const adapterReject = [
 
 const driverAccept = [
   { name: 'hello-ack', message: helloAckMessage },
+  {
+    // `limits` is a tolerant reader in every implementation: it is the one
+    // object on the wire that grows between versions, so a receiver that
+    // rejected a ceiling it had never heard of would drop the channel every
+    // time the protocol gained one.
+    name: 'hello-ack-unknown-limit-key',
+    message: {
+      ...helloAckMessage,
+      limits: { ...DEFAULT_LIMITS, maxQuantumFlux: 7, maxTeaPots: 1 },
+    },
+  },
   { name: 'get-tree-latest', message: { type: 'get-tree', requestId: 0 } },
   { name: 'get-tree-revision', message: { type: 'get-tree', requestId: 4, revision: 12 } },
   { name: 'error', message: { type: 'error', code: 'bad-token', message: 'nope' } },
 ];
 
 const driverReject = [
+  // Tolerance stops at the `limits` object: the envelope stays strict, so a
+  // new field there is still a protocol error rather than something to ignore.
+  { name: 'hello-ack-extra-field', message: { ...helloAckMessage, surprise: 1 } },
+  {
+    name: 'hello-ack-missing-limit-key',
+    message: {
+      ...helloAckMessage,
+      limits: Object.fromEntries(
+        Object.entries(DEFAULT_LIMITS).filter(([key]) => key !== 'maxNodes'),
+      ),
+    },
+  },
   { name: 'hello-ack-wrong-protocol', message: { ...helloAckMessage, protocol: 'termwright/0' } },
   { name: 'hello-ack-empty-session', message: { ...helloAckMessage, sessionId: '' } },
   { name: 'hello-ack-bad-subscribe', message: { ...helloAckMessage, subscribe: 'everything' } },

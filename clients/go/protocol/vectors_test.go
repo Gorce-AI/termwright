@@ -445,3 +445,87 @@ func jsonEqual(a, b any) bool {
 	}
 	return string(left) == string(right)
 }
+
+// -- forward compatibility -------------------------------------------------
+
+// TestLimitsTolerateUnknownCeilings guards the one object on the wire that
+// grows between versions. A client that rejected a ceiling it had never heard
+// of would close the channel every time the protocol gained one — which is
+// exactly what happened when the driver started sending the log limits.
+func TestLimitsTolerateUnknownCeilings(t *testing.T) {
+	limits := map[string]any{}
+	for _, field := range limitFields {
+		limits[field] = float64(1)
+	}
+	limits["maxQuantumFlux"] = float64(7)
+	limits["maxTeaPots"] = float64(1)
+
+	ack := map[string]any{
+		"type":      "hello-ack",
+		"protocol":  ProtocolID,
+		"sessionId": "s-1",
+		"limits":    limits,
+		"subscribe": "snapshots",
+		"marker":    map[string]any{"enabled": true},
+	}
+	if _, err := ParseDriverMessage(ack, DefaultLimits); err != nil {
+		t.Fatalf("a forward-compatible hello-ack was rejected: %v", err)
+	}
+
+	// Unknown ceilings are ignored, not carried into the typed limits.
+	body, err := marshalCanonical(ack["limits"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed Limits
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatalf("unknown ceilings broke the typed decode: %v", err)
+	}
+	if parsed.MaxNodes != 1 {
+		t.Errorf("known ceilings did not survive: %+v", parsed)
+	}
+}
+
+func TestLimitsStillRequireEveryKnownCeiling(t *testing.T) {
+	limits := map[string]any{}
+	for _, field := range limitFields {
+		if field == "maxNodes" {
+			continue
+		}
+		limits[field] = float64(1)
+	}
+	ack := map[string]any{
+		"type":      "hello-ack",
+		"protocol":  ProtocolID,
+		"sessionId": "s-1",
+		"limits":    limits,
+		"subscribe": "snapshots",
+		"marker":    map[string]any{"enabled": true},
+	}
+	_, err := ParseDriverMessage(ack, DefaultLimits)
+	if err == nil {
+		t.Fatal("a hello-ack missing a known ceiling was accepted")
+	}
+	if ParseCode(err) != "malformed" {
+		t.Errorf("code %q: %v", ParseCode(err), err)
+	}
+}
+
+func TestUnknownKeysAreStillRejectedOutsideLimits(t *testing.T) {
+	limits := map[string]any{}
+	for _, field := range limitFields {
+		limits[field] = float64(1)
+	}
+	ack := map[string]any{
+		"type":      "hello-ack",
+		"protocol":  ProtocolID,
+		"sessionId": "s-1",
+		"limits":    limits,
+		"subscribe": "snapshots",
+		"marker":    map[string]any{"enabled": true},
+		"surprise":  float64(1),
+	}
+	if _, err := ParseDriverMessage(ack, DefaultLimits); err == nil {
+		t.Error("an unknown envelope field was accepted")
+	}
+}

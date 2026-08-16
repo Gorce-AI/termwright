@@ -8,6 +8,7 @@ from conftest import load_vectors
 from termwright import (
     DEFAULT_LIMITS,
     PROTOCOL_ID,
+    ProtocolLimits,
     parse_adapter_message,
     parse_driver_message,
 )
@@ -58,3 +59,40 @@ def test_builders_produce_parseable_messages():
 def test_a_driver_message_is_not_an_adapter_message():
     assert not parse_adapter_message({"type": "get-tree", "requestId": 0}, DEFAULT_LIMITS).ok
     assert not parse_driver_message(revision_commit(1), DEFAULT_LIMITS).ok
+
+
+def test_limits_tolerate_ceilings_this_version_does_not_know():
+    """A newer driver may add ceilings; an older client must keep talking.
+
+    `limits` is the one object on the wire that grows between versions. If a
+    client rejected an unknown ceiling it would close the channel every time
+    the protocol gained one, which is exactly what happened when the driver
+    started sending the log limits.
+    """
+    ack = VECTORS["driverToAdapter"]["accept"][0]["message"]
+    assert ack["type"] == "hello-ack"
+
+    future = {**ack, "limits": {**ack["limits"], "maxQuantumFlux": 7, "maxTeaPots": 1}}
+    result = parse_driver_message(future, DEFAULT_LIMITS)
+    assert result.ok, f"a forward-compatible hello-ack was rejected: {result.detail}"
+
+    # The unknown ceilings are ignored, not carried into the typed limits.
+    limits = ProtocolLimits.from_wire(result.message["limits"])
+    assert limits == DEFAULT_LIMITS
+
+
+def test_limits_still_require_every_known_ceiling():
+    ack = VECTORS["driverToAdapter"]["accept"][0]["message"]
+    truncated = {key: value for key, value in ack["limits"].items() if key != "maxNodes"}
+    result = parse_driver_message({**ack, "limits": truncated}, DEFAULT_LIMITS)
+    assert not result.ok
+    assert "maxNodes" in result.detail
+
+
+def test_unknown_keys_are_still_rejected_outside_limits():
+    """Only `limits` is extensible; the envelope stays strict."""
+    ack = VECTORS["driverToAdapter"]["accept"][0]["message"]
+    assert not parse_driver_message({**ack, "surprise": 1}, DEFAULT_LIMITS).ok
+    assert not parse_driver_message(
+        {**ack, "marker": {"enabled": True, "surprise": 1}}, DEFAULT_LIMITS
+    ).ok

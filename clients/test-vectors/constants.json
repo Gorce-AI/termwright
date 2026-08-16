@@ -52,7 +52,8 @@
     "actions",
     "text-ranges",
     "render-revisions",
-    "tree-diffs"
+    "tree-diffs",
+    "logs"
   ],
   "defaultLimits": {
     "maxFrameBytes": 1048576,
@@ -63,7 +64,9 @@
     "maxRelationTargets": 64,
     "maxQueuedFrames": 32,
     "maxPendingWaiters": 256,
-    "maxSessions": 16
+    "maxSessions": 16,
+    "maxLogRecordBytes": 32768,
+    "maxLogQueue": 1000
   },
   "absoluteLimits": {
     "maxFrameBytes": 8388608,
@@ -74,6 +77,8 @@
     "maxRelationTargets": 1024,
     "maxQueuedFrames": 256,
     "maxPendingWaiters": 4096,
-    "maxSessions": 128
+    "maxSessions": 128,
+    "maxLogRecordBytes": 262144,
+    "maxLogQueue": 10000
   }
 }

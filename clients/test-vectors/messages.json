@@ -275,7 +275,7 @@
           ]
         },
         "code": "malformed",
-        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"bounds\"|\"absolute-bounds\"|\"states\"|\"actions\"|\"text-ranges\"|\"render-revisions\"|\"tree-diffs\""
+        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"bounds\"|\"absolute-bounds\"|\"states\"|\"actions\"|\"text-ranges\"|\"render-revisions\"|\"tree-diffs\"|\"logs\""
       },
       {
         "name": "hello-extra-field",
@@ -514,7 +514,36 @@
             "maxRelationTargets": 64,
             "maxQueuedFrames": 32,
             "maxPendingWaiters": 256,
-            "maxSessions": 16
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000
+          },
+          "subscribe": "snapshots",
+          "marker": {
+            "enabled": true
+          }
+        }
+      },
+      {
+        "name": "hello-ack-unknown-limit-key",
+        "message": {
+          "type": "hello-ack",
+          "protocol": "termwright/1",
+          "sessionId": "s-0001",
+          "limits": {
+            "maxFrameBytes": 1048576,
+            "maxSnapshotBytes": 1048576,
+            "maxNodes": 5000,
+            "maxDepth": 64,
+            "maxStringBytes": 16384,
+            "maxRelationTargets": 64,
+            "maxQueuedFrames": 32,
+            "maxPendingWaiters": 256,
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000,
+            "maxQuantumFlux": 7,
+            "maxTeaPots": 1
           },
           "subscribe": "snapshots",
           "marker": {
@@ -548,6 +577,60 @@
     ],
     "reject": [
       {
+        "name": "hello-ack-extra-field",
+        "message": {
+          "type": "hello-ack",
+          "protocol": "termwright/1",
+          "sessionId": "s-0001",
+          "limits": {
+            "maxFrameBytes": 1048576,
+            "maxSnapshotBytes": 1048576,
+            "maxNodes": 5000,
+            "maxDepth": 64,
+            "maxStringBytes": 16384,
+            "maxRelationTargets": 64,
+            "maxQueuedFrames": 32,
+            "maxPendingWaiters": 256,
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000
+          },
+          "subscribe": "snapshots",
+          "marker": {
+            "enabled": true
+          },
+          "surprise": 1
+        },
+        "code": "malformed",
+        "detail": "<root>: Unrecognized key: \"surprise\""
+      },
+      {
+        "name": "hello-ack-missing-limit-key",
+        "message": {
+          "type": "hello-ack",
+          "protocol": "termwright/1",
+          "sessionId": "s-0001",
+          "limits": {
+            "maxFrameBytes": 1048576,
+            "maxSnapshotBytes": 1048576,
+            "maxDepth": 64,
+            "maxStringBytes": 16384,
+            "maxRelationTargets": 64,
+            "maxQueuedFrames": 32,
+            "maxPendingWaiters": 256,
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000
+          },
+          "subscribe": "snapshots",
+          "marker": {
+            "enabled": true
+          }
+        },
+        "code": "malformed",
+        "detail": "limits.maxNodes: Invalid input: expected number, received undefined"
+      },
+      {
         "name": "hello-ack-wrong-protocol",
         "message": {
           "type": "hello-ack",
@@ -562,7 +645,9 @@
             "maxRelationTargets": 64,
             "maxQueuedFrames": 32,
             "maxPendingWaiters": 256,
-            "maxSessions": 16
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000
           },
           "subscribe": "snapshots",
           "marker": {
@@ -587,7 +672,9 @@
             "maxRelationTargets": 64,
             "maxQueuedFrames": 32,
             "maxPendingWaiters": 256,
-            "maxSessions": 16
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000
           },
           "subscribe": "snapshots",
           "marker": {
@@ -612,7 +699,9 @@
             "maxRelationTargets": 64,
             "maxQueuedFrames": 32,
             "maxPendingWaiters": 256,
-            "maxSessions": 16
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000
           },
           "subscribe": "everything",
           "marker": {

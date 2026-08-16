@@ -9,7 +9,9 @@
     "maxRelationTargets": 64,
     "maxQueuedFrames": 32,
     "maxPendingWaiters": 256,
-    "maxSessions": 16
+    "maxSessions": 16,
+    "maxLogRecordBytes": 32768,
+    "maxLogQueue": 1000
   },
   "accept": [
     {

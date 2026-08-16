@@ -58,6 +58,7 @@ const (
 	CapTextRanges      Capability = "text-ranges"
 	CapRenderRevisions Capability = "render-revisions"
 	CapTreeDiffs       Capability = "tree-diffs"
+	CapLogs            Capability = "logs"
 )
 
 var roleSet = map[Role]struct{}{
@@ -77,6 +78,7 @@ var actionSet = map[Action]struct{}{
 var capabilitySet = map[Capability]struct{}{
 	CapTree: {}, CapBounds: {}, CapAbsoluteBounds: {}, CapStates: {},
 	CapActions: {}, CapTextRanges: {}, CapRenderRevisions: {}, CapTreeDiffs: {},
+	CapLogs: {},
 }
 
 // ValidRole reports whether r is one of the v1 roles.
@@ -92,4 +94,4 @@ func ValidCapability(c Capability) bool { _, ok := capabilitySet[c]; return ok }
 const ActionCount = 7
 
 // CapabilityCount is the size of the closed capability set.
-const CapabilityCount = 8
+const CapabilityCount = 9
