@@ -26,6 +26,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, 'testing', 'fixture-v2');
+const FIXTURE_BUBBLES = join(here, 'testing', 'fixture-bubbles');
+const BUBBLES_PATCH_SET = join(here, '..', 'upstream-patches', 'bubbles', 'v2.1.1');
 const PATCH_SET = join(here, '..', 'upstream-patches', 'bubbletea', 'v2.0.8');
 const CLIENT = join(here, '..', '..', '..', 'clients', 'go');
 
@@ -63,6 +65,61 @@ afterAll(async () => {
   await Promise.all(sessions.map((session) => session.close()));
   await Promise.all(roots.map((dir) => rm(dir, { recursive: true, force: true })));
 });
+
+/**
+ * Builds the Bubbles fixture with **both** patch sets applied.
+ *
+ * Bubble Tea alone gets the frame hook; Bubbles is where the component state
+ * lives, and it is a separate module, so instrumenting one without the other
+ * reports strictly less.
+ */
+async function buildBubblesFixture(): Promise<string> {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-bub-')));
+  roots.push(dir);
+
+  const app = join(dir, 'app');
+  await mkdir(app, { recursive: true });
+  await cp(FIXTURE_BUBBLES, app, { recursive: true });
+
+  const tea = join(dir, 'bubbletea');
+  await materializeUpstream(
+    await ensureUpstreamModule({
+      module: 'charm.land/bubbletea/v2',
+      version: 'v2.0.8',
+      cachePath: ['charm.land', 'bubbletea', 'v2@v2.0.8'],
+    }),
+    tea,
+  );
+  await applyPatchSet(tea, PATCH_SET);
+
+  const bubbles = join(dir, 'bubbles');
+  await materializeUpstream(
+    await ensureUpstreamModule({
+      module: 'charm.land/bubbles/v2',
+      version: 'v2.1.1',
+      cachePath: ['charm.land', 'bubbles', 'v2@v2.1.1'],
+    }),
+    bubbles,
+  );
+  await applyPatchSet(bubbles, BUBBLES_PATCH_SET);
+
+  const workspace = await writeWorkspace(join(dir, 'generated.work'), {
+    moduleDir: app,
+    inherited: { uses: [], replaces: [] },
+    replaces: [
+      { from: 'charm.land/bubbletea/v2', to: tea },
+      { from: 'charm.land/bubbles/v2', to: bubbles },
+      { from: 'github.com/gorce-ai/termwright/clients/go', to: await realpath(CLIENT) },
+    ],
+  });
+
+  const binary = join(dir, 'app-binary');
+  await run('go', ['build', '-o', binary, '.'], {
+    cwd: app,
+    env: { ...process.env, GOWORK: workspace },
+  });
+  return binary;
+}
 
 async function buildFixture(): Promise<string> {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-zc-')));
@@ -152,6 +209,43 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     // secret leaking through some other field would pass the assertion above.
     const tree = JSON.stringify(app.semanticTree());
     expect(tree).not.toContain('hunter2');
+  }, 900_000);
+});
+
+describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {
+  it('reports state the library keeps entirely private', async () => {
+    const binary = await buildBubblesFixture();
+    const app = await launchTerminal({ command: [binary], columns: 60, rows: 10 });
+    sessions.push(app);
+    await app.waitForText('Loading');
+
+    // A spinner has no public frame index at all: from outside the library it
+    // is a glyph, and "animating" is indistinguishable from "stuck". The
+    // accessor makes the frame observable, so the tree can show it advancing.
+    const frames = new Set<number | undefined>();
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const state = await app.getByRole('status').semanticState();
+      frames.add(state?.positionInSet);
+      if (frames.size > 2) break;
+      await app.waitForStable();
+    }
+    expect(frames.size).toBeGreaterThan(1);
+
+    // progress.Percent() returns the target of the animation, not the
+    // fraction being drawn. The accessor reports the drawn one, and the
+    // difference is not academic: the spring approaches 0.42 asymptotically
+    // and settles just short of it, so the public getter would say 0.420 for a
+    // bar that never draws 0.420. Asserting equality with the target is
+    // exactly the mistake this accessor exists to make impossible.
+    await expect
+      .poll(
+        async () => Number(await app.getByRole('progressbar').textContent()),
+        { timeout: 20_000 },
+      )
+      .toBeGreaterThan(0.4);
+
+    const drawn = Number(await app.getByRole('progressbar').textContent());
+    expect(drawn).toBeLessThanOrEqual(0.42);
   }, 900_000);
 });
 
