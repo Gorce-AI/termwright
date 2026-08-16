@@ -69,6 +69,19 @@ trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it
 is. The browser app never imports Vitest and never reads a `.twtrace` itself.
 
+## The test list
+
+The bottom pane is the run: every reported test, grouped by file, with its
+status, how long it took, and a `flaky` badge for the ones that only passed on a
+retry. A running test shows the time it has been running — the number you watch
+when a suite hangs. The toolbar carries a substring filter over titles and
+paths, the pass/fail/flaky/skipped counters, and Rerun all / Stop.
+
+Clicking a test focuses it: its steps and its failure message open underneath,
+and — when the producer reported which session the test drives — the terminal
+switches to that session. Each row has its own rerun button, which sends
+`rerun { testIds: [id] }` and leaves the rest of the suite alone.
+
 ## What the program said
 
 A TUI cannot print diagnostics to its own screen without corrupting the render,

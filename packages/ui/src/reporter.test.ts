@@ -19,6 +19,8 @@ function testCase(options: {
   file?: string;
   traces?: readonly string[];
   error?: string;
+  duration?: number;
+  retryCount?: number;
 }): Parameters<TermwrightUiReporter['onTestCaseResult']>[0] {
   return {
     id: options.id,
@@ -28,7 +30,7 @@ function testCase(options: {
       state: options.state,
       ...(options.error === undefined ? {} : { errors: [{ message: options.error }] }),
     }),
-    diagnostic: () => ({ duration: 12 }),
+    diagnostic: () => ({ duration: options.duration ?? 12, retryCount: options.retryCount ?? 0 }),
     meta: () => ({ termwright: { traces: options.traces ?? [] } }),
   };
 }
@@ -67,6 +69,30 @@ describe('TermwrightUiReporter', () => {
       failed: 1,
       skipped: 0,
     });
+  });
+
+  it('reports how long each test took, and which ones were flaky', async () => {
+    const sink = new Collected();
+    const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false });
+
+    reporter.onTestRunStart();
+    reporter.onTestCaseReady(testCase({ id: 't1', title: 'login', state: 'run' }));
+    reporter.onTestCaseResult(testCase({ id: 't1', title: 'login', state: 'passed', duration: 340 }));
+    reporter.onTestCaseResult(
+      testCase({ id: 't2', title: 'retried', state: 'passed', duration: 90, retryCount: 2 }),
+    );
+    await reporter.onTestRunEnd();
+
+    const start = sink.messages.find((message) => message.type === 'test-start');
+    expect(start?.type === 'test-start' && typeof start.startedAt).toBe('number');
+
+    const [first, second] = sink.messages.filter((message) => message.type === 'test-end');
+    expect(first?.type === 'test-end' && first.durationMs).toBe(340);
+    expect(first?.type === 'test-end' && first.flaky).toBeUndefined();
+    expect(second?.type === 'test-end' && second.flaky).toBe(true);
+
+    const end = sink.messages.at(-1);
+    expect(end?.type === 'run-end' && end.summary.flaky).toBe(1);
   });
 
   it('puts the steps of a finished test on the timeline, from its trace', async () => {

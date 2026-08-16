@@ -56,7 +56,7 @@ interface TestCaseLike {
   readonly fullName?: string;
   readonly module?: { readonly moduleId?: string };
   result?: () => { state?: string; errors?: readonly { message?: string }[] } | undefined;
-  diagnostic?: () => { duration?: number } | undefined;
+  diagnostic?: () => { duration?: number; retryCount?: number; flaky?: boolean } | undefined;
   meta?: () => { termwright?: { traces?: readonly string[] } } | undefined;
 }
 
@@ -67,7 +67,7 @@ export class TermwrightUiReporter {
   readonly #options: UiReporterOptions;
   #sink: UiMessageSink | undefined;
   #socket: SocketSink | undefined;
-  #counts = { total: 0, passed: 0, failed: 0, skipped: 0 };
+  #counts = { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0 };
   #startedAt = 0;
   #pending: Promise<void>[] = [];
 
@@ -77,7 +77,7 @@ export class TermwrightUiReporter {
 
   onTestRunStart(): void {
     this.#pending = [];
-    this.#counts = { total: 0, passed: 0, failed: 0, skipped: 0 };
+    this.#counts = { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0 };
     this.#startedAt = Date.now();
     this.#sink = this.#options.sink ?? this.#connect();
     this.#publish({ v: 1, type: 'run-start', mode: 'live', startedAt: this.#startedAt });
@@ -93,6 +93,7 @@ export class TermwrightUiReporter {
       id,
       title: testCase.fullName ?? testCase.name ?? id,
       ...(file === undefined ? {} : { file }),
+      startedAt: Date.now(),
     });
   }
 
@@ -101,8 +102,11 @@ export class TermwrightUiReporter {
     if (id === undefined) return;
     const status = toStatus(testCase.result?.()?.state);
     if (status === undefined) return;
+    const diagnostic = testCase.diagnostic?.();
+    const flaky = diagnostic?.flaky === true || (status === 'passed' && (diagnostic?.retryCount ?? 0) > 0);
     this.#counts.total += 1;
     this.#counts[status] += 1;
+    if (flaky) this.#counts.flaky += 1;
     const trace = testCase.meta?.()?.termwright?.traces?.[0];
     const error = testCase.result?.()?.errors?.[0]?.message;
     if (trace !== undefined && this.#options.stepsFromTraces !== false) {
@@ -115,6 +119,8 @@ export class TermwrightUiReporter {
       status,
       ...(trace === undefined ? {} : { traceRef: trace }),
       ...(error === undefined ? {} : { error }),
+      ...(diagnostic?.duration === undefined ? {} : { durationMs: diagnostic.duration }),
+      ...(flaky ? { flaky: true } : {}),
     });
   }
 

@@ -31,6 +31,12 @@ export interface UiRunSummary {
   readonly passed: number;
   readonly failed: number;
   readonly skipped: number;
+  /**
+   * Tests that passed only after a retry. Counted separately from `passed`
+   * because a flaky test is a different problem from a working one, and
+   * burying it in the pass count is how it stays broken.
+   */
+  readonly flaky?: number;
   /** Wall-clock duration of the run, in milliseconds. */
   readonly durationMs?: number;
 }
@@ -41,7 +47,21 @@ export type UiServerMode = 'live' | 'post-mortem' | 'record';
 /** server → client. */
 export type ServerMessage =
   | { readonly v: 1; readonly type: 'run-start'; readonly mode: UiServerMode; readonly startedAt: number }
-  | { readonly v: 1; readonly type: 'test-start'; readonly id: string; readonly title: string; readonly file?: string }
+  | {
+      readonly v: 1;
+      readonly type: 'test-start';
+      readonly id: string;
+      readonly title: string;
+      readonly file?: string;
+      /**
+       * Unix epoch milliseconds when the test started. A tab that connects
+       * mid-run replays the backlog and needs this to show a truthful elapsed
+       * time; without it, every running test would look like it just began.
+       */
+      readonly startedAt?: number;
+      /** Session this test drives, when the producer knows it. */
+      readonly sessionId?: string;
+    }
   | {
       readonly v: 1;
       readonly type: 'step';
@@ -76,6 +96,10 @@ export type ServerMessage =
       readonly status: UiTestStatus;
       readonly traceRef?: string;
       readonly error?: string;
+      /** How long the test took, in milliseconds. */
+      readonly durationMs?: number;
+      /** Passed only after a retry — a different problem from a failure. */
+      readonly flaky?: boolean;
     }
   | { readonly v: 1; readonly type: 'run-end'; readonly summary: UiRunSummary }
   | ({
@@ -212,12 +236,22 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       if (file !== undefined && typeof file !== 'string') {
         throw new UiProtocolError('test-start: file must be a string');
       }
+      const sessionId = value['sessionId'];
+      if (sessionId !== undefined && typeof sessionId !== 'string') {
+        throw new UiProtocolError('test-start: sessionId must be a string');
+      }
+      const startedAt = value['startedAt'];
+      if (startedAt !== undefined && (typeof startedAt !== 'number' || !Number.isFinite(startedAt))) {
+        throw new UiProtocolError('test-start: startedAt must be a finite number');
+      }
       return {
         v: 1,
         type: 'test-start',
         id: requireString(value, 'id', 'test-start'),
         title: requireString(value, 'title', 'test-start'),
         ...(file === undefined ? {} : { file }),
+        ...(startedAt === undefined ? {} : { startedAt }),
+        ...(sessionId === undefined ? {} : { sessionId }),
       };
     }
     case 'step': {
@@ -280,6 +314,14 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       if (error !== undefined && typeof error !== 'string') {
         throw new UiProtocolError('test-end: error must be a string');
       }
+      const durationMs = value['durationMs'];
+      if (durationMs !== undefined && (typeof durationMs !== 'number' || !Number.isFinite(durationMs))) {
+        throw new UiProtocolError('test-end: durationMs must be a finite number');
+      }
+      const flaky = value['flaky'];
+      if (flaky !== undefined && typeof flaky !== 'boolean') {
+        throw new UiProtocolError('test-end: flaky must be a boolean');
+      }
       return {
         v: 1,
         type: 'test-end',
@@ -287,6 +329,8 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         status,
         ...(traceRef === undefined ? {} : { traceRef }),
         ...(error === undefined ? {} : { error }),
+        ...(durationMs === undefined ? {} : { durationMs }),
+        ...(flaky === undefined ? {} : { flaky }),
       };
     }
     case 'app-log': {

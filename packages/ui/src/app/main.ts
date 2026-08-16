@@ -26,12 +26,32 @@ import {
 } from './log-panel.js';
 import { TerminalPane, type Highlight } from './terminal-pane.js';
 import { nextMarker, nodeAt } from '../view-model.js';
-import {
-  renderTimeline,
-  type TimelineHandlers,
-  type TimelineStep,
-  type TimelineTest,
-} from './timeline.js';
+import { renderTimeline, type TimelineHandlers } from './timeline.js';
+import type { TestRow } from '../test-model.js';
+import { countTests, describeCounts } from '../test-model.js';
+
+/** A test row plus the steps reported for it. */
+interface MutableTest {
+  id: string;
+  title: string;
+  file?: string;
+  status: TestRow['status'];
+  startedAt?: number;
+  durationMs?: number;
+  flaky?: boolean;
+  error?: string;
+  traceRef?: string;
+  sessionId?: string;
+  steps: MutableStep[];
+}
+
+interface MutableStep {
+  stepId: string;
+  title: string;
+  status: 'running' | 'passed' | 'failed';
+  startedAt?: number | undefined;
+  endedAt?: number | undefined;
+}
 
 interface SessionView {
   snapshot: SemanticSnapshot | null;
@@ -53,7 +73,10 @@ const state = {
   sessions: new Map<string, SessionView>(),
   activeSessionId: null as string | null,
   recordSessionId: null as string | null,
-  tests: [] as TimelineTest[],
+  tests: [] as MutableTest[],
+  testQuery: '',
+  selectedTestId: null as string | null,
+  now: Date.now(),
   trace: null as TraceOverview | null,
   timeMs: 0,
   /**
@@ -150,6 +173,15 @@ function draw(): void {
         connected: state.connected,
         summary: state.summary,
         logMarks: markedLogs(),
+        testList: {
+          tests: state.tests,
+          query: state.testQuery,
+          selectedId: state.selectedTestId,
+          // A replay is a recording: there is nothing to run again.
+          canRerun: state.mode !== 'post-mortem',
+          now: state.now,
+          steps: selectedTest()?.steps ?? [],
+        },
       },
       timelineHandlers,
     ),
@@ -314,6 +346,20 @@ const timelineHandlers: TimelineHandlers = {
   seek(timeMs) {
     void seek(timeMs);
   },
+  select(testId) {
+    state.selectedTestId = state.selectedTestId === testId ? null : testId;
+    // Focusing a test focuses its session too, when the producer told us which
+    // one it drives; otherwise the terminal keeps showing what it was showing.
+    const sessionId = selectedTest()?.sessionId;
+    if (sessionId !== undefined && state.sessions.has(sessionId)) {
+      state.activeSessionId = sessionId;
+    }
+    schedule();
+  },
+  setQuery(query) {
+    state.testQuery = query;
+    schedule();
+  },
   jump(direction) {
     const markers = state.trace?.markers ?? [];
     const target = nextMarker(markers, state.timeMs, direction);
@@ -362,12 +408,34 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function testFor(id: string, title = id): TimelineTest {
+function testFor(id: string, title = id): MutableTest {
   const found = state.tests.find((test) => test.id === id);
   if (found !== undefined) return found;
-  const created: TimelineTest = { id, title, status: 'running', steps: [] };
+  const created: MutableTest = { id, title, status: 'running', steps: [] };
   state.tests.push(created);
   return created;
+}
+
+function selectedTest(): MutableTest | undefined {
+  return state.tests.find((test) => test.id === state.selectedTestId);
+}
+
+/**
+ * Redraws while tests are running, so their elapsed time ticks. Stops as soon
+ * as nothing is running — a UI that repaints forever keeps a laptop awake.
+ */
+let ticking: ReturnType<typeof setInterval> | undefined;
+function retick(): void {
+  const running = state.tests.some((test) => test.status === 'running');
+  if (running && ticking === undefined) {
+    ticking = setInterval(() => {
+      state.now = Date.now();
+      schedule();
+    }, 500);
+  } else if (!running && ticking !== undefined) {
+    clearInterval(ticking);
+    ticking = undefined;
+  }
 }
 
 function handle(message: ServerMessage): void {
@@ -375,6 +443,7 @@ function handle(message: ServerMessage): void {
     case 'run-start':
       state.mode = message.mode;
       state.tests = [];
+      state.selectedTestId = null;
       state.summary = null;
       // A replayed run's logs come from the archive over HTTP, and the socket's
       // backlog can arrive after that fetch resolves — clearing here would wipe
@@ -389,16 +458,21 @@ function handle(message: ServerMessage): void {
     case 'test-start': {
       const test = testFor(message.id, message.title);
       test.status = 'running';
+      test.title = message.title;
+      if (message.file !== undefined) test.file = message.file;
+      if (message.sessionId !== undefined) test.sessionId = message.sessionId;
+      test.startedAt = message.startedAt ?? Date.now();
+      delete test.durationMs;
+      delete test.error;
+      retick();
       break;
     }
     case 'step': {
       const test = testFor(message.testId);
       const key = message.stepId ?? message.title;
-      let step = test.steps.find((candidate) => candidate.stepId === key);
-      if (step === undefined) {
-        step = { stepId: key, title: message.title, status: 'running' } satisfies TimelineStep;
-        test.steps.push(step);
-      }
+      const existing = test.steps.find((candidate) => candidate.stepId === key);
+      const step: MutableStep = existing ?? { stepId: key, title: message.title, status: 'running' };
+      if (existing === undefined) test.steps.push(step);
       if (message.phase === 'start') step.startedAt = message.t;
       else {
         step.endedAt = message.t;
@@ -422,6 +496,13 @@ function handle(message: ServerMessage): void {
       test.status = message.status;
       if (message.traceRef !== undefined) test.traceRef = message.traceRef;
       if (message.error !== undefined) test.error = message.error;
+      if (message.flaky !== undefined) test.flaky = message.flaky;
+      const measured =
+        message.durationMs ??
+        (test.startedAt === undefined ? undefined : Math.max(Date.now() - test.startedAt, 0));
+      if (measured === undefined) delete test.durationMs;
+      else test.durationMs = measured;
+      retick();
       break;
     }
     case 'app-log': {
@@ -436,10 +517,19 @@ function handle(message: ServerMessage): void {
       break;
     }
     case 'run-end': {
-      const { total, passed, failed, skipped, durationMs } = message.summary;
-      state.summary = `${total} tests — ${passed} passed, ${failed} failed, ${skipped} skipped${
+      const { durationMs } = message.summary;
+      // The run's own counters, with the list's counts as the fallback: a
+      // producer that reports no summary still gets an honest footer.
+      const counts = {
+        ...countTests(state.tests),
+        ...message.summary,
+        flaky: message.summary.flaky ?? countTests(state.tests).flaky,
+        running: 0,
+      };
+      state.summary = `${describeCounts(counts)}${
         durationMs === undefined ? '' : ` in ${Math.round(durationMs)}ms`
       }`;
+      retick();
       break;
     }
   }

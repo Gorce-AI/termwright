@@ -108,6 +108,37 @@ the YAML snapshot file on the first run, which is the artefact a reviewer reads 
 and it keeps this package from having to implement the YAML serializer that
 `@termwright/test` already owns.
 
+## The test list, and what the protocol had to grow
+
+`§UI events` carried enough to *list* tests but not enough to make the list
+useful, so three optional fields were added (all backwards compatible; an older
+producer simply omits them):
+
+- `test-start.startedAt` — Unix epoch ms. Without it, a tab that connects
+  mid-run and replays the backlog would show every running test as having just
+  begun. `test-start.sessionId` is optional in the same way: when a producer
+  knows which session a test drives, focusing the test focuses its terminal.
+- `test-end.durationMs` and `test-end.flaky` — Vitest knows both
+  (`diagnostic().duration`, `retryCount`/`flaky`), and without them the list
+  cannot show a duration or tell a retry from a clean pass.
+- `run-end.summary.flaky` — counted separately from `passed`, for the reason
+  `@termwright/test`'s reporter states: burying a flaky test in the pass count
+  is how it stays broken.
+
+The UI falls back where a producer is silent: a missing `durationMs` is measured
+from `test-start` to `test-end` in the page, and a missing `run-end.flaky` is
+counted from the rows. `test-model.ts` holds all of that logic, free of the DOM
+and therefore tested directly.
+
+**The elapsed clock ticks only while something is running** — `retick()` starts
+a 500 ms interval on the first running test and clears it when the last one
+ends. A runner UI that repaints forever is a runner UI that keeps a laptop
+awake.
+
+**Clicking a row focuses; the row's own button reruns.** The earlier version
+reran on a row click, which is the wrong default: the thing you do constantly is
+look at a test, and the thing you do occasionally is run it again.
+
 ## Logs: one row shape, and no invented severity
 
 The driver's `app-log` event carries two different payloads — a followed file

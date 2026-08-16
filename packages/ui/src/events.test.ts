@@ -13,7 +13,15 @@ describe('server messages', () => {
   it('round-trips every message the contract lists', () => {
     const messages: ServerMessage[] = [
       { v: 1, type: 'run-start', mode: 'live', startedAt: 1_700_000_000_000 },
-      { v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/login.test.ts' },
+      {
+        v: 1,
+        type: 'test-start',
+        id: 't1',
+        title: 'login',
+        file: '/repo/login.test.ts',
+        startedAt: 1_700_000_000_000,
+        sessionId: 's1',
+      },
       { v: 1, type: 'step', testId: 't1', title: 'submit', phase: 'start', t: 120 },
       { v: 1, type: 'output', sessionId: 's1', dataB64: toBase64(new TextEncoder().encode('hi')), t: 5 },
       {
@@ -23,8 +31,16 @@ describe('server messages', () => {
         revision: 7,
         snapshot: { v: 1, sessionId: 's1', revision: 7, columns: 80, rows: 24, rootIds: [], nodes: [] },
       },
-      { v: 1, type: 'test-end', id: 't1', status: 'failed', traceRef: 'out/login.twtrace' },
-      { v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0 } },
+      {
+        v: 1,
+        type: 'test-end',
+        id: 't1',
+        status: 'failed',
+        traceRef: 'out/login.twtrace',
+        durationMs: 1_234,
+        flaky: true,
+      },
+      { v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 1 } },
     ];
     for (const message of messages) {
       expect(parseServerMessage(encodeMessage(message))).toEqual(message);
@@ -51,6 +67,33 @@ describe('server messages', () => {
     expect(() => parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"exploded"}')).toThrow(
       /status must be/,
     );
+  });
+
+  it('rejects malformed test timings', () => {
+    expect(() =>
+      parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"passed","durationMs":"fast"}'),
+    ).toThrow(/durationMs must be a finite number/);
+    expect(() =>
+      parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"passed","flaky":"yes"}'),
+    ).toThrow(/flaky must be a boolean/);
+    expect(() =>
+      parseServerMessage('{"v":1,"type":"test-start","id":"t1","title":"x","startedAt":"now"}'),
+    ).toThrow(/startedAt must be a finite number/);
+  });
+
+  it('keeps the older, field-less forms working', () => {
+    expect(parseServerMessage('{"v":1,"type":"test-start","id":"t1","title":"login"}')).toEqual({
+      v: 1,
+      type: 'test-start',
+      id: 't1',
+      title: 'login',
+    });
+    expect(parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"passed"}')).toEqual({
+      v: 1,
+      type: 'test-end',
+      id: 't1',
+      status: 'passed',
+    });
   });
 
   it('rejects non-JSON and non-objects', () => {

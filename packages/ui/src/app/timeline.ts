@@ -12,6 +12,7 @@ import type { UiTestStatus } from '../events.js';
 import type { TraceOverview } from '../trace-source.js';
 import { formatMs } from '../view-model.js';
 import { renderCrashPanel } from './crash-panel.js';
+import { renderTestList, type TestListHandlers, type TestListModel } from './test-list.js';
 import type { AppLogView } from '../app-log.js';
 
 /** One test on the timeline, with the steps reported for it. */
@@ -48,62 +49,28 @@ export interface TimelineModel {
    * in a replay and reveals the line in the log panel in both modes.
    */
   readonly logMarks: readonly AppLogView[];
+  /** The test list, which owns the tests themselves. */
+  readonly testList: TestListModel;
 }
 
 /** What the timeline can ask the app to do. */
-export interface TimelineHandlers {
-  seek(timeMs: number): void;
+export interface TimelineHandlers extends TestListHandlers {
   jump(direction: -1 | 1): void;
-  rerun(testId?: string): void;
-  stop(): void;
 }
 
 /** Renders the timeline pane. */
 export function renderTimeline(model: TimelineModel, handlers: TimelineHandlers): TemplateResult {
   return html`
     <header class="pane-head">
-      <h2>Timeline</h2>
+      <h2>Tests</h2>
       <span class="muted">${model.mode}${model.connected ? '' : ' — reconnecting…'}</span>
-      ${model.mode === 'live'
-        ? html`
-            <button data-testid="rerun" @click=${() => handlers.rerun()}>Rerun</button>
-            <button @click=${() => handlers.stop()}>Stop</button>
-          `
-        : ''}
     </header>
 
     ${model.trace === null ? '' : renderScrubber(model, model.trace, handlers)}
     ${renderMarks(model, handlers)}
     ${renderCrashPanel(model.trace?.crash ?? null, { seek: (timeMs) => handlers.seek(timeMs) })}
 
-    <ol class="tests" data-testid="tests">
-      ${model.tests.map(
-        (test) => html`
-          <li class=${`test ${test.status}`} data-testid="test">
-            <div class="test-head" @click=${() => handlers.rerun(test.id)}>
-              <span class=${`dot ${test.status}`}></span>
-              <span class="title">${test.title}</span>
-            </div>
-            ${test.error === undefined ? '' : html`<p class="error">${test.error}</p>`}
-            <ol class="steps">
-              ${test.steps.map(
-                (step) => html`
-                  <li
-                    class=${`step ${step.status}`}
-                    @click=${() => (step.startedAt === undefined ? undefined : handlers.seek(step.startedAt))}
-                  >
-                    <span class="title">${step.title}</span>
-                    ${step.startedAt === undefined
-                      ? ''
-                      : html`<span class="muted">${formatMs(step.startedAt)}</span>`}
-                  </li>
-                `,
-              )}
-            </ol>
-          </li>
-        `,
-      )}
-    </ol>
+    ${renderTestList(model.testList, handlers)}
     ${model.summary === null ? '' : html`<footer class="summary">${model.summary}</footer>`}
   `;
 }
