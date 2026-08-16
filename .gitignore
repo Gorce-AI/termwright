@@ -10,3 +10,4 @@ coverage/
 .astro/
 .claude/
 .termwright/
+.playwright-mcp/
