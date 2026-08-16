@@ -104,6 +104,11 @@ const terminal = await launchTerminal({ command: ['node', CONFORMANCE_FIXTURES.g
 
 ## Running the matrix
 
+The MCP suite drives `@termwright/mcp` over real HTTP with several concurrent
+sessions, and checks close ownership against real pids rather than against the
+registry's bookkeeping — a registry can forget a session while its terminals
+keep running, and only a pid probed afterwards tells the two apart.
+
 ```sh
 pnpm --filter @termwright/conformance conformance     # every suite, one matrix
 pnpm --filter @termwright/conformance test            # plain vitest

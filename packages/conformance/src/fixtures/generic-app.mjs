@@ -27,6 +27,15 @@
 
 const ITEMS = ['Alpha', 'Beta', 'Gamma'];
 
+// `--pidfile=<path>` writes this process's pid at startup. It is how a suite
+// proves *which* children an owner actually killed: a pid can be probed with
+// signal 0 long after the process that launched it stopped watching.
+const pidfileArg = process.argv.find((argument) => argument.startsWith('--pidfile='));
+if (pidfileArg !== undefined) {
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(pidfileArg.slice('--pidfile='.length), String(process.pid), 'utf8');
+}
+
 let selected = 0;
 let activated = 'none';
 // Four slots, filled from the start: the row layout must not move when the

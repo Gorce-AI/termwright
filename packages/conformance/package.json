@@ -21,7 +21,7 @@
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:hostile": "vitest run --config vitest.hostile.config.ts src/suites/adversarial.test.ts",
+    "test:hostile": "vitest run --config vitest.hostile.config.ts src/suites/adversarial.test.ts src/suites/mcp-sessions.test.ts",
     "conformance": "node scripts/conformance.mjs"
   },
   "dependencies": {
@@ -30,7 +30,9 @@
     "@xterm/headless": "^6.0.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@termwright/ink": "workspace:*",
+    "@termwright/mcp": "workspace:*",
     "@types/react": "^19.2.18",
     "ink": "^7.1.1",
     "react": "^19.2.8"

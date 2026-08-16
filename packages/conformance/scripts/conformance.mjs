@@ -48,6 +48,7 @@ const SUITES = [
   ['src/suites/ready.test.ts', 'readiness + env', '§5.3'],
   ['src/suites/ink-adapter.test.ts', 'adapter contract (ink)', '§7'],
   ['src/suites/language-adapters.test.ts', 'adapter contract (py/go)', '§7'],
+  ['src/suites/mcp-sessions.test.ts', 'concurrent MCP sessions', '§20.4'],
 ];
 
 function run(args) {
@@ -100,7 +101,10 @@ function pad(text, width) {
 }
 
 const main = await tally([], SUITES.map(([file]) => file));
-const hostile = await tally(['--config', 'vitest.hostile.config.ts'], ['src/suites/adversarial.test.ts']);
+const hostile = await tally(
+  ['--config', 'vitest.hostile.config.ts'],
+  ['src/suites/adversarial.test.ts', 'src/suites/mcp-sessions.test.ts'],
+);
 
 const rows = SUITES.map(([file, title, section]) => {
   const entry = main.files.get(basename(file));
@@ -114,15 +118,20 @@ const rows = SUITES.map(([file, title, section]) => {
   };
 });
 
-const hostileEntry = hostile.files.get('adversarial.test.ts');
-rows.push({
-  area: 'hostile peer @ 128 MB heap',
-  section: '§10',
-  verdict: verdict(hostileEntry),
-  tests: hostileEntry === undefined ? 0 : hostileEntry.passed + hostileEntry.failed + hostileEntry.skipped,
-  passed: hostileEntry?.passed ?? 0,
-  seconds: ((hostileEntry?.ms ?? 0) / 1000).toFixed(1),
-});
+for (const [file, area] of [
+  ['adversarial.test.ts', 'hostile peer @ 128 MB heap'],
+  ['mcp-sessions.test.ts', 'MCP sessions @ 128 MB heap'],
+]) {
+  const entry = hostile.files.get(file);
+  rows.push({
+    area,
+    section: '§10',
+    verdict: verdict(entry),
+    tests: entry === undefined ? 0 : entry.passed + entry.failed + entry.skipped,
+    passed: entry?.passed ?? 0,
+    seconds: ((entry?.ms ?? 0) / 1000).toFixed(1),
+  });
+}
 
 const width = Math.max(...rows.map((row) => row.area.length), 4);
 process.stdout.write('\ntermwright conformance matrix\n');
@@ -136,8 +145,13 @@ for (const row of rows) {
 }
 process.stdout.write(`${'-'.repeat(width + 37)}\n`);
 
-const failed = rows.some((row) => row.verdict.startsWith('FAIL'));
+// An area that did not run is not a pass. Before this, a crashed or killed
+// vitest produced a table of `not run` rows under a cheerful "passed".
+const failed = rows.some((row) => row.verdict.startsWith('FAIL') || row.verdict === 'not run');
 const skipped = rows.every((row) => row.verdict === 'skipped');
 if (skipped) process.stdout.write('no pseudo-terminal available: every suite skipped\n');
+if (rows.some((row) => row.verdict === 'not run')) {
+  process.stdout.write('some areas produced no result at all: the runner exited before reporting\n');
+}
 process.stdout.write(failed ? 'conformance: FAILED\n\n' : 'conformance: passed\n\n');
 process.exit(failed || main.code !== 0 || hostile.code !== 0 ? 1 : 0);

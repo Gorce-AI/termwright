@@ -23,6 +23,14 @@ Round 1 (driver f78174f):
 3. **Channel diagnostics were unreachable** — `harness.diagnostics()` and the
    `diagnostic` event landed with a closed `DiagnosticCode` set.
 
+Round 4 (clients 670b60d):
+
+9. **`clients/README.md` documented a state-dependent quit key.** The tview
+   table said `q`, which stops working once focus reaches the reason field —
+   and the contract suite sends its interaction more than once. The table is now
+   measured per framework. The tview registration keeps Ctrl+C, which is
+   unconditional.
+
 Round 3 (driver 23c61e5 and aa06a8a):
 
 7. **A refused adapter was not told why.** Every refusal path wrote the error
@@ -68,21 +76,24 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
-1. **Ink can re-render after a resize before `process.stdout.columns` catches
+1. **A lost MCP transport leaks a terminal and a session slot.** Streamable HTTP
+   gives the server no signal when a client stops talking, and there is no idle
+   deadline, so a session whose client crashed stays registered forever and its
+   child process keeps running. Measured: after `client.close()` the registry
+   still holds the session and the pid is alive 5 s later; only `serveHttp`'s
+   own `close()` reclaims them. Two consequences, the second worse than the
+   first: a crashed agent leaks a real PTY per crash, and because the slot is
+   never freed, repeated crashes exhaust `maxSessions` and lock out new agents —
+   an accidental denial of service. A session TTL (close a session with no
+   request for N minutes) would bound it the way everything else in this project
+   is bounded. Pinned as observed in `mcp-sessions.test.ts`.
+2. **Ink can re-render after a resize before `process.stdout.columns` catches
    up.** A component that renders its own size (`size: 60x16`) sometimes keeps
    the old numbers in the frame that already reflects the new layout — measured
    at 2 of 6 resizes, while the republished bounds were correct 6 of 6. A
    component's self-reported size is therefore not a usable signal that a resize
    landed; the layout is. Relevant to `@termwright/ink` and to anyone writing a
    resize assertion.
-2. **`clients/README.md` documents a quit key that is state-dependent.** The
-   tview example's table says `q`, exit 0 — true only while focus has not
-   cycled onto the reason field, where `q` types normally (`main.go`:
-   `event.Rune() == 'q' && current != 2`). Since the contract suite sends the
-   interaction more than once, that registration uses Ctrl+C, which tview
-   handles unconditionally. Worth correcting in the clients table, or the next
-   person wiring an adapter up will hit the same ten-second timeout.
-
 ## Deliberate choices
 
 - **The probe emulates a terminal, and matches text on the rendered grid.** It
@@ -138,9 +149,6 @@ has to delete an assertion that explains itself.
   Both interactive fixtures tokenise the chunk (escape sequences whole, then one
   code point at a time); treating a chunk as one event silently drops the second
   key and makes every multi-key test flaky rather than failing.
-- **`waitForText` returns on the first line of a frame, not the last.** The
-  generic suites wait for the event log (the last row the fixture draws) before
-  asserting on coordinates, or half the screen is still in flight.
 - **The tree lags the screen by design.** The marker follows the frame, so a
   `waitForText` on rendered output can precede the matching semantic revision by
   a beat. State assertions right after a rendered change use `expect.poll`.
@@ -200,8 +208,10 @@ has to delete an assertion that explains itself.
 
 - Windows/ConPTY: nothing here has been run on Windows. The suites skip cleanly
   where no PTY opens, which is not the same as passing.
-- Concurrent MCP sessions (§20.4, last item): only concurrent *driver* sessions
-  are covered; the MCP layer has its own ownership rules to certify.
+- MCP session *recovery*: `mcp-sessions.test.ts` covers isolation, close
+  ownership, the ceiling and cursor independence, but not resuming a session
+  from a new transport (the SDK supports it; nothing in this project relies on
+  it yet).
 - The in-process half of §20.2a lives in `@termwright/ink-testing`; this package
   ships the shared component and the process-mode expectations it is compared
   against.
