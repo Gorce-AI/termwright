@@ -82,6 +82,17 @@ function checkNodeShape(
     );
   }
 
+  // Every cell outside the visible area and the node still visible cannot both
+  // be true. Refusing the pair keeps `offscreen` a claim about scrolling rather
+  // than a second, weaker way of saying "hidden".
+  if (node.state?.offscreen === true && node.state.hidden !== true) {
+    return fail(
+      'schema',
+      `node ${node.id}: state.offscreen implies state.hidden — every cell is outside the ` +
+        'visible area, so the node cannot also be visible',
+    );
+  }
+
   if (node.bounds !== undefined) {
     const { width, height, row, column } = node.bounds;
     if (

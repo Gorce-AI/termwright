@@ -165,6 +165,42 @@ describe('validateSnapshot — generic nodes and provenance (D1, D2)', () => {
   });
 });
 
+describe('validateSnapshot — offscreen', () => {
+  function withState(state: Record<string, unknown>): Record<string, unknown> {
+    const snapshot = baseSnapshot();
+    (snapshot['nodes'] as Record<string, unknown>[])[1]!['state'] = state;
+    return snapshot;
+  }
+
+  it('accepts the scrolled-away pair', () => {
+    expect(codeOf(withState({ hidden: true, offscreen: true }))).toBe('ok');
+  });
+
+  it('accepts hidden without offscreen — never displayed is a different state', () => {
+    expect(codeOf(withState({ hidden: true }))).toBe('ok');
+  });
+
+  it('refuses offscreen on a visible node', () => {
+    // Every cell outside the visible area and the node still visible cannot
+    // both be true; allowing it would make `offscreen` a weaker synonym for
+    // `hidden` rather than a claim about scrolling.
+    expect(codeOf(withState({ offscreen: true }))).toBe('schema');
+    expect(codeOf(withState({ offscreen: true, hidden: false }))).toBe('schema');
+  });
+
+  it('accepts an explicit negative claim on a visible node', () => {
+    expect(codeOf(withState({ offscreen: false }))).toBe('ok');
+  });
+
+  it('lets a zero-area rectangle through when the node says why', () => {
+    const snapshot = baseSnapshot();
+    const node = (snapshot['nodes'] as Record<string, unknown>[])[1]!;
+    node['bounds'] = { row: 3, column: 4, width: 0, height: 0 };
+    node['state'] = { hidden: true, offscreen: true };
+    expect(codeOf(snapshot)).toBe('ok');
+  });
+});
+
 describe('validateSnapshot — structural invariants', () => {
   it('rejects duplicate node ids', () => {
     const snapshot = baseSnapshot();

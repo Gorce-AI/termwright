@@ -20,6 +20,29 @@ export interface SemanticState {
   readonly modal?: boolean;
   readonly busy?: boolean;
   readonly hidden?: boolean;
+  /**
+   * The node exists in the layout, but every one of its cells falls outside the
+   * visible area — it is scrolled out, and scrolling can bring it back.
+   *
+   * Named for the claim a test author makes ("this row is off screen"), not for
+   * the mechanism that produced it. Clipping is how it happens; being off
+   * screen is what it means.
+   *
+   * **Absent means "not claiming"**, not "on screen". A producer that cannot
+   * observe clipping simply omits it, which is why this is a positive
+   * assertion rather than a tri-state.
+   *
+   * It exists so that `bounds: undefined` keeps its single meaning — "this
+   * producer does not know the geometry". Before this field, an adapter had to
+   * choose between saying "no geometry" and saying "scrolled away", and those
+   * are different facts that a consumer reading a tree generically could not
+   * tell apart.
+   *
+   * Implies {@link SemanticState.hidden}: if every cell is outside the visible
+   * area then the node is not visible, and validation refuses the pair
+   * `offscreen: true` without `hidden: true`.
+   */
+  readonly offscreen?: boolean;
   readonly readonly?: boolean;
   readonly multiline?: boolean;
   readonly orientation?: 'horizontal' | 'vertical';

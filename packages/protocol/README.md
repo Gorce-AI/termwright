@@ -464,6 +464,40 @@ widget the result is attributed to the intended target — a silent false green,
 which is worse than a refusal. This is a transitional state, not a permanent
 one: it lifts per framework as paint order becomes available.
 
+### Scrolled away is not the same as never displayed
+
+`state.offscreen` says the node exists in the layout but every one of its cells
+falls outside the visible area — it is scrolled out, and scrolling can bring it
+back. It is named for the claim a test author makes, not for the mechanism:
+clipping is *how* it happens, off screen is *what it means*.
+
+Three states that used to collapse into two:
+
+| Situation | `bounds` | `state` |
+|---|---|---|
+| Visible | the visible rectangle | — |
+| Scrolled out of view | zero-area rectangle at its anchor | `hidden: true, offscreen: true` |
+| Not displayed | zero-area rectangle, or absent if unknown | `hidden: true` |
+| Producer does not know the geometry | absent | — |
+
+The last row is why the field exists. Without it an adapter had to choose
+between "no geometry" and "scrolled away", so `bounds: undefined` carried both
+meanings and a consumer reading a tree generically could not tell them apart.
+`offscreen` gives the scrolled case its own word and returns absent bounds to
+its single meaning.
+
+`offscreen: true` implies `hidden: true` and validation refuses the pair
+without it — every cell outside the visible area and the node still visible
+cannot both be true. **Absent means "not claiming"**, not "on screen": a
+producer that cannot observe clipping omits the field, which is why this is a
+positive assertion rather than another tri-state.
+
+Textual is the worked example and the reason this is expressible at all: it
+computes `clip ∩ region`, so its probe reports a zero-area rectangle for a
+scrolled-out widget and no rectangle at all for `display=False`. Normalizers
+get there from `resolveNodeBounds`, whose `clippedAway` maps to exactly this
+pair.
+
 ### Merge precedence
 
 Facts about a node arrive from several sources at once, and the tree publishes

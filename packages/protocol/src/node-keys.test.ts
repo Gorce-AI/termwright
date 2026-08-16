@@ -41,6 +41,7 @@ const everyStateField: Record<keyof SemanticState, true> = {
   modal: true,
   busy: true,
   hidden: true,
+  offscreen: true,
   readonly: true,
   multiline: true,
   orientation: true,

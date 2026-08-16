@@ -76,6 +76,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     modal: z.boolean().optional(),
     busy: z.boolean().optional(),
     hidden: z.boolean().optional(),
+    offscreen: z.boolean().optional(),
     readonly: z.boolean().optional(),
     multiline: z.boolean().optional(),
     orientation: z.union([z.literal('horizontal'), z.literal('vertical')]).optional(),

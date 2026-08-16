@@ -37,9 +37,14 @@ export interface ResolvedBounds {
   readonly source: BoundsSource;
   /**
    * True when the clip removed the rectangle entirely — the node exists and is
-   * scrolled out of view. Callers should mark such a node `state.hidden`, since
-   * a zero-area rectangle cannot intersect the viewport and snapshot validation
-   * will refuse it otherwise.
+   * scrolled out of view.
+   *
+   * A normalizer maps this to **`state.hidden: true` plus
+   * `state.offscreen: true`**. Both are needed and they say different things:
+   * `hidden` because a zero-area rectangle cannot intersect the viewport and
+   * validation refuses it otherwise, and `offscreen` because scrolled-away is
+   * not the same state as never-displayed, and a consumer reading the tree has
+   * no other way to tell them apart.
    */
   readonly clippedAway: boolean;
 }
