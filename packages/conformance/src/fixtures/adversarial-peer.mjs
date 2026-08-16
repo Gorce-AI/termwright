@@ -60,6 +60,20 @@ const socketLagMs = lagArg === undefined ? 0 : Number(lagArg.slice('--socket-lag
  */
 const bpsArg = process.argv.find((argument) => argument.startsWith('--stdout-bps='));
 const stdoutBps = bpsArg === undefined ? 0 : Number(bpsArg.slice('--stdout-bps='.length));
+/**
+ * Bytes of screen repaint to emit before each revision's marker.
+ *
+ * The other half of the same story, and the half that is the driver's own: a
+ * platform which repaints the whole screen per frame — ConPTY — hands the
+ * driver far more bytes than the application wrote, and the driver's emulator
+ * queue, not the transport, is what falls behind. A marker sitting in that
+ * queue is one the driver has received but not yet read, which is why a half's
+ * expiry clock starts at the drain barrier rather than on arrival. This knob
+ * makes that backlog on any platform.
+ */
+const repaintArg = process.argv.find((argument) => argument.startsWith('--repaint='));
+const repaintBytes = repaintArg === undefined ? 0 : Number(repaintArg.slice('--repaint='.length));
+const REPAINT = repaintBytes > 0 ? `\x1b[H${'.'.repeat(repaintBytes)}\r` : '';
 const endpoint = process.env['TERMWRIGHT_ENDPOINT'];
 const token = process.env['TERMWRIGHT_TOKEN'];
 
@@ -164,7 +178,7 @@ function validNodes(label) {
 function publish(revision, label = 'Peer') {
   socket.write(frame({ type: 'snapshot', snapshot: tree(revision, validNodes(label)) }));
   socket.write(frame({ type: 'revision-commit', revision }));
-  process.stdout.write(marker(revision));
+  process.stdout.write(REPAINT + marker(revision));
   published = revision;
 }
 
@@ -410,7 +424,7 @@ function sendDelta(delta) {
   // The delta is the message: the body sits beside the discriminator rather
   // than nested under it.
   socket.write(frame({ type: 'tree-delta', ...delta }));
-  process.stdout.write(marker(delta.revision));
+  process.stdout.write(REPAINT + marker(delta.revision));
   published = Math.max(published, delta.revision);
 }
 

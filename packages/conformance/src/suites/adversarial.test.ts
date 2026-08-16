@@ -60,6 +60,10 @@ const PEER_ARGS: readonly string[] = (() => {
   // Windows reports. 5000 lands on the same signature there.
   const bps = process.env['TERMWRIGHT_CONFORMANCE_STDOUT_BPS'];
   if (bps !== undefined && bps !== '') args.push(`--stdout-bps=${bps}`);
+  // And the driver-side backlog: bytes of repaint per revision, which is what
+  // a platform that redraws the whole screen per frame actually costs.
+  const repaint = process.env['TERMWRIGHT_CONFORMANCE_REPAINT'];
+  if (repaint !== undefined && repaint !== '') args.push(`--repaint=${repaint}`);
   return args;
 })();
 
@@ -92,37 +96,26 @@ async function fire(terminal: TerminalHarness): Promise<void> {
 }
 
 /**
- * Asserts what a burst of 200 revisions owes, on any platform.
+ * The one thing a burst of 200 revisions owes: it ends where the app ended.
  *
- * Whether the chain *arrives* at 200 is not the driver's promise: markers ride
- * the terminal and trees ride the socket, so a terminal that falls behind its
- * own frames — a pty re-encoding every byte under a flood — delivers a marker
- * after the driver has stopped waiting for its tree, and the tail of the burst
- * is lost by design. Measured, not assumed: at 5 kB/s of terminal throughput
- * this settles on revision 1 with `revision-expired×64`, which is the signature
- * Windows CI reports; with a terminal that keeps up it settles on 200.
+ * Revisions *along the way* may be evicted — that is what `maxQueuedFrames` is
+ * for — so nothing here counts them. The destination is the contract: once the
+ * flood stops, the session holds the last revision the app published.
  *
- * What the driver owes either way is that the session is not left behind for
- * good — the next ordinary render puts the tree right. That is the assertion a
- * user can rely on, and the one that fails if the pairing ever wedges.
+ * How long that takes is a measurement about the platform, not a promise, so
+ * the wait is on the chain still advancing and no clock is asserted. Pinning
+ * the emulator's throughput instead would turn a loaded runner into a red
+ * driver — and it would have pinned the wrong thing anyway: a half's expiry
+ * clock now starts at the drain barrier, so the tail lands however far behind
+ * the emulator's parse queue happens to be running.
  */
 async function expectBurstSettles(terminal: TerminalHarness, lastLabel: string): Promise<void> {
   const settled = await settledRevision(terminal, 200);
-  if (settled === 200) {
-    expect(await terminal.getByRole('button').textContent()).toBe(lastLabel);
-    return;
-  }
-
-  // The tail was lost, so the loss has to have been recorded rather than
-  // silently absorbed — and then repaired by one further render.
   expect(
-    codes(terminal),
-    `the burst settled at ${settled} without recording why; diagnostics: ${diagnosticTally(terminal)}`,
-  ).toContain('revision-expired');
-  await terminal.press('p');
-  await expect
-    .poll(() => terminal.semanticTree()?.revision ?? 0, { timeout: 20_000 })
-    .toBeGreaterThan(settled);
+    settled,
+    `the burst stopped at ${settled} of 200; diagnostics: ${diagnosticTally(terminal)}`,
+  ).toBe(200);
+  expect(await terminal.getByRole('button').textContent()).toBe(lastLabel);
 }
 
 /** The diagnostic codes the session recorded, oldest first. */

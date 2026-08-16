@@ -104,22 +104,21 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
-0. **A burst leaves the tree behind until the application renders again.** Where
-   the terminal falls behind the socket — a pty re-encoding every byte under a
-   flood — a revision's marker arrives after its tree has expired, so the tail
-   of the burst is never published. Measured, both on Windows CI and locally
-   with the peer's terminal capped at 5 kB/s: the session settles far short of
-   the last revision, records `revision-expired` for the rest, and stays there.
-   One further render repairs it, so nothing wedges, and the suite pins exactly
-   that. The gap is what happens when there is no further render, which is the
-   common case for a TUI that draws a burst at startup and then idles: with the
-   terminal permanently slower than the socket the session held **revision 0
-   forever** while the screen showed the last frame — no tree, no locator, and
-   no diagnostic saying the tree is stale rather than absent. The driver already
-   has the machinery that would close this: an expired marker whose revision the
-   adapter still holds is exactly the case `get-tree` resync was built for.
-   Raised with the driver; the policy call (repair, or retain the newest
-   unpaired tree past the window) is theirs.
+0. **A marker that arrives late over the transport is still lost.** The driver
+   closed the case where its *own* emulator queue delays a marker: the expiry
+   clock now starts at the drain barrier, and `--repaint=40000` — 8 MB of screen
+   repaint across the burst — settles on 200 as it should. What that cannot
+   reach is a marker the driver has not received yet, because the platform
+   delivered it late. Reproduced with `TERMWRIGHT_CONFORMANCE_STDOUT_BPS=5000`,
+   where the burst still ends on revision 1 with `revision-expired×64`. Whether
+   Windows suffers this as well as the queue delay is the open question, and the
+   next CI run is the discriminator: the queue half is fixed, so a repeat there
+   would mean the transport half matters too. Measured while it did: with the
+   terminal permanently slower than the socket, a session that never renders
+   again held **revision 0 indefinitely** while the screen showed the last
+   frame — no tree, no locator, and no diagnostic separating "stale" from
+   "absent". `get-tree` resync is the machinery that would close it, if the
+   driver decides the case is worth closing.
 1. **The Textual example cannot be quit from every focus state.** It binds only
    `q`, and Tab eventually lands on its `Input`, which swallows the key —
    Ctrl+C does not quit either. Measured: `q`, Ctrl+D, Escape+`q` and
@@ -269,20 +268,29 @@ has to delete an assertion that explains itself.
   mode is hidden the effect is asserted instead: the child decodes the report,
   and the session records `mode-unverifiable` for that mode exactly once,
   because that entry describes the platform rather than any one action.
-- **A burst does not promise to arrive.** The two 200-revision floods were
-  given 45 s, then failed on Windows anyway; the fix was not a bigger number but
-  a different question. Waiting on *progress* rather than a clock turned the
-  timeout into a measurement — "stopped at 39-44 of 200; revision-dropped×130,
-  revision-expired×64" — and that measurement named the mechanism: markers ride
-  the terminal, trees ride the socket, and a terminal that falls behind its own
-  frames delivers a marker after the driver has stopped waiting for its tree.
-  Reproduced on POSIX by capping the peer's terminal throughput
-  (`TERMWRIGHT_CONFORMANCE_STDOUT_BPS=5000`), which lands on `expired×64` —
-  the same count Windows reports. So reaching 200 was never the driver's
-  promise; it was an unstated assumption about throughput. What *is* owed, and
-  what the tests assert now, is that the session is not left behind for good:
-  the next ordinary render puts the tree right. Both branches are exercised
-  locally — the strong one by default, the recovery one under the throttle.
+- **A timeout is not a diagnosis; make the wait produce one.** The two
+  200-revision floods were given 45 s, then failed on Windows anyway. Waiting on
+  *progress* rather than a clock turned "Matcher did not succeed in time" into
+  "stopped at 39-44 of 200; revision-dropped×130, revision-expired×64", and that
+  measurement is what let the driver find the cause — its own emulator write
+  queue, which a marker has to cross while the snapshot travels the socket for
+  free. Platform-neutral (692 ms of it measured on macOS); ConPTY only supplies
+  the volume, by repainting whole screens. Fixed in the driver by starting a
+  half's expiry clock at the drain barrier, so `revision-expired` means "the
+  other half never came" rather than "the driver had not read it yet".
+  My first reading of the same data — "the terminal is slower than the socket"
+  — described the symptom and would have led to a test that shrugged the loss
+  off as platform-specific. Two different delays sit behind that sentence, and
+  only a measurement separates them.
+- **Which leaves the assertion: the burst ends where the app ended.** Revisions
+  along the way may be evicted, and how long the drain takes is a property of
+  the machine, so neither is asserted — pinning emulator throughput turns a
+  loaded runner into a red driver. `--repaint=<bytes>` reproduces the driver-
+  side backlog the fix is about (8 MB of repaint over 200 revisions still lands
+  on 200); `--stdout-bps` reproduces the *other* delay, a transport that
+  delivers late, which no expiry policy can see and which still loses the tail.
+  Keep them distinct: the first is a regression test for the fix, the second is
+  a probe for a question that is still open.
 - **A tri-state mode is not a boolean, and truthiness will not say so.**
   `focusReporting` gained `'unknown'` once the driver stopped reporting the
   host's focus mode as the child's. The helper here still returned it as a
