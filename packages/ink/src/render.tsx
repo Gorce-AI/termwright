@@ -8,6 +8,7 @@ import type { AdapterCapability } from '@termwright/protocol';
 import { openChannel } from './channel.js';
 import { canPublishAbsoluteBounds } from './collect.js';
 import { readAdapterEnv, type EnvSource } from './config.js';
+import { captureConsole, startLogForwarder, type LogForwarder } from './logs.js';
 import { SemanticProvider } from './provider.js';
 import { SemanticPublisher } from './publisher.js';
 import { SemanticRegistry } from './registry.js';
@@ -22,6 +23,9 @@ const BASE_CAPABILITIES: readonly AdapterCapability[] = [
   'states',
   'actions',
   'render-revisions',
+  // The diagnostics channel is always a possible source, so this is always
+  // announced under instrumentation; the driver decides whether to enable it.
+  'logs',
 ];
 
 /** Adapter-specific knobs. Everything else on the options object goes to Ink. */
@@ -30,6 +34,13 @@ export interface SemanticOptions {
   readonly env?: EnvSource;
   /** Milliseconds allowed for connect + handshake before giving up. Default 1000. */
   readonly handshakeTimeoutMs?: number;
+  /**
+   * Capture `console.error`/`warn`/`log`/`info`/`debug` as log records, tagged
+   * `logger: 'console'`. Default `true` under instrumentation, never in a
+   * dormant process. Turn it off if the application already routes console
+   * output into its own logger and you would rather not see both.
+   */
+  readonly captureConsole?: boolean;
 }
 
 /** Ink's render options plus the adapter's own. */
@@ -83,6 +94,7 @@ function renderWith(
   const probeRef: RefObject<DOMElement | null> = { current: null };
   const userOnRender = inkOptions.onRender;
   let publisher: SemanticPublisher | undefined;
+  let logForwarder: LogForwarder | undefined;
   let disposed = false;
 
   const wrap = (child: ReactNode): ReactNode => (
@@ -135,12 +147,33 @@ function renderWith(
       // Frames committed before the handshake completed were never published;
       // publish the state that is on screen right now.
       publisher.notifyRender();
+
+      // Only after the driver enabled the channel: the protocol forbids `log`
+      // messages otherwise, and the budget is enforced here rather than there.
+      const budget = channel.session.logs;
+      if (budget !== undefined) {
+        logForwarder =
+          startLogForwarder({
+            channel,
+            budget,
+            limits: channel.session.limits,
+            currentRevision: () => publisher?.revision ?? 0,
+          }) ?? undefined;
+      }
     })
     .catch(() => undefined);
 
+  // Installed straight after the first render, so it wraps Ink's own patched
+  // console rather than being wrapped by it. Publishing is free until the
+  // forwarder subscribes, so pre-handshake output simply finds no listener.
+  const restoreConsole =
+    semantics?.captureConsole === false ? () => undefined : captureConsole();
+
   const dispose = (): void => {
     disposed = true;
+    logForwarder?.dispose();
     publisher?.dispose();
+    restoreConsole();
   };
 
   return {

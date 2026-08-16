@@ -52,6 +52,37 @@ already queued and nothing more, which is exactly the guarantee the marker needs
    `DOMElement` type.** The adapter reads it (never writes it). If Ink renames
    it, role detection for un-annotated apps breaks; `useSemantic` keeps working.
 
+## Ink's `patchConsole` cannot be hooked (and would not be enough)
+
+The brief asked for console output to become log records by hooking Ink's
+`patchConsole`. That is not possible with public API, and the internals would
+not carry what we need anyway — both halves matter, so here is what Ink 7.1.1
+actually does:
+
+- `Ink.patchConsole()` calls the `patch-console` package with a private
+  callback and keeps the restore function on the instance. Neither the callback
+  nor a way to register one is exposed on `RenderOptions` or `Instance`.
+- Even with access, **the level is already gone**. `patch-console` builds an
+  internal `console.Console(stdout, stderr)` over two `PassThrough` streams, so
+  Ink's callback receives `(stream, data)` where `stream` is only `'stdout'` or
+  `'stderr'` and `data` is preformatted text. `console.warn` and `console.error`
+  are indistinguishable at that point, and so are `log`, `info` and `debug`.
+
+So the adapter wraps the console methods itself (`captureConsole` in
+`src/logs.ts`), which is plain JavaScript rather than an Ink internal. Two
+details make it compose with Ink instead of fighting it:
+
+- the wrapper is installed **after** the first render, so it wraps Ink's
+  already-patched methods; the original call still reaches Ink's render-safe
+  routing, and the frame is never corrupted;
+- Ink restores the pristine console on unmount, which drops our wrapper with
+  it, so there is nothing to leak.
+
+Records are tagged `logger: 'console'` so a test can tell them apart from an
+application's structured logging — which matters for apps whose logger also
+prints, where the same event legitimately arrives twice by two routes. That is
+also why `semantics.captureConsole: false` exists.
+
 ## Deliberate design choices
 
 - **Role mapping is conservative.** Ink roles with no unambiguous protocol
@@ -78,6 +109,22 @@ already queued and nothing more, which is exactly the guarantee the marker needs
   `@termwright/trace` needed (adapters may not depend on `@termwright/driver`).
 - **Node ids** are `n1`, `n2`, … assigned on first sight and held in a `WeakMap`,
   so they stay stable across revisions for as long as an element is mounted.
+- **The log budget is enforced at the source.** A token bucket sized by
+  `hello-ack.logs` (`maxRecordsPerSecond` refill, `burst` capacity) drops
+  over-budget records before they reach the socket, because a log storm that
+  got that far would compete with the semantic tree for the frame budget.
+  Dropped records are *not* renumbered: `seq` comes from the publisher, so a
+  drop leaves a gap and the gap is how the driver counts what was lost. Note
+  that a trailing drop is invisible until a later record lands — the test
+  asserts the gap only after publishing again past the refill.
+- **`logs` is announced whenever the process is instrumented**, because the
+  diagnostics channel is always a possible source: any dependency can publish
+  to `termwright:log` without importing anything of ours. Whether records
+  actually flow is the driver's decision, taken in `hello-ack`.
+- **A record is stamped with the current revision** when the publisher did not
+  set one, which is accurate because forwarding is synchronous with
+  publication. The stamp builds a fresh object rather than mutating the frozen
+  record — the same aliasing discipline as `actions`.
 
 ## Validator invariants the collector must keep
 

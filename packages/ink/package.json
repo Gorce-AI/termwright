@@ -4,15 +4,27 @@
   "description": "Ink 7 semantic adapter (aria props, measureElement, render flush, DCS marker)",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@termwright/protocol": "workspace:*" },
+  "dependencies": {
+    "@termwright/logs": "workspace:^",
+    "@termwright/protocol": "workspace:*"
+  },
   "peerDependencies": {
     "ink": ">=7.1.0",
     "react": ">=19.2.0"

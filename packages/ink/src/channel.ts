@@ -20,6 +20,7 @@ import {
   type AdapterToDriverMessage,
   type FrameDecoder,
   type HelloAckMessage,
+  type LogRecord,
   type ProtocolLimits,
   type SemanticSnapshot,
 } from '@termwright/protocol';
@@ -31,6 +32,11 @@ export interface ChannelSession {
   readonly limits: ProtocolLimits;
   readonly subscribe: HelloAckMessage['subscribe'];
   readonly markerEnabled: boolean;
+  /**
+   * Log budget, present only when the driver enabled the channel. Absent means
+   * logs are disabled and no `log` message may be sent at all.
+   */
+  readonly logs?: { readonly maxRecordsPerSecond: number; readonly burst: number };
 }
 
 /** Serves a driver `get-tree` request. Returns `undefined` when the revision is gone. */
@@ -108,6 +114,16 @@ export class SemanticChannel {
   /** Push a bare revision commit. No-op once the channel is disabled. */
   sendRevisionCommit(revision: number): void {
     this.#send({ type: 'revision-commit', revision });
+  }
+
+  /**
+   * Push one application log record.
+   *
+   * Callers must have checked {@link ChannelSession.logs}: the protocol forbids
+   * `log` messages when the driver did not enable the channel.
+   */
+  sendLog(record: LogRecord): void {
+    this.#send({ type: 'log', record });
   }
 
   /** Disable the channel and release the socket. Safe to call repeatedly. */
@@ -270,6 +286,14 @@ function readHelloAck(value: unknown): ChannelSession | null {
     limits: narrowLimits(ack.limits),
     subscribe: ack.subscribe,
     markerEnabled: ack.marker.enabled,
+    ...(ack.logs === undefined || !ack.logs.enabled
+      ? {}
+      : {
+          logs: {
+            maxRecordsPerSecond: ack.logs.maxRecordsPerSecond,
+            burst: ack.logs.burst,
+          },
+        }),
   };
 }
 

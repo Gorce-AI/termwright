@@ -71,6 +71,31 @@ the driver knows which tree belongs to which screen; it is authenticated with
 the session token, invisible in the terminal, and never emitted outside an
 instrumented run.
 
+## Application logs
+
+A TUI cannot print diagnostics without corrupting its own render, so they go to
+a logger where a test can no longer see them. When the driver enables the `logs`
+capability, the adapter forwards them: it subscribes to the `termwright:log`
+diagnostics channel and pushes each record over the same socket as the semantic
+tree, stamped with the revision that was on screen.
+
+Anything can feed it, with no production dependency on a test tool:
+
+```js
+import {channel} from 'node:diagnostics_channel';
+channel('termwright:log').publish({level: 'error', message: 'payment failed'});
+```
+
+`@termwright/logs` adds redaction and ready-made bridges for pino, winston,
+consola and OpenTelemetry. `console.error`/`warn`/`log`/`info`/`debug` are
+captured too, tagged `logger: 'console'`; pass `semantics: {captureConsole:
+false}` if your logger already prints and you would rather not see both.
+
+The driver sets a rate budget, which the adapter enforces locally: over-budget
+records are dropped here rather than allowed to compete with the semantic tree
+for the frame budget. Dropped records leave a gap in `seq`, which is how the
+driver reports how many were lost.
+
 ## Bounds and `alternateScreen`
 
 Ink measures elements inside its *live layout region*, which coincides with the

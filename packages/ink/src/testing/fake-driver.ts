@@ -22,6 +22,7 @@ import {
   type AdapterToDriverMessage,
   type GetTreeResponse,
   type HelloMessage,
+  type LogRecord,
   type ProtocolLimits,
   type SemanticSnapshot,
 } from '@termwright/protocol';
@@ -36,6 +37,15 @@ export interface FakeDriverOptions {
   readonly rejectHandshake?: boolean;
   /** Destroy the connection abruptly after this many snapshots. */
   readonly dropAfterSnapshots?: number;
+  /**
+   * Log budget offered in `hello-ack`. Omitted entirely by default, which is
+   * the protocol's way of saying logs are disabled.
+   */
+  readonly logs?: {
+    readonly enabled: boolean;
+    readonly maxRecordsPerSecond: number;
+    readonly burst: number;
+  };
 }
 
 /** A running fake driver. Always `close()` it, even when a test fails. */
@@ -46,8 +56,11 @@ export interface FakeDriver {
   readonly hello: HelloMessage | undefined;
   readonly snapshots: readonly SemanticSnapshot[];
   readonly commits: readonly number[];
+  readonly logs: readonly LogRecord[];
   /** Resolve once `count` snapshots have arrived. */
   waitForSnapshots(count: number, timeoutMs?: number): Promise<readonly SemanticSnapshot[]>;
+  /** Resolve once `count` log records have arrived. */
+  waitForLogs(count: number, timeoutMs?: number): Promise<readonly LogRecord[]>;
   /** Resolve once a connection has completed the handshake. */
   waitForHandshake(timeoutMs?: number): Promise<HelloMessage>;
   /** Issue a `get-tree` request and await the adapter's answer. */
@@ -70,6 +83,7 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
 
   const snapshots: SemanticSnapshot[] = [];
   const commits: number[] = [];
+  const logs: LogRecord[] = [];
   const responses = new Map<number, (response: GetTreeResponse) => void>();
   const waiters: Array<() => void> = [];
   let hello: HelloMessage | undefined;
@@ -121,6 +135,7 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
           limits,
           subscribe: options.subscribe ?? 'snapshots',
           marker: { enabled: options.markerEnabled ?? true },
+          ...(options.logs === undefined ? {} : { logs: options.logs }),
         });
         notify();
         return;
@@ -134,6 +149,11 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
         ) {
           socket.destroy();
         }
+        return;
+      }
+      case 'log': {
+        logs.push(message.record);
+        notify();
         return;
       }
       case 'revision-commit': {
@@ -196,9 +216,16 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
     get commits() {
       return commits;
     },
+    get logs() {
+      return logs;
+    },
     async waitForSnapshots(count, timeoutMs = 5_000) {
       await until(() => snapshots.length >= count, timeoutMs, `${count} snapshot(s)`);
       return snapshots;
+    },
+    async waitForLogs(count, timeoutMs = 5_000) {
+      await until(() => logs.length >= count, timeoutMs, `${count} log record(s)`);
+      return logs;
     },
     async waitForHandshake(timeoutMs = 5_000) {
       await until(() => hello !== undefined, timeoutMs, 'handshake');
