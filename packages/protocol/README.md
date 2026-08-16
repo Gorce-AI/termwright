@@ -436,6 +436,34 @@ a table, and conformance parses all three. The rule governs adapters, not
 markdown, and making authors rewrite prose to suit a parser would be the tail
 wagging the dog.
 
+### Bounds are visible geometry, and occlusion is a separate fact
+
+The IR keeps `intendedRect` (where an object asked to draw) and `visibleRect`
+(what survived the clip) apart, because they are different facts. A
+`SemanticNode` publishes **one** rectangle, so a normalizer collapses them, and
+the collapse is guaranteed rather than incidental:
+
+`bounds` is always the best known **visible** geometry — the framework's own
+clip intersection where it computes one, `intendedRect ∩ clip` where a clip is
+known, and the intended rectangle only as a last resort. A consumer never has
+to ask which of the two it is holding.
+
+Publishing both rectangles was the alternative and was rejected: it moves "which
+of these did you mean" onto every consumer of the tree instead of answering it
+once. `resolveNodeBounds` implements the rule, so the five client
+implementations share one collapse rather than five.
+
+What `bounds` cannot say is whether something was painted on top of it. That is
+`occlusion`, and it is `'known'` only when the probe reports paint order —
+three of the six frameworks do. **Absent means `'unknown'`**: the conservative
+value is the default, so knowledge must be claimed rather than assumed.
+
+A consumer performing pointer actions should refuse on `'unknown'` rather than
+click and hope. The input lands somewhere real, and if it lands on another
+widget the result is attributed to the intended target — a silent false green,
+which is worse than a refusal. This is a transitional state, not a permanent
+one: it lifts per framework as paint order becomes available.
+
 ### Merge precedence
 
 Facts about a node arrive from several sources at once, and the tree publishes

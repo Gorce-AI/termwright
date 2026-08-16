@@ -1,5 +1,6 @@
 import type { SemanticAction, SemanticRole } from './roles.js';
 import type { ProvenanceSource } from './probe/ir.js';
+import type { OcclusionKnowledge } from './probe/bounds.js';
 
 /** Zero-based viewport cell coordinates. */
 export interface Rect {
@@ -43,8 +44,34 @@ export interface SemanticNode {
   readonly name: string;
   readonly description?: string;
   readonly value?: string;
-  /** Optional: class-B/C frameworks publish nodes without trustworthy bounds. */
+  /**
+   * The node's **visible** geometry, guaranteed.
+   *
+   * Normalizers resolve this to the best known visible rectangle — the clip
+   * intersection where a framework computes one, `intendedRect ∩ clip` where a
+   * clip is known, and the intended rectangle only as a last resort. A consumer
+   * therefore never has to ask which rectangle it is holding.
+   *
+   * Still optional: class-B/C frameworks publish nodes without trustworthy
+   * coordinates, and one framework hands over a rendered string with no
+   * geometry anywhere. Absent bounds is a normal state, not a degraded one.
+   */
   readonly bounds?: Rect;
+  /**
+   * Whether it is knowable that something else was painted over this node.
+   *
+   * `bounds` says where the node is; it does not say whether a pointer aimed
+   * there reaches it. Only some frameworks expose paint order, so this is
+   * `'known'` only when the probe reported it. **Absent means `'unknown'`** —
+   * the conservative value is the default, so a producer has to claim
+   * knowledge rather than have it assumed.
+   *
+   * A consumer performing pointer actions should refuse on `'unknown'` rather
+   * than click and hope: the input lands somewhere real, and if it lands on
+   * another widget the result is attributed to this one. That is a silent
+   * false green, which is a worse failure than a refusal.
+   */
+  readonly occlusion?: OcclusionKnowledge;
   readonly state?: SemanticState;
   readonly actions?: readonly SemanticAction[];
   readonly labelledBy?: readonly string[];
