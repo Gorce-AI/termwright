@@ -68,17 +68,13 @@ await runAdapterConformance({
     cwd: GO_MODULE,
     timeoutMs: 180_000,
   },
-  // The Go client dials `net.DialTimeout("unix", …)` — `clients/go/protocol/
-  // client.go:133` — and the endpoint this harness hands a child on Windows is
-  // a named pipe. So the binary builds, runs, and stays dormant, which the
-  // suite would otherwise report as "no snapshot ever arrived" on every
-  // Windows run. The Python client meets the same wall and *declares* it
-  // (`clients/python/src/termwright/client.py:148`), which is the treatment
-  // this row borrows until the Go client either dials a pipe or says it cannot.
-  unsupported: {
-    when: process.platform === 'win32',
-    reason: 'the Go client has no named-pipe transport, so it cannot reach a Windows endpoint',
-  },
+  // This row was skipped on win32 while the Go client dialled a unix socket
+  // unconditionally: on Windows it reached a named pipe, failed the handshake,
+  // and — because a failed handshake is deliberately survivable — ran on
+  // publishing nothing. `clients` gave it a per-platform transport (2b29d9e,
+  // `winio.DialPipe` behind a build tag), so the row runs everywhere again.
+  // Certified on Windows by CI rather than here: this machine can only say
+  // that the example still cross-compiles for it.
   spawn: () => ({ command: [GO_BINARY] }),
   ready: 'Permission required',
   // The tview example logs at startup rather than on a keystroke, so the

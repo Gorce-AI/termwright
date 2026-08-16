@@ -129,21 +129,6 @@ export interface AdapterConformanceOptions {
     readonly cwd?: string;
     readonly timeoutMs?: number;
   };
-  /**
-   * A transport this client states it does not implement.
-   *
-   * Distinct from a missing toolchain: the language is installed and the binary
-   * runs, but it cannot reach the endpoint this platform hands it. Certifying
-   * that as a conformance failure would be reporting the same known gap on
-   * every run; certifying it as a pass would be worse. The row skips, with the
-   * limitation and its source in the block's name, and the gap stays a finding
-   * against the client rather than noise in the matrix. Only for a limitation
-   * the client *declares* — a client that merely fails to connect is a failure.
-   */
-  readonly unsupported?: {
-    readonly when: boolean;
-    readonly reason: string;
-  };
 }
 
 /**
@@ -349,16 +334,13 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
     ...(options.rows === undefined ? {} : { rows: options.rows }),
   };
 
-  const unsupported = options.unsupported?.when === true;
   const title = !ptyAvailable()
     ? `adapter conformance: ${options.name} (skipped: no pseudo-terminal here)`
-    : !toolchain
-      ? `adapter conformance: ${options.name} (skipped: ${options.requires?.label ?? 'toolchain'} unavailable)`
-      : unsupported
-        ? `adapter conformance: ${options.name} (skipped: ${options.unsupported?.reason ?? 'unsupported here'})`
-        : `adapter conformance: ${options.name}`;
+    : toolchain
+      ? `adapter conformance: ${options.name}`
+      : `adapter conformance: ${options.name} (skipped: ${options.requires?.label ?? 'toolchain'} unavailable)`;
 
-  describe.skipIf(!ptyAvailable() || !toolchain || unsupported)(title, { timeout: timeout * 4 }, () => {
+  describe.skipIf(!ptyAvailable() || !toolchain)(title, { timeout: timeout * 4 }, () => {
     describe('the dormant rule', () => {
       it('opens nothing and emits no marker without an endpoint', async () => {
         const probe = await AdapterProbe.start(options.spawn(), { ...probeOptions, instrument: false });
