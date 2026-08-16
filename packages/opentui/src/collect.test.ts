@@ -255,6 +255,40 @@ describe('SnapshotCollector', () => {
     expect(actionsOf(shared)).not.toBe(authorActions);
   });
 
+  it('names the framework type on a widget it cannot classify', () => {
+    // The `generic` path: registered, so it is published, but with no role for
+    // the collector to resolve and no class it recognises. The protocol refuses
+    // such a node without a `frameworkType`, and a refused frame closes the
+    // channel — which surfaces as every later wait timing out with no reason
+    // given. Nothing exercised this path before, so the break was invisible.
+    const root = new FakeRenderable({ id: 'root' });
+    const widget = root.add(new FakeRenderable({ id: 'mystery' }));
+    const registry = new SemanticRegistry();
+    registry.register(widget, { name: 'Mystery' });
+
+    const snapshot = collect(root, registry);
+    const node = snapshot.nodes.find((entry) => entry.name === 'Mystery');
+
+    expect(node?.role).toBe('generic');
+    expect(node?.frameworkType).toBe('FakeRenderable');
+    expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
+  });
+
+  it('names the framework type on every node, not only the unclassified ones', () => {
+    // Set unconditionally on purpose: a rule that only applies to `generic`
+    // has to be remembered every time role resolution changes, and in the
+    // sibling adapter it was not.
+    const root = new FakeRenderable({ id: 'root' });
+    const button = root.add(new FakeRenderable({ id: 'approve' }));
+    const registry = new SemanticRegistry();
+    registry.register(button, { role: 'button', name: 'Approve' });
+
+    const snapshot = collect(root, registry);
+
+    expect(snapshot.nodes.length).toBeGreaterThan(1);
+    for (const node of snapshot.nodes) expect(node.frameworkType).toBe('FakeRenderable');
+  });
+
   it('clamps strings on a code-point boundary', () => {
     const limits: ProtocolLimits = { ...DEFAULT_LIMITS, maxStringBytes: 8 };
     const root = new FakeRenderable({ id: 'root' });

@@ -79,6 +79,7 @@ export class SnapshotCollector {
       id: rootId,
       role: 'application',
       name: '',
+      frameworkType: frameworkTypeOf(root),
       ...(options.includeBounds
         ? { bounds: { row: 0, column: 0, width: options.columns, height: options.rows } }
         : {}),
@@ -161,6 +162,13 @@ export class SnapshotCollector {
       parentId,
       role: resolvedRole,
       name,
+      // OpenTUI's own name for the widget — its class. Set on every node rather
+      // than only where the protocol demands it (a `generic` role), because a
+      // conditional here is a rule that has to be remembered every time role
+      // resolution changes. The sibling adapter learned that the hard way: its
+      // `generic` path went unexercised, so a validator refusal for a missing
+      // `frameworkType` reached CI as a bare timeout.
+      frameworkType: frameworkTypeOf(node),
       ...(meta?.description === undefined ? {} : { description: this.#clamp(meta.description) }),
       ...(value === undefined ? {} : { value: this.#clamp(value) }),
       ...(options.includeBounds ? boundsOf(node) : {}),
@@ -197,6 +205,20 @@ export class SnapshotCollector {
  */
 function idOf(node: RenderableLike): string {
   return `n${String(node.num)}`;
+}
+
+/**
+ * What OpenTUI calls this widget: its class name.
+ *
+ * A driver uses it to tell one unclassified widget from another, so it must
+ * never be empty — the protocol refuses a `generic` node without it, and a
+ * refused frame closes the channel. An object with no constructor name is not
+ * something OpenTUI produces, but the fallback keeps a broken frame from being
+ * the way we find out.
+ */
+function frameworkTypeOf(node: RenderableLike): string {
+  const name = node.constructor?.name;
+  return typeof name === 'string' && name.length > 0 ? name : 'Renderable';
 }
 
 /**
