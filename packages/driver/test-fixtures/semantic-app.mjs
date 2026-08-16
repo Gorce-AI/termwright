@@ -99,9 +99,9 @@ function stripBounds(snapshot) {
   };
 }
 
-function sendLog(level, message, extra = {}) {
+function sendLog(level, message, extra = {}, reuseSeq = false) {
   if (socket === null || logBudget === null) return;
-  logSeq += 1;
+  if (!reuseSeq) logSeq += 1;
   socket.write(
     encodeFrame(
       {
@@ -151,6 +151,11 @@ process.stdin.on('data', (chunk) => {
   if (text === 'G') {
     // Far over the granted budget, on purpose.
     for (let index = 0; index < 400; index += 1) sendLog('debug', `flood ${index}`);
+    return;
+  }
+  if (text === 'D') {
+    // Repeats the previous seq: an adapter that lost track of its counter.
+    sendLog('error', 'a repeated seq', {}, true);
     return;
   }
   if (text === 'S') {

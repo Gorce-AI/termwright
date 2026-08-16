@@ -281,6 +281,30 @@ describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout:
     expect(lines[1]?.record?.message).toBe('after a local drop');
   });
 
+  it('refuses a record whose seq did not advance, and keeps the channel', async () => {
+    const { terminal, lines, logDiagnostics } = await launchSemantic();
+
+    await terminal.press('g');
+    await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(1);
+
+    // The adapter repeats the seq it already used: one error would otherwise
+    // be published — and counted — twice.
+    await terminal.press('D');
+    await expect
+      .poll(() => logDiagnostics.some((entry) => entry.detail.includes('strictly increase')), {
+        timeout: 5_000,
+      })
+      .toBe(true);
+    expect(lines).toHaveLength(1);
+    expect(lines.map((entry) => entry.record?.message)).not.toContain('a repeated seq');
+
+    // The channel is untouched: a miscounting adapter is a bug, not an attack.
+    await terminal.press('g');
+    await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(2);
+    expect(terminal.capabilities().semanticTree).toBe(true);
+    expect(await terminal.getByTestId('approve').textContent()).toBe('Approve');
+  });
+
   it('enforces the budget again on arrival, and says so', async () => {
     const { terminal, lines, logDiagnostics } = await launchSemantic();
 

@@ -918,6 +918,19 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #publishLogRecord(record: LogRecord): void {
     if (this.#closed) return;
 
+    if (this.#lastLogSeq !== null && record.seq <= this.#lastLogSeq) {
+      // Strictly increasing within a session (contract): a repeated or
+      // rewound seq means the adapter lost track of its own counter. The
+      // record is refused rather than published, because a consumer counting
+      // errors would otherwise count one twice; the channel survives, since a
+      // miscounted record is a bug in the adapter, not hostile input.
+      this.#diagnostic(
+        'log-dropped',
+        `refused a log record with seq ${record.seq}: the previous record was seq ${this.#lastLogSeq}, ` +
+          'and seq must strictly increase within a session',
+      );
+      return;
+    }
     if (this.#lastLogSeq !== null && record.seq > this.#lastLogSeq + 1) {
       const lost = record.seq - this.#lastLogSeq - 1;
       this.#diagnostic(

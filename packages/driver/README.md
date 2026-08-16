@@ -154,9 +154,10 @@ rate budget in the handshake and its records arrive on the same event with
 `source: 'adapter'` and a `record` instead of a `line`. Records carry a
 wall-clock timestamp — the only clock both sides can agree on — which the driver
 rebases onto the session timeline using the offset measured at the handshake,
-clamped so a skewed clock cannot place a record in the future. A gap in the
-record sequence means the adapter dropped records at the source, and is
-reported as `log-dropped`.
+clamped so a skewed clock cannot place a record in the future. Record sequence numbers must strictly increase within a session: a gap means the
+adapter dropped records at the source, and a repeated or rewound number means it
+lost track of its counter — the first is reported, the second is refused, both
+as `log-dropped`. Neither closes the channel.
 
 `timeMs` is when the driver *read* the line, not when the program wrote it —
 they differ by up to one poll interval, so treat it as an upper bound. Bounded
