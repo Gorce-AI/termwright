@@ -87,29 +87,49 @@ async function tally(configArgs, files) {
     '--reporter=json',
     `--outputFile=${output}`,
   ]);
-  if (code !== 0) {
-    process.stdout.write(`\n--- vitest output (exit ${code}) ---\n${runnerOutput}\n`);
-  }
   let report;
   try {
     report = JSON.parse(await readFile(output, 'utf8'));
   } catch {
+    // No report at all: a crashed or killed runner, where the child's own
+    // output is the only evidence left of what happened.
+    process.stdout.write(`\n--- vitest produced no report (exit ${code}) ---\n${runnerOutput}\n`);
     return { code, files: new Map() };
   } finally {
     await rm(output, { force: true });
   }
 
   const results = new Map();
+  const failures = [];
   for (const file of report.testResults ?? []) {
     const key = basename(file.name ?? '');
     const entry = results.get(key) ?? { passed: 0, failed: 0, skipped: 0, ms: 0 };
     for (const assertion of file.assertionResults ?? []) {
       if (assertion.status === 'passed') entry.passed += 1;
-      else if (assertion.status === 'failed') entry.failed += 1;
-      else entry.skipped += 1;
+      else if (assertion.status === 'failed') {
+        entry.failed += 1;
+        failures.push({
+          file: key,
+          name: assertion.fullName ?? assertion.title ?? '(unnamed)',
+          message: (assertion.failureMessages ?? []).join('\n').split('\n')[0] ?? '',
+        });
+      } else entry.skipped += 1;
       entry.ms += assertion.duration ?? 0;
     }
     results.set(key, entry);
+  }
+
+  // The JSON reporter replaces the readable one, so a failing run used to print
+  // tallies and whatever the child happened to write to stdout — on Windows
+  // that was pages of node-pty noise and not one test name. The report already
+  // carries the names; printing them is what makes a remote failure diagnosable
+  // without reproducing it.
+  if (failures.length > 0) {
+    process.stdout.write(`\nfailing tests (${failures.length})\n`);
+    for (const failure of failures) {
+      process.stdout.write(`  ${failure.file} › ${failure.name}\n      ${failure.message}\n`);
+    }
+    process.stdout.write('\n');
   }
   return { code, files: results };
 }

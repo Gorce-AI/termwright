@@ -4,6 +4,7 @@
  * This file is also the worked example an adapter author copies: the whole
  * binding between an adapter and the suite is the object below.
  */
+import { fileURLToPath } from 'node:url';
 import { runAdapterConformance } from '../adapter-conformance.js';
 import { CONFORMANCE_FIXTURES } from '../support/pty.js';
 
@@ -29,7 +30,9 @@ await runAdapterConformance({
     // `unicode` is a `text` node whose value the fixture annotates, which the
     // role gate allows; everything else must derive none.
     annotatedValues: ['unicode'],
-    readmePath: new URL('../../../ink/README.md', import.meta.url).pathname,
+    // `URL.pathname` yields `/D:/…` on Windows, which no fs call accepts — the
+    // Windows CI run reported this adapter as declaring nothing at all.
+    readmePath: fileURLToPath(new URL('../../../ink/README.md', import.meta.url)),
   },
   columns: 80,
   rows: 24,
