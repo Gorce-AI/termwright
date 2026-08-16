@@ -23,6 +23,7 @@ import {
   EXIT_CODES,
   type CliIo,
 } from '@termwright/mcp';
+import { stat } from 'node:fs/promises';
 import { openInBrowser, shouldOpenBrowser, startUiServer, writeInlineReport } from '@termwright/ui';
 import { captureScreenshot } from './screenshot-command.js';
 import { documentedCommands, parseArgs, type ParsedArgs } from './args.js';
@@ -155,14 +156,46 @@ async function emitSkill(args: ParsedArgs, io: CliIo): Promise<number> {
  * Node's filesystem errors both do, while a genuine bug in our own code (a
  * `TypeError`, say) does not, and must keep reading as internal.
  */
-function asArchiveUsageError(error: unknown, path: string): unknown {
+async function asArchiveUsageError(error: unknown, path: string): Promise<unknown> {
   const code: unknown = (error as { code?: unknown } | null)?.code;
   if (typeof code !== 'string') return error;
   const detail = error instanceof Error ? error.message : String(error);
-  return usageError(
-    `cannot read the archive ${path}: ${detail}`,
-    'check the path, or pass the directory or .zip a run wrote',
-  );
+  return usageError(`cannot read the archive ${path}: ${detail}`, await suggestionFor(code, path));
+}
+
+/** Codes that name a missing archive outright. */
+const MISSING_CODES = new Set(['not-found', 'ENOENT', 'ENOTDIR', 'EACCES']);
+
+/**
+ * What to try next, which depends on which mistake this was.
+ *
+ * A wrong path and a broken archive are both the user's input — exit 2 either
+ * way — but they call for opposite actions. Telling someone to check the path
+ * when the path was right and the file is truncated sends them looking in the
+ * wrong place, and a corrupt artifact off a CI job is exactly the case where
+ * that costs the most time.
+ *
+ * The question "is it there?" is answered by asking the filesystem rather than
+ * by reading the error, because today `openTrace` reports a missing archive as
+ * a protocol violation — a mis-coding its owner is fixing with a `not-found`
+ * code. Looking ourselves is right before that lands and stays right after.
+ */
+async function suggestionFor(code: string, path: string): Promise<string> {
+  const present = MISSING_CODES.has(code) ? false : await exists(path);
+  return present
+    ? 'the file is there but does not read as an archive — it may be truncated, ' +
+        'or written by a version this build does not know'
+    : 'check the path, or pass the directory or .zip a run wrote';
+}
+
+/** Whether anything at all is at `path`. */
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -184,7 +217,7 @@ async function emitScreenshot(args: ParsedArgs, deps: CliDeps, json: boolean): P
       scale: args.scale,
     });
   } catch (error) {
-    throw asArchiveUsageError(error, trace);
+    throw await asArchiveUsageError(error, trace);
   }
 
   if (json) {
@@ -235,7 +268,7 @@ async function emitReport(args: ParsedArgs, deps: CliDeps, json: boolean): Promi
   try {
     result = await writeInlineReport(trace, out);
   } catch (error) {
-    throw asArchiveUsageError(error, trace);
+    throw await asArchiveUsageError(error, trace);
   }
 
   if (json) {
@@ -311,7 +344,7 @@ async function launch(
   try {
     return await runUi(request, deps.ui, announce);
   } catch (error) {
-    throw asArchiveUsageError(error, args.trace);
+    throw await asArchiveUsageError(error, args.trace);
   }
 }
 

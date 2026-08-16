@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { EXIT_CODES } from '@termwright/mcp';
 import type { UiServer, UiServerOptions } from '@termwright/ui';
@@ -255,6 +256,32 @@ describe('the ui command', () => {
 
     expect(await runCli(['ui', '--trace', '/nowhere.twtrace'], h.deps)).toBe(EXIT_CODES.usage);
     expect(h.err.join('\n')).toContain('/nowhere.twtrace');
+  });
+
+  it('points at the path when the archive is missing, and at the file when it is broken', async () => {
+    // Both are the user's input, so both are exit 2 — but "check the path" is
+    // the wrong advice for a truncated artifact off a CI job, which is the
+    // case where looking in the wrong place costs the most.
+    const missing = harness({
+      mode: 'post-mortem',
+      startUiError: Object.assign(new Error('trace not found: /gone.twtrace'), { code: 'ENOENT' }),
+    });
+    expect(await runCli(['ui', '--trace', '/gone.twtrace'], missing.deps)).toBe(EXIT_CODES.usage);
+    expect(missing.err.join('\n')).toContain('check the path');
+
+    // A path that really is there, because "is it there?" is answered by the
+    // filesystem: `openTrace` currently reports a missing archive as a protocol
+    // violation, so the code alone cannot tell these two cases apart.
+    const broken = harness({
+      mode: 'post-mortem',
+      startUiError: Object.assign(new Error('meta.json is not valid JSON'), {
+        code: 'protocol-violation',
+      }),
+    });
+    const present = fileURLToPath(import.meta.url);
+    expect(await runCli(['ui', '--trace', present], broken.deps)).toBe(EXIT_CODES.usage);
+    expect(broken.err.join('\n')).toContain('does not read as an archive');
+    expect(broken.err.join('\n')).not.toContain('check the path');
   });
 
   it('keeps a fault of our own reading as internal', async () => {
