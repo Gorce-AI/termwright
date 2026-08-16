@@ -47,6 +47,8 @@ export {
   type TraceCrash,
   type TraceEvent,
   type TraceEventKind,
+  type TraceLogEntry,
+  type TraceLogSummary,
   type TraceExit,
   type TraceMeta,
 } from './types.js';
@@ -83,7 +85,12 @@ export {
   type TraceWriterOptions,
 } from './writer.js';
 
-export { openTrace, type TraceReader, type TraceState } from './reader.js';
+export {
+  openTrace,
+  type StateOptions,
+  type TraceReader,
+  type TraceState,
+} from './reader.js';
 
 export {
   frameAt,

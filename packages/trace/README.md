@@ -13,6 +13,7 @@ An archive is a directory (zippable for transport) holding four files:
 | `session.cast` | asciicast **v3**; `test.step()` titles become markers |
 | `events.jsonl` | inputs, resizes, steps, locator actions, assertions, crash |
 | `semantics.jsonl` | one semantic tree per revision, with its cast offset |
+| `logs.jsonl` | application log entries; absent when the session logged nothing |
 
 The layout is normative in [`/CONTRACTS.md`](../../CONTRACTS.md) §Trace. Nothing
 outside this package reads or writes those files directly.
@@ -95,6 +96,38 @@ inspected cell by cell or handed to `@termwright/screenshot`.
 
 **`packTrace(dir, file)` / `unpackTrace(file, dir)`** — zip an archive for CI
 artifact upload and read it back.
+
+## Application logs
+
+A TUI cannot print diagnostics to the screen without corrupting the render, so
+`logs.jsonl` carries what the program said about itself: lines from a followed
+log file, and structured records from an adapter that negotiated the `logs`
+capability. Both land in one shape with a `message` field, so nothing has to
+branch on where an entry came from before printing it.
+
+```ts
+const state = await trace.stateAt(1_500, { logWindow: 50 });
+for (const entry of state.logs) {
+  console.log(entry.level ?? 'log', entry.label, entry.message);
+}
+```
+
+The report shows the entries inside the failing step, level-coloured, and pins
+`warn`/`error`/`fatal` entries onto the test timeline next to the steps, so a
+logged error is visible *where in the test it happened*. A followed file line
+carries no level — the driver does not invent one from the text, and neither
+does the report, so file lines appear in the log section but never in the
+timeline's notable set.
+
+`meta.logs` summarises the file (count, per-level counts, sources) and reports
+how many entries were evicted: the writer keeps the most recent
+`maxLogEntries` (10 000 by default), because when a program floods its log the
+end is the part worth keeping.
+
+Redaction happens at the source, in `@termwright/logs`, which is where the
+record's structure is known. **Lines tailed from a log file are not redacted** —
+they arrive as raw text, so treat them like `meta.crash.screenTail` when you
+store or forward an archive.
 
 ## When the program dies on its own
 

@@ -3,7 +3,7 @@
  * Not exported from `src/index.ts` — it never ships.
  */
 
-import type { SemanticNode, SemanticSnapshot } from '@termwright/protocol';
+import type { LogRecord, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type {
   CrashReport,
   ExitStatus,
@@ -87,6 +87,31 @@ export class FakeSession implements TraceSource {
     this.#tree = snapshot;
     this.#emit('semantic-revision', { revision: snapshot.revision, timeMs: this.clock });
   }
+
+  /** Emits a line read from a followed log file. */
+  logLine(line: string, label = 'app.log'): void {
+    this.#emit('app-log', { source: 'file', label, line, timeMs: this.clock });
+  }
+
+  /** Emits a structured record from an instrumented adapter. */
+  logRecord(record: Partial<LogRecord> & { message: string }): void {
+    this.#emit('app-log', {
+      source: 'adapter',
+      ...(record.logger === undefined ? {} : { label: record.logger }),
+      record: {
+        ts: record.ts ?? Date.UTC(2026, 7, 16),
+        level: record.level ?? 'info',
+        message: record.message,
+        seq: record.seq ?? ++this.#logSeq,
+        ...(record.attrs === undefined ? {} : { attrs: record.attrs }),
+        ...(record.logger === undefined ? {} : { logger: record.logger }),
+        ...(record.revision === undefined ? {} : { revision: record.revision }),
+      },
+      timeMs: this.clock,
+    });
+  }
+
+  #logSeq = 0;
 
   exit(code: number | null, signal: string | null = null): void {
     this.#emit('exit', { code, signal, timeMs: this.clock });

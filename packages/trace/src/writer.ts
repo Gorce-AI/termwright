@@ -19,6 +19,8 @@ import {
   type StepStatus,
   type TraceEvent,
   type TraceCrash,
+  type TraceLogEntry,
+  type TraceLogSummary,
   type TraceExit,
   type TraceMeta,
 } from './types.js';
@@ -61,6 +63,12 @@ export interface TraceWriterOptions {
    * output and sets `meta.truncated`. Default 32 MiB.
    */
   readonly maxOutputBytes?: number;
+  /**
+   * Application log entries to retain. On overflow the **oldest** are evicted
+   * and counted in `meta.logs.dropped`: when a program floods its log, the end
+   * is the part worth keeping. Default 10 000.
+   */
+  readonly maxLogEntries?: number;
   /** Injectable clock (milliseconds). Default `Date.now`. */
   readonly now?: () => number;
 }
@@ -123,6 +131,7 @@ interface PendingCastEvent {
 }
 
 const DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
+const DEFAULT_MAX_LOG_ENTRIES = 10_000;
 const COALESCE_LIMIT_BYTES = 64 * 1024;
 
 /**
@@ -147,6 +156,7 @@ export function createTraceWriter(
 ): TraceWriter {
   const now = options.now ?? (() => Date.now());
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+  const maxLogEntries = options.maxLogEntries ?? DEFAULT_MAX_LOG_ENTRIES;
   const startWall = now();
   const startedAt = new Date().toISOString();
 
@@ -154,6 +164,9 @@ export function createTraceWriter(
   const traceEvents: TraceEvent[] = [];
   const semantics: { t: number; revision: number; snapshot: SemanticSnapshot }[] = [];
   const hiddenWindows: HiddenWindow[] = [];
+  const logs: TraceLogEntry[] = [];
+  const logLabels: string[] = [];
+  const logLevels = new Map<NonNullable<TraceLogEntry['level']>, number>();
   const openSteps: string[] = [];
   const closedSteps = new Set<string>();
   const decoder = new TextDecoder('utf-8');
@@ -168,6 +181,7 @@ export function createTraceWriter(
   let disposed = false;
   let exit: TraceExit | undefined;
   let crash: TraceCrash | undefined;
+  let droppedLogs = 0;
   let columns = options.columns ?? 100;
   let rows = options.rows ?? 30;
   let lastResize: { columns: number; rows: number } | null = null;
@@ -300,6 +314,36 @@ export function createTraceWriter(
     }),
   );
 
+  unsubscribers.push(
+    session.events.on('app-log', (event) => {
+      const wall = driverTime(event.timeMs);
+      const record = event.record;
+      const label = event.label ?? record?.logger;
+      const entry: TraceLogEntry = {
+        t: wall,
+        // Replaced with the real offset in writeArchive.
+        castOffset: wall,
+        source: event.source,
+        ...(label === undefined ? {} : { label }),
+        ...(record?.level === undefined ? {} : { level: record.level }),
+        message: record?.message ?? event.line ?? '',
+        ...(record?.attrs === undefined ? {} : { attrs: record.attrs }),
+        ...(record?.seq === undefined ? {} : { seq: record.seq }),
+        ...(record?.revision === undefined ? {} : { revision: record.revision }),
+        ...(record?.ts === undefined ? {} : { ts: record.ts }),
+      };
+      if (label !== undefined && !logLabels.includes(label)) logLabels.push(label);
+      if (entry.level !== undefined) {
+        logLevels.set(entry.level, (logLevels.get(entry.level) ?? 0) + 1);
+      }
+      logs.push(entry);
+      if (logs.length > maxLogEntries) {
+        logs.shift();
+        droppedLogs += 1;
+      }
+    }),
+  );
+
   function detach(): void {
     if (disposed) return;
     disposed = true;
@@ -422,6 +466,8 @@ export function createTraceWriter(
         idleTimeLimit: finalizeOptions.idleTimeLimit,
         header: buildHeader(),
         crash,
+        logs,
+        logSummary: buildLogSummary(),
         meta: {
           v: TRACE_VERSION,
           sessionId: session.sessionId,
@@ -455,6 +501,17 @@ export function createTraceWriter(
     return semantics.length > 0;
   }
 
+  /** Counted once, at the end: a flood that ends the session still adds up. */
+  function buildLogSummary(): TraceLogSummary | undefined {
+    if (logs.length === 0 && droppedLogs === 0) return undefined;
+    return {
+      count: logs.length,
+      dropped: droppedLogs,
+      sources: [...logLabels],
+      levels: Object.fromEntries(logLevels),
+    };
+  }
+
   function buildHeader(): CastHeader {
     const initialColumns = options.columns ?? (lastResize?.columns ?? columns);
     const initialRows = options.rows ?? (lastResize?.rows ?? rows);
@@ -481,7 +538,10 @@ interface WriteArchiveInput {
   readonly header: CastHeader;
   /** Its `castOffset` is still the wall-clock time; the timeline fixes it up. */
   readonly crash: TraceCrash | undefined;
-  readonly meta: Omit<TraceMeta, 'idleTimeLimit' | 'durationMs' | 'crash'>;
+  /** Same: `castOffset` is rewritten once the timeline exists. */
+  readonly logs: readonly TraceLogEntry[];
+  readonly logSummary: TraceLogSummary | undefined;
+  readonly meta: Omit<TraceMeta, 'idleTimeLimit' | 'durationMs' | 'crash' | 'logs'>;
 }
 
 /** Applies the timeline transforms and writes the four archive files. */
@@ -530,6 +590,10 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
     return JSON.stringify(line);
   });
 
+  const logLines = input.logs.map((entry) =>
+    JSON.stringify({ ...entry, castOffset: round(timeline.mapWall(entry.t)) }),
+  );
+
   const meta: TraceMeta = {
     ...input.meta,
     ...(input.idleTimeLimit !== undefined && input.idleTimeLimit > 0
@@ -539,6 +603,7 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
     ...(input.crash === undefined
       ? {}
       : { crash: { ...input.crash, castOffset: round(timeline.mapWall(input.crash.t)) } }),
+    ...(input.logSummary === undefined ? {} : { logs: input.logSummary }),
   };
 
   await mkdir(input.dir, { recursive: true });
@@ -547,6 +612,9 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
     writeFile(join(input.dir, TRACE_FILES.cast), `${castLines.join('\n')}\n`, 'utf8'),
     writeFile(join(input.dir, TRACE_FILES.events), joinLines(eventLines), 'utf8'),
     writeFile(join(input.dir, TRACE_FILES.semantics), joinLines(semanticLines), 'utf8'),
+    ...(logLines.length === 0
+      ? []
+      : [writeFile(join(input.dir, TRACE_FILES.logs), joinLines(logLines), 'utf8')]),
   ]);
 
   return { dir: input.dir, meta, durationMs: meta.durationMs ?? 0 };

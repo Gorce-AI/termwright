@@ -154,3 +154,35 @@ package README, and as a visible banner above the `<pre>` in the HTML report.
 Pasted input is the one thing that is never included: `CrashInput` reports a
 paste's size and omits its preview, and the report renders that as
 "not recorded" rather than silently showing an empty cell.
+
+## Application logs
+
+`logs.jsonl` collapses the driver's two payloads into one line shape. The
+driver's `AppLogEvent` carries either `line` (followed file) or `record`
+(instrumented adapter), never both; the archive stores `message` for both and
+keeps `source` for consumers that care. Every consumer — the report, the runner
+UI, an agent reading a replay — wants to print the entry first and inspect its
+provenance second, and mutually exclusive fields make the common case the
+awkward one.
+
+A followed file line has **no level**, and none is guessed. Parsing `ERROR` out
+of a line's text would colour the report by substring match, which is wrong
+often enough to be worse than no colour: file lines show up in the log section
+and stay out of the timeline's notable set.
+
+### Eviction is counted at the end, not on the next event
+
+The driver's team flagged a bug pattern worth checking for: a counter that is
+accumulated during rate limiting and reported *when the next event arrives*
+loses the last window whenever a flood ends the session — which is exactly when
+the number matters.
+
+The log ring buffer keeps the newest `maxLogEntries` and increments
+`droppedLogs`, which is read once in `buildLogSummary()` at `finalize()`. There
+is a test that floods past the ceiling and then ends the session with no further
+event of any kind; the count is still right.
+
+Auditing the rest of the writer for the same shape: `truncated` (output byte
+ceiling) is a flag read at finalize, hidden windows are closed at finalize, and
+open steps are closed at finalize. None of them defer work to a next event, so
+the log buffer was the only place the pattern could have appeared.

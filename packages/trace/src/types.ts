@@ -9,13 +9,14 @@
  * | `session.cast`    | asciicast **v3** recording, markers = test steps      |
  * | `events.jsonl`    | one {@link TraceEvent} per line                       |
  * | `semantics.jsonl` | one {@link SemanticRecord} per line                   |
+ * | `logs.jsonl`      | one {@link TraceLogEntry} per line (absent when none) |
  *
  * See `/CONTRACTS.md` §Trace — that file is normative, this one mirrors it in
  * TypeScript.
  */
 
 import type { CrashInput, SessionDiagnostic } from '@termwright/driver';
-import type { SemanticSnapshot } from '@termwright/protocol';
+import type { LogAttrValue, LogLevel, SemanticSnapshot } from '@termwright/protocol';
 
 /** Current archive version. Readers reject anything else. */
 export const TRACE_VERSION = 1 as const;
@@ -26,6 +27,7 @@ export const TRACE_FILES = {
   cast: 'session.cast',
   events: 'events.jsonl',
   semantics: 'semantics.jsonl',
+  logs: 'logs.jsonl',
 } as const;
 
 /** Process exit as recorded in `meta.json`. */
@@ -62,6 +64,65 @@ export interface TraceMeta {
    * the harness closed or signalled itself.
    */
   readonly crash?: TraceCrash;
+  /** Present when the session produced application logs. */
+  readonly logs?: TraceLogSummary;
+}
+
+/**
+ * What `logs.jsonl` holds, summarised so a consumer can decide whether to
+ * stream it at all — and so the eviction count is always accurate.
+ *
+ * The counts are written once, at {@link TraceWriter.finalize}. A counter
+ * flushed on the *next* log event would lose the last window whenever a flood
+ * ends the session, which is exactly when the numbers matter.
+ */
+export interface TraceLogSummary {
+  /** Entries actually written to `logs.jsonl`. */
+  readonly count: number;
+  /**
+   * Entries evicted to stay under the writer's ceiling. The **oldest** go
+   * first: when a program floods its log the interesting part is the end.
+   */
+  readonly dropped: number;
+  /** Distinct labels seen, in first-seen order. */
+  readonly sources: readonly string[];
+  /** Entry count per level; file lines have no level and are not counted. */
+  readonly levels: Readonly<Partial<Record<LogLevel, number>>>;
+}
+
+/**
+ * One line of `logs.jsonl`: an application log entry on the session timeline.
+ *
+ * A followed file yields a raw line and an instrumented adapter yields a
+ * structured record, but both land in `message`. Keeping one field rather than
+ * the driver's mutually exclusive `line`/`record` means every consumer — the
+ * report, the UI, an agent — can print a log without first branching on where
+ * it came from; `source` is still there for the ones that care.
+ */
+export interface TraceLogEntry {
+  /** Wall-clock offset from the start of recording, in milliseconds. */
+  readonly t: number;
+  /** Position on the cast timeline, in milliseconds. */
+  readonly castOffset: number;
+  readonly source: 'file' | 'adapter';
+  /** Log file label, or the adapter's logger name. */
+  readonly label?: string;
+  /** Adapter records only — a followed file has no level to report. */
+  readonly level?: LogLevel;
+  /** The file line, or the record's already-formatted message. */
+  readonly message: string;
+  /** Adapter records only: flat structured context. */
+  readonly attrs?: Readonly<Record<string, LogAttrValue>>;
+  /** Adapter records only: per-session counter; a gap means upstream drops. */
+  readonly seq?: number;
+  /** Semantic revision current when the record was produced, when known. */
+  readonly revision?: number;
+  /**
+   * Adapter records only: the adapter's own Unix-epoch timestamp. `t` is when
+   * the driver saw it, which for a followed file is an upper bound on when the
+   * program wrote it.
+   */
+  readonly ts?: number;
 }
 
 /**

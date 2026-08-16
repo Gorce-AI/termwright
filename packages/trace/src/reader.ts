@@ -17,6 +17,7 @@ import {
   type SemanticRecord,
   type StepSummary,
   type TraceEvent,
+  type TraceLogEntry,
   type TraceMeta,
 } from './types.js';
 
@@ -38,6 +39,18 @@ export interface TraceState {
   readonly nearestSemantic: SemanticRecord | null;
   /** The innermost step covering `timeMs`, when any. */
   readonly step: StepSummary | null;
+  /**
+   * The application log entries leading up to `timeMs`, oldest first — what
+   * the program was saying about itself as the screen reached this state.
+   * Bounded by `StateOptions.logWindow`.
+   */
+  readonly logs: readonly TraceLogEntry[];
+}
+
+/** Options for {@link TraceReader.stateAt}. */
+export interface StateOptions {
+  /** How many preceding log entries to include. Default 20; `0` disables. */
+  readonly logWindow?: number;
 }
 
 /** Streaming reader over one archive. */
@@ -53,6 +66,8 @@ export interface TraceReader {
   events(): AsyncIterable<TraceEvent>;
   /** Streams `semantics.jsonl`. */
   semantics(): AsyncIterable<SemanticRecord>;
+  /** Streams `logs.jsonl`; empty when the session produced no logs. */
+  logs(): AsyncIterable<TraceLogEntry>;
   /** Flattened step list, ordered by start time. Cached. */
   steps(): Promise<readonly StepSummary[]>;
   /** The newest semantic record at or before `castOffsetMs`. */
@@ -64,7 +79,7 @@ export interface TraceReader {
    */
   crashSemantic(): Promise<SemanticRecord | null>;
   /** Everything the UI needs to render one point in time. */
-  stateAt(timeMs: number): Promise<TraceState>;
+  stateAt(timeMs: number, options?: StateOptions): Promise<TraceState>;
   close(): Promise<void>;
 }
 
@@ -161,6 +176,22 @@ class ArchiveReader implements TraceReader {
     );
   }
 
+  logs(): AsyncIterable<TraceLogEntry> {
+    return parseJsonLines<TraceLogEntry>(this.#files.lines(TRACE_FILES.logs), TRACE_FILES.logs);
+  }
+
+  /** The last `limit` entries at or before `castOffsetMs`, oldest first. */
+  async #logsBefore(castOffsetMs: number, limit: number): Promise<readonly TraceLogEntry[]> {
+    if (limit <= 0 || this.meta.logs === undefined) return [];
+    const window: TraceLogEntry[] = [];
+    for await (const entry of this.logs()) {
+      if (entry.castOffset > castOffsetMs) break;
+      window.push(entry);
+      if (window.length > limit) window.shift();
+    }
+    return window;
+  }
+
   async steps(): Promise<readonly StepSummary[]> {
     if (this.#steps !== null) return this.#steps;
     const open = new Map<string, StepSummary>();
@@ -240,7 +271,7 @@ class ArchiveReader implements TraceReader {
     return null;
   }
 
-  async stateAt(timeMs: number): Promise<TraceState> {
+  async stateAt(timeMs: number, options: StateOptions = {}): Promise<TraceState> {
     if (!Number.isFinite(timeMs) || timeMs < 0) {
       throw new TraceError('protocol-violation', `stateAt(${timeMs}): time must be >= 0`);
     }
@@ -263,6 +294,7 @@ class ArchiveReader implements TraceReader {
     }
     const semantic = await this.semanticAt(timeMs);
     const step = findStep(await this.steps(), timeMs);
+    const logs = await this.#logsBefore(timeMs, options.logWindow ?? 20);
     return {
       timeMs: reached,
       castPrefix: output.join(''),
@@ -271,6 +303,7 @@ class ArchiveReader implements TraceReader {
       nearestSemanticRevision: semantic?.revision ?? null,
       nearestSemantic: semantic,
       step,
+      logs,
     };
   }
 

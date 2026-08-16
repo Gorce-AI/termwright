@@ -15,7 +15,7 @@ import type { SemanticSnapshot } from '@termwright/protocol';
 import { openTrace, type TraceReader, type TraceState } from './reader.js';
 import { changedRows, escapeHtml, renderAnsiToHtml, type RenderedScreen } from './render.js';
 import { diffSemanticSnapshots, type SemanticDiff } from './semantic-diff.js';
-import type { StepStatus, StepSummary, TraceCrash } from './types.js';
+import type { StepStatus, StepSummary, TraceCrash, TraceLogEntry } from './types.js';
 
 /** Explicit before/after screens, when the caller already has them. */
 export interface VisualDiffInput {
@@ -125,6 +125,8 @@ export interface ReportOptions {
   readonly generatedAt?: Date;
   /** Cast recordings larger than this are not embedded. Default 4 MiB. */
   readonly maxEmbeddedCastBytes?: number;
+  /** Log entries shown per test, in each of the two places. Default 200. */
+  readonly maxLogEntriesShown?: number;
 }
 
 /** Outcome of {@link generateHtmlReport}. */
@@ -176,6 +178,10 @@ interface TestSection {
   readonly visual: { before: RenderedScreen; after: RenderedScreen; labels: [string, string] } | null;
   readonly semantic: SemanticDiff | null;
   readonly crash: TraceCrash | null;
+  /** Entries around the failure, for the Logs section. */
+  readonly logs: readonly TraceLogEntry[];
+  /** error/fatal/warn entries across the whole run, for the timeline. */
+  readonly notableLogs: readonly TraceLogEntry[];
   readonly cast: string | null;
   readonly castNote: string | null;
 }
@@ -191,6 +197,8 @@ async function buildSection(
     visual: null,
     semantic: null,
     crash: null,
+    logs: [],
+    notableLogs: [],
     cast: null,
     castNote: null,
   };
@@ -220,6 +228,7 @@ async function buildSection(
     const visual = await buildVisual(result, before, after, trace);
     const semantic = buildSemantic(result, before, after);
     const { cast, castNote } = await loadCast(trace, options);
+    const { logs, notableLogs } = await loadLogs(trace, result, failingStep, options);
 
     return {
       result,
@@ -228,6 +237,8 @@ async function buildSection(
       visual,
       semantic,
       crash: trace?.meta.crash ?? null,
+      logs,
+      notableLogs,
       cast,
       castNote,
     };
@@ -284,6 +295,37 @@ function buildSemantic(
   const to = after?.nearestSemantic?.snapshot;
   if (from === undefined || to === undefined || from.revision === to.revision) return null;
   return diffSemanticSnapshots(from, to);
+}
+
+const NOTABLE_LEVELS = new Set(['warn', 'error', 'fatal']);
+
+/**
+ * Reads `logs.jsonl` once, splitting it into the window shown at a failure and
+ * the notable entries pinned onto the timeline.
+ */
+async function loadLogs(
+  trace: TraceReader | null,
+  result: ReportTestResult,
+  failingStep: StepSummary | null,
+  options: ReportOptions,
+): Promise<{ logs: readonly TraceLogEntry[]; notableLogs: readonly TraceLogEntry[] }> {
+  if (trace === null || trace.meta.logs === undefined) return { logs: [], notableLogs: [] };
+  const limit = options.maxLogEntriesShown ?? 200;
+  const from = failingStep?.castOffset ?? 0;
+  const until = failingStep?.castEndOffset ?? Number.POSITIVE_INFINITY;
+
+  const window: TraceLogEntry[] = [];
+  const notable: TraceLogEntry[] = [];
+  for await (const entry of trace.logs()) {
+    if (entry.level !== undefined && NOTABLE_LEVELS.has(entry.level)) {
+      if (notable.length < limit) notable.push(entry);
+    }
+    if (result.status !== 'failed') continue;
+    if (entry.castOffset < from || entry.castOffset > until) continue;
+    window.push(entry);
+    if (window.length > limit) window.shift();
+  }
+  return { logs: window, notableLogs: notable };
 }
 
 async function loadCast(
@@ -394,7 +436,10 @@ function renderSection(section: TestSection): string {
   if (section.castNote !== null) {
     parts.push(`<p class="tw-note">${escapeHtml(section.castNote)}</p>`);
   }
-  if (section.steps.length > 0) parts.push(renderSteps(section.steps));
+  if (section.logs.length > 0) parts.push(renderLogs(section.logs));
+  if (section.steps.length > 0 || section.notableLogs.length > 0) {
+    parts.push(renderTimeline(section.steps, section.notableLogs));
+  }
 
   return `<details class="tw-test tw-${result.status}"${open}>
   <summary>
@@ -583,21 +628,73 @@ function renderScreenshots(screenshots: readonly ReportScreenshot[]): string {
   </section>`;
 }
 
-function renderSteps(steps: readonly StepSummary[]): string {
-  const rows = steps
-    .map(
-      (step) =>
-        `<tr class="tw-step-${step.status ?? 'open'}"><td>${escapeHtml(
-          step.title,
-        )}</td><td>${step.status ?? 'open'}</td><td>${formatMs(step.castOffset)}</td></tr>`,
-    )
+/**
+ * Steps and notable log entries on one time-ordered list.
+ *
+ * Two separate lists would leave the reader to align them by hand, and the
+ * whole point of a logged error is *where in the test it happened*.
+ */
+function renderTimeline(
+  steps: readonly StepSummary[],
+  notableLogs: readonly TraceLogEntry[],
+): string {
+  const entries: { at: number; html: string }[] = [
+    ...steps.map((step) => ({
+      at: step.castOffset,
+      html: `<tr class="tw-step-${step.status ?? 'open'}"><td>${escapeHtml(
+        step.title,
+      )}</td><td>${step.status ?? 'open'}</td><td>${formatMs(step.castOffset)}</td></tr>`,
+    })),
+    ...notableLogs.map((entry) => ({
+      at: entry.castOffset,
+      html: `<tr class="tw-log-row tw-log-${entry.level ?? 'info'}"><td>${logLabel(
+        entry,
+      )}${escapeHtml(entry.message)}</td><td>${escapeHtml(
+        entry.level ?? 'log',
+      )}</td><td>${formatMs(entry.castOffset)}</td></tr>`,
+    })),
+  ];
+  entries.sort((a, b) => a.at - b.at);
+  return `<section class="tw-block">
+    <h3>Timeline</h3>
+    <table class="tw-steps"><thead><tr><th>event</th><th>status</th><th>at</th></tr></thead>
+    <tbody>
+      ${entries.map((entry) => entry.html).join('\n      ')}
+    </tbody></table>
+  </section>`;
+}
+
+/** `<span class="tw-log-label">http</span>` — empty when the entry has no label. */
+function logLabel(entry: TraceLogEntry): string {
+  return entry.label === undefined
+    ? ''
+    : `<span class="tw-log-label">${escapeHtml(entry.label)}</span> `;
+}
+
+/** Every log entry inside the failing step, level-coloured. */
+function renderLogs(logs: readonly TraceLogEntry[]): string {
+  const rows = logs
+    .map((entry) => {
+      const attrs =
+        entry.attrs === undefined
+          ? ''
+          : ` <span class="tw-note">${escapeHtml(
+              Object.entries(entry.attrs)
+                .map(([key, value]) => `${key}=${String(value)}`)
+                .join(' '),
+            )}</span>`;
+      return `<li class="tw-log-${entry.level ?? 'info'}"><span class="tw-log-at">${formatMs(
+        entry.castOffset,
+      )}</span> ${logLabel(entry)}${escapeHtml(entry.message)}${attrs}</li>`;
+    })
     .join('\n      ');
   return `<section class="tw-block">
-    <h3>Steps</h3>
-    <table class="tw-steps"><thead><tr><th>step</th><th>status</th><th>at</th></tr></thead>
-    <tbody>
+    <h3>Application logs <span class="tw-note">${logs.length} entr${
+      logs.length === 1 ? 'y' : 'ies'
+    } around the failure</span></h3>
+    <ul class="tw-logs">
       ${rows}
-    </tbody></table>
+    </ul>
   </section>`;
 }
 
@@ -711,6 +808,16 @@ summary { cursor:pointer; display:flex; gap:12px; align-items:baseline; flex-wra
 .tw-crash-head { margin:0; }
 .tw-warn { margin:6px 0; padding:6px 10px; border-radius:6px; font-size:12px; color:#ffd8a8; background:rgba(200,163,74,.12); border:1px solid rgba(200,163,74,.4); }
 .tw-crash-screen { background:#141414; border:1px solid var(--line); border-radius:6px; padding:8px; overflow-x:auto; font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace; font-size:12px; line-height:1.3; white-space:pre; margin:0; }
+.tw-logs { margin:0; padding:0; list-style:none; font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace; font-size:12px; line-height:1.5; background:#111; border:1px solid var(--line); border-radius:6px; padding:8px; overflow-x:auto; }
+.tw-logs li { white-space:pre-wrap; border-left:2px solid transparent; padding-left:6px; }
+.tw-log-at { color:var(--muted); }
+.tw-log-label { color:#7fb3ff; }
+.tw-log-warn { border-left-color:var(--skip); color:#f0d089; }
+.tw-log-error, .tw-log-fatal { border-left-color:var(--fail); color:#ffb4b4; }
+.tw-log-fatal { font-weight:700; }
+.tw-log-row td:nth-child(2) { color:var(--muted); }
+.tw-log-row.tw-log-warn td:nth-child(2) { color:var(--skip); }
+.tw-log-row.tw-log-error td:nth-child(2), .tw-log-row.tw-log-fatal td:nth-child(2) { color:var(--fail); }
 .tw-shots { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; }
 .tw-shot { margin:0; }
 .tw-shot figcaption { color:var(--muted); font-size:12px; margin-bottom:4px; }
