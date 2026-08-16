@@ -2,9 +2,9 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { ProtocolViolation } from './errors.js';
 import {
-  MARKER_DCS_FINAL,
-  MARKER_DCS_PREFIX,
   MARKER_MAC_BYTES,
+  MARKER_OSC_CODE,
+  MARKER_OSC_PREFIX,
   encodeMarker,
   verifyMarkerPayload,
 } from './marker.js';
@@ -12,24 +12,36 @@ import {
 const TOKEN = 'b4f1c0de'.repeat(8);
 const SESSION = 'session-1';
 const ESC = '\x1b';
+const BEL = '\x07';
+const ST = '\x1b\\';
 
-/** Extract the DCS payload (the part a VT handler would hand us). */
+/** Extract the OSC payload — what a VT handler is handed after the number. */
 function payloadOf(sequence: string): string {
-  expect(sequence.startsWith(`${ESC}P`)).toBe(true);
-  expect(sequence.endsWith(`${ESC}\\`)).toBe(true);
-  return sequence.slice(2, -2);
+  const opener = `${ESC}]${MARKER_OSC_CODE};`;
+  expect(sequence.startsWith(opener)).toBe(true);
+  expect(sequence.endsWith(BEL)).toBe(true);
+  return sequence.slice(opener.length, -BEL.length);
 }
 
 describe('encodeMarker', () => {
-  it('emits a private DCS sequence with the documented shape', () => {
+  it('emits a private OSC sequence terminated by BEL', () => {
     const sequence = encodeMarker(TOKEN, SESSION, 42);
-    const payload = payloadOf(sequence);
-    expect(payload.startsWith(MARKER_DCS_PREFIX)).toBe(true);
+    expect(sequence.startsWith(`${ESC}]8487;`)).toBe(true);
+    expect(sequence.endsWith(BEL)).toBe(true);
 
-    const [revision, mac] = payload.slice(MARKER_DCS_PREFIX.length).split(';');
+    const payload = payloadOf(sequence);
+    expect(payload.startsWith(MARKER_OSC_PREFIX)).toBe(true);
+    const [revision, mac] = payload.slice(MARKER_OSC_PREFIX.length).split(';');
     expect(revision).toBe('42');
     // base64url of 16 bytes, unpadded.
     expect(mac).toMatch(/^[A-Za-z0-9_-]{22}$/);
+  });
+
+  it('never emits DCS, APC or a bare ST — the forms ConPTY drops', () => {
+    const sequence = encodeMarker(TOKEN, SESSION, 1);
+    expect(sequence).not.toContain(`${ESC}P`);
+    expect(sequence).not.toContain(`${ESC}_`);
+    expect(sequence).not.toContain(ST);
   });
 
   it('derives the MAC from HMAC-SHA256 over `sessionId:revision`', () => {
@@ -38,7 +50,7 @@ describe('encodeMarker', () => {
       .digest()
       .subarray(0, MARKER_MAC_BYTES)
       .toString('base64url');
-    expect(payloadOf(encodeMarker(TOKEN, SESSION, 7))).toBe(`${MARKER_DCS_PREFIX}7;${expected}`);
+    expect(payloadOf(encodeMarker(TOKEN, SESSION, 7))).toBe(`${MARKER_OSC_PREFIX}7;${expected}`);
   });
 
   it('never leaks the token into the emitted bytes', () => {
@@ -66,25 +78,31 @@ describe('verifyMarkerPayload', () => {
     });
   });
 
+  it('accepts the payload with either terminator still attached', () => {
+    // A VT parser strips the terminator; a regex scanning raw output may not.
+    const payload = payloadOf(encodeMarker(TOKEN, SESSION, 12));
+    expect(verifyMarkerPayload(payload, TOKEN, SESSION)).not.toBeNull();
+    expect(verifyMarkerPayload(payload + BEL, TOKEN, SESSION)).not.toBeNull();
+    expect(verifyMarkerPayload(payload + ST, TOKEN, SESSION)).not.toBeNull();
+  });
+
   it('returns a frozen marker', () => {
     const marker = verifyMarkerPayload(payloadOf(encodeMarker(TOKEN, SESSION, 1)), TOKEN, SESSION);
     expect(Object.isFrozen(marker)).toBe(true);
   });
 
   it('rejects a MAC minted with a different token', () => {
-    const payload = payloadOf(encodeMarker('other-token', SESSION, 5));
-    expect(verifyMarkerPayload(payload, TOKEN, SESSION)).toBeNull();
+    expect(verifyMarkerPayload(payloadOf(encodeMarker('other-token', SESSION, 5)), TOKEN, SESSION)).toBeNull();
   });
 
   it('rejects a MAC bound to a different session', () => {
-    const payload = payloadOf(encodeMarker(TOKEN, 'session-2', 5));
-    expect(verifyMarkerPayload(payload, TOKEN, SESSION)).toBeNull();
+    expect(verifyMarkerPayload(payloadOf(encodeMarker(TOKEN, 'session-2', 5)), TOKEN, SESSION)).toBeNull();
   });
 
   it('rejects a MAC replayed onto a different revision', () => {
     const valid = payloadOf(encodeMarker(TOKEN, SESSION, 5));
-    const mac = valid.slice(valid.indexOf(';') + 1);
-    expect(verifyMarkerPayload(`${MARKER_DCS_PREFIX}6;${mac}`, TOKEN, SESSION)).toBeNull();
+    const mac = valid.slice(valid.indexOf(';', MARKER_OSC_PREFIX.length) + 1);
+    expect(verifyMarkerPayload(`${MARKER_OSC_PREFIX}6;${mac}`, TOKEN, SESSION)).toBeNull();
   });
 
   it('rejects a single flipped MAC character', () => {
@@ -95,13 +113,13 @@ describe('verifyMarkerPayload', () => {
 
   it('rejects non-canonical revisions so one commit has one encoding', () => {
     for (const text of ['05', '+5', ' 5', '5 ', '0x5', '5.0', '1e3', '']) {
-      const payload = `${MARKER_DCS_PREFIX}${text};${'A'.repeat(22)}`;
+      const payload = `${MARKER_OSC_PREFIX}${text};${'A'.repeat(22)}`;
       expect(verifyMarkerPayload(payload, TOKEN, SESSION)).toBeNull();
     }
   });
 
   it('rejects revisions beyond the safe-integer range', () => {
-    const payload = `${MARKER_DCS_PREFIX}9007199254740993;${'A'.repeat(22)}`;
+    const payload = `${MARKER_OSC_PREFIX}9007199254740993;${'A'.repeat(22)}`;
     expect(verifyMarkerPayload(payload, TOKEN, SESSION)).toBeNull();
   });
 
@@ -112,29 +130,19 @@ describe('verifyMarkerPayload', () => {
       'twm;',
       'twm;1',
       'other;1;AAAAAAAAAAAAAAAAAAAAAA',
-      `${MARKER_DCS_PREFIX}1;short`,
-      `${MARKER_DCS_PREFIX}1;${'A'.repeat(23)}`,
-      `${MARKER_DCS_PREFIX}1;${'+'.repeat(22)}`,
-      `${MARKER_DCS_PREFIX}1;${'A'.repeat(22)};extra`,
-      `${MARKER_DCS_PREFIX}\uD800;${'A'.repeat(22)}`,
-      `${MARKER_DCS_PREFIX}1;${'A'.repeat(10_000)}`,
+      // The OSC number must already be stripped by the caller; leaving it in
+      // means the payload does not start with the tag.
+      `8487;${MARKER_OSC_PREFIX}1;${'A'.repeat(22)}`,
+      `${MARKER_OSC_PREFIX}1;short`,
+      `${MARKER_OSC_PREFIX}1;${'A'.repeat(23)}`,
+      `${MARKER_OSC_PREFIX}1;${'+'.repeat(22)}`,
+      `${MARKER_OSC_PREFIX}1;${'A'.repeat(22)};extra`,
+      `${MARKER_OSC_PREFIX}\uD800;${'A'.repeat(22)}`,
+      `${MARKER_OSC_PREFIX}1;${'A'.repeat(10_000)}`,
     ];
     for (const payload of hostile) {
       expect(verifyMarkerPayload(payload, TOKEN, SESSION)).toBeNull();
     }
-  });
-
-  // Regression guard for the driver/adapter integration: VT parsers consume
-  // the DCS final byte before handing over the payload, so an integration that
-  // forwards the parser's `data` verbatim will silently never match.
-  it('requires the DCS final byte, which VT parsers strip from the payload', () => {
-    const payload = payloadOf(encodeMarker(TOKEN, SESSION, 8));
-    expect(payload.startsWith(MARKER_DCS_FINAL)).toBe(true);
-
-    // What xterm.js hands a handler registered on { final: 't' }:
-    const parserData = payload.slice(MARKER_DCS_FINAL.length);
-    expect(verifyMarkerPayload(parserData, TOKEN, SESSION)).toBeNull();
-    expect(verifyMarkerPayload(MARKER_DCS_FINAL + parserData, TOKEN, SESSION)).not.toBeNull();
   });
 
   it('rejects everything when the token or session is empty', () => {

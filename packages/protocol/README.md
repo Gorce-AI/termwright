@@ -51,7 +51,7 @@ socket.on('data', (chunk: Uint8Array) => {
 process.stdout.write(encodeMarker(token, sessionId, revision));
 socket.write(encodeFrame({ type: 'revision-commit', revision }, DEFAULT_LIMITS.maxFrameBytes));
 
-// VT layer: verify a DCS payload before trusting it (null on any mismatch).
+// VT layer: verify an OSC payload before trusting it (null on any mismatch).
 const marker = verifyMarkerPayload(payload, token, sessionId);
 ```
 
@@ -73,24 +73,50 @@ const marker = verifyMarkerPayload(payload, token, sessionId);
 
 ## Integrating the marker with a VT parser
 
-The one trap in this package. `encodeMarker` emits
-`ESC P t wm;{rev};{mac} ESC \`, where `t` is the DCS **final byte**. VT parsers
-dispatch on that byte and consume it, so a handler registered on `{ final: 't' }`
-receives only `wm;{rev};{mac}`. `verifyMarkerPayload` expects the payload
-*including* the final byte, so prepend it — verified against `@xterm/headless`:
+`encodeMarker` emits a private OSC sequence terminated by BEL:
+
+```
+ESC ] 8487 ; twm;{rev};{mac} BEL
+```
+
+A VT parser hands an OSC handler everything after the number and its
+separator, which is exactly what `verifyMarkerPayload` takes — verified against
+`@xterm/headless`:
 
 ```ts
-import { MARKER_DCS_FINAL, verifyMarkerPayload } from '@termwright/protocol';
+import { MARKER_OSC_CODE, verifyMarkerPayload } from '@termwright/protocol';
 
-term.parser.registerDcsHandler({ final: MARKER_DCS_FINAL }, (data) => {
-  const marker = verifyMarkerPayload(MARKER_DCS_FINAL + data, token, sessionId);
+term.parser.registerOscHandler(MARKER_OSC_CODE, (data) => {
+  const marker = verifyMarkerPayload(data, token, sessionId);
   if (marker !== null) commit(marker.revision);
   return true; // consumed: keeps the sequence out of the visible grid
 });
 ```
 
-Forwarding the parser's `data` verbatim fails silently — every marker simply
-returns `null`. A regression test in `marker.test.ts` pins this down.
+A trailing BEL or ST is tolerated, because a caller scanning raw output with a
+regex keeps the terminator that a parser would have consumed.
+
+### Why OSC 8487
+
+**Why OSC and not DCS.** ConPTY rewrites the stream it forwards. A passthrough
+probe run in CI across the three platforms showed it dropping DCS, APC and
+OSC 8, while passing private OSC with either terminator, and OSC 133. A DCS
+marker could not reach the driver on Windows at all.
+
+One encoding is used everywhere rather than negotiated per platform: two paths
+double the surface that has to stay correct, and the path used least is the one
+that rots unnoticed. BEL is emitted rather than ST because it is the terminator
+ConPTY was observed to forward most reliably.
+
+**Why this number.** OSC numbers have no registry, only convention, so 8487 is
+chosen to sit clear of everything in use — xterm's allocations (0–14, 46, 50,
+52, 104, 110–119), OSC 8 hyperlinks, 9 and 1337 (iTerm2), 99 and 30001 (kitty),
+133 (FinalTerm shell integration), 633 (VS Code), 697 (ConEmu), 777–779
+(urxvt/VTE). It is the ASCII codes of `T` and `W`, for termwright.
+
+The `twm;` tag after the number is kept as a self-identifying guard: if anything
+ever does claim 8487, a marker still says what it is rather than being mistaken
+for that feature's payload.
 
 The token is likewise **opaque**: whatever lands in `TERMWRIGHT_TOKEN` is what
 both sides pass to the HMAC as the key. Never decode it to bytes first. Use
@@ -438,7 +464,15 @@ stripped, so a reader that does understand them still can.
   acquiring behaviour by accident.
 - Any new field on an **adapter → driver** message. That direction is strict,
   so adding one breaks every driver that has not been updated.
-- Changing the meaning, units or clock of an existing field. Tightening
+- Changing the meaning, units or clock of an existing field.
+- **Changing an encoding.** The render marker moved from a private DCS
+  sequence to `OSC 8487 … BEL` because ConPTY drops DCS, so the old encoding
+  could not work on Windows at all. Every producer and every receiver had to
+  change together; `MARKER_DCS_PREFIX`/`MARKER_DCS_FINAL` were replaced by
+  `MARKER_OSC_CODE`/`MARKER_OSC_PREFIX` with **no aliases**, because an alias
+  would have left two encodings alive and the second one untested. This was
+  done pre-publication, as a single generation of producers — the only point at
+  which a change of this shape is cheap. Tightening
   `LogRecord.seq` from non-decreasing to strictly increasing is an example:
   nothing about the shape changed, but a sender that repeated a number was
   previously conforming and now is not.

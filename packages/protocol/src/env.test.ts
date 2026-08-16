@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { PROTOCOL_ID, PROTOCOL_VERSION, TOKEN_BYTES, generateToken } from './env.js';
-import { encodeMarker, verifyMarkerPayload } from './marker.js';
+import { MARKER_OSC_CODE, encodeMarker, verifyMarkerPayload } from './marker.js';
+
+/**
+ * The payload a VT parser would hand an OSC handler: everything after
+ * `OSC <code>;`, terminator consumed. Derived from the constants rather than
+ * from fixed offsets, so a future encoding change fails in `marker.test.ts`
+ * where it belongs instead of here.
+ */
+function markerPayload(sequence: string): string {
+  const opener = `\u001b]${MARKER_OSC_CODE};`;
+  return sequence.slice(opener.length, -1);
+}
 
 describe('generateToken', () => {
   it('mints a 256-bit token as unpadded base64url', () => {
@@ -24,7 +35,7 @@ describe('generateToken', () => {
     delete process.env['TERMWRIGHT_TOKEN_TEST'];
 
     expect(received).toBe(token);
-    const payload = encodeMarker(received, 's1', 1).slice(2, -2);
+    const payload = markerPayload(encodeMarker(received, 's1', 1));
     expect(verifyMarkerPayload(payload, token, 's1')).not.toBeNull();
   });
 
@@ -32,7 +43,7 @@ describe('generateToken', () => {
     // Decoding the token before keying the HMAC yields a different MAC — the
     // mistake this test exists to catch.
     const token = generateToken();
-    const payload = encodeMarker(token, 's1', 1).slice(2, -2);
+    const payload = markerPayload(encodeMarker(token, 's1', 1));
     const decoded = Buffer.from(token, 'base64url').toString('binary');
     expect(verifyMarkerPayload(payload, decoded, 's1')).toBeNull();
   });
