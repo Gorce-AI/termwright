@@ -331,6 +331,46 @@ jobs:
           echo "$changed"
           exit 1
 
+  rust-msrv:
+    name: clients (rust MSRV 1.74)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exactly the floor Cargo.toml declares. Testing on anything newer would
+      # prove the wrong thing: the crate compiled on 1.82 while claiming 1.74 is
+      # how a method stabilised in 1.82 reached a release unnoticed.
+      - uses: dtolnay/rust-toolchain@1.74
+
+      - name: The toolchain must be the declared floor
+        working-directory: clients/rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          declared=$(grep -m1 '^rust-version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          actual=$(rustc --version | cut -d' ' -f2)
+          echo "declared floor: $declared, toolchain: $actual"
+          case "$actual" in
+            "$declared"|"$declared".*) ;;
+            *) echo "::error::this job must run on $declared, not $actual — pin the toolchain or raise rust-version"; exit 1 ;;
+          esac
+
+      # Build, not test: MSRV is a promise to whoever *depends* on the crate,
+      # and a dependent compiles the library. Compiling the test binaries would
+      # drag dev-dependencies into the floor, so an unrelated crate raising its
+      # own MSRV would fail this lane with nothing wrong on our side.
+      - name: Build on the floor
+        working-directory: clients/rust
+        run: cargo build --locked
+
+      # The tracing bridge is a documented option, so it is part of the promise.
+      # If this step is what fails, the fix is to document that the feature needs
+      # a newer Rust — not to quietly raise the floor for everyone.
+      - name: Build with every feature
+        working-directory: clients/rust
+        run: cargo build --locked --all-features
+
   vectors:
     name: cross-language vectors are current
     runs-on: ubuntu-latest
