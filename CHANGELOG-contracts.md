@@ -276,3 +276,21 @@
 - 2026-08-16 (owner rule applied to §Trace): castOffset is REQUIRED on every
   events.jsonl line; the reader fallback to `t` is removed (single writer
   generation pre-1.0).
+- 2026-08-16 (protocol, task #25, 338932e/99eeed6): tree deltas. New adapter→
+  driver message `tree-delta {baseRevision, revision, changed, removed,
+  rootIds?, cursor?}` (capability tree-diffs); HelloAck.subscribe gains
+  'diffs' — safe ONLY because the driver picks it solely for adapters that
+  announced tree-diffs (gate, not set; extending a closed set WITHOUT such a
+  gate stays breaking). Four normative composition rules: (a) changed =
+  whole-node upsert by id (no field merging); (b) removed cascades through
+  the subtree; (c) rootIds present replaces the root list, absent = base
+  roots minus removed (adding a root REQUIRES rootIds); (d) removals apply
+  BEFORE inserts (a delta may rescue a node from a removed subtree). Cursor:
+  present replaces, absent = unchanged; hiding is visible:false; columns/
+  rows/sessionId are inherited (resize deserves a full snapshot). Validation
+  split: validateTreeDelta checks shape only; parent existence, acyclicity,
+  depth and viewport membership are properties of the COMPOSED tree checked
+  by applyTreeDelta via validateSnapshot. Resync per origin §8.3: mismatched
+  base or removing an unknown node points at get-tree, never speculative
+  patching. The reference composition (applyTreeDelta) lives in the protocol
+  deliberately — one tested implementation instead of five.
