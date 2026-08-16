@@ -15,7 +15,13 @@ import type { SemanticSnapshot } from '@termwright/protocol';
 import { openTrace, type TraceReader, type TraceState } from './reader.js';
 import { changedRows, escapeHtml, renderAnsiToHtml, type RenderedScreen } from './render.js';
 import { diffSemanticSnapshots, type SemanticDiff } from './semantic-diff.js';
-import type { StepStatus, StepSummary, TraceCrash, TraceLogEntry } from './types.js';
+import type {
+  ActionEvent,
+  StepStatus,
+  StepSummary,
+  TraceCrash,
+  TraceLogEntry,
+} from './types.js';
 
 /** Explicit before/after screens, when the caller already has them. */
 export interface VisualDiffInput {
@@ -184,6 +190,8 @@ interface TestSection {
   readonly notableLogs: readonly TraceLogEntry[];
   /** True when `logs` is the failing step's window rather than the whole log. */
   readonly logsAroundFailure: boolean;
+  /** Actions the driver reported as failed, for the timeline. */
+  readonly failedActions: readonly ActionEvent[];
   readonly cast: string | null;
   readonly castNote: string | null;
 }
@@ -202,6 +210,7 @@ async function buildSection(
     logs: [],
     notableLogs: [],
     logsAroundFailure: false,
+    failedActions: [],
     cast: null,
     castNote: null,
   };
@@ -218,6 +227,7 @@ async function buildSection(
   try {
     const steps = trace === null ? [] : await trace.steps();
     const failingStep = pickFailingStep(steps);
+    const failedActions = trace === null ? [] : await loadFailedActions(trace, options);
 
     let before: TraceState | null = null;
     let after: TraceState | null = null;
@@ -249,6 +259,7 @@ async function buildSection(
       logs,
       notableLogs,
       logsAroundFailure: failedStep !== null,
+      failedActions,
       cast,
       castNote,
     };
@@ -308,6 +319,26 @@ function buildSemantic(
 }
 
 const NOTABLE_LEVELS = new Set(['warn', 'error', 'fatal']);
+
+/**
+ * Actions the driver reported as failed.
+ *
+ * The driver emits these precisely so a report can say the click never landed
+ * and why, instead of showing a screen that simply did not change.
+ */
+async function loadFailedActions(
+  trace: TraceReader,
+  options: ReportOptions,
+): Promise<readonly ActionEvent[]> {
+  const limit = options.maxLogEntriesShown ?? 200;
+  const failed: ActionEvent[] = [];
+  for await (const event of trace.events()) {
+    if (event.kind !== 'action' || event.ok) continue;
+    failed.push(event);
+    if (failed.length >= limit) break;
+  }
+  return failed;
+}
 
 /**
  * Reads `logs.jsonl` once, splitting it into the window shown at a failure and
@@ -455,8 +486,12 @@ function renderSection(section: TestSection): string {
     );
   }
   if (section.logs.length > 0) parts.push(renderLogs(section.logs, section.logsAroundFailure));
-  if (section.steps.length > 0 || section.notableLogs.length > 0) {
-    parts.push(renderTimeline(section.steps, section.notableLogs));
+  if (
+    section.steps.length > 0 ||
+    section.notableLogs.length > 0 ||
+    section.failedActions.length > 0
+  ) {
+    parts.push(renderTimeline(section.steps, section.notableLogs, section.failedActions));
   }
 
   return `<details class="tw-test tw-${result.status}"${open}>
@@ -655,6 +690,7 @@ function renderScreenshots(screenshots: readonly ReportScreenshot[]): string {
 function renderTimeline(
   steps: readonly StepSummary[],
   notableLogs: readonly TraceLogEntry[],
+  failedActions: readonly ActionEvent[],
 ): string {
   const entries: { at: number; html: string }[] = [
     ...steps.map((step) => ({
@@ -670,6 +706,14 @@ function renderTimeline(
       )}${escapeHtml(entry.message)}</td><td>${escapeHtml(
         entry.level ?? 'log',
       )}</td><td>${formatMs(entry.castOffset)}</td></tr>`,
+    })),
+    ...failedActions.map((action) => ({
+      at: action.castOffset,
+      html: `<tr class="tw-action-failed"><td>${escapeHtml(action.api)}${
+        action.selector === undefined ? '' : ` <span class="tw-note">${escapeHtml(action.selector)}</span>`
+      }</td><td>${escapeHtml(action.error ?? 'failed')}</td><td>${formatMs(
+        action.castOffset,
+      )}</td></tr>`,
     })),
   ];
   entries.sort((a, b) => a.at - b.at);
@@ -835,6 +879,8 @@ summary { cursor:pointer; display:flex; gap:12px; align-items:baseline; flex-wra
 .tw-log-error, .tw-log-fatal { border-left-color:var(--fail); color:#ffb4b4; }
 .tw-log-fatal { font-weight:700; }
 .tw-log-row td:nth-child(2) { color:var(--muted); }
+.tw-action-failed td:first-child { color:#ffb4b4; }
+.tw-action-failed td:nth-child(2) { color:var(--fail); font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace; font-size:12px; }
 .tw-log-row.tw-log-warn td:nth-child(2) { color:var(--skip); }
 .tw-log-row.tw-log-error td:nth-child(2), .tw-log-row.tw-log-fatal td:nth-child(2) { color:var(--fail); }
 .tw-shots { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; }

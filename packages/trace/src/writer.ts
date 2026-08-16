@@ -120,7 +120,14 @@ export interface TraceWriter {
   show(): void;
   /** True while a hide window is open. */
   isHidden(): boolean;
-  /** Records a driver action and its outcome. */
+  /**
+   * Records an action the driver cannot see.
+   *
+   * Actions performed through the harness arrive on their own — the driver
+   * emits an `action` event for each one, failures included — so this is for
+   * work a caller does outside it. Calling it for a harness action would
+   * record that action twice.
+   */
   recordAction(action: Omit<ActionEvent, 't' | 'kind' | 'castOffset'>): void;
   /** Records an assertion and its outcome. */
   recordAssert(assertion: Omit<AssertEvent, 't' | 'kind' | 'castOffset'>): void;
@@ -329,6 +336,24 @@ export function createTraceWriter(
         exit: crash.exit,
         screenTailLines: crash.screenTail.length,
         lastSemanticRevision,
+      });
+    }),
+  );
+
+  unsubscribers.push(
+    // Emitted after the action finished, so `t` is its completion — see
+    // ActionEvent's TSDoc for what that means for the timeline.
+    session.events.on('action', (event) => {
+      const stepId = openSteps[openSteps.length - 1];
+      traceEvents.push({
+        t: driverTime(event.timeMs),
+        kind: 'action',
+        api: event.api,
+        ...(event.selector === undefined ? {} : { selector: event.selector }),
+        ...(event.ref === undefined ? {} : { ref: event.ref }),
+        ok: event.ok,
+        ...(event.error === undefined ? {} : { error: event.error }),
+        ...(stepId === undefined ? {} : { stepId }),
       });
     }),
   );

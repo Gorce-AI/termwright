@@ -247,3 +247,25 @@ describes the session, like `columns` and `platform` beside it, and `meta.json`
 is our file — putting a termwright field inside a foreign format's `term`
 object risks colliding with whatever asciicast puts there later, for the sake
 of a `session.cast` extracted on its own, which asciinema would ignore anyway.
+
+## Driver actions record themselves
+
+The driver emits an `action` event per harness or locator call (4a3261c), so
+the writer subscribes instead of asking callers to report their own actions.
+`recordAction` stays for work the driver cannot see; calling it for a harness
+action would record that action twice, and its TSDoc says so. Nothing outside
+this package called it when the subscription landed, so there was nothing to
+migrate.
+
+Two properties of the event worth remembering, both from the driver:
+
+- **It arrives after the action finished**, so `t` is the completion time and
+  the bytes the action sent appear *earlier* on the timeline than the action
+  entry. Anything drawing a "this action caused that output" relationship has
+  to read backwards. There is a test asserting the `input`-then-`action` order
+  so nobody "fixes" it into the intuitive one.
+- **Failed actions are emitted too**, which is the valuable half. `error`
+  carries a code (`unsupported-action`, `timeout`), not prose — the message
+  belongs to the thrown error, the code is for grouping. The report puts failed
+  actions on the timeline beside the steps; successful ones stay out, since the
+  timeline is for what went wrong.

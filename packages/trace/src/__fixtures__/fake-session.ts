@@ -88,6 +88,24 @@ export class FakeSession implements TraceSource {
     this.#emit('semantic-revision', { revision: snapshot.revision, timeMs: this.clock });
   }
 
+  /**
+   * Emits a driver action, which the driver reports *after* it finished — so
+   * a test that sends input then emits the action mirrors the real order.
+   */
+  action(
+    api: string,
+    outcome: { ok?: boolean; selector?: string; ref?: string; error?: string } = {},
+  ): void {
+    this.#emit('action', {
+      api,
+      ok: outcome.ok ?? true,
+      ...(outcome.selector === undefined ? {} : { selector: outcome.selector }),
+      ...(outcome.ref === undefined ? {} : { ref: outcome.ref }),
+      ...(outcome.error === undefined ? {} : { error: outcome.error }),
+      timeMs: this.clock,
+    });
+  }
+
   /** Emits a line read from a followed log file. */
   logLine(line: string, label = 'app.log', path = `/var/log/${label}`): void {
     this.#emit('app-log', { source: 'file', label, path, line, timeMs: this.clock });

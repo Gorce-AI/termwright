@@ -11,7 +11,7 @@ An archive is a directory (zippable for transport) holding four files:
 |---|---|
 | `meta.json` | session id, command, viewport, platform, exit status, crash |
 | `session.cast` | asciicast **v3**; `test.step()` titles become markers |
-| `events.jsonl` | inputs, resizes, steps, locator actions, assertions, crash |
+| `events.jsonl` | inputs, resizes, steps, driver actions, assertions, crash |
 | `semantics.jsonl` | one semantic tree per revision, with its cast offset |
 | `logs.jsonl` | application log entries; absent when the session logged nothing |
 
@@ -128,6 +128,13 @@ filter on.
 A test that passed under `trace: 'on'` keeps its archive too, so its section
 names the `.twtrace` path and shows the whole log rather than a failure window.
 The section stays collapsed — nothing failed — but the artifacts are all there.
+
+Driver actions record themselves: the harness emits one per `click`, `press`,
+`resize` and so on, **failures included**, so the report can say the click
+never landed and why instead of showing a screen that simply did not change.
+Failed actions appear on the test timeline with their error code. Note that an
+action's timestamp is when it *finished*, so the bytes it sent sit earlier on
+the timeline than the action itself.
 
 The report shows the entries inside the failing step, level-coloured, and pins
 `warn`/`error`/`fatal` entries onto the test timeline next to the steps, so a

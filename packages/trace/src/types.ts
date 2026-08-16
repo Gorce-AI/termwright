@@ -263,15 +263,31 @@ export interface StepEndEvent extends TraceEventBase {
   readonly error?: string;
 }
 
-/** A driver action (`click`, `press`, …) with its outcome. */
+/**
+ * A driver action (`click`, `press`, …) with its outcome.
+ *
+ * `t` is when the action **finished**, because that is when the driver reports
+ * it. The bytes an action sent therefore appear on the timeline *before* the
+ * action entry that caused them — anything drawing a "this action produced
+ * that output" relationship has to read backwards from the action, not
+ * forwards.
+ *
+ * Failed actions are recorded too, which is the point: a report can say the
+ * click never landed and why, instead of showing silence.
+ */
 export interface ActionEvent extends TraceEventBase {
   readonly kind: 'action';
-  /** Driver API name, e.g. `'locator.click'`. */
+  /** Driver API name, e.g. `'click'`, `'press'`, `'resize'`. */
   readonly api: string;
   readonly selector?: string;
   /** Resolved target ref, e.g. `'n8@42'`. */
   readonly ref?: string;
   readonly ok: boolean;
+  /**
+   * Failure reason as a **code** (`'unsupported-action'`, `'timeout'`), not
+   * prose: the message belongs to the thrown error, this field is for grouping
+   * and filtering.
+   */
   readonly error?: string;
   readonly stepId?: string;
 }
