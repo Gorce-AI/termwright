@@ -207,3 +207,9 @@
   entries, `stateAt(t, {logWindow})`, default 20) and `TraceReader` gains
   `logs()`. Redaction is the source's job (`@termwright/logs`); tailed file
   lines are raw and carry `crash.screenTail`'s handling caveat.
+- 2026-08-16 (seq semantics): LogRecord.seq is STRICTLY increasing within a
+  semantic session. A duplicate or decreasing seq rejects that single record
+  with a 'log-dropped' diagnostic (detail names the reason); it does NOT
+  close the channel. An upward gap still means source-side dropping and is
+  reported as before. File follower fingerprint fix (driver 56c410f): head
+  window fixed at snapshot time, no re-emission on append to short files.
