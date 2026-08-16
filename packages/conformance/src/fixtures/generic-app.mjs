@@ -79,8 +79,12 @@ function draw() {
   // or TERM is broken in ways that look like a driver bug much later. The home
   // variable is named per platform because the allowlist is: Windows has no
   // `HOME`, and a program there uses the profile variables instead.
+  // `TERM` and `COLORTERM` are not inherited but set by the driver, so their
+  // values are the claim rather than their presence. Printed before `allow:`,
+  // which several suites wait on as the last line of the frame.
+  out(`term: ${process.env['TERM'] ?? 'unset'}/${process.env['COLORTERM'] ?? 'unset'}\r\n`);
   const home = process.platform === 'win32' ? 'USERPROFILE' : 'HOME';
-  const allow = ['PATH', home, 'TERM', 'LANG']
+  const allow = ['PATH', home, 'LANG']
     .map((name) => `${name}=${process.env[name] === undefined ? 'no' : 'yes'}`)
     .join(' ');
   out(`allow: ${allow}\r\n`);
