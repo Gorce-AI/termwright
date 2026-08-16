@@ -1,5 +1,5 @@
---- a/src/terminal/frame.rs	2026-08-17 00:52:43
-+++ b/src/terminal/frame.rs	2026-08-17 00:52:44
+--- a/src/terminal/frame.rs	2026-08-17 01:05:05
++++ b/src/terminal/frame.rs	2026-08-17 01:05:05
 @@ -104,6 +104,18 @@
      ///
      /// [`Layout`]: crate::layout::Layout

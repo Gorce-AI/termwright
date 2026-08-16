@@ -247,7 +247,9 @@ fn a_vanilla_ratatui_app_reaches_the_probe() {
         "type_name did not survive the hook:\n{text}"
     );
 
-    // And the same application, uninstrumented, leaves no trace.
+    // And the same application, uninstrumented, publishes nothing. It does say
+    // why, once, because a typo in one of the two variables is otherwise
+    // indistinguishable from a probe that does not work.
     let dormant_log = app.join("dormant.log");
     let dormant = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
         .args(["run", "--quiet", "--config", &patch])
@@ -258,11 +260,202 @@ fn a_vanilla_ratatui_app_reaches_the_probe() {
         .output()
         .expect("cargo runs");
     assert!(dormant.status.success());
+    let dormant_text = std::fs::read_to_string(&dormant_log).unwrap_or_default();
     assert!(
-        !dormant_log.exists(),
-        "a dormant run still produced diagnostics"
+        !dormant_text.contains("first render intercepted"),
+        "a dormant run collected render calls:\n{dormant_text}"
+    );
+    assert!(
+        !dormant_text.contains("session started"),
+        "a dormant run opened a session:\n{dormant_text}"
+    );
+    assert!(
+        dormant_text.contains("dormant:"),
+        "a dormant run did not say why it published nothing:\n{dormant_text}"
     );
 
+    let _ = std::fs::remove_dir_all(&copy);
+    let _ = std::fs::remove_dir_all(&app);
+}
+
+// -- the definition of done for this framework ------------------------------
+
+/// A driver end that completes the handshake and records what arrives.
+fn start_driver(path: &str) -> std::sync::mpsc::Receiver<serde_json::Value> {
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixListener;
+
+    use termwright_protocol::{encode_frame, FrameDecoder, DEFAULT_LIMITS};
+
+    let listener = UnixListener::bind(path).expect("binding the driver socket");
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return;
+        };
+        let mut decoder =
+            FrameDecoder::new(DEFAULT_LIMITS.max_frame_bytes, DEFAULT_LIMITS.max_depth);
+        let mut buffer = [0u8; 16384];
+        loop {
+            let Ok(count) = stream.read(&mut buffer) else {
+                return;
+            };
+            if count == 0 {
+                return;
+            }
+            let Ok(frames) = decoder.push(&buffer[..count]) else {
+                return;
+            };
+            for frame in frames {
+                if frame.value.get("type").and_then(serde_json::Value::as_str) == Some("hello") {
+                    let ack = serde_json::json!({
+                        "type": "hello-ack",
+                        "protocol": "termwright/1",
+                        "sessionId": "s-e2e",
+                        "limits": DEFAULT_LIMITS,
+                        "subscribe": "snapshots",
+                        "marker": { "enabled": true },
+                    });
+                    let encoded =
+                        encode_frame(&ack, DEFAULT_LIMITS.max_frame_bytes).expect("encoding");
+                    let _ = stream.write_all(&encoded);
+                }
+                if sender.send(frame.value).is_err() {
+                    return;
+                }
+            }
+        }
+    });
+    receiver
+}
+
+/// Zero-config, end to end: an ordinary Ratatui application publishes a tree.
+///
+/// Everything above proves a piece. This proves the claim: an application that
+/// imports nothing of ours, launched with one flag and two variables, hands a
+/// real driver a validated semantic tree and commits it with a marker.
+#[test]
+fn a_vanilla_app_publishes_a_validated_tree() {
+    use std::time::{Duration, Instant};
+
+    let Some(source) = registry_source() else {
+        eprintln!("skipped: ratatui-core {VERSION} is not unpacked in this registry");
+        return;
+    };
+    let copy = scratch("publish-core");
+    copy_out(&source, &copy).expect("copy out");
+    let manifest = read_manifest(&patch_set_dir().join("manifest.json")).expect("manifest");
+    apply(&manifest, &patch_set_dir(), &copy, &probe_dir()).expect("applies");
+
+    let app = scratch("publish-app");
+    std::fs::create_dir_all(app.join("src")).expect("app dir");
+    std::fs::write(
+        app.join("Cargo.toml"),
+        "[package]\nname = \"publishing-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\
+         \n[dependencies]\nratatui = \"0.30\"\n",
+    )
+    .expect("manifest");
+    std::fs::write(
+        app.join("src/main.rs"),
+        r#"use ratatui::widgets::{Block, List, Paragraph};
+
+fn main() {
+    let backend = ratatui::backend::TestBackend::new(40, 10);
+    let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
+    terminal
+        .draw(|frame| {
+            let area = frame.area();
+            frame.render_widget(Block::bordered().title("Permission"), area);
+            frame.render_widget(Paragraph::new("Approve?"), area);
+            frame.render_widget(List::new(["yes", "no"]), area);
+        })
+        .expect("draw");
+    println!("drew a frame");
+}
+"#,
+    )
+    .expect("source");
+
+    // A short socket path: the 104-byte sockaddr_un limit is easy to exceed
+    // under a temp directory, and the failure looks like a driver that never
+    // accepted.
+    let socket = format!("/tmp/tw-ratatui-{}.sock", std::process::id());
+    let _ = std::fs::remove_file(&socket);
+    let received = start_driver(&socket);
+
+    let patch = format!("patch.crates-io.ratatui-core.path='{}'", copy.display());
+    let run = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+        .args(["run", "--quiet", "--config", &patch])
+        .current_dir(&app)
+        .env("TERMWRIGHT_ENDPOINT", &socket)
+        .env("TERMWRIGHT_TOKEN", "test-token")
+        .env("TERMWRIGHT_RATATUI_VERSION", "0.30.2")
+        .output()
+        .expect("cargo runs");
+    assert!(
+        run.status.success(),
+        "the instrumented app failed:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut hello = None;
+    let mut snapshot = None;
+    while Instant::now() < deadline && (hello.is_none() || snapshot.is_none()) {
+        match received.recv_timeout(Duration::from_millis(200)) {
+            Ok(message) => match message.get("type").and_then(serde_json::Value::as_str) {
+                Some("hello") => hello = Some(message),
+                Some("snapshot") => snapshot = Some(message),
+                _ => {}
+            },
+            Err(_) => break,
+        }
+    }
+
+    let hello = hello.expect("the app never completed a handshake");
+    let declared = hello
+        .get("probe")
+        .expect("the driver cannot tell this is a probe");
+    assert_eq!(declared["framework"], "ratatui");
+    assert_eq!(
+        declared["identityKind"], "frame-local",
+        "the probe claimed an identity Ratatui cannot support"
+    );
+    assert_eq!(declared["frameworkVersion"], "0.30.2");
+
+    let snapshot = snapshot.expect("no tree reached the driver");
+    let tree = &snapshot["snapshot"];
+    let result = termwright_protocol::validate_snapshot(tree, &termwright_protocol::DEFAULT_LIMITS);
+    assert!(result.is_ok(), "the published tree is invalid: {result:?}");
+
+    let nodes = tree["nodes"].as_array().expect("nodes");
+    assert!(!nodes.is_empty(), "the tree is empty: {tree}");
+    assert!(
+        nodes.iter().all(|node| node["occlusion"] == "unknown"),
+        "a node claimed to know about occlusion: {tree}"
+    );
+    let roles: Vec<&str> = nodes
+        .iter()
+        .filter_map(|node| node["role"].as_str())
+        .collect();
+    assert!(
+        roles.contains(&"region"),
+        "no Block became a region: {roles:?}"
+    );
+    assert!(
+        roles.contains(&"text"),
+        "no Paragraph became text: {roles:?}"
+    );
+    assert!(roles.contains(&"list"), "no List became a list: {roles:?}");
+
+    // The marker commits the frame, and it must follow the frame's bytes.
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        stdout.contains("\u{1b}]8487;"),
+        "no render-commit marker was written"
+    );
+
+    let _ = std::fs::remove_file(&socket);
     let _ = std::fs::remove_dir_all(&copy);
     let _ = std::fs::remove_dir_all(&app);
 }

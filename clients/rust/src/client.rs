@@ -29,7 +29,7 @@ use crate::logs::{AttrValue, LogLevel, LogRecord, MAX_LOG_ATTRS};
 use crate::marker::encode_marker;
 use crate::messages::{
     default_capabilities, parse_driver_message, GetTree, GetTreeResult, Hello, HelloAck,
-    LogMessage, ProtocolErrorMessage, RevisionCommit, SnapshotMessage,
+    LogMessage, ProbeInfo, ProtocolErrorMessage, RevisionCommit, SnapshotMessage,
 };
 use crate::roles::Capability;
 use crate::tree::Snapshot;
@@ -71,6 +71,9 @@ pub struct Options {
     /// Bound on a single frame write. `None` disables it, which is only sane
     /// for a caller that publishes off the render path.
     pub write_timeout: Option<Duration>,
+    /// What a probe says it can observe. `None` for a hand-written adapter,
+    /// which is what the driver assumes by default.
+    pub probe: Option<ProbeInfo>,
     /// Adapter-side diagnostic log, or `None` for silence — which is what
     /// [`Options::new`] leaves here unless `TERMWRIGHT_DEBUG_FILE` names a
     /// file. Shared rather than owned so an adapter can log alongside the
@@ -97,6 +100,7 @@ impl Options {
             capabilities: default_capabilities(),
             limits: DEFAULT_LIMITS,
             write_timeout: Some(WRITE_TIMEOUT),
+            probe: None,
             // Left silent on purpose: opening a file is a side effect, and a
             // constructor is the wrong place for one. `Client::from_env` is
             // where the environment is read, here and in the other clients.
@@ -316,12 +320,15 @@ impl Client {
         stream.set_write_timeout(self.options.write_timeout)?;
         self.stream = Some(stream);
 
-        let hello = Hello::new(
+        let mut hello = Hello::new(
             &self.token,
             &self.options.adapter_name,
             &self.options.adapter_version,
             self.options.capabilities.clone(),
         );
+        if let Some(probe) = self.options.probe.clone() {
+            hello = hello.with_probe(probe);
+        }
         self.send(&hello)?;
         self.debug_line(
             Category::Sem,

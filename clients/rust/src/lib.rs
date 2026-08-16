@@ -71,7 +71,10 @@ pub use marker::{
     compute_mac, encode_marker, verify_marker_payload, RenderMarker, MARKER_MAC_BYTES,
     MARKER_OSC_CODE, MARKER_OSC_PREFIX,
 };
-pub use messages::{parse_adapter_message, parse_driver_message, PROTOCOL_ID, PROTOCOL_VERSION};
+pub use messages::{
+    parse_adapter_message, parse_driver_message, ProbeIdentityKind, ProbeInfo, PROTOCOL_ID,
+    PROTOCOL_VERSION,
+};
 pub use roles::{Action, Capability, Role};
 pub use tree::{
     Cursor, CursorShape, Node, Occlusion, Orientation, Provenance, Rect, Snapshot, State, TextRange,

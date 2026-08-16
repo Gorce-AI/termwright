@@ -537,22 +537,30 @@ mod tests {
 
     #[test]
     fn the_manifest_reader_reads_our_manifest() {
-        let manifest = read_manifest(Path::new(
-            "upstream-patches/ratatui-core/0.1.2/manifest.json",
-        ))
-        .expect("the shipped manifest parses");
+        let directory = Path::new("upstream-patches/ratatui-core/0.1.2");
+        let manifest =
+            read_manifest(&directory.join("manifest.json")).expect("the shipped manifest parses");
         assert_eq!(manifest.framework, "ratatui-core");
         assert_eq!(manifest.framework_version, "0.1.2");
-        assert_eq!(manifest.patch_set_version, 1);
-        let paths: Vec<&str> = manifest
-            .patched
-            .iter()
-            .map(|file| file.path.as_str())
-            .collect();
-        assert_eq!(paths, ["Cargo.toml", "src/terminal/frame.rs"]);
+        assert!(manifest.patch_set_version >= 1);
+
+        // Not the version number and not the file list: pinning either turns
+        // every legitimate change to the patch set into a test to update. What
+        // is worth asserting is that the manifest describes something real.
+        assert!(!manifest.patched.is_empty());
         for file in &manifest.patched {
+            assert!(
+                directory.join(&file.patch).is_file(),
+                "{} names a patch that is not there",
+                file.path
+            );
             assert!(file.sha256_before.starts_with("sha256:"), "{file:?}");
-            assert_ne!(file.sha256_before, file.sha256_after, "{file:?}");
+            assert_ne!(
+                file.sha256_before, file.sha256_after,
+                "{} is pinned to the same state before and after, so the patch \
+                 either does nothing or the manifest was not regenerated",
+                file.path
+            );
         }
     }
 }

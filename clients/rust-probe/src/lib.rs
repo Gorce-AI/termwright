@@ -25,6 +25,7 @@
 //! of the `no_std` crate that calls it.
 
 pub mod patchset;
+pub mod session;
 pub mod tree;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,6 +33,7 @@ use std::sync::{Mutex, OnceLock};
 
 use termwright_protocol::client::{ENV_ENDPOINT, ENV_TOKEN};
 use termwright_protocol::debug::{Category, DebugLog};
+use termwright_protocol::{ProbeIdentityKind, ProbeInfo};
 
 /// One `render_widget` call, as the patched crate reported it.
 ///
@@ -212,15 +214,14 @@ mod tests {
 /// `operations` *is* claimed: an immediate-mode frame is a call stream, and
 /// that stream is the only structure there is.
 #[must_use]
-pub fn probe_info(framework_version: Option<&str>) -> String {
-    let version = framework_version
-        .map(|value| format!(",\"frameworkVersion\":\"{value}\""))
-        .unwrap_or_default();
-    format!(
-        "{{\"framework\":\"ratatui\",\"probeVersion\":\"{}\",\
-         \"identityKind\":\"frame-local\",\"capabilities\":[\"operations\"]{version}}}",
-        env!("CARGO_PKG_VERSION")
-    )
+pub fn probe_info(framework_version: Option<&str>) -> ProbeInfo {
+    ProbeInfo {
+        framework: "ratatui".to_owned(),
+        framework_version: framework_version.map(str::to_owned),
+        probe_version: env!("CARGO_PKG_VERSION").to_owned(),
+        identity_kind: ProbeIdentityKind::FrameLocal,
+        capabilities: vec!["operations".to_owned()],
+    }
 }
 
 #[cfg(test)]
@@ -234,7 +235,7 @@ mod handshake_tests {
     /// is not exposed, and there is nowhere for an author to annotate.
     #[test]
     fn it_claims_only_what_ratatui_gives() {
-        let declared = probe_info(Some("0.30.2"));
+        let declared = serde_json::to_string(&probe_info(Some("0.30.2"))).expect("serialises");
         assert!(
             declared.contains("\"identityKind\":\"frame-local\""),
             "{declared}"
@@ -257,6 +258,7 @@ mod handshake_tests {
 
     #[test]
     fn the_framework_version_is_optional() {
-        assert!(!probe_info(None).contains("frameworkVersion"));
+        let declared = serde_json::to_string(&probe_info(None)).expect("serialises");
+        assert!(!declared.contains("frameworkVersion"), "{declared}");
     }
 }

@@ -71,6 +71,44 @@ pub struct Hello {
     pub adapter: AdapterInfo,
     /// What this adapter can provide.
     pub capabilities: Vec<Capability>,
+    /// Present when the sender is a probe rather than a hand-written adapter.
+    ///
+    /// Carries what the probe can actually observe — framework and versions,
+    /// the best identity it can produce, and its optional abilities — so the
+    /// driver negotiates against measured capability rather than a floor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub probe: Option<ProbeInfo>,
+}
+
+/// How an object's identity behaves across frames.
+///
+/// `FrameLocal` is a legitimate answer, not a degraded one: in immediate mode
+/// the widget is consumed by the render and nothing survives to be named
+/// again. A consumer must not correlate frame-local values between frames.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProbeIdentityKind {
+    /// Identities survive across frames and may be correlated.
+    Stable,
+    /// Identities are meaningful only within their own frame.
+    FrameLocal,
+}
+
+/// What a probe says about itself when it attaches.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeInfo {
+    /// Framework name, e.g. `ratatui`.
+    pub framework: String,
+    /// Version of the framework, when the probe can determine it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub framework_version: Option<String>,
+    /// Version of the probe itself, so a mismatch is diagnosable.
+    pub probe_version: String,
+    /// The best identity this probe can offer for any object.
+    pub identity_kind: ProbeIdentityKind,
+    /// Optional abilities, from the protocol's closed set.
+    pub capabilities: Vec<String>,
 }
 
 impl Hello {
@@ -85,7 +123,15 @@ impl Hello {
                 version: version.to_owned(),
             },
             capabilities,
+            probe: None,
         }
+    }
+
+    /// Attach a probe's declaration to this handshake.
+    #[must_use]
+    pub fn with_probe(mut self, probe: ProbeInfo) -> Self {
+        self.probe = Some(probe);
+        self
     }
 }
 
