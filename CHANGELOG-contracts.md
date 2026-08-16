@@ -234,3 +234,9 @@
   run-end summary gains flaky?, durationMs?. All optional/additive. test↔
   session binding remains optional (reporter cannot know worker sessions);
   no testId on output/semantic.
+- 2026-08-16 (owner decision): pre-1.0 there is ONE producer generation —
+  §UI events fields are REQUIRED (file, startedAt, durationMs, flaky,
+  summary.flaky, summary.durationMs); optional only where genuinely unknowable
+  (sessionId) or genuinely absent (traceRef, error). Receiver-side fallbacks
+  removed. General rule for all in-repo contracts until 1.0 ships: no
+  backward-compat shims, no "older producer" branches.
