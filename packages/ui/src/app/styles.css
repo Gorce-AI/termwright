@@ -11,8 +11,13 @@
   /* Surfaces, from furthest back to closest. */
   --bg: #0e1117;
   --panel: #161a22;
-  --raised: var(--raised);
-  --selected: var(--selected);
+  /* A step above the panel, and the row you picked. These were declared as
+     `var(--raised)` — a cycle, which CSS treats as invalid, so every raised
+     surface and every selected row in the dark theme fell back to
+     transparent. The light theme defined them properly and looked right,
+     which is why it went unnoticed. */
+  --raised: #1d2230;
+  --selected: #24304a;
   --line: #262c38;
 
   /* Text. */
@@ -88,6 +93,171 @@ body {
   }
 }
 
+/* `hidden` is a UA rule of the lowest specificity, so any `display` a class
+   sets beats it. Everything in this panel that hides itself sets `hidden`, so
+   the attribute has to win. */
+[hidden] {
+  display: none !important;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  height: 100vh;
+  background: var(--bg);
+}
+
+.view {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The sidebar is the one part of the panel that never changes shape, so it is
+   what tells you where you are. */
+.sidebar {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  min-width: 0;
+}
+
+.side-head {
+  display: grid;
+  gap: 2px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.side-head .project {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-head .branch {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar nav ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0 8px;
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar .nav {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar .nav:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.sidebar .nav.current {
+  background: var(--tint-accent);
+  color: var(--accent);
+}
+
+.sidebar .nav:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.sidebar .nav .glyph {
+  width: 1em;
+  text-align: center;
+}
+
+.sidebar .running-dot {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.side-foot {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.side-foot .link {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.side-foot .link:hover {
+  color: var(--text);
+}
+
+.view-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.view-head h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.view-head .fact {
+  font-size: 11px;
+}
+
+.page {
+  overflow: auto;
+  padding: 12px 16px;
+  min-height: 0;
+}
+
+.settings {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 18px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.settings dt {
+  color: var(--muted);
+}
+
+.settings dd {
+  margin: 0;
+}
+
 .layout {
   --split-main: 70%;
   --split-bottom: 50%;
@@ -98,7 +268,7 @@ body {
     'terminal split-main inspector'
     'split-bottom split-main inspector'
     'timeline split-main inspector';
-  height: 100vh;
+  min-height: 0;
   background: var(--line);
 }
 

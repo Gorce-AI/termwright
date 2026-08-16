@@ -17,6 +17,7 @@
 import type { LogWindowQuery, TraceLogs } from './trace-logs.js';
 import type { TraceCommands, TraceFrames } from './trace-playback.js';
 import type { TraceOverview, TraceStatePayload } from './trace-source.js';
+import type { ProjectInfo } from './project.js';
 import type { RunManifest, RunSummaryEntry } from './runs.js';
 
 /**
@@ -28,6 +29,11 @@ import type { RunManifest, RunSummaryEntry } from './runs.js';
  */
 export interface ViewerState {
   readonly mode: 'live' | 'post-mortem' | 'record';
+  /**
+   * Which project, which branch, which version — the frame around every view.
+   * A report carries the values as they were when it was written.
+   */
+  readonly project: ProjectInfo;
   readonly sessions: readonly {
     readonly sessionId: string;
     readonly command: readonly string[];

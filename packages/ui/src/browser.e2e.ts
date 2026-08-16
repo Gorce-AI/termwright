@@ -125,6 +125,9 @@ describe('the runner UI in a browser', () => {
   it('lists the tests and their counts', async () => {
     const page = await open(await buildFixtureTrace());
 
+    // A page opened on an archive lands in the runner; the list of specs is
+    // its own place now, and this is the walk to it.
+    await page.locator(testId('nav-specs')).click();
     expect(await textOf(page, testId('test-counts'))).not.toBe('');
     expect(await page.locator(testId('tests')).isVisible()).toBe(true);
     await expect.poll(() => page.locator(testId('test')).count()).toBeGreaterThan(0);
@@ -196,7 +199,9 @@ describe('the runner UI in a browser', () => {
   it('shows no crash panel for a session that exited cleanly', async () => {
     const page = await open(await buildFixtureTrace());
 
-    await page.locator(testId('tests')).waitFor({ state: 'attached', timeout: 15_000 });
+    // Wait for the archive to be open — the crash panel, if there were one,
+    // renders with the rest of the runner.
+    await page.locator(testId('scrub')).waitFor({ state: 'attached', timeout: 15_000 });
     expect(await page.locator(testId('crash')).count()).toBe(0);
   });
 
@@ -434,7 +439,7 @@ describe('the runner UI showing run history', () => {
     const crashed = await buildCrashedFixtureTrace();
     const { page } = await serve({ runsDir: await writeRuns(crashed) });
 
-    await page.locator(testId('view-runs')).click();
+    await page.locator(testId('nav-runs')).click();
     await expect.poll(() => page.locator(testId('run')).count(), { timeout: 15_000 }).toBe(2);
 
     // History is newest first, and it is the *older* run whose test failed and
@@ -458,7 +463,7 @@ describe('the runner UI showing run history', () => {
   it('warns on a test whose log lost records, without restating its result', async () => {
     const { page } = await serve({ runsDir: await writeRuns(await buildFixtureTrace()) });
 
-    await page.locator(testId('view-runs')).click();
+    await page.locator(testId('nav-runs')).click();
     await page.locator(testId('run')).last().click();
     const row = page.locator(testId('run-test')).first();
     await row.waitFor();
@@ -578,7 +583,8 @@ describe('the viewer emitted as a self-contained report', () => {
 
     // A report holds one recording, so it must not offer a history tab that
     // could only ever fail.
-    expect(await page.locator(testId('view-runs')).count()).toBe(0);
+    // A report holds one recording, so the history is not a place it can go.
+    expect(await page.locator(testId('nav-runs')).count()).toBe(0);
     expect(failed).toEqual([]);
   });
 });

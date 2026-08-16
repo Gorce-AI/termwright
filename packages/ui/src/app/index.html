@@ -11,6 +11,11 @@
     />
   </head>
   <body>
+    <div class="app">
+      <aside class="sidebar" id="sidebar"></aside>
+      <div class="view">
+        <div id="view-head"></div>
+        <div id="page" class="page" hidden></div>
     <main class="layout">
       <section class="pane terminal-pane">
         <header class="pane-head">
@@ -26,6 +31,9 @@
       <section class="pane" id="inspector"></section>
       <div class="splitter horizontal" id="split-bottom" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize the bottom panel"></div>
       <section class="pane" id="timeline"></section>
+    </main>
+      </div>
+    </div>
       <aside id="shortcuts" class="shortcuts" hidden>
         <h2>Keyboard</h2>
         <dl>
@@ -36,7 +44,6 @@
           <dt><kbd>?</kbd></dt><dd>this list</dd>
         </dl>
       </aside>
-    </main>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

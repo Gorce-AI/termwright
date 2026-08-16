@@ -21,6 +21,7 @@ import { openTrace } from '@termwright/trace';
 import { INLINE_PAYLOAD_KEY, type InlinePayload, type ViewerState } from './data-source.js';
 import { readTraceLogs } from './trace-logs.js';
 import { readCommandLog, readFrames } from './trace-playback.js';
+import { readProjectInfo } from './project.js';
 import { readTraceOverview } from './trace-source.js';
 
 /** Payload ceiling, in bytes of JSON, before frames and logs are cut. */
@@ -39,6 +40,8 @@ export interface InlineReportOptions {
   readonly budgetBytes?: number;
   /** Directory holding the built browser app. Default `dist/app`. */
   readonly appDir?: string;
+  /** Project directory, for the name and branch shown in the frame. */
+  readonly cwd?: string;
 }
 
 /** What an emission left out, so a caller can say so too. */
@@ -76,6 +79,9 @@ export async function buildInlinePayload(
 
     const state: ViewerState = {
       mode: 'post-mortem',
+      // The frame states what was true when the report was written; a reader
+      // opening it next month is not looking at their own checkout.
+      project: await readProjectInfo(options.cwd ?? process.cwd()),
       // A report has no attached session: the recording is the session, and the
       // pane builds its terminal from the archive's own profile.
       sessions: [],

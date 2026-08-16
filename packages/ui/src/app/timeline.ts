@@ -13,7 +13,7 @@ import type { TraceOverview } from '../trace-source.js';
 import { formatMs } from '../view-model.js';
 import { percentFor, timeAt } from '../timeline-scale.js';
 import { renderCrashPanel } from './crash-panel.js';
-import { renderTestList, type TestListHandlers, type TestListModel } from './test-list.js';
+import type { TestListHandlers, TestListModel } from './test-list.js';
 import { renderRunHistory, type RunHistoryHandlers, type RunHistoryModel } from './run-history.js';
 import type { AppLogView } from '../app-log.js';
 import type { PlaybackSpeed } from '../playback.js';
@@ -63,14 +63,6 @@ export interface TimelineModel {
   /** Playback state, when a recording is open. */
   readonly playing: boolean;
   readonly speed: PlaybackSpeed;
-  /** Which half of the pane is showing. */
-  readonly view: 'tests' | 'runs';
-  /**
-   * Whether past runs can be listed at all. A self-contained report holds one
-   * recording, so it hides the tab rather than offering an empty list.
-   */
-  readonly hasHistory: boolean;
-  readonly runHistory: RunHistoryModel;
 }
 
 /** What the timeline can ask the app to do. */
@@ -78,41 +70,51 @@ export interface TimelineHandlers extends TestListHandlers, RunHistoryHandlers {
   jump(direction: -1 | 1): void;
   togglePlay(): void;
   cycleSpeed(): void;
-  setView(view: 'tests' | 'runs'): void;
 }
 
 /** Renders the timeline pane. */
 export function renderTimeline(model: TimelineModel, handlers: TimelineHandlers): TemplateResult {
   return html`
     <header class="pane-head">
-      <nav class="segmented" aria-label="Panel view">
-        <button
-          class=${model.view === 'tests' ? 'active' : ''}
-          data-testid="view-tests"
-          @click=${() => handlers.setView('tests')}
-        >
-          Tests
-        </button>
-        ${model.hasHistory
-          ? html`<button
-              class=${model.view === 'runs' ? 'active' : ''}
-              data-testid="view-runs"
-              @click=${() => handlers.setView('runs')}
-            >
-              Runs
-            </button>`
-          : ''}
-      </nav>
+      <h2>Command timeline</h2>
+      <span class="spacer"></span>
       <span class="muted">${model.mode}${model.connected ? '' : ' — reconnecting…'}</span>
     </header>
 
     ${model.trace === null ? '' : renderScrubber(model, model.trace, handlers)}
     ${renderCrashPanel(model.trace?.crash ?? null, { seek: (timeMs) => handlers.seek(timeMs) })}
 
-    ${model.view === 'runs'
-      ? renderRunHistory(model.runHistory, handlers)
-      : renderTestList(model.testList, handlers)}
+    ${renderSteps(model.testList)}
     ${model.summary === null ? '' : html`<footer class="summary">${model.summary}</footer>`}
+  `;
+}
+
+/**
+ * The steps of the test in focus.
+ *
+ * The list of specs moved to its own view, so this pane stopped being a list
+ * and became what the runner actually needs: where the focused test is, on the
+ * timeline above it. Rendering the list here as well would have been two live
+ * copies of one component — the thing this panel exists not to do.
+ */
+function renderSteps(model: TestListModel): TemplateResult {
+  const test = model.tests.find((candidate) => candidate.id === model.selectedId);
+  if (test === undefined) {
+    return html`<p class="empty" data-testid="no-focus">
+      Pick a test in Specs to see its steps here.
+    </p>`;
+  }
+  return html`
+    <div class="steps" data-testid="steps">
+      <h3>${test.title}</h3>
+      ${model.steps.length === 0
+        ? html`<p class="empty">This test reported no steps.</p>`
+        : html`<ol>
+            ${model.steps.map(
+              (step) => html`<li class=${`step ${step.status}`}>${step.title}</li>`,
+            )}
+          </ol>`}
+    </div>
   `;
 }
 

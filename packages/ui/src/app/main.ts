@@ -9,13 +9,15 @@
 
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { html, render } from 'lit-html';
+import { html, render, type TemplateResult } from 'lit-html';
 import type { SemanticSnapshot } from '@termwright/protocol';
 import { fromBase64, type ServerMessage } from '../events.js';
 import type { GeneratedSelector } from '../selector.js';
 import type { TraceOverview } from '../trace-source.js';
 import { RunnerClient, type ServerState } from './client.js';
 import { InlineDataSource, readInlinePayload, type DataSource } from '../data-source.js';
+import { renderSidebar, renderViewHeader, type ViewName } from './sidebar.js';
+import type { ProjectInfo } from '../project.js';
 import { renderInspector, type InspectorHandlers } from './inspector.js';
 import {
   applyAriaAttributes,
@@ -35,6 +37,8 @@ import {
   type PlaybackState,
 } from '../playback.js';
 import { renderCommandLog, type CommandLogHandlers } from './command-log.js';
+import { renderRunHistory } from './run-history.js';
+import { renderTestList } from './test-list.js';
 import {
   renderLogPanel,
   visibleLogs,
@@ -113,6 +117,91 @@ function recorder(): RunnerClient {
   if (runner === undefined) throw new Error('recording needs the runner server');
   return runner;
 }
+/** Title and context for the bar above the current view. */
+function viewHeader(): [string, readonly (string | null)[]] {
+  const session = state.activeSessionId === null ? null : state.sessions.get(state.activeSessionId);
+  const profile = session?.terminalProfile ?? state.trace?.terminalProfile ?? null;
+  switch (state.view) {
+    case 'specs':
+      return ['Specs', [`${state.tests.length} tests`, state.project.branch]];
+    case 'runs':
+      return ['Runs', [state.runs.length === 0 ? null : `${state.runs.length} recorded`]];
+    case 'settings':
+      return ['Settings', [`termwright ${state.project.version}`]];
+    default:
+      return [
+        selectedTest()?.title ?? state.trace?.command.join(' ') ?? 'Runner',
+        [state.mode, profile === null ? null : `profile ${profile}`],
+      ];
+  }
+}
+
+/**
+ * The view that is not the runner.
+ *
+ * Specs and Runs render the same components the runner pane used to hold —
+ * this is a move, not a second implementation. Settings is new and read-only
+ * for now: it states what the panel resolved rather than offering to change it.
+ */
+function renderPage(): TemplateResult {
+  if (state.view === 'runs') {
+    return renderRunHistory(
+      {
+        runs: state.runs,
+        openId: state.openRunId,
+        tests: state.openRunTests,
+        openTracePath: state.openTracePath,
+        loading: state.openRunLoading,
+      },
+      timelineHandlers,
+    );
+  }
+  if (state.view === 'settings') {
+    return html`
+      <dl class="settings" data-testid="settings">
+        <dt>Project</dt>
+        <dd>${state.project.name}</dd>
+        <dt>Branch</dt>
+        <dd>${state.project.branch ?? 'not a git repository'}</dd>
+        <dt>termwright</dt>
+        <dd>${state.project.version}</dd>
+        <dt>Mode</dt>
+        <dd>${state.mode}</dd>
+      </dl>
+    `;
+  }
+  return renderTestList(
+    {
+      tests: state.tests,
+      query: state.testQuery,
+      selectedId: state.selectedTestId,
+      canRerun: source.features.live && state.mode !== 'post-mortem',
+      now: state.now,
+      steps: selectedTest()?.steps ?? [],
+    },
+    timelineHandlers,
+  );
+}
+
+const sidebarHandlers = {
+  go(view: ViewName): void {
+    state.view = view;
+    // The history is read when its view is opened rather than kept fresh in
+    // the background: it changes when a run ends, which is rarely.
+    if (view === 'runs') void loadRuns();
+    schedule();
+  },
+  shortcuts(): void {
+    const sheet = document.querySelector<HTMLElement>('#shortcuts');
+    if (sheet !== null) sheet.hidden = !sheet.hidden;
+  },
+};
+
+
+const sidebarHost = document.querySelector<HTMLElement>('#sidebar');
+const viewHeadHost = document.querySelector<HTMLElement>('#view-head');
+const pageHost = document.querySelector<HTMLElement>('#page');
+const runnerHost = document.querySelector<HTMLElement>('.layout');
 const terminalHost = document.querySelector<HTMLElement>('#terminal');
 const inspectorHost = document.querySelector<HTMLElement>('#inspector');
 const timelineHost = document.querySelector<HTMLElement>('#timeline');
@@ -158,7 +247,8 @@ const state = {
   logsHasMoreBefore: false,
   logsLoadingOlder: false,
   logLevels: {} as Readonly<Partial<Record<LogLevel, number>>>,
-  paneView: 'tests' as 'tests' | 'runs',
+  view: 'specs' as ViewName,
+  project: { name: '…', branch: null, version: '' } as ProjectInfo,
   runs: [] as RunSummaryEntry[],
   openRunId: null as string | null,
   openRunTests: [] as RunTest[],
@@ -273,6 +363,24 @@ function draw(): void {
   if (state.rightTab === 'commands') revealCurrentCommand();
 
   render(
+    renderSidebar(
+      {
+        project: state.project,
+        view: state.view,
+        running: state.tests.some((test) => test.status === 'running'),
+        hasRunner: state.mode !== 'live' || state.tests.length > 0 || state.sessions.size > 0,
+        hasHistory: source.features.history,
+      },
+      sidebarHandlers,
+    ),
+    sidebarHost as HTMLElement,
+  );
+  render(renderViewHeader(...viewHeader()), viewHeadHost as HTMLElement);
+  (runnerHost as HTMLElement).hidden = state.view !== 'runner';
+  (pageHost as HTMLElement).hidden = state.view === 'runner';
+  if (state.view !== 'runner') render(renderPage(), pageHost as HTMLElement);
+
+  render(
     renderTimeline(
       {
         mode: state.mode,
@@ -285,15 +393,6 @@ function draw(): void {
         playing: state.playback.playing,
         recordingCut: state.framesTruncated,
         speed: state.playback.speed,
-        view: state.paneView,
-        hasHistory: source.features.history,
-        runHistory: {
-          runs: state.runs,
-          openId: state.openRunId,
-          tests: state.openRunTests,
-          openTracePath: state.openTracePath,
-          loading: state.openRunLoading,
-        },
         testList: {
           tests: state.tests,
           query: state.testQuery,
@@ -706,13 +805,6 @@ const timelineHandlers: TimelineHandlers = {
     }
     const target = nextMarker(state.trace?.markers ?? [], state.timeMs, direction);
     if (target !== undefined) void seek(target);
-  },
-  setView(view) {
-    state.paneView = view;
-    // The history is read when the tab is opened rather than kept fresh in the
-    // background: it changes when a run ends, which is rarely.
-    if (view === 'runs') void loadRuns();
-    schedule();
   },
   open(id) {
     state.openRunId = id;
@@ -1188,9 +1280,10 @@ runner?.connect(handle, (connected) => {
 });
 
 void source
-      .state()
+  .state()
   .then(async (server: ServerState) => {
     state.mode = server.mode;
+    state.project = server.project;
     state.trace = server.trace;
     if (server.record !== null) {
       state.recordSessionId = server.record.sessionId;
@@ -1199,8 +1292,12 @@ void source
     }
     if (server.trace !== null) {
       state.activeSessionId = server.trace.sessionId;
+      // A page opened on an archive is opened to look at it, so it starts in
+      // the runner rather than in a list of specs that cannot be run.
+      state.view = 'runner';
       await loadArchive();
     }
+    if (server.record !== null) state.view = 'runner';
     schedule();
   })
   .catch((error: unknown) => note(describe(error)));

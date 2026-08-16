@@ -33,6 +33,7 @@ import {
   type UiServerMode,
 } from './events.js';
 import { discoverTests, type DiscoveryOptions } from './discovery.js';
+import { readProjectInfo } from './project.js';
 import { DEFAULT_RUNS_DIR, readRunHistory, readRunManifest } from './runs.js';
 import { UiHub, type UiHubOptions } from './hub.js';
 import { attachSession, type UiSessionSource } from './live.js';
@@ -138,6 +139,11 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   const hub = new UiHub(options.hub ?? {});
   const sessions = new Map<string, AttachedSession>();
   const appDir = options.appDir ?? fileURLToPath(new URL('../dist/app/', import.meta.url));
+
+  // Read once at startup: the branch can change under a long-running server,
+  // but re-reading it per request would spawn a git process on every poll for
+  // a line of context. A restart is the cheap way to refresh it.
+  const project = await readProjectInfo(options.discovery?.cwd ?? options.record?.cwd ?? process.cwd());
 
   let mode: UiServerMode = 'live';
   let reader: TraceReader | undefined;
@@ -312,6 +318,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       case 'GET /api/state': {
         sendJson(response, 200, {
           mode,
+          project,
           sessions: [...sessions.values()].map((session) => ({
             sessionId: session.source.sessionId,
             command: session.command ?? [],

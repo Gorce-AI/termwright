@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+
+const project = { name: 'demo', branch: 'main', version: '0.1.0' };
 import {
   INLINE_PAYLOAD_KEY,
   InlineDataSource,
@@ -10,7 +12,7 @@ const record = (t: number) => ({ t, source: 'adapter' as const, level: 'info' as
 
 const payload = (count: number): InlinePayload => ({
   v: 1,
-  state: { mode: 'post-mortem', sessions: [], trace: null, record: null },
+  state: { mode: 'post-mortem', project, sessions: [], trace: null, record: null },
   frames: { frames: [], truncated: false, durationMs: 1_000, revisions: [] },
   commands: { commands: [], incomplete: false },
   logs: {
