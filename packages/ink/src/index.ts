@@ -13,6 +13,8 @@
 
 export { semanticRender, withSemantics } from './render.js';
 export type { InkRenderFn, SemanticOptions, SemanticRenderOptions } from './render.js';
+export { Semantic } from './semantic.js';
+export type { SemanticProps } from './semantic.js';
 export { useSemantic } from './use-semantic.js';
 export type { SemanticMeta } from './types.js';
 export { readAdapterEnv } from './config.js';

@@ -11,7 +11,7 @@
 import { StrictMode, useEffect, useRef } from 'react';
 import { Box, Text, measureElement, render, type DOMElement, type Instance } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { semanticRender, useSemantic } from './index.js';
+import { Semantic, semanticRender, useSemantic } from './index.js';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { createFakeStdout, type FakeStdout } from './testing/fake-stdout.js';
 import { markersIn, stripMarkers } from './testing/markers.js';
@@ -234,6 +234,68 @@ describe('invisibility to the host application', () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       expect(instrumented.metrics).toEqual(plain.metrics);
+    });
+  });
+
+  describe('the declarative wrapper is invisible too', () => {
+    /** The same tree, annotated three ways, must render the same bytes. */
+    const shapes = {
+      plain: (
+        <Box flexDirection="column">
+          <Box borderStyle="round">
+            <Text>Approve</Text>
+          </Box>
+        </Box>
+      ),
+      semantic: (
+        <Box flexDirection="column">
+          <Semantic role="button" name="Approve" state={{ focused: true }}>
+            <Box borderStyle="round">
+              <Text>Approve</Text>
+            </Box>
+          </Semantic>
+        </Box>
+      ),
+      aria: (
+        <Box flexDirection="column">
+          <Box borderStyle="round" aria-role="button">
+            <Text>Approve</Text>
+          </Box>
+        </Box>
+      ),
+    };
+
+    it('renders byte-identically however the tree was annotated', () => {
+      const outputs = Object.entries(shapes).map(([name, tree]) => {
+        const stdout = createFakeStdout();
+        openApps.push(render(tree, { ...INK_OPTIONS, alternateScreen: true, stdout }));
+        return [name, stdout.text] as const;
+      });
+
+      for (const [name, text] of outputs) {
+        expect(text, `${name} differs from plain`).toBe(outputs[0]?.[1]);
+      }
+    });
+
+    it('says nothing on the console, including under StrictMode', async () => {
+      const trap = trapConsole();
+      traps.push(trap);
+
+      await instrument(<StrictMode>{shapes.semantic}</StrictMode>);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      expect(trap.lines).toEqual([]);
+    });
+
+    it('leaves the instrumented stream free of anything but the marker', async () => {
+      const baselineStdout = createFakeStdout();
+      openApps.push(
+        render(shapes.plain, { ...INK_OPTIONS, alternateScreen: true, stdout: baselineStdout }),
+      );
+
+      const { stdout } = await instrument(shapes.semantic);
+
+      expect(stripMarkers(stdout.text)).toBe(baselineStdout.text);
     });
   });
 

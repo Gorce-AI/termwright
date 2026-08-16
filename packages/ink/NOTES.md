@@ -55,6 +55,37 @@ already queued and nothing more, which is exactly the guarantee the marker needs
    `DOMElement` type.** The adapter reads it (never writes it). If Ink renames
    it, role detection for un-annotated apps breaks; `useSemantic` keeps working.
 
+## `<Semantic>`: annotate the child's element, never render one
+
+The declarative wrapper must not introduce a `<Box>`. In a terminal a layout
+change *is* a visible change, so a wrapper element would break the byte
+identity the whole adapter rests on. `<Semantic>` therefore clones its single
+child with a ref attached and renders nothing of its own — zero nodes, zero
+layout, zero bytes, asserted against a plain baseline in both
+`semantic.test.tsx` and `invisibility.test.tsx`.
+
+Consequences worth knowing:
+
+- **The child must accept a ref, which in Ink means `<Box>`.** `<Text>` is a
+  plain function component; in React 19 the ref simply arrives as an ignored
+  prop, so a `<Semantic>` wrapped around bare text annotates nothing. It still
+  *renders* the text — throwing would violate the rule that this adapter never
+  takes an application down — and it stays silent, because a `console.warn`
+  would violate the invisibility guarantee proven next door. Documented in the
+  README instead.
+- **Refs compose.** If the application already put a ref on that element, both
+  are called; the annotation never steals it.
+- **Nesting needs no context.** The collector derives `parentId` from the
+  rendered tree, so a `listitem` inside a `list` is already published under it.
+  The brief asked for a context to carry `parentId`; it would have been dead
+  code, and the nesting tests pass without it. The one case a context *would*
+  disambiguate is two `<Semantic>` wrappers around the same element, where the
+  registry is keyed by element and the outer one wins — rare enough to
+  document rather than engineer around.
+
+The invisibility claim was verified by sabotage: replacing the clone with a
+real `<Box>` wrapper turns three tests red, byte identity among them.
+
 ## Invisibility to the host application — what is proven, and what it costs
 
 Since no upstream change is coming, the way this adapter hooks in has to stay

@@ -18,7 +18,61 @@ npm install @termwright/ink
 
 Peer dependencies: `ink >= 7.1`, `react >= 19.2`, Node >= 22.
 
-## Usage
+## Three ways to annotate
+
+Pick the lightest one that fits. They compose: an explicit annotation wins over
+`aria-*` on the same element, and everything not overridden still contributes.
+
+### 1. `aria-*` props — native Ink, no dependency on us
+
+If your app already annotates itself for Ink's screen-reader support, it is
+already addressable. This costs you nothing and works even if termwright is
+never installed:
+
+```tsx
+<Box aria-role="checkbox" aria-state={{checked}}>
+  <Text>Remember me</Text>
+</Box>
+```
+
+Role and state come through. The accessible name comes from the rendered text —
+Ink does not retain `aria-label` on the element, so it cannot reach us.
+
+### 2. `<Semantic>` — declarative, full control
+
+```tsx
+import {Semantic} from '@termwright/ink';
+
+<Semantic role="dialog" name="Permission" state={{modal: true}}>
+  <Box borderStyle="round" flexDirection="column">
+    <Semantic role="button" name="Approve" state={{focused}} testId="approve">
+      <Box><Text>Approve</Text></Box>
+    </Semantic>
+  </Box>
+</Semantic>
+```
+
+No hook, no ref, no wrapper element: `<Semantic>` annotates the element its
+child already renders, so it adds nothing to the layout and nothing to the
+output — the test suite asserts byte identity against the same tree without it.
+Nesting needs no wiring; a `listitem` inside a `list` is published under it
+because that is where it sits.
+
+The child must be an element that accepts a ref, which in Ink means `<Box>`.
+Wrapping a bare `<Text>` annotates nothing (it takes no ref); put it in a Box.
+
+### 3. `useSemantic` — imperative, for what JSX cannot express
+
+When the annotation is computed rather than written — a role that depends on
+state, or a node whose ref you already hold:
+
+```tsx
+const ref = useRef<DOMElement>(null);
+useSemantic(ref, {role: expanded ? 'menu' : 'button', name, state: {expanded}});
+return <Box ref={ref}>…</Box>;
+```
+
+## Mounting
 
 Swap `render` for `semanticRender`, and annotate the elements a test should be
 able to find:
@@ -123,7 +177,10 @@ on coordinates.**
 - `semanticRender(node, options?)` — `ink.render` plus semantics. Accepts every
   Ink render option, plus `semantics: {env?, handshakeTimeoutMs?}`.
 - `withSemantics(renderFn)` — wraps a custom Ink-compatible render function.
-- `useSemantic(ref, meta)` — annotate a `<Box>`. A no-op outside a session.
+- `<Semantic role name? state? actions? testId?>` — annotate the element its
+  single child renders. Adds no node, no layout and no bytes.
+- `useSemantic(ref, meta)` — annotate a `<Box>` imperatively. A no-op outside a
+  session.
 
 ## Failure behaviour
 
