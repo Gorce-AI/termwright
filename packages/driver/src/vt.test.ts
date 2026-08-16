@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { encodeMarker, MARKER_DCS_PREFIX } from '@termwright/protocol';
+import { encodeMarker, verifyMarkerPayload } from '@termwright/protocol';
 import { captureScreen, captureRows } from './screen.js';
 import { matchGrid } from './matching.js';
 import { textMatcher } from './selectors.js';
@@ -54,9 +54,26 @@ describe('VtScreen', () => {
     await screen.write(`${encodeMarker('token', 'session', 3)}after`);
 
     expect(seen).toHaveLength(1);
-    expect(seen[0]?.payload.startsWith(MARKER_DCS_PREFIX)).toBe(true);
+    // The payload is handed on verbatim: what the handler receives must be
+    // exactly what the verifier expects, with no reassembly in between.
+    expect(verifyMarkerPayload(seen[0]?.payload ?? '', 'token', 'session')?.revision).toBe(3);
     expect(seen[0]?.screenRevision).toBe(2);
     expect(captureRows(screen)[0]?.text).toBe('beforeafter');
+  });
+
+  it('sights a marker terminated by ST as well as by BEL', async () => {
+    // Adapters emit BEL, but the encoding permits either terminator and a
+    // parser consumes it before dispatch — so both must reach the same place.
+    const screen = createVt();
+    const seen: MarkerSighting[] = [];
+    screen.onMarker((marker) => seen.push(marker));
+
+    const bel = encodeMarker('token', 'session', 5);
+    await screen.write(`${bel.slice(0, -1)}\x1b\\tail`);
+
+    expect(seen).toHaveLength(1);
+    expect(verifyMarkerPayload(seen[0]?.payload ?? '', 'token', 'session')?.revision).toBe(5);
+    expect(captureRows(screen)[0]?.text).toBe('tail');
   });
 
   it('sees a marker that follows a synchronized-output block', async () => {

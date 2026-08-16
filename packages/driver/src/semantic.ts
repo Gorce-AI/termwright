@@ -68,7 +68,7 @@ export interface SemanticChannelHooks {
   /**
    * An advisory `revision-commit` arrived.
    *
-   * Pairing authority is the snapshot plus the DCS render marker (design
+   * Pairing authority is the snapshot plus the render marker (design
    * §4.3): the marker *is* the commit, because only it is ordered against the
    * bytes of the render. This message says the adapter believes it committed
    * revision N; it never publishes a revision on its own, and an adapter that

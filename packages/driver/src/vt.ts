@@ -14,12 +14,14 @@
  *    reports neither cursor visibility nor cursor shape, so a private
  *    `CSI ? h/l` handler tracks 1005/1006/1015/25 and `DECSCUSR` alongside it.
  *
- * APC is not parsed by xterm.js, so the render-commit marker arrives as a
- * private DCS sequence (`ESC P twm;{rev};{mac} ST`) and is consumed here before
- * it can reach the grid.
+ * The render-commit marker arrives as a private OSC sequence
+ * (`ESC ] 8487 ; twm;{rev};{mac} BEL`) and is consumed here before it can reach
+ * the grid. OSC is what the marker rides because ConPTY forwards it: the
+ * permeability probe in `escapes.pty.test.ts` measured it dropping DCS, APC and
+ * OSC 8 while passing private OSC with either terminator.
  */
 import { createTerminal, loadSerializeAddon, type Terminal, type TerminalProfile } from '@termwright/vt';
-import { MARKER_DCS_FINAL, type CursorInfo } from '@termwright/protocol';
+import { MARKER_OSC_CODE, type CursorInfo } from '@termwright/protocol';
 import type { TerminalModes } from './api.js';
 
 
@@ -62,9 +64,9 @@ export interface ShellIntegration {
   readonly lastExitCode: number | null;
 }
 
-/** A DCS marker payload observed during a write, tagged with its revision. */
+/** A marker payload observed during a write, tagged with its revision. */
 export interface MarkerSighting {
-  /** Raw payload between DCS and ST, e.g. `twm;7;AAAA…`. */
+  /** Payload after `OSC 8487;`, e.g. `twm;7;AAAA…`. */
   readonly payload: string;
   /** Screen revision the marker commits, i.e. the revision of its write batch. */
   readonly screenRevision: number;
@@ -266,11 +268,11 @@ export class VtScreen {
   #registerHandlers(): void {
     const parser = this.terminal.parser;
 
-    // Render-commit marker. `ESC P twm;… ST` is parsed as DCS with final byte
-    // 't' and payload 'wm;…', so the original payload is reassembled here.
-    parser.registerDcsHandler({ final: MARKER_DCS_FINAL }, (data: string) => {
+    // Render-commit marker. An OSC handler receives everything after the
+    // number and its separator, which is the payload verbatim.
+    parser.registerOscHandler(MARKER_OSC_CODE, (data: string) => {
       const sighting: MarkerSighting = {
-        payload: MARKER_DCS_FINAL + data,
+        payload: data,
         screenRevision: this.#revision + 1,
       };
       for (const cb of this.#markerListeners) cb(sighting);

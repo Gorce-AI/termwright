@@ -1,7 +1,7 @@
 /**
  * Minimal semantic fixture: a hand-written adapter that performs the real
- * handshake, publishes a two-button dialog and commits each render with a DCS
- * marker. It exercises the whole semantic path (endpoint, framing, validation,
+ * handshake, publishes a two-button dialog and commits each render with a
+ * render marker. It exercises the whole semantic path (endpoint, framing, validation,
  * pairing, locators, actions) without depending on any UI framework.
  *
  * Dormant rule: without `TERMWRIGHT_ENDPOINT` it opens nothing and prints the

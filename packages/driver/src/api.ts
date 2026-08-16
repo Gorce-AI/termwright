@@ -356,7 +356,7 @@ export type DiagnosticCode =
   | 'revision-expired'
   /** A revision was dropped: already published, or too many were in flight. */
   | 'revision-dropped'
-  /** A DCS marker arrived whose MAC did not verify; ordinary output cannot forge one. */
+  /** A render marker arrived whose MAC did not verify; ordinary output cannot forge one. */
   | 'marker-unverified'
   /** The semantic channel was closed on a protocol violation. */
   | 'protocol-violation'
