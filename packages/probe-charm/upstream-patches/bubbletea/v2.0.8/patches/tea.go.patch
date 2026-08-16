@@ -9,7 +9,7 @@
 +		p.renderer.render(view) // send view to renderer
 +		// Injected by termwright: one call site covers the loop, the initial
 +		// frame and the final one, because v2 consolidated all three here.
-+		termwrightAfterView(model, view)
++		termwrightAfterView(p, model, view)
  	}
  }
  

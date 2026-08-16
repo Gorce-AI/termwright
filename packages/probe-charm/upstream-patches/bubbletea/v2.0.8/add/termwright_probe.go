@@ -75,13 +75,22 @@ func newTermwrightProbe() *termwrightProbeState {
 //
 // One call site, unlike v1's three: v2 consolidated the loop, initial and
 // final frames into this wrapper, which is why the v2 patch is a single hunk.
-func termwrightAfterView(model Model, view View) {
+func termwrightAfterView(program *Program, model Model, view View) {
 	p := termwrightProbe
 	if p == nil || !p.client.Connected() {
 		return
 	}
 
-	snapshot := p.snapshot(model, view)
+	// The viewport size comes from the Program, which learns it from the
+	// terminal. Before the first WindowSizeMsg it is zero, and a zero is not a
+	// smaller number — it is "not known yet". Publishing it gets the whole
+	// snapshot refused by validation, so the frame is skipped instead.
+	columns, rows := program.width, program.height
+	if columns <= 0 || rows <= 0 {
+		return
+	}
+
+	snapshot := p.snapshot(model, view, columns, rows)
 	marker, err := p.client.Publish(snapshot)
 	if err != nil || marker == "" {
 		p.dropped.Add(1)
@@ -95,11 +104,8 @@ func termwrightAfterView(model Model, view View) {
 }
 
 // snapshot reflects over the user's model and reports what it recognises.
-func (p *termwrightProbeState) snapshot(model Model, view View) *protocol.Snapshot {
-	// The frame's own dimensions are not knowable here: `View.Content` is a
-	// styled string and the renderer has not rasterised it yet. Zero is
-	// honest; a guess would be a fact nobody observed.
-	snapshot := &protocol.Snapshot{Columns: 0, Rows: 0}
+func (p *termwrightProbeState) snapshot(model Model, view View, columns, rows int) *protocol.Snapshot {
+	snapshot := &protocol.Snapshot{Columns: columns, Rows: rows}
 
 	rootID := p.identity("root")
 	snapshot.RootIDs = append(snapshot.RootIDs, rootID)
@@ -183,8 +189,17 @@ func termwrightRecognise(value reflect.Value, fieldName string) *recognised {
 	switch component {
 	case "textinput", "textarea":
 		node.Role = protocol.RoleTextbox
-		node.Value = termwrightCallString(value, "Value")
 		node.State = termwrightFocusState(value)
+		// A masked field's contents are not ours to publish. `Value()` returns
+		// the secret whatever the widget draws, so a probe that reads it puts
+		// a password into the semantic tree, the trace archive and the HTML
+		// report — three places nobody expected one. The screen shows dots;
+		// so does the tree.
+		if termwrightEchoesPlainly(value) {
+			node.Value = termwrightCallString(value, "Value")
+		} else {
+			node.State = termwrightWithReadonlySecret(node.State)
+		}
 	case "list":
 		node.Role = protocol.RoleList
 		if title := termwrightCallString(value, "Title"); title != nil && *title != "" {
@@ -228,6 +243,29 @@ func termwrightCallString(value reflect.Value, name string) *string {
 	}
 	result := method.Call(nil)[0].String()
 	return &result
+}
+
+// termwrightEchoesPlainly reports whether the widget draws what it holds.
+//
+// `EchoMode` is an exported field on textinput, and anything other than
+// EchoNormal means the user deliberately hid the contents.
+func termwrightEchoesPlainly(value reflect.Value) bool {
+	field := value.FieldByName("EchoMode")
+	if !field.IsValid() || !field.CanInt() {
+		// No echo mode at all — textarea, for instance — so nothing is hidden.
+		return true
+	}
+	return field.Int() == 0 // EchoNormal
+}
+
+// termwrightWithReadonlySecret marks a field whose contents were withheld, so
+// a reader can tell "empty" from "not published on purpose".
+func termwrightWithReadonlySecret(state *protocol.State) *protocol.State {
+	if state == nil {
+		state = &protocol.State{}
+	}
+	state.ReadOnly = protocol.Bool(true)
+	return state
 }
 
 func termwrightFocusState(value reflect.Value) *protocol.State {
