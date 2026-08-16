@@ -59,6 +59,24 @@ register matchers on `expect` as a side effect. Using the individual packages
 rather than the umbrella, the same imports are `@termwright/test/reporter` and
 `@termwright/ui/reporter`.
 
+## Three levels, merged key by key
+
+Options come from three places, in increasing specificity:
+
+```
+defineTermwrightConfig()  <  test.scoped({termwrightOptions})  <  terminal.launch({…})
+```
+
+`test.scoped` sets options for a file or a `describe` — Playwright's `test.use()`
+on Vitest's own mechanism. Scopeable: `command`, `columns`, `rows`, `env`,
+`timeouts`, `trace`, `failOnLogLevel`.
+
+The merge is **key by key**. `env` and `timeouts` merge entry by entry, so
+scoping one variable or one timeout class keeps the rest; `command` is replaced
+wholly, because two argument lists do not merge. See
+[Test data and fixtures](../../guides/test-data/) for why that matters — scoping
+a single key would otherwise drop everything else the project configured.
+
 ## Profiles and deterministic colour
 
 `TERMWRIGHT_PROFILE=ci` selects a profile. A profile's palette pins the 16 ANSI

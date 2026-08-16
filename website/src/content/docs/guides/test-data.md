@@ -78,6 +78,49 @@ Three guarantees hold, and the preset pins all three with its own tests:
   your fixture cleans up, the session it built on is still alive. A fixture that
   logs out, snapshots a final state or asserts on a log can still do it.
 
+## Options for a file or a suite
+
+The equivalent of Playwright's `test.use()`, built on Vitest's own mechanism. A
+file of wide-layout tests sets `columns: 200` once instead of repeating it in
+every `launch()`:
+
+```ts
+import {describe} from 'vitest';
+import {test, expect} from 'termwright/test';
+
+test.scoped({termwrightOptions: {columns: 120, trace: 'on'}});
+
+describe('the wide layout', () => {
+  test.scoped({termwrightOptions: {columns: 200}});
+  // …tests here get 200 columns; the rest of the file gets 120.
+});
+```
+
+Scopeable: `command`, `columns`, `rows`, `env`, `timeouts`, `trace`,
+`failOnLogLevel`.
+
+### How the three levels merge
+
+```
+defineTermwrightConfig()  <  test.scoped({termwrightOptions})  <  terminal.launch({…})
+```
+
+The merge is **key by key**, and that is the part worth knowing rather than an
+implementation detail. `test.scoped` replaces a fixture's whole value, so if the
+scoped value were taken as-is, scoping only `trace` would silently drop the
+project's viewport, environment and command — and the suite would fail for a
+reason nothing in the test file mentions. So `launch()` does the merging.
+
+`env` and `timeouts` merge entry by entry too: scoping one variable, or one
+timeout class, keeps the others. `command` is the exception — an argv is
+replaced wholly, never concatenated, because there is no sensible way to merge
+two argument lists.
+
+:::note[`trace` is a session policy, not a test policy]
+It is resolved when a session launches. A test that runs two sessions with
+different trace modes keeps the archive of the one that asked for it.
+:::
+
 ## Coming from Cypress
 
 | Cypress | Here |
