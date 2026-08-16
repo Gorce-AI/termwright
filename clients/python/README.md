@@ -188,6 +188,61 @@ The line format is the driver's, so `TERMWRIGHT_DEBUG=1` on the driver and
 `TERMWRIGHT_DEBUG_FILE=…` on the app produce two halves of one story that a
 single reader can take.
 
+## Zero-config probe (Textual)
+
+The adapter above asks the application to call `enable_semantics()`. The probe
+asks it for nothing at all.
+
+```sh
+python -m termwright_probe -- python app.py
+```
+
+`app.py` imports no termwright, calls nothing of ours, and is not edited. The
+launcher puts a generated `sitecustomize.py` on `PYTHONPATH`; CPython imports
+it during startup, before the script's own directory reaches `sys.path`; the
+probe waits there until the application imports Textual and attaches to
+`App.post_display_hook`. A driver that already sets `TERMWRIGHT_ENDPOINT` and
+`TERMWRIGHT_TOKEN` can compose the same thing itself:
+
+```python
+from termwright_probe import with_probe
+
+command, env, bootstrap = with_probe(["python", "app.py"])
+# run `command` with `env`; call bootstrap.cleanup() when the session ends
+```
+
+Nothing is written into the project. The temporary directory holds one
+generated file and is named only in the child's environment.
+
+**Dormant without instrumentation.** No endpoint and no token means the
+launcher creates no directory, and the generated module — if one survived from
+an earlier run — installs nothing. A test runs the same application on a pty
+with and without the bootstrap and compares the two byte streams: they are
+identical. A second test compares an instrumented run against the baseline
+after removing the render-commit markers, and those are identical too, which is
+the claim that the probe observes rather than redraws.
+
+**What it reports that the adapter could not.**
+
+| Fact | Where it comes from |
+|---|---|
+| `bounds` = what is on screen | `MapGeometry.visible_region`, Textual's `clip ∩ region` |
+| `occlusion: "known"` | widgets ranked by `MapGeometry.order`, the compositor's own sort key |
+| roles for your own widget classes | the MRO, so `SaveButton(Button)` is a button with no registration |
+| `frameworkType` on anything unrecognised | the widget's class name |
+| scrolled out of view vs `display = False` | both `hidden`; the first carries a zero-area rect, the second no rect |
+
+Because paint order is real here, the driver allows pointer actions against
+Textual nodes; it refuses them for producers that cannot say whether a node's
+cells are covered.
+
+**Where the injection reaches**, measured on CPython 3.12 (see
+`docs/architecture/audit/textual.md` for the full table): a plain script,
+`-m`, `-c`, a console-script entry point and `uv run` all work. `python -S`
+and `python -E` do not, and are not meant to — the first disables `site`
+entirely and the second makes the interpreter ignore `PYTHONPATH`. Both are
+the person running the interpreter opting out.
+
 ## Deviations
 
 Measured against the adapter conventions in the protocol README. Everything
@@ -208,6 +263,21 @@ not listed here follows them.
   tree at all. A widget hidden on the *active* screen (`display = False`) does
   publish `hidden: true`. Textual owns the screen stack; reaching into it would
   mean publishing widgets that no longer receive events.
+- **`poetry` is unverified.** Poetry was not installed on the machine where the
+  injection table was measured. It runs the interpreter from the project venv
+  as a subprocess and passes the environment through, so it is *expected* to
+  behave like the venv row, and that expectation has not been confirmed. Treat
+  a poetry-run application as untested for the probe until somebody watches it
+  work.
+- **The probe instruments grandchildren too.** `PYTHONPATH` is inherited, so a
+  process the application spawns is also instrumented unless the variable is
+  scrubbed. Visible to the application as well: it can read its own
+  environment. This is a property of the injection mechanism, not a decision.
+- **The probe does not report `frame-begin`** (probe capability). Textual calls
+  `post_display_hook` from the `finally` of `App._display`, *after* the frame
+  has been flushed, so there is no instant the probe could honestly call the
+  start of a frame. Consumers must not read a missing `frame-begin` as "no
+  frame in progress".
 - **A `Static` subclass with a custom `render()` is named by its `content`**
   (rule 2), which is the markup it was given rather than what it draws. Textual
   renders to a strip of segments with no text handle the adapter can read.
