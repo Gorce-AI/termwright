@@ -224,11 +224,50 @@ Two properties worth keeping:
   a frame that will never come. Writing it the other way round cost three
   timeouts.
 
+## The payload ceiling is set by the narrowest command line
+
+The fixture payload travels as a **command-line argument** — in production, not
+only in tests (`fixture.ts` builds `[node, runner-entry.mjs, payload]`, and the
+runner reads `process.argv[2]`). That makes `MAX_PAYLOAD_BYTES` a property of
+the transport rather than a matter of taste.
+
+It used to be 64 KiB. Windows caps an entire command line at 32,767 characters,
+enforced by the OS at spawn, so on that platform the ceiling could never be
+reached: props between the two limits passed the encoder and then died as a raw
+`ENAMETOOLONG` with nothing to say about what went wrong, on one OS only. A
+limit whose gate cannot fire is not a limit. It is now **24 KiB**, which leaves
+roughly 8 KiB for the interpreter path, the runner path and quoting.
+
+### If 24 KiB turns out to be too tight
+
+The alternative, ready to reach for at the first real report of cramping: move
+the payload to a **temporary file** and pass its path in argv. A path is short,
+so the platform limit stops applying and 64 KiB (or more) becomes available
+again.
+
+What it costs, and why it was not done pre-emptively:
+
+- a file lifecycle — create with owner-only permissions (props can carry
+  application data), read once, unlink; plus cleanup when the runner dies before
+  reading, which is exactly the case that leaks in CI;
+- one more failure mode at startup (temp dir unwritable, disk full) that
+  currently cannot happen;
+- a second thing to keep correct on every platform, where today there is one.
+
+Do it as a *replacement*, never as a fallback above some size: two paths mean
+the rarely used one rots unnoticed, and it would be the one carrying the
+unusual, largest payloads.
+
 ## Open threads
 
-- Windows is untested. `@lydell/node-pty` covers the fixture path and the
-  in-process path has no platform surface at all, but neither has been exercised
-  on a ConPTY host.
+- Windows now runs, and the first run that got this far found three bugs — all
+  of them tests asserting a platform's *mechanism* instead of the behaviour this
+  package owes. A signalled child has no signal in its exit status under
+  ConPTY, so the assertion moved to the session invariant. Mouse mode degraded
+  to "unknown", flipping a refusal assertion into its opposite, so `mountInk`
+  now declares `modesObservable: true` — a fact about the harness owning both
+  ends, not a test flag. And the payload ceiling above. Anything asserting an
+  OS-reported detail is a candidate for the same treatment.
 - The control channel carries one command. `rerender` is the only thing a test
   has needed so far; unmount-on-demand or a props *patch* would fit the same
   framing if a use case turns up.
