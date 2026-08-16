@@ -3,6 +3,7 @@ export * from './errors.js';
 export * from './roles.js';
 export * from './limits.js';
 export * from './tree.js';
+export * from './node-keys.js';
 export * from './logs.js';
 export * from './delta.js';
 export * from './accesskit.js';

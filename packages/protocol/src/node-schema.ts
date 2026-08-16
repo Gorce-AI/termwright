@@ -48,6 +48,10 @@ export interface TreeSchemas {
   readonly node: z.ZodType;
   readonly cursor: z.ZodType;
   readonly snapshot: z.ZodType;
+  /** Field names of `SemanticNode`, read off the schema itself. */
+  readonly nodeKeys: readonly string[];
+  /** Field names of `SemanticState`, read off the schema itself. */
+  readonly stateKeys: readonly string[];
 }
 
 const cache = new WeakMap<ProtocolLimits, TreeSchemas>();
@@ -126,7 +130,14 @@ function build(limits: ProtocolLimits): TreeSchemas {
     nodes: z.array(node).max(limits.maxNodes),
   });
 
-  return { text, node, cursor, snapshot };
+  return {
+    text,
+    node,
+    cursor,
+    snapshot,
+    nodeKeys: Object.freeze(Object.keys(node.shape)),
+    stateKeys: Object.freeze(Object.keys(state.shape)),
+  };
 }
 
 /** Memoised schema family for the given limits. */
