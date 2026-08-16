@@ -504,6 +504,20 @@ failed launch is not an error: a machine with no browser can do nothing about it
 except copy the line already on screen. The whole tokenised URL is what gets
 opened — a tokenless address renders an unauthorised page and reads as a bug.
 
+## A lossy log is a warning, not a verdict
+
+`@termwright/test` counts the application log records it could not keep, and the
+run manifest carries that count per test. The row says "logs incomplete" beside
+the status and never instead of it: a test that passed while its log dropped
+records still passed, and colouring the row would make people rerun a green test
+looking for a failure that is not there.
+
+The count is required in a manifest rather than optional, because "nothing was
+dropped" and "nobody counted" are different facts and only one of them is
+reassuring — which is why the format went to v2 instead of quietly reading a
+v1 entry as zero. Live runs do not carry the count yet: `test-end` would need
+the field, and that is a change to the normative §UI events contract.
+
 ## Open threads
 
 - **`termwright ui` binary** (task #10, the umbrella CLI) wires the flags:

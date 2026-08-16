@@ -879,12 +879,20 @@ button.active {
   white-space: nowrap;
 }
 
-.badge.flaky {
+.badge.flaky,
+.badge.lost-logs {
   padding: 0 5px;
   border-radius: 8px;
   font-size: 10px;
   color: var(--warn);
   background: var(--tint-warn);
+}
+
+/* Not a status: the row keeps its own colour, and this warns about the log
+   beside it. A test that passed with a lossy log still passed. */
+.badge.lost-logs {
+  border: 1px solid var(--tint-warn);
+  background: transparent;
 }
 
 .duration {

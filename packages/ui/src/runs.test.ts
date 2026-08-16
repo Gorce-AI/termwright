@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  RUN_MANIFEST_VERSION,
   parseRunManifest,
   readRunHistory,
   readRunManifest,
@@ -12,7 +13,7 @@ import {
 } from './runs.js';
 
 const manifest = (partial: Partial<RunManifest> = {}): RunManifest => ({
-  v: 1,
+  v: RUN_MANIFEST_VERSION,
   id: '2026-08-16T10-00-00-000Z',
   startedAt: 1_760_000_000_000,
   finishedAt: 1_760_000_002_000,
@@ -25,6 +26,7 @@ const manifest = (partial: Partial<RunManifest> = {}): RunManifest => ({
       status: 'passed',
       durationMs: 300,
       flaky: false,
+      lostLogRecords: 0,
     },
     {
       id: 't2',
@@ -33,6 +35,7 @@ const manifest = (partial: Partial<RunManifest> = {}): RunManifest => ({
       status: 'failed',
       durationMs: 500,
       flaky: false,
+      lostLogRecords: 0,
       traceRef: '/repo/out/t2.twtrace',
       error: 'button stayed disabled',
     },
@@ -106,7 +109,11 @@ describe('readRunHistory', () => {
 
 describe('parseRunManifest', () => {
   it('rejects a manifest from a version this build does not know', () => {
-    expect(parseRunManifest(JSON.stringify({ ...manifest(), v: 2 }))).toBeNull();
+    expect(parseRunManifest(JSON.stringify({ ...manifest(), v: 99 }))).toBeNull();
+    // v1 is this project's own previous format, and is rejected on the same
+    // grounds: its tests carry no `lostLogRecords`, so reading one would mean
+    // inventing the number.
+    expect(parseRunManifest(JSON.stringify({ ...manifest(), v: 1 }))).toBeNull();
   });
 
   it('rejects one missing what the list needs', () => {
@@ -120,7 +127,14 @@ describe('parseRunManifest', () => {
     const parsed = parseRunManifest(
       JSON.stringify({
         ...manifest(),
-        tests: [{ id: 't1', title: 'ok', status: 'passed' }, { id: 't2' }, 'nope', { status: 'exploded' }],
+        tests: [
+          { id: 't1', title: 'ok', status: 'passed', lostLogRecords: 0 },
+          // No `lostLogRecords`: usable in v1, not in v2.
+          { id: 't-old', title: 'ok', status: 'passed' },
+          { id: 't2' },
+          'nope',
+          { status: 'exploded' },
+        ],
       }),
     );
     expect(parsed?.tests.map((test) => test.id)).toEqual(['t1']);

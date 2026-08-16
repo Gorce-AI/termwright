@@ -58,6 +58,13 @@ export function renderTestRow(test: TestRow, context: TestRowContext): TemplateR
         <span class=${`dot ${test.status}`} aria-hidden="true">${statusGlyph(test.status)}</span>
         <span class="title">${test.title}</span>
         ${test.flaky === true ? html`<span class="badge flaky">flaky</span>` : ''}
+        ${(test.lostLogRecords ?? 0) > 0
+          ? html`<span
+              class="badge lost-logs"
+              title=${`${test.lostLogRecords} application log records were dropped while this test ran; the log panel is incomplete`}
+              >logs incomplete</span
+            >`
+          : ''}
         ${test.status === 'not-run' ? html`<span class="badge not-run">not run yet</span>` : ''}
         ${duration === null
           ? ''

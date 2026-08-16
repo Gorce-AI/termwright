@@ -26,6 +26,7 @@ describe('asTestRow', () => {
         status: 'failed',
         durationMs: 500,
         flaky: true,
+        lostLogRecords: 4,
         traceRef: '/out/t1.twtrace',
         error: 'nope',
       }),
@@ -36,13 +37,22 @@ describe('asTestRow', () => {
       status: 'failed',
       durationMs: 500,
       flaky: true,
+      lostLogRecords: 4,
       traceRef: '/out/t1.twtrace',
       error: 'nope',
     });
   });
 
   it('drops a file the manifest left empty rather than inventing one', () => {
-    const row = asTestRow({ id: 't1', title: 'x', file: '', status: 'passed', durationMs: 1, flaky: false });
+    const row = asTestRow({
+      id: 't1',
+      title: 'x',
+      file: '',
+      status: 'passed',
+      durationMs: 1,
+      flaky: false,
+      lostLogRecords: 0,
+    });
     expect(row.file).toBeUndefined();
     expect(row.traceRef).toBeUndefined();
   });

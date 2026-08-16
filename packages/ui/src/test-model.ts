@@ -26,6 +26,12 @@ export interface TestRow {
   readonly traceRef?: string;
   /** Session the test drives, when the producer reported one. */
   readonly sessionId?: string;
+  /**
+   * Application log records the harness could not keep, when the producer
+   * counted any. A warning about the *evidence*, never about the result: a test
+   * that passed with a lossy log still passed.
+   */
+  readonly lostLogRecords?: number;
 }
 
 /** Tests of one file, in report order. */

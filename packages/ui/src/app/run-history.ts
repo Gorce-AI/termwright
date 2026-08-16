@@ -111,6 +111,7 @@ export function asTestRow(test: RunTest): TestRow {
     status: test.status,
     durationMs: test.durationMs,
     flaky: test.flaky,
+    lostLogRecords: test.lostLogRecords,
     ...(test.file === '' ? {} : { file: test.file }),
     ...(test.traceRef === undefined ? {} : { traceRef: test.traceRef }),
     ...(test.error === undefined ? {} : { error: test.error }),

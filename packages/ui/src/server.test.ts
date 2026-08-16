@@ -3,7 +3,7 @@ import { WebSocket } from 'ws';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeRunManifest } from './runs.js';
+import { RUN_MANIFEST_VERSION, writeRunManifest } from './runs.js';
 import { buildCrashedFixtureTrace, buildFixtureTrace } from './__fixtures__/build-trace.js';
 import { FakeHarness, node, snapshot } from './__fixtures__/fake-session.js';
 import { encodeMessage, parseServerMessage, toBase64, type ClientMessage, type ServerMessage } from './events.js';
@@ -268,7 +268,7 @@ describe('run history', () => {
   it('lists recorded runs and serves one by id', async () => {
     const runsDir = await mkdtemp(join(tmpdir(), 'tw-server-runs-'));
     await writeRunManifest(runsDir, {
-      v: 1,
+      v: RUN_MANIFEST_VERSION,
       id: '2026-08-16T10-00-00-000Z',
       startedAt: 1_760_000_000_000,
       finishedAt: 1_760_000_002_000,
@@ -281,6 +281,7 @@ describe('run history', () => {
           status: 'failed',
           durationMs: 500,
           flaky: false,
+          lostLogRecords: 0,
           traceRef: '/repo/out/t1.twtrace',
         },
       ],

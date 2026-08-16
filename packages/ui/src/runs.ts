@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import type { UiRunSummary, UiTestStatus } from './events.js';
 
 /** Format version of `manifest.json`. */
-export const RUN_MANIFEST_VERSION = 1;
+export const RUN_MANIFEST_VERSION = 2;
 
 /** Default directory runs are written to, relative to the project. */
 export const DEFAULT_RUNS_DIR = '.termwright/runs';
@@ -36,6 +36,12 @@ export interface RunTest {
   readonly status: UiTestStatus;
   readonly durationMs: number;
   readonly flaky: boolean;
+  /**
+   * Application log records dropped while the test ran; `0` when none were.
+   * Required, because "none were dropped" and "nobody counted" are different
+   * facts and only one of them is reassuring.
+   */
+  readonly lostLogRecords: number;
   /** Path to the `.twtrace` this test left, when one was retained. */
   readonly traceRef?: string;
   readonly error?: string;
@@ -196,11 +202,17 @@ function parseTests(value: unknown): readonly RunTest[] {
     if (status !== 'passed' && status !== 'failed' && status !== 'skipped') continue;
     const traceRef = text(record['traceRef']);
     const error = text(record['error']);
+    // A v2 entry always carries the count; one without it was written by a
+    // build that did not know about it, and guessing zero would claim nothing
+    // was lost on a run nobody measured.
+    const lostLogRecords = finite(record['lostLogRecords']);
+    if (lostLogRecords === null) continue;
     tests.push({
       id,
       title,
       file: text(record['file']) ?? '',
       status,
+      lostLogRecords,
       durationMs: finite(record['durationMs']) ?? 0,
       flaky: record['flaky'] === true,
       ...(traceRef === null ? {} : { traceRef }),

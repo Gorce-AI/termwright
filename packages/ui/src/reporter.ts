@@ -23,7 +23,13 @@
  */
 
 import { openTrace } from '@termwright/trace';
-import { DEFAULT_RUNS_DIR, runId, writeRunManifest, type RunTest } from './runs.js';
+import {
+  DEFAULT_RUNS_DIR,
+  RUN_MANIFEST_VERSION,
+  runId,
+  writeRunManifest,
+  type RunTest,
+} from './runs.js';
 import { encodeMessage, type ServerMessage, type UiRunSummary, type UiTestStatus } from './events.js';
 import type { UiHub } from './hub.js';
 import { WebSocket } from 'ws';
@@ -77,7 +83,9 @@ interface TestCaseLike {
   readonly module?: { readonly moduleId?: string };
   result?: () => { state?: string; errors?: readonly { message?: string }[] } | undefined;
   diagnostic?: () => { duration?: number; retryCount?: number; flaky?: boolean } | undefined;
-  meta?: () => { termwright?: { traces?: readonly string[] } } | undefined;
+  meta?: () =>
+    | { termwright?: { traces?: readonly string[]; lostLogRecords?: number } }
+    | undefined;
 }
 
 /**
@@ -131,7 +139,12 @@ export class TermwrightUiReporter {
     this.#counts.total += 1;
     this.#counts[status] += 1;
     if (flaky) this.#counts.flaky += 1;
-    const trace = testCase.meta?.()?.termwright?.traces?.[0];
+    const meta = testCase.meta?.()?.termwright;
+    const trace = meta?.traces?.[0];
+    // `@termwright/test` omits the count when nothing was lost, so an absent
+    // field means zero here — that is the producer's documented encoding, not
+    // this reporter guessing at a missing value.
+    const lostLogRecords = meta?.lostLogRecords ?? 0;
     const error = testCase.result?.()?.errors?.[0]?.message;
     if (trace !== undefined && this.#options.stepsFromTraces !== false) {
       this.#pending.push(this.#publishSteps(id, trace));
@@ -143,6 +156,7 @@ export class TermwrightUiReporter {
       status,
       durationMs: diagnostic?.duration ?? 0,
       flaky,
+      lostLogRecords,
       ...(trace === undefined ? {} : { traceRef: trace }),
       ...(error === undefined ? {} : { error }),
     });
@@ -221,7 +235,7 @@ export class TermwrightUiReporter {
     if (runsDir === null) return;
     try {
       await writeRunManifest(runsDir ?? DEFAULT_RUNS_DIR, {
-        v: 1,
+        v: RUN_MANIFEST_VERSION,
         id: runId(this.#startedAt),
         startedAt: this.#startedAt,
         finishedAt: Date.now(),

@@ -39,7 +39,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright';
 import { buildCrashedFixtureTrace, buildFixtureTrace } from './__fixtures__/build-trace.js';
-import { writeRunManifest, type RunManifest } from './runs.js';
+import { RUN_MANIFEST_VERSION, writeRunManifest, type RunManifest } from './runs.js';
 import { startUiServer, type UiServer } from './server.js';
 
 const APP_DIR = fileURLToPath(new URL('../dist/app', import.meta.url));
@@ -380,9 +380,9 @@ describe('the runner UI showing run history', () => {
   async function writeRuns(traceRef: string): Promise<string> {
     const runsDir = await mkdtemp(join(tmpdir(), 'termwright-ui-runs-'));
     const base = {
-      v: 1 as const,
+      v: RUN_MANIFEST_VERSION,
       summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0, durationMs: 3_000 },
-    };
+    } as const;
 
     await writeRunManifest(runsDir, {
       ...base,
@@ -397,6 +397,9 @@ describe('the runner UI showing run history', () => {
           status: 'failed',
           durationMs: 120,
           flaky: false,
+          // This run's log was lossy, which the row warns about without
+          // pretending the failure above was caused by it.
+          lostLogRecords: 7,
           traceRef,
           error: 'button stayed disabled',
         },
@@ -417,6 +420,7 @@ describe('the runner UI showing run history', () => {
           status: 'passed',
           durationMs: 98,
           flaky: false,
+          lostLogRecords: 0,
         },
       ],
     } satisfies RunManifest);
@@ -447,6 +451,28 @@ describe('the runner UI showing run history', () => {
 
     await page.locator(testId('runs-back')).click();
     await expect.poll(() => page.locator(testId('run')).count(), { timeout: 15_000 }).toBe(2);
+  });
+
+  it('warns on a test whose log lost records, without restating its result', async () => {
+    const { page } = await serve({ runsDir: await writeRuns(await buildFixtureTrace()) });
+
+    await page.locator(testId('view-runs')).click();
+    await page.locator(testId('run')).last().click();
+    const row = page.locator(testId('run-test')).first();
+    await row.waitFor();
+
+    // The warning is about the evidence, so it sits beside the status rather
+    // than replacing it: this test failed, and its log is also incomplete.
+    await expect.poll(async () => (await row.innerText()).trim()).toContain('logs incomplete');
+    expect(await row.locator('.badge.lost-logs').getAttribute('title')).toContain('7 application log records');
+    expect(await row.locator('.dot.failed').count()).toBe(1);
+
+    // The other run lost nothing and says nothing.
+    await page.locator(testId('runs-back')).click();
+    await page.locator(testId('run')).first().click();
+    const clean = page.locator(testId('run-test')).first();
+    await clean.waitFor();
+    expect(await clean.locator('.badge.lost-logs').count()).toBe(0);
   });
 });
 
