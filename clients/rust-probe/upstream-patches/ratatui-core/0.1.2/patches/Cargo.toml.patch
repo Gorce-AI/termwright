@@ -1,0 +1,18 @@
+--- a/Cargo.toml	2026-08-17 00:52:43
++++ b/Cargo.toml	2026-08-17 00:52:44
+@@ -73,6 +73,7 @@
+     "dep:serde",
+ ]
+ std = [
++    "dep:termwright-probe-ratatui",
+     "bitflags/std",
+     "compact_str/std",
+     "itertools/use_std",
+@@ -212,3 +213,7 @@
+ 
+ [lints.rust]
+ unsafe_code = "forbid"
++
++[dependencies.termwright-probe-ratatui]
++version = "0.1.0"
++optional = true

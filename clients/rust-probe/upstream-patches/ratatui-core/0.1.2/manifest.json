@@ -1,0 +1,28 @@
+{
+  "framework": "ratatui-core",
+  "frameworkVersion": "0.1.2",
+  "patchSetVersion": 1,
+  "note": "One call inserted into Frame::render_widget, behind #[cfg(feature = \"std\")]. ratatui-core is #![no_std] and gets std only because the ratatui facade enables it, so everything needing a socket lives in termwright-probe-ratatui instead; see docs/architecture/audit/ratatui.md \u00a77g. Measured: a --no-default-features build compiles and does not pull the probe crate in at all.",
+  "requires": [
+    {
+      "crate": "termwright-probe-ratatui",
+      "suppliedBy": "path",
+      "reason": "The dependency's path is machine-specific, so it cannot live in a patch file. The applier writes it into the copy's Cargo.toml, the way the Go probe's generated workspace supplies its module."
+    }
+  ],
+  "patched": [
+    {
+      "path": "Cargo.toml",
+      "patch": "patches/Cargo.toml.patch",
+      "sha256Before": "sha256:ba34c802d26ec0b8c22bb7e6fd9b736de53d49f999f6806e166bfb1f7c8aad39",
+      "sha256After": "sha256:5da0cb86420e502eb9514bbc5a304c9abf75aaaa797554ada1507c86659504f9"
+    },
+    {
+      "path": "src/terminal/frame.rs",
+      "patch": "patches/src_terminal_frame.rs.patch",
+      "sha256Before": "sha256:bef3c314fa46b38e3d5a881d48c53b29b8952910fbc7892681b2ba5c8370a936",
+      "sha256After": "sha256:49b6bd6a9b7f538f8c6108fce731450d46ea0535f49f0353f824bc6c3c025829"
+    }
+  ],
+  "added": []
+}

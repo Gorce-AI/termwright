@@ -1,0 +1,21 @@
+--- a/src/terminal/frame.rs	2026-08-17 00:52:43
++++ b/src/terminal/frame.rs	2026-08-17 00:52:44
+@@ -104,6 +104,18 @@
+     ///
+     /// [`Layout`]: crate::layout::Layout
+     pub fn render_widget<W: Widget>(&mut self, widget: W, area: Rect) {
++        // termwright: report the call before the widget consumes itself. The
++        // hook is a no-op unless the process was launched instrumented, and
++        // the crate it calls is pulled in only by the `std` feature, so a
++        // no_std build neither compiles nor links any of this.
++        #[cfg(feature = "std")]
++        termwright_probe_ratatui::on_render(
++            core::any::type_name::<W>(),
++            area.x,
++            area.y,
++            area.width,
++            area.height,
++        );
+         widget.render(area, self.buffer);
+     }
+ 

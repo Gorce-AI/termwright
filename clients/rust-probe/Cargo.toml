@@ -1,0 +1,12 @@
+[package]
+name = "termwright-probe-ratatui"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+description = "Zero-config semantic probe for Ratatui applications: the std-side half that a patched ratatui-core calls into"
+license = "MIT"
+repository = "https://github.com/gorce-ai/termwright"
+publish = false
+
+[dependencies]
+termwright-protocol = { path = "../rust", version = "0.1.0" }
