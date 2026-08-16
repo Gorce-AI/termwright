@@ -376,7 +376,13 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
       });
 
       await settle(() => gridText(terminal).includes('MOUSE ON'), () => queue);
-      const modesSeen = `mouseTracking=${terminal.modes.mouseTrackingMode}`;
+      // mouse-app enables 1000 and 1006 and nothing else, so focusReporting
+      // here answers a question the escape table cannot: whether the host
+      // turns focus reporting on by itself. A driver that believes an
+      // unrequested 'true' sends CSI I to a child that will print it.
+      const modesSeen =
+        `mouseTracking=${terminal.modes.mouseTrackingMode}` +
+        ` focusReporting=${terminal.modes.sendFocusMode} (never requested by this child)`;
 
       // Exactly the bytes a click sends, written past every capability gate.
       pty.write(Buffer.from('\x1b[<0;1;1M\x1b[<0;1;1m', 'binary'));
