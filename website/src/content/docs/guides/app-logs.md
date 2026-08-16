@@ -184,6 +184,13 @@ nothing — and the runner shows them in its Logs tab, on the same timeline as
 everything else. Notable levels appear as marks on the scrubber, so an error is
 something you can jump to.
 
+**The file is the source of truth, not the summary.** An archive also carries a
+log summary in `meta.json`, and the two can disagree — a copy truncated in
+transit, a writer interrupted. When they do, readers show the records that are
+actually in the file and mark the list incomplete, rather than trusting the
+summary and reporting silence. An empty log panel therefore means the file had
+nothing in it, not that a counter said so.
+
 Note that file lines are stored **raw** and carry the same handling caveat as a
 crash report's screen tail: they are what the program wrote, unscrubbed.
 
