@@ -85,6 +85,12 @@ on **every call** — about a second on macOS, several on Windows, with no cache
 between renders. Rendering a batch of frames that all contain one uncoverable
 character therefore costs seconds per frame.
 
+Whether a frame has fallback characters is a property of *the machine's fonts*,
+not of the content: a desktop with CJK and emoji faces embeds almost everything,
+while a minimal CI container with one Latin font falls back on both. The slow
+path is therefore rarest where it is usually measured and commonest where it
+costs the most.
+
 Point the renderer at a font that covers your screen and the problem
 disappears. When it cannot, and blank glyphs are acceptable, decline the scan:
 

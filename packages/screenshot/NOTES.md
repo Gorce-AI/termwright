@@ -138,6 +138,30 @@ runner, while the same frame in outline mode costs 55–76 ms. The expensive par
 is `loadSystemFonts`, and resvg pays it **per `Resvg` instance** — the second
 and third calls are as slow as the first, so a warm-up does nothing.
 
+### How often the slow path actually fires depends on the machine
+
+Measured, after the CLI reported it could not trigger a fallback at all — a
+capture of `日本語 テスト ✓` and one of `build 🚀 done 🎉 ⚗️` both came back with
+`fallbackCharacters` empty on macOS. That is real, and it is local:
+
+| character | full macOS chain | Latin-only chain |
+|---|---|---|
+| `a`, `✓`, `│` | outline | outline |
+| `日`, `本` | outline | **fallback** |
+| `🚀` | image | **fallback** |
+| `⚗️` (U+2697 VS16) | image | outline (monochrome) |
+| `U+F0000`, `U+E000` | **fallback** | **fallback** |
+
+So coverage — and therefore the cost — is a property of the installed fonts,
+not of the content. macOS supplies CJK and colour emoji, so almost nothing
+falls back there; a minimal CI container with DejaVu alone falls back on both.
+The slow path is rarest exactly where people measure it and commonest exactly
+where it hurts, which is worth knowing before concluding it is a dead branch.
+
+Only the private-use planes fall back everywhere, which is why the tests here
+use `U+F0000`: no real font assigns it, so the fallback branch is reachable on
+any machine.
+
 Two consequences:
 
 - `renderPng` only asks for system fonts when the SVG actually has fallback
