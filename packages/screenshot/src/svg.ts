@@ -8,7 +8,7 @@
  */
 
 import type { CellSnapshot } from '@termwright/driver';
-import { loadFonts, type FontSet, type GlyphOutline } from './font.js';
+import { loadFonts, type FontSet, type Glyph } from './font.js';
 import { DEFAULT_THEME, buildPalette, resolveColor } from './theme.js';
 import type { ScreenFrame, ScreenshotOptions, ScreenshotSvg } from './types.js';
 
@@ -30,8 +30,11 @@ interface GlyphUse {
   readonly y: number;
   readonly fill: string;
   readonly opacity: number;
+  /** Synthesis flags: only set when no real face supplied the style. */
   readonly bold: boolean;
   readonly italic: boolean;
+  /** Colour glyphs carry their own paint and ignore the cell foreground. */
+  readonly painted: boolean;
 }
 
 interface TextRun {
@@ -97,7 +100,8 @@ export function renderSvg(frame: ScreenFrame, options: ScreenshotOptions = {}): 
   const decorations: Rect[] = [];
   const uses: GlyphUse[] = [];
   const textRuns: TextRun[] = [];
-  const defs = new Map<string, GlyphOutline>();
+  const defs = new Map<string, Glyph>();
+  const images = new Map<string, { glyph: Glyph; width: number; height: number }>();
   const fallback = new Set<string>();
 
   const cursor = resolveCursor(frame, options, theme, {
@@ -175,19 +179,40 @@ export function renderSvg(frame: ScreenFrame, options: ScreenshotOptions = {}): 
         continue;
       }
 
-      const outline = fonts?.outlineFor(char) ?? null;
-      if (outline !== null) {
+      const glyph =
+        fonts?.glyphFor(char, { bold: style.bold, italic: style.italic }) ?? null;
+      if (glyph !== null) {
         flushText();
-        defs.set(outline.id, outline);
-        const advance = outline.advanceWidth * (fontSize / outline.unitsPerEm);
+        // A real face already carries the style; only synthesise what the
+        // loaded faces could not supply.
+        const synthesise = fonts !== null && !fonts.hasFace(style);
+        if (glyph.kind === 'image') {
+          const boxWidth = cellWidth * span;
+          const key = `${glyph.id}@${n(boxWidth)}x${n(lineHeight)}`;
+          images.set(key, { glyph, width: boxWidth, height: lineHeight });
+          uses.push({
+            href: key,
+            x,
+            y: rowY,
+            fill,
+            opacity: style.opacity,
+            bold: false,
+            italic: false,
+            painted: true,
+          });
+          continue;
+        }
+        defs.set(glyph.id, glyph);
+        const advance = glyph.advanceWidth * (fontSize / glyph.unitsPerEm);
         uses.push({
-          href: outline.id,
+          href: glyph.id,
           x: x + (cellWidth * span - advance) / 2,
           y: baseline,
           fill,
           opacity: style.opacity,
-          bold: style.bold,
-          italic: style.italic,
+          bold: synthesise && style.bold,
+          italic: synthesise && style.italic,
+          painted: glyph.kind === 'layers',
         });
         continue;
       }
@@ -225,6 +250,7 @@ export function renderSvg(frame: ScreenFrame, options: ScreenshotOptions = {}): 
     fontSize,
     family,
     defs,
+    images,
     backgrounds,
     decorations,
     uses,
@@ -341,7 +367,8 @@ interface AssembleInput {
   readonly theme: { background: string };
   readonly fontSize: number;
   readonly family: string;
-  readonly defs: ReadonlyMap<string, GlyphOutline>;
+  readonly defs: ReadonlyMap<string, Glyph>;
+  readonly images: ReadonlyMap<string, { glyph: Glyph; width: number; height: number }>;
   readonly backgrounds: readonly Rect[];
   readonly decorations: readonly Rect[];
   readonly uses: readonly GlyphUse[];
@@ -360,15 +387,29 @@ function assemble(input: AssembleInput): string {
     `<rect width="${n(input.width)}" height="${n(input.height)}" fill="${input.theme.background}"/>`,
   );
 
-  if (input.defs.size > 0) {
+  if (input.defs.size > 0 || input.images.size > 0) {
     parts.push('<defs>');
-    for (const outline of input.defs.values()) {
-      const scale = input.fontSize / outline.unitsPerEm;
+    for (const glyph of input.defs.values()) {
+      const scale = input.fontSize / glyph.unitsPerEm;
+      const transform = `transform="scale(${n(scale, 6)},${n(-scale, 6)})"`;
+      if (glyph.kind === 'outline') {
+        parts.push(`<path id="${glyph.id}" d="${glyph.path}" ${transform}/>`);
+      } else if (glyph.kind === 'layers') {
+        // Colours are baked per layer, so a `<use>` fill never reaches them.
+        const layers = glyph.layers
+          .map((layer) => `<path d="${layer.path}" fill="${layer.color}"/>`)
+          .join('');
+        parts.push(`<g id="${glyph.id}" ${transform}>${layers}</g>`);
+      }
+    }
+    for (const [key, image] of input.images) {
+      if (image.glyph.kind !== 'image') continue;
       parts.push(
-        `<path id="${outline.id}" d="${outline.path}" transform="scale(${n(scale, 6)},${n(
-          -scale,
-          6,
-        )})"/>`,
+        `<image id="${escapeXml(key)}" width="${n(image.width)}" height="${n(
+          image.height,
+        )}" preserveAspectRatio="xMidYMid meet" href="data:${
+          image.glyph.mediaType
+        };base64,${image.glyph.base64}"/>`,
       );
     }
     parts.push('</defs>');
@@ -382,6 +423,7 @@ function assemble(input: AssembleInput): string {
   const boldStroke = n(Math.max(0.3, input.fontSize / 24), 2);
   for (const use of input.uses) {
     const bold = use.bold ? ` stroke="${use.fill}" stroke-width="${boldStroke}"` : '';
+    const paint = use.painted ? '' : ` fill="${use.fill}"`;
     const opacity = use.opacity === 1 ? '' : ` opacity="${n(use.opacity, 2)}"`;
     // Italic is a shear about the baseline, for the same reason bold is a
     // stroke: the outlines come from the regular face. `x`/`y` cannot be used
@@ -390,7 +432,9 @@ function assemble(input: AssembleInput): string {
     const placement = use.italic
       ? `transform="translate(${n(use.x)},${n(use.y)}) skewX(-12)"`
       : `x="${n(use.x)}" y="${n(use.y)}"`;
-    parts.push(`<use href="#${use.href}" ${placement} fill="${use.fill}"${bold}${opacity}/>`);
+    parts.push(
+      `<use href="#${escapeXml(use.href)}" ${placement}${paint}${bold}${opacity}/>`,
+    );
   }
 
   if (input.textRuns.length > 0) {

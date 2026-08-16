@@ -247,19 +247,63 @@ describe('renderSvg outline mode', () => {
     expect(shot.svg).toContain('<text ');
   });
 
-  it.runIf(hasSystemFont)('shears italic glyphs instead of leaving them upright', () => {
+  it.runIf(hasSystemFont)('uses a real italic face when the system has one', () => {
     const frame = gridFrame([
       [cell({ char: 'a' }), cell({ char: 'b', attributes: { italic: true } })],
     ]);
     const shot = renderSvg(frame, { fontSize: 16, padding: 0 });
     expect(shot.svg).toMatch(/<use href="#[^"]+" x="[\d.]+" y="[\d.]+"/);
-    expect(shot.svg).toMatch(/<use href="#[^"]+" transform="translate\([\d.]+,[\d.]+\) skewX\(-12\)"/);
+
+    if (loadFonts().hasFace({ italic: true })) {
+      // A real face carries the slant; shearing it too would double it.
+      expect(shot.svg).not.toContain('skewX');
+    } else {
+      expect(shot.svg).toContain('skewX(-12)');
+    }
   });
 
-  it.runIf(hasSystemFont)('strokes bold glyphs, since outlines come from the regular face', () => {
+  it.runIf(hasSystemFont)('synthesises bold only when no bold face is available', () => {
     const frame = gridFrame([[cell({ char: 'a', attributes: { bold: true } })]]);
     const shot = renderSvg(frame, { fontSize: 24, padding: 0 });
-    expect(shot.svg).toContain('stroke-width="1"');
+
+    if (loadFonts().hasFace({ bold: true })) {
+      expect(shot.svg).not.toContain('stroke-width');
+    } else {
+      expect(shot.svg).toContain('stroke-width="1"');
+    }
+  });
+
+  it.runIf(hasSystemFont)('draws a colour emoji as an embedded image, not text', () => {
+    const frame = gridFrame([
+      [cell({ char: '🚀', width: 2 }), cell({ char: '', width: 0 })],
+    ]);
+    const shot = renderSvg(frame, { fontSize: 16, padding: 0 });
+    if (loadFonts().glyphFor('🚀')?.kind !== 'image') return;
+
+    expect(shot.selfContained).toBe(true);
+    expect(shot.fallbackCharacters).toEqual([]);
+    expect(shot.svg).toContain('<image id=');
+    expect(shot.svg).toContain('href="data:image/png;base64,');
+    expect(shot.svg).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(shot.svg).not.toContain('<text');
+    // The image box is the two columns the emulator gave the emoji, by one
+    // line — the cell advance comes from the font, so compare, do not hardcode.
+    const box = /<image id="[^"]*" width="([\d.]+)" height="([\d.]+)"/.exec(shot.svg);
+    expect(Number(box?.[1])).toBeCloseTo(shot.width, 3);
+    expect(Number(box?.[2])).toBeCloseTo(16 * 1.2, 3);
+  });
+
+  it.runIf(hasSystemFont)('never paints over a colour glyph with the cell foreground', () => {
+    const frame = gridFrame([
+      [
+        cell({ char: '🚀', width: 2, fg: { kind: 'palette', index: 1 } }),
+        cell({ char: '', width: 0 }),
+      ],
+    ]);
+    const shot = renderSvg(frame, { fontSize: 16, padding: 0 });
+    if (loadFonts().glyphFor('🚀')?.kind !== 'image') return;
+    const use = /<use [^>]*>/.exec(shot.svg)?.[0] ?? '';
+    expect(use).not.toContain('fill=');
   });
 
   it('degrades to text mode when no font can be loaded', () => {

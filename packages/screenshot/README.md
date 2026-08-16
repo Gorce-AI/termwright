@@ -47,9 +47,16 @@ columns because the emulator said so, not because a font did. Emoji, CJK and box
 drawing all stay on the grid.
 
 Colours (256-colour palette and 24-bit), `inverse`, `dim`, `underline`,
-`strikethrough` and the cursor (block, bar, underline) are all drawn. `bold` is
-synthesised by stroking and `italic` by shearing, because the outlines come from
-the regular face.
+`strikethrough` and the cursor (block, bar, underline) are all drawn. `bold` and
+`italic` use the real faces when the system has them — a font collection like
+`Menlo.ttc` carries all four — and fall back to stroking and shearing the
+regular face only when it does not.
+
+Colour emoji are embedded as images lifted straight out of the font's bitmap
+strike (`sbix`/`CBDT`), and `COLR`/`CPAL` fonts as their coloured layers, so a
+screen full of emoji still reports `selfContained: true`. Cells holding several
+code points — a variation selector, a ZWJ family — are shaped through the font
+rather than looked up by first code point.
 
 ## Self-containment
 

@@ -34,9 +34,14 @@ export {
   loadFonts,
   systemCandidates,
   FontSet,
+  type FaceRequest,
   type FontMetrics,
   type FontSetOptions,
+  type Glyph,
+  type GlyphImage,
+  type GlyphLayers,
   type GlyphOutline,
+  type LoadedFace,
 } from './font.js';
 export { DEFAULT_THEME, LIGHT_THEME, buildPalette, resolveColor } from './theme.js';
 export type {
