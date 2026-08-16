@@ -22,6 +22,11 @@ describe('parseArgs', () => {
   it('reads the ui flags', () => {
     const args = parseArgs(['ui', '--port', '4000', '--host', '127.0.0.1', '--no-watch']);
     expect(args).toMatchObject({ command: 'ui', port: 4000, host: '127.0.0.1', watch: false });
+    expect(args.open).toBe(true);
+  });
+
+  it('reads --no-open', () => {
+    expect(parseArgs(['ui', '--no-open']).open).toBe(false);
   });
 
   it('passes arguments after -- to the test runner', () => {

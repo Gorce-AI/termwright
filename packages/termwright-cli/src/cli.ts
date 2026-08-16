@@ -23,7 +23,7 @@ import {
   EXIT_CODES,
   type CliIo,
 } from '@termwright/mcp';
-import { startUiServer } from '@termwright/ui';
+import { openInBrowser, shouldOpenBrowser, startUiServer } from '@termwright/ui';
 import { parseArgs, type ParsedArgs } from './args.js';
 import {
   runUi,
@@ -142,6 +142,19 @@ async function launchUi(args: ParsedArgs, deps: CliDeps, json: boolean): Promise
       return;
     }
     deps.io.out(`termwright ui (${ready.mode}) — ${ready.url}`);
+    // Opening is an extra on top of the printed URL, never a substitute: the
+    // line above stays whatever happens, because it is the only way in when a
+    // machine has no browser to open.
+    const wanted = shouldOpenBrowser({
+      requested: args.open,
+      json,
+      isTty: process.stdout.isTTY === true,
+      env: process.env,
+    });
+    if (!wanted) return;
+    void openInBrowser(ready.url).then((opened) => {
+      if (!opened) deps.io.err('could not open a browser; the URL above is the way in');
+    });
   };
 
   const result = await runUi(
@@ -171,7 +184,7 @@ function helpText(): string {
     `${CLI_NAME} ${CLI_VERSION} — testing terminal programs by role and name`,
     '',
     'Usage:',
-    `  ${CLI_NAME} ui [--trace <file>] [--port N] [--host H] [--no-watch] [-- <vitest args>]`,
+    `  ${CLI_NAME} ui [--trace <file>] [--port N] [--host H] [--no-watch] [--no-open] [-- <vitest args>]`,
     `  ${CLI_NAME} ui --record [--out-file <file>] -- <command>`,
     `  ${CLI_NAME} codegen [--out-file <file>] -- <command>`,
     `  ${CLI_NAME} mcp [--http] [--port N]`,
@@ -182,6 +195,7 @@ function helpText(): string {
     '                  With no flags it starts Vitest in watch mode and points it at',
     '                  the runner; --trace opens a .twtrace archive instead, and',
     '                  --record drives a program you name and writes the test.',
+    '                  The runner opens in your browser; --no-open just prints the URL.',
     '  codegen         `ui --record`, for when recording is the whole point.',
     '  mcp             serve the MCP tools; every argument is forwarded to',
     '                  @termwright/mcp untouched.',

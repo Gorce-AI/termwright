@@ -35,6 +35,8 @@ export interface ParsedArgs {
   readonly host: string | undefined;
   /** Whether `ui` should also run the test suite in watch mode. Default true. */
   readonly watch: boolean;
+  /** Whether `ui` should open the runner in a browser. Default true. */
+  readonly open: boolean;
   /**
    * Everything after `--`.
    *
@@ -67,6 +69,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let port: number | undefined;
   let host: string | undefined;
   let watch = true;
+  let open = true;
   let rest: readonly string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -126,6 +129,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case '--no-watch':
         watch = false;
         break;
+      case '--no-open':
+        open = false;
+        break;
       case '--help':
       case '-h':
         command ??= 'help';
@@ -167,5 +173,5 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     );
   }
 
-  return { command: resolved, json, trace, record, outFile, out, port, host, watch, rest };
+  return { command: resolved, json, trace, record, outFile, out, port, host, watch, open, rest };
 }
