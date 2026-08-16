@@ -135,6 +135,56 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  ui-browser:
+    name: runner UI end-to-end (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `vite build` produces dist/app, which the server serves. Without it the
+      # browser would load nothing and every assertion would fail on an empty
+      # page rather than on the thing under test.
+      - run: pnpm -r --filter './packages/*' run build
+
+      # `pnpm --filter X run <missing script>` exits 0. This job exists to run
+      # one specific suite, so its absence has to be an error — otherwise the
+      # lane goes green having opened no browser at all.
+      - name: The browser suite must exist
+        shell: bash
+        run: |
+          if ! node -e 'process.exit(require("./packages/ui/package.json").scripts?.["test:browser"] ? 0 : 1)'; then
+            echo "::error::packages/ui has no test:browser script — this lane cannot verify anything."
+            exit 1
+          fi
+
+      - name: Install Chromium
+        run: pnpm --filter @termwright/ui exec playwright install --with-deps chromium
+
+      # Asserts the three panes, the test list, time travel, the crash panel and
+      # the log panel against a real browser driving a real server.
+      - run: pnpm --filter @termwright/ui run test:browser
+
+      - name: Upload the failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-browser-artifacts
+          path: |
+            packages/ui/test-results
+            packages/ui/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
   opentui:
     name: opentui adapter contract (Bun)
     runs-on: ubuntu-latest
