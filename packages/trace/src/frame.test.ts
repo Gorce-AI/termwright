@@ -163,6 +163,16 @@ describe('terminal profile', () => {
     ).rejects.toThrow(/does not know/);
   });
 
+  it('does not treat an inherited object key as a profile', async () => {
+    // The profile is a string read off disk, so a prototype key must not
+    // resolve to anything — `resolveProfileId` checks own properties.
+    for (const hostile of ['__proto__', 'constructor', 'toString']) {
+      await expect(
+        frameFromAnsi('x', { columns: 4, rows: 1, profile: hostile }),
+      ).rejects.toThrow(/does not know/);
+    }
+  });
+
   it('replays with the profile stored in the archive', async () => {
     const root = await workspace();
     const dir = join(root, 'profile.twtrace');

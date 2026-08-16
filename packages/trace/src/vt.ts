@@ -1,8 +1,7 @@
 /**
  * The emulator used to replay a recording.
  *
- * Construction goes through `@termwright/vt` rather than `@xterm/headless`
- * directly, and that is the whole point: a session measured characters with
+ * Construction goes through `@termwright/vt`, and that is the whole point: a session measured characters with
  * one set of width tables and its own replay measured them with another, so a
  * reconstructed frame could sit a column away from the screen the test saw.
  * Nothing threw — the screenshot just disagreed with the assertion. One
@@ -13,8 +12,8 @@
 
 import {
   createTerminal as createProfiledTerminal,
+  resolveProfileId,
   type Terminal,
-  type TerminalProfileLike,
 } from '@termwright/vt';
 import { TraceError } from './errors.js';
 
@@ -28,30 +27,28 @@ import { TraceError } from './errors.js';
  *   produce a frame that looks right and is not.
  */
 export function createTerminal(columns: number, rows: number, profile?: string): Terminal {
-  try {
-    return createProfiledTerminal({
-      columns,
-      rows,
-      scrollback: 0,
-      // `TerminalProfileLike` is a union of known ids, which is right for a
-      // caller that knows its profile at compile time. This one reads a string
-      // off disk, so the check has to happen at runtime — `resolveProfile`
-      // does exactly that and throws, which the catch below turns into a
-      // TraceError.
-      ...(profile === undefined ? {} : { profile: profile as TerminalProfileLike }),
-    }).terminal;
-  } catch (cause) {
+  // The profile arrives as a string read off disk, so it is looked up rather
+  // than trusted: `resolveProfileId` answers with `undefined` for anything it
+  // does not know — including keys inherited from Object.prototype — and the
+  // failure is reported in this package's own error vocabulary.
+  const resolved = profile === undefined ? undefined : resolveProfileId(profile);
+  if (profile !== undefined && resolved === undefined) {
     throw new TraceError(
       'protocol-violation',
       `recording asks for terminal profile ${JSON.stringify(profile)}, which this build does not know`,
       {
         suggestion:
-          cause instanceof Error
-            ? cause.message
-            : 'Upgrade @termwright/vt, or re-record with a profile this build supports.',
+          'Upgrade @termwright/vt, or re-record with a profile this build supports. Replaying with the wrong width tables would produce a frame that looks right and is not.',
       },
     );
   }
+
+  return createProfiledTerminal({
+    columns,
+    rows,
+    scrollback: 0,
+    ...(resolved === undefined ? {} : { profile: resolved }),
+  }).terminal;
 }
 
 /** `terminal.write` as a promise; the callback fires once the parser drains. */

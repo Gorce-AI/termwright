@@ -25,7 +25,6 @@
     "@termwright/driver": "workspace:*",
     "@termwright/protocol": "workspace:*",
     "@termwright/vt": "workspace:*",
-    "@xterm/headless": "^6.0.0",
     "asciinema-player": "^3.17.0",
     "fflate": "^0.8.3"
   }

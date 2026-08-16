@@ -10,7 +10,7 @@
 
 import type { CellAttributes, CellColor, CellSnapshot } from '@termwright/driver';
 import type { CursorInfo } from '@termwright/protocol';
-import type { IBufferCell } from '@xterm/headless';
+import type { IBufferCell } from '@termwright/vt';
 import type { TraceReader } from './reader.js';
 import { createTerminal, writeToTerminal } from './vt.js';
 

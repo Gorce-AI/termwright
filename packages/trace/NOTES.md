@@ -231,7 +231,11 @@ sat a column away from the screen the test asserted against, and the screenshot
 disagreed with the assertion for no visible reason.
 
 Terminal construction now goes through `createTerminal` in `@termwright/vt`,
-which registers *and activates* the profile's Unicode provider — activation was
+which is also the only package here that knows about xterm — the cell and
+buffer types come from it, so trace no longer depends on `@xterm/headless`
+directly.
+
+That factory registers *and activates* the profile's Unicode provider — activation was
 the second half of the trap, since registering a provider without setting
 `activeVersion` changes nothing.
 
@@ -241,6 +245,15 @@ An archive that names a profile this build does not know raises
 `protocol-violation` instead of falling back: replaying with the wrong width
 tables produces a frame that looks right and is not, which is the failure mode
 the whole exercise exists to remove.
+
+The profile is looked up with `resolveProfileId`, which answers `undefined`
+for anything it does not know, rather than by passing the string into
+`createTerminal` and catching what it throws. Two reasons: the failure is then
+reported in this package's own error vocabulary, and the value is a string read
+off disk — a lookup that walks the prototype chain would resolve `__proto__` to
+`Object.prototype` and hand it on as a profile. `@termwright/vt` checks own
+properties, and there is a test here for the hostile keys, because this package
+is the one that reads them from a file.
 
 `meta.json` rather than the asciicast header is deliberate. The profile
 describes the session, like `columns` and `platform` beside it, and `meta.json`

@@ -5,12 +5,12 @@
  * The design doc points at `@xterm/addon-serialize`'s `serializeAsHTML`, but
  * that addon can only serialize a whole buffer at once. A visual *diff* needs
  * per-row output so changed rows can be highlighted and aligned, so this module
- * drives `@xterm/headless` directly and walks the buffer cell by cell. It is
- * the same emulator the driver uses, so what the report shows is what the
- * session actually rendered.
+ * walks the buffer cell by cell instead. The emulator comes from
+ * `@termwright/vt`, the same factory the driver uses, so what the report shows
+ * is what the session actually rendered.
  */
 
-import type { IBufferCell } from '@xterm/headless';
+import type { IBufferCell } from '@termwright/vt';
 import { createTerminal, writeToTerminal } from './vt.js';
 
 /** Options for {@link renderAnsiToHtml}. */
