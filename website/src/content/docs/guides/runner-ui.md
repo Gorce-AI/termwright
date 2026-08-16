@@ -117,6 +117,27 @@ const server = await startUiServer();
 console.log(server.url); // http://127.0.0.1:53219/?token=…
 ```
 
+## Past runs
+
+Finished runs are written to `.termwright/runs` and the runner reads them back,
+so a failure you saw yesterday is still there today. Switch to the Runs view,
+pick a run, and you get its tests with their statuses; clicking a test that
+retained an archive opens that recording in the panes.
+
+Two things the list is careful about:
+
+- **Flaky is not passed.** A test that only passed after a retry is counted
+  separately, because burying it in the pass count is how it stays broken.
+- **"Logs incomplete" sits next to a result, not instead of one.** When a test's
+  [application log](../app-logs/) lost records — dropped by the adapter, or
+  refused over budget — the row says so while still showing whether the test
+  passed or failed. The two facts are independent, and a warning that replaced
+  the verdict would hide the more important one.
+
+The manifest format is versioned, and a run written by an older format is
+ignored rather than guessed at. If your history looks empty after an upgrade,
+that is why — `.termwright/runs` can be deleted safely.
+
 ## Post-mortem: time travel
 
 ```ts
@@ -198,6 +219,13 @@ all bounded, and the hostile-input suite runs under
 
 ## What is not there yet
 
+- **Discovery from the CLI.** The server can list a project's tests before
+  anything has run — rows appear as "not run yet" and clicking one runs exactly
+  that test — but only through `startUiServer({discovery})`. `termwright ui`
+  does not pass it yet, so from the CLI the list fills in as tests execute.
+- **A "logs incomplete" warning during a live run.** It shows in run history,
+  where the count is recorded; the live `test-end` message does not carry one
+  yet.
 - **A session switcher.** Multiple sessions in one test are attached and listed,
   but the terminal pane shows the first one that produced output.
 - **Screenshots** are not taken by the runner. They live in
