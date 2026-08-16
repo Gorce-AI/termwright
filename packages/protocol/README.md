@@ -178,8 +178,15 @@ if (!composed.ok) {
 - `cursor`, when present, replaces the cursor; absent means **unchanged**.
   Without it a diffs-only session could never move the cursor, which in a TUI
   moves on nearly every keystroke — the mode would be useless for exactly the
-  interactive applications it exists to make cheap. A delta cannot *remove* a
-  cursor and does not need to: hiding it is `visible: false`.
+  interactive applications it exists to make cheap.
+
+  A delta can set the cursor but **cannot clear it**, and those differ:
+  `{ visible: false }` means there is a cursor and it is hidden, while an
+  absent `cursor` on a snapshot means there is no cursor information at all.
+  So a producer whose tree loses its cursor entirely **must send a full
+  snapshot**, exactly as it must for a resize. Emitting a delta there leaves
+  the receiver holding a cursor the application stopped reporting — stale
+  state that looks live.
 
 **The validation split matters.** `validateTreeDelta` checks only what is
 knowable without the base: bounded sizes, well-formed nodes, unique ids, a

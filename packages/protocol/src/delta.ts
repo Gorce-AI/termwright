@@ -63,9 +63,19 @@ export interface TreeDelta {
    *
    * Without this a diffs-only session could never move the cursor, which in a
    * TUI moves on nearly every keystroke — the mode would be useless for
-   * exactly the interactive applications it exists to make cheap. There is no
-   * way to *remove* a cursor, and none is needed: hiding it is
-   * `visible: false`.
+   * exactly the interactive applications it exists to make cheap.
+   *
+   * A delta can set the cursor but **cannot clear it**, and the two are not
+   * the same thing: `{ visible: false }` says there is a cursor and it is
+   * hidden, while an absent `SemanticSnapshot.cursor` says there is no cursor
+   * information at all. `cursor` is the only optional field on a snapshot, so
+   * it is the only one with this asymmetry.
+   *
+   * **Producer obligation:** a producer whose tree transitions from having a
+   * cursor to having none MUST send a full snapshot rather than a delta.
+   * Emitting a delta there would leave the receiver holding a cursor the
+   * application has stopped reporting — stale state that looks live. The same
+   * rule already applies to `columns`/`rows`, which a delta also cannot change.
    */
   readonly cursor?: CursorInfo;
 }
