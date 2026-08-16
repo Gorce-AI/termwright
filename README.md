@@ -1,5 +1,9 @@
 # termwright
 
+[![CI](https://github.com/Gorce-AI/termwright/actions/workflows/ci.yml/badge.svg)](https://github.com/Gorce-AI/termwright/actions/workflows/ci.yml)
+[![Docs](https://github.com/Gorce-AI/termwright/actions/workflows/docs.yml/badge.svg)](https://gorce-ai.github.io/termwright/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Playwright for the terminal.** A real pseudo-terminal and a standards-grade VT
 emulator observe any program exactly; an application-published **semantic tree**
 — the terminal analogue of an accessibility tree — gives you
@@ -8,6 +12,10 @@ emulator observe any program exactly; an application-published **semantic tree**
 📖 **[Documentation](https://gorce-ai.github.io/termwright/)** ·
 [Getting started](https://gorce-ai.github.io/termwright/getting-started/) ·
 [Why not tmux?](https://gorce-ai.github.io/termwright/guides/why-not-tmux/)
+
+```sh
+npm i -D termwright
+```
 
 ```ts
 import {expect, test} from '@termwright/test';
@@ -27,7 +35,7 @@ Every action goes through the pseudo-terminal: a click is a real mouse report, a
 keystroke is real bytes. There is no callback back-channel into the application,
 so a test that passes is evidence the program works.
 
-## Three things nobody else has
+## What's different
 
 - **Semantic YAML snapshots** — the accessibility tree serialized as reviewable
   YAML, matched partially. A snapshot breaks when meaning changes, not when
@@ -70,7 +78,7 @@ Other registries, same repository — see [`clients/`](clients):
 Working examples, written against the public API only, live in
 [`examples/`](examples).
 
-## Honest about what it cannot see
+## Limitations, stated upfront
 
 A program without a termwright adapter is still fully testable — text, cells,
 colours, modes, scrollback, mouse, paste, resize — and every diagnostic says
