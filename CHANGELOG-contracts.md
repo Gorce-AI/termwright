@@ -402,3 +402,9 @@
   przedłuża okno tylko gdy wyjście płynie; sesja milcząca, której marker
   przyjdzie później, wygasa w terminie — inaczej timeout nigdy by nie zapadał.
   Ograniczoność: maxPending nadal tnie na 32 (`revision-dropped`).
+- 2026-08-16 (driver): driver GWARANTUJE dziecku `TERM=xterm-256color` i
+  `COLORTERM=truecolor` w obu trybach env, przed nadpisaniami użytkownika
+  (`env: { TERM: ... }` wygrywa); `TERM` usunięty z allowlist. To koniec
+  rozjazdu platform, nie nowa polityka: node-pty na POSIX już nadpisywał TERM
+  nazwą terminala (unixTerminal.js:53-54), na Windows nie zapisywał nic —
+  dziecko jest podpięte do naszego emulatora, nie do terminala rodzica.
