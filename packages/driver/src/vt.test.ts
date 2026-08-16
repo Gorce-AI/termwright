@@ -273,3 +273,36 @@ describe('grid matching', () => {
     expect(second[0]?.column).toBe(8);
   });
 });
+
+describe('hyperlinks on the grid', () => {
+  it('carries an OSC 8 link through to the cell snapshot', async () => {
+    const screen = createVt();
+    await screen.write('\x1b]8;id=save;https://example.com/save\x1b\\Go\x1b]8;;\x1b\\!');
+
+    const row = captureRows(screen)[0];
+    expect(row?.text).toBe('Go!');
+    expect(row?.cells[0]?.link).toEqual({ uri: 'https://example.com/save', id: 'save' });
+    expect(row?.cells[1]?.link?.uri).toBe('https://example.com/save');
+    // The '!' is outside the link: a closer means closed.
+    expect(row?.cells[2]?.link).toBeUndefined();
+  });
+
+  it('says so when a URI was cut rather than presenting a shorter address', async () => {
+    // A truncated URI is a wrong URI. An assertion comparing against one has
+    // to be able to tell that from a link that simply is that short.
+    const screen = createVt();
+    const long = `https://example.com/${'x'.repeat(20_000)}`;
+    await screen.write(`\x1b]8;;${long}\x1b\\L\x1b]8;;\x1b\\`);
+
+    const link = captureRows(screen)[0]?.cells[0]?.link;
+    expect(link?.truncated).toBe(true);
+    expect(link?.uri.length).toBeLessThan(long.length);
+    expect(long.startsWith(link?.uri ?? '')).toBe(true);
+  });
+
+  it('leaves ordinary cells without a link field at all', async () => {
+    const screen = createVt();
+    await screen.write('plain');
+    expect(captureRows(screen)[0]?.cells[0]).not.toHaveProperty('link');
+  });
+});

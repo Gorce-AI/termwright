@@ -208,6 +208,27 @@ export interface CellSnapshot {
   readonly fg: CellColor;
   readonly bg: CellColor;
   readonly attributes: CellAttributes;
+  /** The OSC 8 hyperlink covering this cell, when it has one. */
+  readonly link?: CellLink;
+}
+
+/**
+ * A hyperlink attached to a cell.
+ *
+ * `id` is the OSC 8 `id=` parameter. It is the only parameter that survives:
+ * the sequence permits `key=value:key=value`, and the emulator keeps `id` and
+ * discards the rest — so anything carrying data through a hyperlink has this
+ * one field to carry it in.
+ */
+export interface CellLink {
+  readonly uri: string;
+  readonly id?: string;
+  /**
+   * True when `uri` was cut to the string ceiling and is therefore **not** the
+   * address the program wrote. Present only when it happened, so an assertion
+   * against a URI can tell "this is the link" from "this is the front of it".
+   */
+  readonly truncated?: true;
 }
 
 export type CellColor =

@@ -8,7 +8,8 @@
  * emulator has moved past the snapshot's revision.
  */
 import type { IBufferCell } from '@xterm/headless';
-import type { CursorInfo } from '@termwright/protocol';
+import { createLinkResolver, type CellLink } from '@termwright/vt';
+import { DEFAULT_LIMITS, type CursorInfo } from '@termwright/protocol';
 import type {
   CellAttributes,
   CellColor,
@@ -69,14 +70,37 @@ function readAttributes(cell: IBufferCell): CellAttributes {
   });
 }
 
-function readCell(cell: IBufferCell): CellSnapshot {
+/**
+ * Ceiling on a hyperlink URI, borrowed from the protocol's string limit.
+ *
+ * A URI arrives from the program under test and is as long as that program
+ * chose to make it — a `data:` URI has no practical bound. The cap is applied
+ * with a flag rather than silently, because a truncated URI is a wrong URI,
+ * and an assertion that compares against one deserves to know.
+ */
+const MAX_LINK_URI_BYTES = DEFAULT_LIMITS.maxStringBytes;
+
+function readLink(link: CellLink | null): CellSnapshot['link'] {
+  if (link === null) return undefined;
+  const uri =
+    link.uri.length > MAX_LINK_URI_BYTES ? link.uri.slice(0, MAX_LINK_URI_BYTES) : link.uri;
+  return Object.freeze({
+    uri,
+    ...(link.id !== undefined ? { id: link.id } : {}),
+    ...(uri.length < link.uri.length ? { truncated: true as const } : {}),
+  });
+}
+
+function readCell(cell: IBufferCell, link: CellLink | null): CellSnapshot {
   const width = cell.getWidth();
+  const resolved = readLink(link);
   return Object.freeze({
     char: cell.getChars(),
     width: (width === 0 || width === 2 ? width : 1) as 0 | 1 | 2,
     fg: readColor(cell.isFgDefault(), cell.isFgPalette(), cell.isFgRGB(), cell.getFgColor()),
     bg: readColor(cell.isBgDefault(), cell.isBgPalette(), cell.isBgRGB(), cell.getBgColor()),
     attributes: readAttributes(cell),
+    ...(resolved !== undefined ? { link: resolved } : {}),
   });
 }
 
@@ -89,6 +113,7 @@ export interface CapturedRow {
 /** Reads the visible viewport of `vt` into plain frozen rows. */
 export function captureRows(vt: VtScreen): readonly CapturedRow[] {
   const buffer = vt.terminal.buffer.active;
+  const resolveLink = createLinkResolver(vt.terminal);
   const rows: CapturedRow[] = [];
   for (let y = 0; y < vt.rows; y += 1) {
     const line = buffer.getLine(buffer.viewportY + y);
@@ -99,7 +124,7 @@ export function captureRows(vt: VtScreen): readonly CapturedRow[] {
     const cells: CellSnapshot[] = [];
     for (let x = 0; x < line.length; x += 1) {
       const cell = line.getCell(x);
-      cells.push(cell === undefined ? EMPTY_CELL : readCell(cell));
+      cells.push(cell === undefined ? EMPTY_CELL : readCell(cell, resolveLink(cell)));
     }
     rows.push(
       Object.freeze({

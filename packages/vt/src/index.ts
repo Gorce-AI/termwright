@@ -39,4 +39,6 @@ export {
   type UnicodeVersion,
 } from './profiles.js';
 
+export { createLinkResolver, type CellLink, type LinkResolver } from './links.js';
+
 export { isAmbiguousWidth, type UnicodeOverrides } from './unicode.js';
