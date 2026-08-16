@@ -116,6 +116,9 @@ const state = {
   logAutoscroll: true,
   logsAvailable: false,
   logsTruncated: false,
+  /** Older entries exist before the window the page holds. */
+  logsHasMoreBefore: false,
+  logsLoadingOlder: false,
   logLevels: {} as Readonly<Partial<Record<LogLevel, number>>>,
   commands: [] as CommandRow[],
   selectedCommandId: null as string | null,
@@ -273,7 +276,7 @@ function logPanelModel(): LogPanelModel {
     filter: state.logFilter,
     autoscroll: state.logAutoscroll,
     available: state.logsAvailable,
-    truncated: state.logsTruncated,
+    truncated: state.logsTruncated || state.logsHasMoreBefore,
     // Replays get the writer's counts (they cover the whole recording, even the
     // part evicted); a live run has no such summary, so count what arrived.
     levels: state.trace === null ? countLevels(state.logs) : state.logLevels,
@@ -329,8 +332,61 @@ const logHandlers: LogPanelHandlers = {
   },
 };
 
-// Scrolling up is how you say "stop following": the pane stops moving under
-// you, and the Follow button shows it is off.
+/**
+ * Refetches the log window when the replay moves outside the one held.
+ *
+ * The panel shows entries up to the current moment, so a scrub to the end of a
+ * long recording has to fetch the entries near the end — otherwise the window
+ * loaded at open (the oldest ones) stays on screen and the panel quietly lies
+ * about what had been logged by then.
+ */
+function syncLogWindow(timeMs: number): void {
+  if (state.trace === null || state.logsLoadingOlder) return;
+  const first = state.logs[0]?.t;
+  const last = state.logs.at(-1)?.t;
+  const covered =
+    first !== undefined && last !== undefined && timeMs >= first && timeMs <= last;
+  if (covered) return;
+  state.logsLoadingOlder = true;
+  void client
+    .traceLogs({ before: timeMs + 1 })
+    .then((window) => {
+      state.logs = [...window.records];
+      state.logsHasMoreBefore = window.hasMoreBefore;
+      schedule();
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      state.logsLoadingOlder = false;
+    });
+}
+
+/**
+ * Fetches the window of log entries before the oldest one held, and prepends it.
+ *
+ * The page keeps a window rather than the whole log: a recording of a chatty
+ * program can hold far more lines than a browser should carry, and the ones you
+ * are not looking at cost the same as the ones you are.
+ */
+async function loadOlderLogs(): Promise<void> {
+  if (state.trace === null || state.logsLoadingOlder || !state.logsHasMoreBefore) return;
+  const oldest = state.logs[0]?.t;
+  if (oldest === undefined) return;
+  state.logsLoadingOlder = true;
+  try {
+    const older = await client.traceLogs({ before: oldest });
+    state.logs = [...older.records, ...state.logs];
+    state.logsHasMoreBefore = older.hasMoreBefore;
+    schedule();
+  } catch {
+    // The window we have is still the window we show.
+  } finally {
+    state.logsLoadingOlder = false;
+  }
+}
+
+// Two things ride on scrolling the log list: scrolling up says "stop
+// following", and reaching the top asks for the entries before it.
 inspectorHost.addEventListener(
   'scroll',
   (event) => {
@@ -341,6 +397,7 @@ inspectorHost.addEventListener(
       state.logAutoscroll = atBottom;
       schedule();
     }
+    if (target.scrollTop < 24) void loadOlderLogs();
   },
   true,
 );
@@ -514,6 +571,7 @@ function playbackTick(now: number): void {
   state.playback = next;
   applyFrames(next.timeMs);
   syncTree(next.timeMs);
+  syncLogWindow(next.timeMs);
   schedule();
 }
 requestAnimationFrame(playbackTick);
@@ -612,6 +670,7 @@ async function seek(timeMs: number): Promise<void> {
   if (state.frames.length > 0) {
     applyFrames(timeMs);
     syncTree(timeMs);
+    syncLogWindow(timeMs);
     schedule();
     return;
   }
@@ -849,11 +908,12 @@ void client
         state.frames = [...frames.frames];
         state.revisions = [...frames.revisions];
       }
-      const logs = await client.traceLogs().catch(() => null);
+      const logs = await client.traceLogs({ after: 0 }).catch(() => null);
       if (logs !== null) {
         state.logs = [...logs.records];
         state.logsAvailable = logs.available;
         state.logsTruncated = logs.truncated;
+        state.logsHasMoreBefore = logs.hasMoreBefore;
         state.logLevels = logs.levels;
       }
       await seek(0);

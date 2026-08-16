@@ -266,12 +266,32 @@ describe('post-mortem mode', () => {
       available: boolean;
       records: { message: string; level: string | null }[];
       sources: { label?: string; path?: string }[];
+      total: number;
     };
     expect(body.available).toBe(true);
     expect(body.records.map((entry) => entry.message)).toEqual(['listening on 3000', 'pool exhausted']);
+    expect(body.total).toBe(2);
     expect(body.records[0]?.level).toBeNull();
     expect(body.records[1]?.level).toBe('warn');
     expect(body.sources.map((source) => source.label)).toContain('server.log');
+  });
+
+  it('serves a window of the log, and says what lies outside it', async () => {
+    const server = await start({ trace: await buildFixtureTrace() });
+    const first = (await (await api(server, '/api/trace/logs?limit=1')).json()) as {
+      records: { message: string; t: number }[];
+      hasMoreBefore: boolean;
+      hasMoreAfter: boolean;
+    };
+    expect(first.records.map((entry) => entry.message)).toEqual(['listening on 3000']);
+    expect(first.hasMoreAfter).toBe(true);
+
+    const older = (await (await api(server, `/api/trace/logs?before=1050&limit=5`)).json()) as {
+      records: { message: string }[];
+      hasMoreAfter: boolean;
+    };
+    expect(older.records.map((entry) => entry.message)).toEqual(['listening on 3000']);
+    expect(older.hasMoreAfter).toBe(true);
   });
 
   it('reports an archive that recorded no logs as unavailable', async () => {

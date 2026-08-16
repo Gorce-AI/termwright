@@ -93,9 +93,16 @@ export class RunnerClient {
     return this.#get<ServerState>('/api/state');
   }
 
-  /** The archive's application logs, validated server-side. */
-  async traceLogs(): Promise<TraceLogs> {
-    return this.#get<TraceLogs>('/api/trace/logs');
+  /**
+   * One window of the archive's application logs, validated server-side.
+   * Omitting both bounds returns the oldest window.
+   */
+  async traceLogs(query: { before?: number; after?: number; limit?: number } = {}): Promise<TraceLogs> {
+    const params = Object.entries(query)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join('&');
+    return this.#get<TraceLogs>(`/api/trace/logs${params === '' ? '' : `?${params}`}`);
   }
 
   /** The command log of the opened archive. */

@@ -134,6 +134,11 @@ terminal. The **Logs** tab shows it: lines from files the session follows
 with a level filter and a Follow toggle that switches itself off the moment you
 scroll up.
 
+The panel holds a window of the log rather than all of it: scrolling to the top
+pulls in the entries before it, and moving the replay refetches around the new
+moment. A recording with a hundred thousand log lines costs the same as one with
+two hundred.
+
 Warn, error and fatal records also mark the timeline. Clicking a mark jumps
 there — in a replay it moves the terminal, the inspector and the log panel to
 that moment; the strip always shows the whole recording, because "jump to the

@@ -227,6 +227,19 @@ bundled into the browser and `@termwright/protocol` is Node-only (it imports
 fork cannot drift — the assertion runs in Node, where importing the protocol is
 free. That test is the reason no dependency-rule relaxation was needed.
 
+**The panel holds a window, not the log.** A recording of a chatty program can
+carry far more lines than a browser should: `/api/trace/logs` takes `before`,
+`after` and `limit`, the page keeps ~200 rows, pulls the previous window when
+you scroll to the top, and refetches around the scrub position when the replay
+moves outside what it holds. Without that last part the panel keeps showing the
+window loaded at open and quietly misreports what had been logged by then —
+which is exactly how it behaved until the browser check caught it.
+
+The reader streams the archive per request rather than indexing it up front: the
+file is local, and an index of a file you may never scroll through costs more
+than it saves. A window also cannot sort what it never holds, so entries are
+returned in file order — which the writer guarantees is chronological.
+
 The panel's header counts come from `meta.logs.levels`, which the writer
 computed over the whole recording — so "2 errors" stays true while the list is
 filtered, clipped to the scrub position, or short of entries the writer evicted.

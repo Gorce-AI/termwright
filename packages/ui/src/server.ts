@@ -137,7 +137,8 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     mode = 'post-mortem';
     reader = await openTrace(options.trace);
     overview = await readTraceOverview(reader);
-    traceLogs = await readTraceLogs(reader);
+    // Logs are windowed per request; only the summary is precomputed.
+    traceLogs = await readTraceLogs(reader, { limit: 1 });
     traceCommands = await readCommandLog(reader);
     // Frames are read once here rather than per request: a page playing at 4x
     // asks for nothing, and a second tab gets the same array for free.
@@ -317,11 +318,22 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         return;
       }
       case 'GET /api/trace/logs': {
-        if (traceLogs === undefined) {
+        if (reader === undefined || traceLogs === undefined) {
           sendJson(response, 409, { error: 'no trace is open' });
           return;
         }
-        sendJson(response, 200, traceLogs);
+        const before = numberParam(url, 'before');
+        const after = numberParam(url, 'after');
+        const limit = numberParam(url, 'limit');
+        sendJson(
+          response,
+          200,
+          await readTraceLogs(reader, {
+            ...(before === undefined ? {} : { before }),
+            ...(after === undefined ? {} : { after }),
+            ...(limit === undefined ? {} : { limit }),
+          }),
+        );
         return;
       }
       case 'GET /api/trace/state': {
@@ -444,6 +456,14 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       await reader?.close();
     },
   };
+}
+
+/** A finite numeric query parameter, or `undefined` when absent or malformed. */
+function numberParam(url: URL, name: string): number | undefined {
+  const raw = url.searchParams.get(name);
+  if (raw === null) return undefined;
+  const value = Number.parseFloat(raw);
+  return Number.isFinite(value) ? value : undefined;
 }
 
 function listen(server: Server, port: number, host: string): Promise<number> {

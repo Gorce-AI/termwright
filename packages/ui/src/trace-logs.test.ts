@@ -72,6 +72,38 @@ describe('readTraceLogs', () => {
     expect(logs.records[0]?.t).toBe(90);
   });
 
+  it('returns a window of the size asked for, and says what is outside it', async () => {
+    const many = Array.from({ length: 50 }, (_, index) => record({ castOffset: index * 10 }));
+    const first = await readTraceLogs(readerWith(many), { limit: 10 });
+    expect(first.records.map((entry) => entry.t)).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80, 90]);
+    expect(first.hasMoreBefore).toBe(false);
+    expect(first.hasMoreAfter).toBe(true);
+    expect(first.total).toBe(50);
+  });
+
+  it('reads backwards from a cursor, keeping the entries closest to it', async () => {
+    const many = Array.from({ length: 50 }, (_, index) => record({ castOffset: index * 10 }));
+    const older = await readTraceLogs(readerWith(many), { before: 200, limit: 5 });
+    expect(older.records.map((entry) => entry.t)).toEqual([150, 160, 170, 180, 190]);
+    expect(older.hasMoreBefore).toBe(true);
+    expect(older.hasMoreAfter).toBe(true);
+  });
+
+  it('reads forwards from a cursor', async () => {
+    const many = Array.from({ length: 50 }, (_, index) => record({ castOffset: index * 10 }));
+    const newer = await readTraceLogs(readerWith(many), { after: 480, limit: 10 });
+    expect(newer.records.map((entry) => entry.t)).toEqual([480, 490]);
+    expect(newer.hasMoreBefore).toBe(true);
+    expect(newer.hasMoreAfter).toBe(false);
+  });
+
+  it('bounds the window a caller can ask for', async () => {
+    const many = Array.from({ length: 2_000 }, (_, index) => record({ castOffset: index }));
+    const huge = await readTraceLogs(readerWith(many), { limit: 10_000 });
+    expect(huge.records).toHaveLength(500);
+    expect(huge.hasMoreAfter).toBe(true);
+  });
+
   it('skips a line it cannot read, and keeps the rest', async () => {
     const logs = await readTraceLogs(
       readerWith([record(), 'not a record', { t: 1 }, record({ message: 'second' })]),
@@ -79,12 +111,15 @@ describe('readTraceLogs', () => {
     expect(logs.records.map((entry) => entry.message)).toEqual(['listening', 'second']);
   });
 
-  it('orders records by time', async () => {
+  it('reads entries in file order, which the writer appends chronologically', async () => {
+    // A window cannot sort what it never holds, so the reader trusts the order
+    // `logs.jsonl` was written in. Out-of-order lines stay out of order rather
+    // than being silently rearranged into something that looks fine.
     const logs = await readTraceLogs(
       readerWith([
-        record({ castOffset: 300, message: 'third' }),
         record({ castOffset: 100, message: 'first' }),
         record({ castOffset: 200, message: 'second' }),
+        record({ castOffset: 300, message: 'third' }),
       ]),
     );
     expect(logs.records.map((entry) => entry.message)).toEqual(['first', 'second', 'third']);
@@ -97,10 +132,10 @@ describe('readTraceLogs', () => {
     expect(logs.available).toBe(true);
   });
 
-  it('bounds a log stream that never ends', async () => {
+  it('never holds a whole flood in memory', async () => {
     const many = Array.from({ length: 6_000 }, (_, index) => record({ castOffset: index }));
     const logs = await readTraceLogs(readerWith(many));
-    expect(logs.records).toHaveLength(5_000);
-    expect(logs.truncated).toBe(true);
+    expect(logs.records).toHaveLength(200);
+    expect(logs.hasMoreAfter).toBe(true);
   });
 });
