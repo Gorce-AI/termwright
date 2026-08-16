@@ -49,3 +49,12 @@ export {
 } from './patches.js';
 
 export { recognize, roleFor, type RecognizeOptions } from './recognizer.js';
+
+export {
+  prepareInstrumentedBuild,
+  CLIENT_MODULE,
+  FRAMEWORK,
+  PROBE_VERSION,
+  type PrepareOptions,
+  type PreparedBuild,
+} from './launch.js';

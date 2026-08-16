@@ -18,8 +18,9 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
+import { prepareInstrumentedBuild } from './launch.js';
 import { applyPatchSet, materializeUpstream } from './patches.js';
-import { writeWorkspace } from './workspace.js';
+import { canaryCheck, writeWorkspace } from './workspace.js';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -96,6 +97,53 @@ async function buildFixture(options: { readonly instrumented: boolean }): Promis
   await run('go', ['build', '-o', binary, '.'], { cwd: app, env });
   return binary;
 }
+
+describe.skipIf(!runnable)('the launcher call', () => {
+  it('prepares a build from one call, and caches the copy for the next', async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-launch-')));
+    roots.push(dir);
+    const app = join(dir, 'app');
+    await mkdir(app, { recursive: true });
+    await cp(FIXTURE, app, { recursive: true });
+
+    // A cache of its own, so the assertion about building versus reusing is
+    // about this test rather than about whatever ran before it.
+    const env = { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') };
+
+    const first = await prepareInstrumentedBuild({ moduleDir: app, env });
+    expect(first.built).toBe(true);
+    // The version was detected from the module, not passed in.
+    expect(first.copyDir).toContain('v0.42.0');
+
+    await run('go', ['build', '-o', join(dir, 'bin'), '.'], { cwd: app, env: first.env });
+
+    const second = await prepareInstrumentedBuild({ moduleDir: app, env });
+    expect(second.built).toBe(false);
+    expect(second.copyDir).toBe(first.copyDir);
+
+    // And the canary still proves it is our copy that compiles.
+    const canary = await canaryCheck({
+      copyDir: second.copyDir,
+      moduleDir: app,
+      workspaceFile: second.workspaceFile,
+      packageName: 'tview',
+      env,
+    });
+    expect(canary.proved).toBe(true);
+  }, 600_000);
+
+  it('refuses a vendored build by name instead of overriding it', async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-launch-')));
+    roots.push(dir);
+    const app = join(dir, 'app');
+    await mkdir(app, { recursive: true });
+    await cp(FIXTURE, app, { recursive: true });
+
+    await expect(
+      prepareInstrumentedBuild({ moduleDir: app, env: { ...process.env, GOFLAGS: '-mod=vendor' } }),
+    ).rejects.toThrow(/-mod=vendor/u);
+  }, 120_000);
+});
 
 describe.skipIf(!runnable)('a plain tview application under the probe', () => {
   it('exposes its widgets by role, with no import and no configuration', async () => {
