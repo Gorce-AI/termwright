@@ -74,6 +74,13 @@ consumer is parsing that output), when stdout is not a terminal (you piped it),
 and when `CI` is set to anything at all. On a build agent a browser is noise at
 best and a hung job at worst.
 
+`CI=false` also suppresses it. Nobody sets that variable to say "this is not
+CI", and agents only ever set it to `true`, so any value is treated as a signal.
+
+If the opener itself fails — no browser installed, a headless box — you get one
+line on stderr and the URL still stands. Nothing about the session depends on a
+window having appeared.
+
 :::caution[The token is part of the URL]
 It is what authenticates the session, so when you copy the address by hand, copy
 the whole thing — the host and port alone will be refused.

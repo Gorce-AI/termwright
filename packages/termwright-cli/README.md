@@ -79,7 +79,8 @@ await app.close();
 ## The CLI
 
 ```sh
-termwright ui                          # runner + Vitest in watch mode
+termwright ui                            # runner + Vitest in watch mode, opens a browser
+termwright ui --no-open                  # …or just print the URL
 termwright ui --trace out/login.twtrace  # open a recording from CI and scrub it
 termwright codegen -- node agent.js      # drive a program, get a test back
 termwright mcp                           # serve the MCP tools to an agent
@@ -93,8 +94,23 @@ semantic inspector you can point at nodes to get a selector, and a timeline you
 can scrub. It starts your project's own Vitest in watch mode and points it at
 the runner through `TERMWRIGHT_UI_URL`; the browser's rerun and stop buttons
 press the same keys watch mode already understands, and your terminal keeps its
-hotkeys. Add `--no-watch` to open the runner without starting a suite, and put
-runner arguments after `--`:
+hotkeys.
+
+The page opens in your browser by itself. If it does not — `--no-open`, no
+browser on the machine, or an opener that failed — the printed line is the way
+in, and the token is part of it, so copy the whole URL:
+
+```
+termwright ui (live) — http://127.0.0.1:53219/?token=k3n…
+```
+
+Opening is skipped deliberately with `--no-open`, with `--json`, when stdout is
+not a terminal, and whenever `CI` is set to anything at all: a window is for a
+person at a terminal, not for a build agent. The URL is printed in every one of
+those cases, and a failed opener degrades to exactly the same thing.
+
+Add `--no-watch` to open the runner without starting a suite, and put runner
+arguments after `--`:
 
 ```sh
 termwright ui -- src/login.test.ts --reporter=dot
