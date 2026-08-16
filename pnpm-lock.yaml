@@ -118,9 +118,15 @@ importers:
         specifier: '>=3.2.0'
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(yaml@2.9.0)
     devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.30.0
+        version: 1.30.0(zod@4.4.3)
       '@termwright/ink':
         specifier: workspace:*
         version: link:../ink
+      '@termwright/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18
