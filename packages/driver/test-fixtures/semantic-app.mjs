@@ -33,6 +33,14 @@ let logBudget = null;
 // Delta mode: announced only when asked for, so the same fixture serves the
 // snapshot tests unchanged.
 const deltaMode = process.env['TERMWRIGHT_FIXTURE_DELTAS'] === '1';
+/**
+ * Opt-in probe mode: `stable` or `frame-local`. When set, the fixture attaches
+ * as a probe rather than a hand-written adapter and publishes one unrecognised
+ * widget, so the driver's identity rules and `generic` handling are exercised
+ * against a real session. Off by default, so every other test sees the same
+ * tree it always did.
+ */
+const probeMode = process.env['TERMWRIGHT_FIXTURE_PROBE'];
 let subscribeDiffs = false;
 let cursorGone = false;
 let typed = '';
@@ -86,6 +94,19 @@ function tree() {
         state: { focused: false },
         actions: ['focus', 'setValue'],
       },
+      ...(probeMode === undefined
+        ? []
+        : [
+            {
+              id: 'n5',
+              parentId: 'n1',
+              role: 'generic',
+              name: 'Scroller',
+              frameworkType: 'ScrollView',
+              bounds: { row: 3, column: 0, width: 30, height: 1 },
+              p: 'heuristic',
+            },
+          ]),
       {
         id: 'n3',
         parentId: 'n1',
@@ -282,6 +303,19 @@ if (endpoint === undefined || token === undefined) {
             'logs',
             ...(deltaMode ? ['tree-diffs'] : []),
           ],
+          ...(probeMode === undefined
+            ? {}
+            : {
+                probe: {
+                  framework: 'fixture-fw',
+                  frameworkVersion: '1.0.0',
+                  probeVersion: '0.1.0',
+                  identityKind: probeMode,
+                  // 'stable-identity' would contradict a frame-local kind, and
+                  // the protocol refuses that pair on the wire.
+                  capabilities: probeMode === 'stable' ? ['stable-identity'] : [],
+                },
+              }),
         },
         1024 * 1024,
       ),

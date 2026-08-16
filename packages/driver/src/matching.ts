@@ -83,6 +83,9 @@ function stepMatches(index: SemanticIndex, node: SemanticNode, step: SemanticSte
   if (step.classes.some((className) => !classMatches(node, className))) return false;
   if (step.name !== undefined && !matchesText(node.name, step.name)) return false;
   if (step.label !== undefined && !matchesText(index.label(node), step.label)) return false;
+  if (step.frameworkType !== undefined && !matchesText(node.frameworkType, step.frameworkType)) {
+    return false;
+  }
   if (step.text !== undefined) {
     const matched =
       matchesText(node.name, step.text) ||

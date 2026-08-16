@@ -29,6 +29,8 @@ export interface SemanticStep {
   readonly text?: TextMatcher;
   /** Matches against the node's computed label (`labelledBy`, else `name`). */
   readonly label?: TextMatcher;
+  /** Matches the framework's own widget type, the only way to tell generics apart. */
+  readonly frameworkType?: TextMatcher;
   readonly state: Readonly<Partial<SemanticState>>;
 }
 
@@ -258,8 +260,13 @@ export function roleQuery(
   role: SemanticRole,
   name: TextMatcher | undefined,
   state: Readonly<Partial<SemanticState>>,
+  frameworkType?: TextMatcher,
 ): SemanticQuery {
-  const description = `getByRole(${JSON.stringify(role)}${name === undefined ? '' : `, name=${describeMatcher(name)}`})`;
+  const parts = [
+    JSON.stringify(role),
+    ...(name === undefined ? [] : [`name=${describeMatcher(name)}`]),
+    ...(frameworkType === undefined ? [] : [`frameworkType=${describeMatcher(frameworkType)}`]),
+  ];
   return {
     kind: 'semantic',
     steps: [
@@ -267,10 +274,11 @@ export function roleQuery(
         role,
         classes: Object.freeze([]),
         ...(name !== undefined ? { name } : {}),
+        ...(frameworkType !== undefined ? { frameworkType } : {}),
         state,
       },
     ],
-    description,
+    description: `getByRole(${parts.join(', ')})`,
   };
 }
 

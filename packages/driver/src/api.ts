@@ -6,6 +6,7 @@
 import type {
   LogRecord,
   ProtocolErrorMessage,
+  ProvenanceSource,
   Rect,
   SemanticRole,
   SemanticSnapshot,
@@ -296,6 +297,15 @@ export interface RoleLocatorOptions {
   readonly name?: string | RegExp;
   readonly exact?: boolean;
   readonly state?: Partial<SemanticState>;
+  /**
+   * Narrows to nodes whose framework type matches, e.g.
+   * `getByRole('generic', { frameworkType: 'ScrollView' })`.
+   *
+   * Without it `generic` is barely selectable: every widget a recognizer did
+   * not know arrives under that one role, and the role alone cannot tell them
+   * apart.
+   */
+  readonly frameworkType?: string | RegExp;
 }
 
 export interface TextLocatorOptions {
@@ -356,6 +366,29 @@ export interface ResolvedTarget {
   readonly rect: Rect | null;
   readonly role?: SemanticRole;
   readonly name?: string;
+  /**
+   * Whether {@link ResolvedTarget.ref} means anything after this revision.
+   *
+   * `'stable'` — the identity survives across frames, so the ref can be
+   * re-resolved later and `locatorForRef` works. `'frame-local'` — the id is
+   * an index into one frame and means nothing in the next; a probe for a
+   * framework with no stable identity (Ratatui) says so at handshake time.
+   *
+   * Re-resolving a frame-local ref would not answer "did this node change?"
+   * but "what holds that number now?", which is how a passing test ends up
+   * asserting about a widget it never selected.
+   */
+  readonly identity: 'stable' | 'frame-local';
+  /**
+   * The framework's own name for the widget, when the node carries one.
+   *
+   * Required on `generic` nodes by the protocol, and the reason a `generic`
+   * node is worth having: without it an unrecognised widget says only
+   * "something was here".
+   */
+  readonly frameworkType?: string;
+  /** Where this node's facts came from, when the producer reported it. */
+  readonly provenance?: ProvenanceSource;
 }
 
 export interface ActivateReceipt {

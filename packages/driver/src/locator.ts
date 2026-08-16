@@ -49,6 +49,8 @@ export interface LocatorContext {
   screenRevision(): number;
   rows(): readonly CapturedRow[];
   modes(): TerminalModes;
+  /** The best identity the attached producer can offer for a node. */
+  identityKind(): ResolvedTarget['identity'];
   /** Resolves when a screen or semantic revision is published, or the deadline passes. */
   waitForChange(deadline: number): Promise<void>;
   sendInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): Promise<void>;
@@ -74,7 +76,11 @@ interface LocatorState {
   readonly index?: number;
 }
 
-function nodeTarget(node: SemanticNode, revision: number): ResolvedTarget {
+function nodeTarget(
+  node: SemanticNode,
+  revision: number,
+  identity: ResolvedTarget['identity'],
+): ResolvedTarget {
   return Object.freeze({
     ref: `${node.id}@${revision}`,
     revision,
@@ -82,6 +88,9 @@ function nodeTarget(node: SemanticNode, revision: number): ResolvedTarget {
     rect: node.bounds ?? null,
     role: node.role,
     name: node.name,
+    identity,
+    ...(node.frameworkType !== undefined ? { frameworkType: node.frameworkType } : {}),
+    ...(node.p !== undefined ? { provenance: node.p } : {}),
   });
 }
 
@@ -89,6 +98,9 @@ function rectTarget(rect: Rect, revision: number): ResolvedTarget {
   return Object.freeze({
     ref: `grid:${rect.row},${rect.column},${rect.width},${rect.height}@${revision}`,
     revision,
+    // A grid ref carries its own coordinates, so it re-resolves by
+    // construction whatever the framework can or cannot identify.
+    identity: 'stable' as const,
     semantic: false,
     rect,
   });
@@ -604,7 +616,7 @@ export class LocatorImpl implements Locator {
         this.#ctx.errorDiagnostics({ suggestion: 're-resolve the locator and use the fresh refs' }),
       );
     }
-    return [nodeTarget(node, live)];
+    return [nodeTarget(node, live, this.#ctx.identityKind())];
   }
 
   #evaluateSemantic(query: SemanticQuery, scope: ResolvedTarget | null): ResolvedTarget[] {
@@ -634,7 +646,10 @@ export class LocatorImpl implements Locator {
     }
     const scopeId = scope === null ? undefined : (scope.ref.split('@')[0] ?? undefined);
     const revision = index.snapshot.revision;
-    return matchSemantic(index, query.steps, scopeId).map((node) => nodeTarget(node, revision));
+    const identity = this.#ctx.identityKind();
+    return matchSemantic(index, query.steps, scopeId).map((node) =>
+      nodeTarget(node, revision, identity),
+    );
   }
 
   #evaluateGeneric(query: GenericQuery, scope: ResolvedTarget | null): ResolvedTarget[] {

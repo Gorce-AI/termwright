@@ -870,6 +870,63 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
   });
 });
 
+describe.skipIf(!ptyAvailable())('a probe-backed session', { timeout: 20_000 }, () => {
+  it('re-resolves a ref when the probe has stable identity', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { ...environment(), TERMWRIGHT_FIXTURE_PROBE: 'stable' },
+    });
+    const approve = await terminal.getByRole('button', { name: 'Approve' }).resolve();
+    expect(approve.identity).toBe('stable');
+
+    const again = await terminal.locatorForRef(approve.ref).resolve();
+    expect(again.ref).toBe(approve.ref);
+  });
+
+  it('refuses to re-resolve a ref the framework cannot keep', async () => {
+    // Ratatui's case. Re-resolving here would answer "what holds that number
+    // now?" rather than "did this node change?", and the difference is a test
+    // that passes while asserting about a widget it never selected.
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { ...environment(), TERMWRIGHT_FIXTURE_PROBE: 'frame-local' },
+    });
+    const approve = await terminal.getByRole('button', { name: 'Approve' }).resolve();
+    expect(approve.identity).toBe('frame-local');
+
+    const error = await Promise.resolve()
+      .then(() => terminal.locatorForRef(approve.ref))
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('unsupported-action');
+    expect((error as TermwrightError).diagnostics.suggestion).toContain('testId');
+
+    // Everything addressed by role, name or testId keeps working.
+    expect((await terminal.getByTestId('approve').resolve()).name).toBe('Approve');
+  });
+
+  it('keeps an unrecognised widget selectable by its framework type', async () => {
+    // The point of D1's generic role: the widget survives, and frameworkType
+    // is what makes it addressable once it has.
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { ...environment(), TERMWRIGHT_FIXTURE_PROBE: 'stable' },
+    });
+
+    const scroller = await terminal
+      .getByRole('generic', { frameworkType: 'ScrollView' })
+      .resolve();
+    expect(scroller.frameworkType).toBe('ScrollView');
+    // Provenance travels with the target: a name that was guessed should not
+    // look like one the author wrote.
+    expect(scroller.provenance).toBe('heuristic');
+
+    const missing = await terminal
+      .getByRole('generic', { frameworkType: 'NoSuchWidget' })
+      .count();
+    expect(missing).toBe(0);
+  });
+});
+
 describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout: 20_000 }, () => {
   it('negotiates the tree, pairs revisions and resolves semantic locators', async () => {
     const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });

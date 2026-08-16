@@ -20,6 +20,7 @@ import type {
   ErrorDiagnostics,
   LaunchOptions,
   Locator,
+  ResolvedTarget,
   RoleLocatorOptions,
   ScreenSnapshot,
   ScrollbackApi,
@@ -447,7 +448,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   getByRole(role: SemanticRole, opts?: RoleLocatorOptions): Locator {
     const name = opts?.name === undefined ? undefined : textMatcher(opts.name, opts.exact ?? false);
-    return new LocatorImpl(this, roleQuery(role, name, opts?.state ?? {}));
+    // Exact by default for a framework type: it is an identifier the framework
+    // chose, not prose a user typed, so a substring match would be a guess.
+    const frameworkType =
+      opts?.frameworkType === undefined ? undefined : textMatcher(opts.frameworkType, true);
+    return new LocatorImpl(this, roleQuery(role, name, opts?.state ?? {}, frameworkType));
   }
 
   getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator {
@@ -479,7 +484,28 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return new LocatorImpl(this, parseSelector(selector));
   }
 
+  /**
+   * The best identity the attached producer can offer.
+   *
+   * A hand-written adapter that never sent a probe block is taken at the
+   * protocol's word: node ids are stable within a semantic session. A probe
+   * says what it can actually deliver, and Ratatui can deliver nothing better
+   * than an index into one frame.
+   */
+  identityKind(): ResolvedTarget['identity'] {
+    return this.#attachment?.probe?.identityKind ?? 'stable';
+  }
+
   locatorForRef(ref: string): Locator {
+    if (this.identityKind() === 'frame-local') {
+      throw new UnsupportedActionError(
+        `this session's producer has frame-local identity, so ref ${JSON.stringify(ref)} cannot be re-resolved`,
+        this.errorDiagnostics({
+          suggestion:
+            'address the node by role, name or testId; a frame-local id means something different in every frame',
+        }),
+      );
+    }
     const parsed = parseRef(ref);
     if (parsed === null) {
       throw new UnsupportedActionError(
