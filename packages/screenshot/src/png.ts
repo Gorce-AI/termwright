@@ -13,8 +13,10 @@ import type { PngOptions, ScreenFrame, ScreenshotPng } from './types.js';
  *
  * When every glyph came from an embedded outline the rasteriser needs no fonts
  * at all, so the PNG is identical on a developer laptop and a bare CI
- * container. Characters that fell back to `<text>` are rendered with whatever
- * system fonts resvg can find; `selfContained` tells you which case you got.
+ * container — and it is fast. Characters that fell back to `<text>` are
+ * rendered with whatever system fonts resvg can find, which costs a font-
+ * directory scan **per call**; see {@link PngOptions.systemFontFallback}.
+ * `selfContained` tells you which case you got.
  *
  * @example
  * ```ts
@@ -29,7 +31,9 @@ export function renderPng(frame: ScreenFrame, options: PngOptions = {}): Screens
   }
 
   const rendered = renderSvg(frame, options);
-  const needsSystemFonts = !rendered.selfContained;
+  // Only an SVG with fallback characters needs the rasteriser to find fonts,
+  // and finding them is expensive enough that the caller can decline.
+  const needsSystemFonts = !rendered.selfContained && options.systemFontFallback !== false;
   const resvg = new Resvg(rendered.svg, {
     fitTo: { mode: 'width', value: Math.max(1, Math.round(rendered.width * scale)) },
     font: {

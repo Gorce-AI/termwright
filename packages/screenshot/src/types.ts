@@ -94,6 +94,20 @@ export interface ScreenshotSvg {
 export interface PngOptions extends ScreenshotOptions {
   /** Pixel density multiplier. Default 1; use 2 for retina-sharp thumbnails. */
   readonly scale?: number;
+  /**
+   * Let the rasteriser fall back to system fonts for characters no embedded
+   * glyph covers. Default `true`.
+   *
+   * It is not free: resvg enumerates the installed fonts on **every** call that
+   * needs them — roughly a second on macOS, several on Windows — and there is
+   * no cache to amortise it across renders. A screenshot whose glyphs were all
+   * embedded never pays this, so the cost only appears when
+   * {@link ScreenshotSvg.fallbackCharacters} is non-empty.
+   *
+   * Turn it off when rendering many frames and missing glyphs are acceptable:
+   * those characters come out blank, and the raster gets ~20× faster.
+   */
+  readonly systemFontFallback?: boolean;
 }
 
 /** Result of {@link renderPng}. */

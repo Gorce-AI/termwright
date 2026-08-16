@@ -26,15 +26,24 @@ function inkCoverage(svg: string): number {
   return different / (pixels.length / 4);
 }
 
+/**
+ * Rasterising text that fell back to `<text>` makes resvg enumerate the system
+ * fonts, and it does that **per call** — around 0.8 s on macOS and several
+ * seconds on a Windows runner, which is what timed this file out in CI.
+ *
+ * Tests that are not about the fallback path therefore render in outline mode,
+ * where `loadSystemFonts` stays off and a raster costs tens of milliseconds.
+ * Explicit `cellWidth`/`lineHeight` keep the geometry independent of whichever
+ * font the machine happens to have, so the assertions stay exact.
+ */
+const GEOMETRY = { fontSize: 10, cellWidth: 6, lineHeight: 12, padding: 4 } as const;
+
+/** Budget for the one test that must pay font enumeration. See above. */
+const FONT_SCAN_TIMEOUT_MS = 30_000;
+
 describe('renderPng', () => {
   it('produces a decodable PNG whose header matches the SVG size', () => {
-    const shot = renderPng(textFrame('hello', { columns: 10 }), {
-      glyphs: 'text',
-      fontSize: 10,
-      cellWidth: 6,
-      lineHeight: 12,
-      padding: 4,
-    });
+    const shot = renderPng(textFrame('hello', { columns: 10 }), GEOMETRY);
     expect([...shot.png.slice(0, 8)]).toEqual(PNG_SIGNATURE);
     const header = pngHeader(shot.png);
     expect(header.width).toBe(68);
@@ -44,9 +53,8 @@ describe('renderPng', () => {
   });
 
   it('scales the raster without changing the layout', () => {
-    const options = { glyphs: 'text', cellWidth: 6, lineHeight: 12, padding: 4 } as const;
-    const single = renderPng(textFrame('hello', { columns: 10 }), options);
-    const double = renderPng(textFrame('hello', { columns: 10 }), { ...options, scale: 2 });
+    const single = renderPng(textFrame('hello', { columns: 10 }), GEOMETRY);
+    const double = renderPng(textFrame('hello', { columns: 10 }), { ...GEOMETRY, scale: 2 });
     expect(double.width).toBe(single.width * 2);
     expect(double.height).toBe(single.height * 2);
     expect(pngHeader(double.png).width).toBe(single.width * 2);
@@ -57,10 +65,31 @@ describe('renderPng', () => {
     expect(() => renderPng(textFrame('x'), { scale: Number.NaN })).toThrow(/scale/);
   });
 
-  it('reports the same fallback information the SVG renderer does', () => {
-    const shot = renderPng(textFrame('a\u{F0000}'), { fontSize: 12 });
+  it(
+    'reports the same fallback information the SVG renderer does',
+    () => {
+      // The only test here that deliberately renders an uncoverable character,
+      // so the only one that pays resvg's system-font scan.
+      const shot = renderPng(textFrame('a\u{F0000}'), { fontSize: 12 });
+      expect(shot.selfContained).toBe(false);
+      expect(shot.fallbackCharacters).toContain('\u{F0000}');
+    },
+    FONT_SCAN_TIMEOUT_MS,
+  );
+
+  it('can decline the system-font scan a fallback would trigger', () => {
+    const frame = textFrame('a\u{F0000}');
+    const started = performance.now();
+    const shot = renderPng(frame, { ...GEOMETRY, systemFontFallback: false });
+    const elapsed = performance.now() - started;
+
+    // Still an honest report of what could not be embedded...
     expect(shot.selfContained).toBe(false);
     expect(shot.fallbackCharacters).toContain('\u{F0000}');
+    // ...but no font enumeration, which is the whole point of the escape
+    // hatch: a scan costs ~1 s here and several on Windows.
+    expect(elapsed).toBeLessThan(500);
+    expect([...shot.png.slice(0, 8)]).toEqual(PNG_SIGNATURE);
   });
 });
 

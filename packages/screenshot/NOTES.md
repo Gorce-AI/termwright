@@ -130,6 +130,27 @@ kept only as a last resort.
 The COLR limits live under "Open" at the top of this file, since they are things
 this package still cannot do rather than trade-offs it chose.
 
+## resvg re-scans system fonts on every call
+
+Measured, because it looked like a Windows problem and was not: rasterising an
+SVG that contains `<text>` costs ~0.8 s on macOS and 6–7.7 s on a Windows CI
+runner, while the same frame in outline mode costs 55–76 ms. The expensive part
+is `loadSystemFonts`, and resvg pays it **per `Resvg` instance** — the second
+and third calls are as slow as the first, so a warm-up does nothing.
+
+Two consequences:
+
+- `renderPng` only asks for system fonts when the SVG actually has fallback
+  characters, and `systemFontFallback: false` declines even then, for callers
+  rendering many frames who would rather have blank glyphs than minutes of font
+  enumeration.
+- The package's own PNG tests render in outline mode with explicit
+  `cellWidth`/`lineHeight`, which keeps their geometry assertions exact without
+  paying the scan. Exactly one test renders an uncoverable character on
+  purpose, and it carries a raised timeout with a comment saying why. This is
+  the fix for the CI timeout — a per-test budget increase would have papered
+  over a cost the library was imposing on its users too.
+
 ## Deduplicated `<defs>`, merged background runs
 
 A 100×30 screen is 3000 cells drawn from a few dozen distinct characters. Each

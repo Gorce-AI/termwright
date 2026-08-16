@@ -75,6 +75,21 @@ shot.fontsUsed;            // font files whose glyphs were embedded
 `renderPng` returns the same story in pixels: `png`, `width`, `height` (SVG
 units × `scale`), plus `selfContained` and `fallbackCharacters`.
 
+### The cost of a fallback
+
+A fully self-contained frame rasterises in tens of milliseconds. A frame with
+fallback characters makes resvg enumerate the installed fonts, and it does that
+on **every call** — about a second on macOS, several on Windows, with no cache
+between renders. Rendering a batch of frames that all contain one uncoverable
+character therefore costs seconds per frame.
+
+Point the renderer at a font that covers your screen and the problem
+disappears. When it cannot, and blank glyphs are acceptable, decline the scan:
+
+```ts
+renderPng(frame, { systemFontFallback: false });
+```
+
 ### Self-containment
 
 Characters no configured font covers fall back to `<text>` with a monospace
