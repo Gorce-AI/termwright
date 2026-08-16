@@ -73,7 +73,7 @@ async function launchWithLog(options: Record<string, unknown> = {}): Promise<Har
 
 describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, () => {
   it('picks up a file the program creates after it started', async () => {
-    const { terminal, lines } = await launchWithLog();
+    const { terminal, lines, path } = await launchWithLog();
 
     await terminal.press('w');
     await terminal.press('w');
@@ -82,6 +82,8 @@ describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, ()
     expect(lines.map((entry) => entry.line)).toEqual(['hello 1', 'hello 2']);
     expect(lines[0]?.source).toBe('file');
     expect(lines[0]?.label).toBe('app');
+    // A label can be short and shared; the path is what a reader opens.
+    expect(lines[0]?.path).toBe(path);
     expect(lines[0]?.record).toBeUndefined();
     // Same clock as every other event on the session timeline.
     expect(lines[0]?.timeMs).toBeGreaterThan(0);
@@ -252,6 +254,8 @@ describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout:
     const entry = lines[0];
     expect(entry?.source).toBe('adapter');
     expect(entry?.line).toBeUndefined();
+    // No file behind an adapter record, so no path.
+    expect(entry?.path).toBeUndefined();
     expect(entry?.record?.message).toBe('a single record');
     expect(entry?.record?.level).toBe('info');
     // The logger name becomes the label, so both sources read the same way.

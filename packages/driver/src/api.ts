@@ -360,6 +360,11 @@ export interface AppLogSource {
 export interface AppLogEvent {
   readonly source: 'file' | 'adapter';
   readonly label?: string;
+  /**
+   * Path of the followed file, for `source: 'file'`. A label can be short and
+   * shared between sources; the path is what a reader opens.
+   */
+  readonly path?: string;
   /** Raw line, for a followed file. Truncated lines end with an ellipsis. */
   readonly line?: string;
   /** Structured record, for an adapter that negotiated the logs capability. */

@@ -895,6 +895,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#emitter.emit('app-log', {
       source: 'file',
       ...(source.label !== undefined ? { label: source.label } : {}),
+      path: source.path,
       line,
       timeMs: this.#now(),
     });

@@ -140,7 +140,7 @@ const terminal = await launchTerminal({
   command: ['node', 'app.js'],
   logs: [{ path: '/tmp/app.log', label: 'app' }],
 });
-terminal.events.on('app-log', (entry) => console.log(entry.label, entry.line));
+terminal.events.on('app-log', (entry) => console.log(entry.label, entry.path, entry.line));
 ```
 
 A file that does not exist yet is waited for (programs create their log on first
