@@ -1,0 +1,9 @@
+# One checkout on every platform. A CRLF checkout on Windows silently breaks
+# anything that compares file CONTENT — golden snapshots, .cast/.jsonl
+# fixtures, and the README example tests were the first to find this.
+* text=auto eol=lf
+
+# Binary assets: never translated.
+*.png binary
+*.woff2 binary
+*.zip binary
