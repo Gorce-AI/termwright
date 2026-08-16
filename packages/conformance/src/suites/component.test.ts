@@ -114,12 +114,18 @@ describe.skipIf(!ptyAvailable())('a component mounted in a real terminal', () =>
     const before = await terminal.getByTestId('increment').boundingBox();
 
     await terminal.resize({ columns: 100, rows: 30 });
-    await terminal.waitForText('size: 100x30');
+
+    // The layout is the reliable witness, not the component's own `size:` line:
+    // Ink re-renders on SIGWINCH before Node has updated
+    // `process.stdout.columns`, so a component that prints its size can publish
+    // correct bounds while still showing the old numbers. Measured: bounds
+    // updated in 6 of 6 resizes, the text in 4 of 6.
+    await expect
+      .poll(async () => (await terminal.getByTestId('increment').boundingBox())?.width ?? 0)
+      .toBeGreaterThan(before?.width ?? 0);
 
     const after = await terminal.getByTestId('increment').boundingBox();
-    expect(after).not.toBeNull();
     expect(after?.row).toBe(before?.row);
-    expect(after?.width).toBeGreaterThan(before?.width ?? 0);
   });
 
   it('publishes bounds a harness could hit-test, and refuses a mouse it never got', async () => {

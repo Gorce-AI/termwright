@@ -54,15 +54,25 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
-1. **A refused late hello carries no `wireCode`.** Past the late-attach grace
-   the driver refuses a handshake, sends the adapter wire `internal`, and
-   records the decision as `adapter-capability` — but `wireCode` is populated
-   only on `protocol-violation` entries, so the log does not say which wire
-   error went out. The adversarial suite therefore reads that one code off the
-   peer's own output, which is the last indirect assertion left. Either
-   populating `wireCode` wherever a wire error is sent, or classifying the
-   refusal as `protocol-violation`, would close it.
-2. **`clients/README.md` documents a quit key that is state-dependent.** The
+1. **The driver can lose the wire error it just sent.** Every refusal path in
+   `semantic.ts` writes the error frame and calls `socket.destroy()` in the same
+   turn (the second-connection path and `#fail` alike), and `destroy()` discards
+   data that has not been flushed. Measured on the second-connection scenario:
+   the peer failed to receive the frame in 2 of 4 full-file runs, while the
+   driver's own log recorded `wireCode: 'internal'` every time. Consequence for
+   an adapter author: the reason a connection was refused is sometimes never
+   delivered. `socket.end(frame)`, or `write(frame, () => destroy())`, would fix
+   it. Until then no assertion here may depend on the adapter *receiving* a wire
+   error — every one reads `wireCode` from the driver's log instead, and the
+   both-ends assertions come back when the flush does.
+2. **Ink can re-render after a resize before `process.stdout.columns` catches
+   up.** A component that renders its own size (`size: 60x16`) sometimes keeps
+   the old numbers in the frame that already reflects the new layout — measured
+   at 2 of 6 resizes, while the republished bounds were correct 6 of 6. A
+   component's self-reported size is therefore not a usable signal that a resize
+   landed; the layout is. Relevant to `@termwright/ink` and to anyone writing a
+   resize assertion.
+3. **`clients/README.md` documents a quit key that is state-dependent.** The
    tview example's table says `q`, exit 0 — true only while focus has not
    cycled onto the reason field, where `q` types normally (`main.go`:
    `event.Rune() == 'q' && current != 2`). Since the contract suite sends the

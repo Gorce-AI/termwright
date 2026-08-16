@@ -216,6 +216,31 @@ const SCENARIOS = {
     }
     send(tree(2, nodes));
   },
+  'second-connection': () => {
+    // One adapter per session. A second channel from the same process is the
+    // benign shape of that mistake; the driver must refuse it and say so
+    // without disturbing the adapter that is already attached.
+    const second = connect(endpoint, () => {
+      second.write(frame(hello()));
+    });
+    second.on('error', () => say('PEER SECOND SOCKET ERROR'));
+    second.on('close', () => say('PEER SECOND SOCKET CLOSED'));
+    // Buffered and length-decoded, not regexed out of one chunk: the reply and
+    // the socket's own destruction race, and a split read would silently lose
+    // the error this scenario exists to observe.
+    let rest = Buffer.alloc(0);
+    second.on('data', (chunk) => {
+      rest = Buffer.concat([rest, chunk]);
+      for (;;) {
+        if (rest.length < 4) break;
+        const length = rest.readUInt32BE(0);
+        if (rest.length < 4 + length) break;
+        const message = JSON.parse(rest.subarray(4, 4 + length).toString('utf8'));
+        rest = rest.subarray(4 + length);
+        if (message.type === 'error') say(`PEER SECOND GOT ERROR ${message.code}`);
+      }
+    });
+  },
   'peer-error': () => {
     // The other direction: the adapter reports a protocol error at us. The
     // driver must surface the code the peer chose, not one of its own.
