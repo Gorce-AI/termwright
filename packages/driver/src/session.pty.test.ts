@@ -253,16 +253,20 @@ describe.skipIf(!ptyAvailable())('crash reports', { timeout: 20_000 }, () => {
     expect(crashes[0]).toBe(report);
   });
 
-  it('captures a death by signal', async () => {
+  it('captures a death the operating system reports its own way', async () => {
     const terminal = await launch('crash-app.mjs');
     await terminal.waitForText('CRASH APP READY');
 
     await terminal.press('k');
     const status = await terminal.waitForExit();
-    expect(status.signal).toBe('SIGKILL');
+    // POSIX reports the signal; Windows has none and reports a code. Both are
+    // deaths nobody asked for, which is what the report is about.
+    if (process.platform === 'win32') expect(status.code).not.toBe(0);
+    else expect(status.signal).toBe('SIGKILL');
 
     const report = terminal.crashReport();
-    expect(report?.exit.signal).toBe('SIGKILL');
+    expect(report).not.toBeNull();
+    expect(report?.exit).toEqual(status);
     expect(report?.screenTail.join('\n')).toContain('CRASH APP READY');
   });
 
@@ -366,12 +370,15 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
     terminal.events.on('action', (event) => actions.push(event));
 
     await terminal.getByText('READY').click().catch(() => {});
-    await terminal.focus().catch(() => {});
 
+    // A click with no mouse tracking is refused everywhere. focus() is not a
+    // fair second example on Windows: ConPTY enables focus reporting itself,
+    // so the action legitimately succeeds there and the test would be
+    // asserting the platform, not the driver.
     expect(actions.map((event) => [event.api, event.ok, event.error])).toEqual([
       ['click', false, 'unsupported-action'],
-      ['focus', false, 'unsupported-action'],
     ]);
+    expect(actions[0]?.selector).toContain('getByText');
   });
 
   it('reports the action after it finished, not when it started', async () => {
@@ -759,6 +766,28 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     expect(approve.semantic).toBe(true);
     expect(approve.rect).toEqual({ row: 1, column: 2, width: 9, height: 1 });
     expect(approve.ref).toMatch(/^n2@\d+$/u);
+  });
+
+  it('pairs the revision once the marker reaches the emulator', async () => {
+    // Separates two failures that look identical from the outside: an adapter
+    // that never committed, and a terminal that ate the commit. The receipt is
+    // plain text, so it survives anything that strips escape sequences.
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    await terminal.waitForText('MARKED 1');
+
+    const account = (): string =>
+      terminal
+        .diagnostics()
+        .map((entry) => `${entry.code}: ${entry.detail}`)
+        .join(' | ');
+
+    await expect
+      .poll(() => terminal.semanticTree()?.revision ?? 0, { timeout: 3_000 })
+      .toBe(1);
+    expect(terminal.semanticTree()?.revision, account()).toBe(1);
+    // A marker that arrived but did not verify is a different bug, and the
+    // driver would have said so.
+    expect(terminal.diagnostics().some((entry) => entry.code === 'marker-unverified'), account()).toBe(false);
   });
 
   it('fails strictly on an ambiguous locator with bounded candidates', async () => {

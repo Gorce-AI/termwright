@@ -170,6 +170,11 @@ function publish() {
   socket.write(encodeFrame({ type: 'revision-commit', revision }, 1024 * 1024));
   // The marker commits the render: it must follow the last byte of the frame.
   process.stdout.write(encodeMarker(token, sessionId, revision));
+  // A plain-text receipt for the marker. If this line reaches the screen and
+  // the revision never pairs, the DCS sequence was lost between here and the
+  // emulator rather than never written — which is the only way to tell a
+  // transport that strips escape sequences from an adapter that forgot one.
+  process.stdout.write(`MARKED ${revision}\r\n`);
 }
 
 function decodeFrames(buffer, onMessage) {

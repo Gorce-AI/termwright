@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { createServer, connect, type Server, type Socket } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,8 +14,22 @@ afterEach(() => {
   while (directories.length > 0) rmSync(directories.pop() ?? '', { recursive: true, force: true });
 });
 
-/** Starts a unix-socket server that hands each connection to `onConnection`. */
+/**
+ * Starts a local server and returns its endpoint.
+ *
+ * The endpoint is platform-shaped for the same reason the driver's is: Windows
+ * has no filesystem sockets, and `listen()` on a path there wants a named
+ * pipe. A test that hard-codes a POSIX path tests nothing on Windows except
+ * its own assumption.
+ */
 async function serve(onConnection: (socket: Socket) => void): Promise<string> {
+  if (process.platform === 'win32') {
+    const pipe = `\\\\.\\pipe\\termwright-test-${randomBytes(8).toString('hex')}`;
+    const server = createServer(onConnection);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(pipe, () => resolve()));
+    return pipe;
+  }
   const directory = mkdtempSync(join(tmpdir(), 'termwright-socket-'));
   directories.push(directory);
   const path = join(directory, 'test.sock');
