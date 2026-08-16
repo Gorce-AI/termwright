@@ -213,3 +213,5 @@
   close the channel. An upward gap still means source-side dropping and is
   reported as before. File follower fingerprint fix (driver 56c410f): head
   window fixed at snapshot time, no re-emission on append to short files.
+- 2026-08-16 (driver c73b090): AppLogEvent gains optional `path` (filled for
+  source 'file'); adapter records carry none. Additive.
