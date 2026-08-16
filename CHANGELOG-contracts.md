@@ -221,3 +221,7 @@
   rate limit still CONSUME numbers, so an upward gap keeps meaning
   source-side dropping. This makes strict-increase trivially satisfiable
   even with multiple independent publishers on `termwright:log`.
+- 2026-08-16 (ui 7c743be): §UI events gains `app-log`. `ui` needs no
+  dependency relaxation for logs — the level ladder is duplicated locally
+  (browser bundle cannot import Node-only protocol) and pinned by an equality
+  test against LOG_LEVELS.

@@ -95,8 +95,17 @@ those readers.
 WebSocket, JSON messages `{ v: 1, type, ... }`:
 - server→client: `run-start`, `test-start {id, title, file}`,
   `step {testId, title, phase}`, `output {sessionId, dataB64, t}`,
-  `semantic {sessionId, revision, snapshot}`, `test-end {id, status, traceRef}`,
+  `semantic {sessionId, revision, snapshot}`,
+  `app-log {sessionId, t, source, level, message, label?, logger?, seq?,
+  revision?, attrs?}`, `test-end {id, status, traceRef}`,
   `run-end {summary}`.
+
+`app-log` carries one application log entry: `source` is `'file'` (a followed
+file line) or `'adapter'` (a record from an instrumented adapter), `t` is
+session-clock milliseconds, `level` is a protocol `LogLevel` or **`null`** —
+a file line has no level and none may be inferred from its text. `attrs` are
+flat scalars. Receivers mark only `warn`/`error`/`fatal` on the timeline;
+level-less entries produce no markers but are always listed.
 - client→server: `rerun {testIds?}`, `stop`, `pick {sessionId}` (inspector
   pick-mode), `input {sessionId, dataB64}` (recorder mode only).
 The Vitest bridge is a reporter translating Vitest lifecycle into these
