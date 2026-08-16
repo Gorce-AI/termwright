@@ -351,10 +351,16 @@ jobs:
           declared=$(grep -m1 '^rust-version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           actual=$(rustc --version | cut -d' ' -f2)
           echo "declared floor: $declared, toolchain: $actual"
-          case "$actual" in
-            "$declared"|"$declared".*) ;;
-            *) echo "::error::this job must run on $declared, not $actual — pin the toolchain or raise rust-version"; exit 1 ;;
-          esac
+
+          # Compare on major.minor only. A patch release is not a different
+          # floor, and the toolchain action serves the newest patch in the
+          # series — so a Cargo.toml that ever says "1.74.0" must not fail this
+          # guard against a 1.74.1 runner with nothing actually wrong.
+          minor() { echo "$1" | cut -d. -f1,2; }
+          if [ "$(minor "$declared")" != "$(minor "$actual")" ]; then
+            echo "::error::this job must run on $(minor "$declared").x, not $actual — pin the toolchain or raise rust-version"
+            exit 1
+          fi
 
       # Build, not test: MSRV is a promise to whoever *depends* on the crate,
       # and a dependent compiles the library. Compiling the test binaries would
