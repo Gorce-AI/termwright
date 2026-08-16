@@ -217,17 +217,27 @@ describe('collectLogs', () => {
     expect(logsOf(harness)).toBeUndefined();
   });
 
-  it('counts log-dropped diagnostics live, and stops on dispose', () => {
+  it('sums the records the session says never arrived, live', () => {
     const { harness, emit } = fakeHarness();
     const { collection, dispose } = collectLogs(harness);
-    emit('diagnostic', { code: 'log-dropped', detail: 'the adapter dropped 4 log records', timeMs: 5 });
-    emit('diagnostic', { code: 'listener-error', detail: 'unrelated', timeMs: 6 });
-    expect(collection.upstreamDrops()).toBe(1);
+    emit('diagnostic', { code: 'log-dropped', detail: 'the adapter dropped 4', count: 4, timeMs: 5 });
+    emit('diagnostic', { code: 'log-dropped', detail: 'refused 2 over budget', count: 2, timeMs: 6 });
+    emit('diagnostic', { code: 'listener-error', detail: 'unrelated', count: 9, timeMs: 7 });
+    expect(collection.lostRecords()).toBe(6);
     // A diagnostic is not a log entry.
     expect(collection.all()).toEqual([]);
     dispose();
-    emit('diagnostic', { code: 'log-dropped', detail: 'after dispose', timeMs: 7 });
-    expect(collection.upstreamDrops()).toBe(1);
+    emit('diagnostic', { code: 'log-dropped', detail: 'after dispose', count: 3, timeMs: 8 });
+    expect(collection.lostRecords()).toBe(6);
+  });
+
+  it('does not count a refused duplicate as a loss', () => {
+    // A duplicate carries no `count`: the record it repeated did arrive, so
+    // nothing is missing and the evidence is not incomplete.
+    const { harness, emit } = fakeHarness();
+    const { collection } = collectLogs(harness);
+    emit('diagnostic', { code: 'log-dropped', detail: 'refused a log record with seq 7', timeMs: 5 });
+    expect(collection.lostRecords()).toBe(0);
   });
 
   it('stops capturing once disposed', () => {
@@ -283,12 +293,12 @@ describe('the failure threshold', () => {
     expect(describeLogThresholdFailure([record('warn', 'meh')], 'error')).toBeUndefined();
   });
 
-  it('warns that the list may be incomplete when records were dropped upstream', () => {
+  it('warns that the list may be incomplete when records were lost', () => {
     const message = describeLogThresholdFailure([record('error', 'save failed')], 'error', 3);
-    expect(message).toContain('reported 3 log-dropped diagnostics');
+    expect(message).toContain('3 log records never reached this test');
     expect(message).toContain('may be incomplete');
-    // Without drops there is nothing to caveat.
-    expect(describeLogThresholdFailure([record('error', 'x')], 'error', 0)).not.toContain('log-dropped');
+    // Nothing lost, nothing to caveat.
+    expect(describeLogThresholdFailure([record('error', 'x')], 'error', 0)).not.toContain('never reached');
   });
 
   it('lists the offenders and how to turn the check off', () => {

@@ -54,14 +54,17 @@ export interface LogCollection {
   /** Entries dropped because {@link MAX_CAPTURED_LOGS} was reached. */
   dropped(): number;
   /**
-   * `log-dropped` diagnostics seen on the session: records refused by the
-   * driver or lost by the adapter, which never became entries here.
+   * Log entries that never reached this test: the sum of `count` over the
+   * session's `log-dropped` diagnostics.
+   *
+   * A refused duplicate carries no `count` and is not counted — it was not a
+   * loss, since the record it repeated did arrive.
    */
-  upstreamDrops(): number;
+  lostRecords(): number;
   /** Appends an entry. Used by the fixtures; tests read rather than write. */
   push(entry: CapturedLog): void;
-  /** Records that the session reported a dropped log. Used by {@link collectLogs}. */
-  noteUpstreamDrop(): void;
+  /** Adds to {@link lostRecords}. Used by {@link collectLogs}. */
+  noteLostRecords(count: number): void;
 }
 
 /**
@@ -86,7 +89,7 @@ export function createLogCollection(): LogCollection {
   const entries: CapturedLog[] = [];
   const seen = new Set<string>();
   let dropped = 0;
-  let upstream = 0;
+  let lost = 0;
   const collection: LogCollection = {
     all: () => entries,
     filter: (query) => (query === undefined ? entries : entries.filter((entry) => matchesLog(entry, query))),
@@ -98,10 +101,10 @@ export function createLogCollection(): LogCollection {
       entries.length = 0;
       seen.clear();
       dropped = 0;
-      upstream = 0;
+      lost = 0;
     },
     dropped: () => dropped,
-    upstreamDrops: () => upstream,
+    lostRecords: () => lost,
     push: (entry) => {
       const identity = identityOf(entry);
       // One record counted once, however many times it arrives.
@@ -120,8 +123,8 @@ export function createLogCollection(): LogCollection {
         }
       }
     },
-    noteUpstreamDrop: () => {
-      upstream += 1;
+    noteLostRecords: (count) => {
+      lost += count;
     },
   };
   return collection;
@@ -156,7 +159,7 @@ export function collectLogs(
   // keeps only the most recent entries, so a chatty session would have
   // evicted the early drops and the count would quietly be too low.
   const unsubscribeDiagnostics = harness.events.on('diagnostic', (event) => {
-    if (event.code === 'log-dropped') into.noteUpstreamDrop();
+    if (event.code === 'log-dropped' && event.count !== undefined) into.noteLostRecords(event.count);
   });
   collections.set(harness, into);
   return {
@@ -248,10 +251,10 @@ export function logsFailingThreshold(
 export function describeLogThresholdFailure(
   entries: readonly CapturedLog[],
   threshold: LogLevel,
-  upstreamDrops = 0,
+  lostRecords = 0,
 ): string | undefined {
   const offenders = logsFailingThreshold(entries, threshold);
-  return offenders.length === 0 ? undefined : formatLogFailure(offenders, threshold, upstreamDrops);
+  return offenders.length === 0 ? undefined : formatLogFailure(offenders, threshold, lostRecords);
 }
 
 /**
@@ -265,10 +268,10 @@ export function logThresholdFailure(
   entries: readonly CapturedLog[],
   threshold: LogLevel | false,
   testAlreadyFailed: boolean,
-  upstreamDrops = 0,
+  lostRecords = 0,
 ): string | undefined {
   if (threshold === false || testAlreadyFailed) return undefined;
-  return describeLogThresholdFailure(entries, threshold, upstreamDrops);
+  return describeLogThresholdFailure(entries, threshold, lostRecords);
 }
 
 /** How many offending entries a failure message lists before summarising. */
@@ -278,7 +281,7 @@ const FAILURE_LIST_LIMIT = 10;
 export function formatLogFailure(
   offenders: readonly CapturedLog[],
   threshold: LogLevel,
-  upstreamDrops = 0,
+  lostRecords = 0,
 ): string {
   const shown = offenders.slice(0, FAILURE_LIST_LIMIT);
   const rest = offenders.length - shown.length;
@@ -287,11 +290,11 @@ export function formatLogFailure(
       `at level ${threshold} or above:`,
     ...shown.map((entry) => `  ${formatLogEntry(entry)}`),
     ...(rest > 0 ? [`  …and ${rest} more`] : []),
-    ...(upstreamDrops > 0
+    ...(lostRecords > 0
       ? [
           '',
-          `The session also reported ${upstreamDrops} log-dropped diagnostic${upstreamDrops === 1 ? '' : 's'}: ` +
-            'records were refused or lost before this test saw them, so the list above may be incomplete.',
+          `${lostRecords} log record${lostRecords === 1 ? '' : 's'} never reached this test ` +
+            '(dropped by the adapter, or refused over budget), so the list above may be incomplete.',
         ]
       : []),
     '',
