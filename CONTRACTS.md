@@ -62,6 +62,16 @@ package boundaries must be `TermwrightError` subclasses. All I/O bounded per
 `DEFAULT_LIMITS`/`ABSOLUTE_LIMITS`. Hostile-input suites must pass under
 `node --max-old-space-size=128`.
 
+Validation-rule discipline (born of the frameworkType incident): a runtime
+validation rule has no reflection in the types, so a clean typecheck proves
+nothing about its blast radius — the rule's author asks "who produces values
+this will reject" and pings those owners BEFORE the rule lands. A validation
+test asserts the REJECTION CODE, never the bare fact of rejection —
+otherwise every rule that fires earlier silently hollows out the fixtures of
+later ones. Reviewing a test-vector regeneration means diffing each
+vector's `code` under an unchanged name: that diff is the only trace
+masking leaves.
+
 ## §Trace — `.twtrace` archive
 
 A directory (zipped for transport) containing:
