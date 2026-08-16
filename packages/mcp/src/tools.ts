@@ -568,7 +568,9 @@ function pointerTool(name: 'terminal.click' | 'terminal.double_click'): ToolDefi
     title: double ? 'Double-click a target' : 'Click a target',
     description:
       `Sends a real ${double ? 'double ' : ''}mouse report through the pseudo-terminal. Fails with ` +
-      'unsupported-action when the program never enabled mouse tracking.',
+      'unsupported-action when the program never enabled mouse tracking. Where the platform hides ' +
+      'the mode (modes.mouseTracking "unknown", e.g. Windows ConPTY) the click is sent anyway, ' +
+      'encoded as SGR.',
     inputSchema: {
       terminal: terminalId,
       ...targetShape,

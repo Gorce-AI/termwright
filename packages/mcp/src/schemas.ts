@@ -126,8 +126,14 @@ export const cursorSchema = z.object({
 });
 
 export const modesSchema = z.object({
-  mouseTracking: z.enum(['none', 'x10', 'vt200', 'drag', 'any']),
-  mouseEncoding: z.enum(['default', 'sgr', 'urxvt', 'utf8']),
+  /**
+   * `'unknown'` means the platform hides the mode from the emulator (ConPTY on
+   * Windows), not that the program disabled mouse reporting. Pointer actions
+   * still work there: input goes out as SGR, which every program that enables
+   * mouse reporting understands.
+   */
+  mouseTracking: z.enum(['none', 'x10', 'vt200', 'drag', 'any', 'unknown']),
+  mouseEncoding: z.enum(['default', 'sgr', 'urxvt', 'utf8', 'unknown']),
   bracketedPaste: z.boolean(),
   applicationCursorKeys: z.boolean(),
   applicationKeypad: z.boolean(),
