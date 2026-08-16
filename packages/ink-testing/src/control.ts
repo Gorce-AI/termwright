@@ -32,8 +32,15 @@ export const ENV_CONTROL_TOKEN = 'TERMWRIGHT_FIXTURE_CONTROL_TOKEN';
 /**
  * Largest control message accepted, in bytes, in either direction.
  *
- * Matches the fixture payload limit: a rerender carries the same kind of props
- * the launch did, so the same ceiling applies.
+ * Deliberately **larger than `MAX_PAYLOAD_BYTES` in `payload.ts`**, capped by
+ * the narrowest platform command line because the launch payload travels in
+ * argv. A rerender travels over this socket, where no such limit exists, so
+ * copying the argv ceiling here would import a constraint from a transport
+ * this one does not use.
+ *
+ * The visible consequence is worth knowing before it surprises someone: props
+ * too large to *launch* a fixture with can be small enough to *rerender* it
+ * with. See NOTES.md.
  */
 export const MAX_CONTROL_BYTES = 64 * 1024;
 
