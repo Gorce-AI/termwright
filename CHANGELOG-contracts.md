@@ -161,3 +161,8 @@
   is the screen the recording ends on. `meta.crash.screenTail` is NOT redacted
   (driver's wording is binding): every consumer that displays it repeats the
   warning — the HTML report shows it as a banner above the tail.
+- 2026-08-16 (log tail, driver 9d7987a): LaunchOptions.logs (file tail) +
+  SessionEventMap 'app-log' {source:'file'|'adapter', label?, line?, record?}.
+  Two new DiagnosticCodes: 'log-dropped' (data we failed to deliver) and
+  'log-source' (source state change: attach/rotate/truncate/error). Closed
+  set: 16.
