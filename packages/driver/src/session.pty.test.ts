@@ -904,6 +904,28 @@ describe.skipIf(!ptyAvailable())('a probe-backed session', { timeout: 20_000 }, 
     expect((await terminal.getByTestId('approve').resolve()).name).toBe('Approve');
   });
 
+  it('refuses to click geometry the probe cannot vouch for', async () => {
+    // bounds is the best known *visible* geometry, but "best known" is not
+    // "known": without paint order the rectangle is an intention, and a modal
+    // may own those cells. Clicking anyway lands real input somewhere real and
+    // credits it to this target — a green test that tested nothing.
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { ...environment(), TERMWRIGHT_FIXTURE_PROBE: 'stable' },
+    });
+    const approve = terminal.getByRole('button', { name: 'Approve' });
+    expect((await approve.resolve()).occlusion).toBeUndefined();
+
+    const error = await approve.click().catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('unsupported-action');
+    expect((error as TermwrightError).message).toContain('covered');
+
+    // The keyboard path is untouched: refusing the pointer is not refusing the
+    // widget, and the suggestion says so.
+    expect((error as TermwrightError).diagnostics.suggestion).toContain('press()');
+    await terminal.press('Tab');
+  });
+
   it('keeps an unrecognised widget selectable by its framework type', async () => {
     // The point of D1's generic role: the widget survives, and frameworkType
     // is what makes it addressable once it has.

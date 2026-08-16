@@ -389,6 +389,15 @@ export interface ResolvedTarget {
   readonly frameworkType?: string;
   /** Where this node's facts came from, when the producer reported it. */
   readonly provenance?: ProvenanceSource;
+  /**
+   * Whether the producer could tell what covers these cells.
+   *
+   * `'known'` — paint order was observable, so {@link ResolvedTarget.rect} is
+   * geometry the user can actually reach. Anything else, absence included,
+   * means the rectangle is where the widget asked to draw and something may
+   * be on top of it. Pointer actions refuse on anything but `'known'`.
+   */
+  readonly occlusion?: 'known' | 'unknown';
 }
 
 export interface ActivateReceipt {

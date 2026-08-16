@@ -51,6 +51,8 @@ export interface LocatorContext {
   modes(): TerminalModes;
   /** The best identity the attached producer can offer for a node. */
   identityKind(): ResolvedTarget['identity'];
+  /** True when the attached producer is a probe rather than a hand-written adapter. */
+  producerIsProbe(): boolean;
   /** Resolves when a screen or semantic revision is published, or the deadline passes. */
   waitForChange(deadline: number): Promise<void>;
   sendInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): Promise<void>;
@@ -91,6 +93,7 @@ function nodeTarget(
     identity,
     ...(node.frameworkType !== undefined ? { frameworkType: node.frameworkType } : {}),
     ...(node.p !== undefined ? { provenance: node.p } : {}),
+    ...(node.occlusion !== undefined ? { occlusion: node.occlusion } : {}),
   });
 }
 
@@ -419,12 +422,41 @@ export class LocatorImpl implements Locator {
     await this.#clickTarget(target, opts?.button ?? 'left', clicks, opts?.position);
   }
 
+  /**
+   * Refuses a pointer action aimed at geometry that may be covered.
+   *
+   * `bounds` is the best known *visible* geometry, but "best known" is not
+   * "known": where the producer cannot see paint order, the rectangle is an
+   * intention, and a modal or popup may own those cells. Clicking anyway sends
+   * real input to whatever is on top and attributes the result to this target
+   * — a test that passes while testing nothing. Refusing is the transitional
+   * state, and it lifts per framework as paint order becomes available.
+   *
+   * Only probes are held to it. A hand-written adapter never had an occlusion
+   * field to report and its contract predates the rule, so enforcing it there
+   * would disable clicking for every adapter shipped so far in exchange for no
+   * new information. The rule arrives with the model that can answer it.
+   */
+  #assertPointable(target: ResolvedTarget): void {
+    if (!target.semantic || target.occlusion === 'known') return;
+    if (!this.#ctx.producerIsProbe()) return;
+    throw new UnsupportedActionError(
+      `${this.description} cannot be clicked: this producer cannot say whether those cells are covered`,
+      this.#ctx.errorDiagnostics({
+        candidates: [target],
+        suggestion:
+          'drive the widget with press()/keyboard locators, or use a framework whose probe reports paint order',
+      }),
+    );
+  }
+
   async #clickTarget(
     target: ResolvedTarget,
     button: MouseButton,
     clicks: number,
     position?: PointerOptions['position'],
   ): Promise<void> {
+    this.#assertPointable(target);
     const modes = this.#ctx.modes();
     const { row, column } = this.#center(target, position);
     const events: MouseEvent[] = [];

@@ -496,6 +496,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#attachment?.probe?.identityKind ?? 'stable';
   }
 
+  producerIsProbe(): boolean {
+    return this.#attachment?.probe != null;
+  }
+
   locatorForRef(ref: string): Locator {
     if (this.identityKind() === 'frame-local') {
       throw new UnsupportedActionError(
