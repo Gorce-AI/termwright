@@ -14,33 +14,29 @@ import {
   type ServerMessage,
 } from '../events.js';
 import type { TraceOverview, TraceStatePayload } from '../trace-source.js';
-import type { TraceLogs } from '../trace-logs.js';
+import type { DataSource, DataSourceFeatures, ViewerState } from '../data-source.js';
+import type { LogWindowQuery, TraceLogs } from '../trace-logs.js';
 import type { TraceCommands, TraceFrames } from '../trace-playback.js';
 import type { RunManifest, RunSummaryEntry } from '../runs.js';
 import type { GeneratedSelector } from '../selector.js';
 import type { RecordedEvent } from '../codegen.js';
 
-/** `/api/state` — everything the app needs that is not an event. */
-export interface ServerState {
-  readonly mode: 'live' | 'post-mortem' | 'record';
-  readonly sessions: readonly {
-    readonly sessionId: string;
-    readonly command: readonly string[];
-    readonly columns: number | null;
-    readonly rows: number | null;
-    readonly writable: boolean;
-  }[];
-  readonly trace: TraceOverview | null;
-  readonly record: {
-    readonly sessionId: string;
-    readonly command: readonly string[];
-    readonly picking: boolean;
-    readonly outFile: string | null;
-  } | null;
-}
+/**
+ * `/api/state` — everything the app needs that is not an event.
+ *
+ * The shape lives in `data-source.ts` because a report states the same facts
+ * without a server; this name is kept for the routes that answer it.
+ */
+export type ServerState = ViewerState;
 
-/** Connection to the runner server. */
-export class RunnerClient {
+/**
+ * Connection to the runner server, and the {@link DataSource} backed by it.
+ *
+ * A server can do everything: it holds the history, it can open another
+ * archive, and in live mode there is a process on the other end of the socket.
+ */
+export class RunnerClient implements DataSource {
+  readonly features: DataSourceFeatures = { live: true, history: true, openTrace: true };
   readonly #token: string;
   #socket: WebSocket | undefined;
   #onMessage: (message: ServerMessage) => void = () => undefined;
@@ -97,7 +93,7 @@ export class RunnerClient {
    * One window of the archive's application logs, validated server-side.
    * Omitting both bounds returns the oldest window.
    */
-  async traceLogs(query: { before?: number; after?: number; limit?: number } = {}): Promise<TraceLogs> {
+  async traceLogs(query: LogWindowQuery = {}): Promise<TraceLogs> {
     const params = Object.entries(query)
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => `${key}=${String(value)}`)

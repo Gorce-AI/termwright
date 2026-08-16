@@ -54,11 +54,22 @@ export interface TimelineModel {
   readonly logMarks: readonly AppLogView[];
   /** The test list, which owns the tests themselves. */
   readonly testList: TestListModel;
+  /**
+   * True when the recording on screen stops before the session did — cut by
+   * the frame ceiling, or by a report's size budget. Said out loud, because a
+   * replay that just ends looks like a program that just stopped.
+   */
+  readonly recordingCut: boolean;
   /** Playback state, when a recording is open. */
   readonly playing: boolean;
   readonly speed: PlaybackSpeed;
   /** Which half of the pane is showing. */
   readonly view: 'tests' | 'runs';
+  /**
+   * Whether past runs can be listed at all. A self-contained report holds one
+   * recording, so it hides the tab rather than offering an empty list.
+   */
+  readonly hasHistory: boolean;
   readonly runHistory: RunHistoryModel;
 }
 
@@ -82,13 +93,15 @@ export function renderTimeline(model: TimelineModel, handlers: TimelineHandlers)
         >
           Tests
         </button>
-        <button
-          class=${model.view === 'runs' ? 'active' : ''}
-          data-testid="view-runs"
-          @click=${() => handlers.setView('runs')}
-        >
-          Runs
-        </button>
+        ${model.hasHistory
+          ? html`<button
+              class=${model.view === 'runs' ? 'active' : ''}
+              data-testid="view-runs"
+              @click=${() => handlers.setView('runs')}
+            >
+              Runs
+            </button>`
+          : ''}
       </nav>
       <span class="muted">${model.mode}${model.connected ? '' : ' — reconnecting…'}</span>
     </header>
@@ -131,6 +144,11 @@ function renderScrubber(
       ${renderTrack(model, trace, duration, handlers)}
       <button title="Next action (→)" @click=${() => handlers.jump(1)}>▶</button>
       <span class="clock" data-testid="clock">${formatMs(model.timeMs)}</span>
+      ${model.recordingCut
+        ? html`<span class="warn cut" data-testid="recording-cut" title="Playback stops early; the whole recording is in the archive."
+            >recording cut</span
+          >`
+        : ''}
     </div>
   `;
 }

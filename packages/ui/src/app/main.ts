@@ -15,6 +15,7 @@ import { fromBase64, type ServerMessage } from '../events.js';
 import type { GeneratedSelector } from '../selector.js';
 import type { TraceOverview } from '../trace-source.js';
 import { RunnerClient, type ServerState } from './client.js';
+import { InlineDataSource, readInlinePayload, type DataSource } from '../data-source.js';
 import { renderInspector, type InspectorHandlers } from './inspector.js';
 import {
   applyAriaAttributes,
@@ -82,7 +83,36 @@ interface SessionView {
   revision: number | null;
 }
 
-const client = new RunnerClient();
+/**
+ * One viewer, two sources.
+ *
+ * A page emitted as a self-contained report carries its archive with it and has
+ * no server to talk to; a page served by the runner has both. Everything below
+ * this line asks `source` for data and reaches for `runner` only where a live
+ * process is genuinely required — and the panel hides those controls when the
+ * source says it has none.
+ */
+const inlinePayload = readInlinePayload();
+let runner: RunnerClient | undefined;
+let source: DataSource;
+if (inlinePayload === undefined) {
+  runner = new RunnerClient();
+  source = runner;
+} else {
+  source = new InlineDataSource(inlinePayload);
+}
+
+/**
+ * The runner, for the operations that genuinely need one.
+ *
+ * @throws Error when the page has no server. Record mode only exists when the
+ * runner drives a pty, so reaching this from a report is a bug in the gating
+ * above, not a situation to paper over.
+ */
+function recorder(): RunnerClient {
+  if (runner === undefined) throw new Error('recording needs the runner server');
+  return runner;
+}
 const terminalHost = document.querySelector<HTMLElement>('#terminal');
 const inspectorHost = document.querySelector<HTMLElement>('#inspector');
 const timelineHost = document.querySelector<HTMLElement>('#timeline');
@@ -123,6 +153,7 @@ const state = {
   logAutoscroll: true,
   logsAvailable: false,
   logsTruncated: false,
+  framesTruncated: false,
   /** Older entries exist before the window the page holds. */
   logsHasMoreBefore: false,
   logsLoadingOlder: false,
@@ -252,8 +283,10 @@ function draw(): void {
         summary: state.summary,
         logMarks: markedLogs(),
         playing: state.playback.playing,
+        recordingCut: state.framesTruncated,
         speed: state.playback.speed,
         view: state.paneView,
+        hasHistory: source.features.history,
         runHistory: {
           runs: state.runs,
           openId: state.openRunId,
@@ -265,8 +298,9 @@ function draw(): void {
           tests: state.tests,
           query: state.testQuery,
           selectedId: state.selectedTestId,
-          // A replay is a recording: there is nothing to run again.
-          canRerun: state.mode !== 'post-mortem',
+          // A replay is a recording: there is nothing to run again. Neither is
+          // there in a report, which has no runner behind it at all.
+          canRerun: source.features.live && state.mode !== 'post-mortem',
           now: state.now,
           steps: selectedTest()?.steps ?? [],
         },
@@ -374,7 +408,7 @@ function syncLogWindow(timeMs: number): void {
     first !== undefined && last !== undefined && timeMs >= first && timeMs <= last;
   if (covered) return;
   state.logsLoadingOlder = true;
-  void client
+  void source
     .traceLogs({ before: timeMs + 1 })
     .then((window) => {
       state.logs = [...window.records];
@@ -400,7 +434,7 @@ async function loadOlderLogs(): Promise<void> {
   if (oldest === undefined) return;
   state.logsLoadingOlder = true;
   try {
-    const older = await client.traceLogs({ before: oldest });
+    const older = await source.traceLogs({ before: oldest });
     state.logs = [...older.records, ...state.logs];
     state.logsHasMoreBefore = older.hasMoreBefore;
     schedule();
@@ -498,7 +532,7 @@ const inspectorHandlers: InspectorHandlers = {
     state.picking = !state.picking;
     pane.setPicking(state.picking);
     const sessionId = state.activeSessionId;
-    if (sessionId !== null) client.send({ v: 1, type: 'pick', sessionId, enabled: state.picking });
+    if (sessionId !== null) runner?.send({ v: 1, type: 'pick', sessionId, enabled: state.picking });
     schedule();
   },
   copySelector(selector: GeneratedSelector) {
@@ -506,19 +540,19 @@ const inspectorHandlers: InspectorHandlers = {
     note(`copied ${selector.expression}`);
   },
   recordClick(nodeId) {
-    void client
+    void recorder()
       .recordAction('click', nodeId)
       .then((result) => note(`recorded click on ${result.selector.expression}`))
       .catch((error: unknown) => note(describe(error)));
   },
   recordAssertVisible(nodeId) {
-    void client
+    void recorder()
       .recordAction('assert-visible', nodeId)
       .then(() => note('recorded visibility assertion'))
       .catch((error: unknown) => note(describe(error)));
   },
   recordAssertSnapshot() {
-    void client
+    void recorder()
       .recordAssert('snapshot')
       .then(() => note('recorded semantic snapshot assertion'))
       .catch((error: unknown) => note(describe(error)));
@@ -526,7 +560,7 @@ const inspectorHandlers: InspectorHandlers = {
   recordStep() {
     const title = prompt('Step title');
     if (title === null || title === '') return;
-    void client
+    void recorder()
       .recordStep(title)
       .then(() => note(`step: ${title}`))
       .catch((error: unknown) => note(describe(error)));
@@ -534,7 +568,7 @@ const inspectorHandlers: InspectorHandlers = {
   save() {
     const file = prompt('Write the generated test to', 'recorded.test.ts');
     if (file === null || file === '') return;
-    void client
+    void recorder()
       .save(file)
       .then((result) => note(`wrote ${result.path}`))
       .catch((error: unknown) => note(describe(error)));
@@ -576,8 +610,8 @@ function syncTree(timeMs: number): void {
   if (revision === null || revision === state.shownRevision) return;
   state.shownRevision = revision;
   const sessionId = state.activeSessionId ?? state.trace?.sessionId ?? 'trace';
-  void client
-    .traceState(timeMs)
+  void source
+      .traceState(timeMs)
     .then((traceState) => {
       if (state.shownRevision !== revision) return; // playback moved on
       state.sessions.set(sessionId, { snapshot: traceState.snapshot, revision: traceState.revision });
@@ -685,7 +719,7 @@ const timelineHandlers: TimelineHandlers = {
     state.openRunTests = [];
     state.openRunLoading = true;
     schedule();
-    void client
+    void source
       .run(id)
       .then((manifest) => {
         state.openRunTests = [...manifest.tests];
@@ -702,7 +736,7 @@ const timelineHandlers: TimelineHandlers = {
     schedule();
   },
   openTrace(path) {
-    void client
+    void source
       .openTrace(path)
       .then(async (result) => {
         state.trace = result.trace;
@@ -726,10 +760,10 @@ const timelineHandlers: TimelineHandlers = {
     schedule();
   },
   rerun(testId) {
-    client.send({ v: 1, type: 'rerun', ...(testId === undefined ? {} : { testIds: [testId] }) });
+    runner?.send({ v: 1, type: 'rerun', ...(testId === undefined ? {} : { testIds: [testId] }) });
   },
   stop() {
-    client.send({ v: 1, type: 'stop' });
+    runner?.send({ v: 1, type: 'stop' });
   },
 };
 
@@ -748,7 +782,7 @@ async function seek(timeMs: number): Promise<void> {
     schedule();
     return;
   }
-  const traceState = await client.traceState(timeMs);
+  const traceState = await source.traceState(timeMs);
   pane.reset();
   pane.resize(traceState.columns, traceState.rows);
   pane.write(fromBase64(traceState.castPrefixB64));
@@ -794,18 +828,19 @@ function warnAboutProfile(profile: string | null): void {
 async function loadArchive(): Promise<void> {
   warnAboutProfile(state.trace?.terminalProfile ?? null);
   const [commands, frames] = await Promise.all([
-    client.traceCommands().catch(() => null),
-    client.traceFrames().catch(() => null),
+    source.traceCommands().catch(() => null),
+    source.traceFrames().catch(() => null),
   ]);
   state.commands = commands === null ? [] : [...commands.commands];
   state.commandsIncomplete = commands?.incomplete ?? false;
   state.commandsError = commands?.error ?? null;
   state.frames = frames === null ? [] : [...frames.frames];
+  state.framesTruncated = frames?.truncated ?? false;
   state.revisions = frames === null ? [] : [...frames.revisions];
   state.playback = { ...initialPlayback(), speed: state.playback.speed };
   pane.reset();
 
-  const logs = await client.traceLogs({ after: 0 }).catch(() => null);
+  const logs = await source.traceLogs({ after: 0 }).catch(() => null);
   state.logs = logs === null ? [] : [...logs.records];
   state.logsAvailable = logs?.available ?? false;
   state.logsTruncated = logs?.truncated ?? false;
@@ -818,7 +853,7 @@ async function loadArchive(): Promise<void> {
 /** Reads the run history. */
 async function loadRuns(): Promise<void> {
   try {
-    state.runs = [...(await client.runs()).runs];
+    state.runs = [...(await source.runs()).runs];
     schedule();
   } catch (error) {
     note(describe(error));
@@ -1051,7 +1086,7 @@ function handle(message: ServerMessage): void {
 pane.on({
   onData(data) {
     if (state.recordSessionId === null) return;
-    client.sendInput(state.recordSessionId, data);
+    runner?.sendInput(state.recordSessionId, data);
   },
   onPickHover(position) {
     const snapshot = active()?.snapshot;
@@ -1147,13 +1182,13 @@ if (layout !== null) {
   }
 }
 
-client.connect(handle, (connected) => {
+runner?.connect(handle, (connected) => {
   state.connected = connected;
   schedule();
 });
 
-void client
-  .state()
+void source
+      .state()
   .then(async (server: ServerState) => {
     state.mode = server.mode;
     state.trace = server.trace;

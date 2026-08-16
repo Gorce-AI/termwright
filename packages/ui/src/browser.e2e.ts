@@ -40,6 +40,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright';
 import { buildCrashedFixtureTrace, buildFixtureTrace } from './__fixtures__/build-trace.js';
 import { RUN_MANIFEST_VERSION, writeRunManifest, type RunManifest } from './runs.js';
+import { writeInlineReport } from './inline-report.js';
 import { startUiServer, type UiServer } from './server.js';
 
 const APP_DIR = fileURLToPath(new URL('../dist/app', import.meta.url));
@@ -544,6 +545,41 @@ describe('the runner UI chrome', () => {
     // The point of persisting it: the layout survives a reload.
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect.poll(splitOf, { timeout: 15_000 }).toBe(dragged);
+  });
+});
+
+describe('the viewer emitted as a self-contained report', () => {
+  /**
+   * The point of the inline source: the same bundle, the same components, one
+   * file, no server. Opened over `file://` so nothing can quietly answer a
+   * request the report is supposed to carry with it.
+   */
+  it('replays an archive from a file:// page with no server behind it', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-report-'));
+    const out = join(directory, 'report.html');
+    await writeInlineReport(await buildFixtureTrace(), out);
+
+    const page = await browser.newPage();
+    pages.push(page);
+    const failed: string[] = [];
+    page.on('requestfailed', (request) => failed.push(request.url()));
+    await page.goto(`file://${out}`);
+
+    await expect
+      .poll(() => page.locator('#terminal').innerText(), { timeout: 15_000 })
+      .toContain('Permission required');
+
+    // The archive is there to scrub, not merely to render once.
+    const markers = page.locator(`${testId('scrub')} .marker`);
+    await expect.poll(() => markers.count(), { timeout: 15_000 }).toBeGreaterThan(0);
+    const before = await textOf(page, testId('clock'));
+    await markers.last().click();
+    await expect.poll(() => textOf(page, testId('clock'))).not.toBe(before);
+
+    // A report holds one recording, so it must not offer a history tab that
+    // could only ever fail.
+    expect(await page.locator(testId('view-runs')).count()).toBe(0);
+    expect(failed).toEqual([]);
   });
 });
 

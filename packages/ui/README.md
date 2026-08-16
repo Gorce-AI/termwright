@@ -49,6 +49,24 @@ URL without opening anything, and `--json` prints `{url, port, mode}` instead of
 that line. `--json`, a piped stdout and `CI` in the environment each suppress
 opening on their own: a browser window is for a person at a terminal.
 
+## A report you can attach to a build
+
+```ts
+import { writeInlineReport } from '@termwright/ui';
+
+const { bytes, cut } = await writeInlineReport('out/login.twtrace', 'report.html');
+```
+
+The result is one HTML file — the same viewer, the same panes, the archive
+inlined — that opens over `file://` with nothing to fetch. It replays, scrubs,
+shows the command log and the application log, and hides what it cannot do: no
+run history, no rerun, no live terminal. A fixture recording emits at roughly
+400 KiB.
+
+`budgetBytes` (default 8 MiB) bounds the embedded archive. Frames are cut from
+the end of the recording and log records from the oldest end; the page says so
+in both cases, and `cut` tells the caller how much went.
+
 ## Usage as a library
 
 ```ts

@@ -519,6 +519,41 @@ v1 entry as zero. Live runs carry it too: `test-end` gained a required `lostLogR
 contract was updated, so the badge means the same thing in a live run, in a
 replayed archive and in the history — one row, one rule.
 
+## One viewer, two sources
+
+`DataSource` is the seam between the viewer and where its data comes from. A
+server answers over HTTP; a report answers from a payload baked into the page.
+Nothing else differs — same bundle, same components, same state — which is the
+whole point: a second rendering of the command log or the test row would drift
+within a week.
+
+What a source cannot do is declared, not discovered. `features` says whether
+there is a live run, a run history and another archive to open, and the panel
+hides those affordances instead of offering buttons that fail. The inline source
+throws on them rather than returning empty results, because reaching one means
+the gating above is wrong and an empty list would hide that.
+
+The emitted report is one file: bundle, stylesheet and archive inlined, opened
+over `file://` with nothing left to fetch (a browser lane asserts exactly that,
+including zero failed requests). Two traps are worth remembering. `String.replace`
+treats `$&` and friends in the *replacement* as patterns, and a JS bundle is full
+of them — the function form is mandatory, and getting it wrong produces a page
+that parses as HTML and not as a program. And a payload sits inside a `<script>`
+element, so `<`, `>` and the line separators U+2028/U+2029 are escaped: a program
+that logged `</script>` would otherwise truncate the page.
+
+The budget cuts frames from the end and logs from the start. Frames rebuild the
+screen by replaying in order, so only a cut at the end leaves a working replay;
+a log is read to find out how something ended, so the newest lines are the ones
+worth keeping. Both cuts are stated on the page — the log panel already said so,
+and the scrubber now says "recording cut", which it did not before this round
+even when the 8 MiB frame ceiling had already trimmed a recording.
+
+`@termwright/trace` cannot host this: `ui` depends on `trace`, never the other
+way round, so the viewer's bundle cannot be reached from there. The trace
+package keeps its own HTML report, which is a different artifact — a failure
+report with visual and semantic diffs, not a viewer.
+
 ## Open threads
 
 - **`termwright ui` binary** (task #10, the umbrella CLI) wires the flags:

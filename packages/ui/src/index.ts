@@ -155,6 +155,25 @@ export {
 } from './recorder.js';
 
 export {
+  INLINE_PAYLOAD_KEY,
+  InlineDataSource,
+  readInlinePayload,
+  type DataSource,
+  type DataSourceFeatures,
+  type InlinePayload,
+  type ViewerState,
+} from './data-source.js';
+
+export {
+  buildInlinePayload,
+  renderInlineHtml,
+  writeInlineReport,
+  type InlineReportCut,
+  type InlineReportOptions,
+  type InlineReportResult,
+} from './inline-report.js';
+
+export {
   browserCommand,
   openInBrowser,
   shouldOpenBrowser,
