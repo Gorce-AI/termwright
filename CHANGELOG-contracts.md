@@ -365,3 +365,8 @@
   template })` zasiewa prywatny katalog testu przed startem programu, ścieżki
   wychodzące poza niego są odrzucane. Polityka `trace` jest per SESJA
   (rozstrzygana przy launch), nie per test.
+- 2026-08-16 (ui): §UI events + `tests-discovered` (listing projektu przed
+  runem; id = `<file>::<name>`, wiersze adoptowane przez run, discovery
+  nieblokujące). Historia runów: manifest `.termwright/runs/<ts>/manifest.json`
+  (v:1, jeden producent — reporter; ścieżki archiwów, nie kopie; `lostRecords`
+  per test), jeden czytnik `openArchive` dla --trace i widoku Runs.

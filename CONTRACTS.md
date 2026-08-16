@@ -112,7 +112,12 @@ those readers.
 ## §UI events — runner ↔ browser
 
 WebSocket, JSON messages `{ v: 1, type, ... }`:
-- server→client: `run-start`,
+- server→client: `tests-discovered {tests: [{id, title, file}]}` (project
+  listing at server start and on file change; `id` is `<file>::<name>` —
+  stable across runs, reconcilable with a started test by file+title; a
+  discovered row is ADOPTED by the run that touches it, never duplicated;
+  discovery never blocks and a failed listing yields an empty list),
+  `run-start`,
   `session {sessionId, terminalProfile, columns, rows}` (sent when a live
   session attaches; the browser MUST build its terminal via the session's
   profile or state the widths it renders with),
@@ -148,6 +153,13 @@ replay reads from the archive.
   pick-mode), `input {sessionId, dataB64}` (recorder mode only).
 The Vitest bridge is a reporter translating Vitest lifecycle into these
 messages; the browser app never imports Vitest.
+
+Run history: the reporter (single producer) writes
+`.termwright/runs/<timestamp>/manifest.json` — `{ v: 1, counts, tests,
+trace PATHS (never copies), lostRecords per test }`. The UI's Runs view is
+the only consumer; opening an archived test goes through the same
+`openArchive` path as `--trace`. A test without a retained archive says so
+instead of offering a replay.
 
 ## §MCP — tool surface (all tools validate with zod, return structuredContent)
 
