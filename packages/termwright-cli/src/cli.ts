@@ -206,18 +206,17 @@ async function emitScreenshot(args: ParsedArgs, deps: CliDeps, json: boolean): P
   }
 
   deps.io.out(`wrote ${result.path} (${result.width}×${result.height}, ${result.chosen} at ${result.timeMs}ms)`);
-  if (result.systemFontsLoaded) {
-    // Says why the command took a second or more: the rasteriser enumerates
-    // the installed fonts to cover glyphs the embedded set does not, and there
-    // is no cache between calls.
-    deps.io.err('  waited for the system font scan to cover characters with no embedded glyph');
-  }
   if (result.fallbackCharacters.length > 0) {
-    // These come out blank. A screenshot with holes that nobody mentions is
-    // read as the program having drawn nothing there.
+    // Not "these are blank" — with the font fallback on, which is how this
+    // command renders, the rasteriser draws them from the fonts installed
+    // here. The fact worth stating is that the image is machine-dependent:
+    // the same archive can produce a different PNG on a CI runner. The scan
+    // that finds those fonts is also what makes such a capture slow.
+    const characters = result.fallbackCharacters.join(' ');
     deps.io.err(
-      `  ${result.fallbackCharacters.length} character(s) had no embedded glyph and are blank: ` +
-        result.fallbackCharacters.join(' '),
+      `  ${result.fallbackCharacters.length} character(s) had no embedded glyph (${characters}); ` +
+        'the rasteriser drew them with this machine\'s fonts, so another machine may render them ' +
+        'differently — and finding those fonts is what made this capture slow',
     );
   }
   return EXIT_CODES.ok;

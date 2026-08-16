@@ -46,8 +46,13 @@ export interface ScreenshotResult {
   /** How that moment was chosen, for a line the user can check. */
   readonly chosen: 'the moment given' | 'the step given' | 'the crash' | 'the last step' | 'the end';
   /**
-   * Characters no embedded glyph covered. They rasterise blank, so a caller
-   * that stays silent about them ships a screenshot with holes in it.
+   * Characters no embedded glyph covered.
+   *
+   * They are still *drawn*: the rasteriser falls back to the fonts installed
+   * on this machine, which is exactly why such a render is slow. What a caller
+   * must say is that the image became machine-dependent — the same archive can
+   * produce a different picture on a CI runner. (Only a caller that turns the
+   * fallback off gets blanks, and this command never does.)
    */
   readonly fallbackCharacters: readonly string[];
   /**
