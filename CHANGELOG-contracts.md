@@ -183,3 +183,11 @@
   ignored and passed through). New package `@termwright/logs`: channel
   `termwright:log` (node:diagnostics_channel) as a public contract; bridges
   pino/winston/consola/otel as optional peers; secret redaction on both sides.
+- 2026-08-16 (protocol 63e1dbc): direction decides strictness — implemented.
+  parseDriverMessage tolerant end to end (envelope + nested driver objects
+  marker/logs, unknown fields passed through); parseAdapterMessage strict.
+  The bidirectional `error` message is read strict from the adapter and
+  tolerant from the driver. Still strict both ways: known-field types and
+  closed sets (type, error.code, subscribe, roles, actions, log levels).
+  Vector `hello-ack-extra-field` moves reject→accept as
+  `hello-ack-unknown-envelope-field` (clients to update).
