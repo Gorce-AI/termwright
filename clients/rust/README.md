@@ -84,6 +84,20 @@ adapters that do not want a logging framework. Without it, `Client::log` takes
 a `LogRecord` directly. Either way the client owns the sequence numbers and the
 budget, and a dropped record leaves a gap in `seq` rather than being renumbered.
 
+## Deviations
+
+Rules 1–5 of the adapter semantics conventions do not apply here: they govern
+how a widget tree becomes semantic nodes, and this crate builds no tree. It
+ships no framework adapter at all — roles, names, test ids, states and values
+are decided by whatever code calls `Client::publish`, which is where those
+rules land instead.
+
+What the crate does carry is the protocol side that has no adapter in it:
+framing, the marker, validation, delta composition and production, and the
+`tracing` bridge. Those follow the wire contract exactly and are checked
+against the shared vectors, so there is nothing here to declare an exception
+for.
+
 ## Conformance
 
 `tests/vectors.rs` runs against `clients/test-vectors/`, generated from the
