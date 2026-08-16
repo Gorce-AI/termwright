@@ -31,6 +31,7 @@ const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const PATCH_SET = join(here, '..', 'upstream-patches', 'tview', 'v0.42.0');
 const FIXTURE = join(here, 'testing', 'fixture-app');
+const FIXTURE_ANNOTATED = join(here, 'testing', 'fixture-annotated');
 const CLIENT = join(here, '..', '..', '..', 'clients', 'go');
 
 async function goAvailable(): Promise<boolean> {
@@ -108,6 +109,72 @@ async function buildFixture(options: { readonly instrumented: boolean }): Promis
   await run('go', ['build', '-o', binary, '.'], { cwd: app, env });
   return binary;
 }
+
+describe.skipIf(!runnable)('developer annotations', () => {
+  it('adds what the probe cannot observe, and nothing it can', async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-annotated-')));
+    roots.push(dir);
+    const app = join(dir, 'app');
+    await mkdir(app, { recursive: true });
+    await cp(FIXTURE_ANNOTATED, app, { recursive: true });
+
+    const copy = join(dir, 'tview');
+    await materializeUpstream(
+      await ensureUpstreamModule({
+        module: 'github.com/rivo/tview',
+        version: 'v0.42.0',
+        cachePath: ['github.com', 'rivo', 'tview@v0.42.0'],
+      }),
+      copy,
+    );
+    await applyPatchSet(copy, PATCH_SET);
+
+    const client = await realpath(join(here, '..', '..', '..', 'clients', 'go'));
+    const workspace = await writeWorkspace(join(dir, 'generated.work'), {
+      moduleDir: app,
+      inherited: { uses: [], replaces: [] },
+      replaces: [
+        { from: 'github.com/rivo/tview', to: copy },
+        { from: 'github.com/gorce-ai/termwright/clients/go', to: client },
+      ],
+    });
+
+    const binary = join(dir, 'app-binary');
+    await run('go', ['build', '-o', binary, '.'], {
+      cwd: app,
+      env: { ...process.env, GOWORK: workspace },
+    });
+
+    const session = await launchTerminal({ command: [binary], columns: 80, rows: 24 });
+    sessions.push(session);
+    await session.waitForText('unread');
+
+    // A widget the probe has never heard of: without the annotation it would
+    // be a generic region named after its Go type. The annotation says what it
+    // is, and the probe's own facts stay underneath.
+    await expect.poll(() => session.getByTestId('unread-badge').isVisible()).toBe(true);
+    await expect
+      .poll(() => session.getByRole('status', { name: 'Unread messages' }).isVisible())
+      .toBe(true);
+
+    // Domain state the closed vocabulary has no room for, reported verbatim.
+    await expect
+      .poll(async () => (await session.getByTestId('unread-badge').resolve()).ref)
+      .toBeTruthy();
+
+    // Merge, not replacement: the annotation sharpened the button's name while
+    // its role and its measured geometry came from the probe.
+    await expect.poll(() => session.getByRole('button', { name: 'Save changes' }).isVisible()).toBe(true);
+    const box = await session.getByRole('button', { name: 'Save changes' }).boundingBox();
+    expect(box?.width).toBeGreaterThan(0);
+
+    // Interaction still works through the annotated handle.
+    await session.press('Tab');
+    await expect
+      .poll(async () => (await session.getByTestId('save').semanticState())?.focused)
+      .toBe(true);
+  }, 900_000);
+});
 
 describe.skipIf(!runnable)('the launcher call', () => {
   it('prepares a build from one call, and caches the copy for the next', async () => {

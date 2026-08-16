@@ -31,6 +31,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +39,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
+	"github.com/gorce-ai/termwright/clients/go/annotate"
 	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
@@ -235,6 +237,10 @@ func (p *termwrightProbeState) walk(
 	// keeps a widget this probe does not know about alive and identifiable
 	// rather than flattened into an anonymous region.
 	node.FrameworkType = termwrightTypeName(primitive)
+	// An author's annotation is merged on top of the observed facts, and only
+	// where the probe has nothing better: it may say what a widget *is*, never
+	// where it is or whether it has the focus. Those the probe measured.
+	termwrightApplyAnnotation(primitive, &node)
 	if parentID == "" {
 		snapshot.RootIDs = append(snapshot.RootIDs, id)
 	}
@@ -244,6 +250,61 @@ func (p *termwrightProbeState) walk(
 		p.walk(child.primitive, id, hidden || child.hidden, columns, rows, snapshot)
 	}
 	p.appendSynthetic(primitive, id, hidden, snapshot)
+}
+
+// termwrightApplyAnnotation merges what the application declared.
+//
+// tview retains its widgets, so a registry keyed by the primitive's identity
+// works here — which is why tview annotates by registration while Charm, whose
+// components are copied values, annotates through an interface.
+func termwrightApplyAnnotation(primitive Primitive, node *protocol.Node) {
+	meta, ok := annotate.Lookup(primitive)
+	if !ok {
+		return
+	}
+	if meta.Role != "" {
+		// Validated against the closed set and dropped when unknown, rather
+		// than guessed at: exhaustive switches downstream depend on that set
+		// staying closed, and a typo in an annotation is the author's to fix.
+		if role := protocol.Role(meta.Role); protocol.ValidRole(role) {
+			node.Role = role
+		}
+	}
+	if meta.Name != "" {
+		node.Name = meta.Name
+	}
+	if meta.TestID != "" {
+		node.TestID = meta.TestID
+	}
+	if meta.Description != "" {
+		node.Description = meta.Description
+	}
+	// Domain state has no home in the closed state set, so it rides along as
+	// description text rather than being invented into a state flag.
+	if len(meta.Domain) > 0 {
+		node.Description = termwrightJoinDomain(node.Description, meta.Domain)
+	}
+}
+
+// termwrightJoinDomain renders domain pairs deterministically.
+func termwrightJoinDomain(prefix string, domain map[string]string) string {
+	keys := make([]string, 0, len(domain))
+	for key := range domain {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	var builder strings.Builder
+	builder.WriteString(prefix)
+	for _, key := range keys {
+		if builder.Len() > 0 {
+			builder.WriteString(" ")
+		}
+		builder.WriteString(key)
+		builder.WriteString("=")
+		builder.WriteString(domain[key])
+	}
+	return builder.String()
 }
 
 // termwrightChild is a child plus whether its container is showing it.
