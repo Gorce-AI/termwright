@@ -1,5 +1,42 @@
 # @termwright/probe-opentui — implementation notes
 
+## Two specifier forms, and why they are not unified
+
+CI turned both of these up, and the second one reversed a decision that read as
+obviously right.
+
+**A path handed to `node --import` must be a `file://` URL.** On Windows an
+absolute path fails with `ERR_UNSUPPORTED_ESM_URL_SCHEME: Received protocol
+'d:'` — a drive letter parses as a scheme, which is a confusing way for it to
+fail. `withProbe` therefore emits `pathToFileURL(entry).href`. Bun was measured
+to accept either form, so both runtimes get the URL: one form that works
+everywhere beats two where the rarer one rots.
+
+**Inside the shim the opposite holds.** The obvious next step — convert the
+re-import specifier to a URL too, for the same Windows reason — silently breaks
+Bun. Measured on Bun 1.2.15: a shim that re-imports through `file:///…` arrives
+with **one export**, not the framework's whole surface. `export *` forwards
+nothing. The wrapper still works, so `createCliRenderer` looks fine and every
+other export is simply gone; only a test that asserts on a second export catches
+it, which is exactly the test that did.
+
+The rule the shim follows now: **echo back the specifier form the loader handed
+over.** Node's hooks give a URL, Bun's `onLoad` gives a native path, and each
+runtime demonstrably consumes what it produced. `toModuleUrl` exists for the
+launcher flag alone.
+
+Unverified: Bun on Windows, where the shim would embed a `D:\…` path. No CI lane
+runs Bun on Windows today, and the form is self-consistent (Bun produced it), but
+nobody has watched it work.
+
+## Which CI lane has Bun
+
+Bun lives in one lane, not in the build jobs, so the process tests probe for it
+(`src/testing/bun-available.ts`, the same shape as conformance's `ptyAvailable`)
+and drop the Bun arms when it is missing. A test named "skips the Bun arms
+because no bun binary is reachable" runs in that case, so a reduced run says so
+instead of looking fully green. `TERMWRIGHT_SKIP_BUN=1` forces it.
+
 ## Which marker route survives `useThread=true` — measured, not reasoned
 
 OpenTUI writes its frames from a Zig thread over FFI, so the Ink trick of

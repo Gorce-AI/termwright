@@ -11,7 +11,7 @@
  * driver has to depend on a probe.
  */
 
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { ProbeRuntime } from './runtime.js';
 
 /** Resolved entry points, so a launcher never has to guess a path. */
@@ -41,10 +41,16 @@ export interface ProbeCommand {
  * `--require`: the probe is ESM, and `--import` is what runs it before the
  * application's first module.
  *
+ * The entry is passed as a `file://` URL for **both** runtimes. Node requires
+ * it — an absolute Windows path handed to `--import` fails with
+ * `ERR_UNSUPPORTED_ESM_URL_SCHEME`, because `D:` reads as a scheme — and Bun
+ * was measured to accept either form. One form that works everywhere beats two
+ * where the rarer one rots unnoticed.
+ *
  * @example
  * ```ts
  * const {command} = withProbe('bun', ['bun', 'app.ts']);
- * // ['bun', '--preload', '/…/bun-preload.js', 'app.ts']
+ * // ['bun', '--preload', 'file:///…/bun-preload.js', 'app.ts']
  * ```
  */
 export function withProbe(runtime: ProbeRuntime, argv: readonly string[]): ProbeCommand {
@@ -53,5 +59,6 @@ export function withProbe(runtime: ProbeRuntime, argv: readonly string[]): Probe
   }
   const [interpreter, ...rest] = argv as [string, ...string[]];
   const flag = runtime === 'bun' ? '--preload' : '--import';
-  return { command: [interpreter, flag, PROBE_ENTRIES[runtime], ...rest], runtime };
+  const entry = pathToFileURL(PROBE_ENTRIES[runtime]).href;
+  return { command: [interpreter, flag, entry, ...rest], runtime };
 }

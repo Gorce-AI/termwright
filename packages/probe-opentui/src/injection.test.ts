@@ -12,11 +12,12 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
-import { buildShimSource, originalUrl, shouldShim, ORIGINAL_MARKER } from './shim.js';
+import { buildShimSource, originalUrl, shouldShim, toModuleUrl, ORIGINAL_MARKER } from './shim.js';
+import { bunAvailable } from './testing/bun-available.js';
 import { withProbe } from './launch.js';
 import { isInstrumented } from './runtime.js';
 
@@ -66,6 +67,17 @@ describe('shim guards', () => {
     expect(originalUrl(`${entry}?v=2`)).toBe(`${entry}?v=2&${ORIGINAL_MARKER}`);
   });
 
+  it('echoes back the specifier form the loader handed over', () => {
+    // Measured: a shim that re-imports through a file:// URL re-exports NOTHING
+    // under Bun — one export instead of the framework's whole surface. So the
+    // shim converts nothing; `toModuleUrl` exists for the launcher flag, where
+    // Node needs a URL on Windows and Bun accepts one.
+    expect(originalUrl('/repo/x.js')).toBe(`/repo/x.js?${ORIGINAL_MARKER}`);
+    expect(originalUrl('file:///repo/x.js')).toBe(`file:///repo/x.js?${ORIGINAL_MARKER}`);
+    expect(toModuleUrl('/repo/x.js')).toBe('file:///repo/x.js');
+    expect(toModuleUrl('file:///repo/x.js')).toBe('file:///repo/x.js');
+  });
+
   it('re-exports everything and shadows one name', () => {
     const source = buildShimSource(entry);
     expect(source).toContain('export * from');
@@ -86,6 +98,14 @@ describe('command building', () => {
   it('uses --import for Node, because the probe is ESM', () => {
     const { command } = withProbe('node', ['node', 'app.mjs']);
     expect(command[1]).toBe('--import');
+  });
+
+  it.each(['bun', 'node'] as const)('passes the entry to %s as a file URL', (runtime) => {
+    // A bare absolute path is fine until Windows, where `D:` reads as a URL
+    // scheme and Node refuses it outright. Bun accepts either form, so one
+    // form is used for both rather than a platform branch nobody exercises.
+    const { command } = withProbe(runtime, [runtime, 'app']);
+    expect(command[2]).toMatch(/^file:\/\//u);
   });
 
   it('refuses an empty command instead of producing a broken one', () => {
@@ -126,7 +146,9 @@ describe('a real application, in a real process', () => {
     // the running module, which is correct once the package is installed and
     // wrong under vitest, which runs `src`. The production resolution is
     // asserted separately below.
-    const entry = join(packageRoot, 'dist', runtime === 'bun' ? 'bun-preload.js' : 'node-hook.js');
+    const entry = pathToFileURL(
+      join(packageRoot, 'dist', runtime === 'bun' ? 'bun-preload.js' : 'node-hook.js'),
+    ).href;
     const flag = runtime === 'bun' ? '--preload' : '--import';
     const command = options.instrumented ? [interpreter, flag, entry, ...base.slice(1)] : base;
 
@@ -146,7 +168,15 @@ describe('a real application, in a real process', () => {
     return JSON.parse(await readFile(reportPath, 'utf8')) as Report;
   }
 
-  it.each(['bun', 'node'] as const)(
+  const runtimes = (bunAvailable() ? ['bun', 'node'] : ['node']) as readonly ('bun' | 'node')[];
+
+  it.skipIf(bunAvailable())('skips the Bun arms because no bun binary is reachable', () => {
+    // Present so a run without Bun says so out loud instead of quietly
+    // covering half of what the suite claims to cover.
+    expect(bunAvailable()).toBe(false);
+  });
+
+  it.each(runtimes)(
     'wraps createCliRenderer under %s without the app importing anything',
     async (runtime) => {
       const report = await launch(runtime, { instrumented: true });
@@ -158,7 +188,7 @@ describe('a real application, in a real process', () => {
     60_000,
   );
 
-  it.each(['bun', 'node'] as const)(
+  it.each(runtimes)(
     'forwards the rest of the module untouched under %s',
     async (runtime) => {
       const report = await launch(runtime, { instrumented: true });
@@ -183,7 +213,7 @@ describe('a real application, in a real process', () => {
     }
   });
 
-  it.each(['bun', 'node'] as const)(
+  it.each(runtimes)(
     'installs nothing under %s when the process is not instrumented',
     async (runtime) => {
       const report = await launch(runtime, { instrumented: false });

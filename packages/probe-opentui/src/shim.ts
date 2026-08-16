@@ -23,6 +23,8 @@
  * arrive intact.
  */
 
+import { pathToFileURL } from 'node:url';
+
 /** Query marker appended to the real module's URL. */
 export const ORIGINAL_MARKER = 'termwright-original=1';
 
@@ -44,6 +46,27 @@ export function shouldShim(urlOrPath: string): boolean {
   if (urlOrPath.includes(ORIGINAL_MARKER)) return false;
   const withoutQuery = urlOrPath.split('?')[0] ?? '';
   return OPENTUI_ENTRY_PATTERN.test(withoutQuery);
+}
+
+/**
+ * Turn a filesystem path into a `file://` URL, leaving a URL untouched.
+ *
+ * Used for the **launcher flag**, not inside the shim. On Windows an absolute
+ * path handed to `node --import` fails with `ERR_UNSUPPORTED_ESM_URL_SCHEME`
+ * because `D:` reads as a scheme, which is a confusing way for a drive letter
+ * to fail.
+ *
+ * It is deliberately NOT applied to the shim's own import specifier: measured
+ * under Bun 1.2.15, a shim that re-imports through a `file://` URL re-exports
+ * **nothing** — the module arrives with one export instead of the framework's
+ * whole surface. Each loader gets back the form it handed us, because that is
+ * the form it demonstrably consumes.
+ */
+export function toModuleUrl(urlOrPath: string): string {
+  if (/^[a-z][a-z\d+.-]*:\/\//iu.test(urlOrPath)) return urlOrPath;
+  const [pathPart = '', query] = urlOrPath.split('?');
+  const url = pathToFileURL(pathPart).href;
+  return query === undefined ? url : `${url}?${query}`;
 }
 
 /**
