@@ -275,6 +275,10 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+    devDependencies:
+      '@termwright/driver':
+        specifier: workspace:*
+        version: link:../driver
 
   packages/probe-go: {}
 
