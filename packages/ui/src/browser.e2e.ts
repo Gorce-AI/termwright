@@ -13,6 +13,21 @@
  * Plain `playwright` with vitest's own assertions, deliberately — a second test
  * runner in this package would be a bigger cost than the matchers are worth.
  *
+ * Four things this view does that have each cost someone an afternoon:
+ *
+ * - **Assert terminal content mid-recording, never at the end.** An Ink archive
+ *   replayed to its last byte leaves the alternate screen, so the final frame
+ *   is blank and an assertion there is asserting on nothing.
+ * - **Seeking is asynchronous.** The position lands on the next frame, so read
+ *   it through `expect.poll`, never with a single read after the click.
+ * - **A seek loads a log window, which appends marks to the track.** A
+ *   `.marker` locator can therefore resolve to a different element when you
+ *   click than when you measured; bind to one `elementHandle()` if both matter.
+ * - **The last marker in DOM order is not the last in time** — log marks render
+ *   after the trace's own. To reach the end of a recording, click the track's
+ *   right edge (`x + width - 1`; `x + width` is a pixel outside it and lands on
+ *   the neighbouring control).
+ *
  * Run: `pnpm --filter @termwright/ui run test:browser`
  */
 
@@ -60,13 +75,6 @@ async function serve(
 async function open(trace: string): Promise<Page> {
   return (await serve({ trace })).page;
 }
-
-/**
- * Assert terminal *content* against a moment inside the recording, never at the
- * end of one: an Ink archive replayed to its last byte leaves the alternate
- * buffer, so the final frame is a blank screen. A test that asserts there is
- * asserting on nothing.
- */
 
 /** Text of an element, once it exists. */
 async function textOf(page: Page, selector: string): Promise<string> {

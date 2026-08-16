@@ -35,16 +35,19 @@ pnpm exec termwright ui                                  # watch a run
 pnpm exec termwright ui --trace out/login.twtrace        # open a recording
 ```
 
-It prints the URL and waits — nothing opens a browser for you, and the token in
-that URL is what authenticates the session, so copy the whole thing:
+It opens the page in your browser and waits. The token in that URL is what
+authenticates the session, so if nothing opens — a machine with no browser, or
+`--no-open` — copy the whole line, token included:
 
 ```
 termwright ui (live) — http://127.0.0.1:53219/?token=k3n…
 ```
 
 `--port` pins the port (the default is ephemeral), `--host` binds elsewhere,
-`--no-watch` opens the runner without starting a suite, and `--json` prints
-`{url, port, mode}` instead of that line.
+`--no-watch` opens the runner without starting a suite, `--no-open` prints the
+URL without opening anything, and `--json` prints `{url, port, mode}` instead of
+that line. `--json`, a piped stdout and `CI` in the environment each suppress
+opening on their own: a browser window is for a person at a terminal.
 
 ## Usage as a library
 

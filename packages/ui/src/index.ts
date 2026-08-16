@@ -154,6 +154,13 @@ export {
   type RecorderSession,
 } from './recorder.js';
 
+export {
+  browserCommand,
+  openInBrowser,
+  shouldOpenBrowser,
+  type OpenDecision,
+} from './open-browser.js';
+
 export { ariaElementFor, ariaTextFor, type AriaElement } from './aria.js';
 
 export { navigateTree, type TreeKey, type TreeNavState, type TreeRow } from './tree-nav.js';

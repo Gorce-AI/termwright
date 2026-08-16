@@ -490,6 +490,20 @@ overlay box positioned from cell metrics. There is no automated browser suite in
 this package yet — a Playwright project would be the next step, and belongs with
 the CI lane rather than in `vitest run`.
 
+## Opening a browser
+
+`shouldOpenBrowser` is a pure function of flags, TTY and `CI`, and the spawn is
+separate from it, because the decision is the part with rules worth pinning and
+the spawn is one line per platform. The rules: `--no-open`, `--json`, a stdout
+that is not a terminal, and `CI` set to anything each suppress opening on their
+own. `CI=false` suppresses too — nobody sets it to mean "not CI", and CI agents
+only ever set it to true.
+
+The printed URL is not conditional on any of this. Opening is an addition, and a
+failed launch is not an error: a machine with no browser can do nothing about it
+except copy the line already on screen. The whole tokenised URL is what gets
+opened — a tokenless address renders an unauthorised page and reads as a bug.
+
 ## Open threads
 
 - **`termwright ui` binary** (task #10, the umbrella CLI) wires the flags:
