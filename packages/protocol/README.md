@@ -310,10 +310,11 @@ author's annotation: an explicit annotation always wins.
 Step 3 is the one that has diverged most, so it is spelled out. The
 name-from-content roles are exactly:
 
-`button`, `listitem`, `menuitem`, `tab`, `checkbox`, `radio`, `cell`, `heading`
+`button`, `listitem`, `menuitem`, `tab`, `checkbox`, `radio`, `cell`, `row`,
+`heading`
 
 **Containers are never named from their content.** A `region`, `dialog`,
-`list`, `table`, `row` or `application` with no label of its own has an empty
+`list`, `table` or `application` with no label of its own has an empty
 name — it does not inherit the text of everything inside it. Naming containers
 from content is what makes `getByRole('region', { name: 'Approve' })` match the
 dialog *containing* the Approve button, so every ancestor of a label becomes a
@@ -379,14 +380,9 @@ either a fix or a `## Deviations` entry for the adapter's owner to decide:
 |---|---|
 | ink | Names **every** role from concatenated descendant text, containers included (rule 2). Never derives `focused` (rule 4). Never derives `value` (rule 5). |
 | opentui | Derives `value` from any renderable exposing `.value`, ungated by role — permitted, but the role-gated adapters must reconcile with it (rule 5). |
-| textual | No annotation hook for `testId`, native DOM `id` only (rule 3). Includes `row` in its name-from-content set, which ARIA supports but this list does not — see below. |
+| textual | No annotation hook for `testId`, native DOM `id` only (rule 3). |
 | go/tview | Never emits `testId` although the field exists (rule 3). Drops empty `value` via `omitempty`, so `''` reaches the driver as absent (rule 5). |
 | rust | No tree adapter; rules 1–5 do not apply. Logs bridge only. |
-
-One question this list does not settle: ARIA treats `row` as name-from-content
-and the Textual adapter follows ARIA, while the set above does not include it.
-Either the set gains `row` or Textual declares a deviation; the protocol does
-not have a preference, but the five adapters must not answer it differently.
 
 ## Protocol evolution
 
