@@ -26,7 +26,27 @@ pnpm add -D @termwright/ui
 
 Requires Node >= 22. ESM only.
 
-## Usage
+## Run it
+
+The CLI in the `termwright` umbrella is how you open this:
+
+```sh
+pnpm exec termwright ui                                  # watch a run
+pnpm exec termwright ui --trace out/login.twtrace        # open a recording
+```
+
+It prints the URL and waits — nothing opens a browser for you, and the token in
+that URL is what authenticates the session, so copy the whole thing:
+
+```
+termwright ui (live) — http://127.0.0.1:53219/?token=k3n…
+```
+
+`--port` pins the port (the default is ephemeral), `--host` binds elsewhere,
+`--no-watch` opens the runner without starting a suite, and `--json` prints
+`{url, port, mode}` instead of that line.
+
+## Usage as a library
 
 ```ts
 import { startUiServer } from '@termwright/ui';

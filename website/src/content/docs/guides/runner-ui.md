@@ -31,6 +31,49 @@ button that seeks to the moment it happened.
 npm install --save-dev @termwright/ui
 ```
 
+The `termwright` umbrella already depends on it, so if you installed that, the
+runner is there too.
+
+## Run it
+
+```sh
+npx termwright ui
+```
+
+That starts your project's Vitest in watch mode, points it at the runner, and
+prints the URL to open:
+
+```
+termwright ui (live) — http://127.0.0.1:53219/?token=k3n…
+```
+
+Open a recording from CI instead of watching a suite:
+
+```sh
+npx termwright ui --trace termwright-report/login.twtrace
+```
+
+| Flag | Effect |
+|---|---|
+| `--trace <file>` | post-mortem: open a `.twtrace` archive instead of watching a run |
+| `--record -- <command>` | record mode: the server owns the pty and writes the test |
+| `--port N` | pin the port. Default: an ephemeral one, printed in the URL |
+| `--host H` | bind somewhere other than `127.0.0.1` — a live terminal is a shell, so mind what you expose |
+| `--no-watch` | open the runner without starting a suite |
+| `--json` | print `{url, port, mode}` instead of the human line |
+
+Arguments after `--` go to the runner: `termwright ui -- src/login.test.ts
+--reporter=dot`.
+
+:::note[The URL has to be opened by hand]
+Nothing launches a browser for you, and the token in that URL is what
+authenticates the session — so copy the whole thing, not just the host and port.
+:::
+
+In a workspace, prefer a package script (`"ui": "termwright ui"`, then
+`npm run ui`) or `pnpm exec termwright ui`. `npx` can resolve a different copy
+than the one your project installed.
+
 ## Live mode
 
 Live mode needs the reporter in the test process:

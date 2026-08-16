@@ -218,10 +218,21 @@ Import the reporter from its own subpath, never from a package root:
 register matchers on `expect` as a side effect. Using the individual packages
 instead of the umbrella, the same import is `@termwright/test/reporter`.
 
+## Watch it run
+
+```sh
+npx termwright ui
+```
+
+That opens the runner: a live terminal, a semantic inspector you can point at
+nodes to get a selector, and a timeline you can scrub. It prints a URL for you
+to open — see [Runner UI](../guides/runner-ui/).
+
 ## Where to go next
 
 - [Locators](../guides/locators/) — the two dialects, and what to do without a
   semantic tree.
+- [Runner UI](../guides/runner-ui/) — watch a run, or open a recording from CI.
 - [Assertions and snapshots](../guides/assertions/) — matchers, and the YAML
   snapshot format.
 - [Component testing](../guides/component-testing/) — mount an Ink component
