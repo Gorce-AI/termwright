@@ -35,6 +35,8 @@ import {
   type HelloAckMessage,
   type HelloMessage,
   type ProtocolErrorMessage,
+  type ProbeCapability,
+  type ProbeInfo,
   type ProtocolLimits,
   type SemanticSnapshot,
 } from '@termwright/protocol';
@@ -53,6 +55,15 @@ export interface SemanticAttachment {
   readonly logsEnabled: boolean;
   /** True when the adapter pushes deltas instead of full trees. */
   readonly deltasEnabled: boolean;
+  /**
+   * What the sender said about itself as a probe, when it is one.
+   *
+   * A hand-written adapter omits this and the session behaves exactly as
+   * before. A probe uses it to declare the identity it can honestly offer and
+   * the optional abilities it has, so the driver negotiates against measured
+   * capability rather than a floor it assumed.
+   */
+  readonly probe: ProbeInfo | null;
 }
 
 /** Budget the driver grants an adapter that announced the `logs` capability. */
@@ -75,6 +86,15 @@ export interface SemanticChannelHooks {
    * sends commits without markers publishes nothing.
    */
   onCommit(revision: number): void;
+  /**
+   * A probe reports that it has begun rendering `revision` (capability
+   * `frame-begin`).
+   *
+   * Optional by design: no audited framework has a hook guaranteed to fire
+   * before every frame, so a session that never receives one is a session
+   * whose frames are unannounced — never a session without frames.
+   */
+  onFrameBegin(revision: number): void;
   /** The handshake completed; the session is semantic from here on. */
   onAttach(attachment: SemanticAttachment): void;
   /** One validated application log record arrived on the channel. */
@@ -125,6 +145,9 @@ const LOGS_CAPABILITY: AdapterCapability = 'logs';
 
 /** Capability that lets an adapter send deltas instead of whole trees. */
 const DIFFS_CAPABILITY: AdapterCapability = 'tree-diffs';
+
+/** Probe ability that makes a `frame-begin` message believable. */
+const FRAME_BEGIN_CAPABILITY: ProbeCapability = 'frame-begin';
 
 /** How long a `get-tree` may take before the resync is abandoned. */
 const GET_TREE_TIMEOUT_MS = 2_000;
@@ -335,6 +358,7 @@ export class SemanticChannel {
       markerEnabled,
       logsEnabled,
       deltasEnabled,
+      probe: hello.probe === undefined ? null : Object.freeze({ ...hello.probe }),
     });
     this.#options.hooks.onAttach(this.#attachment);
     if (!markerEnabled) {
@@ -352,6 +376,22 @@ export class SemanticChannel {
       case 'revision-commit':
         this.#options.hooks.onCommit(message.revision);
         return true;
+      case 'frame-begin': {
+        // Honoured only from a probe that declared it. A frame signal from a
+        // sender that never claimed the ability is not worth closing the
+        // channel over — it is worth not believing, and saying so.
+        if (this.#attachment?.probe?.capabilities.includes(FRAME_BEGIN_CAPABILITY) !== true) {
+          this.#options.hooks.onDiagnostic(
+            'adapter-capability',
+            `ignoring a frame-begin for revision ${message.revision}: ` +
+              `the sender did not announce the '${FRAME_BEGIN_CAPABILITY}' probe capability`,
+            { revision: message.revision },
+          );
+          return true;
+        }
+        this.#options.hooks.onFrameBegin(message.revision);
+        return true;
+      }
       case 'snapshot': {
         if (message.snapshot.sessionId !== this.#options.sessionId) {
           this.#fail(socket, 'malformed', 'snapshot carries a foreign sessionId');

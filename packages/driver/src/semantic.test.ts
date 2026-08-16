@@ -17,6 +17,7 @@ interface Harness {
   snapshots: SemanticSnapshot[];
   records: LogRecord[];
   attachments: SemanticAttachment[];
+  frameBegins: number[];
   diagnostics: string[];
   diagnosticWireCodes: string[];
   violations: ProtocolViolationError[];
@@ -37,6 +38,7 @@ async function createChannel(accepting = true): Promise<Harness> {
   const snapshots: SemanticSnapshot[] = [];
   const records: LogRecord[] = [];
   const attachments: SemanticAttachment[] = [];
+  const frameBegins: number[] = [];
   const diagnostics: string[] = [];
   const diagnosticWireCodes: string[] = [];
   const violations: ProtocolViolationError[] = [];
@@ -52,6 +54,7 @@ async function createChannel(accepting = true): Promise<Harness> {
       onSnapshot: (snapshot) => snapshots.push(snapshot),
       onLogRecord: (record) => records.push(record),
       onCommit: () => {},
+      onFrameBegin: (revision) => frameBegins.push(revision),
       onAttach: (attachment) => attachments.push(attachment),
       onDiagnostic: (code, detail, about) => {
         diagnostics.push(`${code}: ${detail}`);
@@ -64,7 +67,17 @@ async function createChannel(accepting = true): Promise<Harness> {
     },
   });
   open.push({ channel, sockets: [] });
-  return { channel, snapshots, records, attachments, diagnostics, diagnosticWireCodes, violations, wireCodes };
+  return {
+    channel,
+    snapshots,
+    records,
+    attachments,
+    frameBegins,
+    diagnostics,
+    diagnosticWireCodes,
+    violations,
+    wireCodes,
+  };
 }
 
 interface Client {
@@ -142,6 +155,63 @@ function snapshot(overrides: Record<string, unknown> = {}): Record<string, unkno
     ...overrides,
   };
 }
+
+/** A probe's self-description, as `hello.probe` carries it. */
+function probeInfo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    framework: 'test-framework',
+    frameworkVersion: '9.9.9',
+    probeVersion: '0.1.0',
+    identityKind: 'stable',
+    capabilities: ['frame-begin'],
+    ...overrides,
+  };
+}
+
+describe('the probe lifecycle', () => {
+  it('records what a probe says about itself, and takes its frame boundaries', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+
+    client.send(hello({ probe: probeInfo() }));
+    await client.next();
+    await expect.poll(() => harness.attachments.length).toBe(1);
+    expect(harness.attachments[0]?.probe?.framework).toBe('test-framework');
+    expect(harness.attachments[0]?.probe?.identityKind).toBe('stable');
+
+    client.send({ type: 'frame-begin', revision: 7 });
+    await expect.poll(() => harness.frameBegins).toEqual([7]);
+  });
+
+  it('leaves probe null for a hand-written adapter', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+
+    client.send(hello());
+    await client.next();
+    await expect.poll(() => harness.attachments.length).toBe(1);
+    expect(harness.attachments[0]?.probe).toBeNull();
+  });
+
+  it('does not believe a frame boundary from a sender that never claimed one', async () => {
+    // Not a reason to close the channel — a capability nobody announced is a
+    // reason not to trust the message, and to say why. Believing it would let
+    // a sender hold expiry open through an ability it never claimed to have.
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+
+    client.send(hello({ probe: probeInfo({ capabilities: [] }) }));
+    await client.next();
+    client.send({ type: 'frame-begin', revision: 3 });
+    client.send({ type: 'snapshot', snapshot: snapshot() });
+
+    await expect.poll(() => harness.snapshots.length).toBe(1);
+    expect(harness.frameBegins).toEqual([]);
+    expect(harness.diagnostics.join('\n')).toContain('frame-begin');
+    // The channel is still open and still working: the snapshot arrived after.
+    expect(harness.violations).toEqual([]);
+  });
+});
 
 describe('SemanticChannel', () => {
   it('completes the handshake and accepts snapshots', async () => {
