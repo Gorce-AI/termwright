@@ -37,7 +37,7 @@ import {
   type SnapshotKind,
 } from './snapshot-store.js';
 import { currentScope, enterScope, openStep, scopeKey, type TermwrightScope } from './trace-context.js';
-import './task-meta.js';
+import { buildTaskMeta } from './task-meta.js';
 
 /** What a test may override when launching a program. */
 export interface LaunchFixtureOptions extends Omit<LaunchOptions, 'command'> {
@@ -168,15 +168,10 @@ export const test = base.extend<TermwrightFixtures>({
       } finally {
         exit();
         if (directory !== undefined) rmSync(directory, { recursive: true, force: true });
-        if (scope.traces.length > 0 || obsolete.length > 0) {
-          // Merge: the `terminal` fixture tears down first and may already have
-          // recorded crashes here.
-          task.meta.termwright = {
-            ...(task.meta.termwright ?? {}),
-            ...(scope.traces.length > 0 ? { traces: [...scope.traces] } : {}),
-            ...(obsolete.length > 0 ? { obsoleteSnapshots: obsolete } : {}),
-          };
-        }
+        // Merged, not replaced: the `terminal` fixture tears down first and has
+        // already recorded what it knows here.
+        const added = buildTaskMeta({ traces: scope.traces, obsoleteSnapshots: obsolete });
+        if (added !== undefined) task.meta.termwright = { ...(task.meta.termwright ?? {}), ...added };
       }
     },
     { auto: true },
@@ -278,8 +273,9 @@ export const test = base.extend<TermwrightFixtures>({
 
     for (const detach of detachers) detach();
 
-    if (crashed.length > 0) {
-      task.meta.termwright = { ...(task.meta.termwright ?? {}), crashes: [...crashed] };
+    const sessionMeta = buildTaskMeta({ crashes: crashed, lostLogRecords: logs.lostRecords() });
+    if (sessionMeta !== undefined) {
+      task.meta.termwright = { ...(task.meta.termwright ?? {}), ...sessionMeta };
     }
 
     for (const session of sessions.reverse()) {

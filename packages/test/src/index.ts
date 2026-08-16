@@ -174,7 +174,7 @@ export {
   type TermwrightScope,
 } from './trace-context.js';
 
-export type { TermwrightTaskMeta } from './task-meta.js';
+export { buildTaskMeta, type TermwrightTaskMeta } from './task-meta.js';
 
 // The reporter is deliberately NOT re-exported here: `vitest.config.ts` runs
 // before the test runner exists, and this module registers matchers on import.

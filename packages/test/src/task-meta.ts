@@ -29,9 +29,38 @@ export interface TermwrightTaskMeta {
   readonly obsoleteSnapshots?: readonly string[];
   /** Programs that died unexpectedly during this test. */
   readonly crashes?: readonly ReportCrash[];
+  /**
+   * Log records that never reached this test, summed over the session's
+   * `log-dropped` diagnostics. Omitted when nothing was lost.
+   *
+   * A green test with records missing is not the same result as a green test
+   * with all of them, and the difference is invisible in a pass count — which
+   * is why it travels to reporters rather than living only in a failure
+   * message nobody sees on a passing run.
+   */
+  readonly lostLogRecords?: number;
 }
 
 import type { ReportCrash } from './crash.js';
+
+/** Builds the metadata for a test, omitting everything it has nothing to say about. */
+export function buildTaskMeta(parts: {
+  readonly traces?: readonly string[];
+  readonly obsoleteSnapshots?: readonly string[];
+  readonly crashes?: readonly ReportCrash[];
+  readonly lostLogRecords?: number;
+}): TermwrightTaskMeta | undefined {
+  const meta: Record<string, unknown> = {};
+  if (parts.traces !== undefined && parts.traces.length > 0) meta['traces'] = [...parts.traces];
+  if (parts.obsoleteSnapshots !== undefined && parts.obsoleteSnapshots.length > 0) {
+    meta['obsoleteSnapshots'] = [...parts.obsoleteSnapshots];
+  }
+  if (parts.crashes !== undefined && parts.crashes.length > 0) meta['crashes'] = [...parts.crashes];
+  if (parts.lostLogRecords !== undefined && parts.lostLogRecords > 0) {
+    meta['lostLogRecords'] = parts.lostLogRecords;
+  }
+  return Object.keys(meta).length === 0 ? undefined : (meta as TermwrightTaskMeta);
+}
 
 declare module 'vitest' {
   interface TaskMeta {
