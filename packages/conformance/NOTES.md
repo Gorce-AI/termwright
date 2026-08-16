@@ -23,6 +23,20 @@ Round 1 (driver f78174f):
 3. **Channel diagnostics were unreachable** — `harness.diagnostics()` and the
    `diagnostic` event landed with a closed `DiagnosticCode` set.
 
+Round 3 (driver 23c61e5 and aa06a8a):
+
+7. **A refused adapter was not told why.** Every refusal path wrote the error
+   frame and called `socket.destroy()` in the same turn, and `destroy()`
+   discards unflushed data. Measured on the `second-connection` scenario: the
+   peer missed the frame in 2 of 4 full-file runs while the driver's log
+   recorded `wireCode` every time. Now the socket is closed only once the frame
+   is on its way, with a hard cap so a peer that stops reading cannot hold the
+   session open. Every refusal in `adversarial.test.ts` asserts both ends again:
+   the code the driver logged, and the code the adapter received.
+8. **`wireCode` reached only `protocol-violation` entries** — it now accompanies
+   every entry whose path sent a wire error, including the refused late hello
+   and the refused second connection.
+
 Round 2 (driver 0e1b0fe, contract note 2d09049):
 
 4. **`waitForReady` called a dead program ready** — fixed; see the liveness
@@ -54,25 +68,14 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
-1. **The driver can lose the wire error it just sent.** Every refusal path in
-   `semantic.ts` writes the error frame and calls `socket.destroy()` in the same
-   turn (the second-connection path and `#fail` alike), and `destroy()` discards
-   data that has not been flushed. Measured on the second-connection scenario:
-   the peer failed to receive the frame in 2 of 4 full-file runs, while the
-   driver's own log recorded `wireCode: 'internal'` every time. Consequence for
-   an adapter author: the reason a connection was refused is sometimes never
-   delivered. `socket.end(frame)`, or `write(frame, () => destroy())`, would fix
-   it. Until then no assertion here may depend on the adapter *receiving* a wire
-   error — every one reads `wireCode` from the driver's log instead, and the
-   both-ends assertions come back when the flush does.
-2. **Ink can re-render after a resize before `process.stdout.columns` catches
+1. **Ink can re-render after a resize before `process.stdout.columns` catches
    up.** A component that renders its own size (`size: 60x16`) sometimes keeps
    the old numbers in the frame that already reflects the new layout — measured
    at 2 of 6 resizes, while the republished bounds were correct 6 of 6. A
    component's self-reported size is therefore not a usable signal that a resize
    landed; the layout is. Relevant to `@termwright/ink` and to anyone writing a
    resize assertion.
-3. **`clients/README.md` documents a quit key that is state-dependent.** The
+2. **`clients/README.md` documents a quit key that is state-dependent.** The
    tview example's table says `q`, exit 0 — true only while focus has not
    cycled onto the reason field, where `q` types normally (`main.go`:
    `event.Rune() == 'q' && current != 2`). Since the contract suite sends the

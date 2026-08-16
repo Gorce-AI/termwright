@@ -100,11 +100,12 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(codes(terminal)).toContain('adapter-attached');
     const violation = entriesFor(terminal, 'protocol-violation')[0];
     expect(violation, `no protocol-violation recorded for ${scenario}`).toBeDefined();
-    // Asserted from the driver's own log, which is the only deterministic
-    // record of it: the driver writes the error frame and destroys the socket
-    // in the same turn, so whether the adapter receives it is a flush race —
-    // measured at ~50% loss on the second-connection path. See NOTES.md.
+    // Both ends of the same contract: the driver logged the wire code it chose,
+    // and the adapter received that exact code. The second half was
+    // unassertable until the driver stopped destroying the socket in the same
+    // turn as the write — a reading peer is now always told why.
     expect(violation?.wireCode).toBe(wireError);
+    await terminal.waitForText(`PEER GOT ERROR ${wireError}`);
     expect(violation?.timeMs).toBeGreaterThan(0);
     await expectSurvives(terminal);
   });
@@ -115,6 +116,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(terminal.capabilities().semanticTree).toBe(false);
     expect(terminal.semanticTree()).toBeNull();
     await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-token');
+    await terminal.waitForText('PEER GOT ERROR bad-token');
 
     const error = (await rejection(terminal.getByRole('button').resolve({ timeout: 500 }))) as TermwrightError;
     expect(error.code).toBe('protocol-violation');
@@ -130,6 +132,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
   it('refuses an unsupported protocol version', async () => {
     const terminal = await arm('bad-version');
     await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-version');
+    await terminal.waitForText('PEER GOT ERROR bad-version');
     expect(terminal.capabilities().semanticTree).toBe(false);
     await expectSurvives(terminal);
   });
@@ -137,6 +140,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
   it('refuses traffic that arrives before the handshake', async () => {
     const terminal = await arm('no-hello');
     await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('malformed');
+    await terminal.waitForText('PEER GOT ERROR malformed');
     expect(terminal.capabilities().semanticTree).toBe(false);
     expect(terminal.semanticTree()).toBeNull();
     await expectSurvives(terminal);
@@ -293,6 +297,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(terminal.semanticTree()).toBeNull();
 
     expect(entriesFor(terminal, 'adapter-capability')[0]?.wireCode).toBe('internal');
+    await terminal.waitForText('PEER GOT ERROR internal');
     await expectSurvives(terminal);
   });
 
@@ -300,6 +305,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const terminal = await arm('second-connection');
     await fire(terminal);
     await expect.poll(() => entriesFor(terminal, 'adapter-capability').at(-1)?.wireCode).toBe('internal');
+    await terminal.waitForText('PEER SECOND GOT ERROR internal');
 
     // The session keeps the adapter it already had: a refused newcomer is not
     // allowed to cost the incumbent its channel.
