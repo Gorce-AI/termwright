@@ -68,14 +68,24 @@ Round 2 (driver 0e1b0fe, contract note 2d09049):
 6. **`ready-strategy` conflated a fact with a guess** — replaced by
    `ready-shell-integration` and `ready-settled-screen`. With that, no assertion
    in this package matches diagnostic prose; every one is on a code.
-7. **`focusReporting` had no `'unknown'`, so focus reporting was unusable where
-   the platform hides the DECSET** — reported after the Windows run and fixed in
-   the driver (7336039): the field is now `'on' | 'off' | 'unknown'`, a report
-   is *sent* rather than refused while the mode is unverifiable, and the
-   per-mode diagnostic `mouse-mode-unverifiable` became `mode-unverifiable`
-   with a `mode` field. The suites here follow the same shape for both modes:
-   assert the refusal only where the mode is visible, and assert the recorded
-   `mode-unverifiable` entry where it is not.
+7. **`focusReporting` reported the host's state as if it were the child's** —
+   raised here after the Windows run, and worth recording with the premise
+   corrected, because the one this package supplied was wrong. The report said
+   ConPTY eats the child's `1004` and the field stays `false`, by analogy with
+   the mouse. The driver disproved that with a measurement (run 31939398845,
+   `session.pty.test.ts:743`): on Windows the field read `true` for a child that
+   never asked — the fixture sends only `?1000h` and `?1006h`. The host turns
+   focus reporting on by itself, so the reading says nothing about the child in
+   either direction, and the damage runs the *other* way from the reported one:
+   the driver was delivering `CSI I`/`CSI O` to programs that never wanted them.
+   Fixed in f17b251 with the shape the analogy did get right — `'on' | 'off' |
+   'unknown'`, a report *sent* rather than refused while the mode is
+   unverifiable, and `mouse-mode-unverifiable` generalised to
+   `mode-unverifiable` with a `mode` field. The lesson for this package: an
+   analogy is a hypothesis, and "same shape as the mouse" was reported as
+   though it were an observation. The suites now follow the corrected shape for
+   both modes — assert the refusal only where the mode is visible, assert the
+   recorded `mode-unverifiable` entry where it is not.
 
 ## The liveness split (do not "fix" this)
 
