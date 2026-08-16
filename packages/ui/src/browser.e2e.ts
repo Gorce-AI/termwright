@@ -505,3 +505,54 @@ describe('the runner UI chrome', () => {
     await expect.poll(splitOf, { timeout: 15_000 }).toBe(dragged);
   });
 });
+
+describe('the playback track', () => {
+  /**
+   * Added by impl-ui with the fix for the drift the owner reported: the marker
+   * strip and the native range thumb were positioned by different geometries,
+   * so a marker and the thumb agreed at the left edge and drifted apart towards
+   * the right. They now share one element and one time→position function, and
+   * this pins that at both edges and the middle, where the old bug was largest.
+   */
+  it('puts the thumb exactly where the marker is, at both edges and the middle', async () => {
+    const page = await open(await buildFixtureTrace());
+    const track = page.locator('[data-testid="scrub"]');
+    await track.waitFor();
+
+    const box = await track.boundingBox();
+    if (box === null) throw new Error('the track has no layout');
+
+    for (const fraction of [0, 0.5, 1]) {
+      const x = box.x + box.width * fraction;
+      await page.mouse.move(x, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.up();
+
+      const thumbCentre = await page.evaluate(() => {
+        const thumb = document.querySelector('.track .thumb');
+        if (thumb === null) return Number.NaN;
+        const rect = thumb.getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      });
+      // Where the pointer went down is where the thumb must be.
+      expect(Math.abs(thumbCentre - x)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('lands the thumb on the marker that was clicked', async () => {
+    const page = await open(await buildFixtureTrace());
+    const marker = page.locator('.track .marker').last();
+    await marker.click();
+
+    const drift = await page.evaluate(() => {
+      const centre = (element: Element | null): number => {
+        if (element === null) return Number.NaN;
+        const rect = element.getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      };
+      const markers = document.querySelectorAll('.track .marker');
+      return Math.abs(centre(markers[markers.length - 1] ?? null) - centre(document.querySelector('.track .thumb')));
+    });
+    expect(drift).toBeLessThanOrEqual(1);
+  });
+});

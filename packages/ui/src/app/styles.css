@@ -391,38 +391,70 @@ button.active {
 .scrubber {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: var(--s4);
+  padding: var(--s3) var(--s5);
 }
 
-.scrubber input[type='range'] {
-  flex: 1;
-  accent-color: var(--accent);
-}
-
-.clock {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--muted);
-  min-width: 60px;
-  text-align: right;
-}
-
-.markers {
+/*
+ * One box for the fill, the thumb and every marker: they are positioned by the
+ * same function against this element's width, so they cannot disagree.
+ */
+.track {
   position: relative;
-  height: 10px;
-  margin: 0 44px 4px 44px;
+  flex: 1;
+  height: 18px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.track::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--raised);
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.track-fill {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.thumb {
+  position: absolute;
+  top: 3px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--panel);
+  pointer-events: none;
 }
 
 .marker {
   position: absolute;
   top: 0;
-  width: 6px;
-  height: 10px;
+  width: 4px;
+  height: 6px;
+  margin-left: -2px;
   padding: 0;
-  border-radius: 2px;
   border: none;
+  border-radius: 1px;
   background: var(--muted);
-  transform: translateX(-3px);
 }
 
 .marker.step {
@@ -431,10 +463,29 @@ button.active {
 
 .marker.crash {
   background: var(--fail);
-  width: 8px;
-  height: 14px;
-  top: -2px;
-  transform: translateX(-4px);
+  height: 8px;
+}
+
+.marker.log {
+  top: 12px;
+  height: 6px;
+}
+
+.marker.log.warn {
+  background: var(--warn);
+}
+
+.marker.log.error,
+.marker.log.fatal {
+  background: var(--fail);
+}
+
+.clock {
+  font-family: var(--font-mono);
+  color: var(--muted);
+  min-width: 60px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .tests {
@@ -1004,6 +1055,11 @@ button.active {
 .scrubber .speed {
   flex: none;
   min-width: 34px;
+}
+
+.marker:hover,
+.marker:focus-visible {
+  outline: 1px solid var(--text);
 }
 
 /* Tree keyboard focus and twisties ------------------------------------- */

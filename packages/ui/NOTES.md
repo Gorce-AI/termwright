@@ -76,6 +76,31 @@ Where the profile comes from differs by mode, and both are deliberate:
 
 `null` in a replay means the recording predates profiles.
 
+## One function from a moment to a place
+
+The scrubber, the markers and every click go through `timeline-scale.ts`. That
+is not tidiness: the owner reported the thumb and the markers disagreeing, and
+the drift **grew towards the right**, which is the most convincing kind of wrong
+— it survives a glance at the start and lies at the end. Two causes, both real:
+
+1. the marker strip was a separate element with its own `margin: 0 44px`, while
+   the track was a flex child between buttons whose widths changed every time a
+   control was added (play and speed made it worse);
+2. a native `<input type=range>` thumb travels `width − thumbWidth`, while a
+   marker at `t/duration × 100%` is placed against the full width — that alone
+   produces drift that is zero at the left and maximal at the right.
+
+The fix is a custom track: fill, thumb and every marker are children of one
+element, positioned by `percentFor` and centred on their point, and a pointer is
+read back by `timeAt` against the same box. Losing the native input cost the
+free keyboard support, so the track is a real `role="slider"` with
+`aria-valuenow`/`aria-valuetext` and arrow keys — and the global arrow shortcuts
+now stand aside for it, as they already did for the tree.
+
+Verified in the browser at the left edge, the middle and the right edge: 0.00 px
+between the thumb centre and the point asked for, at all three. The e2e lane
+pins it.
+
 ## Cell metrics without reaching into xterm
 
 Overlay boxes need the pixel size of a cell. xterm exposes it only through

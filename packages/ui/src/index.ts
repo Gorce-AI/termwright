@@ -92,6 +92,8 @@ export {
   type CommandRow,
 } from './commands.js';
 
+export { fractionFor, percentFor, timeAt } from './timeline-scale.js';
+
 export {
   PLAYBACK_SPEEDS,
   advance,

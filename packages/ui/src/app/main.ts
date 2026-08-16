@@ -1073,8 +1073,8 @@ window.addEventListener('keydown', (event) => {
   const target = event.target;
   if (target instanceof HTMLElement) {
     if (target.tagName === 'INPUT' || target.tagName === 'SELECT') return;
-    // The tree owns its own arrows and Enter while it has focus.
-    if (target.closest('[role="tree"]') !== null) return;
+    // The tree and the scrubber own their own arrows while focused.
+    if (target.closest('[role="tree"], [role="slider"]') !== null) return;
   }
   if (event.key === '?') {
     event.preventDefault();
