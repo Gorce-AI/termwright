@@ -24,6 +24,7 @@ tree assembled from guesses.
 from __future__ import annotations
 
 from typing import Any, Callable, List, Optional
+from weakref import WeakKeyDictionary
 
 #: Everything the probe touches on Textual's public surface. Checked once, at
 #: attach time, so a version that moved one of them produces a diagnostic
@@ -98,7 +99,41 @@ def attach_to_app_module(module: Any) -> bool:
     setattr(app_class, "post_display_hook", post_display_hook)
     _attached_modules.append(id(module))
     _log("sem", f"attached to Textual {_textual_version()}")
+    _publish_frames()
     return True
+
+
+#: One session per application object. Keyed weakly: an app that goes away
+#: takes its session with it, and a process may legitimately run several.
+_sessions: "WeakKeyDictionary[Any, Any]" = WeakKeyDictionary()
+
+
+def _publish_frames() -> None:
+    """Register the observer that turns frames into published trees."""
+
+    def publish(app: Any) -> None:
+        session = _sessions.get(app)
+        if session is None:
+            from .session import session_for
+
+            session = session_for(app, _textual_version())
+            if session is None:
+                # Not instrumented after all — nothing to publish to. Recorded
+                # so the app is not asked again on every frame.
+                _sessions[app] = _DORMANT
+                return
+            _sessions[app] = session
+        if session is not _DORMANT:
+            session.on_frame()
+
+    on_frame(publish)
+
+
+class _Dormant:
+    """Marker for an app we already decided not to publish for."""
+
+
+_DORMANT = _Dormant()
 
 
 def frames_seen() -> int:
@@ -155,6 +190,7 @@ def _log(category: str, message: str) -> None:
 def reset() -> None:
     """Forget observers and attachments. For tests only."""
     global _frames
+    _sessions.clear()
     _observers.clear()
     _attached_modules.clear()
     _frames = 0

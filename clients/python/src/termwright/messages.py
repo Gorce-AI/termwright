@@ -47,18 +47,33 @@ def _malformed(detail: str) -> ParseResult:
 # --------------------------------------------------------------------------
 
 
-def hello(token: str, adapter_name: str, adapter_version: str, capabilities: Sequence[str]) -> Dict[str, Any]:
-    """Build the handshake message. Unknown capabilities are refused locally."""
+def hello(
+    token: str,
+    adapter_name: str,
+    adapter_version: str,
+    capabilities: Sequence[str],
+    probe: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build the handshake message. Unknown capabilities are refused locally.
+
+    ``probe`` is present when the sender is a probe rather than a hand-written
+    adapter, and carries what it can actually observe — framework and
+    versions, the best identity it can offer, and its optional abilities — so
+    the driver negotiates against measured capability instead of a floor.
+    """
     unknown = [item for item in capabilities if item not in CAPABILITY_SET]
     if unknown:
         raise ProtocolViolation("marker-argument", f"unknown capabilities: {', '.join(unknown)}")
-    return {
+    message: Dict[str, Any] = {
         "type": "hello",
         "protocol": PROTOCOL_ID,
         "token": token,
         "adapter": {"name": adapter_name, "version": adapter_version},
         "capabilities": list(capabilities),
     }
+    if probe is not None:
+        message["probe"] = dict(probe)
+    return message
 
 
 def snapshot_message(snapshot: Mapping[str, Any]) -> Dict[str, Any]:

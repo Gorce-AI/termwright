@@ -130,6 +130,7 @@ class SemanticClient:
         capabilities: Sequence[str] = DEFAULT_CAPABILITIES,
         limits: ProtocolLimits = DEFAULT_LIMITS,
         debug: Optional[DebugLog] = None,
+        probe: Optional[Mapping[str, Any]] = None,
     ) -> None:
         self._endpoint = endpoint
         self._token = token
@@ -140,6 +141,9 @@ class SemanticClient:
         #: Diagnostic log, or None. Every use is guarded; the client behaves
         #: identically with and without one.
         self._debug = debug
+        #: What a probe says it can observe, sent with `hello`. None for a
+        #: hand-written adapter, which is what the driver assumes by default.
+        self._probe = probe
 
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
@@ -198,7 +202,13 @@ class SemanticClient:
 
         try:
             await self._send(
-                hello(self._token, self._adapter_name, self._adapter_version, self._capabilities)
+                hello(
+                    self._token,
+                    self._adapter_name,
+                    self._adapter_version,
+                    self._capabilities,
+                    self._probe,
+                )
             )
             self._log(
                 "sem",
@@ -470,6 +480,7 @@ def client_from_env(
     env: Optional[Mapping[str, str]] = None,
     limits: ProtocolLimits = DEFAULT_LIMITS,
     debug: Optional[DebugLog] = None,
+    probe: Optional[Mapping[str, Any]] = None,
 ) -> Optional[SemanticClient]:
     """Build a client from ``TERMWRIGHT_*``, or ``None`` when not instrumented.
 
@@ -510,6 +521,7 @@ def client_from_env(
         capabilities=capabilities,
         limits=limits,
         debug=log,
+        probe=probe,
     )
 
 
