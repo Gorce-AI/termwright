@@ -166,3 +166,11 @@
   Two new DiagnosticCodes: 'log-dropped' (data we failed to deliver) and
   'log-source' (source state change: attach/rotate/truncate/error). Closed
   set: 16.
+- 2026-08-16 (evolution rule, part 2): driver→adapter messages (hello-ack,
+  get-tree request) are TOLERANT READERS end to end — adapters/clients ignore
+  unknown fields anywhere in these envelopes (known fields stay type-checked).
+  Rationale: the driver is the trusted side and these messages are
+  informational; behavior is governed by negotiated capabilities. Adapter→
+  driver messages remain STRICT (hostile-input boundary). Adding an optional
+  field to a driver→adapter message is NOT breaking; adapter→driver envelope
+  changes still are.
