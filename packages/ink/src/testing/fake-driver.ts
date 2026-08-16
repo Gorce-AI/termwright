@@ -25,13 +25,14 @@ import {
   type LogRecord,
   type ProtocolLimits,
   type SemanticSnapshot,
+  type TreeDelta,
 } from '@termwright/protocol';
 
 /** Knobs for simulating driver behaviour the adapter must survive. */
 export interface FakeDriverOptions {
   readonly sessionId?: string;
   readonly markerEnabled?: boolean;
-  readonly subscribe?: 'snapshots' | 'revisions';
+  readonly subscribe?: 'snapshots' | 'revisions' | 'diffs';
   readonly limits?: ProtocolLimits;
   /** Reply to `hello` with a protocol error instead of an ack. */
   readonly rejectHandshake?: boolean;
@@ -57,8 +58,14 @@ export interface FakeDriver {
   readonly snapshots: readonly SemanticSnapshot[];
   readonly commits: readonly number[];
   readonly logs: readonly LogRecord[];
+  /** Tree deltas, in arrival order, with the message envelope stripped. */
+  readonly deltas: readonly TreeDelta[];
+  /** Snapshots and deltas interleaved, so a test can assert what arrived when. */
+  readonly treeTraffic: readonly ({ kind: 'snapshot' } | { kind: 'delta' })[];
   /** Resolve once `count` snapshots have arrived. */
   waitForSnapshots(count: number, timeoutMs?: number): Promise<readonly SemanticSnapshot[]>;
+  /** Resolve once `count` tree messages (snapshot or delta) have arrived. */
+  waitForTreeTraffic(count: number, timeoutMs?: number): Promise<number>;
   /** Resolve once `count` log records have arrived. */
   waitForLogs(count: number, timeoutMs?: number): Promise<readonly LogRecord[]>;
   /** Resolve once a connection has completed the handshake. */
@@ -84,6 +91,8 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
   const snapshots: SemanticSnapshot[] = [];
   const commits: number[] = [];
   const logs: LogRecord[] = [];
+  const deltas: TreeDelta[] = [];
+  const treeTraffic: ({ kind: 'snapshot' } | { kind: 'delta' })[] = [];
   const responses = new Map<number, (response: GetTreeResponse) => void>();
   const waiters: Array<() => void> = [];
   let hello: HelloMessage | undefined;
@@ -140,8 +149,16 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
         notify();
         return;
       }
+      case 'tree-delta': {
+        const { type: _type, ...delta } = message;
+        deltas.push(delta);
+        treeTraffic.push({ kind: 'delta' });
+        notify();
+        return;
+      }
       case 'snapshot': {
         snapshots.push(message.snapshot);
+        treeTraffic.push({ kind: 'snapshot' });
         notify();
         if (
           options.dropAfterSnapshots !== undefined &&
@@ -219,9 +236,19 @@ export async function startFakeDriver(options: FakeDriverOptions = {}): Promise<
     get logs() {
       return logs;
     },
+    get deltas() {
+      return deltas;
+    },
+    get treeTraffic() {
+      return treeTraffic;
+    },
     async waitForSnapshots(count, timeoutMs = 5_000) {
       await until(() => snapshots.length >= count, timeoutMs, `${count} snapshot(s)`);
       return snapshots;
+    },
+    async waitForTreeTraffic(count, timeoutMs = 5_000) {
+      await until(() => treeTraffic.length >= count, timeoutMs, `${count} tree message(s)`);
+      return treeTraffic.length;
     },
     async waitForLogs(count, timeoutMs = 5_000) {
       await until(() => logs.length >= count, timeoutMs, `${count} log record(s)`);

@@ -20,6 +20,7 @@
 
 import type { DOMElement } from 'ink';
 import { encodeMarker, type SemanticSnapshot } from '@termwright/protocol';
+import { computeTreeDelta, deltaIsWorthSending } from './delta.js';
 import type { SemanticChannel } from './channel.js';
 import { hasStaticContent, SnapshotCollector } from './collect.js';
 import type { SemanticRegistry } from './registry.js';
@@ -44,6 +45,8 @@ export class SemanticPublisher {
   #revision = 0;
   #queue: Promise<void> = Promise.resolve();
   #latest: SemanticSnapshot | undefined;
+  /** The tree the driver is known to hold; the base every delta composes onto. */
+  #lastSent: SemanticSnapshot | undefined;
   #disposed = false;
 
   constructor(options: PublisherOptions) {
@@ -81,6 +84,7 @@ export class SemanticPublisher {
     if (this.#disposed) return;
     this.#disposed = true;
     this.#latest = undefined;
+    this.#lastSent = undefined;
     this.#options.channel.close();
   }
 
@@ -101,13 +105,38 @@ export class SemanticPublisher {
     });
     this.#latest = snapshot;
 
-    if (channel.session.subscribe === 'snapshots') channel.sendSnapshot(snapshot);
+    this.#publishTree(snapshot);
     channel.sendRevisionCommit(revision);
 
     if (!channel.session.markerEnabled) return;
     await drain(stdout);
     if (this.#disposed || !channel.isOpen) return;
     stdout.write(encodeMarker(token, channel.session.sessionId, revision));
+  }
+
+  /**
+   * Send the tree in whichever form the driver asked for.
+   *
+   * In `diffs` mode a delta needs a base the driver actually holds, so the
+   * first publication — and any publication whose delta would not pay for
+   * itself — goes out as a full snapshot. That is allowed: `subscribe: 'diffs'`
+   * selects a preference, not a prohibition.
+   */
+  #publishTree(snapshot: SemanticSnapshot): void {
+    const { channel } = this.#options;
+    if (channel.session.subscribe === 'revisions') return;
+
+    if (channel.session.subscribe === 'diffs' && this.#lastSent !== undefined) {
+      const delta = computeTreeDelta(this.#lastSent, snapshot);
+      if (deltaIsWorthSending(delta, snapshot)) {
+        channel.sendTreeDelta(delta);
+        this.#lastSent = snapshot;
+        return;
+      }
+    }
+
+    channel.sendSnapshot(snapshot);
+    this.#lastSent = snapshot;
   }
 
   /**

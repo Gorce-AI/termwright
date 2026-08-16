@@ -188,6 +188,51 @@ also why `semantics.captureConsole: false` exists.
   publication. The stamp builds a fresh object rather than mutating the frozen
   record — the same aliasing discipline as `actions`.
 
+## Tree deltas: the cascade is the whole difficulty
+
+Under `subscribe: 'diffs'` the adapter diffs each snapshot against **the last
+tree it actually sent**, not against the previous revision — a superseded
+render never reaches the driver, so its tree is not a base anything can
+compose onto.
+
+The delta format removes an id together with its subtree, walking the **base**
+tree's parent links. That is what keeps deltas small, and it is also the one
+rule a naive diff gets wrong:
+
+> A node that survived the re-render, is byte-identical, and happens to sit
+> under something that disappeared **is deleted by the cascade** and must be
+> re-listed in `changed` anyway.
+
+`computeTreeDelta` therefore emits three kinds of upsert: new nodes, changed
+nodes, and unchanged nodes caught in the collateral of a removal. Removals list
+only the top of each removed subtree.
+
+The first publication always goes out as a full snapshot (a delta needs a base),
+and so does any delta that grew past half the snapshot's encoded size —
+`subscribe: 'diffs'` expresses a preference, not a prohibition, and past that
+point a delta costs the same bytes plus composition work. `get-tree` is always
+answered with a full snapshot. Message order on the session is unchanged:
+`(delta|snapshot)` → `revision-commit` → marker.
+
+### What the tests are worth
+
+`applyTreeDelta` from the protocol is used as an oracle: base + delta must
+reproduce the adapter's own snapshot exactly. Two rounds of deliberate
+sabotage were needed before that suite was worth anything:
+
+- the first version of the sequence test counted tree messages from zero while
+  the opening snapshot had already arrived, so every wait was satisfied
+  immediately and **no delta was ever exercised**. A `deltas.length > 0` guard
+  now makes that failure loud;
+- the first "cascade trap" test moved the surviving node to a new parent, which
+  the ordinary "differs" check already catches — it passed with the cascade
+  rule deleted. It now uses a node that is byte-identical in both trees and
+  dies only because its *grandparent* was removed.
+
+Each of the three plausible mistakes — dropping the resurrection, listing every
+removed id instead of subtree roots, never sending `rootIds` — is now caught by
+exactly one test, verified by making each break in turn.
+
 ## Validator invariants the collector must keep
 
 `validateSnapshot` enforces three rules that are stricter than the design prose,

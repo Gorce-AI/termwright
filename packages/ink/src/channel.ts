@@ -22,6 +22,7 @@ import {
   type HelloAckMessage,
   type LogRecord,
   type ProtocolLimits,
+  type TreeDelta,
   type SemanticSnapshot,
 } from '@termwright/protocol';
 import type { AdapterEnv } from './config.js';
@@ -109,6 +110,17 @@ export class SemanticChannel {
   /** Push a committed snapshot. No-op once the channel is disabled. */
   sendSnapshot(snapshot: SemanticSnapshot): void {
     this.#send({ type: 'snapshot', snapshot });
+  }
+
+  /**
+   * Push an incremental tree update.
+   *
+   * Only valid when the driver selected `subscribe: 'diffs'`, and only when it
+   * still holds the delta's `baseRevision` — the publisher owns that
+   * bookkeeping.
+   */
+  sendTreeDelta(delta: TreeDelta): void {
+    this.#send({ type: 'tree-delta', ...delta });
   }
 
   /** Push a bare revision commit. No-op once the channel is disabled. */

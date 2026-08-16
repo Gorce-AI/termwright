@@ -100,6 +100,15 @@ is public and two publishers can legitimately pick the same number. Dropped
 records still consume one, so a gap is how the driver reports how many were
 lost; a publisher's own number is preserved as the `origin.seq` attribute.
 
+## Incremental updates
+
+When the driver asks for `subscribe: 'diffs'`, the adapter sends a tree delta
+instead of a full snapshot after each render: whole-node upserts plus removals
+that cascade over the previous tree. The first publication is always a full
+snapshot, and so is any update whose delta would cost more than half the
+snapshot it describes — the cheaper encoding wins. `get-tree` always answers
+with a full snapshot.
+
 ## Bounds and `alternateScreen`
 
 Ink measures elements inside its *live layout region*, which coincides with the

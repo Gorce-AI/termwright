@@ -23,6 +23,7 @@ const BASE_CAPABILITIES: readonly AdapterCapability[] = [
   'states',
   'actions',
   'render-revisions',
+  'tree-diffs',
   // The diagnostics channel is always a possible source, so this is always
   // announced under instrumentation; the driver decides whether to enable it.
   'logs',
