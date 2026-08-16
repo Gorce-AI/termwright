@@ -208,6 +208,10 @@ has to delete an assertion that explains itself.
 
 - Windows/ConPTY: nothing here has been run on Windows. The suites skip cleanly
   where no PTY opens, which is not the same as passing.
+- Log *bridges*: `@termwright/logs` ships pino, consola and OTel adapters;
+  conformance exercises the wire contract (`seq`, budgets, ceilings, records
+  staying off-screen) but not the bridges themselves, which have their own
+  tests.
 - MCP session *recovery*: `mcp-sessions.test.ts` covers isolation, close
   ownership, the ceiling and cursor independence, but not resuming a session
   from a new transport (the SDK supports it; nothing in this project relies on

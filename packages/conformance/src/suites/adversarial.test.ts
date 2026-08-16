@@ -18,6 +18,18 @@ import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from
 
 const sessions = createSessionPool();
 
+/** The `log-flood` scenario sends this many records in one turn. */
+const LOG_FLOOD_RECORDS = 500;
+
+/** Collects the log records a session publishes, in order. */
+function collectLogs(terminal: TerminalHarness): number[] {
+  const seqs: number[] = [];
+  terminal.events.on('app-log', (event) => {
+    if (event.record !== undefined) seqs.push(event.record.seq);
+  });
+  return seqs;
+}
+
 /** The `flood` scenario publishes revisions 2..100 without markers. */
 const FIRST_FLOOD_REVISION = 2;
 const FLOOD_REVISIONS = 99;
@@ -328,6 +340,90 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(terminal.semanticTree()?.revision).toBe(1);
     await terminal.press('p');
     await expect.poll(() => terminal.semanticTree()?.revision).toBe(2);
+    await expectSurvives(terminal);
+  });
+
+  it('refuses log records the handshake never invited', async () => {
+    const terminal = await arm('log-no-negotiation');
+    const seqs = collectLogs(terminal);
+    await fire(terminal);
+    await expect.poll(() => codes(terminal)).toContain('protocol-violation');
+
+    // An adapter that never announced `logs` was never granted a budget, so a
+    // record is not merely unexpected — it is traffic the driver has no way to
+    // bound. The channel closes rather than absorbing it.
+    expect(entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('malformed');
+    await terminal.waitForText('PEER GOT ERROR malformed');
+    expect(seqs).toEqual([]);
+    await expectSurvives(terminal);
+  });
+
+  it('refuses a repeated seq without closing the channel', async () => {
+    const terminal = await arm('log-seq-duplicate');
+    const seqs = collectLogs(terminal);
+    await fire(terminal);
+    await expect.poll(() => seqs).toEqual([1, 2]);
+
+    // A miscounted seq is a bug in the adapter, not hostile input: the record
+    // is refused so a consumer counting errors cannot count one twice, and the
+    // session keeps its channel — the record after the duplicate still arrives.
+    expect(codes(terminal)).toContain('log-dropped');
+    expect(codes(terminal)).not.toContain('protocol-violation');
+    expect(terminal.capabilities().semanticTree).toBe(true);
+    await expectSurvives(terminal);
+  });
+
+  it('reports how many records the adapter dropped at the source', async () => {
+    const terminal = await arm('log-seq-gap');
+    const seqs = collectLogs(terminal);
+    await fire(terminal);
+    await expect.poll(() => seqs).toEqual([1, 6]);
+
+    // A gap upward means the adapter shed load itself. Only it knows how much,
+    // so the count is derived from the gap rather than guessed.
+    const gap = entriesFor(terminal, 'log-dropped')[0];
+    expect(gap?.count).toBe(4);
+    expect(codes(terminal)).not.toContain('protocol-violation');
+    await expectSurvives(terminal);
+  });
+
+  it('closes the channel on a log record over the byte ceiling', async () => {
+    const terminal = await arm('log-oversized');
+    const seqs = collectLogs(terminal);
+    await fire(terminal);
+    await expect.poll(() => codes(terminal)).toContain('protocol-violation');
+
+    expect(entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('limit-exceeded');
+    await terminal.waitForText('PEER GOT ERROR limit-exceeded');
+    expect(seqs).toEqual([]);
+    await expectSurvives(terminal);
+  });
+
+  it('holds its own log budget when an adapter ignores the negotiated one', async () => {
+    const terminal = await arm('log-flood');
+    const seqs = collectLogs(terminal);
+    await fire(terminal);
+    await expect.poll(() => codes(terminal)).toContain('log-dropped');
+    await terminal.waitForStable({ frames: 4 }).catch(() => undefined);
+
+    const refused = entriesFor(terminal, 'log-dropped')
+      .map((entry) => entry.count ?? 0)
+      .reduce((sum, count) => sum + count, 0);
+
+    // Every record is accounted for: what arrived plus what was refused is
+    // what was sent. Asserted without naming the ceiling, so tuning the budget
+    // does not turn this into a false failure.
+    expect(seqs.length + refused).toBe(LOG_FLOOD_RECORDS);
+    expect(seqs.length).toBeGreaterThan(0);
+    expect(refused).toBeGreaterThan(0);
+
+    // The budget sheds the tail, not an arbitrary subset: what got through is
+    // the first N records, in order.
+    expect(seqs).toEqual(Array.from({ length: seqs.length }, (_, index) => index + 1));
+
+    // A flood of logs must not cost the session its semantic channel.
+    expect(terminal.capabilities().semanticTree).toBe(true);
+    expect(codes(terminal)).not.toContain('protocol-violation');
     await expectSurvives(terminal);
   });
 

@@ -40,6 +40,13 @@ const token = process.env['TERMWRIGHT_TOKEN'];
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_NODES = 5_000;
 const MAX_DEPTH = 64;
+const MAX_LOG_RECORD_BYTES = 32 * 1024;
+
+/** Scenarios that need the log channel negotiated in the handshake. */
+const NEEDS_LOGS = new Set(['log-seq-duplicate', 'log-seq-gap', 'log-oversized', 'log-flood']);
+
+let logSeq = 0;
+let logBudget = null;
 
 let sessionId = null;
 let socket = null;
@@ -241,6 +248,29 @@ const SCENARIOS = {
       }
     });
   },
+  'log-no-negotiation': () => {
+    // The handshake never announced `logs`, so the budget was never granted.
+    socket.write(frame({ type: 'log', record: logRecord(1, 'uninvited') }));
+  },
+  'log-seq-duplicate': () => {
+    sendLog(1, 'first');
+    sendLog(1, 'same seq again');
+    sendLog(2, 'after the duplicate');
+  },
+  'log-seq-gap': () => {
+    sendLog(1, 'before the gap');
+    // Four records the adapter dropped at the source; the gap is how it says so.
+    sendLog(6, 'after the gap');
+  },
+  'log-oversized': () => {
+    socket.write(
+      frame({ type: 'log', record: logRecord(1, 'x'.repeat(MAX_LOG_RECORD_BYTES + 1024)) }),
+    );
+  },
+  'log-flood': () => {
+    // Far past any sane per-second budget, sent in one turn.
+    for (let seq = 1; seq <= 500; seq += 1) sendLog(seq, `flood ${seq}`);
+  },
   'peer-error': () => {
     // The other direction: the adapter reports a protocol error at us. The
     // driver must surface the code the peer chose, not one of its own.
@@ -254,14 +284,28 @@ const SCENARIOS = {
 };
 
 function hello(overrides = {}) {
+  const capabilities = ['tree', 'bounds', 'states', 'actions', 'render-revisions'];
+  // `log-no-negotiation` deliberately does NOT announce it: the point of that
+  // scenario is sending records the driver never invited.
+  if (NEEDS_LOGS.has(scenario)) capabilities.push('logs');
   return {
     type: 'hello',
     protocol: 'termwright/1',
     token,
     adapter: { name: 'adversarial-peer', version: '0.1.0' },
-    capabilities: ['tree', 'bounds', 'states', 'actions', 'render-revisions'],
+    capabilities,
     ...overrides,
   };
+}
+
+/** One well-formed record, with the seq the caller asks for. */
+function logRecord(seq, message = `record ${seq}`) {
+  return { ts: Date.now(), level: 'info', message, logger: 'peer', seq };
+}
+
+function sendLog(seq, message) {
+  socket.write(frame({ type: 'log', record: logRecord(seq, message) }));
+  logSeq = Math.max(logSeq, seq);
 }
 
 /** Sends a snapshot together with its marker, so only the tree can be at fault. */
@@ -335,6 +379,8 @@ if (endpoint === undefined || token === undefined) {
       pending = pending.subarray(4 + length);
       if (message.type === 'hello-ack') {
         sessionId = message.sessionId;
+        logBudget = message.logs ?? null;
+        say(`PEER LOGS ${logBudget === null ? 'denied' : `enabled ${logBudget.maxRecordsPerSecond}/s`}`);
         publish(1);
         say(`PEER READY ${scenario}`);
       }

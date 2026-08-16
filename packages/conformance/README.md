@@ -62,6 +62,13 @@ requires: {
 },
 ```
 
+An adapter that announces the `logs` capability declares how to exercise it,
+and the obligations above are then asserted rather than skipped:
+
+```ts
+logs: { input: 'l', expect: 'conformance log record' },
+```
+
 It checks the five obligations an adapter has:
 
 | Obligation | What is asserted |
@@ -72,6 +79,7 @@ It checks the five obligations an adapter has:
 | Snapshot validity | Every snapshot passes `validateSnapshot`, carries this session's id, has resolvable parents and monotonic revisions |
 | Revision ordering | For each revision: snapshot → `revision-commit` → a marker that verifies against the session token, markers strictly increasing |
 | Channel loss | Cutting the socket leaves the application rendering and alive, and the adapter does not reconnect |
+| Logs (when declared) | A record reaches the driver, `seq` is unique and increasing, and the message never appears on the terminal |
 
 `await` it at the top level: `vitest` is imported dynamically so the package can
 also be used from a plain script.

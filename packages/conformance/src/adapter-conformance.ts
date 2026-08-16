@@ -64,6 +64,18 @@ export interface AdapterConformanceOptions {
    * visible rather than becoming folklore.
    */
   readonly treeBeforeInput?: { readonly required: false; readonly reason: string };
+  /**
+   * How to make the application log, for an adapter that announces the `logs`
+   * capability. Without it the log obligations are skipped; with it they are
+   * asserted, and an adapter that announces `logs` but never delivers one
+   * fails here rather than in a user's test.
+   */
+  readonly logs?: {
+    /** Input that makes the application write one log record. */
+    readonly input: string;
+    /** A substring of the logged message, used to prove it stayed off-screen. */
+    readonly expect: string;
+  };
   /** How long the handshake may take. Default 10 s. */
   readonly timeoutMs?: number;
   /**
@@ -328,6 +340,37 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           expect(marker.offset).toBeGreaterThan(previousEnd);
           previousEnd = marker.offset;
         }
+      });
+
+      it.skipIf(options.logs === undefined)('carries a log record without printing it', async () => {
+        const logs = options.logs as NonNullable<AdapterConformanceOptions['logs']>;
+        const hello = probe.observe().messages[0]?.message as { capabilities: readonly string[] };
+        expect(
+          hello.capabilities.includes('logs'),
+          'the registration declares logs, but the adapter never announced the capability',
+        ).toBe(true);
+
+        const before = probe.observe().logs.length;
+        await probe.write(logs.input);
+        await probe.waitFor((observation) => observation.logs.length > before, timeout);
+
+        const observation = probe.observe();
+        const record = observation.logs.at(-1);
+        expect(record?.message).toContain(logs.expect);
+        // `seq` is a non-negative counter, so the first record of a session is
+        // legitimately 0; what matters is the relation between records.
+        expect(record?.seq).toBeGreaterThanOrEqual(0);
+
+        // Strictly increasing within a session: a consumer counting errors must
+        // not be able to count one twice, and a gap must mean a real loss.
+        const seqs = observation.logs.map((entry) => entry.seq);
+        expect(seqs).toEqual([...seqs].sort((left, right) => left - right));
+        expect(new Set(seqs).size).toBe(seqs.length);
+
+        // The whole point of the capability: the record reaches the driver and
+        // never the terminal. A TUI that printed it would corrupt its render.
+        expect(observation.screen).not.toContain(logs.expect);
+        expect(observation.text).not.toContain(logs.expect);
       });
 
       it('keeps the application alive when the channel is cut', async () => {

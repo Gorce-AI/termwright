@@ -26,6 +26,7 @@
 import { createElement as h, useEffect, useRef, useState } from 'react';
 import { Box, Text, measureElement, render as inkRender, useApp, useStdin } from 'ink';
 import { semanticRender, useSemantic } from '@termwright/ink';
+import { publishLog } from '@termwright/logs';
 
 const FILES = ['readme.md', 'index.ts', 'ünïcode 日本語 😀', 'notes.txt', 'LICENSE'];
 const LOG_LINES = Array.from({ length: 20 }, (_, index) => `log line ${index + 1}`);
@@ -122,6 +123,13 @@ function App() {
       if (text === '\x7f') return { ...current, value: current.value.slice(0, -1) };
       if (text >= ' ') return { ...current, value: current.value + text };
       return current;
+    }
+    if (text === 'l') {
+      // A TUI cannot print diagnostics without corrupting its own render, so
+      // this goes to the log channel and must NOT reach the screen. The suite
+      // asserts both halves of that.
+      publishLog({ level: 'warn', message: 'conformance log record', logger: 'fixture' });
+      return { ...current, last: 'LOGGED' };
     }
     if (text === 'd') return { ...current, dialog: true, focus: 'dialog-approve' };
     if (text === 'e') return { ...current, expanded: !current.expanded };

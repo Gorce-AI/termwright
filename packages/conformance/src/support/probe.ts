@@ -37,6 +37,7 @@ import {
   verifyMarkerPayload,
   type AdapterToDriverMessage,
   type HelloAckMessage,
+  type LogRecord,
 } from '@termwright/protocol';
 // `@xterm/headless` is CommonJS: a named ESM import type-checks and passes
 // under vitest's transform, then fails at runtime for anyone importing the
@@ -70,6 +71,9 @@ export interface RecordedMarker {
   readonly atMs: number;
 }
 
+/** Log budget the probe grants to an adapter that announces `logs`. */
+const LOG_BUDGET = Object.freeze({ enabled: true, maxRecordsPerSecond: 200, burst: 400 });
+
 /** A frame the probe refused; a conforming adapter produces none. */
 export interface RecordedFault {
   readonly code: string;
@@ -94,6 +98,8 @@ export interface ProbeObservation {
   readonly text: string;
   /** The visible grid, one row per line — what a user would actually see. */
   readonly screen: string;
+  /** Application log records the adapter sent, in arrival order. */
+  readonly logs: readonly LogRecord[];
 }
 
 const MARKER_PATTERN = /\x1bP(twm;[0-9]+;[A-Za-z0-9_-]+)\x1b\\/gu;
@@ -122,6 +128,7 @@ export class AdapterProbe {
   readonly #messages: RecordedMessage[] = [];
   readonly #markers: RecordedMarker[] = [];
   readonly #faults: RecordedFault[] = [];
+  readonly #logs: LogRecord[] = [];
   #chunks: Uint8Array[] = [];
   #bytes = 0;
   #text = '';
@@ -221,6 +228,7 @@ export class AdapterProbe {
       stdout: this.#stdout(),
       text: this.#text,
       screen: this.screenText(),
+      logs: this.#logs.map((entry) => entry),
     };
   }
 
@@ -379,6 +387,7 @@ export class AdapterProbe {
       return;
     }
     this.#messages.push({ message: parsed.message, stdoutBytes: this.#bytes, atMs: this.#now() });
+    if (parsed.message.type === 'log') this.#logs.push(parsed.message.record);
     if (parsed.message.type !== 'hello') return;
 
     const ack: HelloAckMessage = {
@@ -388,6 +397,9 @@ export class AdapterProbe {
       limits: DEFAULT_LIMITS,
       subscribe: 'snapshots',
       marker: { enabled: parsed.message.capabilities.includes('render-revisions') },
+      // Granted only to an adapter that asked: an adapter that never announced
+      // `logs` must not be handed a budget it can then claim it was given.
+      ...(parsed.message.capabilities.includes('logs') ? { logs: LOG_BUDGET } : {}),
     };
     socket.write(encodeFrame(ack, DEFAULT_LIMITS.maxFrameBytes));
   }

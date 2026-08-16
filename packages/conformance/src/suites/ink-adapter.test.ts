@@ -19,6 +19,9 @@ await runAdapterConformance({
   ready: 'Termwright Conformance',
   interaction: { input: '\t', expect: '[Save]' },
   quit: { input: '\u0003', exitCode: 0 },
+  // `l` publishes through `@termwright/logs`; the message must reach the
+  // driver's log channel and never the screen.
+  logs: { input: 'l', expect: 'conformance log record' },
   columns: 80,
   rows: 24,
   expectAbsoluteBounds: true,
