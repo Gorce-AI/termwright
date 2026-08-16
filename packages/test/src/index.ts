@@ -105,6 +105,13 @@ export { serializeScreen, type CellSnapshotOptions } from './cells.js';
 export { ptyAvailable, resetPtyProbe } from './pty-available.js';
 
 export {
+  mergeOptions,
+  type LaunchOverrides,
+  type MergedOptions,
+  type TermwrightOptions,
+} from './options.js';
+
+export {
   seedDirectory,
   type SeedFile,
   type SeedFiles,

@@ -23,10 +23,11 @@ import { test as base } from 'vitest';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
 import type { LogLevel } from '@termwright/protocol';
 import { createTraceWriter, type TraceWriter } from '@termwright/trace';
-import { getTermwrightConfig, type ResolvedTermwrightConfig } from './config.js';
+import { getTermwrightConfig, type ResolvedTermwrightConfig, type TraceMode } from './config.js';
 import { appendCrashSection, collectCrashes, toReportCrash, type ReportCrash } from './crash.js';
 import { collectTestNames } from './declared-tests.js';
 import { seedDirectory, type SeedFiles, type SeedTemplate } from './seed.js';
+import { mergeOptions, type TermwrightOptions } from './options.js';
 import { collectLogs, createLogCollection, logThresholdFailure, type LogCollection } from './logs.js';
 import {
   beginSnapshotScope,
@@ -59,6 +60,8 @@ export interface LaunchFixtureOptions extends Omit<LaunchOptions, 'command'> {
    * change only what it is about. `files` are written over it.
    */
   readonly template?: SeedTemplate | string;
+  /** Trace policy for this session, overriding the file's and the project's. */
+  readonly trace?: TraceMode;
 }
 
 /** Runs a titled step; it becomes a marker in the recording and a trace event. */
@@ -94,6 +97,17 @@ export interface TerminalFactory {
 
 /** Fixtures added to Vitest's `test`. */
 export interface TermwrightFixtures {
+  /**
+   * Options for this file or suite, the equivalent of Playwright's `test.use()`:
+   *
+   * ```ts
+   * test.scoped({ termwrightOptions: { columns: 120, trace: 'on' } });
+   * ```
+   *
+   * They sit between the project configuration and a `launch()` call, merged
+   * key by key — scoping one option keeps the rest.
+   */
+  termwrightOptions: TermwrightOptions;
   termwright: TermwrightScopeFixture;
   terminal: TerminalFactory;
   step: StepRunner;
@@ -111,6 +125,8 @@ interface Session {
   readonly harness: TerminalHarness;
   readonly writer: TraceWriter | undefined;
   readonly dir: string | undefined;
+  /** Effective policy for this session, which a `launch()` may have overridden. */
+  readonly trace: TraceMode;
 }
 
 /**
@@ -118,6 +134,8 @@ interface Session {
  * `test.step()` is available inside any of its tests.
  */
 export const test = base.extend<TermwrightFixtures>({
+  termwrightOptions: {},
+
   termwright: [
     async ({ task, expect }, use) => {
       const config = getTermwrightConfig();
@@ -168,14 +186,15 @@ export const test = base.extend<TermwrightFixtures>({
     await use(termwright.step);
   },
 
-  terminal: async ({ termwright, task, onTestFailed }, use) => {
+  terminal: async ({ termwright, termwrightOptions, task, onTestFailed }, use) => {
     const { config } = termwright;
     const scope = currentScope(scopeKey(task.file.filepath, fullName(task)));
     const sessions: Session[] = [];
     const harnesses: TerminalHarness[] = [];
     const logs = createLogCollection();
     const detachers: (() => void)[] = [];
-    let threshold: LogLevel | false = config.failOnLogLevel;
+    let threshold: LogLevel | false =
+      mergeOptions(config, termwrightOptions, {}).failOnLogLevel;
     const crashed: ReportCrash[] = [];
     const attempt = (attempts.get(task.id) ?? 0) + 1;
     attempts.set(task.id, attempt);
@@ -201,13 +220,15 @@ export const test = base.extend<TermwrightFixtures>({
         return termwright.tmpdir;
       },
       async launch(options: LaunchFixtureOptions = {}): Promise<TerminalHarness> {
-        const command = options.command ?? config.command;
+        const merged = mergeOptions(config, termwrightOptions, options, inheritedEnv());
+        const command = merged.command;
         if (command === undefined || command.length === 0) {
           throw new TypeError(
-            'terminal.launch() needs a command: pass one, or set `command` in defineTermwrightConfig()',
+            'terminal.launch() needs a command: pass one, set it for this file with ' +
+              'test.scoped({ termwrightOptions: { command } }), or set `command` in defineTermwrightConfig()',
           );
         }
-        const { files, template, ...launchOptions } = options;
+        const { files, template, trace: _trace, ...launchOptions } = options;
         const cwd = options.cwd ?? termwright.tmpdir;
         if (files !== undefined || template !== undefined) {
           // Before the program starts: a program that reads its config at
@@ -217,19 +238,18 @@ export const test = base.extend<TermwrightFixtures>({
             ...(template === undefined ? {} : { template }),
           });
         }
-        const { expect: _expect, ...driverTimeouts } = config.timeouts;
         const harness = await launchTerminal({
           ...launchOptions,
           command,
-          columns: options.columns ?? config.columns,
-          rows: options.rows ?? config.rows,
+          columns: merged.columns,
+          rows: merged.rows,
           cwd,
-          env: { ...inheritedEnv(), ...config.env, ...(options.env ?? {}) },
-          timeouts: { ...driverTimeouts, ...(options.timeouts ?? {}) },
+          env: merged.env,
+          timeouts: merged.timeouts,
         });
         const index = sessions.length;
         const dir =
-          config.trace === 'off'
+          merged.trace === 'off'
             ? undefined
             : traceDir(config, { taskId: task.id, name: fullName(task), index, attempt });
         const writer =
@@ -238,12 +258,12 @@ export const test = base.extend<TermwrightFixtures>({
             : createTraceWriter(harness, {
                 dir,
                 command,
-                columns: options.columns ?? config.columns,
-                rows: options.rows ?? config.rows,
+                columns: merged.columns,
+                rows: merged.rows,
               });
         detachers.push(collectLogs(harness, logs).dispose);
         if (writer !== undefined) scope?.writers.push(writer);
-        sessions.push({ harness, writer, dir });
+        sessions.push({ harness, writer, dir, trace: merged.trace });
         harnesses.push(harness);
         return harness;
       },
@@ -263,7 +283,7 @@ export const test = base.extend<TermwrightFixtures>({
     }
 
     for (const session of sessions.reverse()) {
-      const keep = config.trace === 'on' || (failed && config.trace === 'retain-on-failure');
+      const keep = session.trace === 'on' || (failed && session.trace === 'retain-on-failure');
       try {
         await session.harness.close();
       } finally {

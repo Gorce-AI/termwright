@@ -49,6 +49,37 @@ afterAll(() => {
   expect(order).toEqual(['app:setup', 'body', 'app:teardown']);
 });
 
+describe.skipIf(!pty)('options scoped to a suite', () => {
+  // The equivalent of Playwright's test.use(), on Vitest's own mechanism.
+  test.scoped({ termwrightOptions: { columns: 120, trace: 'on' } });
+
+  test('reach the session, and keep what they did not mention', { timeout: 30_000 }, async ({
+    terminal,
+  }) => {
+    const app = await terminal.launch();
+    await app.waitForText('Permission required');
+    // Scoped.
+    expect(app.screen().columns).toBe(120);
+    // From the project configuration, which scoping `columns` and `trace` must
+    // not have dropped: the command is why the program started at all.
+    expect(app.screen().rows).toBe(10);
+  });
+
+  test('are overridden by the call that launches', { timeout: 30_000 }, async ({ terminal }) => {
+    const app = await terminal.launch({ columns: 90 });
+    await app.waitForText('Permission required');
+    expect(app.screen().columns).toBe(90);
+  });
+});
+
+describe.skipIf(!pty)('without a scope', () => {
+  test('the project configuration stands', { timeout: 30_000 }, async ({ terminal }) => {
+    const app = await terminal.launch();
+    await app.waitForText('Permission required');
+    expect(app.screen().columns).toBe(60);
+  });
+});
+
 describe.skipIf(!pty)('a fixture composed on top of the preset', () => {
   appTest('receives a ready program and the preset fixtures beside it', { timeout: 30_000 }, async ({
     app,
