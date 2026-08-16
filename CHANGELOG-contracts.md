@@ -262,3 +262,9 @@
 - 2026-08-16 (ui e6e4403): §UI events gains `action` (driver call/assertion
   mirror of events.jsonl); live producer is the reporter via Vitest 3.2
   onTestAnnotate.
+- 2026-08-16 (#27f): §Trace — `meta.logs.sources` is `{label?, path?}[]` (was
+  `string[]`), and `logs.jsonl` file entries carry `path`, following the
+  driver's `app-log` gaining it (c73b090). Per-entry rather than an index into
+  `sources`, because the driver's own contract says a label can be shared
+  between sources — two nodes logging under `app` must stay distinguishable.
+  No compatibility branch: one generation of producers.

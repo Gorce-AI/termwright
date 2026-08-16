@@ -86,9 +86,11 @@ since session start, monotonic, never resets for the lifetime of a session
   carries either `line` (followed file) or `record` (adapter); both are stored
   as `message`, with `source` preserving the provenance. A file line has NO
   `level` — consumers must not infer one from its text. `meta.logs`
-  summarises: `{ count, dropped, sources, levels }`, where `dropped` counts
-  entries evicted by the writer's ceiling (oldest first) and is computed at
-  finalize, never flushed on a following event. Redaction happens at the
+  summarises: `{ count, dropped, sources, levels }`, where `sources` is
+  `{label?, path?}[]` and `dropped` counts entries evicted by the writer's
+  ceiling (oldest first) and is computed at finalize, never flushed on a
+  following event. A file entry repeats its `path`: a label may be shared
+  between sources, so a label alone cannot attribute a line to its file. Redaction happens at the
   source (`@termwright/logs`); file lines are RAW and carry the same handling
   caveat as `crash.screenTail`.
 
