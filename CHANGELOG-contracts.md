@@ -225,3 +225,7 @@
   dependency relaxation for logs — the level ladder is duplicated locally
   (browser bundle cannot import Node-only protocol) and pinned by an equality
   test against LOG_LEVELS.
+- 2026-08-16 (approved): SessionDiagnostic gains optional `count?: number` —
+  how many things the entry covers (records dropped at source / by driver
+  budget, file lines rate-limited, revisions dropped). Filled wherever the
+  number previously lived only in `detail` prose. Closed code set stays 16.
