@@ -30,7 +30,7 @@ import type {
   TimeoutClasses,
   WaitOptions,
 } from './api.js';
-import type { SemanticRole, SemanticSnapshot } from '@termwright/protocol';
+import type { LogRecord, SemanticRole, SemanticSnapshot } from '@termwright/protocol';
 import {
   DEFAULT_LIMITS,
   DEFAULT_NEGOTIATION_MS,
@@ -123,6 +123,20 @@ const CRASH_INPUT_PREVIEW = 40;
 
 /** How long the exit waits for the child's dying output to finish parsing. */
 const CRASH_DRAIN_MS = 250;
+
+/**
+ * Budget offered to an adapter that announced the `logs` capability.
+ *
+ * The adapter enforces it at the source — that is what keeps a log storm from
+ * eating the frame budget the semantic tree needs — and the driver enforces the
+ * same ceiling again on arrival, because a budget only the sender honours is
+ * not a budget.
+ */
+const LOG_RECORDS_PER_SECOND = 200;
+const LOG_BURST = 500;
+
+/** Window the driver-side record limiter counts in. */
+const LOG_WINDOW_MS = 250;
 
 /** Bounded diagnostics log: a flooding adapter cannot grow it without bound. */
 const MAX_DIAGNOSTICS = 200;
@@ -225,6 +239,13 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #teardownRequested = false;
   #debug: DebugLog | null = null;
   #logs: LogTailer | null = null;
+  /** Wall clock and session clock as they stood at the handshake. */
+  #clockAnchor: { epochMs: number; sessionMs: number } | null = null;
+  #logWindowStartedAt = 0;
+  #logWindowRecords = 0;
+  #logDroppedInWindow = 0;
+  #logDropTimer: NodeJS.Timeout | null = null;
+  #lastLogSeq: number | null = null;
   /** When the generic verdict becomes final; null while semantics are still possible. */
   #genericDefiniteAt: number | null = null;
   #graceTimer: NodeJS.Timeout | null = null;
@@ -274,9 +295,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       token: this.#token,
       limits: DEFAULT_LIMITS,
       acceptHello: () => this.semanticPossible(),
+      logBudget: { maxRecordsPerSecond: LOG_RECORDS_PER_SECOND, burst: LOG_BURST },
       hooks: {
         onAttach: (attachment) => this.#onAttach(attachment),
         onSnapshot: (snapshot) => this.#pairing.offerSnapshot(snapshot),
+        onLogRecord: (record) => this.#publishLogRecord(record),
         onCommit: (revision) =>
           this.#diagnostic(
             'revision-commit',
@@ -763,6 +786,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       await Promise.race([this.exit, delay(CLOSE_GRACE_MS)]);
     }
     if (this.#exitStatus === null) this.#onExit({ code: null, signal: null });
+    this.#flushLogDrops();
     await this.#logs?.stop();
     await this.#channel?.close();
     this.#vt.dispose();
@@ -804,7 +828,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       log.line('api', `exited code=${String(code)} signal=${String(signal)}`),
     );
     this.#emitter.on('app-log', (entry) =>
-      log.line('app', `${entry.label ?? 'log'} | ${entry.line ?? JSON.stringify(entry.record)}`),
+      log.line(
+        'app',
+        `${entry.label ?? 'log'} | ${entry.line ?? `${entry.record?.level ?? '?'} ${entry.record?.message ?? ''}`}`,
+      ),
     );
     if (log.logsIo) {
       this.#emitter.on('output', ({ data }) => log.line('io', `out ${formatBytes(data)}`));
@@ -842,6 +869,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   #onAttach(attachment: SemanticAttachment): void {
     const late = this.#settled;
+    // Anchor the two clocks against each other once, while both are being read
+    // in the same instant.
+    this.#clockAnchor = { epochMs: Date.now(), sessionMs: this.#now() };
     this.#attachment = attachment;
     this.#genericDefiniteAt = null;
     if (this.#graceTimer !== null) {
@@ -869,6 +899,88 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       line,
       timeMs: this.#now(),
     });
+  }
+
+  /**
+   * Publishes one adapter log record.
+   *
+   * Two things have to be reconciled. The record carries a wall-clock
+   * timestamp, because that is the only clock an adapter and a driver can agree
+   * on without negotiating one; the session timeline is monotonic milliseconds
+   * since start. They are rebased through the offset measured at the handshake
+   * and clamped into the session, so a skewed or adjusted wall clock cannot
+   * place a record before the session began or in the future.
+   *
+   * The adapter also rate-limits at the source and leaves a gap in `seq` when
+   * it drops; that gap is reported here, because only the adapter knows what it
+   * threw away.
+   */
+  #publishLogRecord(record: LogRecord): void {
+    if (this.#closed) return;
+
+    if (this.#lastLogSeq !== null && record.seq > this.#lastLogSeq + 1) {
+      const lost = record.seq - this.#lastLogSeq - 1;
+      this.#diagnostic(
+        'log-dropped',
+        `the adapter dropped ${lost} log record${lost === 1 ? '' : 's'} before seq ${record.seq}: ` +
+          'it was over the budget granted in the handshake',
+      );
+    }
+    this.#lastLogSeq = record.seq;
+
+    const now = Date.now();
+    if (now - this.#logWindowStartedAt >= LOG_WINDOW_MS) {
+      this.#flushLogDrops();
+      this.#logWindowStartedAt = now;
+      this.#logWindowRecords = 0;
+    }
+    const perWindow = Math.ceil((LOG_RECORDS_PER_SECOND * LOG_WINDOW_MS) / 1000);
+    if (this.#logWindowRecords >= perWindow) {
+      this.#logDroppedInWindow += 1;
+      // A flood that stops would never report what it lost if the count waited
+      // for the next record, so the window closes itself.
+      if (this.#logDropTimer === null) {
+        this.#logDropTimer = setTimeout(() => {
+          this.#logDropTimer = null;
+          this.#flushLogDrops();
+        }, LOG_WINDOW_MS);
+        this.#logDropTimer.unref?.();
+      }
+      return;
+    }
+    this.#logWindowRecords += 1;
+
+    this.#emitter.emit('app-log', {
+      source: 'adapter',
+      ...(record.logger !== undefined ? { label: record.logger } : {}),
+      record,
+      timeMs: this.#sessionTimeOf(record.ts),
+    });
+  }
+
+  /** Rebases an adapter's epoch timestamp onto the session timeline. */
+  #sessionTimeOf(epochMs: number): number {
+    const anchor = this.#clockAnchor;
+    const now = this.#now();
+    if (anchor === null) return now;
+    const rebased = anchor.sessionMs + (epochMs - anchor.epochMs);
+    return Math.min(Math.max(rebased, 0), now);
+  }
+
+  /** Reports records the driver itself refused, once per window. */
+  #flushLogDrops(): void {
+    if (this.#logDropTimer !== null) {
+      clearTimeout(this.#logDropTimer);
+      this.#logDropTimer = null;
+    }
+    if (this.#logDroppedInWindow === 0) return;
+    const dropped = this.#logDroppedInWindow;
+    this.#logDroppedInWindow = 0;
+    this.#diagnostic(
+      'log-dropped',
+      `refused ${dropped} log record${dropped === 1 ? '' : 's'} from the adapter: ` +
+        `more than ${LOG_RECORDS_PER_SECOND} records per second arrived despite the negotiated budget`,
+    );
   }
 
   #publishSemantic(snapshot: SemanticSnapshot): void {

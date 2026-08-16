@@ -190,3 +190,74 @@ describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, ()
     expect(lines.length).toBe(afterClose);
   });
 });
+
+describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout: 20_000 }, () => {
+  async function launchSemantic(options: Record<string, unknown> = {}): Promise<Harness> {
+    const terminal = await launchTerminal({
+      command: [process.execPath, join(FIXTURES, 'semantic-app.mjs')],
+      columns: 60,
+      rows: 10,
+      semanticNegotiationMs: 5_000,
+      ...options,
+    });
+    open.push(terminal);
+
+    const lines: AppLogEvent[] = [];
+    const logDiagnostics: SessionDiagnostic[] = [];
+    terminal.events.on('app-log', (entry) => lines.push(entry));
+    terminal.events.on('diagnostic', (entry) => {
+      if (entry.code === 'log-dropped' || entry.code === 'log-source') logDiagnostics.push(entry);
+    });
+    await terminal.getByTestId('approve').resolve();
+    return { terminal, lines, logDiagnostics };
+  }
+
+  it('negotiates the channel and publishes records on the session timeline', async () => {
+    const { terminal, lines } = await launchSemantic();
+    expect(terminal.capabilities().capabilities).toContain('logs');
+
+    await terminal.press('g');
+    await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(1);
+
+    const entry = lines[0];
+    expect(entry?.source).toBe('adapter');
+    expect(entry?.line).toBeUndefined();
+    expect(entry?.record?.message).toBe('a single record');
+    expect(entry?.record?.level).toBe('info');
+    // The logger name becomes the label, so both sources read the same way.
+    expect(entry?.label).toBe('fixture');
+
+    // The record's own clock is epoch milliseconds; the event is rebased onto
+    // the session timeline and can never land in the future or before the start.
+    expect(entry?.record?.ts).toBeGreaterThan(1_600_000_000_000);
+    expect(entry?.timeMs).toBeGreaterThan(0);
+    expect(entry?.timeMs).toBeLessThan(60_000);
+  });
+
+  it('reports what the adapter dropped at the source, from the seq gap', async () => {
+    const { terminal, lines, logDiagnostics } = await launchSemantic();
+    await terminal.press('g');
+    await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(1);
+
+    await terminal.press('S');
+    await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(2);
+
+    const dropped = logDiagnostics.find((entry) => entry.code === 'log-dropped');
+    expect(dropped?.detail).toContain('the adapter dropped 5 log records');
+    expect(lines[1]?.record?.message).toBe('after a local drop');
+  });
+
+  it('enforces the budget again on arrival, and says so', async () => {
+    const { terminal, lines, logDiagnostics } = await launchSemantic();
+
+    await terminal.press('G');
+    await expect
+      .poll(() => logDiagnostics.some((entry) => entry.detail.includes('refused')), { timeout: 8_000 })
+      .toBe(true);
+
+    // Far fewer than the 400 records the fixture sent, and the session lives on.
+    expect(lines.length).toBeLessThan(400);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(await terminal.getByTestId('approve').textContent()).toBe('Approve');
+  });
+});

@@ -29,6 +29,7 @@ import {
   PROTOCOL_ID,
   type AdapterCapability,
   type AdapterToDriverMessage,
+  type LogRecord,
   type HelloAckMessage,
   type HelloMessage,
   type ProtocolErrorMessage,
@@ -45,6 +46,14 @@ export interface SemanticAttachment {
   readonly capabilities: readonly AdapterCapability[];
   /** True when the adapter promised render-commit markers in stdout. */
   readonly markerEnabled: boolean;
+  /** True when the log channel was negotiated in the handshake. */
+  readonly logsEnabled: boolean;
+}
+
+/** Budget the driver grants an adapter that announced the `logs` capability. */
+export interface LogBudget {
+  readonly maxRecordsPerSecond: number;
+  readonly burst: number;
 }
 
 /** Callbacks the session installs on the channel. */
@@ -63,6 +72,8 @@ export interface SemanticChannelHooks {
   onCommit(revision: number): void;
   /** The handshake completed; the session is semantic from here on. */
   onAttach(attachment: SemanticAttachment): void;
+  /** One validated application log record arrived on the channel. */
+  onLogRecord(record: LogRecord): void;
   /** Non-fatal channel diagnostics (negotiation, disconnects, advisory commits). */
   onDiagnostic(code: DiagnosticCode, detail: string, revision?: number): void;
   /**
@@ -85,11 +96,16 @@ export interface SemanticChannelOptions {
    * bounded late-attach grace); until then a slow child is still welcome.
    */
   acceptHello(): boolean;
+  /** Budget offered to an adapter that announced the `logs` capability. */
+  readonly logBudget: LogBudget;
   readonly hooks: SemanticChannelHooks;
 }
 
 /** Capability that makes render markers — and therefore pairing — meaningful. */
 const MARKER_CAPABILITY: AdapterCapability = 'render-revisions';
+
+/** Capability that opens the application log channel. */
+const LOGS_CAPABILITY: AdapterCapability = 'logs';
 
 const CAPABILITY_SET: ReadonlySet<string> = new Set(ADAPTER_CAPABILITIES);
 
@@ -263,6 +279,7 @@ export class SemanticChannel {
 
     this.#attached = socket;
     const markerEnabled = capabilities.includes(MARKER_CAPABILITY);
+    const logsEnabled = capabilities.includes(LOGS_CAPABILITY);
     const ack: HelloAckMessage = {
       type: 'hello-ack',
       protocol: PROTOCOL_ID,
@@ -270,12 +287,15 @@ export class SemanticChannel {
       limits: this.#options.limits,
       subscribe: 'snapshots',
       marker: { enabled: markerEnabled },
+      // Absent means disabled: an adapter without this field must stay quiet.
+      ...(logsEnabled ? { logs: { enabled: true, ...this.#options.logBudget } } : {}),
     };
     this.#send(socket, ack);
     this.#attachment = Object.freeze({
       adapter: Object.freeze({ name: hello.adapter.name, version: hello.adapter.version }),
       capabilities: Object.freeze(capabilities),
       markerEnabled,
+      logsEnabled,
     });
     this.#options.hooks.onAttach(this.#attachment);
     if (!markerEnabled) {
@@ -299,6 +319,15 @@ export class SemanticChannel {
           return false;
         }
         this.#options.hooks.onSnapshot(message.snapshot);
+        return true;
+      }
+      case 'log': {
+        if (this.#attachment?.logsEnabled !== true) {
+          // The budget was never granted, so these records were never invited.
+          this.#fail(socket, 'malformed', 'log record sent without a negotiated log channel');
+          return false;
+        }
+        this.#options.hooks.onLogRecord(message.record);
         return true;
       }
       case 'hello':

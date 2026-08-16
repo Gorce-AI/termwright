@@ -148,6 +148,16 @@ write); one that already exists is followed from its current end, so a session
 never replays a previous run. Truncation and rotation restart the tail instead
 of failing, with a `log-source` diagnostic saying why.
 
+An instrumented application can also publish **structured** records over the
+semantic channel: an adapter that announces the `logs` capability is granted a
+rate budget in the handshake and its records arrive on the same event with
+`source: 'adapter'` and a `record` instead of a `line`. Records carry a
+wall-clock timestamp — the only clock both sides can agree on — which the driver
+rebases onto the session timeline using the offset measured at the handshake,
+clamped so a skewed clock cannot place a record in the future. A gap in the
+record sequence means the adapter dropped records at the source, and is
+reported as `log-dropped`.
+
 `timeMs` is when the driver *read* the line, not when the program wrote it —
 they differ by up to one poll interval, so treat it as an upper bound. Bounded
 throughout: lines longer than 4 KiB are truncated with an ellipsis, and a source

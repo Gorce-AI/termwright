@@ -5,7 +5,7 @@
  */
 import { connect, type Socket } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_LIMITS, encodeFrame, type SemanticSnapshot } from '@termwright/protocol';
+import { DEFAULT_LIMITS, encodeFrame, type LogRecord, type SemanticSnapshot } from '@termwright/protocol';
 import type { ProtocolViolationError } from './errors.js';
 import { SemanticChannel, type SemanticAttachment } from './semantic.js';
 
@@ -15,6 +15,7 @@ const TOKEN = 'a-very-secret-token';
 interface Harness {
   channel: SemanticChannel;
   snapshots: SemanticSnapshot[];
+  records: LogRecord[];
   attachments: SemanticAttachment[];
   diagnostics: string[];
   violations: ProtocolViolationError[];
@@ -33,6 +34,7 @@ afterEach(async () => {
 
 async function createChannel(accepting = true): Promise<Harness> {
   const snapshots: SemanticSnapshot[] = [];
+  const records: LogRecord[] = [];
   const attachments: SemanticAttachment[] = [];
   const diagnostics: string[] = [];
   const violations: ProtocolViolationError[] = [];
@@ -42,8 +44,10 @@ async function createChannel(accepting = true): Promise<Harness> {
     token: TOKEN,
     limits: DEFAULT_LIMITS,
     acceptHello: () => accepting,
+    logBudget: { maxRecordsPerSecond: 200, burst: 500 },
     hooks: {
       onSnapshot: (snapshot) => snapshots.push(snapshot),
+      onLogRecord: (record) => records.push(record),
       onCommit: () => {},
       onAttach: (attachment) => attachments.push(attachment),
       onDiagnostic: (code, detail) => diagnostics.push(`${code}: ${detail}`),
@@ -54,7 +58,7 @@ async function createChannel(accepting = true): Promise<Harness> {
     },
   });
   open.push({ channel, sockets: [] });
-  return { channel, snapshots, attachments, diagnostics, violations, wireCodes };
+  return { channel, snapshots, records, attachments, diagnostics, violations, wireCodes };
 }
 
 interface Client {
@@ -293,6 +297,59 @@ describe('SemanticChannel', () => {
     await client.closed;
     expect(harness.attachments).toHaveLength(0);
     expect(harness.diagnostics.join('\n')).toContain('settled as generic');
+  });
+
+  it('grants a log budget only to an adapter that asked for logs', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+
+    client.send(hello({ capabilities: ['tree', 'logs'] }));
+    const ack = await client.next();
+    expect(ack['logs']).toEqual({ enabled: true, maxRecordsPerSecond: 200, burst: 500 });
+    expect(harness.attachments[0]?.logsEnabled).toBe(true);
+
+    client.send({
+      type: 'log',
+      record: { ts: Date.now(), level: 'info', message: 'hello from the adapter', seq: 1 },
+    });
+    await expect.poll(() => harness.records.length).toBe(1);
+    expect(harness.records[0]?.message).toBe('hello from the adapter');
+  });
+
+  it('omits the budget when the capability was not announced', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+
+    client.send(hello({ capabilities: ['tree'] }));
+    const ack = await client.next();
+    // Absent means disabled; the adapter must stay quiet.
+    expect(ack['logs']).toBeUndefined();
+    expect(harness.attachments[0]?.logsEnabled).toBe(false);
+  });
+
+  it('closes the channel on a log record nobody invited', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+    client.send(hello({ capabilities: ['tree'] }));
+    await client.next();
+
+    client.send({ type: 'log', record: { ts: Date.now(), level: 'warn', message: 'x', seq: 1 } });
+    const error = await client.next();
+    expect(error['code']).toBe('malformed');
+    await client.closed;
+    expect(harness.records).toHaveLength(0);
+  });
+
+  it('rejects a log record that does not validate', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+    client.send(hello({ capabilities: ['tree', 'logs'] }));
+    await client.next();
+
+    client.send({ type: 'log', record: { ts: Date.now(), level: 'shouting', message: 'x', seq: 1 } });
+    const error = await client.next();
+    expect(error['type']).toBe('error');
+    expect(harness.records).toHaveLength(0);
   });
 
   it('removes the endpoint on close', async () => {

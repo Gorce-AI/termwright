@@ -25,6 +25,8 @@ let revision = 0;
 let focused = 'approve';
 let socket = null;
 let lastEvent = 'none';
+let logSeq = 0;
+let logBudget = null;
 let typed = '';
 
 function draw() {
@@ -97,6 +99,20 @@ function stripBounds(snapshot) {
   };
 }
 
+function sendLog(level, message, extra = {}) {
+  if (socket === null || logBudget === null) return;
+  logSeq += 1;
+  socket.write(
+    encodeFrame(
+      {
+        type: 'log',
+        record: { ts: Date.now(), level, message, seq: logSeq, logger: 'fixture', ...extra },
+      },
+      1024 * 1024,
+    ),
+  );
+}
+
 function publish() {
   revision += 1;
   draw();
@@ -127,6 +143,21 @@ process.stdin.on('data', (chunk) => {
   if (text === '\x03' || text === 'q') {
     process.stdout.write('BYE\r\n');
     process.exit(0);
+  }
+  if (text === 'g') {
+    sendLog('info', 'a single record');
+    return;
+  }
+  if (text === 'G') {
+    // Far over the granted budget, on purpose.
+    for (let index = 0; index < 400; index += 1) sendLog('debug', `flood ${index}`);
+    return;
+  }
+  if (text === 'S') {
+    // A gap in seq is how an adapter reports what it dropped at the source.
+    logSeq += 5;
+    sendLog('warn', 'after a local drop');
+    return;
   }
   if (text === 'X') {
     // Dies on its own, with a semantic tree already published.
@@ -172,7 +203,7 @@ if (endpoint === undefined || token === undefined) {
           protocol: 'termwright/1',
           token,
           adapter: { name: 'fixture', version: '0.1.0' },
-          capabilities: ['tree', 'bounds', 'states', 'actions', 'render-revisions'],
+          capabilities: ['tree', 'bounds', 'states', 'actions', 'render-revisions', 'logs'],
         },
         1024 * 1024,
       ),
@@ -185,6 +216,8 @@ if (endpoint === undefined || token === undefined) {
     pending = decodeFrames(Buffer.concat([pending, chunk]), (message) => {
       if (message.type === 'hello-ack') {
         sessionId = message.sessionId;
+        // Absent 'logs' means the channel was not granted: stay quiet.
+        logBudget = message.logs?.enabled === true ? message.logs : null;
         publish();
       }
     });
