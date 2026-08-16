@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createNodePtyBackend } from '@termwright/driver';
 import { Client, connectClient } from './sdk-facade.js';
 import { ERROR_META_KEY, serveInMemory } from './server.js';
@@ -132,7 +132,19 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     });
     expect(waited.isError, waited.text).toBe(false);
 
-    const since = await call('terminal.capture_since', { terminal, cursor });
+    // Same hazard as the stale-ref test: the click's semantic revision lands
+    // after the screen shows its effect, and settleSemantics only budgets
+    // 250 ms for the pairing. Re-asking with the SAME cursor is lossless, so
+    // poll until the subtrees arrive rather than assume one call catches them.
+    let since = await call('terminal.capture_since', { terminal, cursor });
+    await vi.waitFor(
+      async () => {
+        since = await call('terminal.capture_since', { terminal, cursor });
+        expect((since.data['changedSubtrees'] as unknown[]).length).toBeGreaterThan(0);
+      },
+      { timeout: 15_000, interval: 50 },
+    );
+
     expect(since.isError, since.text).toBe(false);
     const changedRows = since.data['changedRows'] as { row: number; text: string }[];
     expect(changedRows.some((row) => row.text.includes('CLICKED reject'))).toBe(true);
@@ -173,10 +185,23 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     const refs = snapshot.data['refs'] as { ref: string; name: string }[];
     const approve = refs.find((entry) => entry.name === 'Approve');
     expect(approve).toBeDefined();
+    const mintedAt = snapshot.data['semanticRevision'] as number;
+    expect(mintedAt).toBeGreaterThan(0);
 
     // Tab re-renders the fixture, which publishes a new semantic revision.
     await call('terminal.press', { terminal, keys: 'Tab' });
-    await call('terminal.wait_for', { terminal, wait: 'stable', timeout: 3_000 });
+
+    // Wait for the revision itself, not for the screen to settle: "stable" can
+    // return before the new tree is observable, and on a slow ConPTY it did —
+    // the old ref was then still current, so the tool correctly did NOT fail
+    // and the assertion below tested timing rather than the staleness rule.
+    await vi.waitFor(
+      async () => {
+        const now = await call('terminal.snapshot', { terminal });
+        expect(now.data['semanticRevision']).toBeGreaterThan(mintedAt);
+      },
+      { timeout: 15_000, interval: 50 },
+    );
 
     const stale = await call('terminal.click', { terminal, ref: approve?.ref });
     expect(stale.isError).toBe(true);
