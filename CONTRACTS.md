@@ -62,6 +62,11 @@ package boundaries must be `TermwrightError` subclasses. All I/O bounded per
 `DEFAULT_LIMITS`/`ABSOLUTE_LIMITS`. Hostile-input suites must pass under
 `node --max-old-space-size=128`.
 
+"The screen settled" and "the semantic tree caught up" are TWO different
+events — the tree travels over the socket, the commit marker over the byte
+stream. Any test that reads semantics after an action waits for the
+REVISION to advance, never for the render to settle.
+
 Validation-rule discipline (born of the frameworkType incident): a runtime
 validation rule has no reflection in the types, so a clean typecheck proves
 nothing about its blast radius — the rule's author asks "who produces values
