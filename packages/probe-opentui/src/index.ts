@@ -14,4 +14,6 @@ export { onRendererCreated, RENDERER_HOOK } from './attach.js';
 export type { ObservedRenderer } from './attach.js';
 export { detectRuntime, isInstrumented } from './runtime.js';
 export type { EnvSource, ProbeRuntime } from './runtime.js';
-export { buildShimSource, shouldShim, originalUrl, ORIGINAL_MARKER, OPENTUI_ENTRY_PATTERN } from './shim.js';
+export { buildShimSource, shouldShim, originalUrl, toModuleUrl, ORIGINAL_MARKER, OPENTUI_ENTRY_PATTERN } from './shim.js';
+export { observeTree } from './observe.js';
+export type { ObservableNode, ObserveOptions, Observation } from './observe.js';
