@@ -204,6 +204,21 @@ inconsistent, while a log line is an independent event: taxing every call with a
 poll interval to catch one that may not exist buys less than it costs, and the
 next capture picks it up without loss.
 
+## Live and archived logs meet in one projection
+
+`logs.ts` owns the entry shape and the renderer; the live side fills it from
+`app-log` events, the replay side from `@termwright/trace`'s `TraceLogEntry`
+(`fromTraceLog`). An archived entry has no arrival sequence of its own for a
+followed file, so its position in the stream stands in, and its `timeMs` is the
+cast offset — the timeline the replay tools already speak, as with crashes.
+
+`trace.frame_at` takes the window the reader already computes (`stateAt`'s
+`logWindow`), while `trace.diff` streams `logs()` and keeps what falls strictly
+inside the two cast offsets. Both are clamped to the recording, so a window that
+runs past the end simply stops there — a test pins that, because the alternative
+(silently reporting entries from beyond the frames being compared) would make a
+diff describe something it did not show.
+
 ## Crash reporting happens in one place
 
 `server.ts: withCrashContext()` attaches the crash to *any* failed tool call

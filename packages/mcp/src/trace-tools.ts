@@ -13,10 +13,18 @@
  */
 import { z } from 'zod';
 import { frameFromAnsi } from '@termwright/trace';
-import type { StepSummary, TraceFrame, TraceMeta, TraceReader } from '@termwright/trace';
+import type {
+  StepSummary,
+  TraceFrame,
+  TraceLogEntry,
+  TraceMeta,
+  TraceReader,
+} from '@termwright/trace';
 import { crashSchema, renderCrash } from './crash.js';
 import type { CrashProjection } from './crash.js';
 import { diffRows, diffSemantic } from './diff.js';
+import { LOG_LIMITS, logEntrySchema, renderLogs } from './logs.js';
+import type { LogEntry } from './logs.js';
 import { usageError } from './errors.js';
 import { formatCompactSnapshot, refEntries } from './format.js';
 import type { SemanticSnapshot } from './model.js';
@@ -148,12 +156,56 @@ interface Frame {
   readonly semantic: SemanticSnapshot | null;
   readonly semanticRevision: number | null;
   readonly step: StepSummary | null;
+  /** What the program was saying about itself as the screen reached this state. */
+  readonly logs: readonly LogEntry[];
 }
 
-async function frameAt(trace: OpenTrace, timeMs: number): Promise<Frame> {
+/**
+ * Projects an archived log entry into the shape the live tools use.
+ *
+ * `timeMs` carries the cast offset — the timeline `frame_at` and `diff` already
+ * speak — and an entry from a followed file has no sequence of its own, so its
+ * position in the stream stands in.
+ */
+function fromTraceLog(entry: TraceLogEntry, index: number): LogEntry {
+  return {
+    seq: entry.seq ?? index + 1,
+    timeMs: entry.castOffset,
+    source: entry.source,
+    ...(entry.label === undefined ? {} : { label: entry.label }),
+    ...(entry.level === undefined ? {} : { level: entry.level }),
+    message: entry.message,
+    ...(entry.attrs === undefined ? {} : { attrs: { ...entry.attrs } }),
+  };
+}
+
+/** Log entries recorded strictly between two cast offsets, oldest first. */
+async function logsBetween(
+  reader: TraceReader,
+  fromMs: number,
+  toMs: number,
+  limit: number,
+): Promise<{ readonly entries: readonly LogEntry[]; readonly omitted: number }> {
+  if (limit <= 0) return { entries: [], omitted: 0 };
+  const window: LogEntry[] = [];
+  let index = 0;
+  let seen = 0;
+  for await (const entry of reader.logs()) {
+    if (entry.castOffset > fromMs && entry.castOffset <= toMs) {
+      seen += 1;
+      window.push(fromTraceLog(entry, index));
+      // Newest kept: a failure is explained by the end of the window.
+      if (window.length > limit) window.shift();
+    }
+    index += 1;
+  }
+  return { entries: window, omitted: seen - window.length };
+}
+
+async function frameAt(trace: OpenTrace, timeMs: number, logWindow = 20): Promise<Frame> {
   // One reconstruction serves both halves: `stateAt` for the cast prefix and the
   // nearest semantic record, `frameFromAnsi` to replay that prefix into cells.
-  const state = await trace.reader.stateAt(timeMs);
+  const state = await trace.reader.stateAt(timeMs, { logWindow });
   const grid = await frameFromAnsi(state.castPrefix, {
     columns: state.columns,
     rows: state.rows,
@@ -169,6 +221,7 @@ async function frameAt(trace: OpenTrace, timeMs: number): Promise<Frame> {
     semantic: (state.nearestSemantic?.snapshot as SemanticSnapshot | undefined) ?? null,
     semanticRevision: state.nearestSemanticRevision,
     step: state.step,
+    logs: state.logs.map((entry, index) => fromTraceLog(entry, index)),
   };
 }
 
@@ -357,6 +410,13 @@ const frame = defineTool({
     stepIndex: z.number().int().min(0).optional().describe('step index from trace.overview'),
     marker: z.string().optional().describe('cast marker label from trace.overview'),
     maxRows: z.number().int().min(1).max(10_000).optional(),
+    maxLogs: z
+      .number()
+      .int()
+      .min(0)
+      .max(500)
+      .optional()
+      .describe('preceding application log entries to include; default 20, 0 to skip'),
     ...screenshotShape,
   },
   outputSchema: {
@@ -368,6 +428,7 @@ const frame = defineTool({
     semanticTree: semanticTreeState,
     step: stepSchema.partial().nullable(),
     refs: z.array(refEntrySchema),
+    logs: z.array(logEntrySchema),
     compact: z.string(),
     screenshot: screenshotSchema.optional(),
   },
@@ -375,8 +436,12 @@ const frame = defineTool({
   handler: async (context, args) => {
     const trace = context.traces.get(args.traceId);
     const at = await resolveTime(trace, args);
-    const reconstructed = await frameAt(trace, at);
+    const reconstructed = await frameAt(trace, at, args.maxLogs ?? 20);
     const compact = renderFrame(trace, reconstructed, args.maxRows);
+    const logs =
+      reconstructed.logs.length === 0
+        ? ''
+        : `\n${renderLogs({ entries: reconstructed.logs, omitted: 0, cursor: 0 })}`;
     const step = reconstructed.step;
     const image =
       args.screenshot === true
@@ -386,7 +451,7 @@ const frame = defineTool({
           })
         : undefined;
     return {
-      text: compact,
+      text: `${compact}${logs}`,
       ...(image === undefined ? {} : { images: [image] }),
       data: {
         traceId: trace.id,
@@ -400,6 +465,7 @@ const frame = defineTool({
           reconstructed.semantic === null
             ? []
             : refEntries(reconstructed.semantic).map((entry) => ({ ...entry, flags: [...entry.flags] })),
+        logs: reconstructed.logs.map((entry) => ({ ...entry })),
         compact,
         ...(image === undefined ? {} : { screenshot: describeImage(image) }),
       },
@@ -419,6 +485,13 @@ const diff = defineTool({
     toMs: z.number().min(0),
     maxRows: z.number().int().min(1).max(10_000).optional(),
     maxSubtrees: z.number().int().min(1).max(1_000).optional(),
+    maxLogs: z
+      .number()
+      .int()
+      .min(0)
+      .max(500)
+      .optional()
+      .describe(`application log entries between the two moments; default ${LOG_LIMITS.maxPerResponse}, 0 to skip`),
   },
   outputSchema: {
     traceId: z.string(),
@@ -435,6 +508,8 @@ const diff = defineTool({
         compact: z.string(),
       }),
     ),
+    logs: z.array(logEntrySchema),
+    logsOmitted: z.number().int(),
     compact: z.string(),
   },
   annotations: { readOnlyHint: true },
@@ -443,8 +518,14 @@ const diff = defineTool({
       throw usageError('toMs must not precede fromMs', 'swap the two, or read trace.overview for the timeline');
     }
     const trace = context.traces.get(args.traceId);
-    const before = await frameAt(trace, args.fromMs);
-    const after = await frameAt(trace, args.toMs);
+    const before = await frameAt(trace, args.fromMs, 0);
+    const after = await frameAt(trace, args.toMs, 0);
+    const logs = await logsBetween(
+      trace.reader,
+      before.timeMs,
+      after.timeMs,
+      args.maxLogs ?? LOG_LIMITS.maxPerResponse,
+    );
 
     const changedRows = diffRows(before.lines, after.lines).slice(
       0,
@@ -466,6 +547,7 @@ const diff = defineTool({
       const marker = subtree.change === 'added' ? '+' : subtree.change === 'removed' ? '-' : '~';
       for (const line of subtree.compact.split('\n')) lines.push(`  ${marker} ${line}`);
     }
+    lines.push(renderLogs({ entries: logs.entries, omitted: logs.omitted, cursor: 0 }));
 
     return {
       text: lines.join('\n'),
@@ -476,6 +558,8 @@ const diff = defineTool({
         semanticTree: after.semantic === null ? ('unavailable' as const) : ('available' as const),
         changedRows: changedRows.map((row) => ({ ...row })),
         changedSubtrees: changedSubtrees.map((subtree) => ({ ...subtree })),
+        logs: logs.entries.map((entry) => ({ ...entry })),
+        logsOmitted: logs.omitted,
         compact: lines.join('\n'),
       },
     };

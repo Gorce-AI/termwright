@@ -108,6 +108,29 @@ async function workspace(): Promise<string> {
   return dir;
 }
 
+/** Adds a logs.jsonl to a recorded archive, the way the trace writer does. */
+async function withLogs(path: string): Promise<string> {
+  const entries = [
+    { t: 500, castOffset: 500, source: 'file', label: 'app', message: 'INFO booted' },
+    {
+      t: 2_100,
+      castOffset: 2_100,
+      source: 'adapter',
+      label: 'http',
+      level: 'error',
+      message: 'upstream refused the token',
+      seq: 7,
+    },
+    { t: 2_600, castOffset: 2_600, source: 'file', label: 'app', message: 'INFO retrying' },
+  ];
+  await writeFile(join(path, 'logs.jsonl'), `${entries.map((e) => JSON.stringify(e)).join('\n')}\n`, 'utf8');
+  const metaPath = join(path, 'meta.json');
+  const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
+  meta['logs'] = { count: entries.length, sources: ['app', 'http'] };
+  await writeFile(metaPath, JSON.stringify(meta), 'utf8');
+  return path;
+}
+
 /** Records a two-step session whose second step fails, and returns its path. */
 async function recordSample(): Promise<string> {
   const path = join(await workspace(), 'sample.twtrace');
@@ -534,5 +557,73 @@ describe('a crash recorded in the archive', () => {
 
     expect(overview.isError, overview.text).toBe(false);
     expect(overview.data['crash']).toBeUndefined();
+  });
+});
+
+describe('application logs in a recording', () => {
+  it('shows what the program was saying as the screen reached a frame', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await withLogs(await recordSample()) });
+    const frame = await call('trace.frame_at', { traceId: data['traceId'], timeMs: 2_500 });
+
+    expect(frame.isError, frame.text).toBe(false);
+    const logs = frame.data['logs'] as { message: string; level?: string }[];
+    // Everything up to that moment, not after it.
+    expect(logs.map((entry) => entry.message)).toEqual(['INFO booted', 'upstream refused the token']);
+    expect(logs[1]?.level).toBe('error');
+    expect(frame.text).toContain('upstream refused the token');
+  });
+
+  it('honours a log window of zero', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await withLogs(await recordSample()) });
+    const frame = await call('trace.frame_at', {
+      traceId: data['traceId'],
+      timeMs: 2_500,
+      maxLogs: 0,
+    });
+
+    expect(frame.data['logs']).toEqual([]);
+    expect(frame.text).not.toContain('upstream refused');
+  });
+
+  it('reports the log entries between two moments in a diff', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await withLogs(await recordSample()) });
+    const diff = await call('trace.diff', { traceId: data['traceId'], fromMs: 1_000, toMs: 2_500 });
+
+    expect(diff.isError, diff.text).toBe(false);
+    const logs = diff.data['logs'] as { message: string }[];
+    // Strictly inside the window: 'booted' is before it, 'retrying' after.
+    expect(logs.map((entry) => entry.message)).toEqual(['upstream refused the token']);
+    expect(diff.data['logsOmitted']).toBe(0);
+    expect(diff.text).toContain('upstream refused the token');
+  });
+
+  it('counts what the response ceiling trimmed from a diff window', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await withLogs(await recordSample()) });
+    const diff = await call('trace.diff', {
+      traceId: data['traceId'],
+      fromMs: 0,
+      toMs: 3_000,
+      maxLogs: 1,
+    });
+
+    // The window is clamped to the recording, so the entry logged after the
+    // last frame is out of range; of what remains, the newest is kept.
+    expect(diff.data['toMs']).toBeLessThan(2_600);
+    const logs = diff.data['logs'] as { message: string }[];
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.message).toBe('upstream refused the token');
+    expect(diff.data['logsOmitted']).toBe(1);
+    expect(diff.text).toContain('1 omitted');
+  });
+
+  it('says nothing about logs for a recording that has none', async () => {
+    const call = await connectSession();
+    const { data } = await call('trace.open', { path: await recordSample() });
+    const frame = await call('trace.frame_at', { traceId: data['traceId'], stepIndex: 0 });
+    expect(frame.data['logs']).toEqual([]);
   });
 });

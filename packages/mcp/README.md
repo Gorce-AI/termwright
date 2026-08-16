@@ -172,6 +172,11 @@ call; re-asking with the same cursor is lossless.
 Structured records from an instrumented adapter keep their level, logger and
 attributes; a followed file yields the raw line.
 
+The same view exists for a recording: `trace.frame_at` returns the entries
+leading up to that moment (`maxLogs`, default 20) and `trace.diff` the ones
+between the two, so "what was it saying when the screen looked like this" reads
+the same live and in replay.
+
 ## Crashes
 
 When a child dies on its own, the driver records what the session knew and this
