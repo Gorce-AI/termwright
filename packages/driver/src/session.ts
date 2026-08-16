@@ -6,6 +6,7 @@
  * wait is driven by revisions or process events — the driver never sleeps.
  */
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import type {
   ActionEvent,
   AppLogSource,
@@ -50,6 +51,7 @@ import {
   SessionClosedError,
   TimeoutError,
   UnsupportedActionError,
+  NotFoundError,
 } from './errors.js';
 import { DebugLog, debugMode, formatBytes, instrument } from './debug.js';
 import { SessionEventEmitter } from './events.js';
@@ -353,6 +355,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       }
       this.#pairing.offerMarker(verified.revision, marker.screenRevision);
     });
+
+    assertLaunchPathsExist(this.#options.command, this.#options.cwd);
 
     const env = buildChildEnv(this.#options.envMode ?? 'replace', this.#options.env);
     env[ENV_ENDPOINT] = this.#channel.endpoint;
@@ -1414,6 +1418,33 @@ const WINDOWS_ENV_KEYS = [
 /** The allowlist for the platform the driver is running on. */
 function safeEnvKeys(): readonly string[] {
   return process.platform === 'win32' ? WINDOWS_ENV_KEYS : POSIX_ENV_KEYS;
+}
+
+/**
+ * Rejects a launch whose paths do not exist, before a pty is opened.
+ *
+ * `node-pty` does not fail on either mistake: it hands back a live pty whose
+ * child dies immediately, so the caller saw an exit code of 1 and a blank
+ * screen — the same thing a program that genuinely failed produces. Naming the
+ * missing path costs one `stat` and turns that into an answer.
+ *
+ * Only a command that *is* a path is checked. Resolving a bare name would mean
+ * reimplementing the platform's lookup (`PATH`, and `PATHEXT` on Windows), and
+ * a wrong "not found" for a program that exists is worse than the blank screen
+ * this replaces.
+ */
+function assertLaunchPathsExist(command: readonly string[], cwd: string | undefined): void {
+  const fail = (what: string, path: string): never => {
+    throw new NotFoundError(`${what} does not exist: ${path}`, {
+      semanticTree: false,
+      suggestion: 'check the path; the session was not started',
+    });
+  };
+  if (cwd !== undefined && !existsSync(cwd)) fail('the working directory', cwd);
+  const file = command[0];
+  if (file !== undefined && (file.includes('/') || file.includes('\\')) && !existsSync(file)) {
+    fail('the command', file);
+  }
 }
 
 /**

@@ -587,7 +587,15 @@ export type TermwrightErrorCode =
   | 'protocol-violation'
   | 'capacity'
   | 'process-exited'
-  | 'session-closed';
+  | 'session-closed'
+  /**
+   * A named resource does not exist: an archive file, a working directory, a
+   * path that was supposed to hold something. Distinct from
+   * `protocol-violation`, which means a resource exists and is malformed —
+   * a missing file breaks no format, and telling the two apart is what lets a
+   * CLI answer "you pointed at nothing" instead of "your data is corrupt".
+   */
+  | 'not-found';
 
 export declare class TermwrightError extends Error {
   readonly code: TermwrightErrorCode;

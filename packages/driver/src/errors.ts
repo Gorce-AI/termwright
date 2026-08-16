@@ -113,5 +113,15 @@ export class SessionClosedError extends TermwrightError {
   }
 }
 
+/**
+ * A named resource does not exist. Reserved for absence, never for a resource
+ * that is present and wrong — that is a `protocol-violation`.
+ */
+export class NotFoundError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('not-found', message, diagnostics);
+  }
+}
+
 /** Diagnostics for a session that never negotiated a semantic tree. */
 export const GENERIC_DIAGNOSTICS: ErrorDiagnostics = Object.freeze({ semanticTree: false });

@@ -119,6 +119,33 @@ describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout:
     expect((error as TermwrightError).diagnostics.semanticTree).toBe(false);
   });
 
+  it('names a launch path that does not exist instead of dying blank', async () => {
+    // node-pty starts a pty either way and the child dies immediately, so
+    // without this the caller gets exit code 1 and an empty screen — the same
+    // thing a program that genuinely failed produces.
+    const missingCwd = await launchTerminal({
+      command: [process.execPath, '-e', '0'],
+      cwd: join(FIXTURES, 'no-such-directory'),
+    }).catch((cause: unknown) => cause as TermwrightError);
+    expect(missingCwd).toBeInstanceOf(TermwrightError);
+    expect((missingCwd as TermwrightError).code).toBe('not-found');
+    expect((missingCwd as TermwrightError).message).toContain('no-such-directory');
+
+    const missingCommand = await launchTerminal({
+      command: [join(FIXTURES, 'no-such-fixture.mjs')],
+    }).catch((cause: unknown) => cause as TermwrightError);
+    expect((missingCommand as TermwrightError).code).toBe('not-found');
+  });
+
+  it('leaves a bare command name to the platform to resolve', async () => {
+    // Only a command that is a path is checked: reimplementing PATH (and
+    // PATHEXT) lookup would eventually refuse a program that exists, which is
+    // worse than the blank screen the check above replaces.
+    const terminal = await launch('echo-app.mjs');
+    await terminal.waitForText('READY');
+    expect(terminal.screen().text()).toContain('READY');
+  });
+
   it('resizes the pty and the emulator together', async () => {
     const terminal = await launch('echo-app.mjs');
     await terminal.waitForText('READY');

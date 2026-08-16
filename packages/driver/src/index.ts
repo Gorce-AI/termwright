@@ -59,6 +59,7 @@ export {
   AmbiguousLocatorError,
   CapacityError,
   HistoryTruncatedError,
+  NotFoundError,
   ProcessExitedError,
   ProtocolViolationError,
   SessionClosedError,
