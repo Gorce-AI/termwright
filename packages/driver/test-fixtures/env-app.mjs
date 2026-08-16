@@ -8,6 +8,8 @@ const report = (name) => {
   process.stdout.write(`ENV ${name}=${value === undefined ? '<unset>' : value}\r\n`);
 };
 
+report('TERM');
+report('COLORTERM');
 report('TERMWRIGHT_FIXTURE_SECRET');
 report('TERMWRIGHT_FIXTURE_EXPLICIT');
 process.stdout.write(`ENV PATH=${process.env['PATH'] === undefined ? '<unset>' : '<set>'}\r\n`);

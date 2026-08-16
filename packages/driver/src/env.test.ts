@@ -48,6 +48,49 @@ describe('buildChildEnv', () => {
     }
   });
 
+  it('tells the child which terminal it is attached to, in either mode', () => {
+    // Ours, not the runner's: the emulator's capabilities are known exactly,
+    // and a Windows runner has no TERM of its own to pass on anyway.
+    for (const mode of ['replace', 'inherit'] as const) {
+      const env = buildChildEnv(mode, undefined);
+      expect(lookup(env, 'TERM')).toBe('xterm-256color');
+      expect(lookup(env, 'COLORTERM')).toBe('truecolor');
+    }
+  });
+
+  it('does not depend on the parent having a terminal', () => {
+    const had = Object.prototype.hasOwnProperty.call(process.env, 'TERM');
+    const previous = process.env['TERM'];
+    delete process.env['TERM'];
+    try {
+      // A GitHub Actions Windows runner looks exactly like this.
+      expect(lookup(buildChildEnv('replace', undefined), 'TERM')).toBe('xterm-256color');
+      expect(lookup(buildChildEnv('inherit', undefined), 'TERM')).toBe('xterm-256color');
+    } finally {
+      if (had) process.env['TERM'] = previous;
+    }
+  });
+
+  it('does not pass on the parent’s terminal, which describes a different one', () => {
+    const had = Object.prototype.hasOwnProperty.call(process.env, 'TERM');
+    const previous = process.env['TERM'];
+    process.env['TERM'] = 'dumb';
+    try {
+      expect(lookup(buildChildEnv('inherit', undefined), 'TERM')).toBe('xterm-256color');
+    } finally {
+      if (had) process.env['TERM'] = previous;
+      else delete process.env['TERM'];
+    }
+  });
+
+  it('still lets a caller test their program under another terminal', () => {
+    for (const mode of ['replace', 'inherit'] as const) {
+      const env = buildChildEnv(mode, { TERM: 'vt100', COLORTERM: '' });
+      expect(env['TERM']).toBe('vt100');
+      expect(env['COLORTERM']).toBe('');
+    }
+  });
+
   it('lets explicit entries win in either mode', () => {
     for (const mode of ['replace', 'inherit'] as const) {
       const env = buildChildEnv(mode, { EXPLICIT: 'yes', PATH: 'overridden' });

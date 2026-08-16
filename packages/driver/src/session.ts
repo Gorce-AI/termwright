@@ -363,6 +363,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       command: this.#options.command,
       ...(this.#options.cwd !== undefined ? { cwd: this.#options.cwd } : {}),
       env,
+      // One source of truth: the pty is told the same terminal name the child
+      // reads out of TERM.
+      term: EMULATED_TERM,
       columns: this.#vt.columns,
       rows: this.#vt.rows,
     });
@@ -1361,7 +1364,24 @@ class TerminalSession implements TerminalHarness, LocatorContext {
  * Deliberately short: the tokens, cloud credentials and CI secrets sitting in a
  * test runner's environment are not the application under test's business.
  */
-const POSIX_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'SHELL', 'TMPDIR', 'USER', 'TERM'] as const;
+const POSIX_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'SHELL', 'TMPDIR', 'USER'] as const;
+
+/**
+ * What the child is told it is talking to.
+ *
+ * Not inherited, and not absent: the child's terminal is our emulator, whose
+ * capabilities are known exactly, so passing on whatever terminal (if any)
+ * launched the test run would describe the wrong thing. `@xterm/headless`
+ * answers to `xterm-256color` and renders 24-bit colour, and both statements
+ * are true on every platform the driver runs on.
+ *
+ * This also settles a split that only showed up on Windows: on POSIX
+ * `node-pty` already forces `TERM` from the terminal name it is given, while
+ * on Windows it does not, so a runner without `TERM` in its own environment
+ * handed the child nothing and ncurses-style libraries fell back to guessing.
+ */
+const EMULATED_TERM = 'xterm-256color';
+const EMULATED_COLORTERM = 'truecolor';
 
 /**
  * The same list for Windows, which needs a different and longer one.
@@ -1389,7 +1409,6 @@ const WINDOWS_ENV_KEYS = [
   'PROCESSOR_ARCHITECTURE',
   'NUMBER_OF_PROCESSORS',
   'OS',
-  'TERM',
 ] as const;
 
 /** The allowlist for the platform the driver is running on. */
@@ -1419,6 +1438,12 @@ export function buildChildEnv(mode: EnvMode, overrides: Readonly<Record<string, 
       if (wanted.has(insensitive ? key.toLowerCase() : key)) env[key] = value;
     }
   }
+  // Set in both modes and before the overrides: these describe the emulator
+  // the child is attached to, which is ours whatever the parent's terminal was
+  // — and an explicit `env` entry still wins, for a caller testing what their
+  // program does under a different TERM.
+  env['TERM'] = EMULATED_TERM;
+  env['COLORTERM'] = EMULATED_COLORTERM;
   for (const [key, value] of Object.entries(overrides ?? {})) env[key] = value;
   return env;
 }

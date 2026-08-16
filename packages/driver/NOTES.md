@@ -121,3 +121,20 @@ revisions faster than pairs close will lose the oldest, with a diagnostic. Note
 the coupling, though — publishing drops everything below, so pairing that keeps
 up is also what keeps the queue short. Throughput of the emulator is a
 measurement, never a contract.
+
+## Windows: the child was told nothing about its terminal
+
+`node-pty` sets `TERM` from the terminal name it is given — but only in
+`unixTerminal.js` (`env.TERM = name`). The Windows path computes the same name
+and never writes it to the environment. So on a runner whose own environment
+has no `TERM` (GitHub Actions Windows), the child started with none, and
+ncurses/termbox/tcell-style libraries fell back to guessing at a terminal whose
+capabilities we know exactly.
+
+`TERM=xterm-256color` and `COLORTERM=truecolor` are therefore set by the driver
+in **both** env modes, before the caller's overrides. Not inherited: the child
+is attached to our emulator, not to whatever terminal launched the test run, so
+forwarding the parent's value would describe the wrong terminal — and on POSIX
+`node-pty` was already overriding it anyway, so this makes the platforms agree
+rather than introducing a new policy. An explicit `env: { TERM }` still wins,
+for a caller testing their program under something else.

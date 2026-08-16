@@ -549,6 +549,17 @@ describe.skipIf(!ptyAvailable())('the child environment', { timeout: 20_000 }, (
     }
   });
 
+  it('tells the child which terminal it is attached to', async () => {
+    // Asserted on what the child received, not on what the driver believes it
+    // sent: on Windows the runner has no TERM of its own, and node-pty only
+    // forces one on POSIX, so this is the platform split that has to hold.
+    const terminal = await launch('env-app.mjs');
+    await terminal.waitForText('ENV DONE');
+    const text = terminal.screen().text();
+    expect(text).toContain('ENV TERM=xterm-256color');
+    expect(text).toContain('ENV COLORTERM=truecolor');
+  });
+
   it('always passes explicit env entries, in either mode', async () => {
     const terminal = await launch('env-app.mjs', { env: { TERMWRIGHT_FIXTURE_EXPLICIT: 'yes' } });
     await terminal.waitForText('ENV DONE');
