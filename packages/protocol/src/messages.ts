@@ -179,11 +179,17 @@ const limitsSchema = z.object({
   maxLogQueue: revisionNumber,
 });
 
-const errorSchema = z.strictObject({
+const errorFields = {
   type: z.literal('error'),
   code: z.enum(['bad-token', 'bad-version', 'malformed', 'limit-exceeded', 'internal']),
   message: z.string().max(MAX_IDENTIFIER_LENGTH),
-});
+};
+
+/** adapter → driver: strict, this is the hostile-input boundary. */
+const errorSchema = z.strictObject(errorFields);
+
+/** driver → adapter: tolerant envelope, see the note above `parseDriverMessage`. */
+const errorFromDriverSchema = z.object(errorFields);
 
 /** adapter → driver schemas. Snapshot bodies are validated separately. */
 const helloSchema = z.strictObject({
@@ -222,15 +228,15 @@ const getTreeResultSchema = z
   );
 
 /** driver → adapter schemas. */
-const helloAckSchema = z.strictObject({
+const helloAckSchema = z.object({
   type: z.literal('hello-ack'),
   protocol: z.literal(PROTOCOL_ID),
   sessionId: nonEmptyIdentifier,
   limits: limitsSchema,
   subscribe: z.enum(['snapshots', 'revisions']),
-  marker: z.strictObject({ enabled: z.boolean() }),
+  marker: z.object({ enabled: z.boolean() }),
   logs: z
-    .strictObject({
+    .object({
       enabled: z.boolean(),
       maxRecordsPerSecond: revisionNumber,
       burst: safeIndex,
@@ -238,7 +244,7 @@ const helloAckSchema = z.strictObject({
     .optional(),
 });
 
-const getTreeRequestSchema = z.strictObject({
+const getTreeRequestSchema = z.object({
   type: z.literal('get-tree'),
   requestId: safeIndex,
   revision: revisionNumber.optional(),
@@ -317,6 +323,10 @@ function checkLogRecord(value: unknown, limits: ProtocolLimits): MessageParseRes
 /**
  * Parse and validate one adapter → driver message.
  *
+ * **Strict reader**: this is the hostile-input boundary, so unknown fields are
+ * rejected rather than ignored. See {@link parseDriverMessage} for why the
+ * other direction is tolerant.
+ *
  * @param value - Untrusted decoded frame body.
  * @param limits - Active session limits, applied to any embedded snapshot.
  * @returns A frozen message on success, or a typed failure. Never throws.
@@ -380,7 +390,19 @@ export function parseAdapterMessage(
 /**
  * Parse and validate one driver → adapter message.
  *
- * @param value - Untrusted decoded frame body.
+ * **Tolerant reader.** Unlike {@link parseAdapterMessage}, unknown envelope
+ * fields are ignored rather than rejected, and are carried through to the
+ * caller so a reader that does understand them still can. Known fields stay
+ * strictly type-checked, and closed sets (`type`, `code`, `subscribe`) stay
+ * closed — an unknown message type is still `malformed`.
+ *
+ * The asymmetry is about who is speaking, not about the message. The driver is
+ * the trusted party and behaviour is governed by negotiated capabilities, so a
+ * newer driver may add an optional field without invalidating every adapter
+ * already published. Traffic in the other direction crosses the hostile-input
+ * boundary and stays strict.
+ *
+ * @param value - Decoded frame body from the driver.
  * @param limits - Active session limits used for the projection depth bound.
  * @returns A frozen message on success, or a typed failure. Never throws.
  */
@@ -406,7 +428,7 @@ export function parseDriverMessage(
       return issue === null ? { ok: true, message: dto as GetTreeRequest } : malformed(issue);
     }
     case 'error': {
-      const issue = check(errorSchema, dto);
+      const issue = check(errorFromDriverSchema, dto);
       return issue === null
         ? { ok: true, message: dto as ProtocolErrorMessage }
         : malformed(issue);

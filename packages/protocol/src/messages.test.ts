@@ -257,6 +257,53 @@ describe('parseDriverMessage', () => {
     );
   });
 
+  it('ignores unknown envelope fields on any driver message', () => {
+    // The driver is the trusted party: a newer one may add an optional field,
+    // and every already published adapter must keep working.
+    expect(driverCode({ ...helloAck(), futureField: { nested: true } })).toBe('ok');
+    expect(driverCode({ type: 'get-tree', requestId: 1, futureField: 'x' })).toBe('ok');
+    expect(driverCode({ type: 'error', code: 'internal', message: 'x', detail: 'extra' })).toBe(
+      'ok',
+    );
+  });
+
+  it('carries unknown envelope fields through to the caller', () => {
+    const result = parseDriverMessage({ ...helloAck(), futureField: 42 }, LIMITS);
+    if (!result.ok) throw new Error(result.detail);
+    expect((result.message as unknown as Record<string, unknown>)['futureField']).toBe(42);
+  });
+
+  it('tolerates unknown fields in nested driver objects too', () => {
+    expect(driverCode({ ...helloAck(), marker: { enabled: true, style: 'dcs' } })).toBe('ok');
+    expect(
+      driverCode({
+        ...helloAck(),
+        logs: { enabled: true, maxRecordsPerSecond: 10, burst: 5, sampling: 0.5 },
+      }),
+    ).toBe('ok');
+  });
+
+  it('keeps known driver fields strictly type-checked', () => {
+    expect(driverCode({ ...helloAck(), sessionId: 42 })).toBe('malformed');
+    expect(driverCode({ ...helloAck(), marker: { enabled: 'yes' } })).toBe('malformed');
+    expect(driverCode({ type: 'get-tree', requestId: -1 })).toBe('malformed');
+  });
+
+  it('keeps closed sets closed even on the tolerant side', () => {
+    expect(driverCode({ ...helloAck(), subscribe: 'everything' })).toBe('malformed');
+    expect(driverCode({ type: 'error', code: 'not-a-code', message: 'x' })).toBe('malformed');
+    expect(driverCode({ type: 'unheard-of', requestId: 1 })).toBe('malformed');
+  });
+
+  it('stays strict in the adapter → driver direction', () => {
+    // Same message type, opposite direction: this one crosses the hostile
+    // boundary, so an unknown field is a rejection.
+    expect(adapterCode({ type: 'error', code: 'internal', message: 'x', detail: 'extra' })).toBe(
+      'malformed',
+    );
+    expect(adapterCode({ ...hello(), futureField: 1 })).toBe('malformed');
+  });
+
   it('rejects a malformed log budget', () => {
     expect(driverCode({ ...helloAck(), logs: { enabled: true } })).toBe('malformed');
     expect(

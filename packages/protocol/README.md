@@ -136,18 +136,35 @@ reference nodes present in the same snapshot.
 The protocol grows without a version bump only in ways an already published
 client can survive. Anything else is a breaking change.
 
+### Direction decides strictness
+
+The two directions are read differently, and the difference is about **who is
+speaking**, not about the message:
+
+| Direction | Reader | Unknown fields |
+|---|---|---|
+| adapter → driver (`parseAdapterMessage`) | strict | rejected as `malformed` |
+| driver → adapter (`parseDriverMessage`) | tolerant | ignored, and passed through |
+
+Adapter traffic crosses the hostile-input boundary: it comes from a process
+under test that may be broken or malicious, so an unknown field is a signal,
+not an extension. The driver is the trusted party and behaviour there is
+governed by negotiated capabilities, so a newer driver may add an optional
+field without invalidating every adapter already published.
+
+Tolerant does not mean lax. Known fields stay strictly type-checked, closed
+sets stay closed, and unknown fields are *carried through* rather than
+stripped, so a reader that does understand them still can.
+
 **Additive — readers must tolerate these:**
 
-- **New keys in `limits`.** The reference parser reads the `limits` object of
-  `hello-ack` *leniently*: unknown keys are ignored, not rejected, and are
-  carried through to the caller so a reader that does understand them still
-  can. Known keys stay strict about their type. This is the one lenient object
-  on the wire, and it exists because a driver learning a new ceiling must not
-  invalidate every adapter already in the wild.
-- **New optional fields on a message.** `hello-ack.logs` is the worked example:
-  **absent means the feature is off**, so an older driver that never sends it
-  keeps working unchanged, and an adapter must not use a feature it was not
-  explicitly granted.
+- **New fields on any driver → adapter message**, including nested objects
+  (`marker`, `logs`). `hello-ack.logs` is the worked example: **absent means
+  the feature is off**, so an older driver that never sends it keeps working,
+  and an adapter must not use a feature it was not explicitly granted.
+- **New keys in `limits`.** Lenient in *both* directions — capacity is
+  negotiated, so a driver learning a new ceiling must not invalidate adapters
+  in the wild.
 - **New capability strings.** The driver filters the adapter's advertised
   capabilities down to the ones it knows, so an adapter may advertise a
   capability a given driver has never heard of.
@@ -156,9 +173,11 @@ client can survive. Anything else is a breaking change.
 
 - A new or renamed **required** field on any message.
 - A new member of a **closed set** a reader must accept: message `type`,
-  `error.code`, roles, actions, log levels, `subscribe`. These stay strict
-  precisely so unknown values fail loudly instead of acquiring behaviour by
-  accident.
+  `error.code`, roles, actions, log levels, `subscribe`. These stay strict in
+  both directions, precisely so unknown values fail loudly instead of
+  acquiring behaviour by accident.
+- Any new field on an **adapter → driver** message. That direction is strict,
+  so adding one breaks every driver that has not been updated.
 - Changing the meaning, units or clock of an existing field.
 
 The asymmetry is deliberate: *capacity* is negotiated and therefore extensible,
