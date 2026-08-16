@@ -195,8 +195,13 @@ package's owner.
   an accessor that reports the drawn rectangle of an option.
 - **No `cursor` in snapshots.** `renderer.getCursorState()` exists and looks
   usable; it was left out of v1 rather than shipped unverified.
-- **`text-ranges` and `tree-diffs` capabilities are not claimed.** Both are
-  additive in v1.x and neither is needed by the first driver.
+- **`text-ranges`, `tree-diffs` and `logs` capabilities are not claimed.** All
+  three are additive and optional. The conformance suite skips its `logs`
+  test accordingly (`skipIf(options.logs === undefined)`) while still
+  asserting — in the test above it, which runs — that an adapter which does
+  not announce the capability sends no log records. `logs` would be a
+  natural fit here, since OpenTUI captures `console.*` into its own overlay
+  and the mount disables that already.
 - **`CliRenderer.stdout` is read as a private field** when the caller does not
   pass `stdout` explicitly. A public accessor for the stream a renderer draws
   into would remove the reach-in; it is the one upstream request this adapter

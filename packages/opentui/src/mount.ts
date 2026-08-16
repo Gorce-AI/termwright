@@ -316,6 +316,10 @@ class OpenTuiHarnessImpl implements OpenTuiHarness {
     return this.#session.capabilities();
   }
 
+  settled(opts?: WaitOptions): Promise<SessionCapabilities> {
+    return this.#session.settled(opts);
+  }
+
   screen(): ScreenSnapshot {
     return this.#session.screen();
   }

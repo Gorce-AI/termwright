@@ -68,6 +68,13 @@ try {
     checks['semanticTree'] = harness.capabilities().semanticTree;
     checks['adapter'] = harness.capabilities().adapter?.name;
 
+    // Forwarded like every other harness member, and meaningful on a mount:
+    // the adapter attaches after the renderer's first frames, so a caller that
+    // waits for the verdict must get the settled one.
+    const settled = await harness.settled();
+    checks['settledSemanticTree'] = settled.semanticTree;
+    checks['settledAdapter'] = settled.adapter?.name;
+
     const button = harness.getByRole('button', { name: 'Approve' });
     const resolved = await button.resolve();
     checks['buttonRef'] = typeof resolved.ref === 'string' && resolved.ref.length > 0;

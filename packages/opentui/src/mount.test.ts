@@ -89,6 +89,9 @@ describe.skipIf(bun === null && !required)('under Bun', () => {
       expect(result.checks).toEqual({
         semanticTree: true,
         adapter: '@termwright/opentui',
+        // settled() resolves to the final verdict, not a provisional one.
+        settledSemanticTree: true,
+        settledAdapter: '@termwright/opentui',
         buttonRef: true,
         semanticMatch: true,
         // Viewport-absolute, straight from screenX/screenY: the scene placed
