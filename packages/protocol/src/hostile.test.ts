@@ -123,7 +123,7 @@ describe('hostile snapshots', () => {
   it('rejects a deep parent chain at the depth ceiling', () => {
     const nodes: Record<string, unknown>[] = [{ id: 'n0', role: 'region', name: 'n0' }];
     for (let i = 1; i < 5_000; i += 1) {
-      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', name: 'x' });
+      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', frameworkType: 'Fixture', name: 'x' });
     }
     const result = validateSnapshot(
       { v: 1, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['n0'], nodes },
@@ -154,6 +154,7 @@ describe('hostile snapshots', () => {
         id: `n${i}`,
         parentId: `n${(i + 1) % size}`,
         role: 'generic',
+        frameworkType: 'Fixture',
         name: 'x',
       });
     }
@@ -283,7 +284,7 @@ describe('hostile tree deltas', () => {
     // A 10k-deep chain would blow the stack under naive recursion.
     const nodes: Record<string, unknown>[] = [{ id: 'n0', role: 'region', name: 'n0' }];
     for (let i = 1; i < 10_000; i += 1) {
-      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', name: 'x' });
+      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', frameworkType: 'Fixture', name: 'x' });
     }
     const limits = { ...DEFAULT_LIMITS, maxDepth: 20_000, maxNodes: 20_000, maxSnapshotBytes: 8 * MB };
     const snapshot = validateSnapshot(

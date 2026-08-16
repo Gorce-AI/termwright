@@ -71,6 +71,17 @@ function checkNodeShape(
   ids: ReadonlySet<string>,
   limits: ProtocolLimits,
 ): ValidationResult | null {
+  // D1: `generic` is how an unrecognised widget survives instead of being
+  // dropped, but only if it says what it was. A generic node without a
+  // framework type carries no more information than the drop it replaced.
+  if (node.role === 'generic' && (node.frameworkType === undefined || node.frameworkType === '')) {
+    return fail(
+      'schema',
+      `node ${node.id} has role 'generic' without a frameworkType; an unrecognised widget must ` +
+        'name what the framework called it',
+    );
+  }
+
   if (node.bounds !== undefined) {
     const { width, height, row, column } = node.bounds;
     if (

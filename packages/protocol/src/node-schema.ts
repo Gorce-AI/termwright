@@ -15,6 +15,7 @@ import { Buffer } from 'node:buffer';
 import { z } from 'zod';
 import type { ProtocolLimits } from './limits.js';
 import { SEMANTIC_ACTIONS, SEMANTIC_ROLES } from './roles.js';
+import { PROVENANCE_SOURCES } from './probe/ir.js';
 
 export function safeInt(): z.ZodType<number> {
   return z.number().refine(Number.isSafeInteger, 'expected a safe integer');
@@ -101,6 +102,9 @@ function build(limits: ProtocolLimits): TreeSchemas {
     describedBy: relations.optional(),
     textRanges: z.array(textRange).max(limits.maxRelationTargets).optional(),
     testId: text.optional(),
+    frameworkType: text.optional(),
+    p: z.enum(PROVENANCE_SOURCES).optional(),
+    px: z.record(text, z.enum(PROVENANCE_SOURCES)).optional(),
   });
 
   const cursor = z.strictObject({

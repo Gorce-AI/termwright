@@ -4,6 +4,13 @@
  */
 export interface ProtocolLimits {
   readonly maxFrameBytes: number;
+  /**
+   * Byte ceiling for one snapshot or probe frame.
+   *
+   * 2 MiB rather than 1: at the measured 217.5 B/node a full `maxNodes` tree
+   * is 1 062 KiB before a single provenance byte, so the old default
+   * contradicted the node ceiling it shipped with.
+   */
   readonly maxSnapshotBytes: number;
   readonly maxNodes: number;
   readonly maxDepth: number;
@@ -20,7 +27,7 @@ export interface ProtocolLimits {
 
 export const DEFAULT_LIMITS: ProtocolLimits = Object.freeze({
   maxFrameBytes: 1 * 1024 * 1024,
-  maxSnapshotBytes: 1 * 1024 * 1024,
+  maxSnapshotBytes: 2 * 1024 * 1024,
   maxNodes: 5_000,
   maxDepth: 64,
   maxStringBytes: 16 * 1024,

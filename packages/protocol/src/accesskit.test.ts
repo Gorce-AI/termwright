@@ -302,7 +302,7 @@ describe('toAccessKitTreeUpdate — edges', () => {
 
   it('omits an empty label rather than exporting an empty string', () => {
     const snapshot = validateSnapshot(
-      { v: 1, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['r'], nodes: [{ id: 'r', role: 'generic', name: '' }] },
+      { v: 1, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['r'], nodes: [{ id: 'r', role: 'generic', frameworkType: 'Fixture', name: '' }] },
       DEFAULT_LIMITS,
     );
     if (!snapshot.ok) throw new Error(snapshot.detail);

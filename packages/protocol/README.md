@@ -423,6 +423,32 @@ a table, and conformance parses all three. The rule governs adapters, not
 markdown, and making authors rewrite prose to suit a parser would be the tail
 wagging the dog.
 
+### Merge precedence
+
+Facts about a node arrive from several sources at once, and the tree publishes
+one answer. The order is:
+
+**annotation > recognizer > framework mapping > render inference > heuristic**
+
+with one exception that matters more than the order itself: **physical facts
+are never casually overridden by an annotation.** Bounds, focus, visibility and
+cells describe what the terminal actually did. An author may name a widget, give
+it a role or a test id — those are claims about meaning. An author may not
+declare where something is on screen, because a test that trusts an annotated
+rectangle over a measured one stops testing the application and starts testing
+the annotation.
+
+Each node records where its facts came from in `p`, with per-field exceptions in
+`px`, drawn from a closed set: `annotation`, `recognizer`, `framework`,
+`correlation`, `heuristic`. One source per node covers the overwhelming
+majority; the exception map means a mixed node pays only for the fields that
+actually differ.
+
+Provenance is not decoration. A fact with a weak source is not the same as an
+absent fact, and neither is the same as a fact known to be false — three states
+that collapse into one the moment a tree stops saying where its facts came
+from.
+
 ### Where the current differences live
 
 This section carried a snapshot of per-adapter gaps when the rules were first

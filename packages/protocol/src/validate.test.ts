@@ -105,6 +105,66 @@ describe('validateSnapshot — happy path', () => {
   });
 });
 
+describe('validateSnapshot — generic nodes and provenance (D1, D2)', () => {
+  it('requires a frameworkType on a generic node', () => {
+    // An unrecognised widget survives as `generic` instead of being dropped —
+    // but only if it says what the framework called it.
+    const snapshot = baseSnapshot();
+    (snapshot['nodes'] as Record<string, unknown>[])[1] = {
+      id: 'ok',
+      parentId: 'root',
+      role: 'generic',
+      name: '',
+    };
+    expect(codeOf(snapshot)).toBe('schema');
+  });
+
+  it('accepts a generic node that names its framework type', () => {
+    const snapshot = baseSnapshot();
+    (snapshot['nodes'] as Record<string, unknown>[])[1] = {
+      id: 'ok',
+      parentId: 'root',
+      role: 'generic',
+      frameworkType: 'ScrollBoxRenderable',
+      name: '',
+    };
+    expect(codeOf(snapshot)).toBe('ok');
+  });
+
+  it('rejects an empty frameworkType, which carries no more than its absence', () => {
+    const snapshot = baseSnapshot();
+    (snapshot['nodes'] as Record<string, unknown>[])[1] = {
+      id: 'ok',
+      parentId: 'root',
+      role: 'generic',
+      frameworkType: '',
+      name: '',
+    };
+    expect(codeOf(snapshot)).toBe('schema');
+  });
+
+  it('does not require a frameworkType on a recognised role', () => {
+    expect(codeOf(baseSnapshot())).toBe('ok');
+  });
+
+  it('accepts node provenance and per-field exceptions', () => {
+    const snapshot = baseSnapshot();
+    (snapshot['nodes'] as Record<string, unknown>[])[1]!['p'] = 'framework';
+    (snapshot['nodes'] as Record<string, unknown>[])[1]!['px'] = { name: 'annotation' };
+    expect(codeOf(snapshot)).toBe('ok');
+  });
+
+  it('keeps the provenance source set closed', () => {
+    const snapshot = baseSnapshot();
+    (snapshot['nodes'] as Record<string, unknown>[])[1]!['p'] = 'vibes';
+    expect(codeOf(snapshot)).toBe('schema');
+
+    const other = baseSnapshot();
+    (other['nodes'] as Record<string, unknown>[])[1]!['px'] = { name: 'guesswork' };
+    expect(codeOf(other)).toBe('schema');
+  });
+});
+
 describe('validateSnapshot — structural invariants', () => {
   it('rejects duplicate node ids', () => {
     const snapshot = baseSnapshot();
@@ -152,9 +212,9 @@ describe('validateSnapshot — structural invariants', () => {
     const snapshot = baseSnapshot();
     snapshot['rootIds'] = [];
     snapshot['nodes'] = [
-      { id: 'a', parentId: 'c', role: 'generic', name: 'a' },
-      { id: 'b', parentId: 'a', role: 'generic', name: 'b' },
-      { id: 'c', parentId: 'b', role: 'generic', name: 'c' },
+      { id: 'a', parentId: 'c', role: 'generic', frameworkType: 'Fixture', name: 'a' },
+      { id: 'b', parentId: 'a', role: 'generic', frameworkType: 'Fixture', name: 'b' },
+      { id: 'c', parentId: 'b', role: 'generic', frameworkType: 'Fixture', name: 'c' },
     ];
     expect(codeOf(snapshot)).toBe('cycle');
   });
@@ -186,7 +246,7 @@ describe('validateSnapshot — capacity limits', () => {
   it('rejects a tree deeper than maxDepth', () => {
     const nodes: Record<string, unknown>[] = [{ id: 'n0', role: 'region', name: 'n0' }];
     for (let i = 1; i < 10; i += 1) {
-      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', name: `n${i}` });
+      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', frameworkType: 'Fixture', name: `n${i}` });
     }
     const snapshot = { ...baseSnapshot(), rootIds: ['n0'], nodes };
     expect(codeOf(snapshot, withLimits({ maxDepth: 5 }))).toBe('depth');

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PROTOCOL_ID, PROTOCOL_VERSION, TOKEN_BYTES, generateToken } from './env.js';
+import { ABSOLUTE_LIMITS, DEFAULT_LIMITS } from './limits.js';
 import { MARKER_OSC_CODE, encodeMarker, verifyMarkerPayload } from './marker.js';
 
 /**
@@ -53,5 +54,19 @@ describe('protocol identity', () => {
   it('pins the version and id together', () => {
     expect(PROTOCOL_VERSION).toBe(1);
     expect(PROTOCOL_ID).toBe(`termwright/${PROTOCOL_VERSION}`);
+  });
+});
+
+describe('limits (D4)', () => {
+  it('gives a full tree room for provenance', () => {
+    // At the measured 217.5 B/node a full maxNodes tree is ~1 062 KiB, so a
+    // 1 MiB ceiling contradicted the node ceiling it shipped with.
+    expect(DEFAULT_LIMITS.maxSnapshotBytes).toBe(2 * 1024 * 1024);
+    expect(DEFAULT_LIMITS.maxNodes * 218).toBeLessThan(DEFAULT_LIMITS.maxSnapshotBytes);
+  });
+
+  it('leaves the absolute ceiling where it was', () => {
+    expect(ABSOLUTE_LIMITS.maxSnapshotBytes).toBe(8 * 1024 * 1024);
+    expect(DEFAULT_LIMITS.maxSnapshotBytes).toBeLessThan(ABSOLUTE_LIMITS.maxSnapshotBytes);
   });
 });

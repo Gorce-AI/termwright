@@ -1,4 +1,5 @@
 import type { SemanticAction, SemanticRole } from './roles.js';
+import type { ProvenanceSource } from './probe/ir.js';
 
 /** Zero-based viewport cell coordinates. */
 export interface Rect {
@@ -51,6 +52,29 @@ export interface SemanticNode {
   readonly textRanges?: readonly SemanticTextRange[];
   /** Author-supplied test id (getByTestId). */
   readonly testId?: string;
+  /**
+   * The framework's own name for this widget — a class name, a constructor
+   * name, a widget type.
+   *
+   * **Required when `role` is `generic`.** An unrecognised widget must survive
+   * as a generic node keeping its bounds, text and children, instead of being
+   * dropped with its children reparented. `frameworkType` is what makes such a
+   * node identifiable: without it a generic node says only "something was
+   * here", which is barely better than the drop it replaced.
+   */
+  readonly frameworkType?: string;
+  /**
+   * Provenance: where this node's facts came from.
+   *
+   * One source for the whole node, because node facts overwhelmingly share
+   * one. Exceptions go in {@link SemanticNode.px}, so a mixed node pays only
+   * for the fields that actually differ. Descriptive per-property strings were
+   * ruled out by arithmetic — they cost about +91 % against a budget that is
+   * already tight.
+   */
+  readonly p?: ProvenanceSource;
+  /** Per-field provenance, for fields whose source differs from `p`. */
+  readonly px?: Readonly<Record<string, ProvenanceSource>>;
 }
 
 export interface CursorInfo {
