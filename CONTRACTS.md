@@ -45,6 +45,12 @@ Changing a normative file requires: update it first, note the change in
   consola, OpenTelemetry) are OPTIONAL peers, never runtime dependencies.
   Nothing depends on `logs` except adapters and the test layer.
 - `ui` depends on `trace` + `driver`. Talks to Vitest only via our own event protocol.
+- `probe-*` (framework probes, campaign #34) depend on `protocol` ONLY; the
+  instrumented framework is a devDependency, never a peer — a probe patches
+  by path and never imports the framework. Launchers return a command
+  (`withProbe(runtime, argv)`); the driver never depends on a probe.
+- `recognizers` — pure functions IR → semantic tree, depends on `protocol`
+  only, testable without a process.
 - `conformance` may depend on everything; nothing depends on it.
 
 ## Engineering baseline (all packages)
