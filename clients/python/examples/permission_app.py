@@ -31,7 +31,17 @@ class PermissionApp(App):
     """Two buttons and a reason field, the smallest interesting semantic tree."""
 
     CSS = "Screen { layout: vertical; } Button { width: 20; }"
-    BINDINGS = [Binding("q", "quit", "Quit")]
+    BINDINGS = [
+        # `priority=True` is what makes this work from any focus: without it a
+        # focused Input swallows the key like any other character, which is
+        # exactly what leaves an app with no way out. Declared explicitly
+        # rather than relying on Textual's built-in ctrl+q, so the contract
+        # this fixture promises does not depend on a framework default.
+        Binding("ctrl+q", "quit", "Quit", priority=True),
+        # A convenience for the common case; the reason field still takes it
+        # as text, which is why it cannot be the quit key the harness uses.
+        Binding("q", "quit", "Quit"),
+    ]
 
     def compose(self) -> ComposeResult:
         with Vertical():
