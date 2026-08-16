@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -38,10 +39,22 @@ type fakeDriver struct {
 	conn     net.Conn
 	arrived  chan struct{}
 	logs     *LogBudget
+	// subscribe is what the handshake asks the adapter to push; empty means
+	// the driver's default of whole snapshots.
+	subscribe string
 }
 
 func startFakeDriver(t *testing.T) *fakeDriver {
 	return startFakeDriverWithLogs(t, nil)
+}
+
+// startFakeDriverWithSubscribe asks the adapter for diffs rather than whole
+// trees, which is the only mode in which the full-snapshot obligation means
+// anything.
+func startFakeDriverWithSubscribe(t *testing.T, subscribe string) *fakeDriver {
+	driver := startFakeDriverWithLogs(t, nil)
+	driver.subscribe = subscribe
+	return driver
 }
 
 // startFakeDriverWithLogs grants a log budget in the handshake. A nil budget
@@ -96,12 +109,16 @@ func (d *fakeDriver) serve(t *testing.T) {
 				message, _ := frame.Value.(map[string]any)
 				if message["type"] == "hello" {
 					d.record(message)
+					subscribe := d.subscribe
+					if subscribe == "" {
+						subscribe = "snapshots"
+					}
 					d.send(HelloAck{
 						Type:      "hello-ack",
 						Protocol:  ProtocolID,
 						SessionID: testSession,
 						Limits:    DefaultLimits,
-						Subscribe: "snapshots",
+						Subscribe: subscribe,
 						Marker:    MarkerConfig{Enabled: true},
 						Logs:      d.logs,
 					})
@@ -347,5 +364,210 @@ func TestSnapshotMessageMarshalsAsAnEnvelope(t *testing.T) {
 	}
 	if _, ok := parsed["snapshot"].(map[string]any); !ok {
 		t.Error("envelope carries no snapshot object")
+	}
+}
+
+// -- a driver that stops reading -------------------------------------------
+
+// paddedSnapshot is a valid tree big enough that a few of them overflow a
+// socket buffer, which is what makes a stalled reader observable.
+//
+// Node ids do NOT vary with the seed: only one name does. A tree whose every
+// node is new is legitimately published whole, so a fixture that changed all
+// the ids would produce snapshots throughout and quietly prove the opposite of
+// what the obligation test claims.
+func paddedSnapshot(seed int) *Snapshot {
+	snapshot := NewSnapshot("ignored", 999, 80, 24)
+	snapshot.RootIDs = []string{"root"}
+	snapshot.Nodes = []Node{{ID: "root", Role: RoleDialog, Name: "Permission"}}
+	padding := strings.Repeat("x", 4000)
+	for index := 0; index < 60; index++ {
+		name := padding
+		if index == 0 {
+			name = fmt.Sprintf("%s-%d", padding, seed)
+		}
+		snapshot.Nodes = append(snapshot.Nodes, Node{
+			ID:       fmt.Sprintf("n%d", index),
+			ParentID: "root",
+			Role:     RoleText,
+			Name:     name,
+		})
+	}
+	return snapshot
+}
+
+// stalledDriver accepts a connection, completes the handshake, and then stops
+// reading. The kernel's socket buffer absorbs a few frames; after that a write
+// blocks, which is exactly the state a probe publishing from a render loop must
+// survive.
+type stalledDriver struct {
+	listener net.Listener
+	conn     net.Conn
+	resume   chan struct{}
+	read     chan []byte
+}
+
+func startStalledDriver(t *testing.T, path string) *stalledDriver {
+	t.Helper()
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	driver := &stalledDriver{
+		listener: listener,
+		resume:   make(chan struct{}),
+		read:     make(chan []byte, 64),
+	}
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		driver.conn = conn
+		// Answer the handshake, then read nothing until released.
+		buffer := make([]byte, 64*1024)
+		if _, err := conn.Read(buffer); err != nil {
+			return
+		}
+		ack, _ := EncodeFrame(map[string]any{
+			"type": "hello-ack", "protocol": ProtocolID, "sessionId": "s-1",
+			"limits": DefaultLimits, "subscribe": "diffs",
+			"marker": map[string]any{"enabled": true},
+		}, DefaultLimits.MaxFrameBytes)
+		_, _ = conn.Write(ack)
+
+		<-driver.resume
+		for {
+			n, err := conn.Read(buffer)
+			if n > 0 {
+				chunk := make([]byte, n)
+				copy(chunk, buffer[:n])
+				select {
+				case driver.read <- chunk:
+				default:
+				}
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	t.Cleanup(func() { _ = listener.Close() })
+	return driver
+}
+
+// The application must keep rendering while the driver is not reading. Before
+// the write deadline existed, this test hung: a full socket buffer stopped the
+// caller for as long as the driver stayed away, which for a probe means the
+// application's own render loop.
+func TestAWriteToAStalledDriverIsBounded(t *testing.T) {
+	directory := shortTempDir(t)
+	path := filepath.Join(directory, "s")
+	driver := startStalledDriver(t, path)
+
+	client := New(path, "token", Options{
+		AdapterName: "test", AdapterVersion: "0.0.0",
+		WriteTimeout: 100 * time.Millisecond,
+	})
+	if err := client.Start(2 * time.Second); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+
+	// Enough traffic to fill the socket buffer and then some.
+	started := time.Now()
+	var failure error
+	for attempt := 0; attempt < 400 && failure == nil; attempt++ {
+		_, failure = client.Publish(paddedSnapshot(attempt))
+	}
+	elapsed := time.Since(started)
+
+	if failure == nil {
+		t.Skip("the socket buffer swallowed everything; nothing was stalled")
+	}
+	if !errors.Is(failure, ErrWriteTimeout) {
+		t.Fatalf("expected a recognisable write timeout, got %v", failure)
+	}
+	if elapsed > 30*time.Second {
+		t.Fatalf("publishing took %s; the write was not bounded", elapsed)
+	}
+	// A half-written frame cannot be resynchronised, so the session is over
+	// and further publishes return at once rather than retrying into a broken
+	// stream.
+	if client.Connected() {
+		t.Error("the session survived a partially written frame")
+	}
+	if marker, err := client.Publish(paddedSnapshot(0)); marker != "" || err != nil {
+		t.Errorf("a closed session still published: %q, %v", marker, err)
+	}
+	close(driver.resume)
+}
+
+// "Driver not keeping up" and "frame refused as oversized" need different
+// handling, so they must be told apart without matching on message text.
+func TestAnOversizedFrameIsNotAWriteTimeout(t *testing.T) {
+	driver := startFakeDriver(t)
+	client := New(driver.endpoint(), "token", Options{AdapterName: "test", AdapterVersion: "0.0.0"})
+	if err := client.Start(2 * time.Second); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	defer client.Close()
+
+	huge := paddedSnapshot(0)
+	huge.Nodes[0].Name = strings.Repeat("x", DefaultLimits.MaxStringBytes+1)
+	_, err := client.Publish(huge)
+	if err == nil {
+		t.Fatal("expected the oversized snapshot to be refused")
+	}
+	if errors.Is(err, ErrWriteTimeout) {
+		t.Fatalf("an oversized frame was reported as a slow driver: %v", err)
+	}
+	if code := ValidationCode(err); code == "" {
+		t.Fatalf("expected a validation error carrying a code, got %T %v", err, err)
+	}
+}
+
+// -- the producer's obligation after a gap ---------------------------------
+
+func TestRequireFullSnapshotForcesAWholeTree(t *testing.T) {
+	driver := startFakeDriverWithSubscribe(t, "diffs")
+	client := New(driver.endpoint(), "token", Options{AdapterName: "test", AdapterVersion: "0.0.0"})
+	if err := client.Start(2 * time.Second); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	defer client.Close()
+
+	if _, err := client.Publish(paddedSnapshot(1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Publish(paddedSnapshot(2)); err != nil {
+		t.Fatal(err)
+	}
+	if client.DeltasSent() == 0 {
+		t.Fatal("the second publish was not a delta, so this test proves nothing")
+	}
+
+	// The probe lost a frame: the next tree must be whole.
+	client.RequireFullSnapshot()
+	if !client.FullSnapshotRequired() {
+		t.Error("the obligation was not recorded")
+	}
+	before := client.SnapshotsSent()
+	if _, err := client.Publish(paddedSnapshot(3)); err != nil {
+		t.Fatal(err)
+	}
+	if client.SnapshotsSent() != before+1 {
+		t.Error("the obligation did not produce a full snapshot")
+	}
+	if client.FullSnapshotRequired() {
+		t.Error("the obligation was not cleared once honoured")
+	}
+
+	// And the one after it is a delta again.
+	deltas := client.DeltasSent()
+	if _, err := client.Publish(paddedSnapshot(4)); err != nil {
+		t.Fatal(err)
+	}
+	if client.DeltasSent() != deltas+1 {
+		t.Error("the client stopped sending deltas after honouring the obligation")
 	}
 }

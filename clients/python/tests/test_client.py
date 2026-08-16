@@ -312,3 +312,109 @@ async def test_a_pipe_endpoint_on_a_loop_that_cannot_open_one_fails_soft():
     assert await client.start(timeout=1.0) is False
     assert client.publish_nowait(sample_snapshot()) is None
     await client.close()
+
+
+# -- a driver that stops reading -------------------------------------------
+
+
+async def test_a_write_to_a_stalled_driver_is_bounded(endpoint):
+    """A driver that stops reading must not queue frames without limit.
+
+    asyncio keeps the loop turning, so this does not freeze a render the way
+    the blocking clients would — but an unbounded `drain` holds every frame in
+    memory for as long as the driver stays away, and the session never notices
+    it has stopped working.
+    """
+    import asyncio as _asyncio
+
+    stalled = _asyncio.Event()
+
+    async def serve(reader, writer):
+        await reader.read(65536)
+        ack = {
+            "type": "hello-ack",
+            "protocol": "termwright/1",
+            "sessionId": SESSION,
+            "limits": DEFAULT_LIMITS.to_wire(),
+            "subscribe": "snapshots",
+            "marker": {"enabled": True},
+        }
+        writer.write(encode_frame(ack, DEFAULT_LIMITS.maxFrameBytes))
+        await writer.drain()
+        await stalled.wait()  # and then read nothing at all
+        writer.close()
+
+    server = await asyncio.start_unix_server(serve, endpoint)
+    client = SemanticClient(
+        endpoint,
+        TOKEN,
+        adapter_name="test",
+        adapter_version="0.1.0",
+        write_timeout=0.1,
+    )
+    assert await client.start()
+
+    padding = "x" * 4000
+    started = asyncio.get_event_loop().time()
+    for revision in range(400):
+        if not client.connected:
+            break
+        snapshot = SemanticSnapshot(
+            sessionId="s",
+            revision=revision,
+            columns=80,
+            rows=24,
+            rootIds=["root"],
+            nodes=[SemanticNode(id="root", role="dialog", name="Permission")]
+            + [
+                SemanticNode(id=f"n{index}", parentId="root", role="text", name=padding)
+                for index in range(60)
+            ],
+        )
+        await client.publish(snapshot)
+    elapsed = asyncio.get_event_loop().time() - started
+
+    stalled.set()
+    server.close()
+
+    assert elapsed < 30, f"publishing took {elapsed:.1f}s; the write was not bounded"
+    # A partially written frame cannot be resynchronised, so the session ends
+    # rather than retrying into a stream the driver can no longer parse.
+    assert not client.connected, "the session survived a stalled driver"
+    await client.close()
+
+
+async def test_require_full_snapshot_forces_a_whole_tree(endpoint):
+    driver = FakeDriver(endpoint, subscribe="diffs")
+    await driver.start()
+    client = SemanticClient(endpoint, TOKEN, adapter_name="test", adapter_version="0.1.0")
+    assert await client.start()
+
+    def tree(revision: int) -> SemanticSnapshot:
+        return SemanticSnapshot(
+            sessionId="s",
+            revision=revision,
+            columns=80,
+            rows=24,
+            rootIds=["root"],
+            nodes=[
+                SemanticNode(id="root", role="dialog", name="Permission"),
+                SemanticNode(id="n1", parentId="root", role="text", name=f"row {revision}"),
+            ],
+        )
+
+    await client.publish(tree(1))
+    await client.publish(tree(2))
+    assert client.deltas_sent > 0, "the second publish was not a delta; this proves nothing"
+
+    client.require_full_snapshot()
+    assert client.full_snapshot_required
+    before = client.snapshots_sent
+    await client.publish(tree(3))
+    assert client.snapshots_sent == before + 1, "the obligation produced no full snapshot"
+    assert not client.full_snapshot_required, "the obligation was not cleared"
+
+    deltas = client.deltas_sent
+    await client.publish(tree(4))
+    assert client.deltas_sent == deltas + 1, "deltas stopped after the obligation"
+    await client.close()

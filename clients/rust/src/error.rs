@@ -105,6 +105,13 @@ pub enum Error {
     Io(std::io::Error),
     /// The driver did not answer the handshake in time.
     HandshakeTimeout,
+    /// The driver did not read a frame within the write deadline.
+    ///
+    /// Distinct from [`Error::Io`] so a caller can tell a slow driver — drop
+    /// the frame, keep rendering — from a snapshot refused as invalid, which
+    /// will be refused again for the same tree. Part of a length-prefixed
+    /// frame may already be on the wire, so the session is over, not delayed.
+    WriteTimeout,
 }
 
 impl fmt::Display for Error {
@@ -115,6 +122,12 @@ impl fmt::Display for Error {
             Error::Parse(inner) => write!(formatter, "{inner}"),
             Error::Io(inner) => write!(formatter, "io: {inner}"),
             Error::HandshakeTimeout => write!(formatter, "timed out waiting for hello-ack"),
+            Error::WriteTimeout => {
+                write!(
+                    formatter,
+                    "the driver did not read within the write deadline"
+                )
+            }
         }
     }
 }

@@ -75,10 +75,10 @@ class ProbeSession:
     def _on_frame(self) -> None:
         if not self._started:
             self._begin()
-            self.frames_dropped += 1
+            self._drop()
             return
         if not self._client.connected:
-            self.frames_dropped += 1
+            self._drop()
             return
 
         snapshot = build_snapshot(
@@ -90,6 +90,17 @@ class ProbeSession:
         marker = self._client.publish_nowait(snapshot)
         if marker:
             self._write(marker)
+
+    def _drop(self) -> None:
+        """Record a frame that never reached the driver.
+
+        The count is diagnostics; the obligation is protocol. A tree the driver
+        never saw means the next one it does see must be whole — a patch would
+        be applied to a state that never accounted for what was skipped, and
+        nothing would report the divergence.
+        """
+        self.frames_dropped += 1
+        self._client.require_full_snapshot()
 
     def _begin(self) -> None:
         """Start the handshake, once, from inside the running event loop."""

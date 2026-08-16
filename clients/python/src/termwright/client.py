@@ -56,6 +56,27 @@ CAPABILITIES_WITH_LOGS = DEFAULT_CAPABILITIES + ("logs",)
 #: How many recent snapshots stay answerable by a ``get-tree`` for a past revision.
 _SNAPSHOT_HISTORY = 8
 
+#: Seconds a single frame write may wait for the driver to read.
+#:
+#: A probe publishes from the render path, so an unbounded write turns a driver
+#: that stopped reading into an application that stopped drawing. asyncio keeps
+#: the loop turning either way, but an unbounded ``drain`` queues frames in
+#: memory for as long as the driver stays away, which is its own failure. A
+#: driver that cannot take a frame in a quarter of a second is not keeping up,
+#: and the next frame carries newer state anyway.
+DEFAULT_WRITE_TIMEOUT = 0.25
+
+
+class WriteTimeout(TermwrightError):
+    """The driver did not read within the write deadline.
+
+    Distinguishable on purpose: a caller reacting to a slow driver does
+    something quite different from one whose snapshot was refused for being
+    invalid, which raises :class:`ProtocolViolation` and will do so again for
+    the same tree.
+    """
+
+
 
 def _is_pipe_path(endpoint: str) -> bool:
     """Whether the endpoint names a Windows pipe rather than a unix socket."""
@@ -131,6 +152,7 @@ class SemanticClient:
         limits: ProtocolLimits = DEFAULT_LIMITS,
         debug: Optional[DebugLog] = None,
         probe: Optional[Mapping[str, Any]] = None,
+        write_timeout: float = DEFAULT_WRITE_TIMEOUT,
     ) -> None:
         self._endpoint = endpoint
         self._token = token
@@ -144,6 +166,11 @@ class SemanticClient:
         #: What a probe says it can observe, sent with `hello`. None for a
         #: hand-written adapter, which is what the driver assumes by default.
         self._probe = probe
+        #: Seconds one frame write may wait. Non-positive disables the bound,
+        #: which is only sane for a caller that publishes off the render path.
+        self._write_timeout = write_timeout
+        #: Set when the producer lost something and owes a whole tree.
+        self._force_full = False
 
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
@@ -315,9 +342,12 @@ class SemanticClient:
         so a skipped publish cannot leave the driver applying a delta onto a
         tree it never received.
         """
+        forced, self._force_full = self._force_full, False
         delta = None
-        if self.subscribe == "diffs" and self._published is not None:
+        if self.subscribe == "diffs" and self._published is not None and not forced:
             delta = build_delta(self._published, wire)
+        if forced:
+            self._log("io", f"r{wire['revision']} full snapshot: the producer reported a gap")
 
         self._published = wire
         if delta is None:
@@ -386,6 +416,22 @@ class SemanticClient:
             return None
         return encode_marker(self._token, self.session_id, revision)
 
+    def require_full_snapshot(self) -> None:
+        """Make the next publish send a whole tree.
+
+        The producer's obligation from D5: a probe that lost anything from its
+        own stream of facts — a dropped frame, a coalesced burst, a write that
+        failed — must not follow it with a patch. The driver would apply that
+        patch to a tree that never accounted for what was lost, and the
+        divergence would be silent.
+        """
+        self._force_full = True
+
+    @property
+    def full_snapshot_required(self) -> bool:
+        """Whether the obligation is outstanding."""
+        return self._force_full
+
     def _log(self, category: str, message: str) -> None:
         """Write one diagnostic line, when diagnostics are on."""
         if self._debug is not None:
@@ -402,7 +448,20 @@ class SemanticClient:
             return
         writer.write(encode_frame(message, self._limits.maxFrameBytes))
         try:
-            await writer.drain()
+            if self._write_timeout > 0:
+                await asyncio.wait_for(writer.drain(), self._write_timeout)
+            else:
+                await writer.drain()
+        except asyncio.TimeoutError:
+            # Part of a length-prefixed frame may already be on the wire and
+            # there is no resynchronisation point, so the session is over
+            # rather than merely delayed.
+            self._log(
+                "diag",
+                f"write deadline of {int(self._write_timeout * 1000)}ms exceeded; "
+                "session is unrecoverable",
+            )
+            await self.close()
         except (OSError, ConnectionResetError):
             await self.close()
 

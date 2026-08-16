@@ -45,6 +45,15 @@ pub const ENV_PROTOCOL: &str = "TERMWRIGHT_PROTOCOL";
 /// Default handshake budget.
 pub const DIAL_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Default bound on a single frame write.
+///
+/// This client is blocking by design — a TUI renders on one thread and the
+/// marker must follow that render's last byte — so an unbounded `write_all`
+/// turns a driver that stopped reading into an application that stopped
+/// drawing. A driver that cannot take a frame in a quarter of a second is not
+/// keeping up, and the next frame carries newer state anyway.
+pub const WRITE_TIMEOUT: Duration = Duration::from_millis(250);
+
 /// How many recent revisions stay answerable by `get-tree`.
 const SNAPSHOT_HISTORY: usize = 8;
 
@@ -59,6 +68,9 @@ pub struct Options {
     pub capabilities: Vec<Capability>,
     /// Limits in force until `hello-ack` replaces them.
     pub limits: Limits,
+    /// Bound on a single frame write. `None` disables it, which is only sane
+    /// for a caller that publishes off the render path.
+    pub write_timeout: Option<Duration>,
     /// Adapter-side diagnostic log, or `None` for silence — which is what
     /// [`Options::new`] leaves here unless `TERMWRIGHT_DEBUG_FILE` names a
     /// file. Shared rather than owned so an adapter can log alongside the
@@ -84,6 +96,7 @@ impl Options {
             adapter_version: adapter_version.into(),
             capabilities: default_capabilities(),
             limits: DEFAULT_LIMITS,
+            write_timeout: Some(WRITE_TIMEOUT),
             // Left silent on purpose: opening a file is a side effect, and a
             // constructor is the wrong place for one. `Client::from_env` is
             // where the environment is read, here and in the other clients.
@@ -166,6 +179,7 @@ pub struct Client {
     logs_dropped: u64,
     subscribe: String,
     history: VecDeque<(i64, Box<RawValue>)>,
+    force_full: bool,
 }
 
 impl Client {
@@ -191,6 +205,7 @@ impl Client {
             logs_dropped: 0,
             subscribe: "snapshots".to_owned(),
             history: VecDeque::new(),
+            force_full: false,
         }
     }
 
@@ -298,6 +313,7 @@ impl Client {
             }
         };
         stream.set_read_timeout(Some(Duration::from_millis(50)))?;
+        stream.set_write_timeout(self.options.write_timeout)?;
         self.stream = Some(stream);
 
         let hello = Hello::new(
@@ -373,6 +389,23 @@ impl Client {
         &self.limits
     }
 
+    /// Make the next publish send a whole tree.
+    ///
+    /// The producer's obligation from D5: a probe that lost anything from its
+    /// own stream of facts — a dropped frame, a coalesced burst, a write that
+    /// failed — must not follow it with a patch. The driver would apply that
+    /// patch to a tree that never accounted for what was lost, and the
+    /// divergence would be silent.
+    pub fn require_full_snapshot(&mut self) {
+        self.force_full = true;
+    }
+
+    /// Whether the obligation is outstanding.
+    #[must_use]
+    pub fn full_snapshot_required(&self) -> bool {
+        self.force_full
+    }
+
     /// Drop the session. The application keeps running.
     pub fn close(&mut self) {
         if let Some(stream) = self.stream.take() {
@@ -432,7 +465,16 @@ impl Client {
             // subscription, or past roughly half the tree. The base advances
             // only once a message has been built from it, so a skipped
             // publish cannot leave the driver patching a tree it never got.
-            let delta = if self.subscribe == "diffs" {
+            // An outstanding obligation overrides the choice: a gap in the
+            // producer's own facts means the next tree must be whole.
+            let forced = std::mem::take(&mut self.force_full);
+            if forced {
+                self.debug_line(
+                    Category::Io,
+                    &format!("r{revision} full snapshot: the producer reported a gap"),
+                );
+            }
+            let delta = if self.subscribe == "diffs" && !forced {
                 self.published
                     .as_ref()
                     .and_then(|base| build_delta(base, &parsed))
@@ -668,7 +710,21 @@ impl Client {
         match stream.write_all(&frame).and_then(|()| stream.flush()) {
             Ok(()) => Ok(()),
             Err(error) => {
+                let timed_out = matches!(
+                    error.kind(),
+                    ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                );
                 self.close();
+                if timed_out {
+                    // `write_all` may have delivered part of a length-prefixed
+                    // frame, and there is no resynchronisation point in the
+                    // stream, so the session is unrecoverable rather than slow.
+                    self.debug_line(
+                        Category::Diag,
+                        "write deadline exceeded; session is unrecoverable",
+                    );
+                    return Err(Error::WriteTimeout);
+                }
                 Err(Error::Io(error))
             }
         }

@@ -4,13 +4,13 @@ use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
 use termwright_protocol::{
-    encode_frame, verify_marker_payload, Client, FrameDecoder, Node, Options, Rect, Role, Snapshot,
-    DEFAULT_LIMITS,
+    encode_frame, verify_marker_payload, Client, Error, FrameDecoder, Node, Options, Rect, Role,
+    Snapshot, DEFAULT_LIMITS,
 };
 
 /// What a VT parser would hand an OSC handler. Only the introducer is
@@ -84,6 +84,71 @@ fn start_fake_driver(path: &str) -> (Receiver<Value>, Sender<Value>) {
                                     "sessionId": SESSION,
                                     "limits": DEFAULT_LIMITS,
                                     "subscribe": "snapshots",
+                                    "marker": { "enabled": true },
+                                }),
+                            );
+                        }
+                        if sender.send(frame.value).is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    (receiver, outbound)
+}
+
+/// A fake driver that asks the adapter for diffs rather than whole trees.
+fn start_fake_driver_with_subscribe(
+    path: &str,
+    subscribe: &str,
+) -> (Receiver<Value>, Sender<Value>) {
+    let listener = UnixListener::bind(path).expect("binding the driver socket");
+    let (sender, receiver) = channel();
+    let (outbound, to_send) = channel::<Value>();
+    let subscribe = subscribe.to_owned();
+
+    thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return;
+        };
+        let mut decoder =
+            FrameDecoder::new(DEFAULT_LIMITS.max_frame_bytes, DEFAULT_LIMITS.max_depth);
+        stream
+            .set_read_timeout(Some(Duration::from_millis(20)))
+            .expect("read timeout");
+        let mut buffer = [0u8; 8192];
+        loop {
+            for message in to_send.try_iter() {
+                send(&mut stream, &message);
+            }
+            match stream.read(&mut buffer) {
+                Ok(0) => return,
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                    ) =>
+                {
+                    continue
+                }
+                Err(_) => return,
+                Ok(count) => {
+                    let Ok(frames) = decoder.push(&buffer[..count]) else {
+                        return;
+                    };
+                    for frame in frames {
+                        if frame.value.get("type").and_then(Value::as_str) == Some("hello") {
+                            send(
+                                &mut stream,
+                                &json!({
+                                    "type": "hello-ack",
+                                    "protocol": "termwright/1",
+                                    "sessionId": SESSION,
+                                    "limits": DEFAULT_LIMITS,
+                                    "subscribe": subscribe,
                                     "marker": { "enabled": true },
                                 }),
                             );
@@ -320,4 +385,160 @@ fn wait_for(
         }
     }
     None
+}
+
+// -- a driver that stops reading -------------------------------------------
+
+/// Accepts one connection, answers the handshake, then reads nothing. The
+/// kernel's socket buffer absorbs a few frames; after that a write blocks,
+/// which is the state a probe publishing from a render thread must survive.
+fn start_stalled_driver(path: &str) -> std::sync::mpsc::Sender<()> {
+    use std::io::{Read, Write};
+    use std::os::unix::net::UnixListener;
+
+    let listener = UnixListener::bind(path).expect("binding the driver socket");
+    let (release, released) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else {
+            return;
+        };
+        let mut buffer = [0u8; 8192];
+        if stream.read(&mut buffer).is_err() {
+            return;
+        }
+        let ack = serde_json::json!({
+            "type": "hello-ack",
+            "protocol": "termwright/1",
+            "sessionId": SESSION,
+            "limits": DEFAULT_LIMITS,
+            "subscribe": "snapshots",
+            "marker": { "enabled": true },
+        });
+        let frame = encode_frame(&ack, DEFAULT_LIMITS.max_frame_bytes).expect("encoding");
+        let _ = stream.write_all(&frame);
+        // Hold the connection open and read nothing until released, so the
+        // socket buffer fills and stays full.
+        let _ = released.recv();
+    });
+    release
+}
+
+/// A valid tree big enough that a few of them overflow a socket buffer, which
+/// is what makes a stalled reader observable.
+///
+/// Node ids do NOT vary with the seed: only one name does. A tree whose every
+/// node is new is legitimately published whole, so a fixture that changed all
+/// the ids would produce snapshots throughout and quietly prove the opposite
+/// of what the obligation test claims.
+fn padded_snapshot(seed: i64) -> Snapshot {
+    let mut snapshot = Snapshot::new(80, 24);
+    let padding = "x".repeat(4000);
+    snapshot.push(Node::new("root", Role::Dialog, "Permission"));
+    for index in 0..60 {
+        let name = if index == 0 {
+            format!("{padding}-{seed}")
+        } else {
+            padding.clone()
+        };
+        snapshot.push(Node::new(format!("n{index}"), Role::Text, name).with_parent("root"));
+    }
+    snapshot
+}
+
+/// The render thread must not be held by a driver that stopped reading.
+/// Without the write deadline this blocks for as long as the driver stays
+/// away, which for a probe means the application stops drawing.
+#[test]
+fn a_write_to_a_stalled_driver_is_bounded() {
+    let path = socket_path();
+    let release = start_stalled_driver(&path);
+
+    let mut options = Options::new("test", "0.1.0");
+    options.write_timeout = Some(Duration::from_millis(100));
+    let mut client = Client::new(&path, TOKEN, options);
+    client.connect(Duration::from_secs(2)).expect("handshake");
+
+    let started = Instant::now();
+    let mut failure = None;
+    for seed in 0..400 {
+        if let Err(error) = client.publish(&mut padded_snapshot(seed)) {
+            failure = Some(error);
+            break;
+        }
+    }
+    let elapsed = started.elapsed();
+    let _ = release.send(());
+
+    // 400 trees of a quarter-megabyte each: a socket buffer that swallowed all
+    // of them would mean the driver was reading, and this test would be
+    // asserting nothing at all.
+    let failure = failure.expect("nothing ever blocked, so the stall was never reproduced");
+    assert!(
+        matches!(failure, Error::WriteTimeout),
+        "expected a recognisable write timeout, got {failure:?}"
+    );
+    assert!(
+        elapsed < Duration::from_secs(30),
+        "publishing took {elapsed:?}; the write was not bounded"
+    );
+    // A half-written frame cannot be resynchronised, so the session is over.
+    assert!(!client.connected(), "the session survived a stalled driver");
+}
+
+/// "Driver not keeping up" and "snapshot refused" need different handling.
+#[test]
+fn an_invalid_snapshot_is_not_a_write_timeout() {
+    let path = socket_path();
+    let _driver = start_fake_driver(&path);
+    let mut client = Client::new(&path, TOKEN, Options::new("test", "0.1.0"));
+    client.connect(Duration::from_secs(2)).expect("handshake");
+
+    let mut broken = padded_snapshot(0);
+    broken.nodes[1].role = Role::Generic; // generic without a frameworkType
+    let error = client.publish(&mut broken).expect_err("expected a refusal");
+    assert!(
+        !matches!(error, Error::WriteTimeout),
+        "a refused snapshot was reported as a slow driver: {error:?}"
+    );
+    assert!(matches!(error, Error::Validation(_)), "{error:?}");
+}
+
+// -- the producer's obligation after a gap ---------------------------------
+
+#[test]
+fn require_full_snapshot_forces_a_whole_tree() {
+    let path = socket_path();
+    let driver = start_fake_driver_with_subscribe(&path, "diffs");
+    let mut client = Client::new(&path, TOKEN, Options::new("test", "0.1.0"));
+    client.connect(Duration::from_secs(2)).expect("handshake");
+
+    client.publish(&mut padded_snapshot(1)).expect("first");
+    client.publish(&mut padded_snapshot(2)).expect("second");
+    assert!(
+        client.deltas_sent() > 0,
+        "the second publish was not a delta, so this test proves nothing"
+    );
+
+    client.require_full_snapshot();
+    assert!(client.full_snapshot_required());
+    let before = client.snapshots_sent();
+    client.publish(&mut padded_snapshot(3)).expect("third");
+    assert_eq!(
+        client.snapshots_sent(),
+        before + 1,
+        "the obligation produced no full snapshot"
+    );
+    assert!(
+        !client.full_snapshot_required(),
+        "the obligation was not cleared"
+    );
+
+    let deltas = client.deltas_sent();
+    client.publish(&mut padded_snapshot(4)).expect("fourth");
+    assert_eq!(
+        client.deltas_sent(),
+        deltas + 1,
+        "deltas stopped after the obligation was honoured"
+    );
+    drop(driver);
 }

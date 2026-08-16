@@ -37,6 +37,25 @@ const snapshotHistory = 8
 // one themselves.
 const DialTimeout = 5 * time.Second
 
+// DefaultWriteTimeout bounds a single frame write.
+//
+// A probe publishes from inside the render loop — tview does it under the
+// application's write lock — so an unbounded Write turns a driver that has
+// stopped reading into a frozen application. That is the failure this whole
+// campaign exists to remove, so the ceiling is deliberately short: a driver
+// that cannot take a frame in a quarter of a second is not keeping up, and
+// waiting longer buys nothing that the next frame will not carry anyway.
+const DefaultWriteTimeout = 250 * time.Millisecond
+
+// ErrWriteTimeout reports that the driver did not read within the write
+// deadline.
+//
+// Distinguishable on purpose: a caller reacting to a slow driver (drop the
+// frame, keep rendering) does something quite different from a caller whose
+// snapshot was refused for being oversized, which is a *Violation with code
+// "frame-oversized" and will happen again on the next identical frame.
+var ErrWriteTimeout = errors.New("termwright: the driver did not read within the write deadline")
+
 // Options tune a Client. The zero value is usable.
 type Options struct {
 	// AdapterName and AdapterVersion identify the adapter in the handshake.
@@ -46,6 +65,10 @@ type Options struct {
 	Capabilities []Capability
 	// Limits applies until hello-ack replaces it.
 	Limits *Limits
+	// WriteTimeout bounds a single frame write. Zero means
+	// DefaultWriteTimeout; a negative value disables the deadline, which is
+	// only sane for a caller that publishes off the render path.
+	WriteTimeout time.Duration
 	// Debug receives the adapter-side diagnostic lines. Nil means silent, and
 	// nil is what FromEnv leaves here unless TERMWRIGHT_DEBUG_FILE names a
 	// file. Every use is on a nil-safe method, so the client behaves
@@ -80,6 +103,7 @@ type Client struct {
 	logSeq      int64
 	logBucket   *tokenBucket
 	logsDropped int64
+	forceFull   bool
 
 	ready chan error
 	once  sync.Once
@@ -485,10 +509,16 @@ func (c *Client) treeMessage(snapshot *Snapshot, subscribe string, body json.Raw
 
 	c.mu.Lock()
 	previous := c.published
+	forced := c.forceFull
+	c.forceFull = false
 	c.published = wire
 	c.mu.Unlock()
 
-	if subscribe == "diffs" && previous != nil {
+	if forced {
+		c.options.Debug.Line("io", fmt.Sprintf(
+			"r%d full snapshot: the producer reported a gap", snapshot.Revision))
+	}
+	if subscribe == "diffs" && previous != nil && !forced {
 		if delta := BuildDelta(previous, wire); delta != nil {
 			c.mu.Lock()
 			c.deltasSent++
@@ -503,6 +533,28 @@ func (c *Client) treeMessage(snapshot *Snapshot, subscribe string, body json.Raw
 	c.mu.Unlock()
 	c.options.Debug.Line("io", fmt.Sprintf("r%d snapshot nodes=%d", snapshot.Revision, len(snapshot.Nodes)))
 	return SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, nil
+}
+
+// RequireFullSnapshot makes the next Publish send a whole tree.
+//
+// The producer's obligation from D5: a probe that lost anything from its own
+// stream of facts — a dropped frame, a coalesced burst, a write that failed —
+// must not follow it with a patch. The driver would apply that patch to a tree
+// that never accounted for what was lost, and the divergence would be silent.
+//
+// The flag clears once a full snapshot has actually been built, so calling
+// this while disconnected still does the right thing when the link returns.
+func (c *Client) RequireFullSnapshot() {
+	c.mu.Lock()
+	c.forceFull = true
+	c.mu.Unlock()
+}
+
+// FullSnapshotRequired reports whether the obligation is outstanding.
+func (c *Client) FullSnapshotRequired() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.forceFull
 }
 
 // DeltasSent counts the patches this client has published.
@@ -541,11 +593,51 @@ func (c *Client) send(message any, limits Limits) error {
 	if conn == nil {
 		return nil
 	}
-	if _, err := conn.Write(frame); err != nil {
+
+	timeout := c.writeTimeout()
+	if timeout > 0 {
+		if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+			// A transport that cannot take a deadline cannot be bounded, and
+			// publishing into it from a render loop is the risk we refuse.
+			c.options.Debug.Line("diag", "cannot bound this write: "+errorLabel(err))
+			c.Close()
+			return err
+		}
+	}
+	written, err := conn.Write(frame)
+	if timeout > 0 {
+		// Best effort: the deadline is cleared so a later write on a still-open
+		// connection is not judged by this frame's clock.
+		_ = conn.SetWriteDeadline(time.Time{})
+	}
+	if err != nil {
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			// The stream now holds a fragment of a length-prefixed frame and
+			// there is no resynchronisation point: everything after it would be
+			// read as garbage. The session is over, not merely delayed.
+			c.options.Debug.Line("diag", fmt.Sprintf(
+				"write deadline exceeded after %d of %d bytes; session is unrecoverable",
+				written, len(frame)))
+			c.Close()
+			return fmt.Errorf("%w after %d of %d bytes: %v", ErrWriteTimeout, written, len(frame), err)
+		}
 		c.Close()
 		return err
 	}
+	if written != len(frame) {
+		c.options.Debug.Line("diag", fmt.Sprintf(
+			"short write, %d of %d bytes; session is unrecoverable", written, len(frame)))
+		c.Close()
+		return fmt.Errorf("%w: wrote %d of %d bytes", ErrWriteTimeout, written, len(frame))
+	}
 	return nil
+}
+
+func (c *Client) writeTimeout() time.Duration {
+	if c.options.WriteTimeout == 0 {
+		return DefaultWriteTimeout
+	}
+	return c.options.WriteTimeout
 }
 
 func (c *Client) readLoop(conn net.Conn) {

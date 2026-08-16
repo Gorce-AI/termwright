@@ -150,11 +150,12 @@ async def test_frames_before_the_handshake_are_counted_not_queued(endpoint):
 
 
 async def test_a_dropped_frame_never_leaves_the_driver_holding_a_gap(endpoint):
-    """The delta base is the last tree SENT, not the last tree built.
+    """Every delta is based on a revision the driver actually received.
 
-    A probe that skips frames must not then send a patch against a tree the
-    driver never received. The client only advances its base when it builds a
-    message from it, and this is the test that says so out loud.
+    Two clean publishes produce a patch; a dropped frame then forces the next
+    tree to be whole, so the driver is never handed a patch against a state it
+    never saw. Both halves are asserted, because either one alone would pass
+    while the other silently regressed.
     """
     driver = FakeDriver(endpoint, subscribe="diffs")
     await driver.start()
@@ -169,29 +170,27 @@ async def test_a_dropped_frame_never_leaves_the_driver_holding_a_gap(endpoint):
 
         session.on_frame()
         await wait_for(lambda: any(m.get("type") == "snapshot" for m in driver.received))
-
-        # Change the tree while the session cannot publish, so the frame is
-        # dropped rather than sent.
         app.query_one("#prompt", Label).update("Permission granted")
         await pilot.pause()
+        session.on_frame()
+        await wait_for(lambda: any(m.get("type") == "tree-delta" for m in driver.received))
+
+        # Now lose a frame, and watch the next one arrive whole.
         client.closed = True
         session.on_frame()
         client.closed = False
-
+        app.query_one("#prompt", Label).update("Permission denied")
+        await pilot.pause()
+        snapshots_before = client.snapshots_sent
         session.on_frame()
-        await wait_for(lambda: len(driver.received) > 2)
+        await wait_for(lambda: client.snapshots_sent > snapshots_before)
         await pilot.pause()
         await client.close()
 
     trees = [m for m in driver.received if m.get("type") in ("snapshot", "tree-delta")]
-    assert trees, "nothing reached the driver"
-    # Without a delta this test proves nothing, and it would go on passing.
-    assert any(m["type"] == "tree-delta" for m in trees), (
-        f"no delta was produced, so the base-revision check is vacuous: "
-        f"{[m['type'] for m in trees]}"
-    )
-    # The first tree is always whole; any later delta must be based on the
-    # revision of a tree the driver actually saw.
+    # Without a delta the base-revision check below is vacuous, and it would
+    # go on passing.
+    assert any(m["type"] == "tree-delta" for m in trees), [m["type"] for m in trees]
     seen_revisions = {
         m["snapshot"]["revision"] if m["type"] == "snapshot" else m["revision"]
         for m in trees
@@ -285,3 +284,37 @@ async def test_a_vanilla_app_in_a_child_process_publishes_a_tree(endpoint, tmp_p
 
     assert driver.hello is not None
     assert driver.hello.get("probe", {}).get("framework") == "textual"
+
+
+async def test_a_dropped_frame_obliges_the_next_tree_to_be_whole(endpoint):
+    """D5, as the probe experiences it.
+
+    The count of drops is diagnostics. The obligation is protocol: the driver
+    never saw the skipped tree, so a patch against it would be applied to a
+    state that never accounted for what was missed.
+    """
+    driver = FakeDriver(endpoint, subscribe="diffs")
+    await driver.start()
+    app = DemoApp()
+    async with app.run_test() as pilot:
+        client = SemanticClient(
+            endpoint, TOKEN, adapter_name="textual-probe", adapter_version="0.1.0"
+        )
+        session = ProbeSession(app, client)
+        session.on_frame()
+        await wait_for(lambda: client.connected)
+        # The handshake frame itself was a drop, so the obligation is already
+        # outstanding — which is correct, and worth stating.
+        assert client.full_snapshot_required
+
+        session.on_frame()
+        await wait_for(lambda: any(m.get("type") == "snapshot" for m in driver.received))
+        assert not client.full_snapshot_required, "the obligation was not honoured"
+
+        client.closed = True
+        session.on_frame()
+        client.closed = False
+        assert client.full_snapshot_required, "a dropped frame left no obligation"
+
+        await pilot.pause()
+        await client.close()
