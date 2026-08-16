@@ -282,12 +282,22 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+    devDependencies:
+      '@termwright/driver':
+        specifier: workspace:*
+        version: link:../driver
 
   packages/protocol:
     dependencies:
       zod:
         specifier: ^4.0.0
         version: 4.4.3
+
+  packages/recognizers:
+    dependencies:
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/screenshot:
     dependencies:
