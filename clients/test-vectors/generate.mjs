@@ -10,8 +10,16 @@
  *
  *   pnpm --filter @termwright/protocol build
  *   node clients/test-vectors/generate.mjs
+ *
+ * Regenerating prints a warning for every case that kept its name and changed
+ * its verdict, because that is the one failure a regeneration cannot show you
+ * on its own: a new rule firing earlier than an old one leaves the old rule's
+ * case green while it stops testing the rule it is named for. Read those lines
+ * before committing. `--strict` turns the warning into a non-zero exit for a
+ * caller that wants a gate rather than a report; CI does not need it, since
+ * the vectors job already fails on any uncommitted diff.
  */
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Buffer } from 'node:buffer';
@@ -45,10 +53,82 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
 
+/**
+ * Every named case's verdict, keyed by `group:name`.
+ *
+ * Keyed by name and not by position: inserting a case shifts every index after
+ * it, and a check that reported those as changes would be noise nobody reads.
+ */
+function verdicts(value) {
+  const found = new Map();
+  const walk = (node, group) => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, group);
+      return;
+    }
+    if (node === null || typeof node !== 'object') return;
+    if (typeof node.name === 'string') {
+      const code = node.code ?? node.expect?.code ?? null;
+      const ok = node.expect?.ok;
+      const verdict = code ?? (ok === undefined ? null : ok ? 'accept' : 'reject');
+      if (verdict !== null) found.set(`${group}:${node.name}`, verdict);
+    }
+    for (const [key, child] of Object.entries(node)) {
+      walk(child, Array.isArray(child) ? key : group);
+    }
+  };
+  walk(value, 'root');
+  return found;
+}
+
+/** Verdicts that changed while the case kept its name — see {@link masking}. */
+const shifted = [];
+
 function write(name, value) {
   const path = join(here, name);
+
+  // A vector whose name stayed put while its verdict moved is the one thing a
+  // regeneration cannot show you on its own. It usually means a new rule now
+  // fires EARLIER than the one the case was written for: the case still passes
+  // in every client, while the rule it was named for quietly loses its
+  // coverage. That happened to `parent-cycle` when generic nodes began
+  // requiring a frameworkType, and the only trace was one line of the diff.
+  let before = new Map();
+  try {
+    before = verdicts(JSON.parse(readFileSync(path, 'utf8')));
+  } catch {
+    // No previous file, or an unreadable one: nothing to compare against.
+  }
+  for (const [key, verdict] of verdicts(value)) {
+    const was = before.get(key);
+    if (was !== undefined && was !== verdict) shifted.push({ file: name, key, was, now: verdict });
+  }
+
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
   console.log(`wrote ${name}`);
+}
+
+/**
+ * Reports the verdict shifts collected during this run.
+ *
+ * A warning and not a failure: a shift is often exactly what the author
+ * intended, and the regeneration itself is already gated by the CI job that
+ * diffs the committed files. The point is that nobody can regenerate without
+ * being told which case now proves something different. `--strict` turns it
+ * into an exit code for anyone who wants the harder gate.
+ */
+function masking() {
+  if (shifted.length === 0) return;
+  console.log('');
+  console.log('  !! these cases kept their name and changed their verdict:');
+  for (const { file, key, was, now } of shifted) {
+    console.log(`     ${file} ${key}: ${was} -> ${now}`);
+  }
+  console.log('');
+  console.log('  Check each one still proves what its name says. A case that');
+  console.log('  now trips an earlier rule leaves its own rule uncovered in');
+  console.log('  every client, and stays green while doing it.');
+  if (process.argv.includes('--strict')) process.exit(1);
 }
 
 // --------------------------------------------------------------------------
@@ -889,3 +969,5 @@ write('deltas.json', {
     'The order of `nodes` is NOT normative — compare them as a set keyed by id.',
   cases: composed,
 });
+
+masking();
