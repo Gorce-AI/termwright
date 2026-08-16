@@ -28,6 +28,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createTerminal, type Terminal } from '@termwright/vt';
+import { MARKER_OSC_CODE, MARKER_OSC_PREFIX } from '@termwright/protocol';
 import { describe, expect, it } from 'vitest';
 import { createNodePtyBackend, type PtyProcess } from './pty.js';
 
@@ -121,6 +122,19 @@ const CANDIDATES: readonly Candidate[] = [
       terminal.parser.registerOscHandler(8, (data) => {
         if (data.includes('id=twprobe')) seen();
         return false;
+      });
+    },
+  },
+  {
+    name: 'osc-8487-marker',
+    sequence: `${ESC}]${MARKER_OSC_CODE};${MARKER_OSC_PREFIX}1;probe-marker-mac${BEL}`,
+    signature: new RegExp(`\\x1b\\]${MARKER_OSC_CODE};${MARKER_OSC_PREFIX}1;probe-marker-mac`),
+    leak: 'probe-marker-mac',
+    note: 'the number the render marker actually rides — measured, not inferred from its class',
+    listen: (terminal, seen) => {
+      terminal.parser.registerOscHandler(MARKER_OSC_CODE, (data) => {
+        if (data.endsWith('probe-marker-mac')) seen();
+        return true;
       });
     },
   },
