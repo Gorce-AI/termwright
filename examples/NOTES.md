@@ -66,13 +66,14 @@ workaround in this directory.
   exist at coordinates that are still moving — `waitForStable()` before the
   click. This is the one wait in these suites that is *not* about the tree, and
   the reason it survives the rest of them being deleted.
-- **Two keys in one `press()` can be handled before the app re-renders.**
-  `press('Tab Space')` writes both at once; an Ink app batches the two events,
-  so the space is handled against the focus Tab was leaving and lands in the
-  field being left rather than toggling the list. Splitting the call and
-  asserting the focus in between fixes it and costs nothing, because the
-  matcher polls — `fixtures.test.ts` does exactly that. This is the
-  assertion-as-wait pattern earning its keep, not decoration.
+- **Two chords in one `press()` are one write, not two keystrokes.** The driver
+  encodes the chords and sends them as a single write, so any program that
+  handles input in batches sees both before it has re-rendered:
+  `press('Tab Space')` put the space in the field Tab was leaving instead of
+  toggling the list. Send separate interactions separately, with an assertion
+  between them — `fixtures.test.ts` and the tview suite both do. Several chords
+  in one call are right only for a sequence the program consumes as a whole,
+  like `'Control+K Control+F'`. Now documented in the preset's README too.
 - **An installed language client goes stale silently.** The Textual example
   runs against `termwright` as installed in the environment, not against
   `clients/python` in the tree. When the render-commit marker moved from DCS to

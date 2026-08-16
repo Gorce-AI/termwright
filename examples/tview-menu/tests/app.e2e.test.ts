@@ -45,7 +45,14 @@ describe.skipIf(!runnable)('the tview menu', () => {
     await expect(app.getByRole('button', { name: 'Save' })).not.toBeVisible();
 
     await step('open Settings from the menu', async () => {
-      await app.press('ArrowDown Enter');
+      // Two chords in one press() go out as a single write, so the program can
+      // see both before it has re-rendered. These are two separate
+      // interactions — move, then choose — so they are sent as two, with the
+      // assertion in between doing the waiting.
+      await app.press('ArrowDown');
+      await expect(app.getByRole('listitem', { name: 'Settings' })).toHaveState({ selected: true });
+
+      await app.press('Enter');
       await expect(app.getByRole('textbox', { name: 'Name' })).toBeVisible();
     });
 
