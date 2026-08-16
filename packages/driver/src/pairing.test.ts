@@ -14,12 +14,13 @@ function snapshot(revision: number): SemanticSnapshot {
   };
 }
 
-function createPairing(markerEnabled = true) {
+function createPairing(markerEnabled = true, caughtUp?: () => Promise<void>) {
   const published: PairedRevision[] = [];
   const diagnostics: string[] = [];
   const pairing = new RevisionPairing({
     maxPending: 3,
     pairingTimeoutMs: 50,
+    ...(caughtUp !== undefined ? { caughtUp } : {}),
     onPublish: (paired) => published.push(paired),
     onDiagnostic: (code, detail, revision) => diagnostics.push(`${code} r${revision}: ${detail}`),
   });
@@ -96,7 +97,60 @@ describe('RevisionPairing', () => {
     try {
       const { pairing, diagnostics } = createPairing();
       pairing.offerSnapshot(snapshot(1));
-      vi.advanceTimersByTime(60);
+      await vi.advanceTimersByTimeAsync(60);
+      expect(diagnostics.join('\n')).toContain('render marker did not arrive');
+      expect(pairing.hasPendingRender).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not run the expiry clock while the emulator is still catching up', async () => {
+    // The flood case: the tree came over a socket, its marker is bytes still
+    // queued for the parser. Expiring here would report a missing half that is
+    // in fact already in hand, unread.
+    vi.useFakeTimers();
+    try {
+      let caughtUp = (): void => {};
+      const barrier = new Promise<void>((resolve) => {
+        caughtUp = resolve;
+      });
+      const { pairing, diagnostics, published } = createPairing(true, () => barrier);
+
+      pairing.offerSnapshot(snapshot(1));
+      await vi.advanceTimersByTimeAsync(500); // ten times the window
+      expect(diagnostics).toEqual([]);
+      expect(pairing.hasPendingRender).toBe(true);
+
+      // The marker was in those unparsed bytes all along.
+      pairing.offerMarker(1, 9);
+      expect(published).toHaveLength(1);
+
+      caughtUp();
+      await vi.advanceTimersByTimeAsync(500);
+      // Nothing expires afterwards either: the half was cancelled before its
+      // timer was ever armed.
+      expect(diagnostics).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('expires once caught up, so a genuinely missing half is still reported', async () => {
+    vi.useFakeTimers();
+    try {
+      let caughtUp = (): void => {};
+      const barrier = new Promise<void>((resolve) => {
+        caughtUp = resolve;
+      });
+      const { pairing, diagnostics } = createPairing(true, () => barrier);
+
+      pairing.offerSnapshot(snapshot(1));
+      await vi.advanceTimersByTimeAsync(500);
+      expect(diagnostics).toEqual([]);
+
+      caughtUp();
+      await vi.advanceTimersByTimeAsync(60);
       expect(diagnostics.join('\n')).toContain('render marker did not arrive');
       expect(pairing.hasPendingRender).toBe(false);
     } finally {

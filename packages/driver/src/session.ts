@@ -285,6 +285,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#pairing = new RevisionPairing({
       maxPending: DEFAULT_LIMITS.maxQueuedFrames,
       pairingTimeoutMs: PAIRING_TIMEOUT_MS,
+      // The emulator's write queue is the barrier: a marker cannot be seen
+      // before the bytes it sits in have been parsed.
+      caughtUp: () => this.#vt.drain(),
       onPublish: (paired) => this.#publishSemantic(paired.snapshot),
       onDiagnostic: (code, detail, revision) => this.#diagnostic(code, detail, { revision }),
     });

@@ -26,6 +26,20 @@ export interface PairedRevision {
 export interface PairingOptions {
   readonly maxPending: number;
   readonly pairingTimeoutMs: number;
+  /**
+   * Resolves once the emulator has parsed everything received up to the moment
+   * of the call. A half's expiry clock starts then, never before.
+   *
+   * The two halves reach the driver by unequal roads: a tree arrives on a
+   * socket and needs no parsing, while its marker is bytes in the output
+   * stream, queued behind every byte written before it. Under a flood that
+   * queue was measured adding 0.7 s against a 1 s window on a machine where
+   * the transport added nothing — so a timeout without this barrier reports
+   * "the other half never came" when the truth is "we had not read it yet".
+   *
+   * Defaults to "already caught up", which restores the plain timeout.
+   */
+  caughtUp?(): Promise<void>;
   /** Publishes a fully paired revision. */
   onPublish(paired: PairedRevision): void;
   /** Reports dropped, superseded or expired halves. */
@@ -34,12 +48,42 @@ export interface PairingOptions {
 
 interface PendingSnapshot {
   readonly snapshot: SemanticSnapshot;
-  readonly timer: NodeJS.Timeout;
+  readonly expiry: DeferredExpiry;
 }
 
 interface PendingMarker {
   readonly screenRevision: number;
-  readonly timer: NodeJS.Timeout;
+  readonly expiry: DeferredExpiry;
+}
+
+/**
+ * A timeout that does not start until a barrier resolves. Cancelling before
+ * the barrier settles is honoured, so a half that pairs while the emulator is
+ * still catching up never arms a timer at all.
+ */
+class DeferredExpiry {
+  #timer: NodeJS.Timeout | null = null;
+  #cancelled = false;
+
+  constructor(barrier: Promise<void>, delayMs: number, onExpire: () => void) {
+    void barrier.then(
+      () => this.#arm(delayMs, onExpire),
+      // A barrier that rejects must not strand the half forever: fall back to
+      // arming immediately, which is the behaviour without a barrier at all.
+      () => this.#arm(delayMs, onExpire),
+    );
+  }
+
+  cancel(): void {
+    this.#cancelled = true;
+    if (this.#timer !== null) clearTimeout(this.#timer);
+  }
+
+  #arm(delayMs: number, onExpire: () => void): void {
+    if (this.#cancelled) return;
+    this.#timer = setTimeout(onExpire, delayMs);
+    this.#timer.unref?.();
+  }
 }
 
 /** Holds the two halves of each in-flight revision until they meet. */
@@ -96,14 +140,14 @@ export class RevisionPairing {
     }
     const marker = this.#markers.get(snapshot.revision);
     if (marker !== undefined) {
-      clearTimeout(marker.timer);
+      marker.expiry.cancel();
       this.#markers.delete(snapshot.revision);
       this.#publish({ snapshot, screenRevision: marker.screenRevision });
       return;
     }
     this.#retain(this.#snapshots, snapshot.revision, 'tree', {
       snapshot,
-      timer: this.#expire(snapshot.revision, 'tree'),
+      expiry: this.#expire(snapshot.revision, 'tree'),
     });
   }
 
@@ -120,14 +164,14 @@ export class RevisionPairing {
     }
     const pending = this.#snapshots.get(revision);
     if (pending !== undefined) {
-      clearTimeout(pending.timer);
+      pending.expiry.cancel();
       this.#snapshots.delete(revision);
       this.#publish({ snapshot: pending.snapshot, screenRevision });
       return;
     }
     this.#retain(this.#markers, revision, 'marker', {
       screenRevision,
-      timer: this.#expire(revision, 'marker'),
+      expiry: this.#expire(revision, 'marker'),
     });
   }
 
@@ -135,8 +179,8 @@ export class RevisionPairing {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
-    for (const pending of this.#snapshots.values()) clearTimeout(pending.timer);
-    for (const marker of this.#markers.values()) clearTimeout(marker.timer);
+    for (const pending of this.#snapshots.values()) pending.expiry.cancel();
+    for (const marker of this.#markers.values()) marker.expiry.cancel();
     this.#snapshots.clear();
     this.#markers.clear();
   }
@@ -150,7 +194,7 @@ export class RevisionPairing {
   #dropBelow(revision: number): void {
     for (const [pendingRevision, pending] of this.#snapshots) {
       if (pendingRevision >= revision) continue;
-      clearTimeout(pending.timer);
+      pending.expiry.cancel();
       this.#snapshots.delete(pendingRevision);
       this.#options.onDiagnostic(
         'revision-superseded',
@@ -160,7 +204,7 @@ export class RevisionPairing {
     }
     for (const [pendingRevision, marker] of this.#markers) {
       if (pendingRevision >= revision) continue;
-      clearTimeout(marker.timer);
+      marker.expiry.cancel();
       this.#markers.delete(pendingRevision);
       this.#options.onDiagnostic(
         'revision-superseded',
@@ -176,7 +220,7 @@ export class RevisionPairing {
       const oldest = store.keys().next();
       if (oldest.done === true) break;
       const evicted = store.get(oldest.value);
-      if (evicted !== undefined) clearTimeout((evicted as { timer: NodeJS.Timeout }).timer);
+      if (evicted !== undefined) (evicted as { expiry: DeferredExpiry }).expiry.cancel();
       store.delete(oldest.value);
       this.#options.onDiagnostic(
         'revision-dropped',
@@ -186,8 +230,12 @@ export class RevisionPairing {
     }
   }
 
-  #expire(revision: number, half: 'tree' | 'marker'): NodeJS.Timeout {
-    const timer = setTimeout(() => {
+  #expire(revision: number, half: 'tree' | 'marker'): DeferredExpiry {
+    // The clock starts when the emulator has caught up with the bytes already
+    // received, so a timeout means the other half never came rather than that
+    // the driver was still chewing through the output it arrived in.
+    const barrier = this.#options.caughtUp?.() ?? Promise.resolve();
+    return new DeferredExpiry(barrier, this.#options.pairingTimeoutMs, () => {
       const store = half === 'tree' ? this.#snapshots : this.#markers;
       if (!store.delete(revision)) return;
       this.#options.onDiagnostic(
@@ -195,8 +243,6 @@ export class RevisionPairing {
         `revision ${revision} dropped: its ${half === 'tree' ? 'render marker' : 'tree'} did not arrive within ${this.#options.pairingTimeoutMs} ms`,
         revision,
       );
-    }, this.#options.pairingTimeoutMs);
-    timer.unref?.();
-    return timer;
+    });
   }
 }

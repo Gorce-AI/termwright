@@ -404,6 +404,54 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
   });
 });
 
+describe.skipIf(!ptyAvailable())('application key modes through a real pty', { timeout: 30_000 }, () => {
+  it('reports what a child in application mode receives for an arrow key', async () => {
+    // The escape table showed `?1h` and `ESC =` not reaching the emulator on
+    // Windows, which leaves the driver unable to tell which arrow encoding the
+    // program wants. Whether that is a real defect depends on the other
+    // direction: if the terminal rewrites what we write to match the mode it
+    // kept for itself, the program gets the right bytes anyway.
+    const { terminal } = createTerminal({ columns: 60, rows: 10, scrollback: 0 });
+    let pty: PtyProcess | undefined;
+    try {
+      pty = createNodePtyBackend().spawn({
+        command: [process.execPath, join(FIXTURES, 'appkeys-app.mjs')],
+        env: environment(),
+        columns: 60,
+        rows: 10,
+      });
+      let queue: Promise<void> = Promise.resolve();
+      pty.onData((chunk) => {
+        queue = queue.then(
+          () => new Promise<void>((resolve) => terminal.write(chunk, () => resolve())),
+        );
+      });
+
+      await settle(() => gridText(terminal).includes('APPKEYS ON'), () => queue);
+      const modes = `applicationCursorKeys=${terminal.modes.applicationCursorKeysMode} applicationKeypad=${terminal.modes.applicationKeypadMode}`;
+
+      // Normal-mode Up, which is what the driver sends when it believes the
+      // program is not in application mode.
+      pty.write(Buffer.from('\x1b[A', 'binary'));
+      await settle(() => /GOT:/u.test(gridText(terminal)), () => queue);
+      // Application-mode Up, for comparison.
+      pty.write(Buffer.from('\x1bOA', 'binary'));
+      await settle(() => (gridText(terminal).match(/GOT:/gu) ?? []).length >= 2, () => queue);
+
+      const received = [...gridText(terminal).matchAll(/GOT:([0-9a-f ]+)/gu)].map((m) => m[1]?.trim());
+      console.log(
+        `[appkeys probe] platform=${process.platform} ${modes}\n` +
+          `  sent 1b 5b 41 (CSI A)  -> child got: ${received[0] ?? 'nothing'}\n` +
+          `  sent 1b 4f 41 (SS3 A)  -> child got: ${received[1] ?? 'nothing'}`,
+      );
+      expect(gridText(terminal)).toContain('APPKEYS ON');
+    } finally {
+      pty?.dispose();
+      terminal.dispose();
+    }
+  });
+});
+
 describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_000 }, () => {
   it('reports how far behind a commit marker falls when renders come back to back', async () => {
     // Why this exists: on Windows a flood leaves the revision chain stalled

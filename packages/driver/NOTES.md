@@ -84,3 +84,27 @@ silently. Hence `'unknown'` is defined as "this reading is the host's state and
 says nothing about the child", which covers both a swallowed request and an
 added one; a definition tied to the mechanism would have covered only the
 mouse.
+
+## Floods: the pairing timeout was measuring our own backlog
+
+A revision's two halves reach the driver by unequal roads. The tree arrives on
+a socket and needs no parsing; its marker is bytes in the output stream, queued
+behind every byte written before it. The flood probe in `escapes.pty.test.ts`
+times each marker twice — when its bytes land, and when the emulator reaches
+it — and on macOS, where no ConPTY exists, the transport added **0 ms** while
+the parse queue added up to **692 ms** against a 1000 ms pairing window. Under
+a heavier flood the window closes, and the driver reports `revision-expired`
+for a marker it is already holding, unread.
+
+So the expiry clock now starts at a drain barrier: a half cannot expire until
+the emulator has parsed everything received at the moment the half was
+accepted. A timeout means "the other half never came" again, rather than "we
+were busy". This is why the fix is not a bigger budget or a per-platform one:
+the race is platform-neutral and a budget only moves the flood size at which it
+returns.
+
+The eviction path (`maxPending`) is unchanged and correct: a peer producing
+revisions faster than pairs close will lose the oldest, with a diagnostic. Note
+the coupling, though — publishing drops everything below, so pairing that keeps
+up is also what keeps the queue short. Throughput of the emulator is a
+measurement, never a contract.
