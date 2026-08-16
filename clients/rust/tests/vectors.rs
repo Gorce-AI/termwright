@@ -499,3 +499,95 @@ fn the_optional_log_budget_is_understood() {
     )
     .is_err());
 }
+
+// -- the barrier against the next missing field -----------------------------
+
+/// A field added to the protocol must fail here, not in production.
+///
+/// `frameworkType`, `occlusion`, `p` and `px` each reached the reference and
+/// stayed unknown to this client until something tripped over a rejected
+/// snapshot. The reference now exports its key list; this compares against it,
+/// so the next one is a red test on the day it lands.
+#[test]
+fn node_and_state_keys_are_exactly_the_protocols() {
+    use std::collections::BTreeSet;
+
+    use termwright_protocol::schema_keys::{NODE_KEYS, STATE_KEYS};
+
+    let constants = vectors("constants");
+    for (what, expected, actual) in [
+        ("node", &constants["nodeKeys"], &NODE_KEYS[..]),
+        ("state", &constants["stateKeys"], &STATE_KEYS[..]),
+    ] {
+        let want: BTreeSet<String> = expected
+            .as_array()
+            .expect("the vector lists keys")
+            .iter()
+            .map(|value| value.as_str().expect("a key is a string").to_owned())
+            .collect();
+        let got: BTreeSet<String> = actual.iter().map(|key| (*key).to_owned()).collect();
+        assert_eq!(
+            want,
+            got,
+            "{what} keys diverged; missing here: {:?}, unknown to the protocol: {:?}",
+            want.difference(&got).collect::<Vec<_>>(),
+            got.difference(&want).collect::<Vec<_>>(),
+        );
+    }
+}
+
+/// The validator knowing a field is not the same as being able to send it.
+///
+/// Checked by serialising a node with every optional field populated and
+/// reading back which keys survive: a field the struct cannot hold simply does
+/// not appear, whatever the validator thinks.
+#[test]
+fn the_node_struct_can_carry_every_field() {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use termwright_protocol::{Node, Occlusion, Provenance, Rect, Role, State};
+
+    let mut node = Node::new("n1", Role::Generic, "name");
+    node.parent_id = Some("root".into());
+    node.description = Some("described".into());
+    node.value = Some(String::new());
+    node.bounds = Some(Rect {
+        row: 0,
+        column: 0,
+        width: 1,
+        height: 1,
+    });
+    node.state = Some(State::default());
+    node.actions = Some(vec![]);
+    node.labelled_by = Some(vec!["a".into()]);
+    node.described_by = Some(vec!["b".into()]);
+    node.text_ranges = Some(vec![]);
+    node.test_id = Some("t".into());
+    node.framework_type = Some("Widget".into());
+    node.occlusion = Some(Occlusion::Known);
+    node.p = Some(Provenance::Framework);
+    node.px = Some(BTreeMap::from([(
+        "name".to_owned(),
+        Provenance::Annotation,
+    )]));
+
+    let wire = serde_json::to_value(&node).expect("a node serialises");
+    let carried: BTreeSet<&str> = wire
+        .as_object()
+        .expect("an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+
+    let constants = vectors("constants");
+    for key in constants["nodeKeys"]
+        .as_array()
+        .expect("the vector lists keys")
+    {
+        let key = key.as_str().expect("a key is a string");
+        assert!(
+            carried.contains(key),
+            "Node cannot carry {key:?}, so this client can never publish it",
+        );
+    }
+}

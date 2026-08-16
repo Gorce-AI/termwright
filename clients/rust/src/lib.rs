@@ -74,7 +74,15 @@ pub use marker::{
 pub use messages::{parse_adapter_message, parse_driver_message, PROTOCOL_ID, PROTOCOL_VERSION};
 pub use roles::{Action, Capability, Role};
 pub use tree::{
-    Cursor, CursorShape, Node, Occlusion, Orientation, Provenance, Rect, Snapshot, State,
-    TextRange,
+    Cursor, CursorShape, Node, Occlusion, Orientation, Provenance, Rect, Snapshot, State, TextRange,
 };
 pub use validate::{apply_tree_delta, validate_snapshot, validate_tree_delta};
+
+/// The fields a node and a state may carry, as this client knows them.
+///
+/// Exposed so a test can compare them against the protocol's own exported
+/// lists: a field added upstream must fail a test here rather than wait to be
+/// noticed as a rejected snapshot in production.
+pub mod schema_keys {
+    pub use crate::validate::{NODE_KEYS, STATE_KEYS};
+}

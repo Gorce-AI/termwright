@@ -180,7 +180,8 @@ const STATE_BOOL_KEYS: [&str; 9] = [
     "multiline",
 ];
 
-const STATE_KEYS: [&str; 16] = [
+/// Every field a `state` object may carry, as this client knows them.
+pub const STATE_KEYS: [&str; 16] = [
     "disabled",
     "focused",
     "selected",
@@ -236,7 +237,8 @@ fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
     Ok(())
 }
 
-const NODE_KEYS: [&str; 17] = [
+/// Every field a node may carry, as this client knows them.
+pub const NODE_KEYS: [&str; 17] = [
     "id",
     "parentId",
     "role",
@@ -332,7 +334,11 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
             return Err(Issue::new(path(at, &["px"]), "expected an object"));
         };
         for (field, source) in fields {
-            text(Some(&Value::String(field.clone())), path(at, &["px", field]), limits)?;
+            text(
+                Some(&Value::String(field.clone())),
+                path(at, &["px", field]),
+                limits,
+            )?;
             if !source
                 .as_str()
                 .is_some_and(|value| PROVENANCE_SOURCES.contains(&value))

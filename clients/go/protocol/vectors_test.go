@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -575,5 +577,71 @@ func TestClosedSetsStayClosedInBothDirections(t *testing.T) {
 	badMarker["marker"] = map[string]any{"enabled": "yes", "style": "dcs"}
 	if _, err := ParseDriverMessage(badMarker, DefaultLimits); err == nil {
 		t.Error("a mistyped known field was accepted alongside an unknown one")
+	}
+}
+
+// -- the barrier against the next missing field -----------------------------
+
+// A field added to the protocol must fail here, not in production.
+//
+// frameworkType, occlusion, p and px each reached the reference and stayed
+// unknown to this client until something tripped over a rejected snapshot. The
+// reference now exports its key list; this compares against it, so the next
+// one is a red test on the day it lands.
+func TestNodeKeysAreExactlyTheProtocols(t *testing.T) {
+	var vectors struct {
+		NodeKeys  []string `json:"nodeKeys"`
+		StateKeys []string `json:"stateKeys"`
+	}
+	loadVectors(t, "constants", &vectors)
+
+	assertSameSet(t, "node", vectors.NodeKeys, nodeKeys)
+	assertSameSet(t, "state", vectors.StateKeys, stateKeys)
+}
+
+// The validator knowing a field is not the same as being able to send it: a
+// client that accepts `occlusion` but whose Node cannot hold one still cannot
+// produce it, which is the state this client was in.
+func TestTheNodeStructCanCarryEveryField(t *testing.T) {
+	var vectors struct {
+		NodeKeys []string `json:"nodeKeys"`
+	}
+	loadVectors(t, "constants", &vectors)
+
+	carried := map[string]bool{}
+	nodeType := reflect.TypeOf(Node{})
+	for index := 0; index < nodeType.NumField(); index++ {
+		tag := nodeType.Field(index).Tag.Get("json")
+		name := strings.Split(tag, ",")[0]
+		if name != "" && name != "-" {
+			carried[name] = true
+		}
+	}
+	for _, key := range vectors.NodeKeys {
+		if !carried[key] {
+			t.Errorf("Node cannot carry %q, so this client can never publish it", key)
+		}
+	}
+}
+
+func assertSameSet(t *testing.T, what string, expected, actual []string) {
+	t.Helper()
+	want := map[string]bool{}
+	for _, key := range expected {
+		want[key] = true
+	}
+	got := map[string]bool{}
+	for _, key := range actual {
+		got[key] = true
+	}
+	for key := range want {
+		if !got[key] {
+			t.Errorf("%s key %q is in the protocol and missing here", what, key)
+		}
+	}
+	for key := range got {
+		if !want[key] {
+			t.Errorf("%s key %q is known here and unknown to the protocol", what, key)
+		}
 	}
 }

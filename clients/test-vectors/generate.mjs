@@ -41,7 +41,9 @@ import {
   PROTOCOL_ID,
   PROTOCOL_VERSION,
   SEMANTIC_ACTIONS,
+  SEMANTIC_NODE_KEYS,
   SEMANTIC_ROLES,
+  SEMANTIC_STATE_KEYS,
   createFrameDecoder,
   encodeFrame,
   encodeMarker,
@@ -161,6 +163,12 @@ write('constants.json', {
   probeUnobservableFields: [...PROBE_UNOBSERVABLE_FIELDS],
   probeIdentityKinds: ['stable', 'frame-local'],
   occlusionValues: ['known', 'unknown'],
+  // Every field a node and a state may carry. A client asserts its own
+  // structures against these, so a field added to the protocol fails three
+  // client suites at once instead of waiting to be noticed in production —
+  // which is how frameworkType, occlusion, p and px each went missing.
+  nodeKeys: [...SEMANTIC_NODE_KEYS],
+  stateKeys: [...SEMANTIC_STATE_KEYS],
   defaultLimits: { ...DEFAULT_LIMITS },
   absoluteLimits: { ...ABSOLUTE_LIMITS },
 });

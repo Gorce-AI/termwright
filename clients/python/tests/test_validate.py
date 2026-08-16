@@ -79,3 +79,49 @@ def test_oversized_snapshots_are_rejected_by_bytes():
     result = validate_snapshot(snapshot.to_wire(), DEFAULT_LIMITS)
     assert not result.ok
     assert result.code == "bytes"
+
+
+# -- the barrier against the next missing field -----------------------------
+
+
+def test_the_node_keys_are_exactly_the_protocols():
+    """A field added to the protocol must fail here, not in production.
+
+    frameworkType, occlusion, p and px each reached the reference and stayed
+    unknown to this client until something tripped over a rejected snapshot.
+    The reference now exports its key list; this compares against it, so the
+    next one is a red test on the day it lands.
+    """
+    from termwright.validate import _NODE_KEYS
+
+    expected = set(load_vectors("constants")["nodeKeys"])
+    assert set(_NODE_KEYS) == expected, {
+        "missing here": sorted(expected - set(_NODE_KEYS)),
+        "unknown to the protocol": sorted(set(_NODE_KEYS) - expected),
+    }
+
+
+def test_the_state_keys_are_exactly_the_protocols():
+    from termwright.validate import _STATE_KEYS
+
+    expected = set(load_vectors("constants")["stateKeys"])
+    assert set(_STATE_KEYS) == expected, {
+        "missing here": sorted(expected - set(_STATE_KEYS)),
+        "unknown to the protocol": sorted(set(_STATE_KEYS) - expected),
+    }
+
+
+def test_the_node_dataclass_can_carry_every_field():
+    """The validator knowing a field is not the same as being able to send it.
+
+    A client whose validator accepts `occlusion` but whose node type cannot
+    hold one is still unable to produce it — which was exactly the state this
+    client was in.
+    """
+    import dataclasses
+
+    from termwright.tree import SemanticNode
+
+    fields = {field.name for field in dataclasses.fields(SemanticNode)}
+    expected = set(load_vectors("constants")["nodeKeys"])
+    assert expected <= fields, sorted(expected - fields)
