@@ -18,8 +18,10 @@ import {
   type TerminalHarness,
   type TimeoutClasses,
 } from '@termwright/driver';
+import { ControlChannel, ENV_CONTROL_ENDPOINT, ENV_CONTROL_TOKEN } from './control.js';
+import { ForwardingHarness } from './forwarding.js';
 import { encodeFixturePayload, type JsonProps } from './payload.js';
-import { waitForFirstFrame, type SettleOptions } from './settle.js';
+import { commitFrame, waitForFirstFrame, type SettleOptions } from './settle.js';
 
 /** Options for {@link launchInkFixture}. */
 export interface LaunchInkFixtureOptions {
@@ -69,10 +71,35 @@ export interface LaunchInkFixtureOptions {
 }
 
 /**
+ * A {@link TerminalHarness} over a fixture process, plus the prop update only a
+ * control channel can deliver.
+ */
+export interface InkFixtureHarness extends TerminalHarness {
+  /**
+   * Replaces the fixture's props and resolves once the resulting frame has been
+   * committed and published.
+   *
+   * The counterpart of `InkHarness.rerender`, and deliberately not the same
+   * signature: a mount takes a React element because it shares a heap with the
+   * test, while a fixture is another process and can only be sent data. Props
+   * cross as bounded JSON over a private socket — never over stdin, which
+   * belongs to the simulated user, and never as code.
+   *
+   * The *component* is fixed when the fixture starts and is never re-resolved
+   * from a message: a rerender changes what it is showing, never which code
+   * runs.
+   */
+  rerender(props: JsonProps, opts?: SettleOptions): Promise<void>;
+}
+
+/**
  * Ink's frame cap inside a fixture. Matches the mount so that a component
  * behaves the same in both modes.
  */
 const FIXTURE_MAX_FPS = 1_000;
+
+/** How long a fixture may take to attach to the control channel. */
+const CONTROL_ATTACH_TIMEOUT_MS = 5_000;
 
 /** The runner lives next to `dist/`, one level below the package root. */
 const RUNNER_ENTRY = new URL('../runner/runner-entry.mjs', import.meta.url);
@@ -98,7 +125,7 @@ const RUNNER_ENTRY = new URL('../runner/runner-entry.mjs', import.meta.url);
  * await harness.close();
  * ```
  */
-export async function launchInkFixture(options: LaunchInkFixtureOptions): Promise<TerminalHarness> {
+export async function launchInkFixture(options: LaunchInkFixtureOptions): Promise<InkFixtureHarness> {
   const payload = encodeFixturePayload({
     v: 1,
     module: moduleUrl(options.component),
@@ -107,12 +134,20 @@ export async function launchInkFixture(options: LaunchInkFixtureOptions): Promis
     maxFps: FIXTURE_MAX_FPS,
   });
 
+  // Created before the process starts, so the address exists by the time the
+  // runner looks for it and no connection can be missed.
+  const control = await ControlChannel.listen();
+
   const harness = await launchTerminal({
     command: [process.execPath, ...(options.nodeArgs ?? []), fileURLToPath(RUNNER_ENTRY), payload],
     columns: options.columns ?? 80,
     rows: options.rows ?? 24,
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-    ...(options.env === undefined ? {} : { env: options.env }),
+    env: {
+      ...options.env,
+      [ENV_CONTROL_ENDPOINT]: control.endpoint,
+      [ENV_CONTROL_TOKEN]: control.token,
+    },
     ...(options.envMode === undefined ? {} : { envMode: options.envMode }),
     ...(options.logs === undefined ? {} : { logs: options.logs }),
     ...(options.timeouts === undefined ? {} : { timeouts: options.timeouts }),
@@ -145,10 +180,56 @@ export async function launchInkFixture(options: LaunchInkFixtureOptions): Promis
       died,
     ]);
   } catch (error) {
+    await control.close();
     await harness.close();
     throw error;
   }
-  return harness;
+
+  return new InkFixtureHarnessImpl(
+    harness,
+    control,
+    options.settleTimeout === undefined ? undefined : { timeout: options.settleTimeout },
+  );
+}
+
+/**
+ * The session, plus `rerender`, plus a `close` that takes the control channel
+ * down with it.
+ *
+ * Built on the same explicit forwarder as `mountInk` rather than on a
+ * prototype trick: the driver's session keeps its state in private fields, so
+ * an object that merely inherits from it throws on the first method call —
+ * which typechecks perfectly and fails at runtime.
+ */
+class InkFixtureHarnessImpl extends ForwardingHarness implements InkFixtureHarness {
+  readonly #control: ControlChannel;
+  readonly #settle: SettleOptions | undefined;
+
+  constructor(session: TerminalHarness, control: ControlChannel, settle: SettleOptions | undefined) {
+    super(session);
+    this.#control = control;
+    this.#settle = settle;
+  }
+
+  async rerender(props: JsonProps, opts?: SettleOptions): Promise<void> {
+    await this.#control.waitForFixture(CONTROL_ATTACH_TIMEOUT_MS);
+
+    // Listen first, send second, and let a failed send win. Attaching the frame
+    // listeners up front means a fixture that repaints immediately cannot
+    // outrun them; awaiting the send before the frame means a rejected command
+    // — unserializable props, an oversized message, a fixture that refused —
+    // fails in milliseconds instead of waiting out a frame that will never come.
+    const committed = commitFrame(this.session, () => undefined, opts ?? this.#settle);
+    committed.catch(() => undefined);
+
+    await this.#control.rerender(props);
+    await committed;
+  }
+
+  override async close(): Promise<void> {
+    await this.#control.close();
+    await super.close();
+  }
 }
 
 function moduleUrl(component: string | URL): string {

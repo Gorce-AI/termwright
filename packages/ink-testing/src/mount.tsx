@@ -29,6 +29,7 @@ import {
 } from '@termwright/driver';
 import type { SemanticRole, SemanticSnapshot } from '@termwright/protocol';
 import { createInProcessBackend } from './backend.js';
+import { ForwardingHarness } from './forwarding.js';
 import { MountErrorBoundary } from './error-boundary.js';
 import { commitFrame, waitForFirstFrame, type SettleOptions } from './settle.js';
 
@@ -278,8 +279,7 @@ function wrapTree(
  * in-process harness is provably the driver's own — if `TerminalHarness` grows
  * a member, this class stops compiling.
  */
-class InkHarnessImpl implements InkHarness {
-  readonly #session: TerminalHarness;
+class InkHarnessImpl extends ForwardingHarness implements InkHarness {
   readonly #state: MountState;
   readonly #tree: (node: ReactNode) => ReactNode;
   readonly #settle: SettleOptions | undefined;
@@ -290,7 +290,7 @@ class InkHarnessImpl implements InkHarness {
     tree: (node: ReactNode) => ReactNode,
     settle: SettleOptions | undefined,
   ) {
-    this.#session = session;
+    super(session);
     this.#state = state;
     this.#tree = tree;
     this.#settle = settle;
@@ -307,149 +307,17 @@ class InkHarnessImpl implements InkHarness {
     }
     this.#state.error = null;
     this.#state.generation += 1;
-    await commitFrame(this.#session, () => instance.rerender(this.#tree(element)), opts ?? this.#settle);
+    await commitFrame(this.session, () => instance.rerender(this.#tree(element)), opts ?? this.#settle);
   }
 
   renderError(): Error | null {
     return this.#state.error;
   }
 
-  // --- TerminalHarness ------------------------------------------------------
+  // --- TerminalHarness: everything else is forwarded by the base class ------
 
-  get sessionId(): string {
-    return this.#session.sessionId;
-  }
-
-  get scrollback(): ScrollbackApi {
-    return this.#session.scrollback;
-  }
-
-  get selection(): SelectionApi {
-    return this.#session.selection;
-  }
-
-  get events(): SessionEvents {
-    return this.#session.events;
-  }
-
-  get exit(): Promise<ExitStatus> {
-    return this.#session.exit;
-  }
-
-  capabilities(): SessionCapabilities {
-    return this.#session.capabilities();
-  }
-
-  screen(): ScreenSnapshot {
-    return this.#session.screen();
-  }
-
-  semanticTree(): SemanticSnapshot | null {
-    return this.#session.semanticTree();
-  }
-
-  cell(pos: { row: number; column: number }): CellSnapshot {
-    return this.#session.cell(pos);
-  }
-
-  getByRole(role: SemanticRole, opts?: RoleLocatorOptions): Locator {
-    return this.#session.getByRole(role, opts);
-  }
-
-  getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator {
-    return this.#session.getByLabel(text, opts);
-  }
-
-  getByText(text: string | RegExp, opts?: TextLocatorOptions): Locator {
-    return this.#session.getByText(text, opts);
-  }
-
-  getByTestId(testId: string): Locator {
-    return this.#session.getByTestId(testId);
-  }
-
-  locator(selector: string): Locator {
-    return this.#session.locator(selector);
-  }
-
-  locatorForRef(ref: string): Locator {
-    return this.#session.locatorForRef(ref);
-  }
-
-  press(keys: string): Promise<void> {
-    return this.#session.press(keys);
-  }
-
-  type(text: string): Promise<void> {
-    return this.#session.type(text);
-  }
-
-  paste(text: string): Promise<void> {
-    return this.#session.paste(text);
-  }
-
-  write(bytes: Uint8Array | string): Promise<void> {
-    return this.#session.write(bytes);
-  }
-
-  resize(size: { columns: number; rows: number }): Promise<void> {
-    return this.#session.resize(size);
-  }
-
-  focus(): Promise<void> {
-    return this.#session.focus();
-  }
-
-  blur(): Promise<void> {
-    return this.#session.blur();
-  }
-
-  signal(sig: 'INT' | 'TERM' | 'KILL' | 'HUP'): Promise<void> {
-    return this.#session.signal(sig);
-  }
-
-  waitForText(text: string | RegExp, opts?: WaitOptions): Promise<void> {
-    return this.#session.waitForText(text, opts);
-  }
-
-  waitForRender(opts: { after: number } & WaitOptions): Promise<void> {
-    return this.#session.waitForRender(opts);
-  }
-
-  waitForStable(opts?: { frames?: number } & WaitOptions): Promise<void> {
-    return this.#session.waitForStable(opts);
-  }
-
-  waitForIdle(opts?: WaitOptions): Promise<void> {
-    return this.#session.waitForIdle(opts);
-  }
-
-  waitForReady(opts?: WaitOptions): Promise<void> {
-    return this.#session.waitForReady(opts);
-  }
-
-  waitForExit(opts?: WaitOptions): Promise<ExitStatus> {
-    return this.#session.waitForExit(opts);
-  }
-
-  diagnostics(): readonly SessionDiagnostic[] {
-    return this.#session.diagnostics();
-  }
-
-  crashReport(): CrashReport | null {
-    return this.#session.crashReport();
-  }
-
-  title(): string {
-    return this.#session.title();
-  }
-
-  waitForTitle(text: string | RegExp, opts?: WaitOptions): Promise<void> {
-    return this.#session.waitForTitle(text, opts);
-  }
-
-  async close(): Promise<void> {
-    await this.#session.close();
+  override async close(): Promise<void> {
+    await super.close();
     this.#state.instance = null;
   }
 }

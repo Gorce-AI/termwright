@@ -98,10 +98,18 @@ click. What is not identical:
 - **`interactive: true` + `alternateScreen: true` are forced.** That is the only
   configuration in which the adapter claims `absolute-bounds` (see the adapter's
   NOTES), and without absolute bounds a click cannot be aimed.
-- **The harness is forwarded explicitly, not proxied.** `InkHarnessImpl` names
-  every member of `TerminalHarness`. A `Proxy` would be shorter and would also
-  silently keep compiling if the contract grew a member the in-process path
-  cannot honour.
+- **The harness is forwarded explicitly, not proxied.** `ForwardingHarness` in
+  `src/forwarding.ts` names every member of `TerminalHarness`, and both modes
+  extend it. A `Proxy` would be shorter and would keep compiling when the
+  contract grows — the explicit list has now caught four additions
+  (`locatorForRef`, `waitForReady`, `diagnostics`, `crashReport`).
+
+  `Object.create(session)` is worse than shorter: it *typechecks* and then
+  throws on the first call, because the driver's session keeps its state in
+  private fields, which are unreachable from an object that merely inherits
+  from it (`Cannot read private member #closed from an object whose class did
+  not declare it`). The fixture wrapper was written that way first and the type
+  system had nothing to say about it.
 - **`waitUntilExit()` is called exactly once per mount.** It registers a
   `beforeExit` listener that Ink only removes from inside `unmount()`, so
   calling it again after unmounting leaks one listener per mount — enough to
@@ -166,15 +174,43 @@ importing `test` from the preset rather than from Vitest.
 The stored snapshots in `src/__snapshots__/` are assertions, not artifacts —
 review them like source.
 
+## The fixture control channel
+
+`launchInkFixture(...).rerender(props)` needs to reach another process, and the
+tempting route — writing to the fixture's stdin — is the one thing it must not
+do. Stdin is the simulated *user*: multiplexing commands onto it would mean
+every keystroke test depends on nobody typing the framing the harness chose.
+
+So the harness opens a second, private endpoint, shaped exactly like the
+driver's semantic channel: unix socket in a `mkdtemp` directory (named pipe on
+Windows), address and a 256-bit token in the child's environment, harness
+listens and fixture connects. Newline-delimited JSON, 64 KiB per message, one
+connection accepted at a time — before authentication as much as after, because
+two unauthenticated peers sharing one line buffer could split each other's
+messages.
+
+Two properties worth keeping:
+
+- **The component is fixed at startup.** A control message carries props and
+  nothing else; the module and export were resolved once, from the launch
+  payload. A confused or hostile channel can change what a component shows,
+  never which code runs.
+- **Listen first, send second, let a failed send win.** `rerender` attaches the
+  frame listeners before it writes, so a fixture that repaints immediately
+  cannot outrun them — but it awaits the command's acknowledgement *before*
+  awaiting the frame, so a rejected command (unserializable props, oversized
+  message, a fixture that refused) fails in milliseconds instead of waiting out
+  a frame that will never come. Writing it the other way round cost three
+  timeouts.
+
 ## Open threads
 
 - Windows is untested. `@lydell/node-pty` covers the fixture path and the
   in-process path has no platform surface at all, but neither has been exercised
   on a ConPTY host.
-- `launchInkFixture` has no `rerender`. Prop updates in a fixture would need a
-  control channel into the runner; today the way to change props is to relaunch,
-  or to drive the change through input. Worth revisiting if fixture tests grow
-  beyond process-fidelity cases.
+- The control channel carries one command. `rerender` is the only thing a test
+  has needed so far; unmount-on-demand or a props *patch* would fit the same
+  framing if a use case turns up.
 - There is no `mountOpenTui`. The backend, the streams and the settlement
   helpers are framework-agnostic and exported for exactly that reason; only
   `mount.tsx` knows about Ink.

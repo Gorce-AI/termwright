@@ -27,7 +27,9 @@ export { mountInk } from './mount.js';
 export type { InkHarness, MountInkOptions, MountInkRenderOptions } from './mount.js';
 
 export { launchInkFixture } from './fixture.js';
-export type { LaunchInkFixtureOptions } from './fixture.js';
+export type { InkFixtureHarness, LaunchInkFixtureOptions } from './fixture.js';
+
+export { ForwardingHarness } from './forwarding.js';
 
 export { commitFrame, waitForFirstFrame } from './settle.js';
 export type { SettleOptions } from './settle.js';

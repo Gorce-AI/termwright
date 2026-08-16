@@ -37,7 +37,8 @@ must be rendered by [`@termwright/ink`](../ink) — annotate them with
 | where the component runs | this process | a child process, in a real pty |
 | props | anything, including callbacks and spies | bounded JSON |
 | speed | ~100 ms per mount | ~400 ms per launch |
-| `rerender`, `renderError` | yes | no |
+| `rerender` | a React element | props, as bounded JSON |
+| `renderError` | yes | no |
 | raw mode, signals, `SIGWINCH` | modelled | real |
 
 Reach for `mountInk` by default and for `launchInkFixture` when the *process* is
@@ -85,6 +86,19 @@ The fixture module default-exports the component; props cross as JSON and are
 validated before a process is spawned, so a stray callback fails the test
 instead of silently arriving as `undefined`.
 
+Props can be changed afterwards, too:
+
+```ts
+await harness.rerender({label: 'Reject'});
+```
+
+That travels over a private socket created by the harness, not over stdin —
+stdin belongs to the simulated user, and a harness that multiplexed commands
+onto it would make every keystroke test depend on nobody typing the escape
+sequence the harness happens to use. The component itself is fixed when the
+fixture starts and is never re-resolved from a message: a rerender changes what
+it shows, never which code runs.
+
 Two things to know when writing one:
 
 - **A fixture must hold the event loop open.** A component that renders once and
@@ -131,6 +145,7 @@ instead.
   curated subset of Ink's render options).
 - `InkHarness` — the driver's `TerminalHarness`, plus `rerender(element)` and
   `renderError()`.
+- `InkFixtureHarness` — the driver's `TerminalHarness`, plus `rerender(props)`.
 - `launchInkFixture(options)` → `TerminalHarness`. Options: `component`,
   `exportName`, `props`, `columns`, `rows`, `cwd`, `env`, `envMode`, `logs`,
   `nodeArgs`, `timeouts`, `settleTimeout`.
