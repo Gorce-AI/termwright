@@ -370,3 +370,9 @@
   nieblokujące). Historia runów: manifest `.termwright/runs/<ts>/manifest.json`
   (v:1, jeden producent — reporter; ścieżki archiwów, nie kopie; `lostRecords`
   per test), jeden czytnik `openArchive` dla --trace i widoku Runs.
+- 2026-08-16 (driver): `TerminalModes.focusReporting` → `'on' | 'off' |
+  'unknown'` — na ConPTY odczyt jest stanem HOSTA (włącza 1004 sam) i nie
+  mówi nic o dziecku; przy 'unknown' driver wysyła CSI I/O + diagnostyka.
+  Kod `mouse-mode-unverifiable` przemianowany na `mode-unverifiable` z polem
+  `mode?: 'mouse' | 'focus'` (zbiór kodów zostaje 18, wpis raz na sesję per
+  tryb). Opcja `mouseModesObservable` → `modesObservable`. Bez aliasów.
