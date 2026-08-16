@@ -32,6 +32,9 @@ Changing a normative file requires: update it first, note the change in
 - `screenshot` depends on `driver` types only (consumes `CellSnapshot`) and may
   type-import from `protocol` (`CursorInfo`). Never on `trace` — the trace
   reader produces frames for it, not the other way round.
+- `logs` depends on `protocol` only; logger libraries (pino, winston,
+  consola, OpenTelemetry) are OPTIONAL peers, never runtime dependencies.
+  Nothing depends on `logs` except adapters and the test layer.
 - `ui` depends on `trace` + `driver`. Talks to Vitest only via our own event protocol.
 - `conformance` may depend on everything; nothing depends on it.
 

@@ -174,3 +174,12 @@
   driver messages remain STRICT (hostile-input boundary). Adding an optional
   field to a driver→adapter message is NOT breaking; adapter→driver envelope
   changes still are.
+- 2026-08-16 (protocol, task #22 phase 1, 90ca78f): capability `logs` +
+  adapter→driver message `log { record }`, LogRecord {ts(epoch ms), level,
+  message, seq, attrs?(flat, <=64 keys), logger?, revision?}. ProtocolLimits
+  += maxLogRecordBytes, maxLogQueue. HelloAck.logs {enabled,
+  maxRecordsPerSecond, burst} is OPTIONAL — absent means logs disabled (older
+  drivers stay correct). `limits` additive rule implemented (unknown keys
+  ignored and passed through). New package `@termwright/logs`: channel
+  `termwright:log` (node:diagnostics_channel) as a public contract; bridges
+  pino/winston/consola/otel as optional peers; secret redaction on both sides.
