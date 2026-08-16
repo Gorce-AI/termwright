@@ -306,9 +306,15 @@ importers:
       '@termwright/mcp':
         specifier: workspace:*
         version: link:../mcp
+      '@termwright/screenshot':
+        specifier: workspace:*
+        version: link:../screenshot
       '@termwright/test':
         specifier: workspace:*
         version: link:../test
+      '@termwright/trace':
+        specifier: workspace:*
+        version: link:../trace
       '@termwright/ui':
         specifier: workspace:*
         version: link:../ui
