@@ -120,6 +120,12 @@ describe('refusals', () => {
   });
 });
 
+// Runs exactly when the Go arms do not, so a reduced run says so instead of
+// looking fully green. Borrowed from probe-opentui's Bun lane.
+it.skipIf(upstream !== null)('skips the Go arms because no go toolchain is reachable', () => {
+  expect(upstream).toBeNull();
+});
+
 describe.skipIf(upstream === null)('against the real framework', () => {
   it('applies to a pristine copy and lands the expected bytes', async () => {
     const copy = join(await scratch(), 'tview');
@@ -151,6 +157,42 @@ describe.skipIf(upstream === null)('against the real framework', () => {
     expect(probe).toContain('TERMWRIGHT_ENDPOINT');
     expect(probe).toContain('return nil');
   }, 180_000);
+
+  it('catches a patch that applies cleanly but produces the wrong bytes', async () => {
+    // Deliberate sabotage, because a checksum test that cannot fail is not a
+    // test. The patch still applies — only its inserted text differs — so the
+    // before-hash passes and only the after-hash can catch this.
+    const dir = await scratch();
+    const set = join(dir, 'set');
+    await materializeUpstream(PATCH_SET, set);
+    const patchFile = join(set, 'patches', 'application.go.patch');
+    const tampered = (await readFile(patchFile, 'utf8')).replace(
+      'Injected by termwright',
+      'Injected by someone else',
+    );
+    await writeFile(patchFile, tampered, 'utf8');
+
+    const copy = join(dir, 'tview');
+    await materializeUpstream(upstream as string, copy);
+
+    await expect(applyPatchSet(copy, set)).rejects.toThrow(/applied cleanly but produced/u);
+  }, 120_000);
+
+  it('catches an added file whose contents were swapped', async () => {
+    const dir = await scratch();
+    const set = join(dir, 'set');
+    await materializeUpstream(PATCH_SET, set);
+    await writeFile(
+      join(set, 'add', 'termwright_probe.go'),
+      'package tview\n\n// not the probe that was signed for\n',
+      'utf8',
+    );
+
+    const copy = join(dir, 'tview');
+    await materializeUpstream(upstream as string, copy);
+
+    await expect(applyPatchSet(copy, set)).rejects.toThrow(/hashes sha256:.*not the expected/u);
+  }, 120_000);
 
   it('is idempotent only through a fresh copy, and says so when it is not', async () => {
     const copy = join(await scratch(), 'tview');
