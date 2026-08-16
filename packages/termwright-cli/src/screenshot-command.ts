@@ -50,6 +50,12 @@ export interface ScreenshotResult {
    * that stays silent about them ships a screenshot with holes in it.
    */
   readonly fallbackCharacters: readonly string[];
+  /**
+   * Whether this render waited for the system font scan — a second on macOS
+   * and several on Windows, with no cache between calls. Reported so a slow
+   * capture has a stated reason rather than looking like the archive was big.
+   */
+  readonly systemFontsLoaded: boolean;
 }
 
 /**
@@ -90,6 +96,7 @@ export async function captureScreenshot(request: ScreenshotRequest): Promise<Scr
       timeMs: state.timeMs,
       chosen: moment.chosen,
       fallbackCharacters: rendered.fallbackCharacters,
+      systemFontsLoaded: rendered.systemFontsLoaded,
     };
   } finally {
     await reader.close();

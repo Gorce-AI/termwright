@@ -196,6 +196,7 @@ async function emitScreenshot(args: ParsedArgs, deps: CliDeps, json: boolean): P
         height: result.height,
         timeMs: result.timeMs,
         chosen: result.chosen,
+        systemFontsLoaded: result.systemFontsLoaded,
         ...(result.fallbackCharacters.length === 0
           ? {}
           : { fallbackCharacters: [...result.fallbackCharacters] }),
@@ -205,6 +206,12 @@ async function emitScreenshot(args: ParsedArgs, deps: CliDeps, json: boolean): P
   }
 
   deps.io.out(`wrote ${result.path} (${result.width}×${result.height}, ${result.chosen} at ${result.timeMs}ms)`);
+  if (result.systemFontsLoaded) {
+    // Says why the command took a second or more: the rasteriser enumerates
+    // the installed fonts to cover glyphs the embedded set does not, and there
+    // is no cache between calls.
+    deps.io.err('  waited for the system font scan to cover characters with no embedded glyph');
+  }
   if (result.fallbackCharacters.length > 0) {
     // These come out blank. A screenshot with holes that nobody mentions is
     // read as the program having drawn nothing there.

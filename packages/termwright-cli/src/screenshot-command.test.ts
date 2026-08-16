@@ -99,6 +99,9 @@ describe('capturing a moment of a recording', () => {
     // the moment reported is that one — never a time nothing was recorded at.
     expect(result.timeMs).toBeLessThanOrEqual(500);
     expect(result.width).toBeGreaterThan(0);
+    // Plain ASCII is covered by the embedded glyphs, so this render must not
+    // have paid for the font scan.
+    expect(result.systemFontsLoaded).toBe(false);
 
     const bytes = await readFile(out);
     // PNG signature: proof the file is an image, not an empty write.
