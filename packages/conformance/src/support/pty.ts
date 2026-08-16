@@ -252,6 +252,50 @@ export function commandAvailable(
   }
 }
 
+/**
+ * Turns on the child's mouse reporting and reports whether the emulator can
+ * see that it happened.
+ *
+ * ConPTY consumes the child's DECSET, so on Windows the mode reads `'unknown'`
+ * — the child did enable tracking, the terminal just cannot say so. Branching
+ * on the *observed* mode rather than on `process.platform` keeps one code path:
+ * a platform that starts reporting the mode tightens the assertions by itself,
+ * and one that stops loosens them, without anyone editing a list of platforms.
+ *
+ * @returns `true` when the mode is observable, so mode-specific claims (an
+ * exact tracking level, a refusal for the wrong level) can be asserted.
+ */
+export async function enableMouseReporting(
+  terminal: TerminalHarness,
+  mode: 'click' | 'drag',
+): Promise<boolean> {
+  const expected = mode === 'click' ? 'vt200' : 'drag';
+  await terminal.press(mode === 'click' ? 'm' : 'M');
+  await pollUntil(() => {
+    const tracking = terminal.screen().modes.mouseTracking;
+    return tracking === expected || tracking === 'unknown';
+  });
+  return terminal.screen().modes.mouseTracking === expected;
+}
+
+/** True while the emulator cannot see which mouse mode the child asked for. */
+export function mouseModeHidden(terminal: TerminalHarness): boolean {
+  return terminal.screen().modes.mouseTracking === 'unknown';
+}
+
+/** Polls a predicate until it holds, or throws once the budget is spent. */
+export async function pollUntil(predicate: () => boolean, timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (predicate()) return;
+    if (Date.now() >= deadline) throw new Error('conformance: condition never became true');
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 25);
+      timer.unref?.();
+    });
+  }
+}
+
 /** Catch helper: awaits a rejection and returns the error, typed. */
 export async function rejection<T>(promise: Promise<T>): Promise<unknown> {
   try {

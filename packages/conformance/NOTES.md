@@ -205,6 +205,17 @@ has to delete an assertion that explains itself.
 
 ## Traps
 
+- **Branch on the observed mouse mode, never on `process.platform`.** ConPTY
+  consumes the child's mouse DECSET, so the mode reads `'unknown'` on Windows
+  while the child is in fact tracking and decoding SGR reports. Any assertion
+  that a click is *refused* is a claim about the child ("it enabled nothing"),
+  and only a platform that shows the mode can make it. The suites take the
+  branch from `terminal.screen().modes.mouseTracking`, so a platform that
+  starts reporting the mode tightens these assertions by itself and one that
+  stops loosens them — with no list of platforms to keep current. Where the
+  mode is hidden the effect is asserted instead: the child decodes the report,
+  and the session records `mouse-mode-unverifiable` exactly once, because that
+  entry describes the platform rather than any one action.
 - **A PTY coalesces writes.** Two `press()` calls routinely arrive as one chunk.
   Both interactive fixtures tokenise the chunk (escape sequences whole, then one
   code point at a time); treating a chunk as one event silently drops the second

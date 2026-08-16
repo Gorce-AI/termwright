@@ -16,7 +16,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
-import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from '../support/pty.js';
+import {
+  CONFORMANCE_FIXTURES,
+  createSessionPool,
+  mouseModeHidden,
+  ptyAvailable,
+  rejection,
+} from '../support/pty.js';
 
 const sessions = createSessionPool();
 
@@ -134,8 +140,17 @@ describe.skipIf(!ptyAvailable())('a component mounted in a real terminal', () =>
 
     expect(box).toMatchObject({ height: 1 });
     expect(box?.row).toBeGreaterThan(0);
+
     // The component never enabled mouse reporting, so a click has nowhere to
-    // go; refusing is the honest outcome, not synthesising an event.
+    // go; refusing is the honest outcome, not synthesising an event. That
+    // refusal is a claim about the child, and only a platform that shows the
+    // mode can make it — where ConPTY hides it the driver sends the report
+    // instead and records why, which is the other half of the same honesty.
+    if (mouseModeHidden(terminal)) {
+      await terminal.getByTestId('decrement').click();
+      expect(terminal.diagnostics().filter((entry) => entry.code === 'mouse-mode-unverifiable')).toHaveLength(1);
+      return;
+    }
     const refused = (await rejection(terminal.getByTestId('decrement').click())) as TermwrightError;
     expect(refused.code).toBe('unsupported-action');
   });

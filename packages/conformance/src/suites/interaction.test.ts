@@ -10,7 +10,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
-import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from '../support/pty.js';
+import {
+  CONFORMANCE_FIXTURES,
+  createSessionPool,
+  enableMouseReporting,
+  mouseModeHidden,
+  ptyAvailable,
+  rejection,
+} from '../support/pty.js';
 
 const sessions = createSessionPool();
 
@@ -39,10 +46,15 @@ async function semantic(): Promise<TerminalHarness> {
   return terminal;
 }
 
-/** Turns on the child's mouse reporting and waits until the emulator sees it. */
-async function enableMouse(terminal: TerminalHarness, mode: 'click' | 'drag'): Promise<void> {
-  await terminal.press(mode === 'click' ? 'm' : 'M');
-  await expect.poll(() => terminal.screen().modes.mouseTracking).toBe(mode === 'click' ? 'vt200' : 'drag');
+/**
+ * Turns on the child's mouse reporting.
+ *
+ * Returns whether the emulator could see it happen: ConPTY consumes the
+ * DECSET, so the mode reads `'unknown'` there while the child is in fact
+ * tracking. Callers branch on that rather than on the platform.
+ */
+async function enableMouse(terminal: TerminalHarness, mode: 'click' | 'drag'): Promise<boolean> {
+  return enableMouseReporting(terminal, mode);
 }
 
 afterEach(sessions.closeAll);
@@ -163,9 +175,12 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     await terminal.waitForText('ev: MOUSE press b=0');
 
     await terminal.press('m'); // the child gives the mouse back
-    await expect.poll(() => terminal.screen().modes.mouseTracking).toBe('none');
-    const refused = (await rejection(terminal.getByText('Alpha').click())) as TermwrightError;
-    expect(refused.code).toBe('unsupported-action');
+    if (!mouseModeHidden(terminal)) {
+      // Observed off: the driver knows there is nothing listening and says so.
+      await expect.poll(() => terminal.screen().modes.mouseTracking).toBe('none');
+      const refused = (await rejection(terminal.getByText('Alpha').click())) as TermwrightError;
+      expect(refused.code).toBe('unsupported-action');
+    }
 
     await enableMouse(terminal, 'drag');
     await terminal.getByText('Alpha').drag({ from: { row: 1, column: 2 }, to: { row: 2, column: 2 } });

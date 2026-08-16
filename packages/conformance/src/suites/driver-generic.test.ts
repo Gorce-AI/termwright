@@ -8,7 +8,14 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { TermwrightError, UnsupportedActionError } from '@termwright/driver';
-import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from '../support/pty.js';
+import {
+  CONFORMANCE_FIXTURES,
+  createSessionPool,
+  enableMouseReporting,
+  mouseModeHidden,
+  ptyAvailable,
+  rejection,
+} from '../support/pty.js';
 
 const sessions = createSessionPool();
 const launch = async (options = {}) => {
@@ -138,12 +145,17 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
   it('sends mouse reports only after the child asks for them', async () => {
     const terminal = await launch();
 
-    const refused = await rejection(terminal.getByText('Alpha').click());
-    expect((refused as TermwrightError).code).toBe('unsupported-action');
+    // Refusing a click is a claim about the child ("it enabled nothing"), and
+    // only a platform that shows the mode can make it. Where the mode is
+    // hidden the driver sends the report instead, which is the honest choice:
+    // 'none' is a reason to refuse, 'unknown' is not.
+    if (!mouseModeHidden(terminal)) {
+      const refused = await rejection(terminal.getByText('Alpha').click());
+      expect((refused as TermwrightError).code).toBe('unsupported-action');
+    }
 
-    await terminal.press('m');
-    await expect.poll(() => terminal.screen().modes.mouseTracking).toBe('vt200');
-    expect(terminal.screen().modes.mouseEncoding).toBe('sgr');
+    const observable = await enableMouseReporting(terminal, 'click');
+    if (observable) expect(terminal.screen().modes.mouseEncoding).toBe('sgr');
 
     // 'Alpha' sits at row 1, columns 2..6; its centre is cell (1, 4), which SGR
     // reports one-based. A wrong aim would report different coordinates rather
@@ -159,6 +171,13 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
 
     await terminal.getByText('Alpha').click({ button: 'right' });
     await terminal.waitForText('ev: MOUSE press b=2');
+
+    // Whatever the terminal could or could not observe, the bytes reached the
+    // child and it decoded them — and where the mode was hidden the session
+    // says so exactly once, because that describes the platform rather than
+    // any one action.
+    const unverifiable = terminal.diagnostics().filter((entry) => entry.code === 'mouse-mode-unverifiable');
+    expect(unverifiable).toHaveLength(mouseModeHidden(terminal) ? 1 : 0);
   });
 
   it('refuses focus reports and drags the child never enabled', async () => {
@@ -168,12 +187,19 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     expect((noFocus as TermwrightError).code).toBe('unsupported-action');
     expect((noFocus as TermwrightError).diagnostics.suggestion).toContain('1004');
 
-    await terminal.press('m'); // click reporting only: no motion events
-    await expect.poll(() => terminal.screen().modes.mouseTracking).toBe('vt200');
-    const noDrag = await rejection(
-      terminal.getByText('Alpha').drag({ from: { row: 1, column: 2 }, to: { row: 3, column: 2 } }),
-    );
-    expect((noDrag as TermwrightError).diagnostics.suggestion).toContain('1002');
+    const observable = await enableMouseReporting(terminal, 'click'); // clicks only: no motion
+    const drag = terminal.getByText('Alpha').drag({ from: { row: 1, column: 2 }, to: { row: 3, column: 2 } });
+    if (observable) {
+      // The mode says motion was never enabled, so the driver can refuse and
+      // name the sequence the application would have to send.
+      const noDrag = await rejection(drag);
+      expect((noDrag as TermwrightError).diagnostics.suggestion).toContain('1002');
+    } else {
+      // With the mode hidden there is nothing to refuse *from*: the driver
+      // sends the drag and the child decides. Refusing here would invent a
+      // fact about the child that the platform withheld.
+      await drag;
+    }
 
     await terminal.press('f');
     await expect.poll(() => terminal.screen().modes.focusReporting).toBe(true);
