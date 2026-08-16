@@ -158,6 +158,72 @@ describe('RevisionPairing', () => {
     }
   });
 
+  it('does not expire a half while a probe has the frame open', async () => {
+    // The fact the quiet-stream rule was approximating. "Output is arriving"
+    // was only ever a guess at "the application is still drawing"; a probe
+    // that says so directly makes the rule honest instead of probabilistic.
+    vi.useFakeTimers();
+    try {
+      const { pairing, diagnostics, published } = createPairing();
+      pairing.frameOpened(1);
+      pairing.offerSnapshot(snapshot(1));
+
+      await vi.advanceTimersByTimeAsync(500);
+      expect(diagnostics).toEqual([]);
+      expect(pairing.hasOpenFrame).toBe(true);
+
+      pairing.frameClosed(1);
+      pairing.offerMarker(1, 4);
+      expect(published).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(diagnostics).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('expires once the frame closes without its other half', async () => {
+    vi.useFakeTimers();
+    try {
+      const { pairing, diagnostics } = createPairing();
+      pairing.frameOpened(1);
+      pairing.offerSnapshot(snapshot(1));
+      await vi.advanceTimersByTimeAsync(500);
+      expect(diagnostics).toEqual([]);
+
+      pairing.frameClosed(1);
+      await vi.advanceTimersByTimeAsync(60);
+      expect(diagnostics.join('\n')).toContain('render marker did not arrive');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not let an abandoned frame hold expiry open forever', async () => {
+    // A probe can die mid-render, or give up on a frame it started. The next
+    // frame beginning is proof the previous one is not coming — without that,
+    // one lost frame-end wedges the session's expiry permanently.
+    vi.useFakeTimers();
+    try {
+      const { pairing, diagnostics } = createPairing();
+      pairing.frameOpened(1);
+      pairing.offerSnapshot(snapshot(1));
+      await vi.advanceTimersByTimeAsync(500);
+      expect(diagnostics).toEqual([]);
+
+      // Frame 1 is never closed; frame 2 starts and finishes.
+      pairing.frameOpened(2);
+      expect(pairing.hasOpenFrame).toBe(true);
+      pairing.frameClosed(2);
+      expect(pairing.hasOpenFrame).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(60);
+      expect(diagnostics.join('\n')).toContain('render marker did not arrive');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('publishes on arrival when the adapter has no marker capability', () => {
     const { pairing, published } = createPairing(false);
     pairing.offerSnapshot(snapshot(1));
