@@ -258,6 +258,47 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expectSurvives(terminal);
   });
 
+  it('accepts a handshake that arrives inside the late-attach grace', async () => {
+    // A child that boots slower than the negotiation window is routine when
+    // suites run in parallel; the grace is the tolerance for exactly that, so
+    // this adapter must still get its session.
+    const terminal = await sessions.launch(CONFORMANCE_FIXTURES.adversarialPeer(), {
+      columns: 70,
+      rows: 16,
+      semanticNegotiationMs: 250,
+      args: ['none', '--hello-delay=700'],
+    });
+    await terminal.waitForText('PEER SENT HELLO');
+
+    await expect.poll(() => terminal.capabilities().semanticTree).toBe(true);
+    expect(await terminal.getByRole('button').textContent()).toBe('Peer');
+    expect(codes(terminal)).toContain('adapter-attached');
+    await expectSurvives(terminal);
+  });
+
+  it('refuses a handshake that arrives after the verdict is final', async () => {
+    const terminal = await sessions.launch(CONFORMANCE_FIXTURES.adversarialPeer(), {
+      columns: 70,
+      rows: 16,
+      semanticNegotiationMs: 250,
+      args: ['none', '--hello-delay=3000'],
+    });
+    await terminal.waitForText('PEER SENT HELLO');
+
+    // Past the grace the session is generic for good: a late hello cannot flip
+    // a mode the caller has already been told about.
+    await expect.poll(() => codes(terminal)).toContain('adapter-capability');
+    expect(terminal.capabilities().semanticTree).toBe(false);
+    expect(terminal.semanticTree()).toBeNull();
+
+    // The refusal reaches the adapter as a wire error. It is read off the peer
+    // here rather than from `wireCode`, which the driver fills in only for
+    // 'protocol-violation' entries — see NOTES.md.
+    await terminal.waitForText('PEER GOT ERROR internal');
+    expect(entriesFor(terminal, 'adapter-capability')[0]?.detail).toContain('refusing a hello');
+    await expectSurvives(terminal);
+  });
+
   it('surfaces the code an adapter reports at us, not one of its own', async () => {
     const terminal = await arm('peer-error');
     await fire(terminal);

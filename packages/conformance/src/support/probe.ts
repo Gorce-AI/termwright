@@ -38,7 +38,12 @@ import {
   type AdapterToDriverMessage,
   type HelloAckMessage,
 } from '@termwright/protocol';
-import { Terminal } from '@xterm/headless';
+// `@xterm/headless` is CommonJS: a named ESM import type-checks and passes
+// under vitest's transform, then fails at runtime for anyone importing the
+// built package from plain Node. The default import is the interop that works
+// in both, and is what the driver does.
+import xh from '@xterm/headless';
+import type { Terminal } from '@xterm/headless';
 import { createNodePtyBackend, type PtyProcess } from '@termwright/driver';
 import { environment } from './pty.js';
 
@@ -138,7 +143,7 @@ export class AdapterProbe {
     this.#server = server;
     this.#directory = directory;
     this.#pty = pty;
-    this.#terminal = new Terminal({
+    this.#terminal = new xh.Terminal({
       cols: size.columns,
       rows: size.rows,
       allowProposedApi: true,

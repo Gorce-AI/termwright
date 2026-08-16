@@ -15,11 +15,16 @@ import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from
 const sessions = createSessionPool();
 
 async function generic(options = {}): Promise<TerminalHarness> {
-  const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), { columns: 60, rows: 20, ...options });
-  await terminal.waitForText('GENERIC READY');
-  // The banner is the first line of the frame, not the last: wait for the
-  // event log too, or half the screen is still in flight.
-  await terminal.waitForText('ev: none');
+  const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
+    columns: 60,
+    rows: 20,
+    // The LAST line the fixture draws, not the banner. Its frame is 14 rows;
+    // a suite that asks for fewer (the scrollback test uses 10) pushes the
+    // banner off the top before anyone looks, and waiting for it then depends
+    // on how the pty happened to split the write.
+    ready: 'allow: PATH=',
+    ...options,
+  });
   return terminal;
 }
 
@@ -112,13 +117,18 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     const terminal = await generic({ rows: 10, scrollbackLines: 200 });
     await terminal.press('s');
     await terminal.waitForText('SCROLL DONE');
-    await terminal.waitForIdle();
+
+    // Wait for the history itself, not for the program to fall silent.
+    // `waitForIdle` asks "has output stopped for 100 ms", which on a loaded
+    // machine is a question about the scheduler: 120 lines arriving in bursts
+    // keep resetting the quiet window, and the wait fails for a reason that has
+    // nothing to do with scrollback. These two conditions are the state the
+    // assertions below are about, and they only ever become true.
+    await expect.poll(() => terminal.scrollback.length).toBeGreaterThan(50);
+    await expect.poll(() => terminal.scrollback.search('line 55').length).toBe(1);
 
     const inputs: string[] = [];
     terminal.events.on('input', ({ kind }) => inputs.push(kind));
-
-    expect(terminal.scrollback.length).toBeGreaterThan(50);
-    expect(terminal.scrollback.search('line 55')).toHaveLength(1);
 
     const before = terminal.scrollback.position();
     terminal.scrollback.move({ lines: -20 });

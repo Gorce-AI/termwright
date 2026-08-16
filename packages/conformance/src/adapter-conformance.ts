@@ -53,6 +53,17 @@ export interface AdapterConformanceOptions {
   readonly rows?: number;
   /** Assert that published bounds are viewport-absolute (an `absolute-bounds` claim). */
   readonly expectAbsoluteBounds?: boolean;
+  /**
+   * Opt out of the "publishes a tree before any input" obligation.
+   *
+   * By default an adapter must publish a non-empty tree once the handshake
+   * completes, with no input sent — an app that is addressable only after the
+   * first keystroke is not addressable at all to a driver that has just
+   * launched it. Some apps legitimately render nothing until an event arrives;
+   * pass a reason, which is printed in the test title so the exemption stays
+   * visible rather than becoming folklore.
+   */
+  readonly treeBeforeInput?: { readonly required: false; readonly reason: string };
   /** How long the handshake may take. Default 10 s. */
   readonly timeoutMs?: number;
   /**
@@ -67,6 +78,25 @@ export interface AdapterConformanceOptions {
     readonly cwd?: string;
     readonly timeoutMs?: number;
   };
+}
+
+/**
+ * Waits until the child stops writing, so two captures end at comparable
+ * points. A stabilisation, not a deadline: an app that never stops writing
+ * makes the comparison fail loudly rather than pass by accident.
+ */
+async function settle(probe: AdapterProbe, quietMs = 250, budgetMs = 5_000): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  let seen = -1;
+  for (;;) {
+    const length = probe.observe().stdout.length;
+    if (length === seen) return;
+    seen = length;
+    if (Date.now() >= deadline) return;
+    await new Promise((resolve) => {
+      setTimeout(resolve, quietMs);
+    });
+  }
 }
 
 const snapshotsOf = (observation: ProbeObservation): SemanticSnapshot[] =>
@@ -136,22 +166,26 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
       it.skipIf(options.baseline === undefined)(
         'produces the same bytes as a build without the adapter',
         async () => {
-          const script = async (command: AdapterCommand): Promise<Uint8Array> => {
+          // Nothing is written to the child during this comparison. A
+          // pseudo-terminal echoes the suite's own keystrokes, and whether an
+          // echoed byte lands between two frames depends on when the app took
+          // raw mode — so a stream containing our input compares the tty's
+          // timing, not the adapter's output. Measured on the Ink fixture: 3
+          // mismatches in 30 pairs with input (always a stray 0x09, the tab the
+          // suite itself sent), 0 in 40 pairs without.
+          const startup = async (command: AdapterCommand): Promise<Uint8Array> => {
             const probe = await AdapterProbe.start(command, { ...probeOptions, instrument: false });
             try {
               await probe.waitForText(options.ready, timeout);
-              await probe.write(options.interaction.input);
-              await probe.waitForText(options.interaction.expect, timeout);
-              await probe.write(options.quit.input);
-              await probe.waitForExit(timeout).catch(() => undefined);
+              await settle(probe);
               return probe.observe().stdout;
             } finally {
               await probe.stop();
             }
           };
 
-          const instrumented = await script(options.spawn());
-          const plain = await script((options.baseline as () => AdapterCommand)());
+          const instrumented = await startup(options.spawn());
+          const plain = await startup((options.baseline as () => AdapterCommand)());
           // Byte-for-byte: an instrumented build that is one escape sequence
           // different from a plain one is not shippable to production.
           expect(Buffer.from(instrumented).toString('binary')).toBe(Buffer.from(plain).toString('binary'));
@@ -161,11 +195,14 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
 
     describe('an instrumented session', () => {
       let probe: AdapterProbe;
+      /** Everything observed before a single byte was written to the child. */
+      let beforeInput: ProbeObservation;
 
       beforeAll(async () => {
         probe = await AdapterProbe.start(options.spawn(), probeOptions);
         await probe.waitForText(options.ready, timeout);
         await probe.waitFor((observation) => snapshotsOf(observation).length > 0, timeout);
+        beforeInput = probe.observe();
       });
 
       afterAll(async () => {
@@ -187,6 +224,32 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         // A second hello, or a hello after other traffic, is a protocol fault.
         expect(messages.filter((entry) => entry.message.type === 'hello')).toHaveLength(1);
       });
+
+      it(
+        options.treeBeforeInput === undefined
+          ? 'publishes a usable tree before any input'
+          : `publishes a usable tree before any input (exempt: ${options.treeBeforeInput.reason})`,
+        { skip: options.treeBeforeInput !== undefined },
+        () => {
+          const latest = snapshotsOf(beforeInput).at(-1);
+
+          // A driver launches an app and addresses it. An adapter that only
+          // publishes once a key has been pressed is not addressable at that
+          // moment, and a suite that sends input before looking would never
+          // notice — which is exactly how this class of bug reached a shipped
+          // adapter.
+          expect(latest, 'no snapshot arrived before any input was sent').toBeDefined();
+          expect(latest?.nodes.length ?? 0).toBeGreaterThan(0);
+          expect(latest?.rootIds.length ?? 0).toBeGreaterThan(0);
+
+          // A tree of one anonymous root is empty in every sense that matters:
+          // nothing in it can be located by role and name.
+          const addressable = (latest?.nodes ?? []).filter(
+            (node) => node.name.length > 0 || node.testId !== undefined,
+          );
+          expect(addressable.length, 'the tree has no node that a locator could address').toBeGreaterThan(0);
+        },
+      );
 
       it('publishes only valid snapshots, bound to this session', async () => {
         const observation = probe.observe();

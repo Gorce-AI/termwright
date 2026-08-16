@@ -67,8 +67,11 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
 
     const error = (await rejection(terminal.waitForReady({ timeout: 600 }))) as TermwrightError;
     expect(error.code).toBe('timeout');
-    expect(error.message).toContain('running command');
     expect(error.diagnostics.screenExcerpt).toContain('HANGING');
+    // Structural rather than textual: the wait must not have concluded
+    // readiness by either strategy. Matching the message would pin the driver's
+    // prose, which is exactly what the diagnostic codes exist to avoid.
+    expect(strategies(terminal)).toEqual(['ready-shell-integration']);
   });
 
   it('falls back to a settled screen, and says that is what it did', async () => {

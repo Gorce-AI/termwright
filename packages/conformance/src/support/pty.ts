@@ -110,6 +110,13 @@ export function environment(extra?: Readonly<Record<string, string>>): Record<st
 export interface FixtureLaunchOptions extends Partial<Omit<LaunchOptions, 'command'>> {
   /** Extra arguments appended to `node <fixture>`. */
   readonly args?: readonly string[];
+  /**
+   * Text that proves the fixture started drawing. Waiting for it here rather
+   * than in each suite is what lets the failure be diagnosed: a fixture that
+   * printed nothing at all failed to start, which is a very different problem
+   * from one that started and drew the wrong thing.
+   */
+  readonly ready?: string | RegExp;
 }
 
 /**
@@ -132,7 +139,7 @@ export function createSessionPool(): SessionPool {
   const open: TerminalHarness[] = [];
   return {
     async launch(fixture, options = {}) {
-      const { args = [], ...launchOptions } = options;
+      const { args = [], ready: _ready, ...launchOptions } = options;
       const terminal = await launchTerminal({
         command: [process.execPath, fixture, ...args],
         columns: 80,
@@ -146,10 +153,11 @@ export function createSessionPool(): SessionPool {
         // driver's defaults are tight enough that machine load, rather than the
         // implementation, would decide the result — a genuine failure still
         // fails here, just later.
-        timeouts: { text: 30_000, action: 30_000, exit: 30_000 },
+        timeouts: { text: 30_000, action: 30_000, exit: 30_000, idle: 10_000 },
         ...launchOptions,
       });
       open.push(terminal);
+      if (options.ready !== undefined) await waitForStart(terminal, options.ready, fixture);
       return terminal;
     },
     async closeAll() {
@@ -159,6 +167,40 @@ export function createSessionPool(): SessionPool {
       }
     },
   };
+}
+
+/**
+ * Waits for a fixture's first output, and says which way it failed.
+ *
+ * `waitForText` can only report that text never appeared, which reads as a
+ * rendering problem. Distinguishing "the child wrote nothing at all" from "the
+ * child wrote something else" is the difference between hunting a fixture bug
+ * and hunting a spawn or scheduling one — and on a heavily loaded machine it is
+ * always the latter.
+ */
+async function waitForStart(
+  terminal: TerminalHarness,
+  ready: string | RegExp,
+  fixture: string,
+): Promise<void> {
+  let bytes = 0;
+  const off = terminal.events.on('output', ({ data }) => {
+    bytes += data.length;
+  });
+  try {
+    await terminal.waitForText(ready);
+  } catch (error) {
+    const exit = await Promise.race([terminal.exit, Promise.resolve(null)]);
+    const detail =
+      bytes === 0
+        ? `it produced no output at all${exit === null ? ' and is still running' : `; it exited ${JSON.stringify(exit)}`}`
+        : `it produced ${bytes} bytes but never drew ${String(ready)}`;
+    throw new Error(`conformance: ${fixture.split('/').pop() ?? fixture} did not start — ${detail}`, {
+      cause: error,
+    });
+  } finally {
+    off();
+  }
 }
 
 /**

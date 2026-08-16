@@ -54,7 +54,15 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
-1. **`clients/README.md` documents a quit key that is state-dependent.** The
+1. **A refused late hello carries no `wireCode`.** Past the late-attach grace
+   the driver refuses a handshake, sends the adapter wire `internal`, and
+   records the decision as `adapter-capability` — but `wireCode` is populated
+   only on `protocol-violation` entries, so the log does not say which wire
+   error went out. The adversarial suite therefore reads that one code off the
+   peer's own output, which is the last indirect assertion left. Either
+   populating `wireCode` wherever a wire error is sent, or classifying the
+   refusal as `protocol-violation`, would close it.
+2. **`clients/README.md` documents a quit key that is state-dependent.** The
    tview example's table says `q`, exit 0 — true only while focus has not
    cycled onto the reason field, where `q` types normally (`main.go`:
    `event.Rune() == 'q' && current != 2`). Since the contract suite sends the
@@ -149,6 +157,13 @@ has to delete an assertion that explains itself.
   read at first glance as a conformance failure. `scripts/conformance.mjs`
   resolves `node_modules/.bin/vitest` explicitly and fails loudly if it is
   missing.
+- **The generic fixture's frame is 14 rows tall.** A suite that asks for fewer
+  (the scrollback test uses 10) pushes the top of the frame off the grid as the
+  rest of it is drawn, so waiting for the banner is waiting for something that
+  may already be gone — deterministically gone when the pty delivers the frame
+  in one write, and intermittently gone otherwise. Both helpers wait for
+  `allow: PATH=`, the last line the fixture draws, which is visible at any
+  height and also proves the whole frame landed.
 - **Text that can scroll off is not a safe thing to wait for.** A pseudo-
   terminal may deliver a program's whole output in one chunk, so a `waitForText`
   on an early line passes or fails depending on how the write was split. Every

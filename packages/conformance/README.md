@@ -39,6 +39,12 @@ await runAdapterConformance({
 });
 ```
 
+The byte-for-byte comparison covers the **startup** stream, with nothing
+written to the child: a pseudo-terminal echoes the suite's own keystrokes, so a
+stream containing our input compares the tty's timing rather than the adapter's
+output (measured on the Ink fixture: 3 mismatches in 30 pairs with input —
+always a stray `0x09`, the tab the suite itself sent — and 0 in 40 without).
+
 Two requirements the registration has to respect, because the suite exercises
 the app rather than mocking it: `interaction.input` is sent **more than once**,
 so pick something whose repetition is harmless; and `quit.input` must work from
@@ -60,7 +66,8 @@ It checks the five obligations an adapter has:
 
 | Obligation | What is asserted |
 |---|---|
-| Dormant rule | Without `TERMWRIGHT_ENDPOINT` it opens no channel and writes no marker; with `baseline`, byte-for-byte identical output |
+| Dormant rule | Without `TERMWRIGHT_ENDPOINT` it opens no channel and writes no marker; with `baseline`, byte-for-byte identical startup output |
+| Tree before input | Once the handshake completes and *before any input*, the tree is non-empty and has at least one node a locator could address. Opt out with `treeBeforeInput: {required: false, reason}` |
 | Handshake | `hello` first and once, correct protocol id, non-empty adapter identity, capabilities from the closed set |
 | Snapshot validity | Every snapshot passes `validateSnapshot`, carries this session's id, has resolvable parents and monotonic revisions |
 | Revision ordering | For each revision: snapshot → `revision-commit` → a marker that verifies against the session token, markers strictly increasing |

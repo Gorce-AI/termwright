@@ -25,6 +25,14 @@ import { connect } from 'node:net';
 import { createHmac } from 'node:crypto';
 
 const scenario = process.argv[2] ?? 'none';
+/**
+ * Delays the hello, so a suite can place the handshake inside or outside the
+ * driver's late-attach grace. A child that boots slower than the negotiation
+ * window is routine; one that boots slower than the grace is not, and the two
+ * must land differently.
+ */
+const delayArg = process.argv.find((argument) => argument.startsWith('--hello-delay='));
+const helloDelayMs = delayArg === undefined ? 0 : Number(delayArg.slice('--hello-delay='.length));
 const endpoint = process.env['TERMWRIGHT_ENDPOINT'];
 const token = process.env['TERMWRIGHT_TOKEN'];
 
@@ -276,6 +284,14 @@ if (endpoint === undefined || token === undefined) {
     if (ATTACKS_HANDSHAKE.has(scenario)) {
       fire();
       say(`PEER READY ${scenario}`);
+      return;
+    }
+    if (helloDelayMs > 0) {
+      say(`PEER DELAYING HELLO ${helloDelayMs}`);
+      setTimeout(() => {
+        socket.write(frame(hello()));
+        say('PEER SENT HELLO');
+      }, helloDelayMs);
       return;
     }
     socket.write(frame(hello()));

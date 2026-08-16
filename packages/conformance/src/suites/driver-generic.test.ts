@@ -12,32 +12,48 @@ import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from
 
 const sessions = createSessionPool();
 const launch = async (options = {}) => {
-  const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), { columns: 60, rows: 20, ...options });
-  // The banner is the first line of the frame; the event log is the last.
-  await terminal.waitForText('ev: none');
+  const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
+    columns: 60,
+    rows: 20,
+    // The LAST line the fixture draws, not the banner. Its frame is 14 rows;
+    // a suite that asks for fewer (the scrollback test uses 10) pushes the
+    // banner off the top before anyone looks, and waiting for it then depends
+    // on how the pty happened to split the write.
+    ready: 'allow: PATH=',
+    ...options,
+  });
   return terminal;
 };
 
 afterEach(sessions.closeAll);
 
 describe.skipIf(!ptyAvailable())('a generic session', () => {
-  it('falls back to a generic session within the negotiation window', async () => {
+  it('waits out the late-attach grace, then refuses semantic locators', async () => {
     const started = Date.now();
     const terminal = await launch({ semanticNegotiationMs: 250 });
 
-    // `count()` awaits settlement, so the elapsed time is the fallback latency.
-    const error = await rejection(terminal.getByRole('button').count());
-    const elapsed = Date.now() - started;
+    // The negotiation window bounds when the session starts *behaving*
+    // generically; the late-attach grace bounds when that becomes final. While
+    // an adapter could still attach — a child booting slower than the window is
+    // routine when suites run in parallel — a semantic locator is a wait, so
+    // `count()` answers 0 rather than refusing.
+    expect(await terminal.getByRole('button').count()).toBe(0);
 
-    expect(error).toBeInstanceOf(UnsupportedActionError);
+    // Once the verdict is final, a semantic locator against a program that has
+    // no tree is an honest error rather than a silent zero.
+    await expect
+      .poll(async () => (await rejection(terminal.getByRole('button').count())) instanceof UnsupportedActionError, {
+        timeout: 15_000,
+      })
+      .toBe(true);
+
     expect(terminal.capabilities().semanticTree).toBe(false);
     expect(terminal.capabilities().adapter).toBeUndefined();
     expect(terminal.semanticTree()).toBeNull();
-    expect(elapsed).toBeLessThan(5_000);
+    expect(Date.now() - started).toBeLessThan(15_000);
 
     // The fallback is a decision, and the session records it as one.
-    const timeout = terminal.diagnostics().find((entry) => entry.code === 'negotiation-timeout');
-    expect(timeout).toBeDefined();
+    expect(terminal.diagnostics().map((entry) => entry.code)).toContain('negotiation-timeout');
     expect(terminal.diagnostics().map((entry) => entry.code)).not.toContain('adapter-attached');
   });
 
