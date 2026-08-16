@@ -222,20 +222,28 @@ is a worse thing to read in a JSONL stream, and it couples two files' orderings
 together. The cost is a repeated string on file lines; adapter records have no
 path and pay nothing.
 
-### Replayed emoji widths can disagree with the live screen
+### The replay measures characters exactly like the session
 
-`frameFromAnsi` builds its headless terminal without `@xterm/addon-unicode11`,
-which the driver *does* activate. Emoji therefore measure with the legacy width
-table during replay: `🚀` comes back as width 1 here and width 2 from the live
-harness. CJK is unaffected (`漢` is width 2 either way).
+`vt.ts` used to build its own `new Terminal(...)` without the Unicode 11 addon
+while the driver built one with it, so a session counted `🚀` as two columns and
+its own replay counted it as one. Nothing threw; the reconstructed frame just
+sat a column away from the screen the test asserted against, and the screenshot
+disagreed with the assertion for no visible reason.
 
-This matters for anything comparing a replayed frame against a live one, and for
-screenshots of recorded sessions, where an emoji then occupies one column
-instead of two.
+Terminal construction now goes through `createTerminal` in `@termwright/vt`,
+which registers *and activates* the profile's Unicode provider — activation was
+the second half of the trap, since registering a provider without setting
+`activeVersion` changes nothing.
 
-**Tracked, do not patch here.** The fix belongs to task #19: a shared
-`createTerminal(profile)` factory in `@termwright/vt`, so the driver and every
-replay path agree on width tables by construction instead of by two packages
-remembering to activate the same addon. `vt.ts` becomes a thin adapter over
-that factory when it lands. Adding the addon locally would fix the symptom and
-re-create the drift the shared factory exists to prevent.
+The profile travels with the recording as `meta.terminalProfile`, so a replay
+uses the tables the session used rather than whatever this build defaults to.
+An archive that names a profile this build does not know raises
+`protocol-violation` instead of falling back: replaying with the wrong width
+tables produces a frame that looks right and is not, which is the failure mode
+the whole exercise exists to remove.
+
+`meta.json` rather than the asciicast header is deliberate. The profile
+describes the session, like `columns` and `platform` beside it, and `meta.json`
+is our file — putting a termwright field inside a foreign format's `term`
+object risks colliding with whatever asciicast puts there later, for the sake
+of a `session.cast` extracted on its own, which asciinema would ignore anyway.

@@ -52,6 +52,12 @@ export interface TraceWriterOptions {
   readonly platform?: NodeJS.Platform;
   /** Overrides capability detection for `meta.semanticTree`. */
   readonly semanticTree?: boolean;
+  /**
+   * Terminal profile the session measures characters with. Defaults to
+   * `session.capabilities()?.terminalProfile`; a replay that does not match it
+   * can place wide characters a column out.
+   */
+  readonly terminalProfile?: string;
   readonly title?: string;
   readonly env?: Readonly<Record<string, string>>;
   /**
@@ -502,6 +508,9 @@ export function createTraceWriter(
           startedAt,
           platform: options.platform ?? process.platform,
           semanticTree: resolveSemanticFlag(),
+          ...(resolveTerminalProfile() === undefined
+            ? {}
+            : { terminalProfile: resolveTerminalProfile() as string }),
           ...(recordedExit === undefined ? {} : { exit: recordedExit }),
           ...(truncated ? { truncated: true } : {}),
         },
@@ -535,6 +544,10 @@ export function createTraceWriter(
       sources: [...logSources.values()],
       levels: Object.fromEntries(logLevels),
     };
+  }
+
+  function resolveTerminalProfile(): string | undefined {
+    return options.terminalProfile ?? session.capabilities?.()?.terminalProfile;
   }
 
   function buildHeader(): CastHeader {

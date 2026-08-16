@@ -21,6 +21,8 @@ export interface RenderOptions {
   readonly foreground?: string;
   /** Default background of the rendered surface. */
   readonly background?: string;
+  /** Terminal profile, so the report measures characters like the session did. */
+  readonly profile?: string;
 }
 
 /** One rendered screen row. */
@@ -68,7 +70,7 @@ export async function renderAnsiToHtml(
   const foreground = options.foreground ?? DEFAULT_FOREGROUND;
   const background = options.background ?? DEFAULT_BACKGROUND;
 
-  const terminal = createTerminal(columns, rows);
+  const terminal = createTerminal(columns, rows, options.profile);
   try {
     await writeToTerminal(terminal, ansi);
     const buffer = terminal.buffer.active;

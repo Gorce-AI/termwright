@@ -49,6 +49,16 @@ export interface TraceMeta {
   /** ISO-8601 timestamp of the first recorded moment. */
   readonly startedAt: string;
   readonly platform: NodeJS.Platform;
+  /**
+   * Terminal profile the session was measured with, from
+   * `capabilities().terminalProfile`. Absent means `'default'`.
+   *
+   * It lives here rather than in the asciicast header because it describes the
+   * session, like `columns` and `platform` next to it, and because `meta.json`
+   * is ours: putting a termwright field inside a foreign format's `term`
+   * object risks colliding with whatever asciicast adds there later.
+   */
+  readonly terminalProfile?: string;
   /** Whether the recorded session published a semantic tree. */
   readonly semanticTree: boolean;
   readonly exit?: TraceExit;

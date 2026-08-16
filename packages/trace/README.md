@@ -92,7 +92,10 @@ snapshot mismatch, say) can pass them directly via `visual` and `semantic`.
 
 **`frameAt(trace, timeMs)`** — replays the recording's output prefix back into a
 cell grid shaped like the driver's `ScreenSnapshot`, so a recorded moment can be
-inspected cell by cell or handed to `@termwright/screenshot`.
+inspected cell by cell or handed to `@termwright/screenshot`. It measures
+characters with the profile the session used (`meta.terminalProfile`), through
+the shared emulator in `@termwright/vt`, so a replayed frame lines up with the
+screen the test saw.
 
 **`packTrace(dir, file)` / `unpackTrace(file, dir)`** — zip an archive for CI
 artifact upload and read it back.

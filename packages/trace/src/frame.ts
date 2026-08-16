@@ -41,6 +41,12 @@ export interface FrameOptions {
   readonly rows?: number;
   readonly timeMs?: number;
   readonly semanticRevision?: number | null;
+  /**
+   * Terminal profile to measure characters with. {@link frameAt} passes the
+   * one the recording was made with; a mismatch moves wide characters by a
+   * column without anything failing.
+   */
+  readonly profile?: string;
 }
 
 const EMPTY_CELL: CellSnapshot = {
@@ -77,6 +83,9 @@ export async function frameAt(trace: TraceReader, timeMs: number): Promise<Trace
     rows: state.rows,
     timeMs: state.timeMs,
     semanticRevision: state.nearestSemanticRevision,
+    ...(trace.meta.terminalProfile === undefined
+      ? {}
+      : { profile: trace.meta.terminalProfile }),
   });
 }
 
@@ -87,7 +96,7 @@ export async function frameFromAnsi(
 ): Promise<TraceFrame> {
   const columns = options.columns ?? 100;
   const rows = options.rows ?? 30;
-  const terminal = createTerminal(columns, rows);
+  const terminal = createTerminal(columns, rows, options.profile);
   try {
     await writeToTerminal(terminal, ansi);
     const buffer = terminal.buffer.active;

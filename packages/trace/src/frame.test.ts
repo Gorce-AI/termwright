@@ -134,3 +134,74 @@ describe('frameAt', () => {
     }
   });
 });
+
+describe('terminal profile', () => {
+  it('measures emoji the way the live session does', async () => {
+    // The bug this replaces: the driver activated Unicode 11 and the replay did
+    // not, so a rocket was two columns live and one on replay.
+    const frame = await frameFromAnsi('🚀a', { columns: 6, rows: 1 });
+    expect(frame.cell(0, 0)).toMatchObject({ char: '🚀', width: 2 });
+    expect(frame.cell(0, 1).width).toBe(0);
+    expect(frame.cell(0, 2)).toMatchObject({ char: 'a', width: 1 });
+  });
+
+  it('honours a profile that widens ambiguous characters', async () => {
+    const narrow = await frameFromAnsi('±a', { columns: 6, rows: 1 });
+    const wide = await frameFromAnsi('±a', {
+      columns: 6,
+      rows: 1,
+      profile: 'iterm2-ambiguous-wide',
+    });
+    expect(narrow.cell(0, 1)).toMatchObject({ char: 'a' });
+    expect(wide.cell(0, 1).width).toBe(0);
+    expect(wide.cell(0, 2)).toMatchObject({ char: 'a' });
+  });
+
+  it('rejects a recording asking for a profile this build lacks', async () => {
+    await expect(
+      frameFromAnsi('x', { columns: 4, rows: 1, profile: 'ghostty-2031' }),
+    ).rejects.toThrow(/does not know/);
+  });
+
+  it('replays with the profile stored in the archive', async () => {
+    const root = await workspace();
+    const dir = join(root, 'profile.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, {
+      dir,
+      columns: 8,
+      rows: 1,
+      now: session.now,
+      terminalProfile: 'iterm2-ambiguous-wide',
+    });
+    session.output('±a');
+    await writer.finalize();
+
+    const trace = await openTrace(dir);
+    try {
+      expect(trace.meta.terminalProfile).toBe('iterm2-ambiguous-wide');
+      const frame = await frameAt(trace, 0);
+      // Ambiguous-wide: the sign takes two columns, so 'a' lands in column 2.
+      expect(frame.cell(0, 2)).toMatchObject({ char: 'a' });
+    } finally {
+      await trace.close();
+    }
+  });
+
+  it('replays an archive without a profile as default', async () => {
+    const root = await workspace();
+    const dir = join(root, 'noprofile.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, columns: 8, rows: 1, now: session.now });
+    session.output('±a');
+    await writer.finalize();
+
+    const trace = await openTrace(dir);
+    try {
+      expect(trace.meta.terminalProfile).toBeUndefined();
+      expect((await frameAt(trace, 0)).cell(0, 1)).toMatchObject({ char: 'a' });
+    } finally {
+      await trace.close();
+    }
+  });
+});
