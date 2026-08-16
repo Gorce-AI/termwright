@@ -4,22 +4,21 @@ description: A live terminal, a semantic inspector and a timeline you can scrub 
 ---
 
 `@termwright/ui` is a local server and a browser app: DevTools for a terminal
-program. Three panes, three modes.
+program. Four views behind a sidebar, which shows the project and the git branch
+you are on.
 
-| Pane | What it shows |
+| View | What it is for |
 |---|---|
-| Terminal | xterm.js fed by the session's output, with semantic bounds drawn on top |
-| Inspector | the accessibility tree — hover to highlight, click to generate a selector. Also carries the **Logs** and **Commands** tabs |
-| Timeline | tests and steps live; a scrubber with marker jumps in post-mortem |
+| **Specs** | the project's test files as a tree — what exists, when it last ran, how it has been doing |
+| **Runner** | one run: the command log on the left, the terminal and its playback on the right |
+| **Runs** | finished runs as cards, each with the commit it ran against |
+| **Settings** | the resolved configuration, read-only, with the source of every value |
 
-The inspector pane is a real ARIA tree, navigable by keyboard — see
-[Accessibility](../../reference/accessibility/). The **Logs** tab shows
-[application logs](../app-logs/) on the same timeline as everything else, with
-notable levels marked on the scrubber; **Commands** lists the actions the
-session ran, from the trace's event log.
+The sidebar only offers what the source can answer: a standalone
+[report file](#sending-someone-a-failure-without-a-server) has no Runs entry,
+because a single archive is not a history.
 
-A crash panel appears above the panes when the session died on its own, with a
-button that seeks to the moment it happened.
+Three ways to arrive:
 
 - **Live** — watches a Vitest run through a reporter.
 - **Post-mortem** — opens a `.twtrace` from CI and lets you move through it in
@@ -117,23 +116,60 @@ const server = await startUiServer();
 console.log(server.url); // http://127.0.0.1:53219/?token=…
 ```
 
-## The project's tests, before anything runs
+## Specs: the project, before anything runs
 
-The runner lists your project's tests as soon as it opens, rather than filling
-the panel in as results arrive. A test nobody has run yet shows as **not run
-yet**, and clicking it runs exactly that one.
+The Specs view is a file explorer for your tests, populated as soon as the
+runner opens rather than filling in as results arrive. Directories nest, and
+each row carries what history knows about it:
+
+| Column | What it tells you |
+|---|---|
+| Last updated | when the file changed |
+| Latest runs | four dots, newest first — click one to open that run |
+| Average duration | how long it usually takes |
+
+Search filters the tree and counts what matched. Hovering a directory offers
+**Run N tests**; a test nobody has run yet shows as **not run yet**, and
+clicking one runs exactly that test.
 
 Listing happens in live mode only — a replayed archive and a recording already
 know what they contain, so a list of the project's tests would mean nothing
 there. Re-listing follows watch mode, which is when files change: with
 `--no-watch` you get one listing at startup and that is it.
 
-## Past runs
+## Runner: the command log beside the terminal
+
+The Runner view is two panels. On the left, the command log for the test being
+watched — every action the driver took, with the test's name and its counters
+above. On the right, the terminal, a meta bar reading its dimensions and current
+semantic revision, and the playback track underneath.
+
+**Hovering a command highlights its target in the terminal, without moving
+playback.** That is worth calling out, because it is the thing a semantic tree
+makes possible and a DOM inspector cannot match here: the command knows which
+*node* it addressed, so the highlight lands on the right cells even after the
+screen has been repainted around them. You can read down the command log and
+watch each action light up where it happened, with the recording standing still.
+
+The right-hand panel also carries the tabs for the accessibility **tree**, the
+**semantic view**, and [application **logs**](../app-logs/). The tree is a real
+ARIA tree, navigable by keyboard — see
+[Accessibility](../../reference/accessibility/).
+
+A crash panel appears above the panels when the session died on its own, with a
+button that seeks to the moment it happened.
+
+## Runs: what happened, and against which commit
 
 Finished runs are written to `.termwright/runs` and the runner reads them back,
-so a failure you saw yesterday is still there today. Switch to the Runs view,
-pick a run, and you get its tests with their statuses; clicking a test that
-retained an archive opens that recording in the panes.
+so a failure you saw yesterday is still there today. The Runs view shows them as
+cards carrying the commit each ran against — hash, message, author, branch —
+which is what turns "it broke sometime last week" into a range you can bisect.
+A run recorded outside a repository says **no commit recorded** rather than
+leaving the space blank.
+
+Open a card and you get its tests with their statuses; clicking a test that
+retained an archive opens that recording in the panels.
 
 Two things the list is careful about:
 
@@ -148,6 +184,19 @@ Two things the list is careful about:
 The manifest format is versioned, and a run written by an older format is
 ignored rather than guessed at. If your history looks empty after an upgrade,
 that is why — `.termwright/runs` can be deleted safely.
+
+## Settings, and opening a file where you work
+
+The Settings view is **read-only**, and it names the source of every value —
+whether a setting came from `termwright.config.ts`, an environment variable or a
+default. A configuration screen that let you change things the config file also
+sets would be two sources of truth for one number; showing where each value came
+from answers the question people actually have, which is "why is it this?".
+
+Where a file path appears, **Open in IDE** offers VS Code, Insiders, Cursor,
+WebStorm, Zed, or copying the path. The path goes to the clipboard either way:
+a URL scheme cannot report whether anything caught it, so the fallback happens
+unconditionally rather than after a handler that may have silently done nothing.
 
 ## Post-mortem: time travel
 
@@ -198,6 +247,20 @@ second to explore what happened.
 
 ## Recorder and codegen
 
+Recording is a flow inside the panel, not a separate mode you have to launch
+into. **New spec** asks for the command and the file to write, records in the
+same instance — with a REC indicator while it runs — and on stop shows you the
+generated test with save, copy or discard.
+
+**Nothing reaches disk before you press Save.** A recorder that wrote as it went
+would leave half-finished specs behind every time someone changed their mind,
+and the review step is the point at which a recording becomes a test worth
+keeping.
+
+`termwright ui --record -- <command>` still works and lands in the same flow, as
+a deep link for when you already know what you want to record. So does
+`termwright codegen`, and the library entry point:
+
 ```ts
 const recorder = await startUiServer({
   record: {command: ['node', 'agent.js'], outFile: 'src/recorded.test.ts'},
@@ -234,6 +297,13 @@ test('approves the command', async ({terminal}) => {
 
 Codegen is easier in a terminal than in a browser, for once: termwright owns the
 whole input stream, so there is nothing to guess about what the user did.
+
+## When a run finishes while you are elsewhere
+
+A toast tells you, and it is a button: pressing it takes you to the result. The
+alternative — a silent finish while you are reading Specs — means either
+watching the tab or discovering the failure later, and both are worse than one
+dismissible notice.
 
 ## When the pane cannot match the profile
 
