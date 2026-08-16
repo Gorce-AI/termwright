@@ -37,6 +37,10 @@ Changing a normative file requires: update it first, note the change in
 - `screenshot` depends on `driver` types only (consumes `CellSnapshot`) and may
   type-import from `protocol` (`CursorInfo`). Never on `trace` — the trace
   reader produces frames for it, not the other way round.
+- `vt` depends on xterm packages only (`@xterm/headless`, addons). driver,
+  trace, screenshot and ui consume terminals SOLELY via its
+  `createTerminal(profile)` — private per-package terminal factories are how
+  the U6/U11 width split happened and are banned.
 - `logs` depends on `protocol` only; logger libraries (pino, winston,
   consola, OpenTelemetry) are OPTIONAL peers, never runtime dependencies.
   Nothing depends on `logs` except adapters and the test layer.

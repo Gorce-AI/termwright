@@ -294,3 +294,13 @@
   base or removing an unknown node points at get-tree, never speculative
   patching. The reference composition (applyTreeDelta) lives in the protocol
   deliberately — one tested implementation instead of five.
+- 2026-08-16 (#19/#23, driver 787c60a/94a0c37): new package @termwright/vt —
+  single createTerminal(profile) factory; TerminalProfile with three REAL
+  profiles (default, kitty, iterm2-ambiguous-wide), all on Unicode 11
+  (unicode-graphemes addon hangs vitest workers — measured, documented,
+  return path in vt/NOTES). Profiles are documented as differentiating
+  switches, not emulator emulation. LaunchOptions.terminalProfile +
+  SessionCapabilities.terminalProfile. harness.settled(opts?) returns
+  capabilities once they stop changing (negotiation + grace + first tree);
+  bare capabilities() stays sync. Field rename approved: reflowOnResize →
+  reflowCursorLineOnResize (the name must not promise what xterm cannot do).
