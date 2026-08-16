@@ -9,3 +9,4 @@ coverage/
 # Astro's generated types and content cache for website/
 .astro/
 .claude/
+.termwright/

@@ -1,4 +1,8 @@
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { readRunHistory, readRunManifest } from './runs.js';
 import { buildFixtureTrace } from './__fixtures__/build-trace.js';
 import type { ServerMessage } from './events.js';
 import { TermwrightUiReporter, type UiMessageSink } from './reporter.js';
@@ -43,7 +47,7 @@ afterEach(async () => {
 describe('TermwrightUiReporter', () => {
   it('translates a run into the UI event protocol', async () => {
     const sink = new Collected();
-    const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false });
+    const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false, runsDir: null });
 
     reporter.onTestRunStart();
     reporter.onTestCaseReady(testCase({ id: 't1', title: 'login', state: 'run', file: '/repo/a.test.ts' }));
@@ -73,7 +77,7 @@ describe('TermwrightUiReporter', () => {
 
   it('reports how long each test took, and which ones were flaky', async () => {
     const sink = new Collected();
-    const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false });
+    const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false, runsDir: null });
 
     reporter.onTestRunStart();
     reporter.onTestCaseReady(testCase({ id: 't1', title: 'login', state: 'run' }));
@@ -97,7 +101,7 @@ describe('TermwrightUiReporter', () => {
 
   it('puts the steps of a finished test on the timeline, from its trace', async () => {
     const sink = new Collected();
-    const reporter = new TermwrightUiReporter({ sink });
+    const reporter = new TermwrightUiReporter({ sink, runsDir: null });
     const tracePath = await buildFixtureTrace();
 
     reporter.onTestRunStart();
@@ -115,7 +119,7 @@ describe('TermwrightUiReporter', () => {
 
   it('ignores an unreadable trace rather than failing the run', async () => {
     const sink = new Collected();
-    const reporter = new TermwrightUiReporter({ sink });
+    const reporter = new TermwrightUiReporter({ sink, runsDir: null });
     reporter.onTestRunStart();
     reporter.onTestCaseResult(
       testCase({ id: 't1', title: 'login', state: 'passed', traces: ['/nonexistent.twtrace'] }),
@@ -125,7 +129,7 @@ describe('TermwrightUiReporter', () => {
   });
 
   it('does nothing when no UI server is configured', async () => {
-    const reporter = new TermwrightUiReporter({ url: '' });
+    const reporter = new TermwrightUiReporter({ url: '', runsDir: null });
     reporter.onTestRunStart();
     reporter.onTestCaseResult(testCase({ id: 't1', title: 'login', state: 'passed' }));
     await expect(reporter.onTestRunEnd()).resolves.toBeUndefined();
@@ -134,7 +138,7 @@ describe('TermwrightUiReporter', () => {
   it('publishes into a running server over its socket', async () => {
     const server = await startUiServer();
     servers.push(server);
-    const reporter = new TermwrightUiReporter({ url: server.url, stepsFromTraces: false });
+    const reporter = new TermwrightUiReporter({ url: server.url, stepsFromTraces: false, runsDir: null });
 
     reporter.onTestRunStart();
     reporter.onTestCaseResult(testCase({ id: 't1', title: 'login', state: 'passed' }));
@@ -149,5 +153,37 @@ describe('TermwrightUiReporter', () => {
       'test-end',
       'run-end',
     ]);
+  });
+});
+
+describe('run history', () => {
+  it('writes a manifest of the run it just reported', async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), 'tw-reporter-runs-'));
+    const reporter = new TermwrightUiReporter({ sink: new Collected(), stepsFromTraces: false, runsDir });
+
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(
+      testCase({ id: 't1', title: 'login', state: 'failed', file: '/repo/a.test.ts', error: 'nope', duration: 42 }),
+    );
+    await reporter.onTestRunEnd();
+
+    const [run] = await readRunHistory(runsDir);
+    expect(run?.summary.failed).toBe(1);
+    const manifest = await readRunManifest(runsDir, run?.id ?? '');
+    expect(manifest?.tests[0]).toMatchObject({
+      title: 'login',
+      file: '/repo/a.test.ts',
+      status: 'failed',
+      durationMs: 42,
+      error: 'nope',
+    });
+  });
+
+  it('does not write one when history is turned off', async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), 'tw-reporter-runs-'));
+    const reporter = new TermwrightUiReporter({ sink: new Collected(), runsDir: null });
+    reporter.onTestRunStart();
+    await reporter.onTestRunEnd();
+    expect(await readRunHistory(runsDir)).toEqual([]);
   });
 });
