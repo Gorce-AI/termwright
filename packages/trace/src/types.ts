@@ -105,8 +105,18 @@ export interface TraceLogEntry {
   /** Position on the cast timeline, in milliseconds. */
   readonly castOffset: number;
   readonly source: 'file' | 'adapter';
-  /** Log file label, or the adapter's logger name. */
+  /**
+   * Display name of the stream: the log file's label, or the record's logger
+   * when the file has none. What a panel header or a timeline row shows.
+   */
   readonly label?: string;
+  /**
+   * Adapter records only: the record's own logger/channel name, verbatim
+   * (`http`, `db.pool`). Kept separate from {@link label} because filtering by
+   * channel is a different question from "which stream do I render this
+   * under", and a display fallback is the wrong thing to filter on.
+   */
+  readonly logger?: string;
   /** Adapter records only — a followed file has no level to report. */
   readonly level?: LogLevel;
   /** The file line, or the record's already-formatted message. */

@@ -77,6 +77,7 @@ describe('logs.jsonl', () => {
       source: 'adapter',
       level: 'warn',
       label: 'http',
+      logger: 'http',
       message: 'retrying upstream',
       attrs: { attempt: 2, url: '/api/save' },
       revision: 7,
@@ -94,6 +95,8 @@ describe('logs.jsonl', () => {
     // A followed file has no level to report, and none is invented.
     expect(line?.level).toBeUndefined();
     expect(line?.attrs).toBeUndefined();
+    // Nor a logger: `label` is the file, and there is no channel behind it.
+    expect(line?.logger).toBeUndefined();
   });
 
   it('summarises the log in meta.json', async () => {

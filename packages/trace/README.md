@@ -106,11 +106,21 @@ capability. Both land in one shape with a `message` field, so nothing has to
 branch on where an entry came from before printing it.
 
 ```ts
-const state = await trace.stateAt(1_500, { logWindow: 50 });
-for (const entry of state.logs) {
-  console.log(entry.level ?? 'log', entry.label, entry.message);
+if (trace.meta.logs !== undefined) {
+  for await (const entry of trace.logs()) {
+    console.log(entry.level ?? 'log', entry.label, entry.message);
+  }
 }
+
+// Or just the window leading up to a moment, for a scrubbing UI:
+const state = await trace.stateAt(1_500, { logWindow: 50 });
 ```
+
+`label` is the display name of the stream — the file's label, or the record's
+logger when there is no file. `logger` is kept separately on adapter records,
+verbatim: filtering by channel (`db.pool`) is a different question from "which
+stream do I render this under", and a display fallback is the wrong thing to
+filter on.
 
 The report shows the entries inside the failing step, level-coloured, and pins
 `warn`/`error`/`fatal` entries onto the test timeline next to the steps, so a

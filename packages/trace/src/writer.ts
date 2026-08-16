@@ -325,6 +325,7 @@ export function createTraceWriter(
         castOffset: wall,
         source: event.source,
         ...(label === undefined ? {} : { label }),
+        ...(record?.logger === undefined ? {} : { logger: record.logger }),
         ...(record?.level === undefined ? {} : { level: record.level }),
         message: record?.message ?? event.line ?? '',
         ...(record?.attrs === undefined ? {} : { attrs: record.attrs }),
