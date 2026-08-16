@@ -17,20 +17,15 @@
         <div id="view-head"></div>
         <div id="page" class="page" hidden></div>
     <main class="layout">
+      <section class="pane commands-pane" id="commands"></section>
+      <div class="splitter vertical" id="split-main" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the command log"></div>
       <section class="pane terminal-pane">
-        <header class="pane-head">
-          <h2>Terminal</h2>
-          <span class="warn" id="profile-notice" hidden></span>
-          <span class="spacer"></span>
-          <button id="shortcuts-toggle" title="Keyboard shortcuts" aria-expanded="false">?</button>
-          <button id="theme-toggle" title="Switch between the dark and light theme">◐</button>
-        </header>
+        <header class="pane-head" id="meta-bar"></header>
         <div id="terminal" class="terminal"></div>
+        <div id="timeline" class="scrub-strip"></div>
+        <div class="splitter horizontal" id="split-bottom" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize the panel below the terminal"></div>
+        <section class="pane" id="inspector"></section>
       </section>
-      <div class="splitter vertical" id="split-main" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the side panel"></div>
-      <section class="pane" id="inspector"></section>
-      <div class="splitter horizontal" id="split-bottom" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="Resize the bottom panel"></div>
-      <section class="pane" id="timeline"></section>
     </main>
       </div>
     </div>

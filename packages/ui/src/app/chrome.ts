@@ -73,6 +73,8 @@ export interface SplitterOptions {
   readonly key: string;
   /** Applies a fraction to the layout. */
   readonly apply: (fraction: number) => void;
+  /** Where the splitter sits before anyone drags it. */
+  readonly initial: number;
 }
 
 /**
@@ -83,7 +85,7 @@ export interface SplitterOptions {
  */
 export function installSplitter(options: SplitterOptions): void {
   const stored = Number.parseFloat(remembered(options.key) ?? '');
-  let fraction = clampSplit(Number.isFinite(stored) ? stored : 0.7);
+  let fraction = clampSplit(Number.isFinite(stored) ? stored : options.initial);
   options.apply(fraction);
 
   const set = (next: number): void => {

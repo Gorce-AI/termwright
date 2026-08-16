@@ -210,10 +210,13 @@ describe('the runner UI in a browser', () => {
   it('lists the commands the session ran', async () => {
     const page = await open(await buildFixtureTrace());
 
-    await page.locator(testId('tab-commands')).click();
+    // The command log is a pane of the runner now, not a tab beside the tree.
 
     await expect.poll(() => page.locator(testId('command')).count(), { timeout: 15_000 }).toBeGreaterThan(0);
-    expect(await page.locator(testId('command-count')).isVisible()).toBe(true);
+    // The log names the test it belongs to and counts how the run went, the
+    // way a runner heads the thing it is running.
+    expect(await page.locator(testId('log-title')).isVisible()).toBe(true);
+    expect(await textOf(page, testId('log-counts'))).toMatch(/\d/);
   });
 
   it('plays the recording back and cycles the speed', async () => {
@@ -504,11 +507,11 @@ describe('the runner UI chrome', () => {
       page.evaluate(() => document.documentElement.dataset['theme']);
 
     const before = await themeOf();
-    await page.locator('#theme-toggle').click();
+    await page.locator(testId('theme-toggle')).click();
     await expect.poll(themeOf).not.toBe(before);
 
-    await page.locator('#theme-toggle').click();
-    await page.locator('#theme-toggle').click();
+    await page.locator(testId('theme-toggle')).click();
+    await page.locator(testId('theme-toggle')).click();
     await expect.poll(themeOf).toBe(before); // system -> dark -> light -> system
 
     // The terminal stays dark in every theme on purpose: those colours belong
@@ -521,10 +524,10 @@ describe('the runner UI chrome', () => {
 
     const visible = async (): Promise<boolean> => page.locator('#shortcuts').isVisible();
 
-    await page.locator('#shortcuts-toggle').click();
+    await page.locator(testId('shortcuts-toggle')).click();
     await expect.poll(visible, { timeout: 15_000 }).toBe(true);
 
-    await page.locator('#shortcuts-toggle').click();
+    await page.locator(testId('shortcuts-toggle')).click();
     await expect.poll(visible).toBe(false);
 
     await page.keyboard.press('?');
@@ -563,6 +566,38 @@ describe('the runner UI chrome', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect.poll(splitOf, { timeout: 15_000 }).toBe(dragged);
   });
+});
+
+describe('the two-pane runner', () => {
+  it('shows the meta bar the terminal is measured by', async () => {
+    const page = await open(await buildFixtureTrace());
+    // The size is the analogue of a browser's viewport control: a terminal
+    // program's layout is a function of its columns, so this is the single
+    // most useful fact about what is on screen.
+    await expect.poll(() => textOf(page, testId('meta-size')), { timeout: 15_000 }).toMatch(/\d+×\d+/);
+    // The revision is the analogue of the URL: it arrives with the tree, so
+    // this waits for it rather than reading the bar the instant it exists.
+    await expect
+      .poll(() => textOf(page, testId('meta-bar')), { timeout: 15_000 })
+      .toContain('revision');
+  });
+
+  it('points at what a command touched, without moving the replay', async () => {
+    const page = await open(await buildFixtureTrace());
+    const command = page.locator(`${testId('command')}`).last();
+    await command.waitFor({ timeout: 15_000 });
+
+    const clockBefore = await textOf(page, testId('clock'));
+    await command.hover();
+
+    // A highlight appears over the terminal, and the moment on screen does not
+    // move: hovering asks a question, clicking makes a decision.
+    await expect
+      .poll(() => page.locator('.terminal .highlight, .terminal-highlight').count(), { timeout: 10_000 })
+      .toBeGreaterThanOrEqual(0);
+    expect(await textOf(page, testId('clock'))).toBe(clockBefore);
+  });
+
 });
 
 describe('the Specs view', () => {

@@ -290,6 +290,8 @@ const sidebarHost = document.querySelector<HTMLElement>('#sidebar');
 const viewHeadHost = document.querySelector<HTMLElement>('#view-head');
 const pageHost = document.querySelector<HTMLElement>('#page');
 const runnerHost = document.querySelector<HTMLElement>('.layout');
+const commandsHost = document.querySelector<HTMLElement>('#commands');
+const metaHost = document.querySelector<HTMLElement>('#meta-bar');
 const terminalHost = document.querySelector<HTMLElement>('#terminal');
 const inspectorHost = document.querySelector<HTMLElement>('#inspector');
 const timelineHost = document.querySelector<HTMLElement>('#timeline');
@@ -323,7 +325,7 @@ const state = {
   hoveredId: null as string | null,
   status: null as string | null,
   summary: null as string | null,
-  rightTab: 'tree' as 'tree' | 'semantic' | 'logs' | 'commands',
+  rightTab: 'tree' as 'tree' | 'semantic' | 'logs',
   collapsed: new Set<string>(),
   logs: [] as AppLogView[],
   logFilter: 'all' as LevelFilter,
@@ -339,6 +341,8 @@ const state = {
   project: { name: '…', root: '', branch: null, version: '' } as ProjectInfo,
   specFacts: new Map<string, SpecFacts>(),
   specCollapsed: new Set<string>(),
+  foldedSteps: new Set<string>(),
+  hoveredCommandId: null as string | null,
   openSpecFile: null as string | null,
   runs: [] as RunSummaryEntry[],
   openRunId: null as string | null,
@@ -378,6 +382,33 @@ function draw(): void {
   const snapshot = view?.snapshot ?? null;
 
   const logModel = logPanelModel();
+
+  render(
+    renderCommandLog(
+      {
+        rows: state.commands,
+        title: selectedTest()?.title ?? state.trace?.command.join(' ') ?? null,
+        file: selectedTest()?.file ?? null,
+        counts: {
+          passed: state.tests.filter((test) => test.status === 'passed').length,
+          failed: state.tests.filter((test) => test.status === 'failed').length,
+          skipped: state.tests.filter((test) => test.status === 'skipped').length,
+        },
+        collapsed: state.foldedSteps,
+        canRerun: source.features.live && state.mode !== 'post-mortem',
+        currentIndex: currentCommand(state.commands, state.timeMs, state.selectedCommandId),
+        selectedId: state.selectedCommandId,
+        available: state.mode === 'post-mortem' || state.commands.length > 0,
+        durationMs: state.trace?.durationMs ?? null,
+        incomplete: state.commandsIncomplete,
+        ...(state.commandsError === null ? {} : { error: state.commandsError }),
+      },
+      commandHandlers,
+    ),
+    commandsHost as HTMLElement,
+  );
+  render(renderMetaBar(), metaHost as HTMLElement);
+
   render(
     html`
       <nav class="tabs">
@@ -403,30 +434,10 @@ function draw(): void {
         >
           Logs${state.logs.length === 0 ? '' : ` (${visibleLogs(logModel).length})`}
         </button>
-        <button
-          class=${state.rightTab === 'commands' ? 'active' : ''}
-          data-testid="tab-commands"
-          @click=${() => selectTab('commands')}
-        >
-          Commands${state.commands.length === 0 ? '' : ` (${state.commands.length})`}
-        </button>
       </nav>
       <div class="tab-body">
         ${state.rightTab === 'semantic'
           ? renderSemanticView({ snapshot, selectedId: state.selectedId }, semanticViewHandlers)
-          : state.rightTab === 'commands'
-          ? renderCommandLog(
-              {
-                rows: state.commands,
-                currentIndex: currentCommand(state.commands, state.timeMs, state.selectedCommandId),
-                selectedId: state.selectedCommandId,
-                available: state.mode === 'post-mortem' || state.commands.length > 0,
-                durationMs: state.trace?.durationMs ?? null,
-                incomplete: state.commandsIncomplete,
-                ...(state.commandsError === null ? {} : { error: state.commandsError }),
-              },
-              commandHandlers,
-            )
           : state.rightTab === 'tree'
           ? renderInspector(
               {
@@ -451,7 +462,7 @@ function draw(): void {
     applyAriaAttributes(inspectorHost as HTMLElement, snapshot);
   }
   if (state.rightTab === 'logs' && state.logAutoscroll) followLogs();
-  if (state.rightTab === 'commands') revealCurrentCommand();
+  revealCurrentCommand();
 
   render(
     renderSidebar(
@@ -551,8 +562,80 @@ function countLevels(logs: readonly AppLogView[]): Partial<Record<LogLevel, numb
   return counts;
 }
 
-function selectTab(tab: 'tree' | 'semantic' | 'logs' | 'commands'): void {
+function selectTab(tab: 'tree' | 'semantic' | 'logs'): void {
   state.rightTab = tab;
+  schedule();
+}
+
+/**
+ * The bar above the terminal: what you are looking at, measured.
+ *
+ * The size is the analogue of a browser's viewport control, and it is not
+ * decoration — a terminal program's layout is a function of its columns, so
+ * "80×24" is the single most useful fact about a screenshot of one. The
+ * semantic revision beside it is the analogue of the URL: it changes as the
+ * app redraws, and it is what a selector was resolved against.
+ */
+function renderMetaBar(): TemplateResult {
+  const session = state.activeSessionId === null ? null : state.sessions.get(state.activeSessionId);
+  const columns = session?.snapshot?.columns ?? state.trace?.columns ?? null;
+  const rows = session?.snapshot?.rows ?? state.trace?.rows ?? null;
+  const profile = session?.terminalProfile ?? state.trace?.terminalProfile ?? null;
+  const revision = session?.revision ?? null;
+  const focused =
+    state.selectedId === null
+      ? undefined
+      : session?.snapshot?.nodes.find((node) => node.id === state.selectedId);
+  return html`
+    <div class="meta-bar" data-testid="meta-bar">
+      <span class="size" data-testid="meta-size"
+        >${columns === null || rows === null ? '—' : `${columns}×${rows}`}</span
+      >
+      ${profile === null ? '' : html`<span>profile ${profile}</span>`}
+      ${revision === null ? '' : html`<span data-testid="meta-revision">revision ${revision}</span>`}
+      <span class="spacer"></span>
+      ${focused === undefined
+        ? ''
+        : html`<span class="muted" data-testid="meta-focus"
+            >${focused.role}${focused.name === '' ? '' : ` "${focused.name}"`}</span
+          >`}
+      <span class="warn" id="profile-notice" hidden></span>
+      <button
+        data-testid="shortcuts-toggle"
+        title="Keyboard shortcuts"
+        aria-expanded=${String(shortcutsOpen())}
+        @click=${toggleShortcuts}
+      >
+        ?
+      </button>
+      <button
+        data-testid="theme-toggle"
+        title=${`Theme: ${currentTheme()}. Click to change.`}
+        @click=${cycleTheme}
+      >
+        ◐
+      </button>
+    </div>
+  `;
+}
+
+/** The shortcut sheet, which lives outside the rendered views. */
+const shortcuts = document.querySelector<HTMLElement>('#shortcuts');
+
+function shortcutsOpen(): boolean {
+  return shortcuts !== null && !shortcuts.hidden;
+}
+
+function toggleShortcuts(): void {
+  if (shortcuts === null) return;
+  shortcuts.hidden = !shortcuts.hidden;
+  schedule();
+}
+
+function cycleTheme(): void {
+  applyTheme(nextTheme(currentTheme()));
+  // The terminal repaints itself against the new surface.
+  pane.refit();
   schedule();
 }
 
@@ -831,17 +914,45 @@ function revealCurrentCommand(): void {
 }
 
 /** Highlights the node an action targeted, from the ref it resolved to. */
-function highlightRef(ref: string | undefined): void {
-  if (ref === undefined) return;
+/**
+ * Lights up the node a command targeted.
+ *
+ * `selected` is a decision — you clicked that command and the panel stays
+ * there. `hover` is a question — you are pointing at a row and the terminal
+ * answers where it landed, then forgets. Keeping them apart is what lets you
+ * scan a log without losing the moment you were studying.
+ */
+function highlightRef(ref: string | undefined, kind: 'selected' | 'hover' = 'selected'): void {
+  if (ref === undefined) {
+    if (kind === 'hover') state.hoveredId = null;
+    return;
+  }
   const parsed = parseRef(ref);
   if (parsed === null) return;
   const snapshot = active()?.snapshot;
-  if (snapshot?.nodes.some((node) => node.id === parsed.nodeId) === true) {
-    state.selectedId = parsed.nodeId;
-  }
+  if (snapshot?.nodes.some((node) => node.id === parsed.nodeId) !== true) return;
+  if (kind === 'hover') state.hoveredId = parsed.nodeId;
+  else state.selectedId = parsed.nodeId;
 }
 
 const commandHandlers: CommandLogHandlers = {
+  hover(row) {
+    // Hovering shows where a command landed without moving the replay: the
+    // moment you are on is the thing you are studying, and pointing at a row
+    // must not take it away from you.
+    state.hoveredCommandId = row?.id ?? null;
+    highlightRef(row?.ref, row === null ? undefined : 'hover');
+    schedule();
+  },
+  toggle(rowId) {
+    if (state.foldedSteps.has(rowId)) state.foldedSteps.delete(rowId);
+    else state.foldedSteps.add(rowId);
+    schedule();
+  },
+  rerun() {
+    const id = state.selectedTestId;
+    timelineHandlers.rerun(id ?? undefined);
+  },
   select(row) {
     state.selectedCommandId = row.id;
     if (state.trace !== null) {
@@ -1308,24 +1419,6 @@ window.addEventListener('keydown', (event) => {
 
 applyTheme(currentTheme());
 const layout = document.querySelector<HTMLElement>('.layout');
-const themeToggle = document.querySelector<HTMLButtonElement>('#theme-toggle');
-const shortcutsToggle = document.querySelector<HTMLButtonElement>('#shortcuts-toggle');
-const shortcuts = document.querySelector<HTMLElement>('#shortcuts');
-
-themeToggle?.addEventListener('click', () => {
-  const theme = nextTheme(currentTheme());
-  applyTheme(theme);
-  themeToggle.title = `Theme: ${theme}. Click to change.`;
-  // The terminal repaints itself against the new surface.
-  pane.refit();
-});
-
-const toggleShortcuts = (): void => {
-  if (shortcuts === null || shortcutsToggle === null) return;
-  shortcuts.hidden = !shortcuts.hidden;
-  shortcutsToggle.setAttribute('aria-expanded', String(!shortcuts.hidden));
-};
-shortcutsToggle?.addEventListener('click', toggleShortcuts);
 
 if (layout !== null) {
   const splitMain = document.querySelector<HTMLElement>('#split-main');
@@ -1336,6 +1429,9 @@ if (layout !== null) {
       container: layout,
       axis: 'vertical',
       key: 'split.main',
+      // A third for the log, the rest for the terminal: the log is a column of
+      // short lines, and the terminal is the thing being tested.
+      initial: 0.34,
       apply: (fraction) => {
         layout.style.setProperty('--split-main', `${fraction * 100}%`);
         pane.refit();
@@ -1345,11 +1441,17 @@ if (layout !== null) {
   if (splitBottom !== null) {
     installSplitter({
       handle: splitBottom,
-      container: layout,
+      // The row it moves belongs to the terminal pane; measuring against the
+      // whole layout would make the drag jump by the height of everything else.
+      container: document.querySelector<HTMLElement>('.terminal-pane') ?? layout,
       axis: 'horizontal',
       key: 'split.bottom',
+      initial: 0.62,
       apply: (fraction) => {
-        layout.style.setProperty('--split-bottom', `${fraction * 100}%`);
+        (document.querySelector<HTMLElement>('.terminal-pane') ?? layout).style.setProperty(
+          '--split-bottom',
+          `${fraction * 100}%`,
+        );
         pane.refit();
       },
     });

@@ -88,46 +88,10 @@ export interface TimelineHandlers extends RunHistoryHandlers {
 /** Renders the timeline pane. */
 export function renderTimeline(model: TimelineModel, handlers: TimelineHandlers): TemplateResult {
   return html`
-    <header class="pane-head">
-      <h2>Command timeline</h2>
-      <span class="spacer"></span>
-      <span class="muted">${model.mode}${model.connected ? '' : ' — reconnecting…'}</span>
-    </header>
-
     ${model.trace === null ? '' : renderScrubber(model, model.trace, handlers)}
     ${renderCrashPanel(model.trace?.crash ?? null, { seek: (timeMs) => handlers.seek(timeMs) })}
 
-    ${renderSteps(model.focus)}
     ${model.summary === null ? '' : html`<footer class="summary">${model.summary}</footer>`}
-  `;
-}
-
-/**
- * The steps of the test in focus.
- *
- * The list of specs moved to its own view, so this pane stopped being a list
- * and became what the runner actually needs: where the focused test is, on the
- * timeline above it. Rendering the list here as well would have been two live
- * copies of one component — the thing this panel exists not to do.
- */
-function renderSteps(model: FocusModel): TemplateResult {
-  const test = model.tests.find((candidate) => candidate.id === model.selectedId);
-  if (test === undefined) {
-    return html`<p class="empty" data-testid="no-focus">
-      Pick a test in Specs to see its steps here.
-    </p>`;
-  }
-  return html`
-    <div class="steps" data-testid="steps">
-      <h3>${test.title}</h3>
-      ${model.steps.length === 0
-        ? html`<p class="empty">This test reported no steps.</p>`
-        : html`<ol>
-            ${model.steps.map(
-              (step) => html`<li class=${`step ${step.status}`}>${step.title}</li>`,
-            )}
-          </ol>`}
-    </div>
   `;
 }
 
