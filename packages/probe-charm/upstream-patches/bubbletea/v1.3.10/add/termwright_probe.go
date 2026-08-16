@@ -83,10 +83,12 @@ func termwrightAfterView(program *Program, model Model, view string) {
 		return
 	}
 
-	// Zero means "the terminal size has not arrived yet", not "a tiny
-	// terminal". Validation refuses a snapshot without positive dimensions, so
+	// v1 keeps the terminal size on the renderer, not on the Program — the
+	// symmetry with v2 that looks obvious is not there, and assuming it cost a
+	// compile. Zero means "the size has not arrived yet", not "a tiny
+	// terminal": validation refuses a snapshot without positive dimensions, so
 	// the frame is skipped rather than published as a lie.
-	columns, rows := program.width, program.height
+	columns, rows := termwrightViewport(program)
 	if columns <= 0 || rows <= 0 {
 		return
 	}
@@ -244,6 +246,24 @@ func termwrightCallString(value reflect.Value, name string) *string {
 	}
 	result := method.Call(nil)[0].String()
 	return &result
+}
+
+// termwrightViewport reads the terminal size v1 knows about.
+//
+// The standard renderer learns it from the resize handler; a program using a
+// different renderer reports nothing, and nothing is the right answer there
+// rather than a guess.
+func termwrightViewport(program *Program) (int, int) {
+	if program == nil {
+		return 0, 0
+	}
+	renderer, ok := program.renderer.(*standardRenderer)
+	if !ok || renderer == nil {
+		return 0, 0
+	}
+	renderer.mtx.Lock()
+	defer renderer.mtx.Unlock()
+	return renderer.width, renderer.height
 }
 
 // termwrightEchoesPlainly reports whether the widget draws what it holds.

@@ -71,7 +71,7 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     const tea = await readFile(join(copy, 'tea.go'), 'utf8');
     // v2 consolidated v1's three call sites into Program.render, so one hunk
     // covers the loop frame, the initial one and the final one.
-    expect(tea.match(/termwrightAfterView\(model, view\)/gu)).toHaveLength(1);
+    expect(tea.match(/termwrightAfterView\(p, model, view\)/gu)).toHaveLength(1);
 
     await expect(
       run('go', ['build', './...'], { cwd: copy, env: { ...process.env, GOWORK: workspace } }),
