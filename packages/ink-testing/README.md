@@ -127,18 +127,44 @@ instead.
 ## API
 
 - `mountInk(element, options?)` → `InkHarness`. Options: `columns`, `rows`,
-  `wrapper`, `env`, `timeouts`, `settleTimeout`, `ink` (a curated subset of
-  Ink's render options).
+  `wrapper`, `env`, `envMode`, `logs`, `timeouts`, `settleTimeout`, `ink` (a
+  curated subset of Ink's render options).
 - `InkHarness` — the driver's `TerminalHarness`, plus `rerender(element)` and
   `renderError()`.
 - `launchInkFixture(options)` → `TerminalHarness`. Options: `component`,
-  `exportName`, `props`, `columns`, `rows`, `cwd`, `env`, `nodeArgs`,
-  `timeouts`, `settleTimeout`.
+  `exportName`, `props`, `columns`, `rows`, `cwd`, `env`, `envMode`, `logs`,
+  `nodeArgs`, `timeouts`, `settleTimeout`.
 - `commitFrame(harness, mutate)` / `waitForFirstFrame(harness)` — the settlement
   primitives, for harnesses you build yourself.
 - `createInProcessBackend(start)`, `createHarnessStdout`, `createHarnessStdin`,
   `applyOnlcr` — the pty stand-in, exported for adapters other than Ink.
 - `encodeFixturePayload`, `assertJsonProps` — the fixture boundary.
+
+## Application logs
+
+Both modes accept `logs`, the same option `launchTerminal` takes, so a component
+that writes to a log file can be asserted on through
+[`@termwright/test`](../test):
+
+```ts
+import {collectLogs, expect} from '@termwright/test';
+
+const harness = await mountInk(<App />, {logs: [{path: 'app.log', label: 'app'}]});
+collectLogs(harness);
+
+await harness.getByRole('button', {name: 'Save'}).click();
+await expect(harness).toHaveLogged({level: 'error', message: /save/});
+```
+
+Entries land on the session timeline interleaved with input and renders, which
+is what makes "the component logged this *after* that keystroke" a question the
+trace can answer.
+
+One difference between the modes: a fixture also captures `console.*` as log
+records, and a mount does not. In a mount that console belongs to Vitest and to
+every other test in the file, so capturing it would attribute the runner's own
+output to your component. Pass `captureConsole: true` if you want it anyway —
+the wrapper is removed again on `close()`.
 
 ## With the Vitest preset
 

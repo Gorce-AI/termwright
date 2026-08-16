@@ -66,6 +66,14 @@ click. What is not identical:
   including a fixture that throws out of a timer on input and the report that
   comes back with the stack in `screenTail` and the keystroke in
   `recentInputs`.
+- **Console capture.** The adapter wraps `console.*` into log records whenever
+  it is instrumented, and that default is right for a process of its own. A
+  mount turns it **off**: the console object belongs to Vitest and to every
+  other test in the file, so capturing it would file the runner's output under
+  the component and would leave a wrapper on a global for the mount's lifetime.
+  `mountInk({captureConsole: true})` opts back in — the adapter restores the
+  originals on unmount, which `src/logs.test.tsx` pins in both directions.
+  Console output that is genuinely the subject of a test belongs in a fixture.
 - **Props.** A mount takes anything React takes; a fixture takes bounded JSON.
   `assertJsonProps` refuses functions, `undefined`, cycles, class instances and
   depth over 8 *before* spawning, because `JSON.stringify` would drop them

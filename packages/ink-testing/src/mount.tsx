@@ -9,6 +9,7 @@ import { semanticRender } from '@termwright/ink';
 import {
   launchTerminal,
   SessionClosedError,
+  type AppLogSource,
   type CellSnapshot,
   type CrashReport,
   type EnvMode,
@@ -91,6 +92,28 @@ export interface MountInkOptions {
    * separate process can have — use `launchInkFixture` for that.
    */
   readonly envMode?: EnvMode;
+  /**
+   * Log files to follow for the lifetime of the mount, as in `launchTerminal`.
+   *
+   * Entries arrive on the session timeline as `app-log` events, interleaved
+   * with input and renders, which is what makes "the component logged this
+   * *after* that keystroke" answerable. `collectLogs` in `@termwright/test`
+   * reads them straight off the harness.
+   */
+  readonly logs?: readonly AppLogSource[];
+  /**
+   * Let the adapter capture `console.*` as log records. Default `false` here,
+   * unlike a fixture or a production run, where it defaults to `true`.
+   *
+   * A mount shares the runner's console object with the test framework and
+   * with every other test in the file. Capturing it would attribute Vitest's
+   * own output to the component under test, and would leave a wrapper on a
+   * global for as long as the mount is alive. Neither is a property this
+   * package is willing to give up by default — a component whose console
+   * output is the thing under test belongs in `launchInkFixture`, where the
+   * console is genuinely its own.
+   */
+  readonly captureConsole?: boolean;
   /** Driver timeout classes, as in `launchTerminal`. */
   readonly timeouts?: TimeoutClasses;
   /** How long the initial mount and each `rerender` may take to commit. */
@@ -177,7 +200,7 @@ export async function mountInk(element: ReactNode, options: MountInkOptions = {}
       // leaves no trace of itself outside its own wires.
       patchConsole: false,
       ...options.ink,
-      semantics: { env: io.env },
+      semantics: { env: io.env, captureConsole: options.captureConsole ?? false },
     });
     state.instance = instance;
     // Awaited exactly once and shared. `waitUntilExit()` registers a
@@ -207,6 +230,7 @@ export async function mountInk(element: ReactNode, options: MountInkOptions = {}
     rows,
     ...(options.env === undefined ? {} : { env: options.env }),
     ...(options.envMode === undefined ? {} : { envMode: options.envMode }),
+    ...(options.logs === undefined ? {} : { logs: options.logs }),
     ...(options.timeouts === undefined ? {} : { timeouts: options.timeouts }),
   });
 

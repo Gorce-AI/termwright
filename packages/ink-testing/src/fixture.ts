@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   launchTerminal,
   ProcessExitedError,
+  type AppLogSource,
   type EnvMode,
   type TerminalHarness,
   type TimeoutClasses,
@@ -53,6 +54,12 @@ export interface LaunchInkFixtureOptions {
    * when the component genuinely needs the runner's environment.
    */
   readonly envMode?: EnvMode;
+  /**
+   * Log files to follow for the lifetime of the fixture, as in
+   * `launchTerminal`. Entries arrive on the session timeline as `app-log`
+   * events; `collectLogs` in `@termwright/test` reads them off the harness.
+   */
+  readonly logs?: readonly AppLogSource[];
   /** Arguments inserted before the runner, e.g. `['--import', 'tsx']`. */
   readonly nodeArgs?: readonly string[];
   /** Driver timeout classes, as in `launchTerminal`. */
@@ -107,6 +114,7 @@ export async function launchInkFixture(options: LaunchInkFixtureOptions): Promis
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.env === undefined ? {} : { env: options.env }),
     ...(options.envMode === undefined ? {} : { envMode: options.envMode }),
+    ...(options.logs === undefined ? {} : { logs: options.logs }),
     ...(options.timeouts === undefined ? {} : { timeouts: options.timeouts }),
   });
 
