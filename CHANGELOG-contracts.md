@@ -191,3 +191,8 @@
   closed sets (type, error.code, subscribe, roles, actions, log levels).
   Vector `hello-ack-extra-field` moves reject→accept as
   `hello-ack-unknown-envelope-field` (clients to update).
+- 2026-08-16 (driver 1e2aba7, #22 phase 2b): 'app-log' carries both paths —
+  {source:'file', line} and {source:'adapter', record: LogRecord}. Adapter
+  logs without a negotiated budget close the channel as a protocol violation.
+  Wall-clock record ts is anchored to the session clock at handshake and
+  clamped to [0, now]. DiagnosticCode set stays 16.
