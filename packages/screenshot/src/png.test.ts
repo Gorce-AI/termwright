@@ -66,29 +66,53 @@ describe('renderPng', () => {
   });
 
   it(
-    'reports the same fallback information the SVG renderer does',
+    'pays the font scan for an uncoverable character, and declining it is far cheaper',
     () => {
-      // The only test here that deliberately renders an uncoverable character,
-      // so the only one that pays resvg's system-font scan.
-      const shot = renderPng(textFrame('a\u{F0000}'), { fontSize: 12 });
-      expect(shot.selfContained).toBe(false);
-      expect(shot.fallbackCharacters).toContain('\u{F0000}');
+      const frame = textFrame('a\u{F0000}');
+
+      // The one render in this file that deliberately pays resvg's font scan.
+      const paidStart = performance.now();
+      const paid = renderPng(frame, { fontSize: 12 });
+      const paidMs = performance.now() - paidStart;
+
+      expect(paid.selfContained).toBe(false);
+      expect(paid.fallbackCharacters).toContain('\u{F0000}');
+      expect(paid.systemFontsLoaded).toBe(true);
+
+      const declinedStart = performance.now();
+      const declined = renderPng(frame, { fontSize: 12, systemFontFallback: false });
+      const declinedMs = performance.now() - declinedStart;
+      expect(declined.systemFontsLoaded).toBe(false);
+
+      // Relative, not absolute: both renders ran on the same machine moments
+      // apart, so a slow runner scales both. Measured locally the gap is 10–20×
+      // and the escape hatch is pointless below a few, so ×3 fails on a real
+      // regression without failing on a loaded runner.
+      //
+      // Skipped when the scan was cheap anyway. A container with a handful of
+      // fonts has little to enumerate, so the two paths converge and the ratio
+      // stops measuring anything — asserting it there would be the same
+      // machine-dependent trap in a new costume. The flags above still hold.
+      if (paidMs > 200) {
+        expect(declinedMs * 3).toBeLessThan(paidMs);
+      }
     },
     FONT_SCAN_TIMEOUT_MS,
   );
 
   it('can decline the system-font scan a fallback would trigger', () => {
-    const frame = textFrame('a\u{F0000}');
-    const started = performance.now();
-    const shot = renderPng(frame, { ...GEOMETRY, systemFontFallback: false });
-    const elapsed = performance.now() - started;
+    const shot = renderPng(textFrame('a\u{F0000}'), {
+      ...GEOMETRY,
+      systemFontFallback: false,
+    });
 
     // Still an honest report of what could not be embedded...
     expect(shot.selfContained).toBe(false);
     expect(shot.fallbackCharacters).toContain('\u{F0000}');
-    // ...but no font enumeration, which is the whole point of the escape
-    // hatch: a scan costs ~1 s here and several on Windows.
-    expect(elapsed).toBeLessThan(500);
+    // ...and the claim itself, as a fact rather than as a stopwatch reading:
+    // "no scan happened" is what the escape hatch promises, and a wall-clock
+    // threshold turns a loaded CI runner into a failing build.
+    expect(shot.systemFontsLoaded).toBe(false);
     expect([...shot.png.slice(0, 8)]).toEqual(PNG_SIGNATURE);
   });
 });
@@ -125,16 +149,6 @@ describe('reporting what a render cost', () => {
     if (!shot.selfContained) return; // no font on this machine
     expect(shot.systemFontsLoaded).toBe(false);
   });
-
-  it(
-    'says when a render paid for them',
-    () => {
-      const shot = renderPng(textFrame('a\u{F0000}'), GEOMETRY);
-      expect(shot.selfContained).toBe(false);
-      expect(shot.systemFontsLoaded).toBe(true);
-    },
-    FONT_SCAN_TIMEOUT_MS,
-  );
 
   it('says when the caller declined them, fallbacks or not', () => {
     const shot = renderPng(textFrame('a\u{F0000}'), {

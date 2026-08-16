@@ -178,6 +178,23 @@ Two consequences:
   the fix for the CI timeout — a per-test budget increase would have papered
   over a cost the library was imposing on its users too.
 
+### Assert the fact, not the stopwatch
+
+The first version of the escape-hatch test asserted `elapsed < 500` and failed
+on a macOS runner at 506 ms — a build broken by six milliseconds. The claim
+being made was never about a duration: it was "no font scan happened", and
+`systemFontsLoaded` states that outright, so that is what the test checks now.
+
+The performance guard survives as a *relative* comparison inside the one test
+that already pays the scan — declined must be at least 3× faster than paid, on
+the same machine, moments apart, so a loaded runner scales both sides. Measured
+locally the real gap is 10–20×.
+
+That comparison is itself skipped when the paid render took under 200 ms,
+because a machine with few fonts has little to enumerate and the two paths
+converge. Asserting a ratio there would reintroduce the same
+machine-dependence in a new costume — the flags still hold either way.
+
 ## Deduplicated `<defs>`, merged background runs
 
 A 100×30 screen is 3000 cells drawn from a few dozen distinct characters. Each
