@@ -388,6 +388,22 @@ means "this is not a value-bearing widget". Collapsing them makes
 `toHaveValue('')` unassertable, and a wire format that drops empty strings
 (Go's `omitempty` and friends) silently converts the first into the second.
 
+**Which roles derive a value.** Automatic derivation is gated to
+`textbox` and `progressbar`. An explicit author annotation bypasses the gate on
+any role — the author knows something the widget map does not — but an adapter
+must not go looking for a `.value` property on roles outside the set.
+
+`scrollbar` is deliberately excluded: its position is `state.scrollOffset` and
+`state.scrollExtent`, which are numbers with defined meaning, whereas a
+stringified scroll position in `value` would be a second encoding of the same
+fact that no matcher knows how to read.
+
+**A boolean is never a value.** A widget whose `.value` is `true`/`false` is
+reporting a *state*, not contents: it maps to `state.checked`, and `value` stays
+absent. This is a real divergence found while converging two adapters, not a
+hypothetical — publishing `value: "true"` makes a checkbox look like a textbox
+containing the word "true" to every role-blind matcher.
+
 ### 6. Deviations must be declared
 
 Per-adapter differences are permitted **only** where the framework does not
@@ -397,18 +413,18 @@ instead, and why the framework forces it.
 
 An undeclared deviation is a bug, not a difference.
 
-### Known gaps
+### Where the current differences live
 
-Snapshot at 2026-08-16, when these rules were first written down. Each entry is
-either a fix or a `## Deviations` entry for the adapter's owner to decide:
+This section carried a snapshot of per-adapter gaps when the rules were first
+written down. Every entry in it has since been either fixed or declared, and all
+five adapters now carry a `## Deviations` heading, so the snapshot is deleted
+rather than left to rot: a stale list in a normative document is worse than no
+list, because it is read as current.
 
-| Adapter | Gap against the rules above |
-|---|---|
-| ink | Names **every** role from concatenated descendant text, containers included (rule 2). Never derives `focused` (rule 4). Never derives `value` (rule 5). |
-| opentui | Derives `value` from any renderable exposing `.value`, ungated by role — permitted, but the role-gated adapters must reconcile with it (rule 5). |
-| textual | No annotation hook for `testId`, native DOM `id` only (rule 3). |
-| go/tview | Never emits `testId` although the field exists (rule 3). Drops empty `value` via `omitempty`, so `''` reaches the driver as absent (rule 5). |
-| rust | No tree adapter; rules 1–5 do not apply. Logs bridge only. |
+The live source of truth is each adapter's own `## Deviations` section —
+`@termwright/ink`, `@termwright/opentui`, and the Python, Go and Rust clients.
+That is also what conformance enforces: a difference that is declared there is a
+documented limitation, and a difference that is not is a bug.
 
 ## Protocol evolution
 
