@@ -151,6 +151,9 @@ importers:
 
   packages/ink:
     dependencies:
+      '@termwright/logs':
+        specifier: workspace:*
+        version: link:../logs
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
