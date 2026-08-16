@@ -1758,3 +1758,132 @@ button.active {
   padding-left: 4px;
   color: var(--muted);
 }
+
+
+/* ---- Recording ---------------------------------------------------------- */
+
+.recording-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--fail);
+  border-radius: 8px;
+  background: var(--tint-fail);
+}
+
+/* The word carries the meaning; the dot is decoration beside it. A state this
+   consequential must not depend on noticing a colour. */
+.rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--fail);
+}
+
+.rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fail);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rec-dot {
+    animation: rec-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes rec-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.dialog-host {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.dialog-host:has(.dialog) {
+  background: rgb(0 0 0 / 45%);
+  pointer-events: auto;
+}
+
+.dialog {
+  display: grid;
+  gap: 12px;
+  width: min(480px, 90vw);
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 45%);
+}
+
+.dialog.wide {
+  width: min(720px, 92vw);
+}
+
+.dialog h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.dialog label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dialog input {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.dialog .source {
+  max-height: 46vh;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog button,
+button.primary {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.primary {
+  border-color: var(--accent);
+  background: var(--tint-accent);
+  color: var(--accent);
+}

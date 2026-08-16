@@ -18,6 +18,11 @@ import { RunnerClient, type ServerState } from './client.js';
 import { InlineDataSource, readInlinePayload, type DataSource } from '../data-source.js';
 import { renderSidebar, renderViewHeader, type ViewName } from './sidebar.js';
 import { editorChoices, editorLink, type EditorId } from './editor-link.js';
+import {
+  renderRecordForm,
+  renderRecordResult,
+  renderRecordingBadge,
+} from './record-panel.js';
 import { filesUnder, renderSpecs } from './specs-view.js';
 import { buildSpecTree, type SpecFacts } from '../spec-tree.js';
 import type { ProjectInfo } from '../project.js';
@@ -329,6 +334,10 @@ const specsHandlers = {
   openInEditor(file: string): void {
     openInEditor(file);
   },
+  newSpec(): void {
+    state.recordForm = { command: '', outFile: 'src/recorded.test.ts', error: null, busy: false };
+    schedule();
+  },
   rowContext(): TestRowContext {
     return {
       selectedId: state.selectedTestId,
@@ -366,8 +375,10 @@ const sidebarHandlers = {
     schedule();
   },
   shortcuts(): void {
-    const sheet = document.querySelector<HTMLElement>('#shortcuts');
-    if (sheet !== null) sheet.hidden = !sheet.hidden;
+    toggleShortcuts();
+  },
+  stopRecording(): void {
+    void stopRecording();
   },
 };
 
@@ -377,6 +388,7 @@ const viewHeadHost = document.querySelector<HTMLElement>('#view-head');
 const pageHost = document.querySelector<HTMLElement>('#page');
 const runnerHost = document.querySelector<HTMLElement>('.layout');
 const toastHost = document.querySelector<HTMLElement>('#toast');
+const dialogHost = document.querySelector<HTMLElement>('#dialogs');
 const commandsHost = document.querySelector<HTMLElement>('#commands');
 const metaHost = document.querySelector<HTMLElement>('#meta-bar');
 const terminalHost = document.querySelector<HTMLElement>('#terminal');
@@ -430,7 +442,12 @@ const state = {
   specCollapsed: new Set<string>(),
   foldedSteps: new Set<string>(),
   editor: (remembered('editor') ?? 'vscode') as EditorId,
+  recordOutFile: '',
   toast: null as { readonly message: string; readonly failed: boolean } | null,
+  /** The "record a session" dialog, when it is open. */
+  recordForm: null as { command: string; outFile: string; error: string | null; busy: boolean } | null,
+  /** The test a finished recording wrote, before anyone decides its fate. */
+  recordResult: null as { source: string; outFile: string; note: string | null } | null,
   hoveredCommandId: null as string | null,
   openSpecFile: null as string | null,
   runs: [] as RunSummaryEntry[],
@@ -559,6 +576,7 @@ function draw(): void {
         project: state.project,
         view: state.view,
         running: state.tests.some((test) => test.status === 'running'),
+        recording: state.mode === 'record',
         hasRunner: state.mode !== 'live' || state.tests.length > 0 || state.sessions.size > 0,
         hasHistory: source.features.history,
       },
@@ -568,6 +586,7 @@ function draw(): void {
   );
   render(renderViewHeader(...viewHeader()), viewHeadHost as HTMLElement);
   render(renderToast(), toastHost as HTMLElement);
+  render(renderDialogs(), dialogHost as HTMLElement);
   (runnerHost as HTMLElement).hidden = state.view !== 'runner';
   (pageHost as HTMLElement).hidden = state.view === 'runner';
   if (state.view !== 'runner') render(renderPage(), pageHost as HTMLElement);
@@ -707,6 +726,99 @@ function renderMetaBar(): TemplateResult {
       </button>
     </div>
   `;
+}
+
+/** The recording dialogs: what to record, and what the recording wrote. */
+function renderDialogs(): TemplateResult | typeof nothing {
+  if (state.recordForm !== null) {
+    const form = state.recordForm;
+    return renderRecordForm(form, {
+      setCommand: (command) => {
+        form.command = command;
+        schedule();
+      },
+      setOutFile: (file) => {
+        form.outFile = file;
+        schedule();
+      },
+      cancel: () => {
+        state.recordForm = null;
+        schedule();
+      },
+      start: () => void startRecording(),
+    });
+  }
+  if (state.recordResult !== null) {
+    const result = state.recordResult;
+    return renderRecordResult(result, {
+      save: () => void saveRecording(),
+      copy: () => {
+        void navigator.clipboard?.writeText(result.source).catch(() => undefined);
+        result.note = 'copied to the clipboard';
+        schedule();
+      },
+      discard: () => {
+        state.recordResult = null;
+        // The server is holding the source until someone decides; saying
+        // "discard" out loud is what lets it let go.
+        void runner?.discardRecording().catch(() => undefined);
+        schedule();
+      },
+    });
+  }
+  return nothing;
+}
+
+/** Starts the recording the form describes. */
+async function startRecording(): Promise<void> {
+  const form = state.recordForm;
+  if (form === null || runner === undefined) return;
+  form.busy = true;
+  form.error = null;
+  schedule();
+  try {
+    // Split on whitespace: this is a command line, and the alternative is a
+    // form with an argument list, which nobody wants to fill in.
+    const command = form.command.trim().split(/\s+/);
+    await runner.startRecording(command, form.outFile === '' ? undefined : form.outFile);
+    state.recordOutFile = form.outFile;
+    state.recordForm = null;
+    state.view = 'runner';
+  } catch (error) {
+    form.error = describe(error);
+    form.busy = false;
+  }
+  schedule();
+}
+
+/** Stops the recording and shows what it wrote. */
+async function stopRecording(): Promise<void> {
+  if (runner === undefined) return;
+  try {
+    const { source } = await runner.stopRecording();
+    state.recordResult = { source, outFile: state.recordOutFile, note: null };
+    state.mode = 'live';
+  } catch (error) {
+    note(describe(error));
+  }
+  schedule();
+}
+
+/** Writes the recorded test where the form said. */
+async function saveRecording(): Promise<void> {
+  const result = state.recordResult;
+  if (result === null || runner === undefined) return;
+  try {
+    const { path } = await runner.save(result.outFile === '' ? undefined : result.outFile);
+    state.recordResult = null;
+    // Discovery watches the project, so the new spec arrives in the tree on
+    // its own; saying where it went is the part the panel owes the user.
+    note(`wrote ${path}`);
+    state.view = 'specs';
+  } catch (error) {
+    result.note = describe(error);
+  }
+  schedule();
 }
 
 /**

@@ -32,7 +32,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -677,6 +677,44 @@ describe('the Specs view', () => {
 
     await expect.poll(() => textOf(page, testId('spec-matches'))).toBe('2 matches');
     expect(await textOf(page, '.spec-tree')).not.toContain('login.test.ts');
+  });
+});
+
+describe('recording a session from the panel', () => {
+  it('records, shows what it wrote, and writes nothing until asked', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'termwright-rec-'));
+    const { page } = await serve({
+      discovery: { cwd, run: async () => JSON.stringify([]) },
+    });
+
+    await page.locator(testId('new-spec')).click();
+    // A command with no spaces to quote: the point is the flow, not the shell.
+    await page.locator(testId('record-command')).fill('node -e process.stdin.resume()');
+    await page.locator(testId('record-out')).fill(join(cwd, 'recorded.test.ts'));
+    await page.locator(testId('record-start')).click();
+
+    // Recording is a state you cannot miss, and it says so in a word rather
+    // than only in a colour.
+    await expect.poll(() => page.locator(testId('recording')).count(), { timeout: 20_000 }).toBe(1);
+    expect(await textOf(page, testId('recording'))).toContain('REC');
+
+    await page.locator(testId('stop-recording')).click();
+
+    // The test it wrote is shown before anything happens to it.
+    await page.locator(testId('record-result')).waitFor({ timeout: 20_000 });
+    const source = await textOf(page, testId('record-source'));
+    expect(source).toContain("import { test } from '@termwright/test'");
+    expect(source).toContain('terminal.launch');
+
+    // Nothing is on disk yet: stopping is not saving.
+    await expect(readFile(join(cwd, 'recorded.test.ts'), 'utf8')).rejects.toThrow();
+
+    await page.locator(testId('record-save')).click();
+    await expect
+      .poll(async () => readFile(join(cwd, 'recorded.test.ts'), 'utf8').catch(() => ''), {
+        timeout: 20_000,
+      })
+      .toContain('@termwright/test');
   });
 });
 

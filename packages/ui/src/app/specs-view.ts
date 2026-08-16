@@ -46,6 +46,8 @@ export interface SpecsHandlers {
   openRun(runId: string): void;
   /** Open this spec where it is edited, or copy its path. */
   openInEditor(file: string): void;
+  /** Start writing a spec by recording a program. */
+  newSpec(): void;
   /** The row context for the tests of an opened file. */
   rowContext(): TestRowContext;
 }
@@ -71,6 +73,9 @@ export function renderSpecs(model: SpecsModel, handlers: SpecsHandlers): Templat
             >`}
         ${model.canRun
           ? html`
+              <button class="primary" data-testid="new-spec" @click=${() => handlers.newSpec()}>
+                New spec
+              </button>
               <button data-testid="rerun" title="Run every test again" @click=${() => handlers.runAll()}>
                 Run all
               </button>

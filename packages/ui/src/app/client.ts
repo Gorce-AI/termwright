@@ -137,6 +137,21 @@ export class RunnerClient implements DataSource {
     return this.#get<TraceStatePayload>(`/api/trace/state?t=${Math.round(timeMs)}`);
   }
 
+  /** Starts recording a program in this panel. */
+  async startRecording(command: readonly string[], outFile?: string): Promise<{ sessionId: string }> {
+    return this.#post('/api/record/start', { command, ...(outFile === undefined ? {} : { outFile }) });
+  }
+
+  /** Stops recording and returns the test that was written. */
+  async stopRecording(): Promise<{ source: string }> {
+    return this.#post('/api/record/stop', {});
+  }
+
+  /** Throws away a recording the panel decided not to keep. */
+  async discardRecording(): Promise<{ discarded: boolean }> {
+    return this.#post('/api/record/discard', {});
+  }
+
   async recordAction(kind: 'click' | 'assert-visible', nodeId: string): Promise<{ selector: GeneratedSelector; source: string }> {
     return this.#post('/api/record/action', { kind, nodeId });
   }

@@ -18,9 +18,9 @@
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createReadStream, watch } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openTrace, type TraceReader } from '@termwright/trace';
 import {
@@ -176,26 +176,6 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     await previous?.close();
   };
 
-  if (options.trace !== undefined) {
-    await openArchive(options.trace);
-  } else if (options.record !== undefined) {
-    mode = 'record';
-    recorder = await startRecorder(options.record);
-    hub.publish({ v: 1, type: 'run-start', mode: 'record', startedAt: Date.now() });
-    hub.publish({
-      v: 1,
-      type: 'test-start',
-      id: recorder.sessionId,
-      title: options.record.testName ?? options.record.command.join(' '),
-      // The recording has no source file yet — it becomes one when it is saved.
-      file: options.record.outFile ?? '',
-      startedAt: Date.now(),
-      sessionId: recorder.sessionId,
-    });
-  } else {
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
-  }
-
   const attach = (session: AttachedSession): (() => void) => {
     sessions.set(session.source.sessionId, session);
     const detach = attachSession(hub, session.source);
@@ -206,16 +186,80 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   };
 
   let detachRecorder: (() => void) | undefined;
-  if (recorder !== undefined) {
-    const live = recorder;
+  let recordOptions: RecorderOptions | undefined = options.record;
+  /**
+   * What a finished recording wrote, held until someone decides its fate.
+   *
+   * Stopping closes the session — that is what stopping means — but the test
+   * it produced has to outlive it, or "save" after "stop" would have nothing
+   * to write. Cleared when it is saved or discarded.
+   */
+  let pending: { readonly source: string; readonly outFile: string | undefined } | undefined;
+
+  /**
+   * Starts recording a program.
+   *
+   * The same path whether the panel asked for it or the command line did:
+   * `--record` is a deep link into this, exactly as `--trace` is a deep link
+   * into opening an archive. A runner that could only record if you restarted
+   * it with the right flag is a feature nobody finds.
+   */
+  const beginRecording = async (request: RecorderOptions): Promise<string> => {
+    if (recorder !== undefined) throw new Error('already recording');
+    recordOptions = request;
+    recorder = await startRecorder(request);
+    mode = 'record';
     detachRecorder = attach({
-      source: live.harness,
-      write: (bytes) => live.handleInput(bytes),
+      source: recorder.harness,
+      write: (bytes) => recorder?.handleInput(bytes) ?? Promise.resolve(),
       setPickMode: (enabled) => {
-        live.setPickMode(enabled);
+        recorder?.setPickMode(enabled);
       },
-      command: options.record?.command ?? [],
+      command: request.command,
     });
+    hub.publish({ v: 1, type: 'run-start', mode: 'record', startedAt: Date.now() });
+    hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: recorder.sessionId,
+      title: request.testName ?? request.command.join(' '),
+      // The recording has no source file yet — it becomes one when it is saved.
+      file: request.outFile ?? '',
+      startedAt: Date.now(),
+      sessionId: recorder.sessionId,
+    });
+    return recorder.sessionId;
+  };
+
+  /**
+   * Stops recording and hands back the test it wrote.
+   *
+   * The source comes back rather than being written: what to do with it is the
+   * person's decision — save it, copy it, or throw it away — and a recorder
+   * that writes a file the moment you stop has made that decision for them.
+   */
+  const endRecording = async (): Promise<string> => {
+    const live = recorder;
+    if (live === undefined) throw new Error('not recording');
+    const source = live.source();
+    detachRecorder?.();
+    detachRecorder = undefined;
+    recorder = undefined;
+    mode = 'live';
+    await live.close();
+    pending = { source, outFile: recordOptions?.outFile };
+    // No `run-end`: stopping a recording is not a run finishing. Publishing one
+    // made the panel announce "run finished" and offer to open a run that was
+    // never recorded.
+    return source;
+  };
+
+  if (options.trace !== undefined) {
+    await openArchive(options.trace);
+  } else if (options.record !== undefined) {
+    await beginRecording(options.record);
+  } else {
+    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
   }
 
   /**
@@ -342,7 +386,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
               ? null
               : {
                   sessionId: recorder.sessionId,
-                  command: options.record?.command ?? [],
+                  command: recordOptions?.command ?? [],
                   picking: recorder.picking,
                   outFile: options.record?.outFile ?? null,
                 },
@@ -502,15 +546,67 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         sendJson(response, 200, { source: recorder.source() });
         return;
       }
-      case 'POST /api/record/save': {
+      case 'POST /api/record/start': {
+        const body = await readJsonBody(request);
+        const command = body['command'];
+        if (!Array.isArray(command) || command.some((part) => typeof part !== 'string') || command.length === 0) {
+          sendJson(response, 400, { error: 'command must be a non-empty array of strings' });
+          return;
+        }
+        const outFile = body['outFile'];
+        if (outFile !== undefined && typeof outFile !== 'string') {
+          sendJson(response, 400, { error: 'outFile must be a string' });
+          return;
+        }
+        if (recorder !== undefined) {
+          sendJson(response, 409, { error: 'already recording' });
+          return;
+        }
+        const sessionId = await beginRecording({
+          command: command as string[],
+          cwd: options.discovery?.cwd ?? process.cwd(),
+          ...(outFile === undefined ? {} : { outFile }),
+        });
+        sendJson(response, 200, { sessionId });
+        return;
+      }
+      case 'POST /api/record/stop': {
         if (recorder === undefined) {
           sendJson(response, 409, { error: 'not recording' });
           return;
         }
+        sendJson(response, 200, { source: await endRecording() });
+        return;
+      }
+      case 'POST /api/record/discard': {
+        pending = undefined;
+        sendJson(response, 200, { discarded: true });
+        return;
+      }
+      case 'POST /api/record/save': {
         const body = await readJsonBody(request);
         const file = body['file'];
         if (file !== undefined && typeof file !== 'string') {
           sendJson(response, 400, { error: 'file must be a string' });
+          return;
+        }
+        if (recorder === undefined) {
+          // Saving after stopping is the ordinary case: the panel shows the
+          // test first and asks second.
+          if (pending === undefined) {
+            sendJson(response, 409, { error: 'nothing recorded' });
+            return;
+          }
+          const target = file ?? pending.outFile;
+          if (target === undefined) {
+            sendJson(response, 400, { error: 'no output file: name one to save to' });
+            return;
+          }
+          await mkdir(dirname(target), { recursive: true });
+          await writeFile(target, pending.source, 'utf8');
+          const source = pending.source;
+          pending = undefined;
+          sendJson(response, 200, { path: target, source });
           return;
         }
         const path = await recorder.save(file);

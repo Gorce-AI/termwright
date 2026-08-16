@@ -5,7 +5,7 @@ const project = { name: 'demo', root: '/repo', branch: 'main', version: '0.1.0' 
 
 describe('what the frame offers', () => {
   it('offers every place when a server is behind the page', () => {
-    expect(visibleEntries({ project, view: 'specs', running: false, hasRunner: true, hasHistory: true })).toEqual(
+    expect(visibleEntries({ project, view: 'specs', running: false, recording: false, hasRunner: true, hasHistory: true })).toEqual(
       ENTRY_VIEWS,
     );
   });
@@ -17,6 +17,7 @@ describe('what the frame offers', () => {
       project,
       view: 'runner',
       running: false,
+      recording: false,
       hasRunner: true,
       hasHistory: false,
     });

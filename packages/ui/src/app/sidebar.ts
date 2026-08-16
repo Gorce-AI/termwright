@@ -11,6 +11,7 @@
 
 import { html, type TemplateResult } from 'lit-html';
 import type { ProjectInfo } from '../project.js';
+import { renderRecordingBadge } from './record-panel.js';
 
 /** Places the panel can be. */
 export type ViewName = 'specs' | 'runner' | 'runs' | 'settings';
@@ -21,6 +22,8 @@ export interface SidebarModel {
   readonly view: ViewName;
   /** Whether a run is going on, so the frame can say so from any view. */
   readonly running: boolean;
+  /** Whether a session is being recorded right now. */
+  readonly recording: boolean;
   /** Present when a recording or a live session is open behind the views. */
   readonly hasRunner: boolean;
   /**
@@ -34,6 +37,8 @@ export interface SidebarModel {
 export interface SidebarHandlers {
   go(view: ViewName): void;
   shortcuts(): void;
+  /** Stop the recording in progress. */
+  stopRecording(): void;
 }
 
 /** One navigation entry: glyph, label, and the place it leads to. */
@@ -80,6 +85,15 @@ export function renderSidebar(model: SidebarModel, handlers: SidebarHandlers): T
         ${entries.map((entry) => renderEntry(entry, model, handlers))}
       </ul>
     </nav>
+
+    ${model.recording
+      ? html`<div class="recording-bar">
+          ${renderRecordingBadge()}
+          <button class="primary" data-testid="stop-recording" @click=${() => handlers.stopRecording()}>
+            Stop
+          </button>
+        </div>`
+      : ''}
 
     <footer class="side-foot">
       <button class="link" data-testid="shortcuts-open" @click=${() => handlers.shortcuts()}>
