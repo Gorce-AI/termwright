@@ -75,6 +75,17 @@ since session start, monotonic, never resets for the lifetime of a session
 (reconnects included).
 - `semantics.jsonl` — `{ t: <ms>, revision, castOffset: <ms>, snapshot }`,
   snapshot = `SemanticSnapshot` verbatim.
+- `logs.jsonl` — OPTIONAL, absent when the session logged nothing. One entry
+  per line: `{ t: <ms>, castOffset: <ms>, source: 'file'|'adapter', label?,
+  level?, message, attrs?, seq?, revision?, ts? }`. The driver's `app-log`
+  carries either `line` (followed file) or `record` (adapter); both are stored
+  as `message`, with `source` preserving the provenance. A file line has NO
+  `level` — consumers must not infer one from its text. `meta.logs`
+  summarises: `{ count, dropped, sources, levels }`, where `dropped` counts
+  entries evicted by the writer's ceiling (oldest first) and is computed at
+  finalize, never flushed on a following event. Redaction happens at the
+  source (`@termwright/logs`); file lines are RAW and carry the same handling
+  caveat as `crash.screenTail`.
 
 Writer/reader live in `@termwright/trace`; UI and HTML report consume only via
 those readers.

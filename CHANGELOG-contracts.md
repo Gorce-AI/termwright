@@ -196,3 +196,14 @@
   logs without a negotiated budget close the channel as a protocol violation.
   Wall-clock record ts is anchored to the session clock at handshake and
   clamped to [0, now]. DiagnosticCode set stays 16.
+- 2026-08-16 (logs in trace, #22): §Trace gains an OPTIONAL fifth member
+  `logs.jsonl` (absent when the session logged nothing) plus `meta.logs`
+  `{count, dropped, sources, levels}`. One line shape for both driver payloads:
+  `line` and `record.message` both land in `message`, `source` keeps the
+  provenance — a file line has no `level` and consumers must not infer one from
+  its text. `dropped` counts oldest-first evictions and is computed at
+  finalize (a counter flushed on the next event loses the last window when a
+  flood ends the session). `TraceState` gains `logs` (window of preceding
+  entries, `stateAt(t, {logWindow})`, default 20) and `TraceReader` gains
+  `logs()`. Redaction is the source's job (`@termwright/logs`); tailed file
+  lines are raw and carry `crash.screenTail`'s handling caveat.
