@@ -100,6 +100,28 @@ D6. **Probe IR is a new layer in `packages/protocol`** (facts, not
     render inference > heuristic — with physical facts (bounds, focus,
     visibility, cells) never casually overridden by annotations.
 
+### Amendments (post-review by impl-protocol, accepted)
+
+- **D3 amended**: wholesale node replacement already expresses retraction
+  (field absence in the replacing node — pinned by a #25-era test), so no
+  separate retraction mechanism is added; a second road would rot. The one
+  real gap was the **cursor**, closed by the rule "producer loses the cursor
+  → full snapshot". Partial node patches remain a *costed future option* to
+  be revisited only with measurements showing D2's `px` makes full-node
+  resends expensive in practice. The protocol README documents that a
+  recognizer losing confidence re-sends the full node without the field.
+- **FRAME_BEGIN is a capability-gated optional** — no framework audited can
+  guarantee a pre-frame hook (tview beforeDraw can veto; OpenTUI's callback
+  sits inside loop(); Textual is post-frame only; Charm splits submit from
+  flush). The driver treats its absence as "frames unannounced" and keeps
+  the quiet-stream barrier as the fallback, never as "no frame exists".
+- IR hard rules from the audits: identity is a typed capability
+  (`stable` | `frame-local`, never fabricated); geometry distinguishes
+  `intendedRect` from `visibleRect` (names `region`/`area` banned — three
+  conflicting meanings each across audits); observability is tri-valued
+  (observed / absent / unobservable-listed), not `undefined` doing double
+  duty.
+
 Phase order stays as specified: 1 IR+transport → 2 OpenTUI slice → 3 Textual
 → 4 Ink → 5 tview → 6 Ratatui → 7 Charm → 8 annotation SDKs → 9
 inspector/CI/docs/legacy removal.
