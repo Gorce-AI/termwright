@@ -131,6 +131,45 @@ called out here because adapters must satisfy them: every node without a
 `parentId` must appear in `rootIds`, and `labelledBy`/`describedBy` must
 reference nodes present in the same snapshot.
 
+## Protocol evolution
+
+The protocol grows without a version bump only in ways an already published
+client can survive. Anything else is a breaking change.
+
+**Additive — readers must tolerate these:**
+
+- **New keys in `limits`.** The reference parser reads the `limits` object of
+  `hello-ack` *leniently*: unknown keys are ignored, not rejected, and are
+  carried through to the caller so a reader that does understand them still
+  can. Known keys stay strict about their type. This is the one lenient object
+  on the wire, and it exists because a driver learning a new ceiling must not
+  invalidate every adapter already in the wild.
+- **New optional fields on a message.** `hello-ack.logs` is the worked example:
+  **absent means the feature is off**, so an older driver that never sends it
+  keeps working unchanged, and an adapter must not use a feature it was not
+  explicitly granted.
+- **New capability strings.** The driver filters the adapter's advertised
+  capabilities down to the ones it knows, so an adapter may advertise a
+  capability a given driver has never heard of.
+
+**Breaking — needs a coordinated release:**
+
+- A new or renamed **required** field on any message.
+- A new member of a **closed set** a reader must accept: message `type`,
+  `error.code`, roles, actions, log levels, `subscribe`. These stay strict
+  precisely so unknown values fail loudly instead of acquiring behaviour by
+  accident.
+- Changing the meaning, units or clock of an existing field.
+
+The asymmetry is deliberate: *capacity* is negotiated and therefore extensible,
+while *vocabulary* is closed and therefore fixed. When in doubt, ask whether a
+reader that ignores the new thing still behaves correctly. If yes it is
+additive; if it would silently do the wrong thing, it is breaking.
+
+Cross-language clients (`clients/`) assert against generated vectors in
+`clients/test-vectors/`. An additive change still requires regenerating those
+vectors, because they pin exact constants.
+
 ## Development
 
 ```sh

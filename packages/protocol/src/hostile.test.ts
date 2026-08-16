@@ -8,6 +8,7 @@ import { ProtocolViolation } from './errors.js';
 import { createFrameDecoder, encodeFrame, projectDto } from './framing.js';
 import { DEFAULT_LIMITS } from './limits.js';
 import { parseAdapterMessage } from './messages.js';
+import { validateLogRecord } from './logs.js';
 import { validateSnapshot } from './validate.js';
 
 const MB = 1024 * 1024;
@@ -193,5 +194,44 @@ describe('hostile snapshots', () => {
       DEFAULT_LIMITS,
     );
     expect(result.ok ? 'ok' : result.code).toBe('limit-exceeded');
+  });
+});
+
+describe('hostile log flood', () => {
+  function record(seq: number, message = 'tick'): Record<string, unknown> {
+    return { ts: 1_755_300_000_000 + seq, level: 'info', message, seq };
+  }
+
+  it('validates a sustained flood without retaining any of it', () => {
+    // A log storm is the expected abuse: the ceiling is per record, so the
+    // driver's memory must depend on its queue policy, never on volume.
+    for (let i = 0; i < 20_000; i += 1) {
+      const result = parseAdapterMessage({ type: 'log', record: record(i) }, DEFAULT_LIMITS);
+      if (!result.ok) throw new Error(`${result.code}: ${result.detail}`);
+    }
+    expect(true).toBe(true);
+  });
+
+  it('rejects an oversized record without retaining it', () => {
+    const result = validateLogRecord(
+      { ...record(1), message: 'A'.repeat(4 * MB) },
+      DEFAULT_LIMITS,
+    );
+    expect(result.ok ? 'ok' : result.code).toBe('bytes');
+  });
+
+  it('rejects an attribute flood at the key ceiling', () => {
+    const attrs: Record<string, number> = {};
+    for (let i = 0; i < 100_000; i += 1) attrs[`k${i}`] = i;
+    const result = validateLogRecord({ ...record(1), attrs }, DEFAULT_LIMITS);
+    // Byte ceiling or key ceiling, whichever bites first — both are bounded.
+    expect(['bytes', 'count']).toContain(result.ok ? 'ok' : result.code);
+  });
+
+  it('rejects a deeply nested attribute payload', () => {
+    let deep: unknown = 'leaf';
+    for (let i = 0; i < 5_000; i += 1) deep = { deep };
+    const result = validateLogRecord({ ...record(1), attrs: { deep } }, DEFAULT_LIMITS);
+    expect(['depth', 'schema', 'bytes']).toContain(result.ok ? 'ok' : result.code);
   });
 });

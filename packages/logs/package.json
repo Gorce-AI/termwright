@@ -1,0 +1,72 @@
+{
+  "name": "@termwright/logs",
+  "version": "0.1.0",
+  "description": "application log capture for terminal tests: the termwright:log diagnostics channel, ingress redaction, and pino/winston/consola/OpenTelemetry bridges",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./pino": {
+      "types": "./dist/pino.d.ts",
+      "import": "./dist/pino.js"
+    },
+    "./winston": {
+      "types": "./dist/winston.d.ts",
+      "import": "./dist/winston.js"
+    },
+    "./consola": {
+      "types": "./dist/consola.d.ts",
+      "import": "./dist/consola.js"
+    },
+    "./otel": {
+      "types": "./dist/otel.d.ts",
+      "import": "./dist/otel.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/pino.ts src/winston.ts src/consola.ts src/otel.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:hostile": "vitest run --config vitest.hostile.config.ts"
+  },
+  "dependencies": {
+    "@termwright/protocol": "workspace:*"
+  },
+  "peerDependencies": {
+    "@opentelemetry/sdk-logs": "*",
+    "consola": "*",
+    "pino": "*",
+    "winston": "*"
+  },
+  "peerDependenciesMeta": {
+    "pino": {
+      "optional": true
+    },
+    "winston": {
+      "optional": true
+    },
+    "consola": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-logs": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@opentelemetry/api-logs": "^0.208.0",
+    "@opentelemetry/sdk-logs": "^0.208.0",
+    "consola": "^3.4.2",
+    "pino": "^10.3.1",
+    "vitest": "^3.2.0",
+    "winston": "^3.19.0"
+  }
+}

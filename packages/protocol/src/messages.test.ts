@@ -160,6 +160,47 @@ describe('parseAdapterMessage', () => {
   });
 });
 
+describe('parseAdapterMessage — log records', () => {
+  function logMessage(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      type: 'log',
+      record: { ts: 1_755_300_000_000, level: 'warn', message: 'slow query', seq: 3, ...overrides },
+    };
+  }
+
+  it('accepts a log message', () => {
+    expect(adapterCode(logMessage())).toBe('ok');
+  });
+
+  it('carries the record through frozen', () => {
+    const result = parseAdapterMessage(logMessage(), LIMITS);
+    if (!result.ok) throw new Error(result.detail);
+    if (result.message.type !== 'log') throw new Error('expected a log message');
+    expect(result.message.record.level).toBe('warn');
+    expect(Object.isFrozen(result.message.record)).toBe(true);
+  });
+
+  it('rejects a malformed record as malformed, not as a limit', () => {
+    expect(adapterCode(logMessage({ level: 'verbose' }))).toBe('malformed');
+  });
+
+  it('reports an oversized record as limit-exceeded', () => {
+    const result = parseAdapterMessage(logMessage({ message: 'A'.repeat(2048) }), {
+      ...LIMITS,
+      maxLogRecordBytes: 256,
+    });
+    expect(result.ok ? 'ok' : result.code).toBe('limit-exceeded');
+  });
+
+  it('rejects unknown properties on the envelope', () => {
+    expect(adapterCode({ ...logMessage(), urgent: true })).toBe('malformed');
+  });
+
+  it('rejects a log message arriving on the driver side', () => {
+    expect(driverCode(logMessage())).toBe('malformed');
+  });
+});
+
 describe('parseDriverMessage', () => {
   it('accepts each driver → adapter message', () => {
     expect(driverCode(helloAck())).toBe('ok');
@@ -176,6 +217,51 @@ describe('parseDriverMessage', () => {
   it('rejects a hello-ack carrying malformed limits', () => {
     expect(driverCode({ ...helloAck(), limits: { ...LIMITS, maxNodes: -1 } })).toBe('malformed');
     expect(driverCode({ ...helloAck(), limits: { maxNodes: 1 } })).toBe('malformed');
+  });
+
+  it('accepts a hello-ack with a log budget, and one without', () => {
+    expect(driverCode(helloAck())).toBe('ok');
+    expect(
+      driverCode({
+        ...helloAck(),
+        logs: { enabled: true, maxRecordsPerSecond: 200, burst: 500 },
+      }),
+    ).toBe('ok');
+  });
+
+  it('accepts a hello-ack whose limits carry an unknown key', () => {
+    // Limits are additive: a newer driver announcing a ceiling this build has
+    // never heard of must not break the handshake. This is what let the log
+    // limits ship without invalidating already published clients.
+    const result = parseDriverMessage(
+      { ...helloAck(), limits: { ...LIMITS, maxFutureThing: 7 } },
+      LIMITS,
+    );
+    expect(result.ok ? 'ok' : result.code).toBe('ok');
+    if (!result.ok) return;
+    if (result.message.type !== 'hello-ack') throw new Error('expected hello-ack');
+    // The unknown key is carried through rather than silently dropped, so a
+    // consumer that does understand it still can.
+    expect((result.message.limits as unknown as Record<string, unknown>)['maxFutureThing']).toBe(7);
+    expect(result.message.limits.maxNodes).toBe(LIMITS.maxNodes);
+  });
+
+  it('still rejects a known limits key of the wrong type', () => {
+    expect(driverCode({ ...helloAck(), limits: { ...LIMITS, maxNodes: 'lots' } })).toBe('malformed');
+  });
+
+  it('keeps closed sets strict even though limits are lenient', () => {
+    expect(driverCode({ ...helloAck(), subscribe: 'everything' })).toBe('malformed');
+    expect(adapterCode({ ...hello(), capabilities: ['tree', 'not-a-capability'] })).toBe(
+      'malformed',
+    );
+  });
+
+  it('rejects a malformed log budget', () => {
+    expect(driverCode({ ...helloAck(), logs: { enabled: true } })).toBe('malformed');
+    expect(
+      driverCode({ ...helloAck(), logs: { enabled: true, maxRecordsPerSecond: 0, burst: 1 } }),
+    ).toBe('malformed');
   });
 
   it('rejects an unknown subscription mode', () => {

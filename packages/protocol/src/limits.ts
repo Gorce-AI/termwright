@@ -12,6 +12,10 @@ export interface ProtocolLimits {
   readonly maxQueuedFrames: number;
   readonly maxPendingWaiters: number;
   readonly maxSessions: number;
+  /** Byte ceiling for one serialised application log record. */
+  readonly maxLogRecordBytes: number;
+  /** Log records the driver buffers per session before evicting the oldest. */
+  readonly maxLogQueue: number;
 }
 
 export const DEFAULT_LIMITS: ProtocolLimits = Object.freeze({
@@ -24,6 +28,8 @@ export const DEFAULT_LIMITS: ProtocolLimits = Object.freeze({
   maxQueuedFrames: 32,
   maxPendingWaiters: 256,
   maxSessions: 16,
+  maxLogRecordBytes: 32 * 1024,
+  maxLogQueue: 1_000,
 });
 
 export const ABSOLUTE_LIMITS: ProtocolLimits = Object.freeze({
@@ -36,6 +42,8 @@ export const ABSOLUTE_LIMITS: ProtocolLimits = Object.freeze({
   maxQueuedFrames: 256,
   maxPendingWaiters: 4_096,
   maxSessions: 128,
+  maxLogRecordBytes: 256 * 1024,
+  maxLogQueue: 10_000,
 });
 
 /** Default semantic negotiation window (ms) before a session settles as generic. */

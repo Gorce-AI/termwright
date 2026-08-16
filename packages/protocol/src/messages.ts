@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import type { SemanticSnapshot } from './tree.js';
+import type { LogRecord } from './logs.js';
 import type { ProtocolLimits } from './limits.js';
 import { PROTOCOL_ID } from './env.js';
 import { ProtocolViolation } from './errors.js';
 import { projectDto } from './framing.js';
 import { validateSnapshot } from './validate.js';
+import { validateLogRecord } from './logs.js';
 
 /**
  * Wire messages. Transport: length-prefixed JSON frames (see framing.ts).
@@ -21,6 +23,7 @@ export const ADAPTER_CAPABILITIES = [
   'text-ranges',
   'render-revisions',
   'tree-diffs',
+  'logs',
 ] as const;
 export type AdapterCapability = (typeof ADAPTER_CAPABILITIES)[number];
 
@@ -43,6 +46,23 @@ export interface HelloAckMessage {
   readonly subscribe: 'snapshots' | 'revisions';
   /** Marker configuration: adapter must emit DCS marker with this nonce base. */
   readonly marker: { readonly enabled: boolean };
+  /**
+   * Log-channel budget, sent only when the adapter announced the `logs`
+   * capability. **Absent means logs are disabled** — an adapter that receives
+   * no `logs` field must not emit `log` messages at all.
+   *
+   * The adapter enforces the rate itself and drops locally when over budget,
+   * leaving a gap in `LogRecord.seq` so the driver can report how many records
+   * were lost. Enforcing it at the source is what keeps a log storm from
+   * consuming the frame budget the semantic tree needs.
+   */
+  readonly logs?: {
+    readonly enabled: boolean;
+    /** Sustained ceiling on records per second. */
+    readonly maxRecordsPerSecond: number;
+    /** Records allowed in a burst on top of the sustained rate. */
+    readonly burst: number;
+  };
 }
 
 /** adapter → driver after each committed render (always, regardless of mode). */
@@ -72,6 +92,18 @@ export interface GetTreeResponse {
   readonly error?: string;
 }
 
+/**
+ * adapter → driver, one application log record (capability `logs`).
+ *
+ * Sent only after the driver enabled logs in `hello-ack`. Records are
+ * independent of renders: they are not paired with a revision and never gate
+ * snapshot publication.
+ */
+export interface LogMessage {
+  readonly type: 'log';
+  readonly record: LogRecord;
+}
+
 /** either direction: terminal protocol error; sender closes after emitting. */
 export interface ProtocolErrorMessage {
   readonly type: 'error';
@@ -89,6 +121,7 @@ export type AdapterToDriverMessage =
   | RevisionCommitMessage
   | SnapshotMessage
   | GetTreeResponse
+  | LogMessage
   | ProtocolErrorMessage;
 
 export type DriverToAdapterMessage =
@@ -125,7 +158,14 @@ const revisionNumber = z
   .number()
   .refine((n) => Number.isSafeInteger(n) && n > 0, 'expected a positive safe integer');
 
-const limitsSchema = z.strictObject({
+/**
+ * Limits are an ADDITIVE part of the contract: unknown keys are IGNORED, not
+ * rejected. A driver that learns a new ceiling must not break every already
+ * published adapter, so this is the one object on the wire read leniently.
+ * Known keys stay strict about their type, and every closed set elsewhere
+ * (message types, roles, actions, capabilities) stays strict too.
+ */
+const limitsSchema = z.object({
   maxFrameBytes: revisionNumber,
   maxSnapshotBytes: revisionNumber,
   maxNodes: revisionNumber,
@@ -135,6 +175,8 @@ const limitsSchema = z.strictObject({
   maxQueuedFrames: revisionNumber,
   maxPendingWaiters: revisionNumber,
   maxSessions: revisionNumber,
+  maxLogRecordBytes: revisionNumber,
+  maxLogQueue: revisionNumber,
 });
 
 const errorSchema = z.strictObject({
@@ -162,6 +204,11 @@ const snapshotEnvelopeSchema = z.strictObject({
   snapshot: z.unknown(),
 });
 
+const logEnvelopeSchema = z.strictObject({
+  type: z.literal('log'),
+  record: z.unknown(),
+});
+
 const getTreeResultSchema = z
   .strictObject({
     type: z.literal('get-tree-result'),
@@ -182,6 +229,13 @@ const helloAckSchema = z.strictObject({
   limits: limitsSchema,
   subscribe: z.enum(['snapshots', 'revisions']),
   marker: z.strictObject({ enabled: z.boolean() }),
+  logs: z
+    .strictObject({
+      enabled: z.boolean(),
+      maxRecordsPerSecond: revisionNumber,
+      burst: safeIndex,
+    })
+    .optional(),
 });
 
 const getTreeRequestSchema = z.strictObject({
@@ -242,6 +296,25 @@ function checkSnapshot(value: unknown, limits: ProtocolLimits): MessageParseResu
 }
 
 /**
+ * Validate a log record carried inside an envelope, mapping capacity failures
+ * onto `limit-exceeded` exactly as snapshots do.
+ */
+function checkLogRecord(value: unknown, limits: ProtocolLimits): MessageParseResult<never> | null {
+  const result = validateLogRecord(value, limits);
+  if (result.ok) return null;
+  const overCapacity =
+    result.code === 'bytes' ||
+    result.code === 'count' ||
+    result.code === 'depth' ||
+    result.code === 'string-bytes';
+  return {
+    ok: false,
+    code: overCapacity ? 'limit-exceeded' : 'malformed',
+    detail: `log record ${result.code}: ${result.detail}`,
+  };
+}
+
+/**
  * Parse and validate one adapter → driver message.
  *
  * @param value - Untrusted decoded frame body.
@@ -286,6 +359,12 @@ export function parseAdapterMessage(
         if (bad !== null) return bad;
       }
       return { ok: true, message: dto as GetTreeResponse };
+    }
+    case 'log': {
+      const issue = check(logEnvelopeSchema, dto);
+      if (issue !== null) return malformed(issue);
+      const bad = checkLogRecord((dto as { record: unknown }).record, limits);
+      return bad ?? { ok: true, message: dto as LogMessage };
     }
     case 'error': {
       const issue = check(errorSchema, dto);
