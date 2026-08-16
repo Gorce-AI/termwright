@@ -6,6 +6,14 @@ file records why the probe is shaped the way it is.
 
 ## Two majors, two module paths, two strategies
 
+Both Bubbles patch sets exist (v1.0.0 and v2.1.1) and are byte-identical in
+substance: the five fields the accessors read kept their names across the
+major. That is luck, not design — the fields that *were* renamed
+(`filepicker.min`/`max` → `minIdx`/`maxIdx`) happen to be ones no accessor
+touches — so each major keeps its own set and its own checksums, and both are
+compiled in CI rather than assumed to match.
+
+
 **v2 is not v1 with a suffix.** It lives at `charm.land/bubbletea/v2`; asking
 the proxy for `github.com/charmbracelet/bubbletea/v2` fails with *module
 declares its path as: charm.land/bubbletea/v2*. A probe matching by module path
@@ -91,6 +99,12 @@ coordinates.
 
 ## Traps
 
+- **`waitForStable()` is the wrong instrument for an animating UI.** The
+  spinner fixture never stops redrawing, so waiting for a quiet screen waits
+  forever — "the screen never settled for 100 ms". Poll the tree instead. This
+  is not a probe limitation: a stability wait asks a question an animation
+  cannot answer.
+
 - **The viewport size cannot be invented.** Validation requires positive
   columns and rows; a snapshot published with zeroes is refused whole, and the
   tree stays empty while the handshake looks healthy. The probe skips frames
@@ -104,8 +118,5 @@ coordinates.
 
 ## Not covered yet
 
-- v1's Bubbles patch set. The accessors are written against v2's field names,
-  and several were renamed between majors (`filepicker.min`/`max` →
-  `minIdx`/`maxIdx`), so v1 needs its own set rather than a copy.
 - Lip Gloss provenance. Both channels are identified and neither is wired.
 - Windows, and any Charm version other than the two pinned here.

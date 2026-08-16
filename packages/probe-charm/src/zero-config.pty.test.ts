@@ -222,14 +222,20 @@ describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {
     // A spinner has no public frame index at all: from outside the library it
     // is a glyph, and "animating" is indistinguishable from "stuck". The
     // accessor makes the frame observable, so the tree can show it advancing.
+    // Polled rather than settled: this application animates forever, so
+    // waitForStable() waits for a quiet screen that never comes. An
+    // always-animating UI is exactly the case where "wait for stability" is
+    // the wrong instrument, and reaching for it here cost a red test.
     const frames = new Set<number | undefined>();
-    for (let attempt = 0; attempt < 25; attempt += 1) {
-      const state = await app.getByRole('status').semanticState();
-      frames.add(state?.positionInSet);
-      if (frames.size > 2) break;
-      await app.waitForStable();
-    }
-    expect(frames.size).toBeGreaterThan(1);
+    await expect
+      .poll(
+        async () => {
+          frames.add((await app.getByRole('status').semanticState())?.positionInSet);
+          return frames.size;
+        },
+        { timeout: 20_000, interval: 60 },
+      )
+      .toBeGreaterThan(1);
 
     // progress.Percent() returns the target of the animation, not the
     // fraction being drawn. The accessor reports the drawn one, and the

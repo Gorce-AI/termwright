@@ -136,6 +136,62 @@ describe.skipIf(!hasGo)('the patch sets', () => {
   }, 600_000);
 });
 
+describe.skipIf(!hasGo)('the Bubbles patch sets', () => {
+  const BUBBLES: Readonly<Record<CharmMajor, { module: string; version: string; path: readonly string[] }>> = {
+    v1: {
+      module: 'github.com/charmbracelet/bubbles',
+      version: 'v1.0.0',
+      path: ['github.com', 'charmbracelet', 'bubbles@v1.0.0'],
+    },
+    v2: {
+      module: 'charm.land/bubbles/v2',
+      version: 'v2.1.1',
+      path: ['charm.land', 'bubbles', 'v2@v2.1.1'],
+    },
+  };
+
+  it.each(['v1', 'v2'] as const)('adds accessors to %s and still compiles', async (major) => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), `tw-bubbles-${major}-`)));
+    roots.push(dir);
+
+    const copy = join(dir, 'bubbles');
+    await materializeUpstream(
+      await ensureUpstreamModule({
+        module: BUBBLES[major].module,
+        version: BUBBLES[major].version,
+        cachePath: BUBBLES[major].path,
+      }),
+      copy,
+    );
+    await applyPatchSet(copy, join(here, '..', 'upstream-patches', 'bubbles', BUBBLES[major].version));
+
+    const workspace = await writeWorkspace(join(dir, 'bubbles.work'), {
+      moduleDir: copy,
+      inherited: { uses: [], replaces: [] },
+      replaces: [],
+    });
+
+    await expect(
+      run('go', ['build', './...'], { cwd: copy, env: { ...process.env, GOWORK: workspace } }),
+    ).resolves.toBeDefined();
+  }, 900_000);
+
+  it('edits no upstream file in either major', async () => {
+    // Accessors are added, never spliced in. That is why a Bubbles bump costs
+    // nothing here: there is no diff context to drift.
+    for (const major of ['v1', 'v2'] as const) {
+      const manifest = JSON.parse(
+        await readFile(
+          join(here, '..', 'upstream-patches', 'bubbles', BUBBLES[major].version, 'manifest.json'),
+          'utf8',
+        ),
+      );
+      expect(manifest.patched).toEqual([]);
+      expect(manifest.added).toHaveLength(5);
+    }
+  });
+});
+
 describe.skipIf(hasGo)('the patch-set arms', () => {
   it('skips because no go toolchain is reachable', () => {
     expect(hasGo).toBe(false);
