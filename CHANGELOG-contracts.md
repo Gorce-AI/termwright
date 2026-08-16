@@ -387,3 +387,11 @@
   źródło DEKLARUJE features {live, history, openTrace}. Raport HTML w
   packages/trace pozostaje osobnym artefaktem crash-owym (ui zależy od trace,
   nigdy odwrotnie — bundla viewera nie da się dosięgnąć z trace).
+- 2026-08-16 (driver): expiry parowania od BARIERY DRENAŻU — połówka pary
+  rewizji nie może wygasnąć, dopóki emulator nie przetworzył wszystkiego, co
+  dotarło do momentu jej przyjęcia; dopiero wtedy rusza zegar
+  `pairingTimeoutMs`. Dzięki temu `revision-expired` znaczy „druga połówka
+  nie przyszła", a nie „driver jeszcze jej nie odczytał". Eksmisja
+  (`maxPending`, `revision-dropped`) bez zmian. Asercje floodów w konformancji
+  sprawdzają „ostatnia rewizja ląduje po ustaniu floodu" — przepustowość
+  emulatora to pomiar, nie kontrakt.
