@@ -442,3 +442,12 @@
   który pod backpressure porzucił fakty, MUSI wysłać pełny snapshot.
   `paintOrder` opcjonalne z capability (3/6 frameworków); własność komórki
   poza IR.
+- 2026-08-16 (driver, #34 Phase 1): `ResolvedTarget.identity:
+  'stable'|'frame-local'` — `locatorForRef` ODMAWIA (unsupported-action) przy
+  frame-local zamiast rozwiązywać ref na cokolwiek nosi ten numer; adapter
+  bez bloku probe = stabilne (zero zmian dla istniejących).
+  `ResolvedTarget.frameworkType?`/`provenance?` przenoszone z węzła;
+  `RoleLocatorOptions.frameworkType?: string|RegExp` (dopasowanie DOKŁADNE
+  domyślnie — to identyfikator frameworka, nie proza). Hit-test nigdy nie
+  pyta komórki, czyja jest (własność komórki nieosiągalna w 6/6 frameworków)
+  — opiera się na paintOrder + geometrii.
