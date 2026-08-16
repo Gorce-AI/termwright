@@ -244,6 +244,37 @@ describe.skipIf(upstream === null)('against the real framework', () => {
     expect(canary.proved).toBe(true);
   }, 300_000);
 
+  it('runs the probe suite that ships with the patch set', async () => {
+    // The Go tests live in the patch set because they need the probe's
+    // internals, which exist only inside the copy. Running them from here is
+    // what keeps them from rotting unnoticed.
+    const dir = await scratch();
+    const copy = join(dir, 'tview');
+    await materializeUpstream(upstream as string, copy);
+    await applyPatchSet(copy, PATCH_SET);
+
+    const client = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'clients', 'go');
+    const file = await writeWorkspace(join(dir, 'probe.work'), {
+      moduleDir: copy,
+      inherited: { uses: [], replaces: [] },
+      replaces: [{ from: 'github.com/gorce-ai/termwright/clients/go', to: client }],
+    });
+
+    const { stdout } = await run(
+      'go',
+      ['test', '-run', 'Termwright|Probe|Stalled|Marker|Dormant', '-count=1', '-v', '.'],
+      { cwd: copy, env: { ...process.env, GOWORK: file } },
+    );
+
+    // Named, so a suite that quietly stopped covering the stall is visible.
+    expect(stdout).toContain('PASS: TestAStalledDriverCostsFramesAndNotTheApplication');
+    expect(stdout).toContain('PASS: TestAFailedPublishWritesNoMarker');
+    expect(stdout).toContain('PASS: TestTheProbeIsDormantWithoutTheHandshakeVariables');
+    // A skip here means the socket buffer swallowed everything and the stall
+    // was never exercised; that is a gap, not a pass.
+    expect(stdout).not.toContain('SKIP: TestAStalledDriverCostsFramesAndNotTheApplication');
+  }, 300_000);
+
   it('is idempotent only through a fresh copy, and says so when it is not', async () => {
     const copy = join(await scratch(), 'tview');
     await materializeUpstream(upstream as string, copy);

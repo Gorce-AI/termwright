@@ -28,6 +28,7 @@ package tview
 //     frame's bytes and pair the tree with the wrong screen.
 
 import (
+	"errors"
 	"os"
 	"reflect"
 	"strconv"
@@ -55,8 +56,34 @@ type termwrightProbeState struct {
 	mu      sync.Mutex
 	ids     map[Primitive]string
 	nextID  int
-	dropped atomic.Uint64
-	frames  atomic.Uint64
+	dropped  atomic.Uint64
+	timedOut atomic.Uint64
+	frames   atomic.Uint64
+}
+
+// TermwrightProbeStats reports what the probe did and failed to do.
+//
+// Exported because the conformance fixture asserts on it: a drop counter no
+// test can read is a drop counter nobody notices.
+type TermwrightProbeStats struct {
+	Frames              uint64
+	Dropped             uint64
+	TimedOut            uint64
+	FullSnapshotPending bool
+}
+
+// TermwrightProbeStatistics returns the counters, or zeroes when dormant.
+func TermwrightProbeStatistics() TermwrightProbeStats {
+	p := termwrightProbe
+	if p == nil {
+		return TermwrightProbeStats{}
+	}
+	return TermwrightProbeStats{
+		Frames:              p.frames.Load(),
+		Dropped:             p.dropped.Load(),
+		TimedOut:            p.timedOut.Load(),
+		FullSnapshotPending: p.client.FullSnapshotRequired(),
+	}
 }
 
 var termwrightProbe = newTermwrightProbe()
@@ -69,6 +96,13 @@ func newTermwrightProbe() *termwrightProbeState {
 	client := protocol.FromEnv(protocol.Options{
 		AdapterName:    probeName,
 		AdapterVersion: probeVersion,
+		// Bounds one frame write. The publish below happens under the
+		// application's write lock, so an unbounded write would freeze
+		// rendering whenever the driver stops reading — a frozen debugger, a
+		// slow consumer, a transport torn down mid-frame. A quarter of a
+		// second of not being read means the driver is not keeping up, and
+		// the next frame carries newer state anyway.
+		WriteTimeout: protocol.DefaultWriteTimeout,
 	})
 	if client == nil {
 		return nil
@@ -83,8 +117,15 @@ func newTermwrightProbe() *termwrightProbeState {
 // termwrightAfterFrame is called from draw(), after screen.Show() has flushed
 // the frame's bytes.
 func termwrightAfterFrame(a *Application, screen tcell.Screen) {
-	p := termwrightProbe
-	if p == nil || screen == nil || a == nil || !p.client.Connected() {
+	if p := termwrightProbe; p != nil {
+		p.afterFrame(a, screen)
+	}
+}
+
+// afterFrame is the method form, so a test can drive an instance of its own
+// rather than the package-level probe a real run installs.
+func (p *termwrightProbeState) afterFrame(a *Application, screen tcell.Screen) {
+	if screen == nil || a == nil || !p.client.Connected() {
 		return
 	}
 
@@ -96,14 +137,39 @@ func termwrightAfterFrame(a *Application, screen tcell.Screen) {
 	snapshot := p.snapshot(a, columns, rows)
 	marker, err := p.client.Publish(snapshot)
 	if err != nil || marker == "" {
-		// A refused or oversized snapshot disables this frame's semantics and
-		// nothing else: the application keeps rendering exactly as before.
-		p.dropped.Add(1)
+		p.onPublishFailed(err)
 		return
 	}
 	// After the bytes, which is the whole reason this call site exists.
 	_, _ = os.Stdout.WriteString(marker)
 	p.frames.Add(1)
+}
+
+// onPublishFailed records a frame the driver will never see.
+//
+// Three things have to happen together, and leaving out any one of them
+// produces a worse failure than dropping the frame did:
+//
+//  1. **No marker.** A marker names a revision; writing one for a tree that
+//     never arrived makes the driver wait for it and then report
+//     revision-expired — a diagnosis pointing at the adapter's timing rather
+//     than at the driver that stopped reading.
+//  2. **A full snapshot next.** This probe has now lost part of its own fact
+//     stream, and a later delta would be based on a revision the driver never
+//     received. The producer obligation is to re-send the whole tree, and the
+//     client keeps the flag until a full tree is actually built.
+//  3. **Keep rendering.** The application is mid-frame under its own lock;
+//     instrumentation failing is not the application failing.
+func (p *termwrightProbeState) onPublishFailed(err error) {
+	p.dropped.Add(1)
+	p.client.RequireFullSnapshot()
+
+	if errors.Is(err, protocol.ErrWriteTimeout) {
+		// The stream now holds part of a frame and has no resynchronisation
+		// point, so the client closes the session. Nothing to retry: the next
+		// Publish returns immediately and the application draws on.
+		p.timedOut.Add(1)
+	}
 }
 
 // identity returns a stable id for a primitive.
@@ -350,6 +416,29 @@ func termwrightBounds(p Primitive, columns, rows int) *protocol.Rect {
 	return &protocol.Rect{Row: y, Column: x, Width: width, Height: height}
 }
 
+// termwrightScroll reports a scroll offset only when it is a fact.
+//
+// Several of these fields are meaningless until the widget has been drawn once
+// (the audit lists them: TextView.pageSize, TreeView.nodes, Table.visibleRows
+// and friends), and tview leaves some of them negative until then. A negative
+// offset is not "scrolled backwards", it is "not decided yet" — publishing it
+// asserts something false and, since the schema requires a non-negative
+// integer, gets the whole snapshot refused.
+func termwrightScroll(offset int) *int {
+	if offset < 0 {
+		return nil
+	}
+	return protocol.Int(offset)
+}
+
+// termwrightCount is the same guard for set sizes.
+func termwrightCount(count int) *int {
+	if count < 0 {
+		return nil
+	}
+	return protocol.Int(count)
+}
+
 // termwrightState reads the observable state of one widget.
 func termwrightState(p Primitive, focused, hidden bool) *protocol.State {
 	state := protocol.State{}
@@ -381,7 +470,7 @@ func termwrightState(p Primitive, focused, hidden bool) *protocol.State {
 			state.Disabled = protocol.Bool(true)
 			empty = false
 		}
-		state.SetSize = protocol.Int(widget.GetOptionCount())
+		state.SetSize = termwrightCount(widget.GetOptionCount())
 		state.Expanded = protocol.Bool(widget.IsOpen())
 		empty = false
 	case *TextArea:
@@ -389,27 +478,27 @@ func termwrightState(p Primitive, focused, hidden bool) *protocol.State {
 			state.Disabled = protocol.Bool(true)
 		}
 		row, _ := widget.GetOffset()
-		state.ScrollOffset = protocol.Int(row)
+		state.ScrollOffset = termwrightScroll(row)
 		empty = false
 	case *List:
-		state.SetSize = protocol.Int(widget.GetItemCount())
+		state.SetSize = termwrightCount(widget.GetItemCount())
 		// Named `itemOffset` here and `lineOffset`, `rowOffset` or `offsetY`
 		// on the other four scrollables; there is no single field to reach for.
 		offset, _ := widget.GetOffset()
-		state.ScrollOffset = protocol.Int(offset)
+		state.ScrollOffset = termwrightScroll(offset)
 		empty = false
 	case *Table:
-		state.SetSize = protocol.Int(widget.GetRowCount())
+		state.SetSize = termwrightCount(widget.GetRowCount())
 		row, _ := widget.GetOffset()
-		state.ScrollOffset = protocol.Int(row)
+		state.ScrollOffset = termwrightScroll(row)
 		empty = false
 	case *TextView:
 		row, _ := widget.GetScrollOffset()
-		state.ScrollOffset = protocol.Int(row)
+		state.ScrollOffset = termwrightScroll(row)
 		empty = false
 	case *TreeView:
-		state.ScrollOffset = protocol.Int(widget.GetScrollOffset())
-		state.SetSize = protocol.Int(widget.GetRowCount())
+		state.ScrollOffset = termwrightScroll(widget.GetScrollOffset())
+		state.SetSize = termwrightCount(widget.GetRowCount())
 		empty = false
 	case *Modal:
 		state.Modal = protocol.Bool(true)
