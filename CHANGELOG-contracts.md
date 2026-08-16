@@ -376,3 +376,7 @@
   Kod `mouse-mode-unverifiable` przemianowany na `mode-unverifiable` z polem
   `mode?: 'mouse' | 'focus'` (zbiór kodów zostaje 18, wpis raz na sesję per
   tryb). Opcja `mouseModesObservable` → `modesObservable`. Bez aliasów.
+- 2026-08-16 (ui): §UI events `test-end` + wymagane `lostLogRecords: number`
+  (0 reprezentowalne; „nic nie zginęło" ≠ „nikt nie liczył"). Manifest runów
+  v2: licznik per test WYMAGANY; wpisy v1 odrzucane przez istniejący
+  mechanizm wersji.

@@ -128,7 +128,9 @@ WebSocket, JSON messages `{ v: 1, type, ... }`:
   revision?, attrs?}`,
   `action {kind, api, t, ok, testId?, sessionId?, selector?, ref?, error?,
   stepId?}`,
-  `test-end {id, status, durationMs, flaky, traceRef?, error?}`,
+  `test-end {id, status, durationMs, flaky, lostLogRecords, traceRef?,
+  error?}` (`lostLogRecords` is REQUIRED — 0 is representable, and "nothing
+  was lost" and "nobody counted" are different facts),
   `run-end {summary: {total, passed, failed, skipped, flaky, durationMs}}`.
   All fields are REQUIRED except: `sessionId` (a Vitest reporter genuinely
   cannot know worker sessions; producers that do know send it), `traceRef`
