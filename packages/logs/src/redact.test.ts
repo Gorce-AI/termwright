@@ -20,7 +20,8 @@ describe('secret-shaped values', () => {
       'ghp_abcdefghijklmnopqrstuvwxyz0123456789',
       'github_pat_abcdefghijklmnopqrstuv_wxyz0123456789',
       'AKIAIOSFODNN7EXAMPLE',
-      'xoxb-REDACTED-sample',
+      // Assembled at runtime so secret scanners never see a token-shaped literal.
+      ['xoxb', '123456789012', 'abcdefghijklmnop'].join('-'),
       'sk-abcdefghijklmnopqrstuvwxyz0123456789',
     ];
     for (const sample of samples) {
