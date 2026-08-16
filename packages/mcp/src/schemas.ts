@@ -137,7 +137,12 @@ export const modesSchema = z.object({
   bracketedPaste: z.boolean(),
   applicationCursorKeys: z.boolean(),
   applicationKeypad: z.boolean(),
-  focusReporting: z.boolean(),
+  /**
+   * `'unknown'` has the same meaning as for the mouse fields: the platform
+   * hides the mode, so the emulator cannot say whether the program asked for
+   * focus events. It is not `'off'`.
+   */
+  focusReporting: z.enum(['on', 'off', 'unknown']),
   synchronizedOutput: z.boolean(),
 });
 

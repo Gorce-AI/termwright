@@ -45,10 +45,17 @@ export const crashSchema = z.object({
   ),
   diagnostics: z.array(
     z.object({
+      // Left as a free string on purpose: the driver's code set grows, and a
+      // closed enum here would make one unknown code invalidate a whole crash
+      // report — the moment it is needed most.
       code: z.string(),
       detail: z.string(),
       timeMs: z.number(),
       revision: z.number().int().optional(),
+      mode: z
+        .enum(['mouse', 'focus'])
+        .optional()
+        .describe('for "mode-unverifiable": which mode the platform hides'),
     }),
   ),
 });
@@ -84,6 +91,7 @@ export function describeCrash(report: CrashReport): CrashProjection {
       detail: entry.detail,
       timeMs: entry.timeMs,
       ...(entry.revision === undefined ? {} : { revision: entry.revision }),
+      ...(entry.mode === undefined ? {} : { mode: entry.mode }),
     })),
   };
 }
@@ -102,7 +110,10 @@ export function renderCrash(crash: CrashProjection): string {
     );
     lines.push(`last input: ${inputs.join(' ')}`);
   }
-  for (const entry of crash.diagnostics) lines.push(`diagnostic ${entry.code}: ${entry.detail}`);
+  for (const entry of crash.diagnostics) {
+    const mode = entry.mode === undefined ? '' : ` (${entry.mode})`;
+    lines.push(`diagnostic ${entry.code}${mode}: ${entry.detail}`);
+  }
   if (crash.screenTail.length > 0) {
     lines.push(crash.screenTailTruncated ? 'screen tail (truncated):' : 'screen tail:');
     lines.push(...crash.screenTail);

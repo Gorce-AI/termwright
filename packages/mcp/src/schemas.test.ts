@@ -14,7 +14,7 @@ describe('terminal modes', () => {
     bracketedPaste: false,
     applicationCursorKeys: false,
     applicationKeypad: false,
-    focusReporting: false,
+    focusReporting: 'off',
     synchronizedOutput: false,
   };
 
@@ -25,6 +25,15 @@ describe('terminal modes', () => {
       mouseEncoding: 'unknown',
     });
     expect(parsed.success).toBe(true);
+  });
+
+  it('accepts focus reporting as a tri-state, not a boolean', () => {
+    for (const focusReporting of ['on', 'off', 'unknown']) {
+      expect(modesSchema.safeParse({ ...base, focusReporting }).success).toBe(true);
+    }
+    // The old shape must fail loudly rather than coerce: `true` and `'unknown'`
+    // are not the same claim, and a silent pass would hide the difference.
+    expect(modesSchema.safeParse({ ...base, focusReporting: true }).success).toBe(false);
   });
 
   it('still accepts every observable value', () => {
