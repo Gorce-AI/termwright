@@ -132,8 +132,8 @@ describe('live mode', () => {
     const producer = await Viewer.connect(server, 'producer');
     const viewer = await Viewer.connect(server);
 
-    producer.send({ v: 1, type: 'test-start', id: 't1', title: 'login' });
-    producer.send({ v: 1, type: 'test-end', id: 't1', status: 'passed' });
+    producer.send({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
+    producer.send({ v: 1, type: 'test-end', id: 't1', status: 'passed', durationMs: 12, flaky: false });
 
     await viewer.until((messages) => messages.some((m) => m.type === 'test-end'), 'the test result');
     expect(viewer.received.map((message) => message.type)).toEqual(['run-start', 'test-start', 'test-end']);

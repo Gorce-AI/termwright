@@ -36,9 +36,9 @@ export interface UiRunSummary {
    * because a flaky test is a different problem from a working one, and
    * burying it in the pass count is how it stays broken.
    */
-  readonly flaky?: number;
+  readonly flaky: number;
   /** Wall-clock duration of the run, in milliseconds. */
-  readonly durationMs?: number;
+  readonly durationMs: number;
 }
 
 /** What the server is doing: watching a run, replaying a trace, or recording. */
@@ -52,14 +52,18 @@ export type ServerMessage =
       readonly type: 'test-start';
       readonly id: string;
       readonly title: string;
-      readonly file?: string;
+      readonly file: string;
       /**
        * Unix epoch milliseconds when the test started. A tab that connects
        * mid-run replays the backlog and needs this to show a truthful elapsed
        * time; without it, every running test would look like it just began.
        */
-      readonly startedAt?: number;
-      /** Session this test drives, when the producer knows it. */
+      readonly startedAt: number;
+      /**
+       * Session this test drives. The one optional field here: a Vitest
+       * reporter genuinely cannot know a worker's sessions, and inventing one
+       * would be worse than admitting it.
+       */
       readonly sessionId?: string;
     }
   | {
@@ -94,12 +98,14 @@ export type ServerMessage =
       readonly type: 'test-end';
       readonly id: string;
       readonly status: UiTestStatus;
-      readonly traceRef?: string;
-      readonly error?: string;
       /** How long the test took, in milliseconds. */
-      readonly durationMs?: number;
+      readonly durationMs: number;
       /** Passed only after a retry — a different problem from a failure. */
-      readonly flaky?: boolean;
+      readonly flaky: boolean;
+      /** Absent when no archive was retained for this test. */
+      readonly traceRef?: string;
+      /** Absent on a pass. */
+      readonly error?: string;
     }
   | { readonly v: 1; readonly type: 'run-end'; readonly summary: UiRunSummary }
   | ({
@@ -251,25 +257,17 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       return { v: 1, type: 'run-start', mode, startedAt: requireNumber(value, 'startedAt', 'run-start') };
     }
     case 'test-start': {
-      const file = value['file'];
-      if (file !== undefined && typeof file !== 'string') {
-        throw new UiProtocolError('test-start: file must be a string');
-      }
       const sessionId = value['sessionId'];
       if (sessionId !== undefined && typeof sessionId !== 'string') {
         throw new UiProtocolError('test-start: sessionId must be a string');
-      }
-      const startedAt = value['startedAt'];
-      if (startedAt !== undefined && (typeof startedAt !== 'number' || !Number.isFinite(startedAt))) {
-        throw new UiProtocolError('test-start: startedAt must be a finite number');
       }
       return {
         v: 1,
         type: 'test-start',
         id: requireString(value, 'id', 'test-start'),
         title: requireString(value, 'title', 'test-start'),
-        ...(file === undefined ? {} : { file }),
-        ...(startedAt === undefined ? {} : { startedAt }),
+        file: requireString(value, 'file', 'test-start'),
+        startedAt: requireNumber(value, 'startedAt', 'test-start'),
         ...(sessionId === undefined ? {} : { sessionId }),
       };
     }
@@ -333,12 +331,10 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       if (error !== undefined && typeof error !== 'string') {
         throw new UiProtocolError('test-end: error must be a string');
       }
-      const durationMs = value['durationMs'];
-      if (durationMs !== undefined && (typeof durationMs !== 'number' || !Number.isFinite(durationMs))) {
-        throw new UiProtocolError('test-end: durationMs must be a finite number');
-      }
-      const flaky = value['flaky'];
-      if (flaky !== undefined && typeof flaky !== 'boolean') {
+      // Checked in the order the contract lists them, so a producer fixing one
+      // field at a time is told about them in that order.
+      const durationMs = requireNumber(value, 'durationMs', 'test-end');
+      if (typeof value['flaky'] !== 'boolean') {
         throw new UiProtocolError('test-end: flaky must be a boolean');
       }
       return {
@@ -346,10 +342,10 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         type: 'test-end',
         id: requireString(value, 'id', 'test-end'),
         status,
+        durationMs,
+        flaky: value['flaky'],
         ...(traceRef === undefined ? {} : { traceRef }),
         ...(error === undefined ? {} : { error }),
-        ...(durationMs === undefined ? {} : { durationMs }),
-        ...(flaky === undefined ? {} : { flaky }),
       };
     }
     case 'action': {
@@ -390,9 +386,10 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         throw new UiProtocolError('run-end: summary must be an object');
       }
       const record = summary as Record<string, unknown>;
-      for (const key of ['total', 'passed', 'failed', 'skipped']) {
-        if (typeof record[key] !== 'number') {
-          throw new UiProtocolError(`run-end: summary.${key} must be a number`);
+      for (const key of ['total', 'passed', 'failed', 'skipped', 'flaky', 'durationMs']) {
+        const count = record[key];
+        if (typeof count !== 'number' || !Number.isFinite(count)) {
+          throw new UiProtocolError(`run-end: summary.${key} must be a finite number`);
         }
       }
       return { v: 1, type: 'run-end', summary: summary as UiRunSummary };

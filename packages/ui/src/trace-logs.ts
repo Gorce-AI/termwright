@@ -46,8 +46,7 @@ export interface TraceLogs {
   readonly available: boolean;
   /**
    * Streams the recording carried, in first-seen order: a log file's label and
-   * the path being tailed, or an adapter logger's name. Older archives stored
-   * bare labels; both forms are read.
+   * the path being tailed, or an adapter logger's name.
    */
   readonly sources: readonly LogSourceView[];
   /**
@@ -78,7 +77,7 @@ const EMPTY: TraceLogs = {
  */
 export async function readTraceLogs(reader: TraceReader): Promise<TraceLogs> {
   const summary = reader.meta.logs;
-  if (summary === undefined || typeof reader.logs !== 'function') return EMPTY;
+  if (summary === undefined) return EMPTY;
 
   const dropped = Number.isFinite(summary.dropped) ? summary.dropped : 0;
   const sources = parseSources(summary.sources);
@@ -92,9 +91,9 @@ export async function readTraceLogs(reader: TraceReader): Promise<TraceLogs> {
         truncated = true;
         break;
       }
-      // `castOffset` is the position a player seeks to; the panel and the
-      // timeline marks both work in cast time, so it wins over the wall clock.
-      const record = parseAppLog({ ...entry, t: entry.castOffset ?? entry.t });
+      // `castOffset` is the position a player seeks to, and the panel and the
+      // timeline marks both work in cast time.
+      const record = parseAppLog({ ...entry, t: entry.castOffset });
       if (record === null) continue; // a line we cannot read is a line we skip
       records.push(record);
     }
@@ -107,18 +106,11 @@ export async function readTraceLogs(reader: TraceReader): Promise<TraceLogs> {
   return { records, truncated, dropped, available: true, sources, levels };
 }
 
-/**
- * Reads `meta.logs.sources`, which is a list of `{label?, path?}` objects and
- * used to be a list of bare label strings.
- */
+/** Reads `meta.logs.sources`: `{label?, path?}` objects. */
 function parseSources(value: unknown): LogSourceView[] {
   if (!Array.isArray(value)) return [];
   const out: LogSourceView[] = [];
   for (const entry of value) {
-    if (typeof entry === 'string') {
-      if (entry !== '') out.push({ label: entry });
-      continue;
-    }
     if (typeof entry !== 'object' || entry === null) continue;
     const source = entry as Record<string, unknown>;
     const label = typeof source['label'] === 'string' ? source['label'] : undefined;

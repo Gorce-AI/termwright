@@ -155,10 +155,18 @@ producer simply omits them):
   `@termwright/test`'s reporter states: burying a flaky test in the pass count
   is how it stays broken.
 
-The UI falls back where a producer is silent: a missing `durationMs` is measured
-from `test-start` to `test-end` in the page, and a missing `run-end.flaky` is
-counted from the rows. `test-model.ts` holds all of that logic, free of the DOM
-and therefore tested directly.
+**There are no receiver-side fallbacks.** The contract settled on exactly one
+producer generation before 1.0, so these fields are required and the validator
+*rejects* a message that omits one instead of repairing it. The page no longer
+measures durations itself or recounts flaky from the rows; whatever the producer
+says is what the list shows, and a producer that lies gets a visible error rather
+than a plausible-looking number. Three fields stay optional for reasons that are
+about facts, not versions: `sessionId` (a Vitest reporter genuinely cannot know a
+worker's sessions), `traceRef` (no archive was retained) and `error` (the test
+passed).
+
+`test-model.ts` holds the list logic, free of the DOM and therefore tested
+directly.
 
 **The elapsed clock ticks only while something is running** — `retick()` starts
 a 500 ms interval on the first running test and clears it when the last one
@@ -193,6 +201,11 @@ The panel's header counts come from `meta.logs.levels`, which the writer
 computed over the whole recording — so "2 errors" stays true while the list is
 filtered, clipped to the scrub position, or short of entries the writer evicted.
 A live run has no such summary and counts what arrived.
+
+The same rule applies to the archive readers: `meta.logs.sources` is read only
+in its `{label, path}` form, and a log entry is positioned by its `castOffset`
+alone. Validation stays — an archive is still a file that could be malformed —
+but there is no branch for "an older writer wrote it differently".
 
 Archive logs arrive over HTTP (`/api/trace/logs`), not on the socket: they are
 state, like the trace overview, and the panel clips them to the scrub position.

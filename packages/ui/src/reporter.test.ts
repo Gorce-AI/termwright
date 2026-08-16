@@ -88,7 +88,7 @@ describe('TermwrightUiReporter', () => {
 
     const [first, second] = sink.messages.filter((message) => message.type === 'test-end');
     expect(first?.type === 'test-end' && first.durationMs).toBe(340);
-    expect(first?.type === 'test-end' && first.flaky).toBeUndefined();
+    expect(first?.type === 'test-end' && first.flaky).toBe(false);
     expect(second?.type === 'test-end' && second.flaky).toBe(true);
 
     const end = sink.messages.at(-1);

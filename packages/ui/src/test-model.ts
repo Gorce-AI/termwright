@@ -18,7 +18,7 @@ export interface TestRow {
   readonly status: UiTestStatus | 'running';
   /** Wall-clock start, for the elapsed time of a running test. */
   readonly startedAt?: number;
-  /** Final duration, once the test ended. */
+  /** Final duration, reported when the test ended. */
   readonly durationMs?: number;
   /** Passed only after a retry. */
   readonly flaky?: boolean;

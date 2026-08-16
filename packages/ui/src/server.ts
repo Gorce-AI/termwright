@@ -152,6 +152,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       type: 'test-start',
       id: recorder.sessionId,
       title: options.record.testName ?? options.record.command.join(' '),
+      // The recording has no source file yet — it becomes one when it is saved.
+      file: options.record.outFile ?? '',
+      startedAt: Date.now(),
+      sessionId: recorder.sessionId,
     });
   } else {
     hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });

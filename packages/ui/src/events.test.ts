@@ -40,7 +40,7 @@ describe('server messages', () => {
         durationMs: 1_234,
         flaky: true,
       },
-      { v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 1 } },
+      { v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 1, durationMs: 900 } },
     ];
     for (const message of messages) {
       expect(parseServerMessage(encodeMessage(message))).toEqual(message);
@@ -71,29 +71,46 @@ describe('server messages', () => {
 
   it('rejects malformed test timings', () => {
     expect(() =>
-      parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"passed","durationMs":"fast"}'),
+      parseServerMessage(
+        '{"v":1,"type":"test-end","id":"t1","status":"passed","durationMs":"fast","flaky":false}',
+      ),
     ).toThrow(/durationMs must be a finite number/);
     expect(() =>
-      parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"passed","flaky":"yes"}'),
+      parseServerMessage(
+        '{"v":1,"type":"test-end","id":"t1","status":"passed","durationMs":1,"flaky":"yes"}',
+      ),
     ).toThrow(/flaky must be a boolean/);
     expect(() =>
-      parseServerMessage('{"v":1,"type":"test-start","id":"t1","title":"x","startedAt":"now"}'),
+      parseServerMessage(
+        '{"v":1,"type":"test-start","id":"t1","title":"x","file":"a.ts","startedAt":"now"}',
+      ),
     ).toThrow(/startedAt must be a finite number/);
   });
 
-  it('keeps the older, field-less forms working', () => {
-    expect(parseServerMessage('{"v":1,"type":"test-start","id":"t1","title":"login"}')).toEqual({
-      v: 1,
-      type: 'test-start',
-      id: 't1',
-      title: 'login',
-    });
-    expect(parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"passed"}')).toEqual({
-      v: 1,
-      type: 'test-end',
-      id: 't1',
-      status: 'passed',
-    });
+  it('rejects a message missing a required field instead of filling it in', () => {
+    // One producer generation, no receiver-side fallbacks: a message that does
+    // not carry what the contract promises is a bug to surface, not a shape to
+    // repair.
+    expect(() => parseServerMessage('{"v":1,"type":"test-start","id":"t1","title":"login"}')).toThrow(
+      /file must be a string/,
+    );
+    expect(() =>
+      parseServerMessage('{"v":1,"type":"test-start","id":"t1","title":"login","file":"a.ts"}'),
+    ).toThrow(/startedAt must be a finite number/);
+    expect(() => parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"passed"}')).toThrow(
+      /durationMs must be a finite number/,
+    );
+    expect(() =>
+      parseServerMessage('{"v":1,"type":"test-end","id":"t1","status":"passed","durationMs":5}'),
+    ).toThrow(/flaky must be a boolean/);
+    expect(() =>
+      parseServerMessage('{"v":1,"type":"run-end","summary":{"total":1,"passed":1,"failed":0,"skipped":0}}'),
+    ).toThrow(/summary.flaky must be a finite number/);
+    expect(() =>
+      parseServerMessage(
+        '{"v":1,"type":"run-end","summary":{"total":1,"passed":1,"failed":0,"skipped":0,"flaky":0}}',
+      ),
+    ).toThrow(/summary.durationMs must be a finite number/);
   });
 
   it('rejects non-JSON and non-objects', () => {

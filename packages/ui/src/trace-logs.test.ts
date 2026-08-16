@@ -59,11 +59,6 @@ describe('readTraceLogs', () => {
     expect(logs.sources).toEqual([{ label: 'app.log', path: '/var/log/app.log' }]);
   });
 
-  it('reads the older bare-label form of sources too', async () => {
-    const logs = await readTraceLogs(readerWith([record()], { sources: ['app.log', '', 7] }));
-    expect(logs.sources).toEqual([{ label: 'app.log' }]);
-  });
-
   it('carries the writer’s per-level counts, ignoring levels it does not know', async () => {
     const logs = await readTraceLogs(
       readerWith([record()], { levels: { error: 2, warn: 1, trace: 0, critical: 9, info: 'lots' } }),
@@ -75,11 +70,6 @@ describe('readTraceLogs', () => {
     const logs = await readTraceLogs(readerWith([record()]));
     expect(logs.available).toBe(true);
     expect(logs.records[0]?.t).toBe(90);
-  });
-
-  it('falls back to the session clock when there is no cast offset', async () => {
-    const logs = await readTraceLogs(readerWith([record({ castOffset: undefined })]));
-    expect(logs.records[0]?.t).toBe(100);
   });
 
   it('skips a line it cannot read, and keeps the rest', async () => {

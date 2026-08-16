@@ -59,6 +59,11 @@ It publishes to `process.env.TERMWRIGHT_UI_URL`, which `termwright ui` sets, and
 does nothing at all when that variable is unset — safe to leave configured in a
 repository whose runs are mostly headless.
 
+The protocol has exactly one producer generation: every field `§UI events`
+lists is required unless the contract marks it optional, and a message missing
+one is rejected rather than patched up. Anything speaking this protocol has to
+send complete messages.
+
 ## The protocol
 
 The socket speaks `§UI events` from [`/CONTRACTS.md`](../../CONTRACTS.md), and

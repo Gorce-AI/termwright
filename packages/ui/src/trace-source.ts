@@ -120,6 +120,7 @@ export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void 
       id: testId,
       title: overview.command.length > 0 ? overview.command.join(' ') : testId,
       file: overview.path,
+      startedAt: overview.startedAt,
     },
   ];
   for (const step of overview.steps) {
@@ -156,10 +157,12 @@ export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void 
     type: 'test-end',
     id: testId,
     status,
-    traceRef: overview.path,
     // The recording's own length: a replayed "test" took as long as what was
     // recorded, not as long as the page took to receive the message.
     durationMs: overview.durationMs,
+    // A recording is one outcome; a retry would have been its own archive.
+    flaky: false,
+    traceRef: overview.path,
   });
   messages.push({
     v: 1,
@@ -169,6 +172,7 @@ export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void 
       passed: status === 'passed' ? 1 : 0,
       failed: status === 'failed' ? 1 : 0,
       skipped: 0,
+      flaky: 0,
       durationMs: overview.durationMs,
     },
   });

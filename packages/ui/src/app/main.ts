@@ -39,7 +39,7 @@ import { TerminalPane, type Highlight } from './terminal-pane.js';
 import { nextMarker, nodeAt } from '../view-model.js';
 import { renderTimeline, type TimelineHandlers } from './timeline.js';
 import type { TestRow } from '../test-model.js';
-import { countTests, describeCounts } from '../test-model.js';
+import { describeCounts } from '../test-model.js';
 
 /** A test row plus the steps reported for it. */
 interface MutableTest {
@@ -621,9 +621,9 @@ function handle(message: ServerMessage): void {
       const test = testFor(message.id, message.title);
       test.status = 'running';
       test.title = message.title;
-      if (message.file !== undefined) test.file = message.file;
+      test.file = message.file;
+      test.startedAt = message.startedAt;
       if (message.sessionId !== undefined) test.sessionId = message.sessionId;
-      test.startedAt = message.startedAt ?? Date.now();
       delete test.durationMs;
       delete test.error;
       retick();
@@ -658,12 +658,8 @@ function handle(message: ServerMessage): void {
       test.status = message.status;
       if (message.traceRef !== undefined) test.traceRef = message.traceRef;
       if (message.error !== undefined) test.error = message.error;
-      if (message.flaky !== undefined) test.flaky = message.flaky;
-      const measured =
-        message.durationMs ??
-        (test.startedAt === undefined ? undefined : Math.max(Date.now() - test.startedAt, 0));
-      if (measured === undefined) delete test.durationMs;
-      else test.durationMs = measured;
+      test.flaky = message.flaky;
+      test.durationMs = message.durationMs;
       retick();
       break;
     }
@@ -696,18 +692,10 @@ function handle(message: ServerMessage): void {
       break;
     }
     case 'run-end': {
-      const { durationMs } = message.summary;
-      // The run's own counters, with the list's counts as the fallback: a
-      // producer that reports no summary still gets an honest footer.
-      const counts = {
-        ...countTests(state.tests),
-        ...message.summary,
-        flaky: message.summary.flaky ?? countTests(state.tests).flaky,
-        running: 0,
-      };
-      state.summary = `${describeCounts(counts)}${
-        durationMs === undefined ? '' : ` in ${Math.round(durationMs)}ms`
-      }`;
+      // The producer's own counters, used as sent: this protocol has one
+      // producer generation, so there is nothing to reconcile them against.
+      const { durationMs, ...counts } = message.summary;
+      state.summary = `${describeCounts({ ...counts, running: 0 })} in ${Math.round(durationMs)}ms`;
       retick();
       break;
     }

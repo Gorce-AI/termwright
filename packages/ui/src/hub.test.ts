@@ -23,7 +23,7 @@ describe('UiHub', () => {
   it('replays the backlog to a client that connects late', () => {
     const hub = new UiHub();
     hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
-    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login' });
+    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
     const client = new RecordingClient();
     hub.addClient(client);
     expect(client.received.map((message) => message.type)).toEqual(['run-start', 'test-start']);
@@ -72,7 +72,7 @@ describe('UiHub', () => {
   it('drops output before lifecycle messages when the backlog fills', () => {
     const hub = new UiHub({ maxMessages: 3 });
     hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
-    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login' });
+    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
     hub.publish(output('a'));
     hub.publish(output('b'));
     hub.publish(output('c'));
@@ -168,7 +168,7 @@ describe('application logs', () => {
   it('evicts logs before lifecycle messages, and never run-start', () => {
     const hub = new UiHub({ maxMessages: 3 });
     hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
-    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login' });
+    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
     for (let index = 0; index < 20; index += 1) {
       hub.publish({ v: 1, type: 'app-log', sessionId: 's1', t: index, source: 'file', level: null, message: 'noise' });
     }

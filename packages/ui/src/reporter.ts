@@ -99,13 +99,15 @@ export class TermwrightUiReporter {
   onTestCaseReady(testCase: TestCaseLike): void {
     const id = testCase.id;
     if (id === undefined) return;
-    const file = testCase.module?.moduleId;
     this.#publish({
       v: 1,
       type: 'test-start',
       id,
       title: testCase.fullName ?? testCase.name ?? id,
-      ...(file === undefined ? {} : { file }),
+      // Vitest always knows which module a test came from; the fallback keeps
+      // the field present, which the protocol requires, rather than dropping
+      // the message.
+      file: testCase.module?.moduleId ?? '',
       startedAt: Date.now(),
     });
   }
@@ -130,10 +132,12 @@ export class TermwrightUiReporter {
       type: 'test-end',
       id,
       status,
+      // Both required: Vitest reports a duration for every finished test, and
+      // flakiness is a fact about the result, not an optional annotation.
+      durationMs: diagnostic?.duration ?? 0,
+      flaky,
       ...(trace === undefined ? {} : { traceRef: trace }),
       ...(error === undefined ? {} : { error }),
-      ...(diagnostic?.duration === undefined ? {} : { durationMs: diagnostic.duration }),
-      ...(flaky ? { flaky: true } : {}),
     });
   }
 
