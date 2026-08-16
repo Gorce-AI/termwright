@@ -125,14 +125,32 @@ describe('the runner UI in a browser', () => {
       .toContain('Permission required');
   });
 
+  it('stays where you navigated while the archive is still loading', async () => {
+    // The race behind a CI failure: `/api/state` and the archive load are
+    // asynchronous, and the view they open into is a default. A default that
+    // overrules a choice made while it was still loading is a panel that moves
+    // under your hands.
+    const page = await open(await buildFixtureTrace());
+    await page.locator(testId('nav-specs')).click();
+
+    await expect
+      .poll(() => page.locator(testId('specs')).isVisible(), { timeout: 20_000 })
+      .toBe(true);
+    // Still there once everything has settled.
+    await page.waitForTimeout(1_500);
+    expect(await page.locator(testId('specs')).isVisible()).toBe(true);
+  });
+
   it('lists the tests and their counts', async () => {
     const page = await open(await buildFixtureTrace());
 
     // A page opened on an archive lands in the runner; the list of specs is
     // its own place now, and this is the walk to it.
     await page.locator(testId('nav-specs')).click();
+    await expect
+      .poll(() => page.locator(testId('specs')).isVisible(), { timeout: 20_000 })
+      .toBe(true);
     expect(await textOf(page, testId('test-counts'))).not.toBe('');
-    expect(await page.locator(testId('specs')).isVisible()).toBe(true);
     // Specs lists files; the tests inside one appear when it is opened.
     await page.locator(testId('spec-file')).first().click();
     await expect.poll(() => page.locator(testId('test')).count()).toBeGreaterThan(0);

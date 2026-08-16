@@ -363,8 +363,19 @@ async function loadSpecFacts(): Promise<void> {
   }
 }
 
+/**
+ * Whether the person has chosen where to be.
+ *
+ * The view an archive opens into is a *default*, and a default must never
+ * overrule a choice. Opening a page on a recording resolves `/api/state` and
+ * then loads the archive, which on a slow machine is long enough to click
+ * something — and the panel used to yank you back when that finished.
+ */
+let viewChosen = false;
+
 const sidebarHandlers = {
   go(view: ViewName): void {
+    viewChosen = true;
     state.view = view;
     if (view === 'specs') void loadSpecFacts();
     // The history is read when its view is opened rather than kept fresh in
@@ -1754,11 +1765,12 @@ void source
     if (server.trace !== null) {
       state.activeSessionId = server.trace.sessionId;
       // A page opened on an archive is opened to look at it, so it starts in
-      // the runner rather than in a list of specs that cannot be run.
-      state.view = 'runner';
+      // the runner rather than in a list of specs that cannot be run — unless
+      // whoever opened it has already gone somewhere else.
+      if (!viewChosen) state.view = 'runner';
       await loadArchive();
     }
-    if (server.record !== null) state.view = 'runner';
+    if (server.record !== null && !viewChosen) state.view = 'runner';
     schedule();
   })
   .catch((error: unknown) => note(describe(error)));
