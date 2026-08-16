@@ -125,3 +125,18 @@ def test_the_node_dataclass_can_carry_every_field():
     fields = {field.name for field in dataclasses.fields(SemanticNode)}
     expected = set(load_vectors("constants")["nodeKeys"])
     assert expected <= fields, sorted(expected - fields)
+
+
+def test_the_state_dataclass_can_carry_every_field():
+    """The same gap as the node type, for state.
+
+    `offscreen` had to be added to three state structs before any client could
+    publish it; the key list alone would have said the validators were fine.
+    """
+    import dataclasses
+
+    from termwright.tree import SemanticState
+
+    fields = {field.name for field in dataclasses.fields(SemanticState)}
+    expected = set(load_vectors("constants")["stateKeys"])
+    assert expected <= fields, sorted(expected - fields)

@@ -645,3 +645,27 @@ func assertSameSet(t *testing.T, what string, expected, actual []string) {
 		}
 	}
 }
+
+// The same gap as the node struct, for state: `offscreen` had to be added to
+// three state types before any client could publish it, and a key list alone
+// would have reported the validators as fine.
+func TestTheStateStructCanCarryEveryField(t *testing.T) {
+	var vectors struct {
+		StateKeys []string `json:"stateKeys"`
+	}
+	loadVectors(t, "constants", &vectors)
+
+	carried := map[string]bool{}
+	stateType := reflect.TypeOf(State{})
+	for index := 0; index < stateType.NumField(); index++ {
+		name := strings.Split(stateType.Field(index).Tag.Get("json"), ",")[0]
+		if name != "" && name != "-" {
+			carried[name] = true
+		}
+	}
+	for _, key := range vectors.StateKeys {
+		if !carried[key] {
+			t.Errorf("State cannot carry %q, so this client can never publish it", key)
+		}
+	}
+}

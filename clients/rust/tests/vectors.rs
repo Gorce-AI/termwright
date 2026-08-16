@@ -591,3 +591,54 @@ fn the_node_struct_can_carry_every_field() {
         );
     }
 }
+
+/// The same gap as the node struct, for state.
+///
+/// `offscreen` had to be added to three state types before any client could
+/// publish it, and a key list alone would have reported the validators as fine.
+#[test]
+fn the_state_struct_can_carry_every_field() {
+    use std::collections::BTreeSet;
+
+    use termwright_protocol::tree::Checked;
+    use termwright_protocol::{Orientation, State};
+
+    let state = State {
+        disabled: Some(true),
+        focused: Some(true),
+        selected: Some(true),
+        checked: Some(Checked::Flag(true)),
+        expanded: Some(true),
+        modal: Some(true),
+        busy: Some(true),
+        hidden: Some(true),
+        offscreen: Some(true),
+        readonly: Some(true),
+        multiline: Some(true),
+        orientation: Some(Orientation::Vertical),
+        level: Some(1),
+        position_in_set: Some(1),
+        set_size: Some(1),
+        scroll_offset: Some(0),
+        scroll_extent: Some(1),
+    };
+    let wire = serde_json::to_value(&state).expect("a state serialises");
+    let carried: BTreeSet<&str> = wire
+        .as_object()
+        .expect("an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+
+    let constants = vectors("constants");
+    for key in constants["stateKeys"]
+        .as_array()
+        .expect("the vector lists keys")
+    {
+        let key = key.as_str().expect("a key is a string");
+        assert!(
+            carried.contains(key),
+            "State cannot carry {key:?}, so this client can never publish it",
+        );
+    }
+}
