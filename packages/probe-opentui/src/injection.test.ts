@@ -74,7 +74,22 @@ describe('shim guards', () => {
     // Node needs a URL on Windows and Bun accepts one.
     expect(originalUrl('/repo/x.js')).toBe(`/repo/x.js?${ORIGINAL_MARKER}`);
     expect(originalUrl('file:///repo/x.js')).toBe(`file:///repo/x.js?${ORIGINAL_MARKER}`);
-    expect(toModuleUrl('/repo/x.js')).toBe('file:///repo/x.js');
+    // A path becomes a file URL that maps back to the same path. The literal
+    // 'file:///repo/x.js' passes on POSIX and fails on Windows, where a rooted
+    // path acquires the current drive — and asserting pathToFileURL(input)
+    // would merely restate the implementation. The round trip pins the
+    // behaviour without doing either.
+    const nativePath = join(packageRoot, 'x.js');
+    const asUrl = toModuleUrl(nativePath);
+    expect(asUrl.startsWith('file://')).toBe(true);
+    expect(fileURLToPath(asUrl)).toBe(nativePath);
+    expect(toModuleUrl(asUrl)).toBe(asUrl);
+
+    // The hazard this whole conversion exists for: a drive letter must not be
+    // mistaken for a URL scheme and passed through untouched. That mistake is
+    // what Node reports as ERR_UNSUPPORTED_ESM_URL_SCHEME, protocol 'd:'.
+    expect(toModuleUrl(String.raw`D:\repo\x.js`)).not.toBe(String.raw`D:\repo\x.js`);
+    expect(toModuleUrl(String.raw`D:\repo\x.js`).startsWith('file://')).toBe(true);
     expect(toModuleUrl('file:///repo/x.js')).toBe('file:///repo/x.js');
   });
 
