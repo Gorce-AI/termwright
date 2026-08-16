@@ -244,3 +244,18 @@
   the entry AGGREGATES lost items; a rejected seq-duplicate is not a loss and
   carries no count; single-item entries identify via `revision`. Absent count
   means "this entry does not aggregate", NOT zero.
+- 2026-08-16 (mountOpenTui, task #27b): `@termwright/opentui` gains a
+  **`./testing` subpath** that imports `@termwright/driver` and
+  `@termwright/ink-testing`. Read against §Dependency rules ("adapters depend on
+  `protocol` + their framework, never on driver") this is a deviation, and it is
+  deliberate: task #27b placed the mount inside the adapter package rather than
+  in a sibling `opentui-testing` the way Ink has one. The rule's actual purpose —
+  an adapter is imported by the application in production and must not drag a pty
+  binary in — is preserved structurally instead of by package boundary: the mount
+  is unreachable from the root entry, both packages are **optional peer**
+  dependencies (a production install resolves neither), and
+  `packages/opentui/src/mount.test.ts` asserts against the built `dist/index.js`
+  that it references neither, so re-exporting the mount from `src/index.ts` fails
+  the suite. Adapters in general remain bound by the rule as written; if a second
+  consumer needs these at the adapter's root, split out
+  `@termwright/opentui-testing` and mirror Ink.
