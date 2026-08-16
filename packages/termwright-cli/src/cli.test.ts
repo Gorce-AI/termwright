@@ -166,6 +166,26 @@ describe('the ui command', () => {
     });
   });
 
+  it('lists the project’s tests before the run that fills them in', async () => {
+    // Without this the panel stays empty until tests start reporting, which is
+    // the opposite of what discovery is for.
+    const h = harness();
+    await runCli(['ui'], h.deps);
+    expect(h.uiOptions[0]?.discovery).toMatchObject({ cwd: '/workspace', watch: true });
+  });
+
+  it('does not list a project’s tests for a replay or a recording', async () => {
+    // Neither shows a run that has not happened: an archive and a recording
+    // already know what they contain.
+    const replay = harness({ mode: 'post-mortem' });
+    await runCli(['ui', '--trace', 'out/login.twtrace'], replay.deps);
+    expect(replay.uiOptions[0]?.discovery).toBeUndefined();
+
+    const recording = harness({ mode: 'record' });
+    await runCli(['codegen', '--', 'node', 'agent.js'], recording.deps);
+    expect(recording.uiOptions[0]?.discovery).toBeUndefined();
+  });
+
   it('opens an archive without starting a runner', async () => {
     const h = harness({ mode: 'post-mortem' });
     expect(await runCli(['ui', '--trace', 'out/login.twtrace'], h.deps)).toBe(EXIT_CODES.ok);

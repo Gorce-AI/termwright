@@ -170,6 +170,12 @@ export async function runUi(
             ...(request.outFile === undefined ? {} : { outFile: request.outFile }),
           },
         }),
+    // Discovery is about a run that has not happened yet, so it belongs to the
+    // live mode only: a replayed archive and a recording already know what they
+    // contain. Re-listing follows watch mode, which is when files change.
+    ...(request.trace === undefined && request.record === undefined
+      ? { discovery: { cwd: request.cwd, watch: request.watch } }
+      : {}),
     onRerun: () => handle?.rerun(),
     onStop: () => handle?.stop(),
   });
