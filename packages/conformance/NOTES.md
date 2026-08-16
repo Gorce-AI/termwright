@@ -116,6 +116,16 @@ has to delete an assertion that explains itself.
   before an earlier socket message. What is asserted instead is message order on
   the socket (snapshot before commit) and marker order within stdout (strictly
   increasing offsets, non-empty gaps, every MAC verifying).
+- **Delta composition is checked against an oracle, not a self-check.** The
+  probe composes with the protocol's own `applyTreeDelta` and compares the
+  result against a tree the adapter builds itself in answer to `get-tree`. An
+  adapter that composed its own deltas to validate them would only prove it
+  agrees with itself; the disagreement worth catching is between producer and
+  receiver.
+- **Deltas need their own session.** An adapter only sends them to a driver that
+  asked (`subscribe: 'diffs'`), so the delta obligation opens a second probe.
+  The shared session keeps subscribing to whole trees, which is the path most
+  adapters use and which the other obligations exercise.
 - **The adversarial peer imports nothing from termwright.** It re-derives the
   4-byte length prefix and the marker MAC from the spec text. Using
   `encodeFrame`/`encodeMarker` would only prove the implementation agrees with

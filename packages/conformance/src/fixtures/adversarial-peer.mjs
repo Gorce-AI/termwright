@@ -45,6 +45,16 @@ const MAX_LOG_RECORD_BYTES = 32 * 1024;
 /** Scenarios that need the log channel negotiated in the handshake. */
 const NEEDS_LOGS = new Set(['log-seq-duplicate', 'log-seq-gap', 'log-oversized', 'log-flood']);
 
+/** Scenarios that announce `tree-diffs` and push deltas instead of whole trees. */
+const NEEDS_DELTAS = new Set([
+  'delta-sequence',
+  'delta-bad-base',
+  'delta-cursor-clear',
+  'delta-flood',
+  'delta-removed-missing',
+  'delta-before-snapshot',
+]);
+
 let logSeq = 0;
 let logBudget = null;
 
@@ -271,6 +281,32 @@ const SCENARIOS = {
     // Far past any sane per-second budget, sent in one turn.
     for (let seq = 1; seq <= 500; seq += 1) sendLog(seq, `flood ${seq}`);
   },
+  'delta-sequence': () => {
+    sendDelta(renameDelta(1, 2, 'Second'));
+    sendDelta(renameDelta(2, 3, 'Third'));
+    sendDelta(renameDelta(3, 4, 'Fourth'));
+  },
+  'delta-bad-base': () => {
+    // Base 999 was never held, so this cannot be patched onto anything.
+    sendDelta(renameDelta(999, 1000, 'Impossible'));
+  },
+  'delta-cursor-clear': () => {
+    // A delta can set a cursor but never clear it. `c` sends the full tree that
+    // clears it, so the two halves are separate steps rather than a race.
+    sendDelta(renameDelta(1, 2, 'Cursor', { cursor: { row: 3, column: 7, visible: true } }));
+  },
+  'delta-flood': () => {
+    for (let revision = 2; revision <= 200; revision += 1) {
+      sendDelta(renameDelta(revision - 1, revision, `Rev${revision}`));
+    }
+  },
+  'delta-removed-missing': () => {
+    sendDelta({ baseRevision: 1, revision: 2, changed: [], removed: ['ghost'] });
+  },
+  'delta-before-snapshot': () => {
+    // Handled specially at handshake time: nothing was published first.
+    sendDelta(renameDelta(1, 2, 'Premature'));
+  },
   'peer-error': () => {
     // The other direction: the adapter reports a protocol error at us. The
     // driver must surface the code the peer chose, not one of its own.
@@ -288,6 +324,7 @@ function hello(overrides = {}) {
   // `log-no-negotiation` deliberately does NOT announce it: the point of that
   // scenario is sending records the driver never invited.
   if (NEEDS_LOGS.has(scenario)) capabilities.push('logs');
+  if (NEEDS_DELTAS.has(scenario)) capabilities.push('tree-diffs');
   return {
     type: 'hello',
     protocol: 'termwright/1',
@@ -306,6 +343,40 @@ function logRecord(seq, message = `record ${seq}`) {
 function sendLog(seq, message) {
   socket.write(frame({ type: 'log', record: logRecord(seq, message) }));
   logSeq = Math.max(logSeq, seq);
+}
+
+/**
+ * Sends a delta and its marker. The peer keeps no model of its own beyond the
+ * revision counter: composing is the receiver's job, and a producer that also
+ * composed would only prove it agrees with itself.
+ */
+function sendDelta(delta) {
+  // The delta is the message: the body sits beside the discriminator rather
+  // than nested under it.
+  socket.write(frame({ type: 'tree-delta', ...delta }));
+  process.stdout.write(marker(delta.revision));
+  published = Math.max(published, delta.revision);
+}
+
+/** A delta that renames the button, so a composed tree is observable on screen. */
+function renameDelta(baseRevision, revision, label, overrides = {}) {
+  return {
+    baseRevision,
+    revision,
+    changed: [
+      {
+        id: 'n2',
+        parentId: 'n1',
+        role: 'button',
+        name: label,
+        testId: 'peer-button',
+        bounds: { row: 1, column: 0, width: 10, height: 1 },
+        actions: ['activate', 'focus'],
+      },
+    ],
+    removed: [],
+    ...overrides,
+  };
 }
 
 /** Sends a snapshot together with its marker, so only the tree can be at fault. */
@@ -342,6 +413,9 @@ process.stdin.on('data', (chunk) => {
   }
   if (text.includes('g')) fire();
   if (text.includes('p')) publish(published + 1, `Manual${published + 1}`);
+  // The cursor-clearing half of `delta-cursor-clear`: only a full tree can do
+  // it, and `tree()` builds one without a cursor.
+  if (text.includes('c')) publish(published + 1, 'NoCursor');
 });
 
 say(`PEER START ${scenario}`);
@@ -381,8 +455,25 @@ if (endpoint === undefined || token === undefined) {
         sessionId = message.sessionId;
         logBudget = message.logs ?? null;
         say(`PEER LOGS ${logBudget === null ? 'denied' : `enabled ${logBudget.maxRecordsPerSecond}/s`}`);
-        publish(1);
+        // `delta-before-snapshot` deliberately skips the opening tree: its
+        // whole point is a delta with nothing to compose onto.
+        if (scenario !== 'delta-before-snapshot') publish(1);
         say(`PEER READY ${scenario}`);
+      }
+      if (message.type === 'get-tree') {
+        // Answering is what makes a resync observable end to end: the driver
+        // asks, the peer supplies, the session returns to a known tree.
+        const revision = published + 1;
+        socket.write(
+          frame({
+            type: 'get-tree-result',
+            requestId: message.requestId,
+            snapshot: tree(revision, validNodes('Resynced')),
+          }),
+        );
+        published = revision;
+        process.stdout.write(marker(revision));
+        say(`PEER SENT FULL TREE ${revision}`);
       }
       if (message.type === 'error') say(`PEER GOT ERROR ${message.code}`);
     }

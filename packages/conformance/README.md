@@ -84,6 +84,7 @@ It checks the five obligations an adapter has:
 | Revision ordering | For each revision: snapshot → `revision-commit` → a marker that verifies against the session token, markers strictly increasing |
 | Channel loss | Cutting the socket leaves the application rendering and alive, and the adapter does not reconnect |
 | Logs | An adapter that did not announce `logs` sends none. One that declares them in the registration must deliver a record whose `seq` is unique and increasing and whose message never appears on the terminal |
+| Deltas (when announced) | With `subscribe: 'diffs'`, the deltas an adapter emits compose — through the protocol's own `applyTreeDelta` — to the same tree it reports when asked with `get-tree` |
 
 `await` it at the top level: `vitest` is imported dynamically so the package can
 also be used from a plain script.

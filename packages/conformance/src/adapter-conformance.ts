@@ -97,6 +97,39 @@ export interface AdapterConformanceOptions {
 }
 
 /**
+ * Asserts that what the adapter's deltas say the tree is matches what the
+ * adapter itself reports when asked. A producer that also composed would only
+ * prove it agrees with itself, so the composition here is the protocol's own
+ * `applyTreeDelta` and the comparison is against a `get-tree` answer.
+ */
+async function assertDeltasCompose(probe: AdapterProbe, timeoutMs: number): Promise<void> {
+  const { expect } = await import('vitest');
+  const observation = probe.observe();
+
+  expect(observation.compositionError, 'the adapter produced a delta nobody could apply').toBeNull();
+  expect(observation.composed).not.toBeNull();
+  expect(observation.deltas.length).toBeGreaterThan(0);
+
+  const authoritative = await probe.requestTree(timeoutMs);
+  expect(authoritative, 'the adapter answered no get-tree').not.toBeNull();
+
+  const composed = observation.composed as SemanticSnapshot;
+  const truth = authoritative as SemanticSnapshot;
+  const byId = (nodes: SemanticSnapshot['nodes']): SemanticSnapshot['nodes'] =>
+    [...nodes].sort((left, right) => left.id.localeCompare(right.id));
+
+  expect(byId(truth.nodes)).toEqual(byId(composed.nodes));
+  expect([...truth.rootIds].sort()).toEqual([...composed.rootIds].sort());
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+}
+
+/**
  * Waits until the child stops writing, so two captures end at comparable
  * points. A stabilisation, not a deadline: an app that never stops writing
  * makes the comparison fail loudly rather than pass by accident.
@@ -402,6 +435,31 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         // never the terminal. A TUI that printed it would corrupt its render.
         expect(observation.screen).not.toContain(logs.expect);
         expect(observation.text).not.toContain(logs.expect);
+      });
+
+      it('produces deltas that compose to the tree it would have sent', async () => {
+        const announced = (beforeInput.messages[0]?.message as { capabilities: readonly string[] })
+          .capabilities;
+        if (!announced.includes('tree-diffs')) return;
+
+        // Its own session: deltas are only sent to a driver that subscribed to
+        // them, and the shared session deliberately subscribes to whole trees
+        // so the other obligations exercise that path.
+        const diffs = await AdapterProbe.start(options.spawn(), { ...probeOptions, subscribe: 'diffs' });
+        try {
+          await diffs.waitForText(options.ready, timeout);
+          await diffs.waitFor((observation) => observation.composed !== null, timeout);
+
+          // Drive a few renders so there is something to diff.
+          for (let press = 0; press < 3; press += 1) {
+            await diffs.write(options.interaction.input);
+            await delay(150);
+          }
+          await diffs.waitFor((observation) => observation.deltas.length > 0, timeout);
+          await assertDeltasCompose(diffs, timeout);
+        } finally {
+          await diffs.stop();
+        }
       });
 
       it('keeps the application alive when the channel is cut', async () => {

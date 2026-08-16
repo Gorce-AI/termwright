@@ -427,6 +427,103 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expectSurvives(terminal);
   });
 
+  it('composes a correct delta chain without ever resynchronising', async () => {
+    const terminal = await arm('delta-sequence');
+    expect(terminal.semanticTree()?.revision).toBe(1);
+
+    await fire(terminal);
+    await expect.poll(() => terminal.semanticTree()?.revision).toBe(4);
+
+    // Composed, not merely counted: the node the deltas rewrote holds the last
+    // value, and the locator finds it through the composed tree.
+    expect(await terminal.getByRole('button').textContent()).toBe('Fourth');
+    expect(await terminal.getByTestId('peer-button').boundingBox()).toEqual({
+      row: 1,
+      column: 0,
+      width: 10,
+      height: 1,
+    });
+
+    // A chain that composes needs no repair and loses nothing.
+    expect(codes(terminal)).not.toContain('delta-resync');
+    expect(codes(terminal)).not.toContain('revision-dropped');
+    await expectSurvives(terminal);
+  });
+
+  it('asks for a full tree when a delta names a base it never held', async () => {
+    const terminal = await arm('delta-bad-base');
+    await fire(terminal);
+    await expect.poll(() => codes(terminal)).toContain('delta-resync');
+
+    // The repair completes end to end: the driver asks, the peer supplies, and
+    // the session lands on the tree that answer carried.
+    await terminal.waitForText('PEER SENT FULL TREE');
+    await expect.poll(async () => terminal.getByRole('button').textContent()).toBe('Resynced');
+    expect(terminal.semanticTree()?.revision).toBe(1001);
+
+    // A successful repair is not data loss and must not be reported as any.
+    const afterResync = terminal
+      .diagnostics()
+      .slice(terminal.diagnostics().findIndex((entry) => entry.code === 'delta-resync'));
+    expect(afterResync.map((entry) => entry.code)).not.toContain('revision-dropped');
+    await expectSurvives(terminal);
+  });
+
+  it('lets a delta set the cursor but only a full tree clear it', async () => {
+    const terminal = await arm('delta-cursor-clear');
+    expect(terminal.semanticTree()?.cursor).toBeUndefined();
+
+    await fire(terminal);
+    await expect.poll(() => terminal.semanticTree()?.cursor?.column).toBe(7);
+    expect(terminal.semanticTree()?.cursor).toMatchObject({ row: 3, column: 7, visible: true });
+
+    // The asymmetry: absent in a delta means "unchanged", so clearing is
+    // something only a whole tree can express.
+    await terminal.press('c');
+    await expect.poll(() => terminal.semanticTree()?.revision).toBe(3);
+    expect(terminal.semanticTree()?.cursor).toBeUndefined();
+    expect(codes(terminal)).not.toContain('delta-resync');
+    await expectSurvives(terminal);
+  });
+
+  it('resynchronises when a delta removes a node that is not there', async () => {
+    const terminal = await arm('delta-removed-missing');
+    await fire(terminal);
+    await expect.poll(() => codes(terminal)).toContain('delta-resync');
+
+    // Removing an unknown id means the producer's base disagrees with ours, so
+    // the tree is replaced rather than patched into something plausible.
+    await terminal.waitForText('PEER SENT FULL TREE');
+    await expect.poll(async () => terminal.getByRole('button').textContent()).toBe('Resynced');
+    await expectSurvives(terminal);
+  });
+
+  it('resynchronises when a delta arrives before any full tree', async () => {
+    const terminal = await arm('delta-before-snapshot');
+    // The peer published nothing first, on purpose.
+    expect(terminal.semanticTree()).toBeNull();
+
+    await fire(terminal);
+    await expect.poll(() => codes(terminal)).toContain('delta-resync');
+    await terminal.waitForText('PEER SENT FULL TREE');
+    await expect.poll(async () => terminal.getByRole('button').textContent()).toBe('Resynced');
+    await expectSurvives(terminal);
+  });
+
+  it('survives a delta flood and lands on the last revision', async () => {
+    const terminal = await arm('delta-flood');
+    await fire(terminal);
+
+    await expect.poll(() => terminal.semanticTree()?.revision, { timeout: 20_000 }).toBe(200);
+    expect(await terminal.getByRole('button').textContent()).toBe('Rev200');
+
+    // A flood is pressure on the pairing, not a reason to give up composing:
+    // the chain still ends where it should, and nothing had to be repaired.
+    expect(codes(terminal)).not.toContain('delta-resync');
+    expect(terminal.capabilities().semanticTree).toBe(true);
+    await expectSurvives(terminal);
+  });
+
   it('surfaces the code an adapter reports at us, not one of its own', async () => {
     const terminal = await arm('peer-error');
     await fire(terminal);
