@@ -93,6 +93,29 @@ export function nextMarker(
   return [...sorted].reverse().find((marker) => marker.t < timeMs - 1)?.t;
 }
 
+/**
+ * The glyph that marks a status.
+ *
+ * Status is never carried by colour alone: a red dot and a green dot are the
+ * same dot to a colourblind reader, and the panel is full of them.
+ */
+export function statusGlyph(status: string): string {
+  switch (status) {
+    case 'passed':
+      return '✓';
+    case 'failed':
+      return '✕';
+    case 'running':
+      return '◍';
+    case 'skipped':
+      return '–';
+    case 'not-run':
+      return '○';
+    default:
+      return '•';
+  }
+}
+
 /** `320ms`, `1.5s`, `1m 04s`. */
 export function formatMs(value: number): string {
   if (value < 1_000) return `${Math.round(value)}ms`;

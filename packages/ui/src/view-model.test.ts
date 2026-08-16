@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { node, snapshot } from './__fixtures__/fake-session.js';
-import { childrenOf, formatMs, nextMarker, nodeAt, rootsOf, statesOf } from './view-model.js';
+import {
+  childrenOf,
+  formatMs,
+  nextMarker,
+  nodeAt,
+  rootsOf,
+  statesOf,
+  statusGlyph,
+} from './view-model.js';
 
 describe('tree shaping', () => {
   const tree = snapshot(1, [
@@ -88,5 +96,18 @@ describe('formatMs', () => {
     expect(formatMs(320)).toBe('320ms');
     expect(formatMs(1_500)).toBe('1.5s');
     expect(formatMs(64_000)).toBe('1m 04s');
+  });
+});
+
+describe('statusGlyph', () => {
+  it('gives every status a distinct mark, so colour is never the only signal', () => {
+    const glyphs = ['passed', 'failed', 'running', 'skipped', 'not-run'].map(statusGlyph);
+    expect(new Set(glyphs).size).toBe(glyphs.length);
+    expect(statusGlyph('passed')).toBe('✓');
+    expect(statusGlyph('failed')).toBe('✕');
+  });
+
+  it('marks an unknown status rather than rendering nothing', () => {
+    expect(statusGlyph('invented')).toBe('•');
   });
 });

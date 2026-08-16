@@ -224,6 +224,27 @@ The archives our matchers write today carry `selector` and no `ref`, so that
 highlight stays dark on them. The UI side is done and tested; filling in `ref`
 is a change in whoever calls `recordAction`/`recordAssert`.
 
+## The panel is a design system, not a pile of CSS
+
+Colours, spacing and type sizes are tokens on `:root`, and the light theme
+redefines the same tokens rather than adding rules — so nothing downstream
+branches on the theme and the two cannot drift apart. Three decisions worth
+keeping:
+
+- **Status is never colour alone.** A red dot and a green dot are the same dot
+  to a colourblind reader, and this panel is full of them, so every status also
+  carries a glyph (`statusGlyph`, pinned by a test asserting they are distinct).
+- **The terminal keeps its own colours in both themes.** The surface around it
+  is the panel's; what is inside it belongs to the recorded program, and
+  repainting that would be showing something the program never drew.
+- **Splits are draggable *and* focusable.** A splitter that only answers to a
+  mouse is a control some people do not have; arrows move it, and where it was
+  left is remembered per split.
+
+`prefers-reduced-motion` disables every transition, and the storage helpers
+tolerate a browser that refuses to remember anything (private mode) by falling
+back to session-only behaviour rather than failing.
+
 ## Run history is a manifest, not a database
 
 `.termwright/runs/<id>/manifest.json` holds the run's counters, its tests, and

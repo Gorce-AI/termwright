@@ -44,6 +44,7 @@ import { TerminalPane, type Highlight } from './terminal-pane.js';
 import { childrenOf, nextMarker, nodeAt, rootsOf } from '../view-model.js';
 import { navigateTree, type TreeRow } from '../tree-nav.js';
 import { renderTimeline, type TimelineHandlers } from './timeline.js';
+import { applyTheme, currentTheme, installSplitter, nextTheme } from './chrome.js';
 import type { RunSummaryEntry, RunTest } from '../runs.js';
 import type { TestRow } from '../test-model.js';
 import { describeCounts } from '../test-model.js';
@@ -1057,6 +1058,11 @@ window.addEventListener('keydown', (event) => {
     // The tree owns its own arrows and Enter while it has focus.
     if (target.closest('[role="tree"]') !== null) return;
   }
+  if (event.key === '?') {
+    event.preventDefault();
+    toggleShortcuts();
+    return;
+  }
   if (event.key === ' ') {
     event.preventDefault();
     timelineHandlers.togglePlay();
@@ -1068,6 +1074,58 @@ window.addEventListener('keydown', (event) => {
     timelineHandlers.jump(-1);
   }
 });
+
+// --- the panel's own furniture -------------------------------------------
+
+applyTheme(currentTheme());
+const layout = document.querySelector<HTMLElement>('.layout');
+const themeToggle = document.querySelector<HTMLButtonElement>('#theme-toggle');
+const shortcutsToggle = document.querySelector<HTMLButtonElement>('#shortcuts-toggle');
+const shortcuts = document.querySelector<HTMLElement>('#shortcuts');
+
+themeToggle?.addEventListener('click', () => {
+  const theme = nextTheme(currentTheme());
+  applyTheme(theme);
+  themeToggle.title = `Theme: ${theme}. Click to change.`;
+  // The terminal repaints itself against the new surface.
+  pane.refit();
+});
+
+const toggleShortcuts = (): void => {
+  if (shortcuts === null || shortcutsToggle === null) return;
+  shortcuts.hidden = !shortcuts.hidden;
+  shortcutsToggle.setAttribute('aria-expanded', String(!shortcuts.hidden));
+};
+shortcutsToggle?.addEventListener('click', toggleShortcuts);
+
+if (layout !== null) {
+  const splitMain = document.querySelector<HTMLElement>('#split-main');
+  const splitBottom = document.querySelector<HTMLElement>('#split-bottom');
+  if (splitMain !== null) {
+    installSplitter({
+      handle: splitMain,
+      container: layout,
+      axis: 'vertical',
+      key: 'split.main',
+      apply: (fraction) => {
+        layout.style.setProperty('--split-main', `${fraction * 100}%`);
+        pane.refit();
+      },
+    });
+  }
+  if (splitBottom !== null) {
+    installSplitter({
+      handle: splitBottom,
+      container: layout,
+      axis: 'horizontal',
+      key: 'split.bottom',
+      apply: (fraction) => {
+        layout.style.setProperty('--split-bottom', `${fraction * 100}%`);
+        pane.refit();
+      },
+    });
+  }
+}
 
 client.connect(handle, (connected) => {
   state.connected = connected;

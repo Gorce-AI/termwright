@@ -30,7 +30,7 @@ export function renderCrashPanel(
   return html`
     <details class="crash" data-testid="crash" open>
       <summary>
-        <span class="dot failed"></span>
+        <span class="dot failed" aria-hidden="true">✕</span>
         <span class="crash-cause">The program died on its own: <strong>${crash.cause}</strong></span>
         <button
           data-testid="crash-seek"

@@ -9,7 +9,7 @@
 
 import { html, type TemplateResult } from 'lit-html';
 import type { RunSummaryEntry, RunTest } from '../runs.js';
-import { formatMs } from '../view-model.js';
+import { formatMs, statusGlyph } from '../view-model.js';
 
 /** What the view needs to render. */
 export interface RunHistoryModel {
@@ -48,7 +48,7 @@ export function renderRunHistory(
     ${model.runs.map(
       (run) => html`
         <div class=${`run ${run.summary.failed > 0 ? 'failed' : 'passed'}`} data-testid="run" @click=${() => handlers.open(run.id)}>
-          <span class=${`dot ${run.summary.failed > 0 ? 'failed' : 'passed'}`}></span>
+          <span class=${`dot ${run.summary.failed > 0 ? 'failed' : 'passed'}`} aria-hidden="true">${statusGlyph(run.summary.failed > 0 ? 'failed' : 'passed')}</span>
           <span class="when">${formatWhen(run.startedAt)}</span>
           <span class="counts">
             <span class="count passed">${run.summary.passed}</span>
@@ -83,7 +83,7 @@ function renderRun(model: RunHistoryModel, handlers: RunHistoryHandlers): Templa
                   @click=${() => (test.traceRef === undefined ? undefined : handlers.openTrace(test.traceRef))}
                 >
                   <div class="test-head">
-                    <span class=${`dot ${test.status}`}></span>
+                    <span class=${`dot ${test.status}`} aria-hidden="true">${statusGlyph(test.status)}</span>
                     <span class="title">${test.title}</span>
                     ${test.flaky ? html`<span class="badge flaky">flaky</span>` : ''}
                     <span class="duration">${formatMs(test.durationMs)}</span>

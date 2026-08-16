@@ -1,16 +1,72 @@
-/* One dark theme, tuned to sit next to a terminal rather than compete with it. */
+/*
+ * One design system for the whole panel.
+ *
+ * Colours, spacing and type sizes are tokens rather than literals, so a change
+ * lands everywhere at once and the two themes stay in step. The dark theme is
+ * the default because this thing sits next to a terminal; the light one exists
+ * because not everyone's does.
+ */
 
 :root {
+  /* Surfaces, from furthest back to closest. */
   --bg: #0e1117;
   --panel: #161a22;
+  --raised: var(--raised);
+  --selected: var(--selected);
   --line: #262c38;
+
+  /* Text. */
   --text: #e6e9ef;
   --muted: #8b93a7;
+
+  /* Meaning. Each is also paired with a glyph, never colour alone. */
   --accent: #7aa2f7;
   --pass: #7bd88f;
   --fail: #f7768e;
   --warn: #e0af68;
+  --tint-accent: rgb(122 162 247 / 14%);
+  --tint-pass: rgb(123 216 143 / 12%);
+  --tint-fail: rgb(247 118 142 / 12%);
+  --tint-warn: rgb(224 175 104 / 12%);
+
+  /* Spacing: a 4px scale, so panes line up without eyeballing. */
+  --s1: 2px;
+  --s2: 4px;
+  --s3: 6px;
+  --s4: 8px;
+  --s5: 12px;
+  --s6: 16px;
+
+  /* Type. */
+  --font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, 'Cascadia Mono', monospace;
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-md: 13px;
+  --radius: 4px;
+  --motion: 120ms ease;
+
   color-scheme: dark;
+}
+
+/* The light theme keeps the same tokens, so nothing downstream branches. */
+:root[data-theme='light'] {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --raised: #eceef2;
+  --selected: #dbe4fb;
+  --line: #d7dae1;
+  --text: #1b1f27;
+  --muted: #626b7d;
+  --accent: #2f5fd0;
+  --pass: #1a7f45;
+  --fail: #c1344a;
+  --warn: #9a6400;
+  --tint-accent: rgb(47 95 208 / 10%);
+  --tint-pass: rgb(26 127 69 / 10%);
+  --tint-fail: rgb(193 52 74 / 10%);
+  --tint-warn: rgb(154 100 0 / 12%);
+  color-scheme: light;
 }
 
 * {
@@ -21,17 +77,106 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+  font: var(--text-md) / 1.5 var(--font-ui);
+}
+
+/* Nothing animates for someone who asked for that. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 .layout {
+  --split-main: 70%;
+  --split-bottom: 50%;
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(280px, 1.4fr);
-  grid-template-rows: minmax(0, 1fr) minmax(180px, 0.6fr);
-  grid-template-areas: 'terminal inspector' 'timeline inspector';
-  gap: 1px;
+  grid-template-columns: var(--split-main) 4px minmax(240px, 1fr);
+  grid-template-rows: var(--split-bottom) 4px minmax(220px, 1fr);
+  grid-template-areas:
+    'terminal split-main inspector'
+    'split-bottom split-main inspector'
+    'timeline split-main inspector';
   height: 100vh;
   background: var(--line);
+}
+
+/* The panes are separated by draggable splitters rather than a fixed gap. */
+.splitter {
+  background: var(--line);
+  transition: background var(--motion);
+}
+
+.splitter.vertical {
+  grid-area: split-main;
+  cursor: col-resize;
+}
+
+.splitter.horizontal {
+  grid-area: split-bottom;
+  cursor: row-resize;
+}
+
+.splitter:hover,
+.splitter.dragging,
+.splitter:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Shortcut list ---------------------------------------------------------- */
+
+.shortcuts {
+  position: fixed;
+  right: var(--s6);
+  bottom: var(--s6);
+  z-index: 10;
+  padding: var(--s5);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.shortcuts h2 {
+  margin: 0 0 var(--s4);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.shortcuts dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s2) var(--s5);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.shortcuts dt,
+.shortcuts dd {
+  margin: 0;
+}
+
+.shortcuts dd {
+  color: var(--muted);
+}
+
+kbd {
+  display: inline-block;
+  padding: 0 var(--s2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 3px;
 }
 
 .terminal-pane {
@@ -75,14 +220,24 @@ button {
   font-size: 12px;
   padding: 2px 8px;
   color: var(--text);
-  background: #1e2430;
+  background: var(--raised);
   border: 1px solid var(--line);
   border-radius: 4px;
   cursor: pointer;
 }
 
+button {
+  transition: background var(--motion), border-color var(--motion), color var(--motion);
+}
+
 button:hover {
   border-color: var(--accent);
+}
+
+button:focus-visible,
+.segmented button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 button.active {
@@ -101,7 +256,7 @@ button.active {
   flex: 1;
   min-height: 0;
   padding: 4px;
-  background: #0e1117;
+  background: var(--bg);
 }
 
 .overlay {
@@ -117,13 +272,13 @@ button.active {
 .bounds {
   position: absolute;
   border: 1px solid var(--accent);
-  background: rgb(122 162 247 / 12%);
+  background: var(--tint-accent);
   pointer-events: none;
 }
 
 .bounds.selected {
   border-color: var(--warn);
-  background: rgb(224 175 104 / 14%);
+  background: var(--tint-warn);
 }
 
 .bounds-label {
@@ -151,13 +306,15 @@ button.active {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.subtree .children {
-  padding-left: 14px;
+/* The children group nests inside its treeitem, so the indent hangs off it. */
+.node > .children {
+  padding-left: var(--s5);
   border-left: 1px solid var(--line);
-  margin-left: 4px;
+  margin-left: var(--s3);
 }
 
 .node {
+  transition: background var(--motion);
   padding: 1px 4px;
   border-radius: 3px;
   cursor: pointer;
@@ -166,11 +323,11 @@ button.active {
 
 .node:hover,
 .node.hovered {
-  background: #1e2430;
+  background: var(--raised);
 }
 
 .node.selected {
-  background: #2a3247;
+  background: var(--selected);
   outline: 1px solid var(--accent);
 }
 
@@ -295,25 +452,37 @@ button.active {
 .test-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--s3);
   cursor: pointer;
+  border-radius: var(--radius);
+  transition: background var(--motion);
+}
+
+.test-head:hover {
+  background: var(--raised);
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted);
+  flex: none;
+  width: 14px;
+  text-align: center;
+  font-size: var(--text-sm);
+  line-height: 1;
+  color: var(--muted);
 }
 
 .dot.passed {
-  background: var(--pass);
+  color: var(--pass);
 }
 .dot.failed {
-  background: var(--fail);
+  color: var(--fail);
 }
 .dot.running {
-  background: var(--accent);
+  color: var(--accent);
+}
+.dot.skipped,
+.dot.not-run {
+  color: var(--muted);
 }
 
 .test .error {
@@ -357,7 +526,7 @@ button.active {
   margin: 4px 8px 8px;
   border: 1px solid var(--fail);
   border-radius: 4px;
-  background: rgb(247 118 142 / 6%);
+  background: var(--tint-fail);
 }
 
 .crash > summary {
@@ -380,7 +549,7 @@ button.active {
   margin: 0 8px 6px;
   padding: 4px 6px;
   color: var(--warn);
-  background: rgb(224 175 104 / 10%);
+  background: var(--tint-warn);
   border-left: 2px solid var(--warn);
   font-size: 11px;
 }
@@ -458,9 +627,9 @@ button.active {
 }
 
 .tabs button.active {
-  background: #1e2430;
+  background: var(--raised);
   border-color: var(--line);
-  border-bottom-color: #1e2430;
+  border-bottom-color: var(--raised);
   color: var(--text);
 }
 
@@ -478,7 +647,7 @@ button.active {
   font-size: 12px;
   padding: 1px 4px;
   color: var(--text);
-  background: #1e2430;
+  background: var(--raised);
   border: 1px solid var(--line);
   border-radius: 4px;
 }
@@ -501,7 +670,7 @@ button.active {
 }
 
 .log:hover {
-  background: #1e2430;
+  background: var(--raised);
 }
 
 .log .at {
@@ -590,7 +759,7 @@ button.active {
   font-size: 12px;
   padding: 2px 6px;
   color: var(--text);
-  background: #1e2430;
+  background: var(--raised);
   border: 1px solid var(--line);
   border-radius: 4px;
 }
@@ -604,7 +773,7 @@ button.active {
 .count {
   padding: 0 5px;
   border-radius: 8px;
-  background: #1e2430;
+  background: var(--raised);
 }
 
 .count.passed {
@@ -637,7 +806,7 @@ button.active {
 }
 
 .test.selected > .test-head {
-  background: #2a3247;
+  background: var(--selected);
   border-radius: 3px;
 }
 
@@ -658,7 +827,7 @@ button.active {
   border-radius: 8px;
   font-size: 10px;
   color: var(--warn);
-  background: rgb(224 175 104 / 14%);
+  background: var(--tint-warn);
 }
 
 .duration {
@@ -712,7 +881,7 @@ button.active {
 }
 
 .command:hover {
-  background: #1e2430;
+  background: var(--raised);
 }
 
 .command.current {
@@ -739,7 +908,7 @@ button.active {
 }
 
 .command.failed {
-  background: rgb(247 118 142 / 10%);
+  background: var(--tint-fail);
 }
 
 .command.failed .api {
@@ -841,7 +1010,7 @@ button.active {
 
 .semantic-view .sv.button {
   border: 1px solid var(--line);
-  background: #1e2430;
+  background: var(--raised);
 }
 
 .semantic-view .sv-caption {
@@ -855,11 +1024,6 @@ button.active {
   padding-left: 4px;
 }
 
-.dot.not-run {
-  background: transparent;
-  border: 1px solid var(--muted);
-}
-
 .count.not-run,
 .badge.not-run {
   color: var(--muted);
@@ -869,7 +1033,7 @@ button.active {
   padding: 0 5px;
   border-radius: 8px;
   font-size: 10px;
-  background: #1e2430;
+  background: var(--raised);
 }
 
 /* Segmented control (Tests / Runs) -------------------------------------- */
@@ -878,7 +1042,7 @@ button.active {
   display: flex;
   gap: 2px;
   padding: 2px;
-  background: #1a1f29;
+  background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 5px;
 }
@@ -894,7 +1058,7 @@ button.active {
 }
 
 .segmented button.active {
-  background: #2a3247;
+  background: var(--selected);
   color: var(--text);
 }
 
@@ -917,7 +1081,7 @@ button.active {
 }
 
 .run:hover {
-  background: #1e2430;
+  background: var(--raised);
 }
 
 .run .when {
@@ -945,7 +1109,7 @@ button.active {
 }
 
 .run-detail .test:hover {
-  background: #1e2430;
+  background: var(--raised);
 }
 
 .run-detail .test.selected {

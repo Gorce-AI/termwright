@@ -224,6 +224,18 @@ test('approves the command', async ({ terminal }) => {
 });
 ```
 
+## Getting around
+
+The panel is two panes over a terminal, with draggable splits that stay where
+you left them — drag them, or focus one and use the arrow keys. `?` lists the
+keyboard shortcuts: space plays and pauses a replay, the arrows walk actions or
+the semantic tree, and `Enter` hands focus from the tree back to the terminal.
+
+The theme button cycles system → dark → light; the terminal itself stays on the
+colours the recorded program used, because those are the program's, not the
+panel's. Status is never carried by colour alone: every result has a glyph
+(`✓ ✕ ◍ ○`) beside it.
+
 ## Security
 
 The server binds to loopback and mints an unguessable token per launch; the URL

@@ -14,7 +14,7 @@ import {
   testDuration,
   type TestRow,
 } from '../test-model.js';
-import { formatMs } from '../view-model.js';
+import { formatMs, statusGlyph } from '../view-model.js';
 
 /** What the list needs to render. */
 export interface TestListModel {
@@ -103,7 +103,7 @@ function renderTest(
   return html`
     <div class=${`test ${test.status}${selected ? ' selected' : ''}`} data-testid="test">
       <div class="test-head" @click=${() => handlers.select(test.id)}>
-        <span class=${`dot ${test.status}`}></span>
+        <span class=${`dot ${test.status}`} aria-hidden="true">${statusGlyph(test.status)}</span>
         <span class="title">${test.title}</span>
         ${test.flaky === true ? html`<span class="badge flaky">flaky</span>` : ''}
         ${test.status === 'not-run' ? html`<span class="badge not-run">not run yet</span>` : ''}
