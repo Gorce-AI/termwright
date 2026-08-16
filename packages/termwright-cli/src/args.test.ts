@@ -25,6 +25,16 @@ describe('parseArgs', () => {
     expect(args.open).toBe(true);
   });
 
+  it('reads the report command and where it writes', () => {
+    const args = parseArgs(['report', '--trace', 'out/login.twtrace', '--out-file', 'r.html']);
+    expect(args).toMatchObject({ command: 'report', trace: 'out/login.twtrace', outFile: 'r.html' });
+  });
+
+  it('refuses a report with nothing to render', () => {
+    // The archive is the whole input; without it there is no report to write.
+    expect(() => parseArgs(['report'])).toThrow(/needs the archive/);
+  });
+
   it('reads --no-open', () => {
     expect(parseArgs(['ui', '--no-open']).open).toBe(false);
   });

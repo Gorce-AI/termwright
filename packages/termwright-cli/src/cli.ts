@@ -23,7 +23,7 @@ import {
   EXIT_CODES,
   type CliIo,
 } from '@termwright/mcp';
-import { openInBrowser, shouldOpenBrowser, startUiServer } from '@termwright/ui';
+import { openInBrowser, shouldOpenBrowser, startUiServer, writeInlineReport } from '@termwright/ui';
 import { parseArgs, type ParsedArgs } from './args.js';
 import {
   runUi,
@@ -108,6 +108,9 @@ export async function runCli(
         // flags and its own error rendering.
         return await deps.runMcp(json ? [...args.rest, '--json'] : args.rest, io);
 
+      case 'report':
+        return await emitReport(args, deps, json);
+
       case 'ui':
       case 'codegen':
         return await launchUi(args, deps, json);
@@ -132,6 +135,34 @@ async function emitSkill(args: ParsedArgs, io: CliIo): Promise<number> {
   }
   const written = await writeAgentSkill(args.out);
   io.out(args.json ? JSON.stringify({ written }) : written.join('\n'));
+  return EXIT_CODES.ok;
+}
+
+/**
+ * `termwright report` — the viewer and one archive, written as a single file.
+ *
+ * The same page `ui --trace` shows, with its data baked in: it opens over
+ * `file://`, which is what makes it usable as a CI artifact.
+ */
+async function emitReport(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
+  const trace = args.trace as string; // `parseArgs` rejects `report` without one
+  const out = args.outFile ?? 'termwright-report.html';
+  const result = await writeInlineReport(trace, out);
+
+  if (json) {
+    deps.io.out(JSON.stringify({ path: result.path, bytes: result.bytes, cut: result.cut }));
+    return EXIT_CODES.ok;
+  }
+  const size = `${Math.round(result.bytes / 1024)} KiB`;
+  deps.io.out(`wrote ${result.path} (${size})`);
+  // Say what the file does not contain. A report that quietly ends early is
+  // indistinguishable from a program that ended early.
+  if (result.cut.frames > 0) {
+    deps.io.out(`  the recording is cut: ${result.cut.frames} frames left out to fit the budget`);
+  }
+  if (result.cut.logs > 0) {
+    deps.io.out(`  the log is cut: the ${result.cut.logs} oldest records left out to fit the budget`);
+  }
   return EXIT_CODES.ok;
 }
 
@@ -186,6 +217,7 @@ function helpText(): string {
     'Usage:',
     `  ${CLI_NAME} ui [--trace <file>] [--port N] [--host H] [--no-watch] [--no-open] [-- <vitest args>]`,
     `  ${CLI_NAME} ui --record [--out-file <file>] -- <command>`,
+    `  ${CLI_NAME} report --trace <file> [--out-file <file>]`,
     `  ${CLI_NAME} codegen [--out-file <file>] -- <command>`,
     `  ${CLI_NAME} mcp [--http] [--port N]`,
     `  ${CLI_NAME} agent-context | usage | skill [--out <dir>]`,
@@ -196,6 +228,8 @@ function helpText(): string {
     '                  the runner; --trace opens a .twtrace archive instead, and',
     '                  --record drives a program you name and writes the test.',
     '                  The runner opens in your browser; --no-open just prints the URL.',
+    '  report          write the viewer and one archive as a single HTML file,',
+    '                  openable from disk — a CI artifact rather than a server.',
     '  codegen         `ui --record`, for when recording is the whole point.',
     '  mcp             serve the MCP tools; every argument is forwarded to',
     '                  @termwright/mcp untouched.',

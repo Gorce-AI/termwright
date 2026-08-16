@@ -10,6 +10,7 @@ import { usageError } from '@termwright/mcp';
 /** Everything the CLI can be asked to do. */
 export type CliCommand =
   | 'ui'
+  | 'report'
   | 'codegen'
   | 'mcp'
   | 'agent-context'
@@ -141,6 +142,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         command ??= 'version';
         break;
       case 'ui':
+      case 'report':
       case 'codegen':
       case 'mcp':
       case 'agent-context':
@@ -165,6 +167,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
   if (record && trace !== undefined) {
     throw usageError('--trace and --record are different modes; pass one', 'see `termwright --help`');
+  }
+  if (resolved === 'report' && trace === undefined) {
+    throw usageError(
+      'report needs the archive to render',
+      'name it with --trace, as in `termwright report --trace out/login.twtrace`',
+    );
   }
   if (record && rest.length === 0) {
     throw usageError(
