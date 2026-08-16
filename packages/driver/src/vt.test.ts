@@ -8,7 +8,10 @@ import { VtScreen, type MarkerSighting } from './vt.js';
 let vt: VtScreen | null = null;
 
 function createVt(columns = 40, rows = 6): VtScreen {
-  vt = new VtScreen({ columns, rows, scrollbackLines: 20 });
+  // Mouse modes are forced observable: these tests drive the emulator directly,
+  // so they are about what it tracks, not about what a pty hides. The hidden
+  // case has its own tests, which pass the flag the other way.
+  vt = new VtScreen({ columns, rows, scrollbackLines: 20, mouseModesObservable: true });
   return vt;
 }
 
