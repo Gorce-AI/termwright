@@ -339,4 +339,4 @@
   timeout drops the REQUEST, not the session. A get-tree response at an
   already-held revision replaces the composition base without being
   re-published (a successful repair must not report as data loss).
-  @termwright/vt gains /unicode subpath (applyProfile) for browser/трace use.
+  @termwright/vt gains /unicode subpath (applyProfile) for browser/trace use.
