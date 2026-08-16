@@ -104,21 +104,35 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
-0. **A marker that arrives late over the transport is still lost.** The driver
-   closed the case where its *own* emulator queue delays a marker: the expiry
-   clock now starts at the drain barrier, and `--repaint=40000` — 8 MB of screen
-   repaint across the burst — settles on 200 as it should. What that cannot
-   reach is a marker the driver has not received yet, because the platform
-   delivered it late. Reproduced with `TERMWRIGHT_CONFORMANCE_STDOUT_BPS=5000`,
-   where the burst still ends on revision 1 with `revision-expired×64`. Whether
-   Windows suffers this as well as the queue delay is the open question, and the
-   next CI run is the discriminator: the queue half is fixed, so a repeat there
-   would mean the transport half matters too. Measured while it did: with the
-   terminal permanently slower than the socket, a session that never renders
-   again held **revision 0 indefinitely** while the screen showed the last
-   frame — no tree, no locator, and no diagnostic separating "stale" from
-   "absent". `get-tree` resync is the machinery that would close it, if the
-   driver decides the case is worth closing.
+0. **A marker that arrives late over the transport is still lost.** Two delays
+   produce the identical diagnostic, and the driver's measurement separates
+   them. **A**: the bytes are already here, queued in the emulator's parser —
+   692 ms of it on macOS with 0 ms of transport, so a flood broke pairing with
+   no ConPTY involved at all. Closed by `e404026`, which starts the expiry clock
+   at the drain barrier; `--repaint=40000` (8 MB of repaint across the burst) is
+   the regression test and settles on 200. **B**: the bytes are still in the
+   pipe. The drain barrier cannot see them, because the queue is *empty* —
+   nothing arrived, `drain()` resolves at once, the timer arms, the half
+   expires, and the marker lands two seconds later. `TERMWRIGHT_CONFORMANCE_
+   STDOUT_BPS=5000` reproduces B, where the burst still ends on revision 1 with
+   `revision-expired×64`; the driver measured the same shape independently
+   (commit-to-sighting p50 1697 ms, max 3359 ms). Whether Windows suffers B as
+   well as A is the open question and the next CI run is the discriminator,
+   since A is fixed. Measured while B bites: a session that never renders again
+   held **revision 0 indefinitely** while the screen showed the last frame — no
+   tree, no locator, no diagnostic separating "stale" from "absent". A proposal
+   is with the lead: extend the invariant from "we have caught up parsing" to
+   "the evidence is no longer in flight", by arming the clock only once output
+   has also been quiet for `pairingTimeoutMs`. If that lands, B publishes its
+   tail instead of losing it, and the two waits that assert `revision-expired`
+   at all (`marker-without-tree`, `tree-without-marker`) will simply fire a
+   quiet window later — their budgets already allow for it.
+   - Method note, from the driver's first attempt at reproducing B: throttling
+     the *writer* also delays the writer's own timestamps, so the measured gap
+     comes out zero. Here the asymmetry is real — the tree goes out over the
+     socket while the marker is held — which is why the knob measures anything
+     at all. Anyone simulating this without a second channel has to keep the
+     render cadence and the byte budget on separate clocks.
 1. **The Textual example cannot be quit from every focus state.** It binds only
    `q`, and Tab eventually lands on its `Input`, which swallows the key —
    Ctrl+C does not quit either. Measured: `q`, Ctrl+D, Escape+`q` and
@@ -288,9 +302,13 @@ has to delete an assertion that explains itself.
   loaded runner into a red driver. `--repaint=<bytes>` reproduces the driver-
   side backlog the fix is about (8 MB of repaint over 200 revisions still lands
   on 200); `--stdout-bps` reproduces the *other* delay, a transport that
-  delivers late, which no expiry policy can see and which still loses the tail.
-  Keep them distinct: the first is a regression test for the fix, the second is
-  a probe for a question that is still open.
+  delivers late, which the drain barrier cannot see and which still loses the
+  tail. Keep them distinct: the first is a regression test for the fix, the
+  second is a probe for a question that is still open — finding 0 carries the
+  measurements for both. The eviction half needs no such care: `maxQueuedFrames`
+  overflowing is unconditional and correct however the bytes are delayed, which
+  is why the output-flood test can still pin the exact evicted set whatever
+  expiry policy ends up being.
 - **A tri-state mode is not a boolean, and truthiness will not say so.**
   `focusReporting` gained `'unknown'` once the driver stopped reporting the
   host's focus mode as the child's. The helper here still returned it as a

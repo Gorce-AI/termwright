@@ -272,7 +272,10 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
   it('publishes nothing for a marker without a tree', async () => {
     const terminal = await arm('marker-without-tree');
     await fire(terminal);
-    // The expiry is a timer, and it only starts once the unpaired half is in.
+    // Expiry is a timer that only arms once the driver has caught up with what
+    // it has already received, so the wait covers delivery, the drain and the
+    // window — and has room left for the quiet period a further change to that
+    // barrier would add.
     await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-expired');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
@@ -286,9 +289,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const terminal = await arm('tree-without-marker');
     await fire(terminal);
     // The unpaired half expires; the driver keeps the last complete revision.
-    // The expiry is a timer the driver starts when the tree lands, so the wait
-    // has to cover delivery *and* the window — a default poll only covers the
-    // window, which is enough wherever the socket is the faster of the two.
+    // Same budget, same reason as the marker case above.
     await expect.poll(() => codes(terminal), { timeout: 10_000 }).toContain('revision-expired');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
