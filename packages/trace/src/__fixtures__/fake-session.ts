@@ -89,8 +89,8 @@ export class FakeSession implements TraceSource {
   }
 
   /** Emits a line read from a followed log file. */
-  logLine(line: string, label = 'app.log'): void {
-    this.#emit('app-log', { source: 'file', label, line, timeMs: this.clock });
+  logLine(line: string, label = 'app.log', path = `/var/log/${label}`): void {
+    this.#emit('app-log', { source: 'file', label, path, line, timeMs: this.clock });
   }
 
   /** Emits a structured record from an instrumented adapter. */

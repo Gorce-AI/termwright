@@ -198,3 +198,31 @@ driver side first — there is nothing trace can do about it locally.
 Raised while agreeing the format with the runner UI, which wanted
 `sources: {label?, path}[]`. Not blocking: labels are enough to group and
 filter, and the UI shipped on labels.
+
+### `sources` carries paths now
+
+The driver started sending `path` on `app-log` (c73b090), so `meta.logs.sources`
+is `{label?, path?}[]` rather than a list of labels, and each file entry repeats
+its `path`.
+
+Repeating it per entry rather than indexing into `meta.logs.sources` is
+deliberate. The driver's own wording is that "a label can be short and shared
+between sources", so a label cannot attribute a line to the file it came from —
+two nodes both logging under `app` are a normal setup, and there is a test for
+exactly that. An index into another file's array would avoid the repetition but
+is a worse thing to read in a JSONL stream, and it couples two files' orderings
+together. The cost is a repeated string on file lines; adapter records have no
+path and pay nothing.
+
+### Replayed emoji widths can disagree with the live screen
+
+`frameFromAnsi` builds its headless terminal without `@xterm/addon-unicode11`,
+which the driver *does* activate. Emoji therefore measure with the legacy width
+table during replay: `🚀` comes back as width 1 here and width 2 from the live
+harness. CJK is unaffected (`漢` is width 2 either way).
+
+This matters for anything comparing a replayed frame against a live one, and for
+screenshots of recorded sessions, where an emoji then occupies one column
+instead of two. Fixing it means adding the addon to this package and activating
+it in `vt.ts`; that is a dependency change, so it is written down here rather
+than smuggled into an unrelated task.

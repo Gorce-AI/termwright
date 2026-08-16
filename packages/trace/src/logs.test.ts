@@ -90,6 +90,9 @@ describe('logs.jsonl', () => {
     expect(line).toMatchObject({
       source: 'file',
       label: 'db.log',
+      // Repeated per entry: a label can front several files, so it alone
+      // cannot attribute a line to the file it came from.
+      path: '/var/log/db.log',
       message: '2026-08-16T00:00:00Z ERROR db: connection refused',
     });
     // A followed file has no level to report, and none is invented.
@@ -109,7 +112,11 @@ describe('logs.jsonl', () => {
       expect(trace.meta.logs).toEqual({
         count: 4,
         dropped: 0,
-        sources: ['http', 'db.log', 'db'],
+        sources: [
+          { label: 'http' },
+          { label: 'db.log', path: '/var/log/db.log' },
+          { label: 'db' },
+        ],
         levels: { info: 1, warn: 1, error: 1 },
       });
     } finally {
@@ -206,6 +213,50 @@ describe('logs.jsonl', () => {
         '2026-08-16T00:00:00Z ERROR db: connection refused',
         'save failed',
       ]);
+    } finally {
+      await trace.close();
+    }
+  });
+
+  it('separates two files that share one label', async () => {
+    const root = await workspace();
+    const dir = join(root, 'sharedlabel.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+
+    session.logLine('from node 1', 'app', '/srv/a/app.log');
+    session.tick(10);
+    session.logLine('from node 2', 'app', '/srv/b/app.log');
+    await writer.finalize();
+
+    const trace = await openTrace(dir);
+    try {
+      expect(trace.meta.logs?.sources).toEqual([
+        { label: 'app', path: '/srv/a/app.log' },
+        { label: 'app', path: '/srv/b/app.log' },
+      ]);
+      const entries = await readLogFile(dir);
+      expect(entries.map((entry) => entry.path)).toEqual([
+        '/srv/a/app.log',
+        '/srv/b/app.log',
+      ]);
+    } finally {
+      await trace.close();
+    }
+  });
+
+  it('records an adapter source without a path', async () => {
+    const root = await workspace();
+    const dir = join(root, 'adapteronly.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.logRecord({ level: 'info', message: 'hello', logger: 'app' });
+    await writer.finalize();
+
+    const trace = await openTrace(dir);
+    try {
+      expect(trace.meta.logs?.sources).toEqual([{ label: 'app' }]);
+      expect((await readLogFile(dir))[0]?.path).toBeUndefined();
     } finally {
       await trace.close();
     }

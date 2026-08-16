@@ -48,6 +48,7 @@ export {
   type TraceEvent,
   type TraceEventKind,
   type TraceLogEntry,
+  type TraceLogSource,
   type TraceLogSummary,
   type TraceExit,
   type TraceMeta,

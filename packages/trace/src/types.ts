@@ -84,10 +84,23 @@ export interface TraceLogSummary {
    * first: when a program floods its log the interesting part is the end.
    */
   readonly dropped: number;
-  /** Distinct labels seen, in first-seen order. */
-  readonly sources: readonly string[];
+  /** Distinct sources seen, in first-seen order. */
+  readonly sources: readonly TraceLogSource[];
   /** Entry count per level; file lines have no level and are not counted. */
   readonly levels: Readonly<Partial<Record<LogLevel, number>>>;
+}
+
+/**
+ * Where log entries came from.
+ *
+ * A label can be short and shared between sources, so the path is what
+ * identifies a followed file — and what a reader opens. Adapter records have a
+ * logger name and no path; a followed file has both.
+ */
+export interface TraceLogSource {
+  readonly label?: string;
+  /** Followed log files only: the path the driver is tailing. */
+  readonly path?: string;
 }
 
 /**
@@ -121,6 +134,13 @@ export interface TraceLogEntry {
   readonly level?: LogLevel;
   /** The file line, or the record's already-formatted message. */
   readonly message: string;
+  /**
+   * Followed files only: the path this line came from, repeated per entry
+   * rather than indexed into {@link TraceLogSummary.sources} — labels can
+   * collide between sources, so a label alone cannot attribute an entry, and
+   * an index into another file's array is a worse thing to read than a string.
+   */
+  readonly path?: string;
   /** Adapter records only: flat structured context. */
   readonly attrs?: Readonly<Record<string, LogAttrValue>>;
   /** Adapter records only: per-session counter; a gap means upstream drops. */

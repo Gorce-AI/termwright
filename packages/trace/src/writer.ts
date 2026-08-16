@@ -20,6 +20,7 @@ import {
   type TraceEvent,
   type TraceCrash,
   type TraceLogEntry,
+  type TraceLogSource,
   type TraceLogSummary,
   type TraceExit,
   type TraceMeta,
@@ -165,7 +166,7 @@ export function createTraceWriter(
   const semantics: { t: number; revision: number; snapshot: SemanticSnapshot }[] = [];
   const hiddenWindows: HiddenWindow[] = [];
   const logs: TraceLogEntry[] = [];
-  const logLabels: string[] = [];
+  const logSources = new Map<string, TraceLogSource>();
   const logLevels = new Map<NonNullable<TraceLogEntry['level']>, number>();
   const openSteps: string[] = [];
   const closedSteps = new Set<string>();
@@ -325,6 +326,7 @@ export function createTraceWriter(
         castOffset: wall,
         source: event.source,
         ...(label === undefined ? {} : { label }),
+        ...(event.path === undefined ? {} : { path: event.path }),
         ...(record?.logger === undefined ? {} : { logger: record.logger }),
         ...(record?.level === undefined ? {} : { level: record.level }),
         message: record?.message ?? event.line ?? '',
@@ -333,7 +335,17 @@ export function createTraceWriter(
         ...(record?.revision === undefined ? {} : { revision: record.revision }),
         ...(record?.ts === undefined ? {} : { ts: record.ts }),
       };
-      if (label !== undefined && !logLabels.includes(label)) logLabels.push(label);
+      if (label !== undefined || event.path !== undefined) {
+        // Keyed on both: one label can front several files, and the same file
+        // can be relabelled between runs.
+        const key = `${label ?? ''}\u0000${event.path ?? ''}`;
+        if (!logSources.has(key)) {
+          logSources.set(key, {
+            ...(label === undefined ? {} : { label }),
+            ...(event.path === undefined ? {} : { path: event.path }),
+          });
+        }
+      }
       if (entry.level !== undefined) {
         logLevels.set(entry.level, (logLevels.get(entry.level) ?? 0) + 1);
       }
@@ -508,7 +520,7 @@ export function createTraceWriter(
     return {
       count: logs.length,
       dropped: droppedLogs,
-      sources: [...logLabels],
+      sources: [...logSources.values()],
       levels: Object.fromEntries(logLevels),
     };
   }
