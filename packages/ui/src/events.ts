@@ -48,6 +48,17 @@ export type UiServerMode = 'live' | 'post-mortem' | 'record';
 export type ServerMessage =
   | {
       readonly v: 1;
+      readonly type: 'tests-discovered';
+      /**
+       * Every test the project holds, before anything runs. Ids are
+       * `<file>::<full name>`, so a runner can turn one back into a Vitest
+       * invocation and the browser can reconcile a discovered row with the
+       * running test that replaces it.
+       */
+      readonly tests: readonly { readonly id: string; readonly title: string; readonly file: string }[];
+    }
+  | {
+      readonly v: 1;
       readonly type: 'session';
       readonly sessionId: string;
       /**
@@ -157,6 +168,7 @@ export type ClientMessage =
 export type UiMessage = ServerMessage | ClientMessage;
 
 const SERVER_TYPES = new Set([
+  'tests-discovered',
   'session',
   'run-start',
   'test-start',
@@ -264,6 +276,25 @@ export function parseClientMessage(raw: string | Uint8Array): ClientMessage {
 export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
   const value = parseEnvelope(raw, SERVER_TYPES);
   switch (value.type) {
+    case 'tests-discovered': {
+      const tests = value['tests'];
+      if (!Array.isArray(tests)) throw new UiProtocolError('tests-discovered: tests must be an array');
+      return {
+        v: 1,
+        type: 'tests-discovered',
+        tests: tests.map((entry, index) => {
+          if (typeof entry !== 'object' || entry === null) {
+            throw new UiProtocolError(`tests-discovered: tests[${index}] must be an object`);
+          }
+          const test = entry as Record<string, unknown>;
+          return {
+            id: requireString(test, 'id', `tests-discovered.tests[${index}]`),
+            title: requireString(test, 'title', `tests-discovered.tests[${index}]`),
+            file: requireString(test, 'file', `tests-discovered.tests[${index}]`),
+          };
+        }),
+      };
+    }
     case 'session':
       return {
         v: 1,

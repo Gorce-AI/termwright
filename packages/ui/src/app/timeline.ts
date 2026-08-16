@@ -21,7 +21,7 @@ export interface TimelineTest {
   readonly id: string;
   readonly title: string;
   readonly file?: string;
-  status: UiTestStatus | 'running';
+  status: UiTestStatus | 'running' | 'not-run';
   traceRef?: string;
   error?: string;
   readonly steps: TimelineStep[];

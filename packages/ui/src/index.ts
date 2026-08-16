@@ -62,6 +62,15 @@ export {
 export { readTraceLogs, type LogSourceView, type TraceLogs } from './trace-logs.js';
 
 export {
+  discoverTests,
+  discoveredId,
+  parseDiscoveredId,
+  parseListing,
+  type DiscoveredTest,
+  type DiscoveryOptions,
+} from './discovery.js';
+
+export {
   buildCommandLog,
   currentCommand,
   parseRef,

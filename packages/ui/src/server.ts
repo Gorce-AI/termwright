@@ -17,7 +17,7 @@
  */
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, watch } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
@@ -32,6 +32,7 @@ import {
   type ServerMessage,
   type UiServerMode,
 } from './events.js';
+import { discoverTests, type DiscoveryOptions } from './discovery.js';
 import { UiHub, type UiHubOptions } from './hub.js';
 import { attachSession, type UiSessionSource } from './live.js';
 import { startRecorder, type RecorderOptions, type RecorderSession } from './recorder.js';
@@ -74,6 +75,11 @@ export interface UiServerOptions {
   readonly onRerun?: (testIds: readonly string[] | undefined) => void;
   /** Called when a client asks to stop the run. */
   readonly onStop?: () => void;
+  /**
+   * List the project's tests at startup, and again when its files change, so
+   * the panel shows what a run *would* contain before one happens.
+   */
+  readonly discovery?: DiscoveryOptions & { readonly watch?: boolean };
   /** Backlog limits. */
   readonly hub?: UiHubOptions;
 }
@@ -185,6 +191,13 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       command: options.record?.command ?? [],
     });
   }
+
+  /** Lists the project's tests and publishes them. Failure is not fatal. */
+  const publishDiscovery = async (): Promise<void> => {
+    if (options.discovery === undefined) return;
+    const tests = await discoverTests(options.discovery);
+    if (tests.length > 0) hub.publish({ v: 1, type: 'tests-discovered', tests });
+  };
 
   const http = createServer((request, response) => {
     void handleRequest(request, response).catch((error: unknown) => {
@@ -434,6 +447,11 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     }
   }
 
+  // Discovery runs in the background: the server is useful before it finishes,
+  // and a project whose listing takes ten seconds should not delay the page.
+  void publishDiscovery();
+  const stopWatching = options.discovery?.watch === true ? watchForChanges(options.discovery.cwd, publishDiscovery) : undefined;
+
   const port = await listen(http, options.port ?? 0, options.host ?? '127.0.0.1');
   const host = options.host ?? '127.0.0.1';
   const url = `http://${host}:${port}/?token=${token}`;
@@ -448,6 +466,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     trace: reader,
     attach,
     async close(): Promise<void> {
+      stopWatching?.();
       detachRecorder?.();
       for (const client of wss.clients) client.terminate();
       await new Promise<void>((done) => wss.close(() => done()));
@@ -456,6 +475,35 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       await reader?.close();
     },
   };
+}
+
+/** Directories a source tree has that never contain tests worth listing. */
+const IGNORED_DIRECTORIES = /(^|[/\\])(node_modules|dist|coverage|\.git)([/\\]|$)/;
+
+/**
+ * Re-lists the project's tests when its files change.
+ *
+ * Debounced, because saving a file in an editor fires several events, and a
+ * listing takes seconds. Watching is best-effort: a platform without recursive
+ * watching loses the refresh, not the server.
+ */
+function watchForChanges(cwd: string, onChange: () => Promise<void>): (() => void) | undefined {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const watcher = watch(cwd, { recursive: true }, (_event, filename) => {
+      const name = filename === null ? '' : filename.toString();
+      if (name === '' || IGNORED_DIRECTORIES.test(name)) return;
+      if (!/\.(ts|tsx|js|jsx|mts|cts)$/.test(name)) return;
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(() => void onChange(), 300);
+    });
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      watcher.close();
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /** A finite numeric query parameter, or `undefined` when absent or malformed. */

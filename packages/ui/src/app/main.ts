@@ -622,6 +622,13 @@ const timelineHandlers: TimelineHandlers = {
     void seek(timeMs);
   },
   select(testId) {
+    const test = state.tests.find((candidate) => candidate.id === testId);
+    // A test that has never run has nothing to show, so selecting it means
+    // "run this one" — the same thing clicking it in Cypress does.
+    if (test?.status === 'not-run') {
+      timelineHandlers.rerun(testId);
+      return;
+    }
     state.selectedTestId = state.selectedTestId === testId ? null : testId;
     // Focusing a test focuses its session too, when the producer told us which
     // one it drives; otherwise the terminal keeps showing what it was showing.
@@ -731,9 +738,21 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function testFor(id: string, title = id): MutableTest {
+function testFor(id: string, title = id, file?: string): MutableTest {
   const found = state.tests.find((test) => test.id === id);
   if (found !== undefined) return found;
+  // A test that was discovered before the run started is the same test: match
+  // it by file and title and adopt the run's id, rather than listing it twice.
+  const discovered =
+    file === undefined
+      ? undefined
+      : state.tests.find(
+          (test) => test.status === 'not-run' && test.file === file && test.title === title,
+        );
+  if (discovered !== undefined) {
+    discovered.id = id;
+    return discovered;
+  }
   const created: MutableTest = { id, title, status: 'running', steps: [] };
   state.tests.push(created);
   return created;
@@ -783,7 +802,7 @@ function handle(message: ServerMessage): void {
       if (message.mode !== 'post-mortem') pane.reset();
       break;
     case 'test-start': {
-      const test = testFor(message.id, message.title);
+      const test = testFor(message.id, message.title, message.file);
       test.status = 'running';
       test.title = message.title;
       test.file = message.file;
@@ -804,6 +823,25 @@ function handle(message: ServerMessage): void {
       else {
         step.endedAt = message.t;
         step.status = message.status === 'failed' ? 'failed' : 'passed';
+      }
+      break;
+    }
+    case 'tests-discovered': {
+      // Discovery names tests by file and title; a run names them by its own
+      // ids. Rows already seen in this run keep their id and result — the
+      // listing only adds what the run has not touched.
+      const known = new Set(state.tests.map((test) => `${test.file ?? ''}::${test.title}`));
+      for (const discovered of message.tests) {
+        const key = `${discovered.file}::${discovered.title}`;
+        if (known.has(key)) continue;
+        known.add(key);
+        state.tests.push({
+          id: discovered.id,
+          title: discovered.title,
+          file: discovered.file,
+          status: 'not-run',
+          steps: [],
+        });
       }
       break;
     }
@@ -881,7 +919,10 @@ function handle(message: ServerMessage): void {
       // The producer's own counters, used as sent: this protocol has one
       // producer generation, so there is nothing to reconcile them against.
       const { durationMs, ...counts } = message.summary;
-      state.summary = `${describeCounts({ ...counts, running: 0 })} in ${Math.round(durationMs)}ms`;
+      // The run is over, so nothing is running; tests never touched by it stay
+      // counted as not run.
+      const notRun = state.tests.filter((test) => test.status === 'not-run').length;
+      state.summary = `${describeCounts({ ...counts, running: 0, notRun })} in ${Math.round(durationMs)}ms`;
       retick();
       break;
     }

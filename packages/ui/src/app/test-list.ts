@@ -62,6 +62,7 @@ export function renderTestList(model: TestListModel, handlers: TestListHandlers)
         ${counts.flaky === 0 ? '' : html`<span class="count flaky">${counts.flaky}</span>`}
         ${counts.skipped === 0 ? '' : html`<span class="count skipped">${counts.skipped}</span>`}
         ${counts.running === 0 ? '' : html`<span class="count running">${counts.running}</span>`}
+        ${counts.notRun === 0 ? '' : html`<span class="count not-run" title="Discovered, not run yet">${counts.notRun}</span>`}
       </span>
       ${model.canRerun
         ? html`
@@ -75,7 +76,9 @@ export function renderTestList(model: TestListModel, handlers: TestListHandlers)
 
     ${matching.length === 0
       ? html`<p class="empty">
-          ${model.tests.length === 0 ? 'No tests reported yet.' : 'No test matches this filter.'}
+          ${model.tests.length === 0
+            ? 'No tests yet. They appear here as soon as the project is listed, or as a run reports them.'
+            : 'No test matches this filter.'}
         </p>`
       : html`<div class="tests" data-testid="tests">
           ${groupTests(matching).map(
@@ -103,6 +106,7 @@ function renderTest(
         <span class=${`dot ${test.status}`}></span>
         <span class="title">${test.title}</span>
         ${test.flaky === true ? html`<span class="badge flaky">flaky</span>` : ''}
+        ${test.status === 'not-run' ? html`<span class="badge not-run">not run yet</span>` : ''}
         ${duration === null
           ? ''
           : html`<span class=${`duration${test.status === 'running' ? ' running' : ''}`}

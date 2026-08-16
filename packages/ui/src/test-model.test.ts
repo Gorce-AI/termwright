@@ -57,13 +57,16 @@ describe('groupTests', () => {
 
 describe('countTests', () => {
   it('counts each status, with flaky overlapping passed', () => {
-    expect(countTests([...suite, test({ id: 't5', status: 'running' })])).toEqual({
-      total: 5,
+    expect(
+      countTests([...suite, test({ id: 't5', status: 'running' }), test({ id: 't6', status: 'not-run' })]),
+    ).toEqual({
+      total: 6,
       passed: 3,
       failed: 1,
       skipped: 0,
       flaky: 1,
       running: 1,
+      notRun: 1,
     });
   });
 });
@@ -79,6 +82,10 @@ describe('testDuration', () => {
 
   it('never goes negative when the clocks disagree', () => {
     expect(testDuration(test({ id: 't1', status: 'running', startedAt: 5_000 }), 1_000)).toBe(0);
+  });
+
+  it('shows nothing for a test that has never run', () => {
+    expect(testDuration(test({ id: 't1', status: 'not-run' }), 1_000)).toBeNull();
   });
 
   it('shows nothing rather than a made-up zero', () => {
@@ -98,8 +105,8 @@ describe('shortenPath', () => {
 describe('describeCounts', () => {
   it('mentions flaky, skipped and running only when they happened', () => {
     expect(describeCounts(countTests(suite))).toBe('4 tests, 3 passed, 1 failed, 1 flaky');
-    expect(describeCounts({ total: 2, passed: 2, failed: 0, skipped: 0, flaky: 0, running: 0 })).toBe(
-      '2 tests, 2 passed, 0 failed',
-    );
+    expect(
+      describeCounts({ total: 2, passed: 2, failed: 0, skipped: 0, flaky: 0, running: 0, notRun: 0 }),
+    ).toBe('2 tests, 2 passed, 0 failed');
   });
 });

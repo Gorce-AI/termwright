@@ -854,3 +854,20 @@ button.active {
   list-style: none;
   padding-left: 4px;
 }
+
+.dot.not-run {
+  background: transparent;
+  border: 1px solid var(--muted);
+}
+
+.count.not-run,
+.badge.not-run {
+  color: var(--muted);
+}
+
+.badge.not-run {
+  padding: 0 5px;
+  border-radius: 8px;
+  font-size: 10px;
+  background: #1e2430;
+}

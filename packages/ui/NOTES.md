@@ -224,6 +224,26 @@ The archives our matchers write today carry `selector` and no `ref`, so that
 highlight stays dark on them. The UI side is done and tested; filling in `ref`
 is a change in whoever calls `recordAction`/`recordAssert`.
 
+## Discovery: what the project has, before it runs
+
+`vitest list --json` prints `{name, file}` and **no id**, so discovered tests get
+`<file>::<name>`. That shape is not arbitrary: it is stable between runs, it
+reconciles with a running test by file and title, and a runner receiving it in
+`rerun { testIds }` can turn it straight back into `vitest run <file> -t
+"<name>"` with no lookup table on either side.
+
+Two consequences the code makes explicit. A discovered row is *adopted* by the
+run that reaches it (`testFor` matches file+title and takes the run's id), so a
+test never appears twice. And clicking a row that has never run means "run this
+one" rather than "show me its steps", because there are no steps to show — the
+same thing clicking it in Cypress does.
+
+Discovery is a convenience and never a blocker: the listing runs in the
+background after the server is already serving, a failure yields an empty list
+rather than an error page, and the watcher that re-lists on file changes is
+best-effort (a platform without recursive watch loses the refresh, not the
+server).
+
 ## The test list, and what the protocol had to grow
 
 `§UI events` carried enough to *list* tests but not enough to make the list

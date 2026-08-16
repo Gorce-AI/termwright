@@ -14,8 +14,8 @@ export interface TestRow {
   readonly id: string;
   readonly title: string;
   readonly file?: string;
-  /** `running` until the test ends. */
-  readonly status: UiTestStatus | 'running';
+  /** `not-run` before a run touches it, `running` until it ends. */
+  readonly status: UiTestStatus | 'running' | 'not-run';
   /** Wall-clock start, for the elapsed time of a running test. */
   readonly startedAt?: number;
   /** Final duration, reported when the test ended. */
@@ -45,6 +45,8 @@ export interface TestCounts {
   readonly skipped: number;
   readonly flaky: number;
   readonly running: number;
+  /** Discovered but not run in this session. */
+  readonly notRun: number;
 }
 
 /**
@@ -80,10 +82,11 @@ export function groupTests(tests: readonly TestRow[]): readonly TestGroup[] {
 
 /** Counts for the header. `flaky` overlaps `passed`, as it does in Vitest. */
 export function countTests(tests: readonly TestRow[]): TestCounts {
-  const counts = { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, running: 0 };
+  const counts = { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, running: 0, notRun: 0 };
   for (const test of tests) {
     counts.total += 1;
     if (test.status === 'running') counts.running += 1;
+    else if (test.status === 'not-run') counts.notRun += 1;
     else counts[test.status] += 1;
     if (test.flaky === true) counts.flaky += 1;
   }
@@ -100,6 +103,7 @@ export function countTests(tests: readonly TestRow[]): TestCounts {
  * whose producer never reported either.
  */
 export function testDuration(test: TestRow, now: number): number | null {
+  if (test.status === 'not-run') return null;
   if (test.durationMs !== undefined) return test.durationMs;
   if (test.status === 'running' && test.startedAt !== undefined) {
     return Math.max(now - test.startedAt, 0);
@@ -119,5 +123,6 @@ export function describeCounts(counts: TestCounts): string {
   if (counts.flaky > 0) parts.push(`${counts.flaky} flaky`);
   if (counts.skipped > 0) parts.push(`${counts.skipped} skipped`);
   if (counts.running > 0) parts.push(`${counts.running} running`);
+  if (counts.notRun > 0) parts.push(`${counts.notRun} not run`);
   return parts.join(', ');
 }

@@ -114,6 +114,14 @@ action by action.
 
 ## The test list
 
+Opening the runner shows **every test the project has**, not only the ones a run
+has reached: the server asks Vitest (`vitest list --json`) at startup and again
+when files change, and the tests it finds appear as *not run yet*. Clicking one
+runs it. When a run reaches a discovered test, the row becomes that test rather
+than a second copy of it — discovery names tests by file and title, the run by
+its own id, and the two are reconciled on the first.
+
+
 The bottom pane is the run: every reported test, grouped by file, with its
 status, how long it took, and a `flaky` badge for the ones that only passed on a
 retry. A running test shows the time it has been running — the number you watch

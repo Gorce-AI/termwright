@@ -202,6 +202,41 @@ describe('live mode', () => {
     viewer.close();
   });
 
+  it('publishes the project\u2019s tests before anything runs', async () => {
+    const listing = JSON.stringify([
+      { name: 'logs in', file: '/repo/tests/auth.test.ts' },
+      { name: 'renders the menu', file: '/repo/tests/menu.test.ts' },
+    ]);
+    const server = await start({ discovery: { cwd: '/repo', run: async () => listing } });
+    const viewer = await Viewer.connect(server);
+
+    await viewer.until((messages) => messages.some((m) => m.type === 'tests-discovered'), 'the listing');
+    const discovered = viewer.received.find((message) => message.type === 'tests-discovered');
+    expect(discovered?.type === 'tests-discovered' && discovered.tests.map((test) => test.title)).toEqual([
+      'logs in',
+      'renders the menu',
+    ]);
+    expect(discovered?.type === 'tests-discovered' && discovered.tests[0]?.id).toBe(
+      '/repo/tests/auth.test.ts::logs in',
+    );
+    viewer.close();
+  });
+
+  it('starts anyway when the project cannot be listed', async () => {
+    const server = await start({
+      discovery: {
+        cwd: '/repo',
+        run: async () => {
+          throw new Error('vitest: not found');
+        },
+      },
+    });
+    const viewer = await Viewer.connect(server);
+    await viewer.until((messages) => messages.some((m) => m.type === 'run-start'), 'a usable server');
+    expect(viewer.received.some((message) => message.type === 'tests-discovered')).toBe(false);
+    viewer.close();
+  });
+
   it('lists attached sessions over HTTP', async () => {
     const server = await start();
     const session = new FakeHarness('s1');
