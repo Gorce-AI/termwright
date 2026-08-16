@@ -127,6 +127,44 @@ describe('real process', () => {
     expect(markerFor(second!.revision)).toBeGreaterThan(secondFrame);
   }, 30_000);
 
+  it('leaves an installed React DevTools hook untouched', async () => {
+    const driver = await startFakeDriver();
+    openDrivers.push(driver);
+
+    const result = await runFixture({
+      TERMWRIGHT_ENDPOINT: driver.endpoint,
+      TERMWRIGHT_TOKEN: driver.token,
+      TW_LABELS: 'Approve,Reject',
+      TW_DEVTOOLS_HOOK: '1',
+    });
+
+    // Ink registers a renderer only under DEV=true with a DevTools server
+    // listening, so a merely-present hook must stay untouched. Exit 3 means
+    // something called into it — a surface the application never asked for.
+    expect(result.stderr).toBe('');
+    expect(result.code).toBe(0);
+    expect(await driver.waitForSnapshots(1)).not.toHaveLength(0);
+  }, 30_000);
+
+  it('stays silent under StrictMode, with and without a DevTools hook', async () => {
+    for (const devtools of ['0', '1']) {
+      const driver = await startFakeDriver();
+      openDrivers.push(driver);
+
+      const result = await runFixture({
+        TERMWRIGHT_ENDPOINT: driver.endpoint,
+        TERMWRIGHT_TOKEN: driver.token,
+        TW_LABELS: 'Approve,Reject',
+        TW_STRICT_MODE: '1',
+        TW_DEVTOOLS_HOOK: devtools,
+      });
+
+      expect(result.stderr, `devtools=${devtools}`).toBe('');
+      expect(result.code, `devtools=${devtools}`).toBe(0);
+      expect(await driver.waitForSnapshots(1)).not.toHaveLength(0);
+    }
+  }, 60_000);
+
   it('is byte-identical to an uninstrumented run when no driver is present', async () => {
     const driver = await startFakeDriver();
     openDrivers.push(driver);

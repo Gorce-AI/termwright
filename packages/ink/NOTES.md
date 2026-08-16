@@ -34,23 +34,75 @@ on the pending throttled render before it resolves, so awaiting it can flush a
 revision N+1's pixels. A zero-length `stdout.write('', callback)` flushes what is
 already queued and nothing more, which is exactly the guarantee the marker needs.
 
-## Ink API gaps (upstream PR candidates)
+## Ink API gaps (permanent — no upstream PR is coming)
 
 1. **`aria-label` is not retained on the element.** `Box` turns it into a text
    child only when the screen reader is enabled, and `Text` drops it otherwise;
    `DOMElement.internal_accessibility` carries `role` and `state` but no label.
    Accessible names therefore come from `useSemantic({name})` or from rendered
    text. Adding `label` to `internal_accessibility` would make Ink's own aria
-   props sufficient — the single most valuable upstream change for us.
+   props sufficient, and it remains the single most valuable change Ink could
+   make. We are not proposing it: the integration has to stand on its own
+   indefinitely, so this is a constraint to live with, not a ticket to file.
 2. **No public handle on the root element.** `render()` returns an `Instance`
    with no access to `ink-root`, so the adapter mounts a `display: none` probe
    `<Box>` and reaches the root through `ref.current.parentNode`. A hidden box is
    excluded from Yoga layout and emits no bytes — asserted against an
-   uninstrumented baseline in `adapter.test.tsx` and `real-process.test.ts` — but
-   an official root accessor or layout-commit hook would remove the trick.
+   uninstrumented baseline in `adapter.test.tsx` and `real-process.test.ts`. An
+   official root accessor or layout-commit hook would remove the trick; absent
+   one, `invisibility.test.tsx` pins exactly what the trick costs.
 3. **`internal_accessibility` is `internal_`-prefixed yet part of the public
    `DOMElement` type.** The adapter reads it (never writes it). If Ink renames
    it, role detection for un-annotated apps breaks; `useSemantic` keeps working.
+
+## Invisibility to the host application — what is proven, and what it costs
+
+Since no upstream change is coming, the way this adapter hooks in has to stay
+invisible to application authors indefinitely. `invisibility.test.tsx` and the
+real-process suite turn that from a claim into a check. Proven, under
+instrumentation, against a plain `ink.render` baseline:
+
+- **React emits nothing.** Not one line on `console.error/warn/log/info/debug`
+  across mount, re-render and unmount — including under `<StrictMode>`, which
+  double-invokes renders and effects.
+- **The application's own view of itself is identical**: same `nodeName`, same
+  child count, same parent, same `measureElement` result, and the same number
+  of effect runs. Annotated and un-annotated trees alike.
+- **Nothing happens after unmount**: no further snapshot reaches the driver and
+  no further marker reaches stdout, including when a re-render lands in the
+  same tick as the unmount.
+- **Dormant output stays byte-identical under `<StrictMode>`**, and under
+  instrumentation the stream differs from the baseline by the marker sequences
+  and nothing else.
+
+### The one difference, stated plainly
+
+The `display: none` probe adds **exactly one** child to `ink-root`. It is
+zero-sized, excluded from Yoga layout, and contributes no bytes — but an
+application that walks `ref.current.parentNode` up to the root and enumerates
+`childNodes` will see it. Nothing in Ink's public API hands out the root, so
+this is close to unobservable in practice; it is asserted rather than described,
+so if it ever grows into something bigger a test fails.
+
+### React DevTools
+
+A DevTools hook merely present in globals is **never touched**: Ink registers a
+renderer only when `DEV=true` *and* a DevTools server answers on port 8097
+(`ink/build/ink.js` gates the import; `devtools.js` probes the socket). The
+real-process fixture installs a hook stub and exits non-zero if anything calls
+into it, so the assertion is "nothing registered behind the application's back"
+rather than the weaker "no crash". Unrelated but worth knowing when reading a
+bug report: with `DEV=true` and no server running, **Ink itself** prints a
+`console.warn` telling you to start `npx react-devtools`. That line is Ink's,
+not ours.
+
+### A note on the method
+
+The console trap was itself verified against a real React warning (a list
+rendered without `key` props) before being trusted. A silence assertion whose
+trap cannot catch anything proves nothing — the same failure mode that hid the
+`actions` aliasing bug, where the assertion ran on data the channel had already
+sanitised.
 
 ## Ink's `patchConsole` cannot be hooked (and would not be enough)
 
