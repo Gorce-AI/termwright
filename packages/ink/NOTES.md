@@ -349,6 +349,28 @@ at the nearest *published* ancestor and ancestors are pushed first.
 truncated one, and the fake driver runs `parseAdapterMessage` over every frame,
 so the whole suite exercises real validation rather than a mock of it.
 
+## Waiting on the effect, not on its predecessor
+
+A Windows CI failure (`expected [ 1 ] to deeply equal ArrayContaining [1, 2]`)
+turned out to be a race in the *test*, not in the adapter. Per revision the
+adapter sends a snapshot and then a separate `revision-commit` frame, and the
+marker is written later still, after stdout drains. A test that waited for the
+snapshot and then read `commits` — or read the stream for markers — was
+asserting on something that had not happened yet. It passed everywhere the
+transport coalesces the writes into one read, and failed on Windows named
+pipes, which do not.
+
+The fix is to wait for the thing being asserted: `waitForCommits` on the fake
+driver, `waitForMarkers` polling the captured stream. Both self-poll rather
+than sleeping a fixed amount, so they neither flake nor pad the suite.
+
+Reproducing it locally is worth knowing about, because "works on my machine"
+is otherwise the whole story: dispatching each decoded frame on its own
+macrotask in the fake driver models a transport that never coalesces. Under
+that simulation the old assertion fails exactly as CI did and the new one
+passes, and the **whole** suite was re-run that way to find any other test
+resting on the same assumption — there were none.
+
 ## Gotchas for future maintainers
 
 - **`rerender` must re-apply the provider.** `Instance.rerender` replaces the

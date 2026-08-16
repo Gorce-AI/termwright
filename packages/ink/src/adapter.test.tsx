@@ -5,7 +5,7 @@ import { MARKER_OSC_PREFIX } from '@termwright/protocol';
 import { semanticRender, useSemantic } from './index.js';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { createFakeStdout, type FakeStdout } from './testing/fake-stdout.js';
-import { markersIn, stripMarkers } from './testing/markers.js';
+import { markersIn, stripMarkers, waitForMarkers } from './testing/markers.js';
 
 function Demo({ label }: { readonly label: string }): React.ReactNode {
   const ref = useRef<DOMElement>(null);
@@ -159,7 +159,12 @@ describe('@termwright/ink', () => {
 
       expect(snapshots[0]?.sessionId).toBe(driver.sessionId);
       expect(snapshots[1]!.revision).toBeGreaterThan(snapshots[0]!.revision);
-      expect(driver.commits).toEqual(expect.arrayContaining(snapshots.map((s) => s.revision)));
+
+      // The commit is its own frame, sent after the snapshot. Waiting for the
+      // snapshot proves nothing about it wherever the transport does not
+      // coalesce the two writes — which is how this failed on Windows.
+      const commits = await driver.waitForCommits(2);
+      expect(commits).toEqual(expect.arrayContaining(snapshots.map((s) => s.revision)));
     });
 
     it('resolves roles through annotation, then aria props, then generic', async () => {
@@ -239,8 +244,10 @@ describe('@termwright/ink', () => {
       app.rerender(<Demo label="Reject" />);
       await driver.waitForSnapshots(2);
 
+      // The marker lands after its snapshot and after stdout drains, so it has
+      // to be waited for on its own terms rather than read once.
+      const markers = await waitForMarkers(() => stdout.text, driver.token, driver.sessionId, 2);
       const output = stdout.text;
-      const markers = markersIn(output, driver.token, driver.sessionId);
       expect(markers).toHaveLength(2);
 
       const firstFrame = output.indexOf('Approve');
