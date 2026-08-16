@@ -129,6 +129,21 @@ export interface AdapterConformanceOptions {
     readonly cwd?: string;
     readonly timeoutMs?: number;
   };
+  /**
+   * A transport this client states it does not implement.
+   *
+   * Distinct from a missing toolchain: the language is installed and the binary
+   * runs, but it cannot reach the endpoint this platform hands it. Certifying
+   * that as a conformance failure would be reporting the same known gap on
+   * every run; certifying it as a pass would be worse. The row skips, with the
+   * limitation and its source in the block's name, and the gap stays a finding
+   * against the client rather than noise in the matrix. Only for a limitation
+   * the client *declares* — a client that merely fails to connect is a failure.
+   */
+  readonly unsupported?: {
+    readonly when: boolean;
+    readonly reason: string;
+  };
 }
 
 /**
@@ -334,13 +349,16 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
     ...(options.rows === undefined ? {} : { rows: options.rows }),
   };
 
+  const unsupported = options.unsupported?.when === true;
   const title = !ptyAvailable()
     ? `adapter conformance: ${options.name} (skipped: no pseudo-terminal here)`
-    : toolchain
-      ? `adapter conformance: ${options.name}`
-      : `adapter conformance: ${options.name} (skipped: ${options.requires?.label ?? 'toolchain'} unavailable)`;
+    : !toolchain
+      ? `adapter conformance: ${options.name} (skipped: ${options.requires?.label ?? 'toolchain'} unavailable)`
+      : unsupported
+        ? `adapter conformance: ${options.name} (skipped: ${options.unsupported?.reason ?? 'unsupported here'})`
+        : `adapter conformance: ${options.name}`;
 
-  describe.skipIf(!ptyAvailable() || !toolchain)(title, { timeout: timeout * 4 }, () => {
+  describe.skipIf(!ptyAvailable() || !toolchain || unsupported)(title, { timeout: timeout * 4 }, () => {
     describe('the dormant rule', () => {
       it('opens nothing and emits no marker without an endpoint', async () => {
         const probe = await AdapterProbe.start(options.spawn(), { ...probeOptions, instrument: false });
@@ -396,7 +414,11 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
       beforeAll(async () => {
         probe = await AdapterProbe.start(options.spawn(), probeOptions);
         await probe.waitForText(options.ready, timeout);
-        await probe.waitFor((observation) => snapshotsOf(observation).length > 0, timeout);
+        await probe.waitFor(
+          (observation) => snapshotsOf(observation).length > 0,
+          timeout,
+          'a first snapshot from the adapter',
+        );
         beforeInput = probe.observe();
       });
 
@@ -490,7 +512,11 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
       it('orders every revision as snapshot, then commit, then marker', async () => {
         await probe.write(options.interaction.input);
         await probe.waitForText(options.interaction.expect, timeout);
-        await probe.waitFor((observation) => observation.markers.length >= 2, timeout);
+        await probe.waitFor(
+          (observation) => observation.markers.length >= 2,
+          timeout,
+          'a second render marker',
+        );
 
         // The socket and the terminal are independent streams, so a marker can
         // be read before the frame describing the same revision has been
@@ -509,7 +535,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
                 (entry) => entry.message.type === 'revision-commit' && entry.message.revision === marker.revision,
               ),
           );
-        await probe.waitFor(complete, timeout);
+        await probe.waitFor(complete, timeout, 'every marker paired with a snapshot and a commit');
 
         const observation = probe.observe();
         const markers = observation.markers;
@@ -778,6 +804,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         await probe.waitFor(
           (observation) => observation.logs.length > (logs.input === undefined ? 0 : before),
           timeout,
+          'a log record over the negotiated channel',
         );
 
         const observation = probe.observe();
@@ -832,7 +859,11 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         // The observed text is cumulative, so `waitForText` would match output
         // the application produced before the cut. Growth is what proves it is
         // still rendering.
-        await probe.waitFor((observation) => observation.text.length > before.text.length, timeout);
+        await probe.waitFor(
+          (observation) => observation.text.length > before.text.length,
+          timeout,
+          'any further output from the child',
+        );
         const after = probe.observe();
 
         // The application keeps rendering; the adapter goes quiet and does not

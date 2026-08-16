@@ -68,6 +68,17 @@ await runAdapterConformance({
     cwd: GO_MODULE,
     timeoutMs: 180_000,
   },
+  // The Go client dials `net.DialTimeout("unix", …)` — `clients/go/protocol/
+  // client.go:133` — and the endpoint this harness hands a child on Windows is
+  // a named pipe. So the binary builds, runs, and stays dormant, which the
+  // suite would otherwise report as "no snapshot ever arrived" on every
+  // Windows run. The Python client meets the same wall and *declares* it
+  // (`clients/python/src/termwright/client.py:148`), which is the treatment
+  // this row borrows until the Go client either dials a pipe or says it cannot.
+  unsupported: {
+    when: process.platform === 'win32',
+    reason: 'the Go client has no named-pipe transport, so it cannot reach a Windows endpoint',
+  },
   spawn: () => ({ command: [GO_BINARY] }),
   ready: 'Permission required',
   // The tview example logs at startup rather than on a keystroke, so the

@@ -323,14 +323,46 @@ export class AdapterProbe {
     }
   }
 
-  /** Resolves once `predicate` holds over the current observation. */
-  async waitFor(predicate: (observation: ProbeObservation) => boolean, timeoutMs = 10_000): Promise<void> {
+  /**
+   * Resolves once `predicate` holds over the current observation.
+   *
+   * `what` names the thing being waited for, and the failure carries what the
+   * probe could see when it gave up. "Condition never became true" is not a
+   * result anybody can act on: an adapter that never connected, one that
+   * connected and published nothing, and one whose binary died all produce it,
+   * and only the observation tells them apart.
+   */
+  async waitFor(
+    predicate: (observation: ProbeObservation) => boolean,
+    timeoutMs = 10_000,
+    what = 'the condition',
+  ): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       if (predicate(this.observe())) return;
-      if (Date.now() >= deadline) throw new Error('adapter conformance: condition never became true');
+      if (Date.now() >= deadline) {
+        throw new Error(`adapter conformance: ${what} never happened — ${this.describe()}`);
+      }
       await delay(20);
     }
+  }
+
+  /** What the probe has seen so far, for a failure that has to explain itself. */
+  describe(): string {
+    const { messages, connections } = this.observe();
+    const kinds = new Map<string, number>();
+    for (const message of messages) {
+      const kind = (message as { type?: string }).type ?? 'unknown';
+      kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+    }
+    const traffic =
+      kinds.size === 0 ? 'no messages' : [...kinds].map(([kind, n]) => `${kind}×${n}`).join(', ');
+    const screen = this.screenText().trimEnd().split('\n').filter((line) => line.trim() !== '');
+    const exit = this.#exit === null ? 'still running' : `exited ${JSON.stringify(this.#exit)}`;
+    return (
+      `${connections} connection(s) to the endpoint, ${traffic}; the child is ${exit}; ` +
+      `last screen line: ${JSON.stringify(screen.at(-1) ?? '')}`
+    );
   }
 
   /** Waits for the child to exit and returns its status. */

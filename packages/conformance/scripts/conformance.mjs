@@ -131,7 +131,7 @@ async function tally(configArgs, files) {
     }
     process.stdout.write('\n');
   }
-  return { code, files: results };
+  return { code, files: results, output: runnerOutput };
 }
 
 function verdict(entry) {
@@ -267,5 +267,26 @@ if (skipped) process.stdout.write('no pseudo-terminal available: every suite ski
 if (rows.some((row) => row.verdict === 'not run')) {
   process.stdout.write('some areas produced no result at all: the runner exited before reporting\n');
 }
-process.stdout.write(failed ? 'conformance: FAILED\n\n' : 'conformance: passed\n\n');
-process.exit(failed || main.code !== 0 || hostile.code !== 0 ? 1 : 0);
+
+// A runner can exit non-zero with every test passing — an unhandled error in a
+// worker, or a child that dies during teardown, both do it. That is still a
+// failure, but printing "passed" above the non-zero exit made the summary
+// contradict the exit code, and left the reason nowhere. Name it and show the
+// tail, so the next reader debugs the crash instead of the report.
+const crashed = [
+  ['the main suites', main],
+  ['the 128 MB gate', hostile],
+].filter(([, run]) => run.code !== 0 && !failed);
+
+for (const [label, run] of crashed) {
+  process.stdout.write(
+    `\n${label}: every test reported a result, but the runner exited ${run.code} — ` +
+      'something failed outside the tests\n',
+  );
+  const tail = (run.output ?? '').trimEnd().split('\n').slice(-20);
+  for (const line of tail) process.stdout.write(`  ${line}\n`);
+}
+
+const broken = failed || crashed.length > 0;
+process.stdout.write(broken ? '\nconformance: FAILED\n\n' : 'conformance: passed\n\n');
+process.exit(broken ? 1 : 0);
