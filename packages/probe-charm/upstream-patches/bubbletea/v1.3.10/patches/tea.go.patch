@@ -1,0 +1,32 @@
+--- a/tea.go
++++ b/tea.go
+@@ -499,7 +499,8 @@
+ 			case cmds <- cmd: // process command (if any)
+ 			}
+ 
+-			p.renderer.write(model.View()) // send view to renderer
++			// Injected by termwright: the loop's frame.
++			termwrightRenderAndObserve(p, model)
+ 		}
+ 	}
+ }
+@@ -697,7 +698,8 @@
+ 	}
+ 
+ 	// Render the initial view.
+-	p.renderer.write(model.View())
++	// Injected by termwright: the first frame.
++	termwrightRenderAndObserve(p, model)
+ 
+ 	// Subscribe to user input.
+ 	if p.input != nil {
+@@ -736,7 +738,8 @@
+ 	} else {
+ 		// Graceful shutdown of the program (not killed):
+ 		// Ensure we rendered the final state of the model.
+-		p.renderer.write(model.View())
++		// Injected by termwright: the last frame.
++		termwrightRenderAndObserve(p, model)
+ 	}
+ 
+ 	// Restore terminal state.
