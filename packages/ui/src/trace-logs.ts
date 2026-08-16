@@ -13,7 +13,7 @@
  */
 
 import type { TraceReader } from '@termwright/trace';
-import { parseAppLog, type AppLogView } from './app-log.js';
+import { parseAppLog, UI_LOG_LEVELS, type AppLogView, type LogLevel } from './app-log.js';
 
 /** Maximum records kept for display. The archive keeps them all. */
 const MAX_RECORDS = 5_000;
@@ -38,6 +38,12 @@ export interface TraceLogs {
   readonly available: boolean;
   /** Log file labels and logger names seen, in first-seen order. */
   readonly sources: readonly string[];
+  /**
+   * Entry count per level, straight from `meta.logs.levels` — the writer counted
+   * the whole recording, so the header is honest even when this list is
+   * truncated. File lines have no level and are not counted.
+   */
+  readonly levels: Readonly<Partial<Record<LogLevel, number>>>;
 }
 
 const EMPTY: TraceLogs = {
@@ -46,6 +52,7 @@ const EMPTY: TraceLogs = {
   dropped: 0,
   available: false,
   sources: [],
+  levels: {},
 };
 
 /**
@@ -66,6 +73,7 @@ export async function readTraceLogs(reader: TraceReader): Promise<TraceLogs> {
     ? summary.sources.filter((source): source is string => typeof source === 'string')
     : [];
 
+  const levels = countsByLevel(summary.levels);
   const records: AppLogView[] = [];
   let truncated = dropped > 0;
   try {
@@ -83,8 +91,19 @@ export async function readTraceLogs(reader: TraceReader): Promise<TraceLogs> {
   } catch {
     // A truncated or corrupt log file costs the rest of its records, not the
     // archive: everything read so far is still worth showing.
-    return { records, truncated: true, dropped, available: true, sources };
+    return { records, truncated: true, dropped, available: true, sources, levels };
   }
   records.sort((left, right) => left.t - right.t);
-  return { records, truncated, dropped, available: true, sources };
+  return { records, truncated, dropped, available: true, sources, levels };
+}
+
+/** Keeps only the counters that name a level this build knows. */
+function countsByLevel(value: unknown): Readonly<Partial<Record<LogLevel, number>>> {
+  if (typeof value !== 'object' || value === null) return {};
+  const counts: Partial<Record<LogLevel, number>> = {};
+  for (const level of UI_LOG_LEVELS) {
+    const count = (value as Record<string, unknown>)[level];
+    if (typeof count === 'number' && Number.isFinite(count) && count > 0) counts[level] = count;
+  }
+  return counts;
 }

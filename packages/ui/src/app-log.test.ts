@@ -103,6 +103,27 @@ describe('parseAppLog', () => {
   });
 });
 
+describe('label and logger', () => {
+  it('keeps the record’s own channel name apart from the display label', () => {
+    const parsed = parseAppLog({
+      t: 1,
+      source: 'adapter',
+      label: 'db.pool',
+      logger: 'db.pool',
+      level: 'warn',
+      message: 'pool exhausted',
+    });
+    expect(parsed?.label).toBe('db.pool');
+    expect(parsed?.logger).toBe('db.pool');
+  });
+
+  it('leaves a file line without a logger', () => {
+    const parsed = parseAppLog({ t: 1, source: 'file', label: 'server.log', line: 'up' });
+    expect(parsed?.logger).toBeUndefined();
+    expect(parsed?.label).toBe('server.log');
+  });
+});
+
 describe('marking and filtering', () => {
   it('marks only warn and worse', () => {
     expect(isMarked(row({ level: 'info' }))).toBe(false);

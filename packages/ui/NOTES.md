@@ -128,6 +128,11 @@ bundled into the browser and `@termwright/protocol` is Node-only (it imports
 fork cannot drift — the assertion runs in Node, where importing the protocol is
 free. That test is the reason no dependency-rule relaxation was needed.
 
+The panel's header counts come from `meta.logs.levels`, which the writer
+computed over the whole recording — so "2 errors" stays true while the list is
+filtered, clipped to the scrub position, or short of entries the writer evicted.
+A live run has no such summary and counts what arrived.
+
 Archive logs arrive over HTTP (`/api/trace/logs`), not on the socket: they are
 state, like the trace overview, and the panel clips them to the scrub position.
 The clip uses the *requested* moment rather than the one `stateAt` clamped to,

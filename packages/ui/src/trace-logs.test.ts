@@ -5,7 +5,12 @@ import { readTraceLogs } from './trace-logs.js';
 /** A reader over an archive that recorded logs, yielding what the test hands it. */
 function readerWith(
   records: readonly unknown[],
-  options: { throwAfter?: number; dropped?: number; sources?: readonly string[] } = {},
+  options: {
+    throwAfter?: number;
+    dropped?: number;
+    sources?: readonly string[];
+    levels?: Record<string, unknown>;
+  } = {},
 ): TraceReader {
   return {
     meta: {
@@ -13,7 +18,7 @@ function readerWith(
         count: records.length,
         dropped: options.dropped ?? 0,
         sources: options.sources ?? ['server.log'],
-        levels: {},
+        levels: options.levels ?? {},
       },
     },
     async *logs(): AsyncIterable<unknown> {
@@ -50,6 +55,13 @@ describe('readTraceLogs', () => {
     expect(logs.dropped).toBe(42);
     expect(logs.truncated).toBe(true);
     expect(logs.sources).toEqual(['app.log']);
+  });
+
+  it('carries the writer’s per-level counts, ignoring levels it does not know', async () => {
+    const logs = await readTraceLogs(
+      readerWith([record()], { levels: { error: 2, warn: 1, trace: 0, critical: 9, info: 'lots' } }),
+    );
+    expect(logs.levels).toEqual({ error: 2, warn: 1 });
   });
 
   it('positions records on the cast timeline', async () => {

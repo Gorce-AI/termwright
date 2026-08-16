@@ -16,7 +16,7 @@ import type { GeneratedSelector } from '../selector.js';
 import type { TraceOverview } from '../trace-source.js';
 import { RunnerClient, type ServerState } from './client.js';
 import { renderInspector, type InspectorHandlers } from './inspector.js';
-import { isMarked, type AppLogView } from '../app-log.js';
+import { isMarked, type AppLogView, type LogLevel } from '../app-log.js';
 import {
   renderLogPanel,
   visibleLogs,
@@ -75,6 +75,7 @@ const state = {
   logAutoscroll: true,
   logsAvailable: false,
   logsTruncated: false,
+  logLevels: {} as Readonly<Partial<Record<LogLevel, number>>>,
 };
 
 /** Cap on live log rows held in the page. The archive keeps everything. */
@@ -182,6 +183,9 @@ function logPanelModel(): LogPanelModel {
     autoscroll: state.logAutoscroll,
     available: state.logsAvailable,
     truncated: state.logsTruncated,
+    // Replays get the writer's counts (they cover the whole recording, even the
+    // part evicted); a live run has no such summary, so count what arrived.
+    levels: state.trace === null ? countLevels(state.logs) : state.logLevels,
     // Replaying: the log pane shows what had been logged by the moment the
     // terminal is showing, and nothing that had not happened yet.
     upToMs: state.trace === null ? null : Math.max(state.timeMs, state.requestedMs),
@@ -197,6 +201,15 @@ function logPanelModel(): LogPanelModel {
  */
 function markedLogs(): AppLogView[] {
   return state.logs.filter(isMarked);
+}
+
+function countLevels(logs: readonly AppLogView[]): Partial<Record<LogLevel, number>> {
+  const counts: Partial<Record<LogLevel, number>> = {};
+  for (const log of logs) {
+    if (log.level === null) continue;
+    counts[log.level] = (counts[log.level] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function selectTab(tab: 'tree' | 'logs'): void {
@@ -476,6 +489,7 @@ void client
         state.logs = [...logs.records];
         state.logsAvailable = logs.available;
         state.logsTruncated = logs.truncated;
+        state.logLevels = logs.levels;
       }
       await seek(0);
     }

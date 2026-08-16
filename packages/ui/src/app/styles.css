@@ -567,3 +567,8 @@ button.active {
 .marker.log.fatal {
   background: var(--fail);
 }
+
+.severities {
+  color: var(--warn);
+  font-size: 11px;
+}

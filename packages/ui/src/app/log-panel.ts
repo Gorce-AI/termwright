@@ -33,6 +33,12 @@ export interface LogPanelModel {
   /** True when records were dropped to stay within the display bound. */
   readonly truncated: boolean;
   /**
+   * Whole-recording counts per level, when the source knows them. Shown in the
+   * header, so "2 errors" stays true even while the list is filtered or clipped
+   * to the scrub position.
+   */
+  readonly levels: Readonly<Partial<Record<LogLevel, number>>>;
+  /**
    * In post-mortem, the scrub position: rows after it are not shown, because
    * they had not happened yet at the moment the terminal is showing.
    */
@@ -62,6 +68,7 @@ export function renderLogPanel(model: LogPanelModel, handlers: LogPanelHandlers)
     <header class="pane-head">
       <h2>Logs</h2>
       <span class="muted" data-testid="log-count">${rows.length}${model.truncated ? '+' : ''}</span>
+      ${summarise(model.levels) === '' ? '' : html`<span class="severities" data-testid="log-severities">${summarise(model.levels)}</span>`}
       <select
         data-testid="log-filter"
         aria-label="Minimum level"
@@ -98,6 +105,26 @@ export function renderLogPanel(model: LogPanelModel, handlers: LogPanelHandlers)
       ? html`<p class="muted trunc">Older lines omitted; the full log is in the archive.</p>`
       : ''}
   `;
+}
+
+/** Level names as they read in a sentence. */
+const LEVEL_NOUNS: Readonly<Record<LogLevel, string>> = Object.freeze({
+  trace: 'trace',
+  debug: 'debug',
+  info: 'info',
+  warn: 'warning',
+  error: 'error',
+  fatal: 'fatal',
+});
+
+/** `2 errors, 1 warning` — only the levels that occurred, worst first. */
+export function summarise(levels: Readonly<Partial<Record<LogLevel, number>>>): string {
+  const parts: string[] = [];
+  for (const level of [...UI_LOG_LEVELS].reverse()) {
+    const count = levels[level] ?? 0;
+    if (count > 0) parts.push(`${count} ${LEVEL_NOUNS[level]}${count === 1 ? '' : 's'}`);
+  }
+  return parts.join(', ');
 }
 
 function renderRow(log: AppLogView, handlers: LogPanelHandlers): TemplateResult {
