@@ -68,24 +68,44 @@ Round 2 (driver 0e1b0fe, contract note 2d09049):
 6. **`ready-strategy` conflated a fact with a guess** — replaced by
    `ready-shell-integration` and `ready-settled-screen`. With that, no assertion
    in this package matches diagnostic prose; every one is on a code.
-7. **`focusReporting` reported the host's state as if it were the child's** —
-   raised here after the Windows run, and worth recording with the premise
-   corrected, because the one this package supplied was wrong. The report said
-   ConPTY eats the child's `1004` and the field stays `false`, by analogy with
-   the mouse. The driver disproved that with a measurement (run 31939398845,
-   `session.pty.test.ts:743`): on Windows the field read `true` for a child that
-   never asked — the fixture sends only `?1000h` and `?1006h`. The host turns
-   focus reporting on by itself, so the reading says nothing about the child in
-   either direction, and the damage runs the *other* way from the reported one:
-   the driver was delivering `CSI I`/`CSI O` to programs that never wanted them.
-   Fixed in f17b251 with the shape the analogy did get right — `'on' | 'off' |
-   'unknown'`, a report *sent* rather than refused while the mode is
-   unverifiable, and `mouse-mode-unverifiable` generalised to
-   `mode-unverifiable` with a `mode` field. The lesson for this package: an
-   analogy is a hypothesis, and "same shape as the mouse" was reported as
-   though it were an observation. The suites now follow the corrected shape for
-   both modes — assert the refusal only where the mode is visible, assert the
-   recorded `mode-unverifiable` entry where it is not.
+Round 6 (driver f17b251, e404026, cf1229d):
+
+11. **`focusReporting` reported the host's state as if it were the child's** —
+    raised here after the Windows run, and worth recording with the premise
+    corrected, because the one this package supplied was wrong. The report said
+    ConPTY eats the child's `1004` and the field stays `false`, by analogy with
+    the mouse. The driver disproved that with a measurement (run 31939398845,
+    `session.pty.test.ts:743`): on Windows the field read `true` for a child that
+    never asked — the fixture sends only `?1000h` and `?1006h`. The host turns
+    focus reporting on by itself, so the reading says nothing about the child in
+    either direction, and the damage runs the *other* way from the reported one:
+    the driver was delivering `CSI I`/`CSI O` to programs that never wanted them.
+    Fixed in f17b251 with the shape the analogy did get right — `'on' | 'off' |
+    'unknown'`, a report *sent* rather than refused while the mode is
+    unverifiable, and `mouse-mode-unverifiable` generalised to
+    `mode-unverifiable` with a `mode` field. The lesson for this package: an
+    analogy is a hypothesis, and "same shape as the mouse" was reported as
+    though it were an observation. The suites now follow the corrected shape for
+    both modes — assert the refusal only where the mode is visible, assert the
+    recorded `mode-unverifiable` entry where it is not.
+12. **Pairing gave up while the evidence was still arriving** — two delays with
+    one diagnostic, separated by measurement rather than argument. **A**: the
+    bytes are already here, queued in the emulator's parser (692 ms on macOS
+    with 0 ms of transport, so a flood broke pairing with no ConPTY involved).
+    Closed by `e404026`, which arms the expiry clock at the drain barrier;
+    `--repaint=40000`, 8 MB of repaint across the burst, is the regression test.
+    **B**: the bytes are still in the pipe, which the drain barrier cannot see
+    precisely because the queue is *empty* — nothing arrived, the drain resolves
+    at once, the clock arms, and the marker lands seconds later. Reproduced here
+    with `TERMWRIGHT_CONFORMANCE_STDOUT_BPS=5000` (burst ended on revision 1,
+    `revision-expired×64`) and independently by the driver (commit-to-sighting
+    p50 1697 ms, max 3359 ms). Closed by `cf1229d`, which also requires output to
+    have been quiet for `pairingTimeoutMs`: the clock only starts once the
+    evidence cannot still be in transit. Both knobs now settle on 200. The
+    limit is deliberate and worth knowing — quiet extends the window only while
+    output is *flowing*, so a silent session whose marker turns up two seconds
+    later still expires on time, and eviction still caps a stream that never
+    stops.
 
 ## The liveness split (do not "fix" this)
 
@@ -104,35 +124,6 @@ has to delete an assertion that explains itself.
 
 ## Open findings
 
-0. **A marker that arrives late over the transport is still lost.** Two delays
-   produce the identical diagnostic, and the driver's measurement separates
-   them. **A**: the bytes are already here, queued in the emulator's parser —
-   692 ms of it on macOS with 0 ms of transport, so a flood broke pairing with
-   no ConPTY involved at all. Closed by `e404026`, which starts the expiry clock
-   at the drain barrier; `--repaint=40000` (8 MB of repaint across the burst) is
-   the regression test and settles on 200. **B**: the bytes are still in the
-   pipe. The drain barrier cannot see them, because the queue is *empty* —
-   nothing arrived, `drain()` resolves at once, the timer arms, the half
-   expires, and the marker lands two seconds later. `TERMWRIGHT_CONFORMANCE_
-   STDOUT_BPS=5000` reproduces B, where the burst still ends on revision 1 with
-   `revision-expired×64`; the driver measured the same shape independently
-   (commit-to-sighting p50 1697 ms, max 3359 ms). Whether Windows suffers B as
-   well as A is the open question and the next CI run is the discriminator,
-   since A is fixed. Measured while B bites: a session that never renders again
-   held **revision 0 indefinitely** while the screen showed the last frame — no
-   tree, no locator, no diagnostic separating "stale" from "absent". A proposal
-   is with the lead: extend the invariant from "we have caught up parsing" to
-   "the evidence is no longer in flight", by arming the clock only once output
-   has also been quiet for `pairingTimeoutMs`. If that lands, B publishes its
-   tail instead of losing it, and the two waits that assert `revision-expired`
-   at all (`marker-without-tree`, `tree-without-marker`) will simply fire a
-   quiet window later — their budgets already allow for it.
-   - Method note, from the driver's first attempt at reproducing B: throttling
-     the *writer* also delays the writer's own timestamps, so the measured gap
-     comes out zero. Here the asymmetry is real — the tree goes out over the
-     socket while the marker is held — which is why the knob measures anything
-     at all. Anyone simulating this without a second channel has to keep the
-     render cadence and the byte budget on separate clocks.
 1. **The Textual example cannot be quit from every focus state.** It binds only
    `q`, and Tab eventually lands on its `Input`, which swallows the key —
    Ctrl+C does not quit either. Measured: `q`, Ctrl+D, Escape+`q` and
@@ -302,13 +293,18 @@ has to delete an assertion that explains itself.
   loaded runner into a red driver. `--repaint=<bytes>` reproduces the driver-
   side backlog the fix is about (8 MB of repaint over 200 revisions still lands
   on 200); `--stdout-bps` reproduces the *other* delay, a transport that
-  delivers late, which the drain barrier cannot see and which still loses the
-  tail. Keep them distinct: the first is a regression test for the fix, the
-  second is a probe for a question that is still open — finding 0 carries the
-  measurements for both. The eviction half needs no such care: `maxQueuedFrames`
+  delivers late. Keep them distinct — they were fixed by different changes, and
+  finding 12 carries the measurements for both. The eviction half needs no such care: `maxQueuedFrames`
   overflowing is unconditional and correct however the bytes are delayed, which
   is why the output-flood test can still pin the exact evicted set whatever
   expiry policy ends up being.
+- **This package tests the driver's `dist`, not its `src`.** A driver fix is not
+  under test here until `pnpm --filter @termwright/driver build` has run. Cost a
+  wrong conclusion: the transport half of the pairing fix looked unfixed against
+  a stale build, and was reported as still open, while the driver was measuring
+  it green on the same commit. Before concluding that someone else's fix does
+  not work, rebuild their package and re-run — the disagreement is far more
+  likely to be a build than a bug.
 - **A tri-state mode is not a boolean, and truthiness will not say so.**
   `focusReporting` gained `'unknown'` once the driver stopped reporting the
   host's focus mode as the child's. The helper here still returned it as a
