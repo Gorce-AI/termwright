@@ -17,6 +17,9 @@
  */
 
 import { spawn } from 'node:child_process';
+import { discoveredId } from './test-model.js';
+
+export { discoveredId, parseDiscoveredId } from './test-model.js';
 
 /** One test the project holds. */
 export interface DiscoveredTest {
@@ -43,25 +46,6 @@ export interface DiscoveryOptions {
 const MAX_TESTS = 10_000;
 const DEFAULT_COMMAND = ['npx', 'vitest', 'list', '--json'] as const;
 const DEFAULT_TIMEOUT_MS = 30_000;
-
-/** Builds the id for a discovered test. */
-export function discoveredId(file: string, title: string): string {
-  return `${file}::${title}`;
-}
-
-/**
- * Splits a discovered id back into the file and name a runner needs.
- *
- * @returns `null` for an id that was not produced by {@link discoveredId} —
- * a run's own test ids, for instance.
- */
-export function parseDiscoveredId(id: string): { file: string; title: string } | null {
-  const separator = id.indexOf('::');
-  if (separator <= 0) return null;
-  const file = id.slice(0, separator);
-  const title = id.slice(separator + 2);
-  return title === '' ? null : { file, title };
-}
 
 /**
  * Lists the project's tests.

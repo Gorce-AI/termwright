@@ -295,6 +295,19 @@ component is how directory traversal happens.
 
 ## Discovery: what the project has, before it runs
 
+A run resets **results, not the project**. `run-start` used to clear the whole
+list, so starting a run made every not-yet-run test disappear until it ended —
+found by the browser lane, not by a unit test. The page now keeps the discovered
+rows and puts them back to `not-run`, and the hub keeps the newest
+`tests-discovered` across its backlog reset for the same reason: a tab that
+connects mid-run should still see what else the project holds.
+
+The id helpers live in `test-model.ts`, not next to the listing code, because the
+browser needs them and `discovery.ts` spawns a child process — importing it into
+the bundle drags Node in. (It did, once. The build says so immediately, which is
+the second time that particular guard has paid for itself.)
+
+
 `vitest list --json` prints `{name, file}` and **no id**, so discovered tests get
 `<file>::<name>`. That shape is not arbitrary: it is stable between runs, it
 reconciles with a running test by file and title, and a runner receiving it in

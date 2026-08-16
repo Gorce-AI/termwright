@@ -23,6 +23,7 @@ import {
 } from './semantic-view.js';
 import { isMarked, type AppLogView, type LogLevel } from '../app-log.js';
 import { currentCommand, parseRef, stepCommand, type CommandRow } from '../commands.js';
+
 import {
   advance,
   framesUpTo,
@@ -42,6 +43,7 @@ import {
 } from './log-panel.js';
 import { TerminalPane, type Highlight } from './terminal-pane.js';
 import { childrenOf, nextMarker, nodeAt, rootsOf } from '../view-model.js';
+import { discoveredId } from '../test-model.js';
 import { navigateTree, type TreeRow } from '../tree-nav.js';
 import { renderTimeline, type TimelineHandlers } from './timeline.js';
 import { applyTheme, currentTheme, installSplitter, nextTheme } from './chrome.js';
@@ -883,7 +885,22 @@ function handle(message: ServerMessage): void {
   switch (message.type) {
     case 'run-start':
       state.mode = message.mode;
-      state.tests = [];
+      // A new run resets results, not the project: tests the listing found stay
+      // on the list as "not run yet", because they still exist and the user
+      // still wants to see — and click — them while the run goes.
+      state.tests = state.tests.flatMap((test) =>
+        test.file === undefined
+          ? []
+          : [
+              {
+                id: discoveredId(test.file, test.title),
+                title: test.title,
+                file: test.file,
+                status: 'not-run' as const,
+                steps: [],
+              },
+            ],
+      );
       state.selectedTestId = null;
       if (message.mode !== 'post-mortem') {
         state.commands = [];

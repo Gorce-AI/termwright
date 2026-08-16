@@ -50,6 +50,31 @@ export interface TestCounts {
 }
 
 /**
+ * The id a discovered test carries: `<file>::<full name>`.
+ *
+ * Lives here rather than next to the listing code because the browser needs it
+ * too, and `discovery.ts` spawns a child process — importing it into the bundle
+ * would drag Node in.
+ */
+export function discoveredId(file: string, title: string): string {
+  return `${file}::${title}`;
+}
+
+/**
+ * Splits a discovered id back into the file and name a runner needs.
+ *
+ * @returns `null` for an id that was not produced by {@link discoveredId} —
+ * a run's own test ids, for instance.
+ */
+export function parseDiscoveredId(id: string): { file: string; title: string } | null {
+  const separator = id.indexOf('::');
+  if (separator <= 0) return null;
+  const file = id.slice(0, separator);
+  const title = id.slice(separator + 2);
+  return title === '' ? null : { file, title };
+}
+
+/**
  * Filters by a plain substring over title and file, case-insensitively.
  *
  * Deliberately not a regex or a glob: a search box that throws on `(` is worse

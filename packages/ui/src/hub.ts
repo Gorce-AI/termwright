@@ -102,9 +102,18 @@ export class UiHub {
     };
   }
 
-  /** Drops the backlog. Called when a new run starts. */
+  /**
+   * Drops the backlog. Called when a new run starts.
+   *
+   * The project's test listing survives: `tests-discovered` describes what the
+   * project *has*, which a run does not change. Dropping it would leave a tab
+   * that connects mid-run — or the tab that started the run — with no idea what
+   * else exists until the run ends.
+   */
   reset(): void {
+    const listing = this.#backlog.filter((message) => message.type === 'tests-discovered');
     this.#backlog.length = 0;
+    this.#backlog.push(...listing.slice(-1));
     this.#outputBytes = 0;
   }
 

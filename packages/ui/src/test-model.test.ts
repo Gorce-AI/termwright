@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   countTests,
+  discoveredId,
+  parseDiscoveredId,
   describeCounts,
   filterTests,
   groupTests,
@@ -108,5 +110,22 @@ describe('describeCounts', () => {
     expect(
       describeCounts({ total: 2, passed: 2, failed: 0, skipped: 0, flaky: 0, running: 0, notRun: 0 }),
     ).toBe('2 tests, 2 passed, 0 failed');
+  });
+});
+
+describe('discovered ids', () => {
+  it('round-trip, including titles that contain colons', () => {
+    const id = discoveredId('/repo/a.test.ts', 'parses http://example.com');
+    expect(id).toBe('/repo/a.test.ts::parses http://example.com');
+    expect(parseDiscoveredId(id)).toEqual({
+      file: '/repo/a.test.ts',
+      title: 'parses http://example.com',
+    });
+  });
+
+  it('rejects an id that did not come from discovery', () => {
+    expect(parseDiscoveredId('t1')).toBeNull();
+    expect(parseDiscoveredId('::orphan')).toBeNull();
+    expect(parseDiscoveredId('/repo/a.test.ts::')).toBeNull();
   });
 });

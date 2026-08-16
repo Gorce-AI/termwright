@@ -243,3 +243,35 @@ describe('driver actions', () => {
     expect(afterAnnouncement(hub)).toHaveLength(0);
   });
 });
+
+describe('what survives a new run', () => {
+  it('keeps the project’s test listing, because a run does not change what exists', () => {
+    const hub = new UiHub();
+    hub.publish({
+      v: 1,
+      type: 'tests-discovered',
+      tests: [{ id: '/repo/a.test.ts::logs in', title: 'logs in', file: '/repo/a.test.ts' }],
+    });
+    hub.publish({ v: 1, type: 'test-end', id: 't1', status: 'passed', durationMs: 1, flaky: false });
+
+    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 2 });
+
+    expect(hub.backlog.map((message) => message.type)).toEqual(['tests-discovered', 'run-start']);
+  });
+
+  it('keeps only the newest listing', () => {
+    const hub = new UiHub();
+    const listing = (title: string): ServerMessage => ({
+      v: 1,
+      type: 'tests-discovered',
+      tests: [{ id: `/repo/a.test.ts::${title}`, title, file: '/repo/a.test.ts' }],
+    });
+    hub.publish(listing('old'));
+    hub.publish(listing('new'));
+    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+
+    const kept = hub.backlog.filter((message) => message.type === 'tests-discovered');
+    expect(kept).toHaveLength(1);
+    expect(kept[0]?.type === 'tests-discovered' && kept[0].tests[0]?.title).toBe('new');
+  });
+});
