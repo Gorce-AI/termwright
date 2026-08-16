@@ -42,8 +42,12 @@ import {
   type TraceOverview,
 } from './trace-source.js';
 import { readTraceLogs, type TraceLogs } from './trace-logs.js';
-import { readCommandLog, readFrames, type TraceFrames } from './trace-playback.js';
-import type { CommandRow } from './commands.js';
+import {
+  readCommandLog,
+  readFrames,
+  type TraceCommands,
+  type TraceFrames,
+} from './trace-playback.js';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 /** Maximum accepted request body. Bodies here are small by construction. */
@@ -130,7 +134,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   let overview: TraceOverview | undefined;
   let recorder: RecorderSession | undefined;
   let traceLogs: TraceLogs | undefined;
-  let traceCommands: readonly CommandRow[] | undefined;
+  let traceCommands: TraceCommands | undefined;
   let traceFrames: TraceFrames | undefined;
 
   if (options.trace !== undefined) {
@@ -306,7 +310,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           sendJson(response, 409, { error: 'no trace is open' });
           return;
         }
-        sendJson(response, 200, { commands: traceCommands });
+        sendJson(response, 200, traceCommands);
         return;
       }
       case 'GET /api/trace/frames': {

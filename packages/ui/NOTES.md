@@ -155,6 +155,15 @@ alternate buffer as it exits, which is what the archive says happened.
 
 ## The command log, and the one thing missing upstream
 
+`events()` now throws on a line without `castOffset` — the archive contract has
+one producer generation, so an incompatible recording is an error rather than a
+degraded read. The command log catches that throw, keeps the rows it managed to
+read, and says so in the panel: *"this recording's event log could not be read
+to the end"*. A blank list would imply the test did nothing; a partial list with
+a warning is the truth. The rest of the archive (cast, semantics, logs) opens
+normally, because `castOffset` was required there from the start.
+
+
 Rows come from `events.jsonl`, which already holds steps, actions and
 assertions; nothing is recorded twice. Live runs get the same rows from a new
 `action` message, which the reporter builds from Vitest 3.2 **test annotations**

@@ -21,6 +21,10 @@ export interface CommandLogModel {
   readonly selectedId: string | null;
   /** False in a live run with no actions reported yet. */
   readonly available: boolean;
+  /** The archive's event log stopped early; what is listed is partial. */
+  readonly incomplete: boolean;
+  /** Why it stopped. */
+  readonly error?: string;
 }
 
 /** What the log can ask the app to do. */
@@ -49,6 +53,12 @@ export function renderCommandLog(
       : html`<div class="commands" data-testid="commands">
           ${model.rows.map((row, index) => renderRow(row, index === model.currentIndex, model, handlers))}
         </div>`}
+    ${model.incomplete
+      ? html`<p class="warn" data-testid="commands-incomplete">
+          This recording's event log could not be read to the end, so the list stops early.
+          ${model.error ?? ''}
+        </p>`
+      : ''}
   `;
 }
 

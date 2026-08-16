@@ -309,8 +309,10 @@ describe('post-mortem mode', () => {
 
     const commands = (await (await api(server, '/api/trace/commands')).json()) as {
       commands: { kind: string; label: string; t: number }[];
+      incomplete: boolean;
     };
     expect(commands.commands.map((row) => [row.kind, row.label])).toEqual([['step', 'approve']]);
+    expect(commands.incomplete).toBe(false);
 
     const frames = (await (await api(server, '/api/trace/frames')).json()) as {
       frames: { t: number; kind: string; dataB64?: string }[];

@@ -27,15 +27,37 @@ export interface TraceFrames {
   readonly revisions: readonly { readonly t: number; readonly revision: number }[];
 }
 
+/** What `/api/trace/commands` answers. */
+export interface TraceCommands {
+  readonly commands: readonly CommandRow[];
+  /**
+   * True when the event stream stopped early — a truncated file, or an archive
+   * written by a version whose lines this reader rejects. The commands read
+   * before that point are still returned, and the panel says the rest is
+   * missing instead of implying the test did nothing else.
+   */
+  readonly incomplete: boolean;
+  /** Why it stopped, for the panel to show. */
+  readonly error?: string;
+}
+
 /** Reads the command log from `events.jsonl`. */
-export async function readCommandLog(reader: TraceReader): Promise<readonly CommandRow[]> {
+export async function readCommandLog(reader: TraceReader): Promise<TraceCommands> {
   const events: unknown[] = [];
+  let failure: string | undefined;
   try {
     for await (const event of reader.events()) events.push(event);
-  } catch {
-    // A truncated event log still describes everything before the truncation.
+  } catch (error) {
+    // `events()` throws on a line it cannot validate — a truncated file, or an
+    // archive from an incompatible writer. Everything read before that point
+    // still describes what the test did.
+    failure = error instanceof Error ? error.message : String(error);
   }
-  return buildCommandLog(events);
+  return {
+    commands: buildCommandLog(events),
+    incomplete: failure !== undefined,
+    ...(failure === undefined ? {} : { error: failure }),
+  };
 }
 
 /**

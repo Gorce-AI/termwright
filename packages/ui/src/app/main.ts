@@ -121,6 +121,8 @@ const state = {
   logsLoadingOlder: false,
   logLevels: {} as Readonly<Partial<Record<LogLevel, number>>>,
   commands: [] as CommandRow[],
+  commandsIncomplete: false,
+  commandsError: null as string | null,
   selectedCommandId: null as string | null,
   frames: [] as PlaybackFrame[],
   playback: initialPlayback(),
@@ -194,6 +196,8 @@ function draw(): void {
                 currentIndex: currentCommand(state.commands, state.timeMs, state.selectedCommandId),
                 selectedId: state.selectedCommandId,
                 available: state.mode === 'post-mortem' || state.commands.length > 0,
+                incomplete: state.commandsIncomplete,
+                ...(state.commandsError === null ? {} : { error: state.commandsError }),
               },
               commandHandlers,
             )
@@ -903,7 +907,11 @@ void client
         client.traceCommands().catch(() => null),
         client.traceFrames().catch(() => null),
       ]);
-      if (commands !== null) state.commands = [...commands.commands];
+      if (commands !== null) {
+        state.commands = [...commands.commands];
+        state.commandsIncomplete = commands.incomplete;
+        if (commands.error !== undefined) state.commandsError = commands.error;
+      }
       if (frames !== null) {
         state.frames = [...frames.frames];
         state.revisions = [...frames.revisions];
