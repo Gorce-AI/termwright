@@ -453,6 +453,57 @@ describe.skipIf(!ptyAvailable())('application key modes through a real pty', { t
 });
 
 describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_000 }, () => {
+  it('reports the gap when the output pipe is slower than the commit', async () => {
+    // The other flood shape, and the one the conformance matrix reproduces:
+    // the terminal, not the driver, is the slow part. A drain barrier cannot
+    // see this — bytes still in the pty are bytes we do not have — so the two
+    // cases need telling apart before either is called fixed.
+    const renders = 30;
+    const { terminal } = createTerminal({ columns: 80, rows: 24, scrollback: 0 });
+    const gaps: number[] = [];
+    const readingFrom = performance.now();
+    terminal.parser.registerOscHandler(7777, (data) => {
+      const childMs = Number(/t=([\d.]+)/u.exec(data)?.[1] ?? Number.NaN);
+      if (Number.isFinite(childMs)) gaps.push(performance.now() - readingFrom - childMs);
+      return true;
+    });
+
+    let pty: PtyProcess | undefined;
+    try {
+      pty = createNodePtyBackend().spawn({
+        command: [process.execPath, join(FIXTURES, 'flood-probe-app.mjs')],
+        env: {
+          ...environment(),
+          TERMWRIGHT_FLOOD_RENDERS: String(renders),
+          TERMWRIGHT_FLOOD_BPS: '20000',
+          TERMWRIGHT_FLOOD_CADENCE_MS: '10',
+        },
+        columns: 80,
+        rows: 24,
+      });
+      let queue: Promise<void> = Promise.resolve();
+      pty.onData((chunk) => {
+        queue = queue.then(
+          () => new Promise<void>((resolve) => terminal.write(chunk, () => resolve())),
+        );
+      });
+      await settle(() => gaps.length >= renders, () => queue, 60_000);
+    } finally {
+      pty?.dispose();
+    }
+
+    // Absolute here, not relative to the first marker: the question is how
+    // long after a commit its marker becomes visible, against a 1000 ms window.
+    const sorted = [...gaps].sort((a, b) => a - b);
+    const at = (f: number): number => sorted[Math.floor((sorted.length - 1) * f)] ?? 0;
+    console.log(
+      `[throttled probe] platform=${process.platform} renders=${renders} seen=${gaps.length}\n` +
+        `  commit-to-sighting ms: p50=${at(0.5).toFixed(0)} p90=${at(0.9).toFixed(0)} max=${at(1).toFixed(0)}`,
+    );
+    expect(gaps.length).toBeGreaterThan(0);
+    terminal.dispose();
+  });
+
   it('reports how far behind a commit marker falls when renders come back to back', async () => {
     // Why this exists: on Windows a flood leaves the revision chain stalled
     // with markers expiring, and two explanations fit — the terminal delays
