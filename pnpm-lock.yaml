@@ -267,6 +267,16 @@ importers:
         specifier: workspace:*
         version: link:../ink-testing
 
+  packages/probe-opentui:
+    dependencies:
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@opentui/core':
+        specifier: ^0.5.3
+        version: 0.5.3(typescript@5.9.3)(web-tree-sitter@0.25.10)
+
   packages/protocol:
     dependencies:
       zod:
