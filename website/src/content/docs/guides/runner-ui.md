@@ -40,8 +40,8 @@ runner is there too.
 npx termwright ui
 ```
 
-That starts your project's Vitest in watch mode, points it at the runner, and
-prints the URL to open:
+That starts your project's Vitest in watch mode, points it at the runner, prints
+the URL and opens it in your browser:
 
 ```
 termwright ui (live) — http://127.0.0.1:53219/?token=k3n…
@@ -60,14 +60,23 @@ npx termwright ui --trace termwright-report/login.twtrace
 | `--port N` | pin the port. Default: an ephemeral one, printed in the URL |
 | `--host H` | bind somewhere other than `127.0.0.1` — a live terminal is a shell, so mind what you expose |
 | `--no-watch` | open the runner without starting a suite |
+| `--no-open` | print the URL without opening a browser |
 | `--json` | print `{url, port, mode}` instead of the human line |
 
 Arguments after `--` go to the runner: `termwright ui -- src/login.test.ts
 --reporter=dot`.
 
-:::note[The URL has to be opened by hand]
-Nothing launches a browser for you, and the token in that URL is what
-authenticates the session — so copy the whole thing, not just the host and port.
+### When it does not open a window
+
+Opening is an extra on top of the printed URL, never a substitute, and it is
+skipped wherever a window would be wrong: with `--no-open`, with `--json` (a
+consumer is parsing that output), when stdout is not a terminal (you piped it),
+and when `CI` is set to anything at all. On a build agent a browser is noise at
+best and a hung job at worst.
+
+:::caution[The token is part of the URL]
+It is what authenticates the session, so when you copy the address by hand, copy
+the whole thing — the host and port alone will be refused.
 :::
 
 In a workspace, prefer a package script (`"ui": "termwright ui"`, then

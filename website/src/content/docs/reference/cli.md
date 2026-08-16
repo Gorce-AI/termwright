@@ -61,7 +61,7 @@ await app.close();
 ## Commands
 
 ```
-termwright ui [--trace <file>] [--port N] [--host H] [--no-watch] [-- <vitest args>]
+termwright ui [--trace <file>] [--port N] [--host H] [--no-watch] [--no-open] [-- <vitest args>]
 termwright ui --record [--out-file <file>] -- <command>
 termwright codegen [--out-file <file>] -- <command>
 termwright mcp [--http] [--port N]
@@ -70,7 +70,7 @@ termwright agent-context | usage | skill [--out <dir>]
 
 | Command | What it does |
 |---|---|
-| `ui` | opens the [runner](../../guides/runner-ui/): live terminal, semantic inspector, timeline. With no flags it starts your project's own Vitest in watch mode and points it at the runner through `TERMWRIGHT_UI_URL`; `--no-watch` opens the runner without starting a suite; `--trace` opens a `.twtrace` archive instead; `--record` drives a program you name and writes the test. Runner arguments go after `--`: `termwright ui -- src/login.test.ts --reporter=dot`. |
+| `ui` | opens the [runner](../../guides/runner-ui/): live terminal, semantic inspector, timeline. With no flags it starts your project's own Vitest in watch mode, points it at the runner through `TERMWRIGHT_UI_URL`, and opens the page in your browser; `--no-open` prints the URL instead; `--no-watch` opens the runner without starting a suite; `--trace` opens a `.twtrace` archive instead; `--record` drives a program you name and writes the test. Runner arguments go after `--`: `termwright ui -- src/login.test.ts --reporter=dot`. |
 | `codegen` | `ui --record`, for when recording is the whole point. |
 | `mcp` | serves the [MCP tools](../../guides/mcp/); every argument is forwarded to `@termwright/mcp` untouched. |
 | `agent-context` | versioned JSON describing every tool, parameter and exit code. |
@@ -79,6 +79,9 @@ termwright agent-context | usage | skill [--out <dir>]
 
 Global flags: `--json` (machine-readable output; errors carry `kind`),
 `--version` / `-v`, `--help` / `-h`.
+
+`--json` also suppresses opening a browser, as do a non-terminal stdout and a
+set `CI` — a window is for a person at a terminal, not for a build agent.
 
 `agent-context`, `usage` and `skill` are generated from the live zod schemas, so
 they cannot drift from the tools they describe. The umbrella imports those
