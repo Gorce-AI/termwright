@@ -12,7 +12,7 @@
  *    whole frame — including the closing synchronized-output sequence.
  * 3. It then collects the tree (Yoga layout is still the one that produced
  *    that frame), pushes the snapshot, waits for stdout to drain, and only
- *    then writes the DCS marker.
+ *    then writes the marker.
  *
  * A render that is superseded before step 3 is dropped, as the design allows:
  * publishing it would pair revision N's tree with revision N+1's pixels.

@@ -1,22 +1,27 @@
 /**
- * Marker extraction for tests: find the DCS render-commit sequences in a
- * captured stream, verify them, and report where in the stream they sat.
+ * Marker extraction for tests: find the render-commit sequences in a captured
+ * stream, verify them, and report where in the stream they sat.
  *
  * Position is the interesting part — the adapter's core promise is that the
  * marker for revision N follows the last byte of revision N's frame.
  */
 
-import { MARKER_DCS_PREFIX, verifyMarkerPayload } from '@termwright/protocol';
+import { MARKER_OSC_CODE, MARKER_OSC_PREFIX, verifyMarkerPayload } from '@termwright/protocol';
 
 /**
- * `ESC P twm;<revision>;<mac> ESC \`, with the payload captured.
+ * `OSC 8487 ; twm;<revision>;<mac>` with its terminator; the payload is
+ * captured, which is exactly what a VT parser hands an OSC handler.
  *
- * The payload includes the DCS final byte (`t`, the first character of
- * {@link MARKER_DCS_PREFIX}), because that is what `verifyMarkerPayload`
- * expects. A VT parser hands it over separately — see the protocol README.
+ * Both terminators are accepted. The adapter emits BEL — the one ConPTY was
+ * measured to forward most reliably — but the protocol lets a receiver see
+ * either, and a matcher that knew only one would start passing for the wrong
+ * reason the day that changed.
  */
 function markerPattern(): RegExp {
-  return new RegExp(`\\u001bP(${MARKER_DCS_PREFIX}[^\\u001b]*)\\u001b\\\\`, 'gu');
+  return new RegExp(
+    `\\u001b\\]${MARKER_OSC_CODE};(${MARKER_OSC_PREFIX}[^\\u0007\\u001b]*)(?:\\u0007|\\u001b\\\\)`,
+    'gu',
+  );
 }
 
 /** One verified marker and its byte offset in the stream. */

@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { Box, Text, render, type DOMElement, type Instance } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MARKER_DCS_PREFIX } from '@termwright/protocol';
+import { MARKER_OSC_PREFIX } from '@termwright/protocol';
 import { semanticRender, useSemantic } from './index.js';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { createFakeStdout, type FakeStdout } from './testing/fake-stdout.js';
@@ -108,7 +108,7 @@ describe('@termwright/ink', () => {
       });
       openApps.push(app);
 
-      expect(stdout.text).not.toContain(MARKER_DCS_PREFIX);
+      expect(stdout.text).not.toContain(MARKER_OSC_PREFIX);
     });
   });
 
@@ -275,7 +275,7 @@ describe('@termwright/ink', () => {
       });
       await driver.waitForSnapshots(1);
 
-      expect(stdout.text).not.toContain(MARKER_DCS_PREFIX);
+      expect(stdout.text).not.toContain(MARKER_OSC_PREFIX);
     });
   });
 
@@ -313,7 +313,7 @@ describe('@termwright/ink', () => {
       app.rerender(<Demo label="Reject" />);
 
       expect(stdout.text).toContain('Reject');
-      expect(stdout.text).not.toContain(MARKER_DCS_PREFIX);
+      expect(stdout.text).not.toContain(MARKER_OSC_PREFIX);
     });
   });
 });

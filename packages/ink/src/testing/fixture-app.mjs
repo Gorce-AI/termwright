@@ -3,7 +3,7 @@
  *
  * Runs in its own Node process against the *built* package, so the tests
  * exercise what a user would actually install: `semanticRender` writing real
- * frames and real DCS markers to a real stdout pipe.
+ * frames and real markers to a real stdout pipe.
  *
  * Imports are dynamic on purpose. Some of what these tests prove depends on
  * global state that must exist *before* React's reconciler initialises — the

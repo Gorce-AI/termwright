@@ -1,6 +1,6 @@
 /**
  * The design's risk #1, run for real: an Ink app in its own process, a driver
- * on the other end of a unix socket, and the question of whether the DCS marker
+ * on the other end of a unix socket, and the question of whether the marker
  * lands in stdout *after* the bytes of the frame it commits.
  *
  * Everything else in this package is tested against an in-memory stream; this
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { MARKER_DCS_PREFIX } from '@termwright/protocol';
+import { MARKER_OSC_PREFIX } from '@termwright/protocol';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { markersIn, stripMarkers } from './testing/markers.js';
 
@@ -181,7 +181,7 @@ describe('real process', () => {
       TW_LABELS: 'Approve,Reject',
     });
 
-    expect(dormant.stdout).not.toContain(MARKER_DCS_PREFIX);
+    expect(dormant.stdout).not.toContain(MARKER_OSC_PREFIX);
     expect(stripMarkers(instrumented.stdout)).toBe(dormant.stdout);
     expect(await driver.waitForSnapshots(1)).not.toHaveLength(0);
   }, 30_000);

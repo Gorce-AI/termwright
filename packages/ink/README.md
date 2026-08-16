@@ -119,7 +119,7 @@ name comes from the rendered text unless you supply one via `useSemantic`.
 ## What the driver receives
 
 After every committed frame the adapter publishes a snapshot — roles, names,
-states, action hints, test ids, and cell bounds — and then writes a private DCS
+states, action hints, test ids, and cell bounds — and then writes a private OSC
 marker to stdout once that frame's bytes have been flushed. The marker is how
 the driver knows which tree belongs to which screen; it is authenticated with
 the session token, invisible in the terminal, and never emitted outside an

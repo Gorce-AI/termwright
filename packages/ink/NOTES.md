@@ -17,10 +17,12 @@ now proven, in-process and in a real child process (`src/real-process.test.ts`):
   one macrotask (`setImmediate`), by which point Ink has queued the entire
   frame — including the closing synchronized-output sequence (`ESC[?2026l`).
 - The observed byte order for a revision is:
-  `ESC[?2026h … frame … ESC[?2026l` then `ESC P twm;<rev>;<mac> ESC \`.
+  `ESC[?2026h … frame … ESC[?2026l` then `ESC ] 8487 ; twm;<rev>;<mac> BEL`.
   The marker sits *outside* the synchronized-output block. If the driver's VT
   layer assumes anything about the marker's position relative to BSU/ESU, that
-  is the position.
+  is the position. (The marker moved from DCS to private OSC 8487 when ConPTY
+  was measured dropping DCS entirely; the adapter's emission path did not
+  change, only the bytes `encodeMarker` returns.)
 - Writing the marker through Ink's canvas is impossible (it tokenises and clips
   non-SGR sequences) and `useStdout().write()` is also wrong — it erases and
   redraws the frame around the payload. The adapter writes to the raw stream.
