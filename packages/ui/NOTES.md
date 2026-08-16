@@ -108,6 +108,36 @@ the YAML snapshot file on the first run, which is the artefact a reviewer reads 
 and it keeps this package from having to implement the YAML serializer that
 `@termwright/test` already owns.
 
+## ARIA is a translation here, not an interpretation
+
+The protocol's roles were chosen ARIA-aligned, which is what makes `aria.ts` a
+lookup table rather than a heuristic. Three decisions are worth knowing:
+
+- **Attributes go only where ARIA defines them.** `aria-selected` means
+  something on `tab` and `row` and nothing on `listitem`; a selected list item
+  therefore gets `aria-current`. Emitting an ignored attribute would look right
+  in a DOM dump and say nothing to a screen reader.
+- **ARIA is applied after render, not in the template.** lit-html cannot bind a
+  variable set of attribute names, and a template per combination would be
+  unreadable, so `applyAriaAttributes` walks the rendered nodes. It also
+  *removes* attributes that no longer apply — a stale `aria-disabled` on a
+  button the app has since enabled is the expensive kind of lie.
+- **Decorative text is a hidden span, not CSS generated content.** `::before`
+  content is announced by screen readers, so the role/name caption each element
+  shows visually is a real `<span aria-hidden="true">`.
+
+The children group sits *inside* its `treeitem`, as the tree pattern requires; a
+group that is a sibling belongs to nothing. Navigation lives in `tree-nav.ts`
+as a pure function over visible rows, so the arrow-key semantics are tested
+without a DOM.
+
+**Verified** through Playwright's accessibility snapshot: the inspector exposes
+`tree → treeitem[level, expanded] → group → treeitem`, focus and selection move
+together under the arrow keys, and the Semantic view exposes
+`dialog "Permission" → button "Approve"`. A real screen reader (VoiceOver, NVDA)
+was **not** run — there is none in this environment — so what is proven is the
+accessibility tree Chromium computes, not the announcement a user would hear.
+
 ## Playback plays locally; scrubbing used to be a round trip
 
 `/api/trace/frames` hands the page the whole recording once (bounded at 8 MiB),

@@ -190,12 +190,13 @@ function findOpen(open: readonly { stepId: string }[], stepId: string | undefine
   return -1;
 }
 
-/** Cast-timeline position, falling back to the session clock. */
+/**
+ * Cast-timeline position. `castOffset` is required of every `events.jsonl`
+ * line, so an event without one is an event this log cannot place and skips.
+ */
 function position(event: Record<string, unknown>): number | null {
   const castOffset = event['castOffset'];
-  if (typeof castOffset === 'number' && Number.isFinite(castOffset)) return castOffset;
-  const t = event['t'];
-  return typeof t === 'number' && Number.isFinite(t) ? t : null;
+  return typeof castOffset === 'number' && Number.isFinite(castOffset) ? castOffset : null;
 }
 
 function optional<K extends string>(key: K, value: string | undefined): Record<K, string> | object {

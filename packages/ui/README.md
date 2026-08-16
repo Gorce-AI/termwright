@@ -74,6 +74,28 @@ trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it
 is. The browser app never imports Vitest and never reads a `.twtrace` itself.
 
+## Accessibility
+
+The semantic tree is an ARIA-aligned model, so the UI renders it as ARIA rather
+than as a picture of it. The inspector is a real `role="tree"`: rows are
+`treeitem`s with `aria-level`, `aria-expanded` and `aria-selected`, a roving
+`tabindex`, and the arrow keys of the ARIA tree pattern — Up/Down walk visible
+rows, Right opens a node and steps in, Left closes it and steps out, Enter hands
+focus back to the terminal.
+
+The **Semantic view** tab goes further: it renders the *application's* tree as
+accessible HTML. A terminal `button` becomes a `<button>`, a modal `dialog`
+becomes `role="dialog" aria-modal="true"`, a `list` becomes `<ul role="list">`,
+and state becomes the matching attributes — `aria-disabled`, `aria-checked`
+(including `mixed`), `aria-expanded`, `aria-level`, `aria-posinset`. A screen
+reader walking that view is reading what the application published, which is
+something a terminal emulator cannot offer at all.
+
+One rule keeps it honest: an attribute is emitted only where ARIA gives it
+meaning. `aria-selected` on a `listitem` would be ignored, so a selected list
+item gets `aria-current` instead. Nothing in this view acts on the application —
+activating an element selects its node, exactly like clicking it in the tree.
+
 ## Watching a replay
 
 A recording plays like a video: **Play/Pause** (or the space bar) runs it at the

@@ -44,8 +44,8 @@ describe('buildCommandLog', () => {
   it('skips events it cannot read, and keeps the rest', () => {
     const rows = buildCommandLog([
       'not an event',
-      { kind: 'action' }, // no api, no time
-      { kind: 'action', t: 5, api: 'locator.press', ok: true },
+      { kind: 'action', t: 1 }, // no castOffset to place it on, no api
+      { kind: 'action', t: 5, castOffset: 5, api: 'locator.press', ok: true },
       null,
     ]);
     expect(rows.map((row) => row.label)).toEqual(['locator.press']);
@@ -53,8 +53,8 @@ describe('buildCommandLog', () => {
 
   it('survives a step that never closed', () => {
     const rows = buildCommandLog([
-      { kind: 'step-start', t: 0, stepId: 's1', title: 'open' },
-      { kind: 'action', t: 10, api: 'locator.click', ok: true },
+      { kind: 'step-start', t: 0, castOffset: 0, stepId: 's1', title: 'open' },
+      { kind: 'action', t: 10, castOffset: 10, api: 'locator.click', ok: true },
     ]);
     expect(rows[0]?.endT).toBeUndefined();
     expect(rows[0]?.ok).toBeUndefined();
@@ -63,10 +63,10 @@ describe('buildCommandLog', () => {
 
   it('closes the innermost step when the end names none', () => {
     const rows = buildCommandLog([
-      { kind: 'step-start', t: 0, stepId: 'outer', title: 'outer' },
-      { kind: 'step-start', t: 10, stepId: 'inner', title: 'inner' },
-      { kind: 'step-end', t: 20, status: 'passed' },
-      { kind: 'action', t: 30, api: 'locator.click', ok: true },
+      { kind: 'step-start', t: 0, castOffset: 0, stepId: 'outer', title: 'outer' },
+      { kind: 'step-start', t: 10, castOffset: 10, stepId: 'inner', title: 'inner' },
+      { kind: 'step-end', t: 20, castOffset: 20, status: 'passed' },
+      { kind: 'action', t: 30, castOffset: 30, api: 'locator.click', ok: true },
     ]);
     expect(rows[1]?.endT).toBe(20);
     // step-end closes a row rather than adding one, so the action is rows[2] —
@@ -79,6 +79,7 @@ describe('buildCommandLog', () => {
     const many = Array.from({ length: 10_000 }, (_, index) => ({
       kind: 'action',
       t: index,
+      castOffset: index,
       api: 'x'.repeat(10_000),
       ok: true,
     }));
@@ -125,8 +126,8 @@ describe('parseRef', () => {
 describe('a row the user picked', () => {
   it('wins the highlight over another row sharing its millisecond', () => {
     const rows = buildCommandLog([
-      { kind: 'assert', t: 718, api: 'toHaveState', ok: true },
-      { kind: 'step-start', t: 718, stepId: 's1', title: 'open the dialog' },
+      { kind: 'assert', t: 718, castOffset: 718, api: 'toHaveState', ok: true },
+      { kind: 'step-start', t: 718, castOffset: 718, stepId: 's1', title: 'open the dialog' },
     ]);
     const assertion = rows.find((row) => row.kind === 'assert');
     expect(currentCommand(rows, 718)).toBe(1); // the step sorted last
@@ -135,8 +136,8 @@ describe('a row the user picked', () => {
 
   it('is ignored when the replay has moved past it', () => {
     const rows = buildCommandLog([
-      { kind: 'action', t: 100, api: 'locator.click', ok: true },
-      { kind: 'action', t: 200, api: 'locator.press', ok: true },
+      { kind: 'action', t: 100, castOffset: 100, api: 'locator.click', ok: true },
+      { kind: 'action', t: 200, castOffset: 200, api: 'locator.press', ok: true },
     ]);
     expect(currentCommand(rows, 200, rows[0]?.id)).toBe(1);
   });

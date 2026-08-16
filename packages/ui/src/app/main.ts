@@ -16,6 +16,11 @@ import type { GeneratedSelector } from '../selector.js';
 import type { TraceOverview } from '../trace-source.js';
 import { RunnerClient, type ServerState } from './client.js';
 import { renderInspector, type InspectorHandlers } from './inspector.js';
+import {
+  applyAriaAttributes,
+  renderSemanticView,
+  type SemanticViewHandlers,
+} from './semantic-view.js';
 import { isMarked, type AppLogView, type LogLevel } from '../app-log.js';
 import { currentCommand, parseRef, stepCommand, type CommandRow } from '../commands.js';
 import {
@@ -36,7 +41,8 @@ import {
   type LogPanelModel,
 } from './log-panel.js';
 import { TerminalPane, type Highlight } from './terminal-pane.js';
-import { nextMarker, nodeAt } from '../view-model.js';
+import { childrenOf, nextMarker, nodeAt, rootsOf } from '../view-model.js';
+import { navigateTree, type TreeRow } from '../tree-nav.js';
 import { renderTimeline, type TimelineHandlers } from './timeline.js';
 import type { TestRow } from '../test-model.js';
 import { describeCounts } from '../test-model.js';
@@ -103,7 +109,8 @@ const state = {
   hoveredId: null as string | null,
   status: null as string | null,
   summary: null as string | null,
-  rightTab: 'tree' as 'tree' | 'logs' | 'commands',
+  rightTab: 'tree' as 'tree' | 'semantic' | 'logs' | 'commands',
+  collapsed: new Set<string>(),
   logs: [] as AppLogView[],
   logFilter: 'all' as LevelFilter,
   logAutoscroll: true,
@@ -152,6 +159,14 @@ function draw(): void {
           Tree
         </button>
         <button
+          class=${state.rightTab === 'semantic' ? 'active' : ''}
+          data-testid="tab-semantic"
+          title="The application rendered as accessible HTML"
+          @click=${() => selectTab('semantic')}
+        >
+          Semantic view
+        </button>
+        <button
           class=${state.rightTab === 'logs' ? 'active' : ''}
           data-testid="tab-logs"
           @click=${() => selectTab('logs')}
@@ -167,7 +182,9 @@ function draw(): void {
         </button>
       </nav>
       <div class="tab-body">
-        ${state.rightTab === 'commands'
+        ${state.rightTab === 'semantic'
+          ? renderSemanticView({ snapshot, selectedId: state.selectedId }, semanticViewHandlers)
+          : state.rightTab === 'commands'
           ? renderCommandLog(
               {
                 rows: state.commands,
@@ -181,6 +198,7 @@ function draw(): void {
           ? renderInspector(
               {
                 snapshot,
+                collapsed: state.collapsed,
                 revision: view?.revision ?? null,
                 selectedId: state.selectedId,
                 hoveredId: state.hoveredId,
@@ -196,6 +214,9 @@ function draw(): void {
     `,
     inspectorHost as HTMLElement,
   );
+  if (state.rightTab === 'semantic') {
+    applyAriaAttributes(inspectorHost as HTMLElement, snapshot);
+  }
   if (state.rightTab === 'logs' && state.logAutoscroll) followLogs();
   if (state.rightTab === 'commands') revealCurrentCommand();
 
@@ -282,7 +303,7 @@ function countLevels(logs: readonly AppLogView[]): Partial<Record<LogLevel, numb
   return counts;
 }
 
-function selectTab(tab: 'tree' | 'logs' | 'commands'): void {
+function selectTab(tab: 'tree' | 'semantic' | 'logs' | 'commands'): void {
   state.rightTab = tab;
   schedule();
 }
@@ -324,10 +345,67 @@ inspectorHost.addEventListener(
   true,
 );
 
+/** Nodes in display order, honouring collapsed subtrees — what arrows walk. */
+function visibleTreeNodes(): TreeRow[] {
+  const snapshot = active()?.snapshot;
+  if (snapshot === undefined || snapshot === null) return [];
+  const children = childrenOf(snapshot);
+  const out: TreeRow[] = [];
+  const walk = (node: { id: string; parentId?: string }): void => {
+    const kids = children.get(node.id) ?? [];
+    out.push({
+      id: node.id,
+      hasChildren: kids.length > 0,
+      ...(node.parentId === undefined ? {} : { parentId: node.parentId }),
+    });
+    if (state.collapsed.has(node.id)) return;
+    for (const kid of kids) walk(kid);
+  };
+  for (const root of rootsOf(snapshot)) walk(root);
+  return out;
+}
+
+/** Moves DOM focus to the selected row, so the tree behaves like a tree. */
+function focusSelectedTreeItem(): void {
+  if (state.selectedId === null) return;
+  const row = document.querySelector<HTMLElement>(
+    `.tree [data-node-id="${state.selectedId.replace(/["\\]/g, '\\$&')}"]`,
+  );
+  row?.focus();
+}
+
+const semanticViewHandlers: SemanticViewHandlers = {
+  select(nodeId) {
+    state.selectedId = nodeId;
+    schedule();
+  },
+  hover(nodeId) {
+    state.hoveredId = nodeId;
+    schedule();
+  },
+};
+
 const inspectorHandlers: InspectorHandlers = {
   select(nodeId) {
     state.selectedId = nodeId;
     schedule();
+  },
+  toggle(nodeId) {
+    if (state.collapsed.has(nodeId)) state.collapsed.delete(nodeId);
+    else state.collapsed.add(nodeId);
+    schedule();
+  },
+  navigate(key) {
+    const next = navigateTree(visibleTreeNodes(), { selectedId: state.selectedId, collapsed: state.collapsed }, key);
+    state.selectedId = next.selectedId;
+    state.collapsed = new Set(next.collapsed);
+    schedule();
+    // Selection and focus move together, which is what makes this a tree
+    // rather than a list of divs that says it is one.
+    requestAnimationFrame(focusSelectedTreeItem);
+  },
+  focusTerminal() {
+    pane.focus();
   },
   hover(nodeId) {
     state.hoveredId = nodeId;
@@ -728,8 +806,10 @@ pane.on({
 // in the filter box or the search field.
 window.addEventListener('keydown', (event) => {
   const target = event.target;
-  if (target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'SELECT')) {
-    return;
+  if (target instanceof HTMLElement) {
+    if (target.tagName === 'INPUT' || target.tagName === 'SELECT') return;
+    // The tree owns its own arrows and Enter while it has focus.
+    if (target.closest('[role="tree"]') !== null) return;
   }
   if (event.key === ' ') {
     event.preventDefault();
