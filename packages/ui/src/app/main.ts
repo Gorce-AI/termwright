@@ -9,7 +9,7 @@
 
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { html, render, type TemplateResult } from 'lit-html';
+import { html, nothing, render, type TemplateResult } from 'lit-html';
 import type { SemanticSnapshot } from '@termwright/protocol';
 import { fromBase64, type ServerMessage } from '../events.js';
 import type { GeneratedSelector } from '../selector.js';
@@ -17,6 +17,7 @@ import type { TraceOverview } from '../trace-source.js';
 import { RunnerClient, type ServerState } from './client.js';
 import { InlineDataSource, readInlinePayload, type DataSource } from '../data-source.js';
 import { renderSidebar, renderViewHeader, type ViewName } from './sidebar.js';
+import { editorChoices, editorLink, type EditorId } from './editor-link.js';
 import { filesUnder, renderSpecs } from './specs-view.js';
 import { buildSpecTree, type SpecFacts } from '../spec-tree.js';
 import type { ProjectInfo } from '../project.js';
@@ -53,7 +54,10 @@ import { childrenOf, nextMarker, nodeAt, rootsOf } from '../view-model.js';
 import { discoveredId } from '../test-model.js';
 import { navigateTree, type TreeRow } from '../tree-nav.js';
 import { renderTimeline, type TimelineHandlers } from './timeline.js';
-import { applyTheme, currentTheme, installSplitter, nextTheme } from './chrome.js';
+import { applyTheme, currentTheme, installSplitter, nextTheme,
+  remember,
+  remembered,
+} from './chrome.js';
 import type { RunSummaryEntry, RunTest } from '../runs.js';
 import type { TestRow } from '../test-model.js';
 import { describeCounts } from '../test-model.js';
@@ -160,18 +164,51 @@ function renderPage(): TemplateResult {
   }
   if (state.view === 'settings') {
     return html`
-      <dl class="settings" data-testid="settings">
-        <dt>Project</dt>
-        <dd>${state.project.name}</dd>
-        <dt>Branch</dt>
-        <dd>${state.project.branch ?? 'not a git repository'}</dd>
-        <dt>termwright</dt>
-        <dd>${state.project.version}</dd>
-        <dt>Mode</dt>
-        <dd>${state.mode}</dd>
-      </dl>
+      <div class="settings-view" data-testid="settings">
+        <section>
+          <h2>Open in your editor</h2>
+          <p class="muted">
+            Where “Open in IDE” sends a spec. A scheme can silently do nothing — no editor
+            installed, or a browser that blocks it — so the path is always copyable too.
+          </p>
+          <label>
+            Editor
+            <select
+              data-testid="editor-choice"
+              @change=${(event: Event) => setEditor((event.target as HTMLSelectElement).value as EditorId)}
+            >
+              ${editorChoices().map(
+                (choice) => html`<option value=${choice.id} ?selected=${choice.id === state.editor}>
+                  ${choice.label}
+                </option>`,
+              )}
+            </select>
+          </label>
+        </section>
+
+        <section>
+          <h2>Appearance</h2>
+          <label>
+            Theme
+            <button data-testid="theme-cycle" @click=${cycleTheme}>${currentTheme()}</button>
+          </label>
+        </section>
+
+        <section>
+          <h2>What this panel resolved</h2>
+          <dl class="settings">
+            ${resolved().map(
+              ([name, value, source]) => html`
+                <dt>${name}</dt>
+                <dd>${value} <span class="muted origin">${source}</span></dd>
+              `,
+            )}
+          </dl>
+        </section>
+      </div>
     `;
   }
+
   const matching = matchingTests();
   return renderSpecs(
     {
@@ -200,6 +237,52 @@ function openSpecFile(): string | null {
   if (state.openSpecFile !== null) return state.openSpecFile;
   const running = state.tests.find((test) => test.status === 'running');
   return running?.file ?? null;
+}
+
+/**
+ * What the panel resolved and where each value came from.
+ *
+ * Read-only on purpose: the point is to answer "why is it behaving like this",
+ * and a value whose origin is stated answers that in one line. A settings page
+ * that let you change these would be a second place to configure the runner,
+ * competing with the config file and the flags.
+ */
+function resolved(): readonly (readonly [string, string, string])[] {
+  const editorSource = remembered('editor') === null ? 'default' : 'set in this panel';
+  return [
+    ['Project', state.project.name, 'package.json'],
+    ['Root', state.project.root, 'the directory the runner was started in'],
+    ['Branch', state.project.branch ?? 'not a git repository', 'git'],
+    ['Mode', state.mode, 'how the runner was started'],
+    ['Editor', state.editor, editorSource],
+    ['Theme', currentTheme(), currentTheme() === 'system' ? 'default' : 'set in this panel'],
+    ['termwright', state.project.version, 'package.json'],
+  ];
+}
+
+/**
+ * Sends a spec to the editor, and says what happened.
+ *
+ * A URL scheme is fire-and-forget: nothing reports back whether an editor
+ * caught it. So the path goes to the clipboard at the same time and the notice
+ * says so — that way the fallback is already done rather than offered.
+ */
+function openInEditor(file: string): void {
+  const link = editorLink(state.editor, file);
+  void navigator.clipboard?.writeText(file).catch(() => undefined);
+  if (link === null) {
+    note(`copied ${file}`);
+    return;
+  }
+  location.href = link;
+  note(`opening ${file} — the path is on your clipboard too`);
+}
+
+/** Remembers the editor, so it survives a reload like the theme does. */
+function setEditor(editor: EditorId): void {
+  state.editor = editor;
+  remember('editor', editor);
+  schedule();
 }
 
 /** Tests the filter keeps, matched on both the title and the file. */
@@ -242,6 +325,9 @@ const specsHandlers = {
   openRun(runId: string): void {
     state.view = 'runs';
     timelineHandlers.open(runId);
+  },
+  openInEditor(file: string): void {
+    openInEditor(file);
   },
   rowContext(): TestRowContext {
     return {
@@ -290,6 +376,7 @@ const sidebarHost = document.querySelector<HTMLElement>('#sidebar');
 const viewHeadHost = document.querySelector<HTMLElement>('#view-head');
 const pageHost = document.querySelector<HTMLElement>('#page');
 const runnerHost = document.querySelector<HTMLElement>('.layout');
+const toastHost = document.querySelector<HTMLElement>('#toast');
 const commandsHost = document.querySelector<HTMLElement>('#commands');
 const metaHost = document.querySelector<HTMLElement>('#meta-bar');
 const terminalHost = document.querySelector<HTMLElement>('#terminal');
@@ -342,6 +429,8 @@ const state = {
   specFacts: new Map<string, SpecFacts>(),
   specCollapsed: new Set<string>(),
   foldedSteps: new Set<string>(),
+  editor: (remembered('editor') ?? 'vscode') as EditorId,
+  toast: null as { readonly message: string; readonly failed: boolean } | null,
   hoveredCommandId: null as string | null,
   openSpecFile: null as string | null,
   runs: [] as RunSummaryEntry[],
@@ -478,6 +567,7 @@ function draw(): void {
     sidebarHost as HTMLElement,
   );
   render(renderViewHeader(...viewHeader()), viewHeadHost as HTMLElement);
+  render(renderToast(), toastHost as HTMLElement);
   (runnerHost as HTMLElement).hidden = state.view !== 'runner';
   (pageHost as HTMLElement).hidden = state.view === 'runner';
   if (state.view !== 'runner') render(renderPage(), pageHost as HTMLElement);
@@ -614,6 +704,42 @@ function renderMetaBar(): TemplateResult {
         @click=${cycleTheme}
       >
         ◐
+      </button>
+    </div>
+  `;
+}
+
+/**
+ * The notice that a run ended, shown when you are looking somewhere else.
+ *
+ * It is a button, not a banner: the useful thing about "the run failed" is
+ * getting to the failure, and a notice you can only dismiss makes you find it
+ * yourself.
+ */
+function renderToast(): TemplateResult | typeof nothing {
+  const toast = state.toast;
+  if (toast === null) return nothing;
+  return html`
+    <div class=${`toast ${toast.failed ? 'failed' : 'passed'}`} role="status" data-testid="toast">
+      <button
+        class="toast-open"
+        @click=${() => {
+          state.toast = null;
+          sidebarHandlers.go('runs');
+        }}
+      >
+        ${toast.message} — open the run
+      </button>
+      <button
+        class="toast-close"
+        title="Dismiss"
+        aria-label="Dismiss"
+        @click=${() => {
+          state.toast = null;
+          schedule();
+        }}
+      >
+        ✕
       </button>
     </div>
   `;
@@ -952,6 +1078,10 @@ const commandHandlers: CommandLogHandlers = {
   rerun() {
     const id = state.selectedTestId;
     timelineHandlers.rerun(id ?? undefined);
+  },
+  openInEditor() {
+    const file = selectedTest()?.file;
+    if (file !== undefined) openInEditor(file);
   },
   select(row) {
     state.selectedCommandId = row.id;
@@ -1361,6 +1491,18 @@ function handle(message: ServerMessage): void {
       // counted as not run.
       const notRun = state.tests.filter((test) => test.status === 'not-run').length;
       state.summary = `${describeCounts({ ...counts, running: 0, notRun })} in ${Math.round(durationMs)}ms`;
+      // Somebody reading the log of one test should not have to notice that
+      // the rest of the run finished. The notice carries the way to the result
+      // rather than only announcing it.
+      if (state.view !== 'runs') {
+        state.toast = {
+          message:
+            counts.failed > 0
+              ? `Run finished — ${counts.failed} failed`
+              : `Run finished — ${counts.passed} passed`,
+          failed: counts.failed > 0,
+        };
+      }
       retick();
       break;
     }

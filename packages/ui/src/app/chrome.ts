@@ -16,7 +16,7 @@ export type Theme = 'system' | 'dark' | 'light';
 const THEMES: readonly Theme[] = ['system', 'dark', 'light'];
 
 /** Reads a remembered value, tolerating a storage that refuses to answer. */
-function remembered(key: string): string | null {
+export function remembered(key: string): string | null {
   try {
     return localStorage.getItem(STORAGE_PREFIX + key);
   } catch {
@@ -24,7 +24,8 @@ function remembered(key: string): string | null {
   }
 }
 
-function remember(key: string, value: string): void {
+/** Remembers a value for the next visit; a refusing storage costs the session only. */
+export function remember(key: string, value: string): void {
   try {
     localStorage.setItem(STORAGE_PREFIX + key, value);
   } catch {

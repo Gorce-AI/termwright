@@ -74,6 +74,28 @@ export async function git(cwd: string, args: readonly string[]): Promise<string 
   });
 }
 
+/**
+ * The commit a run is being recorded at.
+ *
+ * @returns all four facts, or `null` when any is missing — a card showing a
+ * hash with no message reads as a bug rather than as a partial answer.
+ */
+export async function readRunGit(cwd: string): Promise<{
+  readonly commit: string;
+  readonly message: string;
+  readonly author: string;
+  readonly branch: string;
+} | null> {
+  const [commit, message, author, branch] = await Promise.all([
+    git(cwd, ['rev-parse', 'HEAD']),
+    git(cwd, ['log', '-1', '--format=%s']),
+    git(cwd, ['log', '-1', '--format=%an']),
+    readBranch(cwd),
+  ]);
+  if (commit === null || message === null || author === null || branch === null) return null;
+  return { commit, message, author, branch };
+}
+
 /** The branch name, or `null` on a detached head — which names no branch. */
 async function readBranch(cwd: string): Promise<string | null> {
   const branch = await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);

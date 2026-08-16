@@ -1631,3 +1631,130 @@ button.active {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--text);
 }
+
+
+/* ---- Runs, settings, notices -------------------------------------------- */
+
+.runs {
+  display: grid;
+  gap: 8px;
+}
+
+.run {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.run:hover {
+  background: var(--raised);
+}
+
+.run.failed {
+  border-left: 3px solid var(--fail);
+}
+
+.run.passed {
+  border-left: 3px solid var(--pass);
+}
+
+.run-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.run-head .title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-meta,
+.run-counts {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.run-meta .commit {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.settings-view {
+  display: grid;
+  gap: 22px;
+  max-width: 640px;
+}
+
+.settings-view h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.settings-view label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.settings-view select,
+.settings-view button {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.settings .origin {
+  font-size: 11px;
+}
+
+/* The notice sits above everything, because it reports something that happened
+   somewhere else. */
+.toast-host {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
+}
+
+.toast.failed { border-left-color: var(--fail); }
+.toast.passed { border-left-color: var(--pass); }
+
+.toast button {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.toast .toast-close {
+  padding-left: 4px;
+  color: var(--muted);
+}

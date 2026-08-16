@@ -44,6 +44,8 @@ export interface SpecsHandlers {
   run(paths: readonly string[]): void;
   /** Open the run a status dot stands for. */
   openRun(runId: string): void;
+  /** Open this spec where it is edited, or copy its path. */
+  openInEditor(file: string): void;
   /** The row context for the tests of an opened file. */
   rowContext(): TestRowContext;
 }
@@ -209,6 +211,17 @@ function renderFile(
               )}
         </span>
         <span class="col average">${facts?.averageMs == null ? '—' : formatMs(facts.averageMs)}</span>
+        <button
+          class="run-these open-ide"
+          data-testid="open-ide"
+          title=${`Open ${node.name} in your editor`}
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            handlers.openInEditor(node.path);
+          }}
+        >
+          Open
+        </button>
         ${model.canRun
           ? html`<button
               class="run-these"

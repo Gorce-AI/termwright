@@ -53,6 +53,8 @@ export interface CommandLogHandlers {
   toggle(rowId: string): void;
   /** Run this test again. */
   rerun(): void;
+  /** Open the spec this log belongs to where it is edited. */
+  openInEditor(): void;
 }
 
 /** Renders the command log. */
@@ -80,6 +82,16 @@ export function renderCommandLog(
         </span>
       </span>
       ${model.durationMs === null ? '' : html`<span class="pill">${formatMs(model.durationMs)}</span>`}
+      ${model.file === null
+        ? ''
+        : html`<button
+            class="rerun-log"
+            data-testid="log-open-ide"
+            title="Open this spec in your editor"
+            @click=${() => handlers.openInEditor()}
+          >
+            ⌁
+          </button>`}
       ${model.canRerun
         ? html`<button class="rerun-log" data-testid="rerun-test" title="Run this test again" @click=${() => handlers.rerun()}>↻</button>`
         : ''}

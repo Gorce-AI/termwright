@@ -47,21 +47,73 @@ export function renderRunHistory(
     </p>`;
   }
   return html`<div class="runs" data-testid="runs">
-    ${model.runs.map(
-      (run) => html`
-        <div class=${`run ${run.summary.failed > 0 ? 'failed' : 'passed'}`} data-testid="run" @click=${() => handlers.open(run.id)}>
-          <span class=${`dot ${run.summary.failed > 0 ? 'failed' : 'passed'}`} aria-hidden="true">${statusGlyph(run.summary.failed > 0 ? 'failed' : 'passed')}</span>
-          <span class="when">${formatWhen(run.startedAt)}</span>
-          <span class="counts">
-            <span class="count passed">${run.summary.passed}</span>
-            <span class="count failed">${run.summary.failed}</span>
-            ${run.summary.flaky === 0 ? '' : html`<span class="count flaky">${run.summary.flaky}</span>`}
-          </span>
-          <span class="duration">${formatMs(run.summary.durationMs)}</span>
-        </div>
-      `,
-    )}
+    ${model.runs.map((run) => renderCard(run, handlers))}
   </div>`;
+}
+
+/**
+ * One run, as a card.
+ *
+ * A run is identified by what a person remembers about it — the commit message
+ * they were working on — far more reliably than by a timestamp, which is why
+ * the message is the card's title when the manifest recorded one. Without git
+ * the card falls back to the time, and says nothing it does not know.
+ */
+function renderCard(run: RunSummaryEntry, handlers: RunHistoryHandlers): TemplateResult {
+  const failed = run.summary.failed > 0;
+  const git = run.git;
+  return html`
+    <button
+      class=${`run ${failed ? 'failed' : 'passed'}`}
+      data-testid="run"
+      @click=${() => handlers.open(run.id)}
+    >
+      <span class="run-head">
+        <span class=${`dot ${failed ? 'failed' : 'passed'}`} aria-hidden="true"
+          >${statusGlyph(failed ? 'failed' : 'passed')}</span
+        >
+        <span class="title" data-testid="run-title">
+          ${git === undefined ? formatWhen(run.startedAt) : git.message}
+        </span>
+        ${run.summary.flaky === 0
+          ? ''
+          : html`<span class="badge flaky" data-testid="run-flaky"
+              >${run.summary.flaky} flaky</span
+            >`}
+      </span>
+
+      <span class="run-meta muted">
+        ${git === undefined
+          ? html`<span>no commit recorded</span>`
+          : html`
+              <span class="commit" title=${git.commit}>${git.commit.slice(0, 7)}</span>
+              <span class="branch"><span aria-hidden="true">⑂</span> ${git.branch}</span>
+              <span class="author">${git.author}</span>
+              <span>${formatWhen(run.startedAt)}</span>
+            `}
+      </span>
+
+      <span class="run-counts">
+        <span class="count passed" title=${`${run.summary.passed} passed`}>
+          <span aria-hidden="true">✓</span>${run.summary.passed}
+        </span>
+        <span class="count failed" title=${`${run.summary.failed} failed`}>
+          <span aria-hidden="true">✕</span>${run.summary.failed}
+        </span>
+        ${run.summary.skipped === 0
+          ? ''
+          : html`<span class="count skipped" title=${`${run.summary.skipped} skipped`}>
+              <span aria-hidden="true">⊘</span>${run.summary.skipped}
+            </span>`}
+        ${run.summary.flaky === 0
+          ? ''
+          : html`<span class="count flaky" title=${`${run.summary.flaky} flaky`}>
+              <span aria-hidden="true">↻</span>${run.summary.flaky}
+            </span>`}
+        <span class="duration">${formatMs(run.summary.durationMs)}</span>
+      </span>
+    </button>
+  `;
 }
 
 function renderRun(model: RunHistoryModel, handlers: RunHistoryHandlers): TemplateResult {

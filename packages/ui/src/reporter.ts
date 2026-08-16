@@ -30,6 +30,7 @@ import {
   writeRunManifest,
   type RunTest,
 } from './runs.js';
+import { readRunGit } from './project.js';
 import { encodeMessage, type ServerMessage, type UiRunSummary, type UiTestStatus } from './events.js';
 import type { UiHub } from './hub.js';
 import { WebSocket } from 'ws';
@@ -235,6 +236,10 @@ export class TermwrightUiReporter {
     const runsDir = this.#options.runsDir;
     if (runsDir === null) return;
     try {
+      // Read at write time, not at start: a run that took twenty minutes was
+      // still made at the commit it started from, and reading it now is one
+      // process rather than one per run start.
+      const git = await readRunGit(process.cwd());
       await writeRunManifest(runsDir ?? DEFAULT_RUNS_DIR, {
         v: RUN_MANIFEST_VERSION,
         id: runId(this.#startedAt),
@@ -242,6 +247,7 @@ export class TermwrightUiReporter {
         finishedAt: Date.now(),
         summary,
         tests: this.#tests,
+        ...(git === null ? {} : { git }),
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);

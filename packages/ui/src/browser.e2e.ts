@@ -680,6 +680,74 @@ describe('the Specs view', () => {
   });
 });
 
+describe('the Runs view', () => {
+  it('names a run by the commit it was made at, and says so when there was none', async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), 'termwright-cards-'));
+    const tests = [
+      {
+        id: 't1',
+        title: 'pays',
+        file: '/repo/src/pay.test.ts',
+        status: 'failed' as const,
+        durationMs: 300,
+        flaky: false,
+        lostLogRecords: 0,
+      },
+    ];
+    await writeRunManifest(runsDir, {
+      v: RUN_MANIFEST_VERSION,
+      id: '2026-08-16T10-00-00',
+      startedAt: Date.parse('2026-08-16T10:00:00Z'),
+      finishedAt: Date.parse('2026-08-16T10:00:12Z'),
+      summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 1, durationMs: 12_000 },
+      tests,
+      git: {
+        commit: '9f2b1c4e8a7d6f5b3c2a1e0d9f8b7a6c5d4e3f21',
+        message: 'checkout: retry a flaky payment step',
+        author: 'Ada Lovelace',
+        branch: 'feature/checkout',
+      },
+    });
+    await writeRunManifest(runsDir, {
+      v: RUN_MANIFEST_VERSION,
+      id: '2026-08-16T09-00-00',
+      startedAt: Date.parse('2026-08-16T09:00:00Z'),
+      finishedAt: Date.parse('2026-08-16T09:00:09Z'),
+      summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 9_000 },
+      tests: tests.map((test) => ({ ...test, status: 'passed' as const })),
+    });
+
+    const { page } = await serve({ runsDir });
+    await page.locator(testId('nav-runs')).click();
+    await expect.poll(() => page.locator(testId('run')).count(), { timeout: 20_000 }).toBe(2);
+
+    // A run is remembered by what you were working on, not by a timestamp.
+    const cards = await textOf(page, testId('runs'));
+    expect(cards).toContain('checkout: retry a flaky payment step');
+    expect(cards).toContain('9f2b1c4');
+    expect(cards).toContain('feature/checkout');
+    expect(cards).toContain('Ada Lovelace');
+    expect(await textOf(page, testId('run-flaky'))).toContain('flaky');
+
+    // A checkout with no repository says that, rather than showing blanks.
+    expect(cards).toContain('no commit recorded');
+  });
+});
+
+describe('Settings', () => {
+  it('says what it resolved and where each value came from', async () => {
+    const page = await open(await buildFixtureTrace());
+    await page.locator(testId('nav-settings')).click();
+
+    const settings = await textOf(page, testId('settings'));
+    // The point of the page is answering "why is it behaving like this".
+    expect(settings).toContain('Project');
+    expect(settings).toContain('package.json');
+    expect(settings).toContain('Branch');
+    expect(await page.locator(testId('editor-choice')).isVisible()).toBe(true);
+  });
+});
+
 describe('the viewer emitted as a self-contained report', () => {
   /**
    * The point of the inline source: the same bundle, the same components, one

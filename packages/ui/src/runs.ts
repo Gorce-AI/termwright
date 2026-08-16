@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import type { UiRunSummary, UiTestStatus } from './events.js';
 
 /** Format version of `manifest.json`. */
-export const RUN_MANIFEST_VERSION = 2;
+export const RUN_MANIFEST_VERSION = 3;
 
 /** Default directory runs are written to, relative to the project. */
 export const DEFAULT_RUNS_DIR = '.termwright/runs';
@@ -47,6 +47,21 @@ export interface RunTest {
   readonly error?: string;
 }
 
+/**
+ * The commit a run was made at.
+ *
+ * Optional, and deliberately so: a repository is not a condition of running
+ * tests. A tarball with no `.git`, a shallow CI checkout, a directory unzipped
+ * from an artifact — in each of those the facts do not exist, and writing empty
+ * strings would be inventing them. Absent means "this was not a repository".
+ */
+export interface RunGit {
+  readonly commit: string;
+  readonly message: string;
+  readonly author: string;
+  readonly branch: string;
+}
+
 /** One finished run. */
 export interface RunManifest {
   readonly v: typeof RUN_MANIFEST_VERSION;
@@ -57,6 +72,7 @@ export interface RunManifest {
   readonly finishedAt: number;
   readonly summary: UiRunSummary;
   readonly tests: readonly RunTest[];
+  readonly git?: RunGit;
 }
 
 /** A run as the history list shows it, without its tests. */
@@ -67,6 +83,7 @@ export interface RunSummaryEntry {
   readonly summary: UiRunSummary;
   /** Tests the run recorded, for the list's count. */
   readonly testCount: number;
+  readonly git?: RunGit;
 }
 
 /** Builds the sortable directory name for a run that started at `startedAt`. */
@@ -125,6 +142,7 @@ export async function readRunHistory(runsDir: string): Promise<readonly RunSumma
       finishedAt: manifest.finishedAt,
       summary: manifest.summary,
       testCount: manifest.tests.length,
+      ...(manifest.git === undefined ? {} : { git: manifest.git }),
     });
   }
   return runs;
@@ -168,7 +186,30 @@ export function parseRunManifest(raw: string): RunManifest | null {
   const summary = parseSummary(value['summary']);
   if (id === null || startedAt === null || finishedAt === null || summary === null) return null;
 
-  return { v: RUN_MANIFEST_VERSION, id, startedAt, finishedAt, summary, tests: parseTests(value['tests']) };
+  const git = parseGit(value['git']);
+  return {
+    v: RUN_MANIFEST_VERSION,
+    id,
+    startedAt,
+    finishedAt,
+    summary,
+    tests: parseTests(value['tests']),
+    ...(git === null ? {} : { git }),
+  };
+}
+
+/** Reads the `git` section, or `null` when it is absent or incomplete. */
+function parseGit(value: unknown): RunGit | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  const commit = text(record['commit']);
+  const message = text(record['message']);
+  const author = text(record['author']);
+  const branch = text(record['branch']);
+  // All four or none: a card showing a hash with no message reads as a bug,
+  // and a partial section means something wrote it that did not know the shape.
+  if (commit === null || message === null || author === null || branch === null) return null;
+  return { commit, message, author, branch };
 }
 
 function parseSummary(value: unknown): UiRunSummary | null {
