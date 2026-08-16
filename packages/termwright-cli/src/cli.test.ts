@@ -20,6 +20,8 @@ function harness(
     readonly mode?: UiServer['mode'];
     readonly runnerExit?: number;
     readonly mcpExit?: number;
+    /** Thrown by `startUi`, to stand in for an archive that will not open. */
+    readonly startUiError?: unknown;
   } = {},
 ): Harness {
   const out: string[] = [];
@@ -38,6 +40,7 @@ function harness(
     },
     ui: {
       startUi: async (options) => {
+        if (overrides.startUiError !== undefined) throw overrides.startUiError;
         uiOptions.push(options);
         return {
           url: 'http://127.0.0.1:5000/?token=abc',
@@ -134,6 +137,7 @@ describe('informational commands', () => {
     expect(document.commands.map((command) => command.name)).toEqual([
       'ui',
       'report',
+      'screenshot',
       'codegen',
       'mcp',
       'agent-context',
@@ -237,6 +241,27 @@ describe('the ui command', () => {
     const recording = harness({ mode: 'record' });
     await runCli(['codegen', '--', 'node', 'agent.js'], recording.deps);
     expect(recording.uiOptions[0]?.discovery).toBeUndefined();
+  });
+
+  it('calls a path that does not open a usage error, not an internal fault', async () => {
+    // The taxonomy is a contract for agents and CI: 2 means "you typed
+    // something wrong", 5 means "termwright broke". A missing file is the user's
+    // input, however it surfaces — the trace reader calls it a protocol
+    // violation and the filesystem calls it ENOENT.
+    const archiveMissing = Object.assign(new Error('trace not found: /nowhere.twtrace'), {
+      code: 'protocol-violation',
+    });
+    const h = harness({ mode: 'post-mortem', startUiError: archiveMissing });
+
+    expect(await runCli(['ui', '--trace', '/nowhere.twtrace'], h.deps)).toBe(EXIT_CODES.usage);
+    expect(h.err.join('\n')).toContain('/nowhere.twtrace');
+  });
+
+  it('keeps a fault of our own reading as internal', async () => {
+    // Reclassifying everything would hide our bugs behind "you typed it wrong".
+    const bug = new TypeError('cannot read properties of undefined');
+    const h = harness({ mode: 'post-mortem', startUiError: bug });
+    expect(await runCli(['ui', '--trace', '/out/login.twtrace'], h.deps)).toBe(EXIT_CODES.internal);
   });
 
   it('opens an archive without starting a runner', async () => {

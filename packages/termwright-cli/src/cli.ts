@@ -24,6 +24,7 @@ import {
   type CliIo,
 } from '@termwright/mcp';
 import { openInBrowser, shouldOpenBrowser, startUiServer, writeInlineReport } from '@termwright/ui';
+import { captureScreenshot } from './screenshot-command.js';
 import { documentedCommands, parseArgs, type ParsedArgs } from './args.js';
 import {
   runUi,
@@ -111,6 +112,9 @@ export async function runCli(
       case 'report':
         return await emitReport(args, deps, json);
 
+      case 'screenshot':
+        return await emitScreenshot(args, deps, json);
+
       case 'ui':
       case 'codegen':
         return await launchUi(args, deps, json);
@@ -159,6 +163,57 @@ function asArchiveUsageError(error: unknown, path: string): unknown {
     `cannot read the archive ${path}: ${detail}`,
     'check the path, or pass the directory or .zip a run wrote',
   );
+}
+
+/**
+ * `termwright screenshot` — one moment of a recording, as a PNG.
+ *
+ * The moment chosen is printed, not just the file written: with no `--at` or
+ * `--step` the command picks one, and a picture whose subject is a mystery is
+ * hard to argue with.
+ */
+async function emitScreenshot(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
+  const trace = args.trace as string; // `parseArgs` rejects `screenshot` without one
+  let result: Awaited<ReturnType<typeof captureScreenshot>>;
+  try {
+    result = await captureScreenshot({
+      trace,
+      atMs: args.atMs,
+      step: args.step,
+      out: args.outFile,
+      scale: args.scale,
+    });
+  } catch (error) {
+    throw asArchiveUsageError(error, trace);
+  }
+
+  if (json) {
+    deps.io.out(
+      JSON.stringify({
+        path: result.path,
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        timeMs: result.timeMs,
+        chosen: result.chosen,
+        ...(result.fallbackCharacters.length === 0
+          ? {}
+          : { fallbackCharacters: [...result.fallbackCharacters] }),
+      }),
+    );
+    return EXIT_CODES.ok;
+  }
+
+  deps.io.out(`wrote ${result.path} (${result.width}×${result.height}, ${result.chosen} at ${result.timeMs}ms)`);
+  if (result.fallbackCharacters.length > 0) {
+    // These come out blank. A screenshot with holes that nobody mentions is
+    // read as the program having drawn nothing there.
+    deps.io.err(
+      `  ${result.fallbackCharacters.length} character(s) had no embedded glyph and are blank: ` +
+        result.fallbackCharacters.join(' '),
+    );
+  }
+  return EXIT_CODES.ok;
 }
 
 /**

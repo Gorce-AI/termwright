@@ -11,6 +11,7 @@ import { usageError } from '@termwright/mcp';
 export type CliCommand =
   | 'ui'
   | 'report'
+  | 'screenshot'
   | 'codegen'
   | 'mcp'
   | 'agent-context'
@@ -66,6 +67,16 @@ export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
     summary: [
       'write the viewer and one archive as a single HTML file,',
       'openable from disk — a CI artifact rather than a server.',
+    ],
+  },
+  screenshot: {
+    headline: 'write one moment of a recording as a PNG.',
+    synopsis: ['screenshot --trace <file> [--at <ms> | --step N] [--out-file <file>] [--scale N]'],
+    summary: [
+      'write one moment of a recording as a PNG. With neither --at',
+      'nor --step it captures the crash, or the end of the last step —',
+      'not the final byte, which is a blank screen for a program that',
+      'left the alternate buffer.',
     ],
   },
   codegen: {
@@ -128,6 +139,12 @@ export interface ParsedArgs {
   readonly watch: boolean;
   /** Whether `ui` should open the runner in a browser. Default true. */
   readonly open: boolean;
+  /** `screenshot --at <ms>`: a moment on the cast timeline. */
+  readonly atMs: number | undefined;
+  /** `screenshot --step N`: a step, numbered from 1 as the overview lists them. */
+  readonly step: number | undefined;
+  /** `screenshot --scale N`: pixel density multiplier. */
+  readonly scale: number | undefined;
   /**
    * Everything after `--`.
    *
@@ -137,7 +154,33 @@ export interface ParsedArgs {
   readonly rest: readonly string[];
 }
 
-const NEEDS_VALUE = new Set(['--trace', '--out-file', '--out', '--port', '--host']);
+const NEEDS_VALUE = new Set([
+  '--trace',
+  '--out-file',
+  '--out',
+  '--port',
+  '--host',
+  '--at',
+  '--step',
+  '--scale',
+]);
+
+/**
+ * A numeric flag value, or a usage error naming the flag.
+ *
+ * The *range* checks live with the command that uses the number, because what
+ * counts as valid differs — a step is a positive integer, a scale is any
+ * positive number — and repeating them here would put the rule in two places.
+ *
+ * @throws McpError of kind `usage`.
+ */
+function numberFlag(flag: string, value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw usageError(`${flag} needs a number, got ${JSON.stringify(value)}`);
+  }
+  return parsed;
+}
 
 /**
  * Parse `process.argv.slice(2)`.
@@ -161,6 +204,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let host: string | undefined;
   let watch = true;
   let open = true;
+  let atMs: number | undefined;
+  let step: number | undefined;
+  let scale: number | undefined;
   let rest: readonly string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -195,6 +241,15 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         case '--host':
           host = value;
+          break;
+        case '--at':
+          atMs = numberFlag('--at', value);
+          break;
+        case '--step':
+          step = numberFlag('--step', value);
+          break;
+        case '--scale':
+          scale = numberFlag('--scale', value);
           break;
         case '--port': {
           const parsed = Number(value);
@@ -233,6 +288,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case 'ui':
       case 'report':
+      case 'screenshot':
       case 'codegen':
       case 'mcp':
       case 'agent-context':
@@ -258,6 +314,15 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   if (record && trace !== undefined) {
     throw usageError('--trace and --record are different modes; pass one', 'see `termwright --help`');
   }
+  if (resolved === 'screenshot' && trace === undefined) {
+    throw usageError(
+      'screenshot needs the recording to capture',
+      'name it with --trace, as in `termwright screenshot --trace out/login.twtrace`',
+    );
+  }
+  if (resolved === 'screenshot' && atMs !== undefined && step !== undefined) {
+    throw usageError('--at and --step name the same moment two ways; pass one');
+  }
   if (resolved === 'report' && trace === undefined) {
     throw usageError(
       'report needs the archive to render',
@@ -271,5 +336,20 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     );
   }
 
-  return { command: resolved, json, trace, record, outFile, out, port, host, watch, open, rest };
+  return {
+    command: resolved,
+    json,
+    trace,
+    record,
+    outFile,
+    out,
+    port,
+    host,
+    watch,
+    open,
+    atMs,
+    step,
+    scale,
+    rest,
+  };
 }

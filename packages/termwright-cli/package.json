@@ -49,7 +49,9 @@
     "@termwright/ink-testing": "workspace:*",
     "@termwright/mcp": "workspace:*",
     "@termwright/test": "workspace:*",
-    "@termwright/ui": "workspace:*"
+    "@termwright/ui": "workspace:*",
+    "@termwright/screenshot": "workspace:*",
+    "@termwright/trace": "workspace:*"
   },
   "peerDependencies": {
     "vitest": ">=3.2.0"

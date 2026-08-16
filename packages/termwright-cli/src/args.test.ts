@@ -35,6 +35,23 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['report'])).toThrow(/needs the archive/);
   });
 
+  it('reads the screenshot command and how the moment is named', () => {
+    const args = parseArgs(['screenshot', '--trace', 'out/a.twtrace', '--at', '1500', '--scale', '2']);
+    expect(args).toMatchObject({ command: 'screenshot', atMs: 1_500, scale: 2 });
+    expect(parseArgs(['screenshot', '--trace', 'out/a.twtrace', '--step', '3']).step).toBe(3);
+  });
+
+  it('refuses a screenshot with nothing to capture, or two ways of naming it', () => {
+    expect(() => parseArgs(['screenshot'])).toThrow(/needs the recording/);
+    expect(() =>
+      parseArgs(['screenshot', '--trace', 'a.twtrace', '--at', '10', '--step', '1']),
+    ).toThrow(/pass one/);
+  });
+
+  it('refuses a flag that needs a number and did not get one', () => {
+    expect(() => parseArgs(['screenshot', '--trace', 'a', '--at', 'soon'])).toThrow(/needs a number/);
+  });
+
   it('reads --no-open', () => {
     expect(parseArgs(['ui', '--no-open']).open).toBe(false);
   });
