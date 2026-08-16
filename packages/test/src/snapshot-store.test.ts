@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   beginSnapshotScope,
@@ -27,19 +27,31 @@ afterEach(() => {
 });
 
 describe('snapshotFilePath', () => {
+  // Asserted as a directory and a file name rather than one joined string:
+  // the separator is the platform's, and rebuilding the whole path with the
+  // same expression the implementation uses would assert nothing at all.
+  const testFile = resolve(join('repo', 'src', 'login.test.ts'));
+
   it('puts snapshots next to the test file, one file per kind', () => {
-    expect(snapshotFilePath('/repo/src/login.test.ts', 'semantic', '__snapshots__')).toBe(
-      '/repo/src/__snapshots__/login.test.ts.tw-semantic.yaml',
-    );
-    expect(snapshotFilePath('/repo/src/login.test.ts', 'cells', '-snapshots')).toBe(
-      '/repo/src/-snapshots/login.test.ts.tw-cells.yaml',
-    );
+    const semantic = snapshotFilePath(testFile, 'semantic', '__snapshots__');
+    expect(dirname(semantic)).toBe(resolve(dirname(testFile), '__snapshots__'));
+    expect(basename(semantic)).toBe('login.test.ts.tw-semantic.yaml');
+
+    const cells = snapshotFilePath(testFile, 'cells', '-snapshots');
+    expect(dirname(cells)).toBe(resolve(dirname(testFile), '-snapshots'));
+    expect(basename(cells)).toBe('login.test.ts.tw-cells.yaml');
   });
 
   it('accepts an absolute snapshot directory', () => {
-    expect(snapshotFilePath('/repo/src/a.test.ts', 'cells', '/tmp/snaps')).toBe(
-      '/tmp/snaps/a.test.ts.tw-cells.yaml',
-    );
+    const snapshots = resolve(join('elsewhere', 'snaps'));
+    const file = snapshotFilePath(testFile, 'cells', snapshots);
+    expect(dirname(file)).toBe(snapshots);
+    expect(basename(file)).toBe('login.test.ts.tw-cells.yaml');
+  });
+
+  it('keeps an absolute snapshot directory free of the test file directory', () => {
+    const snapshots = resolve(join('elsewhere', 'snaps'));
+    expect(snapshotFilePath(testFile, 'cells', snapshots).startsWith(snapshots)).toBe(true);
   });
 });
 
