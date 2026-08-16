@@ -32,6 +32,16 @@ describe('launchInkFixture', () => {
     expect(await harness.getByRole('button', { name: 'Approve' }).count()).toBe(1);
   });
 
+  it('reports the negotiated capabilities from settled()', async () => {
+    const harness = await launch();
+
+    const capabilities = await harness.settled();
+
+    expect(capabilities.semanticTree).toBe(true);
+    expect(capabilities.adapter?.name).toBe('@termwright/ink');
+    expect(capabilities.capabilities).toContain('absolute-bounds');
+  });
+
   it('passes props as JSON', async () => {
     const harness = await launch({ label: 'Reject', greeting: 'from a fixture' });
 

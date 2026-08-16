@@ -175,6 +175,19 @@ describe('mountInk', () => {
     expect((await rebuilt.resolve()).ref).toBe(target.ref);
   });
 
+  it('reports the negotiated capabilities from settled()', async () => {
+    const harness = await mount();
+
+    const capabilities = await harness.settled();
+
+    expect(capabilities.semanticTree).toBe(true);
+    expect(capabilities.adapter?.name).toBe('@termwright/ink');
+    expect(capabilities.capabilities).toContain('absolute-bounds');
+    // Settling is a fact about the session, not a one-shot: asking again is
+    // the same answer, not a second negotiation.
+    expect(await harness.settled()).toEqual(capabilities);
+  });
+
   it('answers waitForReady, and says how it decided', async () => {
     const harness = await mount();
 

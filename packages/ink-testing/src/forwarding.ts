@@ -149,6 +149,10 @@ export abstract class ForwardingHarness implements TerminalHarness {
     return this.session.waitForIdle(opts);
   }
 
+  settled(opts?: WaitOptions): Promise<SessionCapabilities> {
+    return this.session.settled(opts);
+  }
+
   waitForReady(opts?: WaitOptions): Promise<void> {
     return this.session.waitForReady(opts);
   }
