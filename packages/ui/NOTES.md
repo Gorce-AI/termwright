@@ -185,11 +185,25 @@ normally, because `castOffset` was required there from the start.
 
 
 Rows come from `events.jsonl`, which already holds steps, actions and
-assertions; nothing is recorded twice. Live runs get the same rows from a new
-`action` message, which the reporter builds from Vitest 3.2 **test annotations**
-(`onTestAnnotate`) — the only channel a worker has to a reporter. Until
-`@termwright/test` emits `termwright:action` annotations, live runs show an
-empty command log with a line saying so, and replays show everything.
+assertions; nothing is recorded twice.
+
+Live runs have **two** producers for the same `action` message, and they cover
+different things:
+
+- `attachSession` translates the driver's own `action` event, so anything that
+  drives a session in-process — the recorder, a future in-process runner — fills
+  the command log without the test framework being involved at all;
+- the reporter translates Vitest 3.2 **test annotations** (`onTestAnnotate`),
+  which is the only channel a worker process has to a reporter. Assertions can
+  only come this way, since the driver never sees them.
+
+The driver's event fires *after* the action finished, so the output it caused is
+already on the timeline ahead of it. The log marks when an action completed and
+never claims the bytes came after it — worth remembering before drawing any
+"this action caused that output" arrow. Failed actions are published too, and
+are the ones worth watching live: *"the click did not land because the app never
+enabled mouse reporting"* beats wondering why nothing happened. Their `error` is
+a code (`unsupported-action`, `timeout`), not prose, so it groups and filters.
 
 Clicking a row can highlight the node an action targeted, but only when the
 recorded event carries a `ref` (`n8@42`, node plus the revision it resolved at).

@@ -175,3 +175,47 @@ describe('application logs', () => {
     expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'test-start', 'app-log']);
   });
 });
+
+describe('driver actions', () => {
+  it('publishes a finished action with its selector and target', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+    session.clock = 120;
+    session.action({ api: 'click', ok: true, selector: 'getByRole("button")', ref: 'n8@42' });
+
+    expect(hub.backlog).toEqual([
+      {
+        v: 1,
+        type: 'action',
+        kind: 'action',
+        api: 'click',
+        t: 120,
+        ok: true,
+        sessionId: 's1',
+        selector: 'getByRole("button")',
+        ref: 'n8@42',
+      },
+    ]);
+  });
+
+  it('publishes failures too, with the code that grouped them', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+    session.action({ api: 'click', ok: false, error: 'unsupported-action' });
+
+    const message = hub.backlog[0];
+    expect(message?.type === 'action' && message.ok).toBe(false);
+    expect(message?.type === 'action' && message.error).toBe('unsupported-action');
+    expect(message?.type === 'action' && message.ref).toBeUndefined();
+  });
+
+  it('stops publishing actions after detaching', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session)();
+    session.action({ api: 'press', ok: true });
+    expect(hub.backlog).toHaveLength(0);
+  });
+});

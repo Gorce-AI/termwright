@@ -48,6 +48,17 @@ export class FakeSession implements UiSessionSource {
     this.#emit('semantic-revision', { revision: snapshot.revision, timeMs: this.clock });
   }
 
+  /** Emits a finished driver action. */
+  action(event: {
+    api: string;
+    ok: boolean;
+    selector?: string;
+    ref?: string;
+    error?: string;
+  }): void {
+    this.#emit('action', { ...event, timeMs: this.clock });
+  }
+
   /** Emits a followed-file log line. */
   logLine(line: string, label = 'server.log'): void {
     this.#emit('app-log', { source: 'file', label, line, timeMs: this.clock });

@@ -26,7 +26,8 @@ export interface UiSessionSource {
 }
 
 /**
- * Streams a session into the hub as `output` and `semantic` messages.
+ * Streams a session into the hub as `output`, `semantic`, `action` and
+ * `app-log` messages.
  *
  * A `semantic-revision` event only announces that a tree exists; the tree itself
  * is read back from the session. When the harness has not caught up yet — the
@@ -51,6 +52,27 @@ export function attachSession(hub: UiHub, source: UiSessionSource): () => void {
     if (snapshot === null || snapshot.revision !== revision) return;
     hub.publish({ v: 1, type: 'semantic', sessionId, revision, snapshot });
   });
+  // Driver actions. The event fires *after* the action finished, so the output
+  // it caused is already on the timeline ahead of it — the command log marks
+  // when an action completed, never claims the bytes came after it.
+  //
+  // Failed actions are published too, and are the ones worth watching live: "the
+  // click did not land because the app never enabled mouse reporting" beats
+  // wondering why nothing happened.
+  const offAction = source.events.on('action', (event) => {
+    hub.publish({
+      v: 1,
+      type: 'action',
+      kind: 'action',
+      api: event.api,
+      t: event.timeMs,
+      ok: event.ok,
+      sessionId,
+      ...(event.selector === undefined ? {} : { selector: event.selector }),
+      ...(event.ref === undefined ? {} : { ref: event.ref }),
+      ...(event.error === undefined ? {} : { error: event.error }),
+    });
+  });
   // Application logs: a followed file yields a line, an instrumented adapter a
   // structured record. Both flatten into one row; a payload that flattens to
   // nothing is dropped rather than published as an empty line.
@@ -62,6 +84,7 @@ export function attachSession(hub: UiHub, source: UiSessionSource): () => void {
   return () => {
     offOutput();
     offSemantic();
+    offAction();
     offLog();
   };
 }
