@@ -92,13 +92,35 @@ Two of them are worth understanding before changing:
 - The TypeScript wrapper asserts the Go tests did not **skip**. A skipped stall
   test looks identical to a passing one in a summary line.
 
+## The zero-config path, end to end
+
+`zero-config.pty.test.ts` walks the whole thing once: a plain tview application
+in `src/testing/fixture-app` — no import of ours, no flag, no build tag — is
+built through the generated workspace, launched under the real driver, and
+addressed by role. It asserts what the phase promised: the adapter reports
+itself as `termwright-probe-tview`, `getByRole('list', {name: 'Files'})`
+resolves, and a widget on a page tview has not shown is *hidden* rather than
+absent, which is knowable only from inside the package.
+
+Two things about that test worth keeping:
+
+- It uses the driver's own API, not the Vitest preset's matchers. A probe
+  proving itself through the test preset would invert the dependency.
+- It does not assert the status line after showing the settings page. tview
+  draws a shown page *over* the one below it, so the text is still in the tree
+  and no longer on the grid — asserting on the screen there would be asserting
+  the layout, not the behaviour.
+
+The dormancy claim is measured rather than read off the source: the same
+fixture is built twice, once against untouched tview and once against the
+instrumented copy, and the two screens must be byte-identical when the
+handshake variables are absent.
+
 ## Not covered yet
 
 - Windows. Nothing here has run on ConPTY, and the named-pipe endpoint path in
   the client is untested from this probe.
 - tview versions other than v0.42.0. The patch set is per version by design;
   a second version means a second directory and a second set of checksums.
-- The zero-config fixture that builds and runs a real application end to end
-  under the driver. The pieces are proven separately — the copy compiles, an
-  application builds through the generated workspace, the canary confirms which
-  copy compiled — but the whole path has not yet been walked in one test.
+- Windows for the zero-config path specifically: the fixture builds and runs
+  only where a pseudo-terminal opens.

@@ -1,0 +1,174 @@
+/**
+ * The whole path, walked once: a plain tview application, built through the
+ * generated workspace, launched under the real driver, addressed by role.
+ *
+ * Everything else in this package proves a piece — the copy compiles, the
+ * canary confirms which copy compiled, the probe survives a stalled driver.
+ * This is the test that says a user's application, with no imports of ours and
+ * no configuration, becomes addressable.
+ *
+ * Skipped without a Go toolchain or a pseudo-terminal.
+ */
+
+import { execFile } from 'node:child_process';
+import { cp, mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { afterAll, describe, expect, it } from 'vitest';
+import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
+import { applyPatchSet, materializeUpstream } from './patches.js';
+import { writeWorkspace } from './workspace.js';
+
+const run = promisify(execFile);
+const here = dirname(fileURLToPath(import.meta.url));
+const PATCH_SET = join(here, '..', 'upstream-patches', 'tview', 'v0.42.0');
+const FIXTURE = join(here, 'testing', 'fixture-app');
+const CLIENT = join(here, '..', '..', '..', 'clients', 'go');
+
+async function goAvailable(): Promise<boolean> {
+  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;
+  try {
+    await run('go', ['version']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ptyAvailable(): boolean {
+  if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
+  try {
+    const pty = createNodePtyBackend().spawn({
+      command: [process.execPath, '-e', 'process.exit(0)'],
+      env: { PATH: process.env['PATH'] ?? '' },
+      columns: 20,
+      rows: 4,
+    });
+    pty.dispose();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const runnable = (await goAvailable()) && ptyAvailable();
+const roots: string[] = [];
+const sessions: TerminalHarness[] = [];
+
+afterAll(async () => {
+  await Promise.all(sessions.map((session) => session.close()));
+  await Promise.all(roots.map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+/** Builds the fixture, optionally through the instrumented copy. */
+async function buildFixture(options: { readonly instrumented: boolean }): Promise<string> {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-zeroconfig-')));
+  roots.push(dir);
+
+  const app = join(dir, 'app');
+  await mkdir(app, { recursive: true });
+  await cp(FIXTURE, app, { recursive: true });
+
+  const binary = join(dir, 'app-binary');
+  const env: NodeJS.ProcessEnv = { ...process.env };
+
+  if (options.instrumented) {
+    const { stdout } = await run('go', ['env', 'GOMODCACHE']);
+    const copy = join(dir, 'tview');
+    await materializeUpstream(join(stdout.trim(), 'github.com', 'rivo', 'tview@v0.42.0'), copy);
+    await applyPatchSet(copy, PATCH_SET);
+
+    env['GOWORK'] = await writeWorkspace(join(dir, 'generated.work'), {
+      moduleDir: app,
+      inherited: { uses: [], replaces: [] },
+      replaces: [
+        { from: 'github.com/rivo/tview', to: copy },
+        { from: 'github.com/gorce-ai/termwright/clients/go', to: await realpath(CLIENT) },
+      ],
+    });
+  } else {
+    // The comparison arm: the same source, the untouched framework.
+    env['GOFLAGS'] = '-mod=mod';
+  }
+
+  await run('go', ['build', '-o', binary, '.'], { cwd: app, env });
+  return binary;
+}
+
+describe.skipIf(!runnable)('a plain tview application under the probe', () => {
+  it('exposes its widgets by role, with no import and no configuration', async () => {
+    const binary = await buildFixture({ instrumented: true });
+
+    const app = await launchTerminal({ command: [binary], columns: 80, rows: 24 });
+    sessions.push(app);
+    await app.waitForText('readme.md');
+
+    // The claim of the whole phase: semantics from an application that was
+    // never told about us.
+    expect(app.capabilities().semanticTree).toBe(true);
+    expect(app.capabilities().adapter?.name).toBe('termwright-probe-tview');
+
+    // The driver's own API rather than the Vitest preset's matchers: a probe
+    // package should not depend on the test preset to prove it works.
+    await expect.poll(() => app.getByRole('list', { name: 'Files' }).isVisible()).toBe(true);
+    await expect.poll(() => app.getByRole('listitem', { name: 'readme.md' }).isVisible()).toBe(true);
+    await expect.poll(() => app.getByRole('button', { name: 'Save' }).isVisible()).toBe(true);
+
+    // A widget on a page tview has not shown carries `hidden` rather than
+    // being absent — the in-package walk is what makes that knowable.
+    await expect.poll(() => app.getByRole('textbox', { name: 'Name' }).isVisible()).toBe(false);
+
+    // Showing the page flips exactly that: the widget stops being hidden.
+    // Not asserted on the screen, because tview draws the shown page over the
+    // status line rather than beside it — the tree knows, the grid does not.
+    await app.press('s');
+    await expect.poll(() => app.getByRole('textbox', { name: 'Name' }).isVisible()).toBe(true);
+    await expect.poll(() => app.getByRole('region', { name: 'Settings' }).isVisible()).toBe(true);
+  }, 600_000);
+
+  it('renders byte-identically to the untouched framework when not instrumented', async () => {
+    // The dormancy claim, measured rather than asserted from the source: the
+    // instrumented binary run without the handshake variables must paint what
+    // the vanilla one paints.
+    const [vanilla, instrumented] = await Promise.all([
+      buildFixture({ instrumented: false }),
+      buildFixture({ instrumented: true }),
+    ]);
+
+    const screens: string[] = [];
+    for (const binary of [vanilla, instrumented]) {
+      // envMode 'replace' already withholds the handshake variables, so the
+      // instrumented binary has no driver to talk to even though one launched
+      // it. That is exactly the dormant case.
+      const session = await launchTerminal({
+        command: [binary],
+        columns: 80,
+        rows: 24,
+        env: { TERMWRIGHT_ENDPOINT: '', TERMWRIGHT_TOKEN: '' },
+      });
+      sessions.push(session);
+      await session.waitForText('readme.md');
+      await session.waitForStable();
+      screens.push(session.screen().text());
+    }
+
+    expect(screens[1]).toBe(screens[0]);
+  }, 900_000);
+});
+
+describe.skipIf(runnable)('the zero-config arms', () => {
+  it('skips because no Go toolchain or no pseudo-terminal is reachable', () => {
+    expect(runnable).toBe(false);
+  });
+});
+
+/** Kept for the failure message when the fixture stops being zero-config. */
+it('the fixture imports nothing of ours', async () => {
+  const source = await readFile(join(FIXTURE, 'main.go'), 'utf8');
+  const imports = source.slice(source.indexOf('import ('), source.indexOf(')'));
+
+  expect(imports).not.toContain('termwright');
+  expect(imports).toContain('github.com/rivo/tview');
+});

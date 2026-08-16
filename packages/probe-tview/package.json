@@ -4,15 +4,28 @@
   "description": "zero-config tview probe: an ephemeral Go workspace redirects the build to an instrumented copy, with no change to the project",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  "engines": {
+    "node": ">=22"
   },
-  "files": ["dist", "upstream-patches"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "upstream-patches"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@termwright/protocol": "workspace:*" }
+  "dependencies": {
+    "@termwright/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@termwright/driver": "workspace:*"
+  }
 }
