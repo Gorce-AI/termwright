@@ -317,7 +317,9 @@ describe('the runner UI with discovered tests', () => {
 
     // Same file and title as a discovered row: this is that test running, not a
     // third one. Two rows for one test is the bug this asserts against.
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
+    //
+    // Deliberately no `run-start` first: that clears the list by design, so a
+    // reconciliation test that sent one would be testing the clear instead.
     server.hub.publish({
       v: 1,
       type: 'test-start',
@@ -393,16 +395,17 @@ describe('the runner UI showing run history', () => {
     await page.locator(testId('view-runs')).click();
     await expect.poll(() => page.locator(testId('run')).count(), { timeout: 15_000 }).toBe(2);
 
-    await page.locator(testId('run')).first().click();
+    // History is newest first, and it is the *older* run whose test failed and
+    // kept an archive — so this is `.last()`, not `.first()`.
+    await page.locator(testId('run')).last().click();
     await expect
       .poll(() => page.locator(testId('run-test')).count(), { timeout: 15_000 })
       .toBeGreaterThan(0);
     expect(await textOf(page, testId('run-detail'))).toContain('approves the command');
 
-    // The run whose test kept an archive: clicking it puts that recording on
-    // screen, which is the entire point of keeping the reference.
-    const withTrace = page.locator(testId('run-test')).first();
-    await withTrace.click();
+    // Clicking the test that kept an archive puts that recording on screen,
+    // which is the entire point of keeping the reference.
+    await page.locator(testId('run-test')).first().click();
 
     await expect.poll(() => page.locator(testId('crash')).count(), { timeout: 20_000 }).toBe(1);
 
