@@ -323,9 +323,7 @@ const specsHandlers = {
   run(paths: readonly string[]): void {
     // Vitest takes file paths as its filter, so running a folder is running
     // the files under it — the same operation the row-level button performs.
-    runner?.send({ v: 1, type: 'rerun', testIds: [...paths] });
-    state.view = 'runner';
-    schedule();
+    void startRun(paths);
   },
   openRun(runId: string): void {
     state.view = 'runs';
@@ -767,6 +765,31 @@ function renderDialogs(): TemplateResult | typeof nothing {
     });
   }
   return nothing;
+}
+
+/**
+ * Starts a run, and says so when it could not be started.
+ *
+ * Over HTTP rather than over the socket, because the socket has no reply: a
+ * panel that could only send `rerun` had no way to tell "nothing started" from
+ * "nothing has happened yet", and that is exactly the silence this fixes.
+ */
+async function startRun(files: readonly string[]): Promise<void> {
+  if (runner === undefined) {
+    note('this page has no runner behind it');
+    return;
+  }
+  // Running *this* spec means "show me it running"; running everything means
+  // "keep me where I was choosing from". Jumping away from the list you just
+  // used is how a panel loses your place.
+  if (files.length > 0) state.view = 'runner';
+  schedule();
+  try {
+    await runner.startRun(files);
+  } catch (error) {
+    state.toast = { message: `could not start the run — ${describe(error)}`, failed: true };
+    schedule();
+  }
 }
 
 /** Starts the recording the form describes. */
@@ -1287,7 +1310,7 @@ const timelineHandlers: TimelineHandlers = {
     schedule();
   },
   rerun(testId) {
-    runner?.send({ v: 1, type: 'rerun', ...(testId === undefined ? {} : { testIds: [testId] }) });
+    void startRun(testId === undefined ? [] : [testId]);
   },
   stop() {
     runner?.send({ v: 1, type: 'stop' });

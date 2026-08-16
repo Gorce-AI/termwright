@@ -61,7 +61,7 @@ function harness(
         runs.push(run);
         return {
           exited: Promise.resolve(overrides.runnerExit ?? 0),
-          rerun: () => undefined,
+          run: async () => undefined,
           stop: () => undefined,
         };
       },
@@ -322,7 +322,7 @@ describe('the ui command', () => {
 
   it('wires the browser controls to the runner', async () => {
     const h = harness();
-    const rerun = vi.fn();
+    const run = vi.fn(async () => undefined);
     const stop = vi.fn();
     const ui = h.deps.ui as { startVitest: CliDeps['ui']['startVitest'] };
     let released: (() => void) | undefined;
@@ -330,7 +330,7 @@ describe('the ui command', () => {
       exited: new Promise<number>((resolve) => {
         released = () => resolve(0);
       }),
-      rerun,
+      run,
       stop,
     });
 
@@ -338,9 +338,10 @@ describe('the ui command', () => {
     await vi.waitFor(() => expect(h.uiOptions).toHaveLength(1));
     await vi.waitFor(() => expect(released).toBeTypeOf('function'));
 
-    h.uiOptions[0]?.onRerun?.(undefined);
+    await h.uiOptions[0]?.onRerun?.(['tests/a.test.ts']);
     h.uiOptions[0]?.onStop?.();
-    expect(rerun).toHaveBeenCalledOnce();
+    // The panel names the files it wants run; the watcher's `r` never could.
+    expect(run).toHaveBeenCalledWith(['tests/a.test.ts']);
     expect(stop).toHaveBeenCalledOnce();
 
     released?.();

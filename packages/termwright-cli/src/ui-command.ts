@@ -10,8 +10,9 @@
  * same two keys.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { UiServer, UiServerOptions } from '@termwright/ui';
 
@@ -28,9 +29,14 @@ export interface VitestRun {
 export interface VitestHandle {
   /** Resolves with the runner's exit code. */
   readonly exited: Promise<number>;
-  /** Ask for a rerun (watch-mode `r`). */
-  rerun(): void;
-  /** Ask the runner to quit (watch-mode `q`). */
+  /**
+   * Runs the tests the panel asked for, and resolves when they finish.
+   *
+   * @param files - spec files to run; empty means the whole suite.
+   * @throws Error when the run could not be started.
+   */
+  run(files: readonly string[]): Promise<void>;
+  /** Ask the runner to quit. */
   stop(): void;
 }
 
@@ -65,6 +71,37 @@ export function resolveVitestBin(cwd: string): string {
 }
 
 /**
+ * The reporter that talks to the panel, as an absolute path.
+ *
+ * A bare specifier does not resolve from the project under test — it depends on
+ * `@termwright/test`, not on `@termwright/ui`, and a strict `node_modules` is
+ * right to refuse it. This package *does* depend on the panel, so it can hand
+ * Vitest the file.
+ *
+ * @throws Error when the panel's reporter cannot be found, which means a broken
+ * installation rather than a project without something configured.
+ */
+export function uiReporterPath(): string {
+  return fileURLToPath(import.meta.resolve('@termwright/ui/reporter'));
+}
+
+/**
+ * Arguments that point a Vitest process at the panel.
+ *
+ * Injected rather than required in the project's config, because a runner you
+ * have to configure before it shows you anything is a runner nobody sees work.
+ * `default` comes first so the terminal keeps its usual output.
+ *
+ * The cost, stated because it is real: Vitest's `--reporter` *replaces* the
+ * reporters a config declares, so a run the panel drives does not also produce
+ * whatever that config sets up (an HTML report, JUnit XML). Anything the user
+ * adds after `--` is appended to these rather than replacing them.
+ */
+export function reporterArgs(): readonly string[] {
+  return ['--reporter=default', `--reporter=${uiReporterPath()}`];
+}
+
+/**
  * Start Vitest in watch mode with the runner's URL in its environment.
  *
  * `stdin` is piped rather than inherited so that the browser's rerun and stop
@@ -72,45 +109,56 @@ export function resolveVitestBin(cwd: string): string {
  * forwarded on to keep every other hotkey working.
  */
 export function startVitest(run: VitestRun, bin = resolveVitestBin(run.cwd)): VitestHandle {
-  const child = spawn(process.execPath, [bin, 'watch', ...run.args], {
+  // `inherit`, not `pipe`. Vitest registers its watch-mode hotkeys only when
+  // its stdin is a TTY, so piping stdin to forward keystrokes disabled the very
+  // keys we were forwarding — `r` and `q` did nothing, for the terminal and for
+  // the browser alike. The terminal owns its keys again, and the panel starts
+  // runs of its own rather than pretending to type.
+  const child = spawn(process.execPath, [bin, 'watch', ...reporterArgs(), ...run.args], {
     cwd: run.cwd,
     env: { ...process.env, [UI_URL_ENV]: run.uiUrl },
-    stdio: ['pipe', 'inherit', 'inherit'],
+    stdio: 'inherit',
   });
-
-  const forward = (chunk: Buffer): void => {
-    child.stdin?.write(chunk);
-  };
-  const wasRaw = process.stdin.isTTY === true && process.stdin.isRaw;
-  if (process.stdin.isTTY === true) process.stdin.setRawMode(true);
-  process.stdin.on('data', forward);
-  process.stdin.resume();
-
-  const detach = (): void => {
-    process.stdin.off('data', forward);
-    if (process.stdin.isTTY === true) process.stdin.setRawMode(wasRaw);
-    process.stdin.pause();
-  };
 
   const exited = new Promise<number>((resolve) => {
     child.on('exit', (code, signal) => {
-      detach();
       // A signalled runner is a stop, not a failure.
       resolve(signal !== null ? 0 : (code ?? 0));
     });
-    child.on('error', () => {
-      detach();
-      resolve(1);
-    });
+    child.on('error', () => resolve(1));
   });
+
+  /** The run the panel started, so a second request does not race the first. */
+  let current: ChildProcess | undefined;
 
   return {
     exited,
-    rerun: () => {
-      child.stdin?.write('r');
+    async run(files: readonly string[]): Promise<void> {
+      if (current !== undefined) throw new Error('a run started from the panel is still going');
+      // A fresh `vitest run` rather than a keystroke into the watcher: it can
+      // be told *which* files to run, which is what "Run this spec" means, and
+      // the watcher's `r` can only ever rerun everything.
+      const started = spawn(process.execPath, [bin, 'run', ...files, ...reporterArgs(), ...run.args], {
+        cwd: run.cwd,
+        env: { ...process.env, [UI_URL_ENV]: run.uiUrl },
+        stdio: ['ignore', 'inherit', 'inherit'],
+      });
+      current = started;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          started.on('error', (error: Error) => reject(new Error(`could not start vitest: ${error.message}`)));
+          // A failing test is a result, not a failure to run: the panel already
+          // shows which tests failed, and reporting it here as an error would
+          // put a scary notice over an ordinary red run.
+          started.on('exit', () => resolve());
+        });
+      } finally {
+        current = undefined;
+      }
     },
     stop: () => {
-      child.stdin?.write('q');
+      current?.kill('SIGTERM');
+      child.kill('SIGTERM');
     },
   };
 }
@@ -176,7 +224,10 @@ export async function runUi(
     ...(request.trace === undefined && request.record === undefined
       ? { discovery: { cwd: request.cwd, watch: request.watch } }
       : {}),
-    onRerun: () => handle?.rerun(),
+    onRerun: async (testIds) => {
+      if (handle === undefined) throw new Error('this panel has no test runner behind it');
+      await handle.run(testIds ?? []);
+    },
     onStop: () => handle?.stop(),
   });
 

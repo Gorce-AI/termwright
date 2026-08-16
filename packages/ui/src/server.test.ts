@@ -164,7 +164,9 @@ describe('live mode', () => {
     const reruns: (readonly string[] | undefined)[] = [];
     let stopped = 0;
     const server = await start({
-      onRerun: (testIds) => reruns.push(testIds),
+      onRerun: (testIds) => {
+        reruns.push(testIds);
+      },
       onStop: () => {
         stopped += 1;
       },
@@ -488,6 +490,50 @@ describe('post-mortem mode', () => {
     const server = await start();
     expect((await api(server, '/api/trace/state?t=0')).status).toBe(409);
     expect((await api(server, '/api/trace/logs')).status).toBe(409);
+  });
+});
+
+describe('starting a run from the panel', () => {
+  it('answers whether the run started, not whether it passed', async () => {
+    const asked: (readonly string[] | undefined)[] = [];
+    const server = await start({
+      onRerun: (testIds) => {
+        asked.push(testIds);
+      },
+    });
+
+    const response = await fetch(`${server.url.replace(/\?.*/, '')}api/run?token=${server.token}`, {
+      method: 'POST',
+      body: JSON.stringify({ files: ['tests/a.test.ts'] }),
+    });
+    expect(response.status).toBe(200);
+    expect(asked).toEqual([['tests/a.test.ts']]);
+  });
+
+  it('says a run could not be started rather than swallowing it', async () => {
+    // The silent half of the bug the owner hit: the panel asked, nothing ran,
+    // and nothing said so.
+    const server = await start({
+      onRerun: () => {
+        throw new Error('vitest is not installed in this project');
+      },
+    });
+
+    const response = await fetch(`${server.url.replace(/\?.*/, '')}api/run?token=${server.token}`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(500);
+    expect(((await response.json()) as { error: string }).error).toContain('vitest is not installed');
+  });
+
+  it('refuses when there is no runner behind the panel', async () => {
+    const server = await start({});
+    const response = await fetch(`${server.url.replace(/\?.*/, '')}api/run?token=${server.token}`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(409);
   });
 });
 

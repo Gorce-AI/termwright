@@ -75,7 +75,14 @@ export interface UiServerOptions {
   /** Pre-shared token. Default: 24 random bytes. */
   readonly token?: string;
   /** Called when a client asks for a rerun. */
-  readonly onRerun?: (testIds: readonly string[] | undefined) => void;
+  /**
+   * Start a run. `testIds` names spec files or tests; absent means everything.
+   *
+   * May return a promise: `POST /api/run` awaits it and reports a failure to
+   * the panel, because a run that could not be started must not look like a
+   * run that produced nothing.
+   */
+  readonly onRerun?: (testIds: readonly string[] | undefined) => void | Promise<void>;
   /** Called when a client asks to stop the run. */
   readonly onStop?: () => void;
   /**
@@ -401,6 +408,28 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         sendJson(response, 200, {
           specs: await readSpecFacts([...files], options.runsDir ?? DEFAULT_RUNS_DIR),
         });
+        return;
+      }
+      case 'POST /api/run': {
+        if (options.onRerun === undefined) {
+          sendJson(response, 409, { error: 'this panel has no test runner behind it' });
+          return;
+        }
+        const body = await readJsonBody(request);
+        const files = body['files'];
+        if (files !== undefined && (!Array.isArray(files) || files.some((f) => typeof f !== 'string'))) {
+          sendJson(response, 400, { error: 'files must be an array of strings' });
+          return;
+        }
+        try {
+          // Awaited so the answer says whether it *started*, not whether it
+          // passed: the panel shows results over the event stream, and the one
+          // thing it cannot learn from there is that nothing began.
+          await options.onRerun(files as string[] | undefined);
+          sendJson(response, 200, { started: true });
+        } catch (error) {
+          sendJson(response, 500, { error: describeError(error) });
+        }
         return;
       }
       case 'GET /api/runs': {

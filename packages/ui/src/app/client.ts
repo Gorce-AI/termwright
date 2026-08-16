@@ -112,6 +112,16 @@ export class RunnerClient implements DataSource {
     return this.#get<TraceFrames>('/api/trace/frames');
   }
 
+  /**
+   * Starts a run over HTTP rather than over the socket.
+   *
+   * The `rerun` message has no reply, so a panel that sent one could not tell a
+   * run that never started from a run that started slowly. This can.
+   */
+  async startRun(files: readonly string[]): Promise<{ started: boolean }> {
+    return this.#post('/api/run', { files });
+  }
+
   /** Facts about the project's spec files: age, average, recent results. */
   async specs(files: readonly string[]): Promise<{ readonly specs: readonly SpecFacts[] }> {
     const query = files.map((file) => `file=${encodeURIComponent(file)}`).join('&');

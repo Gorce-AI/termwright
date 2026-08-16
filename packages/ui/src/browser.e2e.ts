@@ -94,7 +94,10 @@ beforeAll(async () => {
 }, 120_000);
 
 afterEach(() => {
-  for (const page of pages) {
+  // Drained per test: a page that reported an error keeps reporting it to
+  // every later check, so one failure used to fail everything after it and
+  // hide which test actually broke.
+  for (const page of pages.splice(0)) {
     const errors = (page as unknown as { __errors?: string[] }).__errors ?? [];
     if (errors.length > 0) throw new Error(`browser reported errors:\n${errors.join('\n')}`);
   }
@@ -251,7 +254,9 @@ describe('the runner UI against a live run', () => {
     let stopped = 0;
 
     const server = await startUiServer({
-      onRerun: (testIds) => reruns.push(testIds),
+      onRerun: (testIds) => {
+        reruns.push(testIds);
+      },
       onStop: () => {
         stopped += 1;
       },
@@ -297,9 +302,11 @@ describe('the runner UI against a live run', () => {
     await expect.poll(() => reruns.length, { timeout: 15_000 }).toBe(1);
     expect(reruns[0]).toEqual(['t1']);
 
+    // Running one spec shows it running, so the list is a click away again.
+    await page.locator(testId('nav-specs')).click();
     await page.locator(testId('rerun')).click();
     await expect.poll(() => reruns.length, { timeout: 15_000 }).toBe(2);
-    expect(reruns[1]).toBeUndefined(); // no ids = the whole run
+    expect(reruns[1]).toEqual([]); // no files named = the whole suite
 
     await page.locator(testId('stop')).click();
     await expect.poll(() => stopped, { timeout: 15_000 }).toBe(1);
@@ -322,7 +329,9 @@ describe('the runner UI with discovered tests', () => {
 
     const { page } = await serve({
       discovery: { cwd: '/repo', run: async () => listing },
-      onRerun: (testIds) => reruns.push(testIds),
+      onRerun: (testIds) => {
+        reruns.push(testIds);
+      },
     });
 
     // Specs lists files; a file shows its tests when opened.
@@ -715,6 +724,58 @@ describe('recording a session from the panel', () => {
         timeout: 20_000,
       })
       .toContain('@termwright/test');
+  });
+});
+
+describe('starting a run from the panel', () => {
+  const listing = JSON.stringify([
+    { file: '/repo/permission.test.ts', name: 'approves the command' },
+  ]);
+
+  it('starts a run in a project whose watcher cannot be typed at', async () => {
+    // The bug this pins: the panel used to ask by writing `r` into Vitest's
+    // stdin, and Vitest ignores keystrokes unless that stdin is a TTY. Nothing
+    // ran, and nothing said so.
+    const asked: (readonly string[] | undefined)[] = [];
+    const { page } = await serve({
+      discovery: { cwd: '/repo', run: async () => listing },
+      onRerun: (files) => {
+        asked.push(files);
+      },
+    });
+
+    await page.locator(testId('rerun')).waitFor({ timeout: 20_000 });
+    await page.locator(testId('rerun')).click();
+    await expect.poll(() => asked.length, { timeout: 20_000 }).toBe(1);
+
+    // Running one spec names that spec: a keystroke could only ever mean
+    // "everything".
+    await page.locator(testId('nav-specs')).click();
+    await page.locator(testId('spec-file')).first().hover();
+    await page.locator(testId('run-file')).first().click();
+    await expect.poll(() => asked.length, { timeout: 20_000 }).toBe(2);
+    expect(asked[1]).toEqual(['/repo/permission.test.ts']);
+  });
+
+  it('says so when the run could not be started', async () => {
+    const { page } = await serve({
+      discovery: { cwd: '/repo', run: async () => listing },
+      onRerun: () => {
+        throw new Error('vitest is not installed in this project');
+      },
+    });
+
+    await page.locator(testId('rerun')).waitFor({ timeout: 20_000 });
+    await page.locator(testId('rerun')).click();
+
+    // The other half of the same bug: a failure to start must reach the person
+    // who asked, not the catch block.
+    await page.locator(testId('toast')).waitFor({ timeout: 20_000 });
+    expect(await textOf(page, testId('toast'))).toContain('could not start the run');
+    expect(await textOf(page, testId('toast'))).toContain('vitest is not installed');
+
+    // The 500 above is what this test is about; it is not a fault of the page.
+    (page as unknown as { __errors: string[] }).__errors.length = 0;
   });
 });
 
