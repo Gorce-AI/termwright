@@ -772,22 +772,30 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     // Separates two failures that look identical from the outside: an adapter
     // that never committed, and a terminal that ate the commit. The receipt is
     // plain text, so it survives anything that strips escape sequences.
-    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { TERMWRIGHT_FIXTURE_MARK_PROBE: '1' },
+    });
     await terminal.waitForText('MARKED 1');
 
-    const account = (): string =>
-      terminal
-        .diagnostics()
-        .map((entry) => `${entry.code}: ${entry.detail}`)
-        .join(' | ');
+    // Waited by hand rather than with expect.poll: a failing poll throws on its
+    // own, before any assertion carrying the driver's account of what it saw —
+    // and on a platform where this fails, that account is the whole point.
+    const deadline = Date.now() + 3_000;
+    while (terminal.semanticTree() === null && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
 
-    await expect
-      .poll(() => terminal.semanticTree()?.revision ?? 0, { timeout: 3_000 })
-      .toBe(1);
-    expect(terminal.semanticTree()?.revision, account()).toBe(1);
-    // A marker that arrived but did not verify is a different bug, and the
-    // driver would have said so.
-    expect(terminal.diagnostics().some((entry) => entry.code === 'marker-unverified'), account()).toBe(false);
+    const account = terminal
+      .diagnostics()
+      .map((entry) => `${entry.code}: ${entry.detail}`)
+      .join(' | ');
+    // Printed unconditionally so the evidence reaches the log even when a
+    // later assertion is the one that fails.
+    console.log(`[marker probe] tree=${terminal.semanticTree()?.revision ?? 'none'} diagnostics: ${account}`);
+
+    expect(terminal.semanticTree()?.revision, account).toBe(1);
+    expect(terminal.diagnostics().some((entry) => entry.code === 'marker-unverified'), account).toBe(false);
   });
 
   it('fails strictly on an ambiguous locator with bounded candidates', async () => {

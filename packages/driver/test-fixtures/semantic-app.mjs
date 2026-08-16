@@ -19,6 +19,9 @@ const withoutBounds = process.env['TERMWRIGHT_FIXTURE_NO_BOUNDS'] === '1';
 // machine running suites in parallel, where node's own startup outruns the
 // negotiation window.
 const helloDelay = Number(process.env['TERMWRIGHT_FIXTURE_HELLO_DELAY'] ?? '0');
+// Prints a plain-text receipt after each render marker. Opt-in, because the
+// extra line is visible and other packages snapshot this fixture's screen.
+const markProbe = process.env['TERMWRIGHT_FIXTURE_MARK_PROBE'] === '1';
 
 let sessionId = null;
 let revision = 0;
@@ -170,11 +173,10 @@ function publish() {
   socket.write(encodeFrame({ type: 'revision-commit', revision }, 1024 * 1024));
   // The marker commits the render: it must follow the last byte of the frame.
   process.stdout.write(encodeMarker(token, sessionId, revision));
-  // A plain-text receipt for the marker. If this line reaches the screen and
-  // the revision never pairs, the DCS sequence was lost between here and the
-  // emulator rather than never written — which is the only way to tell a
-  // transport that strips escape sequences from an adapter that forgot one.
-  process.stdout.write(`MARKED ${revision}\r\n`);
+  // A plain-text receipt for the marker, printed only when a test asks for it:
+  // an extra line changes the screen, and other packages hold cell snapshots of
+  // this fixture.
+  if (markProbe) process.stdout.write(`MARKED ${revision}\r\n`);
 }
 
 function decodeFrames(buffer, onMessage) {
