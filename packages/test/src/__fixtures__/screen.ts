@@ -62,7 +62,7 @@ export function fakeScreen(lines: readonly string[], options: FakeScreenOptions 
       bracketedPaste: false,
       applicationCursorKeys: false,
       applicationKeypad: false,
-      focusReporting: false,
+      focusReporting: 'off',
       synchronizedOutput: false,
     },
     text: () => Array.from({ length: rows }, (_, row) => line(row)).join('\n'),
