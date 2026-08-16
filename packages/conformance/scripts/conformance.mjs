@@ -160,15 +160,20 @@ function printDeclaredDeviations() {
       continue;
     }
     process.stdout.write(`  ${summary.adapter}\n`);
-    for (const [rule, titles] of rules.sort(([left], [right]) => Number(left) - Number(right))) {
+    // `other` holds entries that name no rule; it sorts last rather than
+    // turning the comparison into NaN.
+    const order = (key) => (/^\d+$/.test(key) ? Number(key) : Number.MAX_SAFE_INTEGER);
+    for (const [rule, titles] of rules.sort(([left], [right]) => order(left) - order(right))) {
       const outcomes = (summary.outcomes ?? []).filter((entry) => entry.rule === rule);
       // What the suite can say about a declared rule, honestly: it either
       // could not check it, checked it and agrees the adapter cannot comply,
       // or checked some aspect of it that passes anyway — which is a prompt to
       // re-read the README, not proof that it is wrong.
       const note =
-        outcomes.length === 0
-          ? 'not checkable from outside'
+        rule === 'other'
+          ? 'names no rule'
+          : outcomes.length === 0
+            ? 'not checkable from outside'
           : outcomes.some((entry) => entry.status === 'documented')
             ? 'confirmed by the checks'
             : 'the checks that run for this rule pass';

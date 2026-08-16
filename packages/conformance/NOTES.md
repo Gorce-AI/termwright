@@ -148,10 +148,21 @@ has to delete an assertion that explains itself.
   false signal on a suite whose whole value is being believed. The summary now
   records "the checks that run for this rule pass" as information, and leaves
   the verdict to whoever re-reads the README.
-- **Two prose shapes for a declaration, both accepted.** `**Rule 2 — …**` (Ink)
-  and `- **…** (rule 3).` (the language clients). The suite parses both rather
-  than making authors converge on one, because the rule it is enforcing is about
-  adapters, not about markdown.
+- **Three shapes for a declaration, all accepted.** `**Rule 2 — …**` (Ink),
+  `- **…** (rule 3).` (the language clients) and a markdown table whose first
+  cell is `2 — …` (OpenTUI). The suite parses all three rather than making
+  authors converge, because the rule it enforces is about adapters, not about
+  markdown. Table rows that name no rule are kept under `other`: they are still
+  declared limitations, and dropping them would make the roll-up quietly
+  incomplete.
+- **A section the parser cannot read fails loudly.** Silent under-reporting is
+  the worse half of the same coin as crying wolf: an unread declaration makes
+  the three-state logic collapse to two, so every documented limitation starts
+  reporting as an error against the adapter that took the trouble to declare it.
+  The guard is shape-agnostic — a section with structure (bullets, table rows,
+  bold lead-ins) that yields no entries is a parser gap — and a section that is
+  plain prose saying "nothing to declare" is exempt, because that is a real
+  state and failing it would be the same false signal in a new place.
 - The README check for rule 6 is advisory on purpose: rules 1, 2 and 4 cannot be
   judged from outside a subprocess, so a missing heading is a documentation gap,
   and failing a conformance run over something no user can observe would train

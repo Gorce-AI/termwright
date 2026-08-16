@@ -232,9 +232,13 @@ async function settle(probe: AdapterProbe, quietMs = 250, budgetMs = 5_000): Pro
 /**
  * Rule numbers declared in an adapter's `## Deviations` section.
  *
- * Two shapes are in use and both are accepted, because the suite should not
- * dictate anyone's prose: `**Rule 2 — …**` (a heading per entry) and
- * `- **…** (rule 3).` (the number at the end of a bullet).
+ * Three shapes are in use and all are accepted, because the suite should not
+ * dictate anyone's prose: `**Rule 2 — …**` (a heading per entry, Ink),
+ * `- **…** (rule 3).` (the number at the end of a bullet, the language
+ * clients), and a markdown table whose first column is `2 — …` (OpenTUI).
+ *
+ * Entries that name no rule are kept under `other`: they are still declared
+ * limitations, and dropping them would make the roll-up quietly incomplete.
  */
 export function parseDeclaredDeviations(readme: string): Map<string, string[]> {
   const declared = new Map<string, string[]>();
@@ -250,6 +254,19 @@ export function parseDeclaredDeviations(readme: string): Map<string, string[]> {
     }
     for (const match of line.matchAll(/\*\*(.+?)\*\*\s*\(rule (\d+)\)/gu)) {
       add(declared, match[2] as string, (match[1] as string).trim());
+    }
+    const trimmed = line.trim();
+    if (trimmed.startsWith('|') && !/^\|[\s:|-]*\|?$/u.test(trimmed) && !/^\|\s*rule\s*\|/iu.test(trimmed)) {
+      // A table row. The rule number and its title share the first cell
+      // (`2 — name sources`); a row that names no rule carries its text in the
+      // second cell instead.
+      const cells = trimmed.split('|').slice(1, -1).map((cell) => cell.trim());
+      const numbered = /^(\d+)\s*[—-]\s*(.+)$/u.exec(cells[0] ?? '');
+      if (numbered !== null) {
+        add(declared, numbered[1] as string, (numbered[2] as string).trim());
+      } else if ((cells[1] ?? '').length > 0) {
+        add(declared, 'other', cells[1] as string);
+      }
     }
   }
   return declared;
@@ -539,6 +556,34 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           : '';
       const declared = parseDeclaredDeviations(readme);
       const outcomes: ConventionOutcome[] = [];
+
+      it('reads the deviations its README declares', () => {
+        if (conventions.readmePath === undefined) return;
+        if (!readme.includes('## Deviations')) return;
+
+        // A section the parser cannot read is worse than a missing one: the
+        // three-state logic silently collapses to two, and every documented
+        // limitation starts reporting as an error against the adapter that
+        // took the trouble to declare it.
+        //
+        // Detectable without understanding any shape: a section that *has
+        // structure* — bullets, table rows, bold lead-ins — but yields no
+        // entries is a parser gap. A section that is plain prose saying there
+        // is nothing to declare is not, and must not be failed for it.
+        const start = readme.indexOf('## Deviations');
+        const rest = readme.slice(start + '## Deviations'.length);
+        const end = rest.indexOf('\n## ');
+        const section = end < 0 ? rest : rest.slice(0, end);
+        const structured = /^\s*[-*|]/mu.test(section) || section.includes('**');
+        if (!structured) return;
+
+        expect(
+          declared.size,
+          `${options.name} has a "## Deviations" section with entries this suite could not ` +
+            'read; its declarations would be invisible and its documented limitations would ' +
+            'report as errors. Teach `parseDeclaredDeviations` the shape it uses.',
+        ).toBeGreaterThan(0);
+      });
 
       /**
        * Runs one rule and decides what its result means.

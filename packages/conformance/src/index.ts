@@ -27,7 +27,7 @@
  * ```
  */
 
-export { runAdapterConformance } from './adapter-conformance.js';
+export { runAdapterConformance, parseDeclaredDeviations } from './adapter-conformance.js';
 export type { AdapterConformanceOptions } from './adapter-conformance.js';
 
 export { AdapterProbe, MARKER_TEXT_PREFIX } from './support/probe.js';
