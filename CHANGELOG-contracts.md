@@ -215,3 +215,9 @@
   window fixed at snapshot time, no re-emission on append to short files.
 - 2026-08-16 (driver c73b090): AppLogEvent gains optional `path` (filled for
   source 'file'); adapter records carry none. Additive.
+- 2026-08-16 (seq authority): the ADAPTER is the authority for wire `seq` —
+  it renumbers records crossing the public channel in send order; the
+  publisher's own seq is a local hint only. Records dropped by the adapter's
+  rate limit still CONSUME numbers, so an upward gap keeps meaning
+  source-side dropping. This makes strict-increase trivially satisfiable
+  even with multiple independent publishers on `termwright:log`.
