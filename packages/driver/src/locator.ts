@@ -52,6 +52,12 @@ export interface LocatorContext {
   /** Resolves when a screen or semantic revision is published, or the deadline passes. */
   waitForChange(deadline: number): Promise<void>;
   sendInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): Promise<void>;
+  /** Publishes one action event; the session owns the clock and the emitter. */
+  emitAction(
+    api: string,
+    ok: boolean,
+    about?: { selector?: string; ref?: string; error?: string },
+  ): void;
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics;
   assertOpen(): void;
 }
@@ -234,24 +240,42 @@ export class LocatorImpl implements Locator {
   // Actions
 
   async click(opts?: PointerOptions): Promise<void> {
-    await this.#pointer(opts, 1);
+    await this.#act('click', (record) => this.#pointer(opts, 1, record));
   }
 
   async doubleClick(opts?: PointerOptions): Promise<void> {
-    await this.#pointer(opts, 2);
+    await this.#act('doubleClick', (record) => this.#pointer(opts, 2, record));
   }
 
   async dragTo(target: Locator, opts?: WaitOptions): Promise<void> {
+    return this.#act('dragTo', (record) => this.#dragTo(target, record, opts));
+  }
+
+  async #dragTo(
+    target: Locator,
+    record: (t: ResolvedTarget) => void,
+    opts?: WaitOptions,
+  ): Promise<void> {
     const raw = unwrap(target);
     if (!(raw instanceof LocatorImpl)) {
       throw new UnsupportedActionError('dragTo() requires a locator created by this harness', this.#ctx.errorDiagnostics());
     }
-    const from = this.#center(await this.#actionTarget('dragTo', opts));
+    const source = await this.#actionTarget('dragTo', opts);
+    record(source);
+    const from = this.#center(source);
     const to = this.#center(await raw.#actionTarget('dragTo', opts));
-    await this.drag({ from, to });
+    await this.#dragBetween(from, to);
   }
 
   async drag(opts: { from: { row: number; column: number }; to: { row: number; column: number } }): Promise<void> {
+    await this.#act('drag', () => this.#dragBetween(opts.from, opts.to));
+  }
+
+  async #dragBetween(
+    from: { row: number; column: number },
+    to: { row: number; column: number },
+  ): Promise<void> {
+    const opts = { from, to };
     this.#ctx.assertOpen();
     const modes = this.#ctx.modes();
     const events: MouseEvent[] = [
@@ -266,7 +290,15 @@ export class LocatorImpl implements Locator {
   }
 
   async wheel(opts: { deltaY: number; deltaX?: number }): Promise<void> {
+    await this.#act('wheel', (record) => this.#wheel(opts, record));
+  }
+
+  async #wheel(
+    opts: { deltaY: number; deltaX?: number },
+    record: (target: ResolvedTarget) => void,
+  ): Promise<void> {
     const target = await this.#actionTarget('wheel');
+    record(target);
     const { row, column } = this.#center(target);
     const modes = this.#ctx.modes();
     const steps = Math.min(Math.abs(Math.trunc(opts.deltaY)), MAX_WHEEL_STEPS);
@@ -277,23 +309,35 @@ export class LocatorImpl implements Locator {
   }
 
   async press(keys: string, opts?: WaitOptions): Promise<void> {
-    await this.#ensureFocused('press', opts);
-    await this.#ctx.sendInput(encodeKeys(keys, this.#ctx.modes()), 'key');
+    await this.#act('press', async () => {
+      await this.#ensureFocused('press', opts);
+      await this.#ctx.sendInput(encodeKeys(keys, this.#ctx.modes()), 'key');
+    });
   }
 
   async type(text: string, opts?: WaitOptions): Promise<void> {
-    await this.#ensureFocused('type', opts);
-    await this.#ctx.sendInput(encodeText(text), 'key');
+    await this.#act('type', async () => {
+      await this.#ensureFocused('type', opts);
+      await this.#ctx.sendInput(encodeText(text), 'key');
+    });
   }
 
   async focusNode(opts?: WaitOptions): Promise<void> {
-    const target = await this.#actionTarget('focusNode', opts);
-    if (target.semantic && this.#node(target).state?.focused === true) return;
-    await this.#clickTarget(target, 'left', 1);
+    await this.#act('focusNode', async (record) => {
+      const target = await this.#actionTarget('focusNode', opts);
+      record(target);
+      if (target.semantic && this.#node(target).state?.focused === true) return;
+      await this.#clickTarget(target, 'left', 1);
+    });
   }
 
   async activate(opts?: WaitOptions): Promise<ActivateReceipt> {
+    return this.#act('activate', (record) => this.#activate(record, opts));
+  }
+
+  async #activate(record: (t: ResolvedTarget) => void, opts?: WaitOptions): Promise<ActivateReceipt> {
     const target = await this.#actionTarget('activate', opts, false);
+    record(target);
     const node = target.semantic ? this.#node(target) : null;
     const focused = node?.state?.focused === true;
 
@@ -326,8 +370,40 @@ export class LocatorImpl implements Locator {
   // -------------------------------------------------------------------------
   // Internals
 
-  async #pointer(opts: PointerOptions | undefined, clicks: number): Promise<void> {
+  /**
+   * Runs a locator action and reports it afterwards, successfully or not.
+   *
+   * `record` is handed to the body so the event can name the target the action
+   * actually resolved. Keeping it per-call rather than on the instance matters:
+   * a locator is reused, and a ref left over from a previous action would
+   * attach itself to the next one.
+   */
+  async #act<T>(api: string, run: (record: (target: ResolvedTarget) => void) => Promise<T>): Promise<T> {
+    let ref: string | undefined;
+    const record = (target: ResolvedTarget): void => {
+      ref = target.ref;
+    };
+    try {
+      const result = await run(record);
+      this.#ctx.emitAction(api, true, { selector: this.description, ...(ref !== undefined ? { ref } : {}) });
+      return result;
+    } catch (error) {
+      this.#ctx.emitAction(api, false, {
+        selector: this.description,
+        ...(ref !== undefined ? { ref } : {}),
+        error: error instanceof TermwrightError ? error.code : error instanceof Error ? error.name : 'unknown',
+      });
+      throw error;
+    }
+  }
+
+  async #pointer(
+    opts: PointerOptions | undefined,
+    clicks: number,
+    record: (target: ResolvedTarget) => void,
+  ): Promise<void> {
     const target = await this.#actionTarget('click', opts);
+    record(target);
     await this.#clickTarget(target, opts?.button ?? 'left', clicks, opts?.position);
   }
 

@@ -334,6 +334,60 @@ describe.skipIf(!ptyAvailable())('crash reports', { timeout: 20_000 }, () => {
   });
 });
 
+describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
+  it('reports every action in order, with the target it resolved', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    await terminal.getByTestId('approve').resolve();
+
+    const actions: { api: string; ok: boolean; selector?: string; ref?: string; error?: string }[] = [];
+    terminal.events.on('action', (event) => actions.push(event));
+
+    await terminal.press('Tab');
+    await terminal.getByRole('button', { name: 'Reject' }).click();
+    await terminal.resize({ columns: 50, rows: 12 });
+
+    expect(actions.map((event) => event.api)).toEqual(['press', 'click', 'resize']);
+    expect(actions.every((event) => event.ok)).toBe(true);
+
+    // A locator action names what it aimed at; a harness action has no target.
+    const click = actions[1];
+    expect(click?.selector).toContain('getByRole');
+    expect(click?.ref).toMatch(/^n\d+@\d+$/u);
+    expect(actions[0]?.selector).toBeUndefined();
+    expect(actions[0]?.ref).toBeUndefined();
+    expect(actions.every((event) => event.timeMs > 0)).toBe(true);
+  });
+
+  it('reports a failed action with its code, not its prose', async () => {
+    const terminal = await launch('echo-app.mjs');
+    await terminal.waitForText('READY');
+
+    const actions: { api: string; ok: boolean; error?: string }[] = [];
+    terminal.events.on('action', (event) => actions.push(event));
+
+    await terminal.getByText('READY').click().catch(() => {});
+    await terminal.focus().catch(() => {});
+
+    expect(actions.map((event) => [event.api, event.ok, event.error])).toEqual([
+      ['click', false, 'unsupported-action'],
+      ['focus', false, 'unsupported-action'],
+    ]);
+  });
+
+  it('reports the action after it finished, not when it started', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    await terminal.getByTestId('approve').resolve();
+
+    const order: string[] = [];
+    terminal.events.on('action', (event) => order.push(`action:${event.api}`));
+    terminal.events.on('input', () => order.push('input'));
+
+    await terminal.press('Tab');
+    // The bytes reach the program first; the event describes what happened.
+    expect(order).toEqual(['input', 'action:press']);
+  });
+});
+
 describe.skipIf(!ptyAvailable())('terminal profiles', { timeout: 20_000 }, () => {
   /** Launches a program that prints one box-drawing character. */
   async function printBoxChar(profile?: string): Promise<TerminalHarness> {

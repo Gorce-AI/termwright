@@ -7,6 +7,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type {
+  ActionEvent,
   AppLogSource,
   CellSnapshot,
   CrashInput,
@@ -42,6 +43,7 @@ import {
   verifyMarkerPayload,
 } from '@termwright/protocol';
 import {
+  TermwrightError,
   HistoryTruncatedError,
   ProtocolViolationError,
   ProcessExitedError,
@@ -465,31 +467,40 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   // Input
 
   async press(keys: string): Promise<void> {
-    await this.sendInput(encodeKeys(keys, this.modes()), 'key');
+    await this.#act('press', async () => {
+      await this.sendInput(encodeKeys(keys, this.modes()), 'key');
+    });
   }
 
   async type(text: string): Promise<void> {
-    await this.sendInput(encodeText(text), 'key');
+    await this.#act('type', async () => {
+      await this.sendInput(encodeText(text), 'key');
+    });
   }
 
   async paste(text: string): Promise<void> {
-    await this.sendInput(encodePaste(text, this.modes().bracketedPaste), 'paste');
+    await this.#act('paste', async () => {
+      await this.sendInput(encodePaste(text, this.modes().bracketedPaste), 'paste');
+    });
   }
 
   async write(bytes: Uint8Array | string): Promise<void> {
-    const data = typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes;
-    await this.sendInput(data, 'raw');
+    await this.#act('write', async () => {
+      const data = typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes;
+      await this.sendInput(data, 'raw');
+    });
   }
 
   async focus(): Promise<void> {
-    await this.#sendFocus(true);
+    await this.#act('focus', () => this.#sendFocus(true));
   }
 
   async blur(): Promise<void> {
-    await this.#sendFocus(false);
+    await this.#act('blur', () => this.#sendFocus(false));
   }
 
   async signal(sig: 'INT' | 'TERM' | 'KILL' | 'HUP'): Promise<void> {
+    this.emitAction('signal', true);
     this.assertOpen();
     // A death the caller asked for is not a crash, whatever the exit status.
     this.#teardownRequested = true;
@@ -507,6 +518,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#pty?.resize(size.columns, size.rows);
     this.#vt.resize(size.columns, size.rows);
     this.#emitter.emit('resize', { columns: size.columns, rows: size.rows, timeMs: this.#now() });
+    this.emitAction('resize', true);
     // A resize is only observable once the child has repainted.
     await this.waitForStable({ frames: 2, timeout: this.timeouts.action }).catch(() => {});
   }
@@ -785,6 +797,34 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   /** Public, bounded diagnostics log (oldest first). */
+  /**
+   * Publishes one action event. Called after the action settles, so `ok`
+   * reports what happened rather than what was attempted.
+   */
+  emitAction(api: string, ok: boolean, about?: Omit<ActionEvent, 'api' | 'ok' | 'timeMs'>): void {
+    if (this.#closed) return;
+    this.#emitter.emit('action', {
+      api,
+      ...(about?.selector !== undefined ? { selector: about.selector } : {}),
+      ...(about?.ref !== undefined ? { ref: about.ref } : {}),
+      ok,
+      ...(about?.error !== undefined ? { error: about.error } : {}),
+      timeMs: this.#now(),
+    });
+  }
+
+  /** Runs a harness-level action and reports it, whichever way it ends. */
+  async #act<T>(api: string, run: () => Promise<T>): Promise<T> {
+    try {
+      const result = await run();
+      this.emitAction(api, true);
+      return result;
+    } catch (error) {
+      this.emitAction(api, false, { error: actionErrorCode(error) });
+      throw error;
+    }
+  }
+
   diagnostics(): readonly SessionDiagnostic[] {
     return Object.freeze([...this.#diagnosticsLog]);
   }
@@ -1288,6 +1328,12 @@ function crashTail(lines: readonly string[]): readonly string[] {
     kept.push(line);
   }
   return Object.freeze(kept.reverse());
+}
+
+/** Groups a failure by its code, not by its prose. */
+function actionErrorCode(error: unknown): string {
+  if (error instanceof TermwrightError) return error.code;
+  return error instanceof Error ? error.name : 'unknown';
 }
 
 function delay(ms: number): Promise<void> {

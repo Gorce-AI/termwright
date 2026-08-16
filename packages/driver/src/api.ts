@@ -441,6 +441,31 @@ export interface CrashReport {
   readonly timeMs: number;
 }
 
+/**
+ * One action the harness or a locator performed, reported after it finished —
+ * successfully or not.
+ *
+ * This is what turns a recording into a story: the raw stream shows bytes going
+ * into the terminal, while these events say which call sent them, at what, and
+ * whether it worked.
+ */
+export interface ActionEvent {
+  /** Method that ran, e.g. `'click'`, `'press'`, `'resize'`. */
+  readonly api: string;
+  /** The locator's description, for actions that had one. */
+  readonly selector?: string;
+  /** Ref of the target the action resolved, when it resolved one. */
+  readonly ref?: string;
+  readonly ok: boolean;
+  /**
+   * Failure reason: the {@link TermwrightErrorCode} when the action failed with
+   * a driver error, otherwise the error's name. Never the full message — the
+   * message belongs to the thrown error, this field is for grouping.
+   */
+  readonly error?: string;
+  readonly timeMs: number;
+}
+
 /** One entry of the session diagnostics log. */
 export interface SessionDiagnostic {
   readonly code: DiagnosticCode;
@@ -476,6 +501,8 @@ export interface SessionEventMap {
   exit: ExitStatus & { readonly timeMs: number };
   /** A line or record from the application own log. */
   'app-log': AppLogEvent;
+  /** One harness or locator action, reported after it finished. */
+  action: ActionEvent;
   /**
    * The child died unexpectedly. Emitted before `exit`, so a listener reacting
    * to the exit can already read {@link TerminalHarness.crashReport}.
