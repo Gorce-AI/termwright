@@ -1,0 +1,15 @@
+{
+  "name": "@termwright/probe-go",
+  "version": "0.1.0",
+  "description": "shared machinery for Go probes: ephemeral workspaces, copy cache, checksummed patch sets",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}

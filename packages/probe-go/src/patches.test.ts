@@ -25,9 +25,13 @@ import {
 
 const run = promisify(execFile);
 
+// A real patch set to exercise the machinery against. It belongs to
+// probe-tview; this package owns the mechanism, not the framework.
 const PATCH_SET = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
+  '..',
+  'probe-tview',
   'upstream-patches',
   'tview',
   'v0.42.0',

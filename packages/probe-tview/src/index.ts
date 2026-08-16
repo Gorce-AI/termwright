@@ -9,44 +9,11 @@
  * @packageDocumentation
  */
 
-export {
-  assertNoVendorMode,
-  canaryCheck,
-  readWorkspace,
-  renderWorkspace,
-  writeWorkspace,
-  WorkspaceError,
-  type InheritedWorkspace,
-  type WorkspacePlan,
-  type WorkspaceReplace,
-  type WorkspaceUse,
-} from './workspace.js';
 
-export {
-  cacheRoot,
-  copyDir,
-  copyKey,
-  isComplete,
-  markComplete,
-  prepareCopyDir,
-  pruneCache,
-  stampPath,
-  type CopyKeyInput,
-} from './cache.js';
 
-export {
-  applyPatchSet,
-  digestFile,
-  digestPatchSet,
-  materializeUpstream,
-  PatchError,
-  readManifest,
-  verifyUpstream,
-  writeProvenance,
-  type AddedFile,
-  type PatchedFile,
-  type PatchManifest,
-} from './patches.js';
+
+// The Go machinery is shared with every other copy-based probe.
+export * from '@termwright/probe-go';
 
 export { recognize, roleFor, type RecognizeOptions } from './recognizer.js';
 

@@ -18,9 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
+import { applyPatchSet, canaryCheck, materializeUpstream, writeWorkspace } from '@termwright/probe-go';
 import { prepareInstrumentedBuild } from './launch.js';
-import { applyPatchSet, materializeUpstream } from './patches.js';
-import { canaryCheck, writeWorkspace } from './workspace.js';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));

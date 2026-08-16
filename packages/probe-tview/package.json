@@ -23,6 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@termwright/probe-go": "workspace:*",
     "@termwright/protocol": "workspace:*"
   },
   "devDependencies": {

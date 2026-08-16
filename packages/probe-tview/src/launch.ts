@@ -13,20 +13,20 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
+  applyPatchSet,
+  assertNoVendorMode,
   copyDir,
+  digestPatchSet,
   isComplete,
   markComplete,
-  prepareCopyDir,
-  type CopyKeyInput,
-} from './cache.js';
-import {
-  applyPatchSet,
-  digestPatchSet,
   materializeUpstream,
+  prepareCopyDir,
   readManifest,
+  readWorkspace,
   writeProvenance,
-} from './patches.js';
-import { assertNoVendorMode, readWorkspace, writeWorkspace } from './workspace.js';
+  writeWorkspace,
+  type CopyKeyInput,
+} from '@termwright/probe-go';
 
 const run = promisify(execFile);
 
