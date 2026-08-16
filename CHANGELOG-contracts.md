@@ -323,3 +323,10 @@
   rows}` emitted on live attach — profile describes a session, not a test.
   Post-mortem reads the profile from TraceMeta.terminalProfile (NOT from the
   cast header — trace deliberately keeps foreign formats clean).
+- 2026-08-16 (#25 cursor clarification, protocol fa7235a): a delta can SET
+  the cursor but cannot CLEAR it; `{visible:false}` (cursor exists, hidden)
+  differs from an absent `cursor` (no cursor information). PRODUCER
+  OBLIGATION: a tree transitioning from has-cursor to no-cursor REQUIRES a
+  full snapshot, same as columns/rows changes. All three language clients
+  independently implemented this degradation before it was written down —
+  and one of them caught the gap; driver reception must honor the same rule.
