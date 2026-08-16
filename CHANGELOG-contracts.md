@@ -395,3 +395,10 @@
   (`maxPending`, `revision-dropped`) bez zmian. Asercje floodów w konformancji
   sprawdzają „ostatnia rewizja ląduje po ustaniu floodu" — przepustowość
   emulatora to pomiar, nie kontrakt.
+- 2026-08-16 (driver, korekta poprzedniego wpisu): expiry parowania rusza,
+  gdy emulator nadgonił ORAZ strumień wyjścia milczał przez
+  `pairingTimeoutMs` — bariera drenażu nie widziała bajtów w drodze
+  (mechanizm B: p50=1697 ms, max=3359 ms przy oknie 1000 ms). GRANICA: cisza
+  przedłuża okno tylko gdy wyjście płynie; sesja milcząca, której marker
+  przyjdzie później, wygasa w terminie — inaczej timeout nigdy by nie zapadał.
+  Ograniczoność: maxPending nadal tnie na 32 (`revision-dropped`).
