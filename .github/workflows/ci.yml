@@ -218,6 +218,11 @@ jobs:
         env:
           TERMWRIGHT_REQUIRE_CONFORMANCE: '1'
 
+      # The injection suite runs each case twice, under Bun and under Node. On a
+      # runner without Bun the Bun arms drop out (and the suite says so with an
+      # explicit test), so this lane is the only place they execute at all.
+      - run: pnpm --filter @termwright/probe-opentui run test
+
   clients:
     name: clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})
     runs-on: ubuntu-latest
