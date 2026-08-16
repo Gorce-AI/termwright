@@ -734,6 +734,9 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           const path = conventions.readmePath as string;
           const text = existsSync(path) ? readFileSync(path, 'utf8') : '';
           if (!text.includes('## Deviations')) {
+            // Rule 6 follows the adapter, not the package: something that
+            // publishes no tree has nothing to declare. Anything reaching this
+            // suite does publish one, so the heading is expected here.
             process.stderr.write(
               `conformance: ${options.name} has no "## Deviations" section in ${path}; ` +
                 'rules 1, 2 and 4 are unverifiable from outside, so an undeclared difference is invisible\n',
