@@ -1,6 +1,6 @@
 ---
 title: Writing an adapter
-description: The five obligations an adapter has, the traps that cost an afternoon each, and how to certify it in any language.
+description: The five wire obligations, the six semantics conventions, the traps that cost an afternoon each, and how to certify an adapter in any language.
 ---
 
 An adapter is small. It connects to a socket the driver already created,
@@ -11,7 +11,7 @@ input handling, the validation — lives in the client library for your language
 Start from the [protocol reference](../../reference/protocol/) for the wire
 format. This page is the adapter author's checklist.
 
-## The five obligations
+## The five wire obligations
 
 The [conformance suite](#certifying-it) asserts exactly these, so an adapter
 that satisfies them is done by definition.
@@ -116,23 +116,106 @@ does not reconnect. An adapter never throws across its own boundary: a refused
 connection, a rejected token, a malformed frame or a driver that vanished all
 disable semantics silently.
 
-## Deriving roles and names
+## The semantics conventions
 
-Role resolution is a three-level fallback, normative for every adapter:
+The vocabulary was always shared — roles, states and actions are closed sets the
+protocol enforces. The **conventions** were not, and that was the gap: two
+conformant adapters could describe the same UI differently, so a test written
+against one failed against another for no reason its author could see.
+
+These six rules are normative for every adapter in every language.
+
+### 1. Role — three levels, in order
 
 1. an explicit author annotation;
-2. the framework's widget-type map (`Button` → `button`, and so on, matched
-   along the inheritance chain so a user's subclass still resolves);
+2. the framework's widget-type map;
 3. `generic`.
 
-Names come from whatever the framework calls a label, then a title, then the
-rendered text — and an author override always wins. Publish the framework's own
-stable identifier (a DOM id, a widget key) as `testId`: an author-supplied id is
-a promise of stability, and it is the first thing the
-[selector generator](../../guides/runner-ui/) reaches for.
+Stop at the first that produces a role in the closed set. An adapter may resolve
+level 2 from whatever its framework offers — a class map, an accessibility
+property, a convention prop — and may consult several sources there. What it
+must not do is invent a fourth *precedence* level above the author's annotation:
+an explicit annotation always wins.
 
-Roles stay ARIA-aligned on purpose, so a future bridge to AccessKit or AT-SPI
-stays possible.
+### 2. Name — ordered sources
+
+1. an explicit author annotation, **including a deliberate empty string**;
+2. the widget's own label, title or placeholder property;
+3. for name-from-content roles only: the concatenated text of descendants;
+4. the widget's identifier.
+
+Step 3 diverged the most, so the set is spelled out. The name-from-content roles
+are exactly `button`, `listitem`, `menuitem`, `tab`, `checkbox`, `radio`,
+`cell`, `row`, `heading`. That is what makes a list item holding only a label
+addressable by that label's text — and why a container is never named this way,
+since a `region` would otherwise be named by everything on the screen.
+
+### 3. `testId` — the native identifier *and* an annotation
+
+An adapter must accept both: the framework's native identifier where one exists
+(a Textual DOM `id`, an OpenTUI `id`), and an explicit author annotation, which
+wins over it.
+
+Framework-*generated* identifiers that the author did not choose — OpenTUI's
+`renderable-<n>` — must be filtered out. A test id that changes when an
+unrelated widget is added is worse than no test id, because it fails later and
+looks flaky rather than wrong.
+
+### 4. States — mapped, never guessed
+
+`disabled`, `focused`, `selected`, `checked`, `expanded`, `modal`, `hidden` and
+`readonly` are published **only** when read from a native framework flag or
+supplied by the author. Never inferred from appearance, position or role.
+
+Omitting a state means "this framework does not report it", which a test can
+handle. Guessing means the tree asserts something the application never said,
+and a test that passes against a guess proves nothing.
+
+An adapter that drops hidden nodes entirely, rather than publishing them with
+`hidden: true`, must declare that under rule 6. Both are defensible; they are
+not the same tree.
+
+### 5. `value` versus `name`
+
+`value` is what the widget *contains*; `name` is what it is *called*. Publish
+`value` whenever the widget has one — **including the empty string**.
+
+That distinction is load-bearing. `''` means "the field is empty"; absent means
+"this is not a value-bearing widget". Collapsing them makes `toHaveValue('')`
+unassertable, and a wire format that drops empty strings (Go's `omitempty` and
+its equivalents) silently converts the first into the second.
+
+Automatic derivation is gated to `textbox` and `progressbar`. An author
+annotation bypasses the gate on any role, but an adapter must not go hunting for
+a `.value` property outside that set. `scrollbar` is deliberately excluded: its
+position is `state.scrollOffset` and `state.scrollExtent`, numbers with defined
+meaning, where a stringified scroll position in `value` would be a second
+encoding no matcher knows how to read.
+
+**A boolean is never a value.** A widget whose `.value` is `true` or `false` is
+reporting a *state*: it maps to `state.checked`, and `value` stays absent. This
+was a real divergence found while converging two adapters — publishing
+`value: "true"` makes a checkbox look, to every role-blind matcher, like a
+textbox containing the word "true".
+
+### 6. Deviations must be declared
+
+A per-adapter difference is permitted **only** where the framework does not
+expose the data, and each one must be listed in that adapter's README under a
+`## Deviations` heading: what the rule is, what the adapter does instead, and
+why the framework forces it.
+
+An undeclared deviation is a bug, not a difference. Conformance reads that
+section, so a declared difference passes and a silent one fails.
+
+Rules 1–5 bind whatever publishes a semantic tree, so a package that publishes
+none — a protocol client with no adapter — has nothing to declare and needs no
+such heading. The requirement follows the adapter, not the package. Entry
+formatting is deliberately unconstrained: prose, bullets and tables are all
+parsed, because the rule governs adapters, not markdown.
+
+Roles stay ARIA-aligned throughout, which is what keeps an
+[AccessKit bridge](../../reference/accessibility/) possible.
 
 ## Two traps
 

@@ -131,8 +131,9 @@ release anything — publishing is a manual, approved pipeline, documented in
 
 ## Writing an adapter
 
-Adapters live happily outside this repository. The five obligations, the traps,
-and how to certify in any language are documented at
+Adapters live happily outside this repository. The five wire obligations, the
+six semantics conventions, the traps, and how to certify in any language are
+documented at
 [Writing an adapter](https://gorce-ai.github.io/termwright/adapters/writing-an-adapter/).
 If yours passes `runAdapterConformance`, open an issue — being on the adapter
 list is the point of certifying.
