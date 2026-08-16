@@ -330,3 +330,13 @@
   full snapshot, same as columns/rows changes. All three language clients
   independently implemented this degradation before it was written down —
   and one of them caught the gap; driver reception must honor the same rule.
+- 2026-08-16 (driver 21a2847, #25 reception): subscribe defaults to 'diffs'
+  for tree-diffs adapters; LaunchOptions.treeUpdates:'snapshots' forces
+  snapshots (deltas then refused). Composition base is the HEAD OF THE CHAIN,
+  held separately from what pairing published — a lost marker does not
+  desync the chain. Failed composition → get-tree + 'delta-resync'
+  diagnostic (set=17); deltas ignored until a full tree arrives; a get-tree
+  timeout drops the REQUEST, not the session. A get-tree response at an
+  already-held revision replaces the composition base without being
+  re-published (a successful repair must not report as data loss).
+  @termwright/vt gains /unicode subpath (applyProfile) for browser/трace use.
