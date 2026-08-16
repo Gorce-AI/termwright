@@ -30,7 +30,7 @@ Homepage = "https://github.com/gorce-ai/termwright"
 Source = "https://github.com/gorce-ai/termwright/tree/main/clients/python"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/termwright"]
+packages = ["src/termwright", "src/termwright_probe"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
