@@ -17,10 +17,14 @@
  */
 
 import { existsSync } from 'node:fs';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright';
 import { buildCrashedFixtureTrace, buildFixtureTrace } from './__fixtures__/build-trace.js';
+import { writeRunManifest, type RunManifest } from './runs.js';
 import { startUiServer, type UiServer } from './server.js';
 
 const APP_DIR = fileURLToPath(new URL('../dist/app', import.meta.url));
@@ -29,9 +33,11 @@ let browser: Browser;
 const servers: UiServer[] = [];
 const pages: Page[] = [];
 
-/** Opens an archive in post-mortem mode and returns a page pointed at it. */
-async function open(trace: string): Promise<Page> {
-  const server = await startUiServer({ trace });
+/** Starts a server with the given options and returns a page pointed at it. */
+async function serve(
+  options: Parameters<typeof startUiServer>[0],
+): Promise<{ server: UiServer; page: Page }> {
+  const server = await startUiServer(options);
   servers.push(server);
 
   const page = await browser.newPage();
@@ -47,7 +53,12 @@ async function open(trace: string): Promise<Page> {
   Object.assign(page, { __errors: errors });
 
   await page.goto(server.url, { waitUntil: 'domcontentloaded' });
-  return page;
+  return { server, page };
+}
+
+/** Opens an archive in post-mortem mode and returns a page pointed at it. */
+async function open(trace: string): Promise<Page> {
+  return (await serve({ trace })).page;
 }
 
 /**
@@ -264,5 +275,208 @@ describe('the runner UI against a live run', () => {
 
     await page.locator(testId('stop')).click();
     await expect.poll(() => stopped, { timeout: 15_000 }).toBe(1);
+  });
+});
+
+/**
+ * Discovery lists a project's tests before anything has run, so the runner is
+ * useful the moment it opens. The listing is injected rather than shelling out
+ * to Vitest: this suite is about the browser, not about a subprocess.
+ */
+describe('the runner UI with discovered tests', () => {
+  const listing = JSON.stringify([
+    { name: 'approves the command', file: '/repo/permission.test.ts' },
+    { name: 'rejects the command', file: '/repo/permission.test.ts' },
+  ]);
+
+  it('shows tests that have not run, and reruns one on click', async () => {
+    const reruns: (readonly string[] | undefined)[] = [];
+
+    const { page } = await serve({
+      discovery: { cwd: '/repo', run: async () => listing },
+      onRerun: (testIds) => reruns.push(testIds),
+    });
+
+    await expect.poll(() => page.locator(testId('test')).count(), { timeout: 15_000 }).toBe(2);
+    expect(await textOf(page, testId('tests'))).toContain('approves the command');
+
+    // A discovered row is explicitly *not* a result, and says so.
+    await expect.poll(() => page.locator('.badge.not-run').count()).toBeGreaterThan(0);
+
+    await page.locator(testId('test')).first().click();
+    await expect.poll(() => reruns.length, { timeout: 15_000 }).toBe(1);
+    expect(reruns[0]).toEqual(['/repo/permission.test.ts::approves the command']);
+  });
+
+  it('reconciles a discovered row with the result that follows it', async () => {
+    const { server, page } = await serve({
+      discovery: { cwd: '/repo', run: async () => listing },
+    });
+
+    await expect.poll(() => page.locator(testId('test')).count(), { timeout: 15_000 }).toBe(2);
+
+    // Same file and title as a discovered row: this is that test running, not a
+    // third one. Two rows for one test is the bug this asserts against.
+    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
+    server.hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 't1',
+      title: 'approves the command',
+      file: '/repo/permission.test.ts',
+      startedAt: Date.now(),
+    });
+
+    await expect
+      .poll(() => page.locator('.badge.not-run').count(), { timeout: 15_000 })
+      .toBe(1);
+    expect(await page.locator(testId('test')).count()).toBe(2);
+  });
+});
+
+/**
+ * Run history: finished runs are read back from disk, and a test in one of them
+ * can put its own archive on screen.
+ */
+describe('the runner UI showing run history', () => {
+  async function writeRuns(traceRef: string): Promise<string> {
+    const runsDir = await mkdtemp(join(tmpdir(), 'termwright-ui-runs-'));
+    const base = {
+      v: 1 as const,
+      summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0, durationMs: 3_000 },
+    };
+
+    await writeRunManifest(runsDir, {
+      ...base,
+      id: '2026-08-16T10-00-00',
+      startedAt: Date.parse('2026-08-16T10:00:00Z'),
+      finishedAt: Date.parse('2026-08-16T10:00:04Z'),
+      tests: [
+        {
+          id: 't1',
+          title: 'approves the command',
+          file: 'permission.test.ts',
+          status: 'failed',
+          durationMs: 120,
+          flaky: false,
+          traceRef,
+          error: 'button stayed disabled',
+        },
+      ],
+    } satisfies RunManifest);
+
+    await writeRunManifest(runsDir, {
+      ...base,
+      id: '2026-08-16T11-00-00',
+      startedAt: Date.parse('2026-08-16T11:00:00Z'),
+      finishedAt: Date.parse('2026-08-16T11:00:03Z'),
+      summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 3_000 },
+      tests: [
+        {
+          id: 't1',
+          title: 'approves the command',
+          file: 'permission.test.ts',
+          status: 'passed',
+          durationMs: 98,
+          flaky: false,
+        },
+      ],
+    } satisfies RunManifest);
+
+    return runsDir;
+  }
+
+  it('lists past runs and opens the archive a failed test left', async () => {
+    const crashed = await buildCrashedFixtureTrace();
+    const { page } = await serve({ runsDir: await writeRuns(crashed) });
+
+    await page.locator(testId('view-runs')).click();
+    await expect.poll(() => page.locator(testId('run')).count(), { timeout: 15_000 }).toBe(2);
+
+    await page.locator(testId('run')).first().click();
+    await expect
+      .poll(() => page.locator(testId('run-test')).count(), { timeout: 15_000 })
+      .toBeGreaterThan(0);
+    expect(await textOf(page, testId('run-detail'))).toContain('approves the command');
+
+    // The run whose test kept an archive: clicking it puts that recording on
+    // screen, which is the entire point of keeping the reference.
+    const withTrace = page.locator(testId('run-test')).first();
+    await withTrace.click();
+
+    await expect.poll(() => page.locator(testId('crash')).count(), { timeout: 20_000 }).toBe(1);
+
+    await page.locator(testId('runs-back')).click();
+    await expect.poll(() => page.locator(testId('run')).count(), { timeout: 15_000 }).toBe(2);
+  });
+});
+
+/** Theme, the shortcuts sheet, and the draggable splitters. */
+describe('the runner UI chrome', () => {
+  it('cycles the theme and remembers nothing the terminal should own', async () => {
+    const page = await open(await buildFixtureTrace());
+
+    const themeOf = async (): Promise<string | undefined> =>
+      page.evaluate(() => document.documentElement.dataset['theme']);
+
+    const before = await themeOf();
+    await page.locator('#theme-toggle').click();
+    await expect.poll(themeOf).not.toBe(before);
+
+    await page.locator('#theme-toggle').click();
+    await page.locator('#theme-toggle').click();
+    await expect.poll(themeOf).toBe(before); // system -> dark -> light -> system
+
+    // The terminal stays dark in every theme on purpose: those colours belong
+    // to the recorded program, not to the viewer's preference.
+    expect(await page.locator('#terminal').count()).toBe(1);
+  });
+
+  it('opens the shortcuts sheet from the button and from `?`', async () => {
+    const page = await open(await buildFixtureTrace());
+
+    const visible = async (): Promise<boolean> => page.locator('#shortcuts').isVisible();
+
+    await page.locator('#shortcuts-toggle').click();
+    await expect.poll(visible, { timeout: 15_000 }).toBe(true);
+
+    await page.locator('#shortcuts-toggle').click();
+    await expect.poll(visible).toBe(false);
+
+    await page.keyboard.press('?');
+    await expect.poll(visible, { timeout: 15_000 }).toBe(true);
+  });
+
+  it('remembers a dragged splitter', async () => {
+    const page = await open(await buildFixtureTrace());
+
+    // localStorage survives between pages on one origin, so a test asserting a
+    // default has to start from a known one.
+    await page.evaluate(() => localStorage.clear());
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
+    const splitOf = async (): Promise<string> =>
+      page.evaluate(() => {
+        const layout = document.querySelector<HTMLElement>('.layout');
+        return layout === null ? '' : getComputedStyle(layout).getPropertyValue('--split-main').trim();
+      });
+
+    const before = await splitOf();
+
+    const handle = page.locator('#split-main');
+    const box = await handle.boundingBox();
+    if (box === null) throw new Error('#split-main has no box — the layout did not render');
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 - 120, box.y + box.height / 2, { steps: 8 });
+    await page.mouse.up();
+
+    await expect.poll(splitOf, { timeout: 15_000 }).not.toBe(before);
+    const dragged = await splitOf();
+
+    // The point of persisting it: the layout survives a reload.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect.poll(splitOf, { timeout: 15_000 }).toBe(dragged);
   });
 });

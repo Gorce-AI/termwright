@@ -9,5 +9,12 @@
     // Node-only branches are dead code in the bundle), not for the app itself.
     "types": ["node"]
   },
-  "include": ["src/app", "src/events.ts", "src/selector.ts", "src/codegen.ts", "src/trace-source.ts"]
+  "include": [
+    "src/app",
+    "src/events.ts",
+    "src/selector.ts",
+    "src/codegen.ts",
+    "src/trace-source.ts",
+    "src/browser.e2e.ts"
+  ]
 }

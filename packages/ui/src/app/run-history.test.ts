@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatWhen } from './run-history.js';
+import { asTestRow, formatWhen } from './run-history.js';
 
 describe('formatWhen', () => {
   const now = Date.parse('2026-08-16T15:00:00');
@@ -13,5 +13,37 @@ describe('formatWhen', () => {
     const older = formatWhen(Date.parse('2026-08-12T09:04:00'), now);
     expect(older).not.toMatch(/today|yesterday/);
     expect(older).toMatch(/12/);
+  });
+});
+
+describe('asTestRow', () => {
+  it('is a rename, not a translation: a run’s test is the list’s test', () => {
+    expect(
+      asTestRow({
+        id: 't1',
+        title: 'logs in',
+        file: '/repo/a.test.ts',
+        status: 'failed',
+        durationMs: 500,
+        flaky: true,
+        traceRef: '/out/t1.twtrace',
+        error: 'nope',
+      }),
+    ).toEqual({
+      id: 't1',
+      title: 'logs in',
+      file: '/repo/a.test.ts',
+      status: 'failed',
+      durationMs: 500,
+      flaky: true,
+      traceRef: '/out/t1.twtrace',
+      error: 'nope',
+    });
+  });
+
+  it('drops a file the manifest left empty rather than inventing one', () => {
+    const row = asTestRow({ id: 't1', title: 'x', file: '', status: 'passed', durationMs: 1, flaky: false });
+    expect(row.file).toBeUndefined();
+    expect(row.traceRef).toBeUndefined();
   });
 });

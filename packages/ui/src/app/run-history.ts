@@ -9,7 +9,9 @@
 
 import { html, type TemplateResult } from 'lit-html';
 import type { RunSummaryEntry, RunTest } from '../runs.js';
+import type { TestRow } from '../test-model.js';
 import { formatMs, statusGlyph } from '../view-model.js';
+import { renderTestRow } from './test-row.js';
 
 /** What the view needs to render. */
 export interface RunHistoryModel {
@@ -72,32 +74,52 @@ function renderRun(model: RunHistoryModel, handlers: RunHistoryHandlers): Templa
       ${model.loading
         ? html`<p class="empty">Loading…</p>`
         : html`<div class="tests">
-            ${model.tests.map(
-              (test) => html`
-                <div
-                  class=${`test ${test.status}${model.openTracePath === test.traceRef ? ' selected' : ''}`}
-                  data-testid="run-test"
-                  title=${test.traceRef === undefined
-                    ? 'No archive was retained for this test'
-                    : 'Replay this test'}
-                  @click=${() => (test.traceRef === undefined ? undefined : handlers.openTrace(test.traceRef))}
-                >
-                  <div class="test-head">
-                    <span class=${`dot ${test.status}`} aria-hidden="true">${statusGlyph(test.status)}</span>
-                    <span class="title">${test.title}</span>
-                    ${test.flaky ? html`<span class="badge flaky">flaky</span>` : ''}
-                    <span class="duration">${formatMs(test.durationMs)}</span>
-                    ${test.traceRef === undefined
-                      ? html`<span class="muted no-trace">no trace</span>`
-                      : html`<span class="replay">▶</span>`}
-                  </div>
-                  ${test.error === undefined ? '' : html`<p class="error">${test.error}</p>`}
-                </div>
-              `,
+            ${model.tests.map((test) =>
+              // The same row the live list renders: a test is one object, and
+              // two renderings of it would drift within a week.
+              renderTestRow(asTestRow(test), {
+                selectedId: openSelection(model),
+                now: Date.now(),
+                testId: 'run-test',
+                select: (row) => {
+                  if (row.traceRef !== undefined) handlers.openTrace(row.traceRef);
+                },
+                trailing: (row) =>
+                  row.traceRef === undefined
+                    ? html`<span class="muted no-trace" title="No archive was retained for this test"
+                        >no trace</span
+                      >`
+                    : html`<span class="replay" title="Replay this test">▶</span>`,
+              }),
             )}
           </div>`}
     </div>
   `;
+}
+
+/**
+ * A run's test, as the shared row sees it.
+ *
+ * The manifest and the live list describe the same thing in the same words, so
+ * this is a rename rather than a translation — and where it is not (a finished
+ * run has no `running` state), the difference is the point.
+ */
+export function asTestRow(test: RunTest): TestRow {
+  return {
+    id: test.id,
+    title: test.title,
+    status: test.status,
+    durationMs: test.durationMs,
+    flaky: test.flaky,
+    ...(test.file === '' ? {} : { file: test.file }),
+    ...(test.traceRef === undefined ? {} : { traceRef: test.traceRef }),
+    ...(test.error === undefined ? {} : { error: test.error }),
+  };
+}
+
+/** The row whose archive is being replayed, so it reads as selected. */
+function openSelection(model: RunHistoryModel): string | null {
+  return model.tests.find((test) => test.traceRef === model.openTracePath)?.id ?? null;
 }
 
 /** `14:32 today`, `yesterday 09:04`, `12 Aug 09:04`. */

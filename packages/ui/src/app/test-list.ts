@@ -7,14 +7,8 @@
  */
 
 import { html, type TemplateResult } from 'lit-html';
-import {
-  countTests,
-  filterTests,
-  groupTests,
-  testDuration,
-  type TestRow,
-} from '../test-model.js';
-import { formatMs, statusGlyph } from '../view-model.js';
+import { countTests, filterTests, groupTests, type TestRow } from '../test-model.js';
+import { renderTestRow, type TestRowStep } from './test-row.js';
 
 /** What the list needs to render. */
 export interface TestListModel {
@@ -28,7 +22,7 @@ export interface TestListModel {
   /** Current epoch milliseconds, for the elapsed time of running tests. */
   readonly now: number;
   /** Steps of the focused test, rendered under it. */
-  readonly steps: readonly { stepId: string; title: string; status: string; startedAt?: number | undefined }[];
+  readonly steps: readonly TestRowStep[];
 }
 
 /** What the list can ask the app to do. */
@@ -85,65 +79,19 @@ export function renderTestList(model: TestListModel, handlers: TestListHandlers)
             (group) => html`
               <section class="file-group" data-testid="file-group">
                 <h3 class="file" title=${group.file ?? ''}>${group.label}</h3>
-                ${group.tests.map((test) => renderTest(test, model, handlers))}
+                ${group.tests.map((test) =>
+                  renderTestRow(test, {
+                    selectedId: model.selectedId,
+                    now: model.now,
+                    steps: model.steps,
+                    select: (row) => handlers.select(row.id),
+                    ...(model.canRerun ? { rerun: (id: string) => handlers.rerun(id) } : {}),
+                    seek: (timeMs: number) => handlers.seek(timeMs),
+                  }),
+                )}
               </section>
             `,
           )}
         </div>`}
-  `;
-}
-
-function renderTest(
-  test: TestRow,
-  model: TestListModel,
-  handlers: TestListHandlers,
-): TemplateResult {
-  const duration = testDuration(test, model.now);
-  const selected = model.selectedId === test.id;
-  return html`
-    <div class=${`test ${test.status}${selected ? ' selected' : ''}`} data-testid="test">
-      <div class="test-head" @click=${() => handlers.select(test.id)}>
-        <span class=${`dot ${test.status}`} aria-hidden="true">${statusGlyph(test.status)}</span>
-        <span class="title">${test.title}</span>
-        ${test.flaky === true ? html`<span class="badge flaky">flaky</span>` : ''}
-        ${test.status === 'not-run' ? html`<span class="badge not-run">not run yet</span>` : ''}
-        ${duration === null
-          ? ''
-          : html`<span class=${`duration${test.status === 'running' ? ' running' : ''}`}
-              >${formatMs(duration)}</span
-            >`}
-        ${model.canRerun
-          ? html`<button
-              class="rerun-one"
-              data-testid="rerun-one"
-              title=${`Run "${test.title}" again`}
-              @click=${(event: Event) => {
-                event.stopPropagation(); // the row click focuses; this one reruns
-                handlers.rerun(test.id);
-              }}
-            >
-              ↻
-            </button>`
-          : ''}
-      </div>
-      ${test.error === undefined ? '' : html`<p class="error">${test.error}</p>`}
-      ${selected && model.steps.length > 0
-        ? html`<ol class="steps">
-            ${model.steps.map(
-              (step) => html`
-                <li
-                  class=${`step ${step.status}`}
-                  @click=${() => (step.startedAt === undefined ? undefined : handlers.seek(step.startedAt))}
-                >
-                  <span class="title">${step.title}</span>
-                  ${step.startedAt === undefined
-                    ? ''
-                    : html`<span class="muted">${formatMs(step.startedAt)}</span>`}
-                </li>
-              `,
-            )}
-          </ol>`
-        : ''}
-    </div>
   `;
 }
