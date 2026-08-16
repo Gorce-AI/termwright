@@ -69,7 +69,10 @@ function decset(code: number, note: string, undo = ''): Candidate {
   return {
     name: `decset-${code}`,
     sequence: `${ESC}[?${code}h${undo}`,
-    signature: new RegExp(`\\x1b\\[\\?[0-9;]*${code}[0-9;]*h`),
+    // The code must match as a whole parameter. Without the boundaries `?1h`
+    // matches inside `?1049h`, and the first Windows table duly reported a
+    // sequence as transported that had in fact been eaten.
+    signature: new RegExp(`\\x1b\\[\\?[0-9;]*(?<![0-9])${code}(?![0-9])[0-9;]*h`),
     leak: `[?${code}h`,
     note,
     listen: (terminal, seen) => {
@@ -398,6 +401,108 @@ describe.skipIf(!ptyAvailable())('escape sequences through a real pty', { timeou
       pty?.dispose();
       terminal.dispose();
     }
+  });
+});
+
+describe.skipIf(!ptyAvailable())('a flood through a real pty', { timeout: 120_000 }, () => {
+  it('reports how far behind a commit marker falls when renders come back to back', async () => {
+    // Why this exists: on Windows a flood leaves the revision chain stalled
+    // with markers expiring, and two explanations fit — the terminal delays
+    // the marker past the pairing window, or the driver simply cannot drink
+    // that fast. The added latency below separates them, and the byte ratio
+    // says whether the terminal is handing us more than the child wrote.
+    const renders = 200;
+    const { terminal } = createTerminal({ columns: 80, rows: 24, scrollback: 0 });
+
+    interface Sighting {
+      readonly seq: number;
+      /** Child clock, ms since its start. */
+      readonly childMs: number;
+      /** Driver clock, ms since this test started reading. */
+      readonly driverMs: number;
+    }
+    const sightings: Sighting[] = [];
+    const readingFrom = performance.now();
+    terminal.parser.registerOscHandler(7777, (data) => {
+      const seq = Number(/seq=(\d+)/u.exec(data)?.[1] ?? Number.NaN);
+      const childMs = Number(/t=([\d.]+)/u.exec(data)?.[1] ?? Number.NaN);
+      if (Number.isFinite(seq) && Number.isFinite(childMs)) {
+        sightings.push({ seq, childMs, driverMs: performance.now() - readingFrom });
+      }
+      return true;
+    });
+
+    // When the bytes of each marker landed, before the emulator saw them. The
+    // gap between this and the sighting is ours, not the terminal's.
+    const rawAt = new Map<number, number>();
+    let tail = '';
+    const scanRaw = (chunk: Uint8Array): void => {
+      tail = (tail + Buffer.from(chunk).toString('binary')).slice(-4096);
+      for (const match of tail.matchAll(/seq=(\d+);t=[\d.]+/gu)) {
+        const seq = Number(match[1]);
+        if (!rawAt.has(seq)) rawAt.set(seq, performance.now() - readingFrom);
+      }
+    };
+
+    let bytesReceived = 0;
+    let pty: PtyProcess | undefined;
+    try {
+      pty = createNodePtyBackend().spawn({
+        command: [process.execPath, join(FIXTURES, 'flood-probe-app.mjs')],
+        env: { ...environment(), TERMWRIGHT_FLOOD_RENDERS: String(renders) },
+        columns: 80,
+        rows: 24,
+      });
+      let queue: Promise<void> = Promise.resolve();
+      pty.onData((chunk) => {
+        bytesReceived += chunk.length;
+        scanRaw(chunk);
+        queue = queue.then(
+          () => new Promise<void>((resolve) => terminal.write(chunk, () => resolve())),
+        );
+      });
+
+      await settle(() => sightings.length >= renders, () => queue, 60_000);
+    } finally {
+      pty?.dispose();
+    }
+
+    // Latency the transport added, measured against the first marker so the
+    // two clocks never have to agree on an origin.
+    const first = sightings[0];
+    const quantiles = (values: readonly number[]): string => {
+      const sorted = [...values].sort((a, b) => a - b);
+      const at = (f: number): number => sorted[Math.floor((sorted.length - 1) * f)] ?? 0;
+      return `p50=${at(0.5).toFixed(0)} p90=${at(0.9).toFixed(0)} max=${at(1).toFixed(0)}`;
+    };
+    const relative = (arrival: (s: Sighting) => number | undefined, base: number): number[] =>
+      first === undefined
+        ? []
+        : sightings.flatMap((s) => {
+            const value = arrival(s);
+            return value === undefined ? [] : [value - base - (s.childMs - first.childMs)];
+          });
+    const firstRaw = rawAt.get(first?.seq ?? 0) ?? 0;
+    const bytesWritten = renders * (40 * 60);
+
+    console.log(
+      [
+        `[flood probe] platform=${process.platform} renders=${renders} seen=${sightings.length}`,
+        // Two latencies, because they have different owners. 'bytes' is what
+        // the terminal delayed; 'parsed' also carries our own write queue, and
+        // it is 'parsed' that the pairing timeout races.
+        `  added latency ms, bytes:  ${quantiles(relative((s) => rawAt.get(s.seq), firstRaw))}`,
+        `  added latency ms, parsed: ${quantiles(relative((s) => s.driverMs, first?.driverMs ?? 0))}`,
+        `  bytes: child~${bytesWritten} received=${bytesReceived} ratio=${(bytesReceived / bytesWritten).toFixed(2)}`,
+        `  wall ms: ${(sightings.at(-1)?.driverMs ?? 0).toFixed(0)}`,
+      ].join('\n'),
+    );
+
+    // Deliberately not a throughput assertion: how fast a terminal can be
+    // driven is a measurement, and pinning it here would turn a slow runner
+    // into a failing driver. Only the probe's own sanity is asserted.
+    expect(sightings.length).toBeGreaterThan(0);
+    terminal.dispose();
   });
 });
 
