@@ -403,8 +403,12 @@ describe('toHaveLogged', () => {
     return collection;
   }
 
+  let seq = 0;
+
+  /** A record with a fresh `seq`: records sharing one are deduplicated. */
   function record(level: 'info' | 'warn' | 'error', message: string): CapturedLog {
-    return { source: 'adapter', sessionId: 's1', timeMs: 1, record: { ts: 1, level, message, seq: 1 } };
+    seq += 1;
+    return { source: 'adapter', sessionId: 's1', timeMs: 1, record: { ts: 1, level, message, seq } };
   }
 
   it('accepts a log collection and anything holding one', async () => {

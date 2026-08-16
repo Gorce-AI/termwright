@@ -15,12 +15,16 @@ import {
   type CapturedLog,
 } from './logs.js';
 
+let nextSeq = 0;
+
+/** A record with a fresh `seq`, the way an adapter mints them. */
 function record(level: LogLevel, message: string, extra: Partial<LogRecord> = {}): CapturedLog {
+  nextSeq += 1;
   return {
     source: 'adapter',
     sessionId: 's1',
     timeMs: 10,
-    record: { ts: 1_700_000_000_000, level, message, seq: 1, ...extra },
+    record: { ts: 1_700_000_000_000, level, message, seq: nextSeq, ...extra },
   };
 }
 
@@ -36,12 +40,60 @@ describe('createLogCollection', () => {
     expect(logs.all().map((entry) => entry.record?.message ?? entry.line)).toEqual(['first', 'second']);
   });
 
+  it('counts a record once, however many times it arrives', () => {
+    // `seq` is strictly increasing per session, so the pair identifies a
+    // record: a session subscribed twice must not double an error count.
+    const logs = createLogCollection();
+    const entry = record('error', 'save failed');
+    logs.push(entry);
+    logs.push({ ...entry });
+    expect(logs.all()).toHaveLength(1);
+  });
+
+  it('keeps records that only look alike', () => {
+    const logs = createLogCollection();
+    logs.push(record('error', 'save failed'));
+    logs.push(record('error', 'save failed'));
+    expect(logs.all()).toHaveLength(2);
+  });
+
+  it('separates sessions that share a sequence number', () => {
+    const logs = createLogCollection();
+    const first = record('info', 'hello');
+    logs.push(first);
+    logs.push({ ...first, sessionId: 'other-session' });
+    expect(logs.all()).toHaveLength(2);
+  });
+
+  it('never deduplicates file lines, which carry no sequence', () => {
+    const logs = createLogCollection();
+    logs.push(line('same line'));
+    logs.push(line('same line'));
+    expect(logs.all()).toHaveLength(2);
+  });
+
+  it('forgets an evicted identity, so the guard cannot outgrow the entries', () => {
+    const logs = createLogCollection();
+    const first = record('info', 'oldest');
+    logs.push(first);
+    for (let index = 0; index < MAX_CAPTURED_LOGS; index += 1) logs.push(record('info', `filler ${index}`));
+    expect(logs.dropped()).toBe(1);
+    // The oldest entry is gone, so its identity is free again.
+    logs.push(first);
+    expect(logs.all().at(-1)?.record?.message).toBe('oldest');
+  });
+
   it('clears what it captured', () => {
     const logs = createLogCollection();
-    logs.push(record('info', 'gone'));
+    const entry = record('info', 'gone');
+    logs.push(entry);
     logs.clear();
     expect(logs.all()).toEqual([]);
     expect(logs.dropped()).toBe(0);
+    // The identity guard is cleared too, or a cleared collection could not
+    // capture the same record again.
+    logs.push(entry);
+    expect(logs.all()).toHaveLength(1);
   });
 
   it('drops the oldest entries rather than growing without bound', () => {

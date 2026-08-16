@@ -57,9 +57,22 @@ export interface LogCollection {
   push(entry: CapturedLog): void;
 }
 
+/**
+ * Identity of a structured record within its session.
+ *
+ * `seq` is strictly increasing per session (CONTRACTS.md; the driver rejects a
+ * repeat with a `log-dropped` diagnostic), so the pair identifies a record.
+ * A file line has no `seq` and is never deduplicated — two identical lines in a
+ * log file are two lines.
+ */
+function identityOf(entry: CapturedLog): string | undefined {
+  return entry.record === undefined ? undefined : `${entry.sessionId}#${entry.record.seq}`;
+}
+
 /** An in-memory collection. */
 export function createLogCollection(): LogCollection {
-  let entries: CapturedLog[] = [];
+  const entries: CapturedLog[] = [];
+  const seen = new Set<string>();
   let dropped = 0;
   const collection: LogCollection = {
     all: () => entries,
@@ -69,15 +82,28 @@ export function createLogCollection(): LogCollection {
       return selected.length === 0 ? '' : `${selected.map(formatLogEntry).join('\n')}\n`;
     },
     clear: () => {
-      entries = [];
+      entries.length = 0;
+      seen.clear();
       dropped = 0;
     },
     dropped: () => dropped,
     push: (entry) => {
+      const identity = identityOf(entry);
+      // One record counted once, however many times it arrives — a session
+      // subscribed twice must not double the error count a threshold reports.
+      if (identity !== undefined) {
+        if (seen.has(identity)) return;
+        seen.add(identity);
+      }
       entries.push(entry);
       if (entries.length > MAX_CAPTURED_LOGS) {
-        entries = entries.slice(-MAX_CAPTURED_LOGS);
-        dropped += 1;
+        // Forget the identities of the entries being evicted with them, or the
+        // set would outgrow the entries it guards.
+        for (const evicted of entries.splice(0, entries.length - MAX_CAPTURED_LOGS)) {
+          const key = identityOf(evicted);
+          if (key !== undefined) seen.delete(key);
+          dropped += 1;
+        }
       }
     },
   };
