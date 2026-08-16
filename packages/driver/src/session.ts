@@ -56,6 +56,7 @@ import { SessionEventEmitter } from './events.js';
 import { LogTailer } from './logs.js';
 import { encodeFocus, encodeKeys, encodePaste, encodeText } from './keys.js';
 import { LocatorImpl, type LocatorContext } from './locator.js';
+import { waitForQuiet } from './internal/quiet.js';
 import { mouseModeUnverifiable } from './mouse.js';
 import { SemanticIndex, textInRect } from './matching.js';
 import { RevisionPairing } from './pairing.js';
@@ -245,6 +246,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #lastOutputAt = Date.now();
   #violation: ProtocolViolationError | null = null;
   #crash: CrashReport | null = null;
+  /** The in-flight evidence wait, shared by every pending pairing half. */
+  #settling: Promise<void> | null = null;
   /** Modes already reported as unverifiable; each is logged once per session. */
   readonly #unverifiableLogged = new Set<'mouse' | 'focus'>();
   /** Inputs kept for a crash report; a bounded ring, oldest first. */
@@ -285,9 +288,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#pairing = new RevisionPairing({
       maxPending: DEFAULT_LIMITS.maxQueuedFrames,
       pairingTimeoutMs: PAIRING_TIMEOUT_MS,
-      // The emulator's write queue is the barrier: a marker cannot be seen
-      // before the bytes it sits in have been parsed.
-      caughtUp: () => this.#vt.drain(),
+      caughtUp: () => this.#evidenceSettled(),
       onPublish: (paired) => this.#publishSemantic(paired.snapshot),
       onDiagnostic: (code, detail, revision) => this.#diagnostic(code, detail, { revision }),
     });
@@ -814,6 +815,44 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#rememberInput(data, kind, timeMs);
     this.#emitter.emit('input', { data, timeMs, kind });
     await Promise.resolve();
+  }
+
+  /**
+   * Resolves once a missing pairing half can honestly be called missing: the
+   * emulator has parsed what arrived, and the stream has stopped talking.
+   *
+   * Both halves of that are needed because the delay has two possible owners.
+   * A flood measured 0.7 s of parse backlog with a transport that added
+   * nothing; a pty slower than the semantic socket measured 1.7 s of transport
+   * backlog with nothing queued for the parser. Either one alone would expire
+   * a marker the driver was about to receive.
+   *
+   * One wait is shared by every pending half: the condition is a property of
+   * the session, not of a revision, so thirty-two halves must not mean
+   * thirty-two timers.
+   */
+  #evidenceSettled(): Promise<void> {
+    this.#settling ??= this.#awaitEvidence().finally(() => {
+      this.#settling = null;
+    });
+    return this.#settling;
+  }
+
+  async #awaitEvidence(): Promise<void> {
+    await this.#vt.drain();
+    await waitForQuiet({
+      lastOutputAt: () => this.#lastOutputAt,
+      quietMs: PAIRING_TIMEOUT_MS,
+      now: () => Date.now(),
+      sleep: (ms) =>
+        new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, ms);
+          timer.unref?.();
+        }),
+      cancelled: () => this.#closed,
+    });
+    // Output that arrived during the quiet wait still has to be parsed.
+    await this.#vt.drain();
   }
 
   /**

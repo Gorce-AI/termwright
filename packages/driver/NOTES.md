@@ -96,12 +96,25 @@ the parse queue added up to **692 ms** against a 1000 ms pairing window. Under
 a heavier flood the window closes, and the driver reports `revision-expired`
 for a marker it is already holding, unread.
 
-So the expiry clock now starts at a drain barrier: a half cannot expire until
-the emulator has parsed everything received at the moment the half was
-accepted. A timeout means "the other half never came" again, rather than "we
-were busy". This is why the fix is not a bigger budget or a per-platform one:
-the race is platform-neutral and a budget only moves the flood size at which it
-returns.
+There is a second shape of the same problem, and it needs a second question.
+The conformance matrix reproduces a flood where the *terminal* is the slow
+part (a pty re-encoding every byte); there the marker's bytes are not in the
+driver's hands at all, the parse queue is empty, and a drain barrier sees
+nothing to wait for. Measured with the throttled probe: 1.7 s median from
+commit to sighting, 3.4 s at the tail.
+
+So the expiry clock starts only once the evidence can no longer be in transit:
+the emulator has parsed everything received, **and** the output stream has been
+silent for `pairingTimeoutMs`. A timeout means "the other half never came" again, rather than "we were busy"
+or "it is still on its way". This is why the fix is not a bigger budget or a
+per-platform one: the race is platform-neutral and a budget only moves the
+flood size at which it returns.
+
+Note the boundary, which is deliberate: the quiet condition only extends the
+window while output is *flowing*. A silent session whose marker turns up two
+seconds later still expires on time — nothing was in transit to wait for. That
+is also what keeps the rule bounded, together with `maxPending`: an endless
+animation postpones expiry indefinitely but evicts at 32 halves.
 
 The eviction path (`maxPending`) is unchanged and correct: a peer producing
 revisions faster than pairs close will lose the oldest, with a diagnostic. Note
