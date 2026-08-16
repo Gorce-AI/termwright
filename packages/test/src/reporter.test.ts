@@ -126,6 +126,19 @@ describe('TermwrightReporter', () => {
     expect(html).not.toContain('login &gt; fine');
   });
 
+  it('includes a passing test that kept its trace, as `trace: \'on\'` makes it', async () => {
+    const dir = workspace();
+    const reporter = new TermwrightReporter({ silent: true, outFile: join(dir, 'on.html') });
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(testCase('1', 'login > works', { traces: ['out/works.twtrace'] }));
+    reporter.onTestCaseResult(testCase('2', 'login > also works'));
+    expect(await reporter.report()).toBe(join(dir, 'on.html'));
+    const html = readFileSync(join(dir, 'on.html'), 'utf8');
+    expect(html).toContain('login &gt; works');
+    // The one without artefacts stays out: there is nothing to show for it.
+    expect(html).not.toContain('login &gt; also works');
+  });
+
   it('includes passing tests when asked', async () => {
     const dir = workspace();
     const reporter = new TermwrightReporter({ silent: true, includePassed: true, outFile: join(dir, 'all.html') });

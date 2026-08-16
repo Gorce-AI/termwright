@@ -306,10 +306,17 @@ For a harness the fixtures did not launch — a `mountInk` component, say —
 subscribe yourself and the matcher finds the collection from the harness:
 
 ```ts
-const app = await mountInk(<App />);
+const app = await mountInk(<App />, { logs: [{ path: 'var/app.log' }] });
 collectLogs(app);
-await expect(app).toHaveLogged({ level: 'error' });
+await expect(app).toHaveLogged({ source: 'file', message: 'saved' });
 ```
+
+**A mount does not capture `console.*` by default**, and that default is right:
+a mounted component shares the runner's process, so its `console` is literally
+Vitest's — capturing it would file the runner's output, and other tests' output,
+as the component's log. Follow a file instead, pass
+`mountInk(el, { captureConsole: true })` when you accept that attribution, or
+use `launchInkFixture`, where the console genuinely belongs to the application.
 
 ## When the program dies
 
@@ -394,6 +401,16 @@ from `@termwright/trace`, with the visual diff, the semantic diff and the
 embedded recording of every failure. Tests that only passed after a retry are
 listed separately as **flaky**: a flaky test is a different problem from a
 broken one, and hiding it in the pass count is how it stays broken.
+
+A test appears in the report when it failed, when it was flaky, or when it kept
+a trace — so under `trace: 'on'` every test is there, with its recording, its
+logs and its steps, collapsed until you open it. Under `retain-on-failure`
+(the default) only the failures kept a trace, so only they appear.
+
+The reporter runs in Vitest's main process, while `configureTermwright` usually
+runs in a `setupFiles` module, which is a worker. It therefore does not see
+your `outputDir`: pass `outFile` to the reporter, or call `configureTermwright`
+from `vitest.config.ts` as well.
 
 Import the reporter from `@termwright/test/reporter`, never from the package
 root: `vitest.config.ts` is loaded before the test runner exists, and the root

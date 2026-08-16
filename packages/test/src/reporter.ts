@@ -176,10 +176,15 @@ export class TermwrightReporter {
     this.#generated = true;
     const config = getTermwrightConfig();
     const all = this.tests;
+    // A retained trace is the signal that a test has artefacts worth linking:
+    // under `trace: 'on'` every test keeps one, under `retain-on-failure` only
+    // the failures do. Reading the trace mode here would not work — the
+    // reporter runs in the main process, and `configureTermwright` usually
+    // runs in a setup file, which is a worker.
     const interesting =
       this.#options.includePassed === true
         ? all
-        : all.filter((test) => test.status === 'failed' || test.flaky);
+        : all.filter((test) => test.status === 'failed' || test.flaky || test.tracePath !== undefined);
     const flaky = all.filter((test) => test.flaky);
     this.#reportObsolete(all);
     if (interesting.length === 0) return undefined;
