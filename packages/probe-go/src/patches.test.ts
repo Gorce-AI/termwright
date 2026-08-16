@@ -16,6 +16,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { canaryCheck, writeWorkspace } from './workspace.js';
 import {
   applyPatchSet,
+  ensureUpstreamModule,
   digestPatchSet,
   materializeUpstream,
   PatchError,
@@ -41,15 +42,18 @@ const PATCH_SET = join(
 async function upstreamDir(): Promise<string | null> {
   if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return null;
   try {
-    const { stdout } = await run('go', ['env', 'GOMODCACHE']);
-    const dir = join(stdout.trim(), 'github.com', 'rivo', 'tview@v0.42.0');
-    await readFile(join(dir, 'application.go'));
-    return dir;
+    // Fetches when the cache is cold, which is every fresh CI runner.
+    return await ensureUpstreamModule({
+      module: 'github.com/rivo/tview',
+      version: 'v0.42.0',
+      cachePath: ['github.com', 'rivo', 'tview@v0.42.0'],
+    });
   } catch {
     return null;
   }
 }
 
+const hasGo = process.env['TERMWRIGHT_SKIP_GO'] !== '1';
 const upstream = await upstreamDir();
 const roots: string[] = [];
 
@@ -130,6 +134,42 @@ describe('refusals', () => {
 // looking fully green. Borrowed from probe-opentui's Bun lane.
 it.skipIf(upstream !== null)('skips the Go arms because no go toolchain is reachable', () => {
   expect(upstream).toBeNull();
+});
+
+describe.skipIf(!hasGo)('a cold module cache', () => {
+  it('fetches the upstream instead of failing on a missing directory', async () => {
+    // What CI is: a runner that has never seen this module. Pointing
+    // GOMODCACHE at an empty directory reproduces it exactly, and the old
+    // code failed here with a bare ENOENT on a path nobody recognises.
+    const dir = await scratch();
+    const cache = join(dir, 'empty-cache');
+    await mkdir(cache, { recursive: true });
+
+    const fetched = await ensureUpstreamModule({
+      module: 'github.com/rivo/tview',
+      version: 'v0.42.0',
+      cachePath: ['github.com', 'rivo', 'tview@v0.42.0'],
+      env: { ...process.env, GOMODCACHE: cache },
+    });
+
+    expect(fetched.startsWith(cache)).toBe(true);
+    expect(await readFile(join(fetched, 'application.go'), 'utf8')).toContain('package tview');
+  }, 600_000);
+
+  it('names an unreachable upstream instead of leaking a path error', async () => {
+    const dir = await scratch();
+    const cache = join(dir, 'empty-cache');
+    await mkdir(cache, { recursive: true });
+
+    await expect(
+      ensureUpstreamModule({
+        module: 'github.com/rivo/tview',
+        version: 'v0.0.0-does-not-exist',
+        cachePath: ['github.com', 'rivo', 'tview@v0.0.0-does-not-exist'],
+        env: { ...process.env, GOMODCACHE: cache, GOPROXY: 'off' },
+      }),
+    ).rejects.toThrow(/is not in the module cache and could not be downloaded/u);
+  }, 600_000);
 });
 
 describe.skipIf(upstream === null)('against the real framework', () => {

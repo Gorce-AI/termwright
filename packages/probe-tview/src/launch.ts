@@ -17,6 +17,7 @@ import {
   assertNoVendorMode,
   copyDir,
   digestPatchSet,
+  ensureUpstreamModule,
   isComplete,
   markComplete,
   materializeUpstream,
@@ -127,10 +128,14 @@ async function detectFrameworkVersion(moduleDir: string, env: NodeJS.ProcessEnv)
   return stdout.trim();
 }
 
-/** Locates the pristine module in the Go module cache. */
+/** Locates the pristine module, fetching it when the cache is cold. */
 async function upstreamDir(version: string, env: NodeJS.ProcessEnv): Promise<string> {
-  const { stdout } = await run('go', ['env', 'GOMODCACHE'], { env });
-  return join(stdout.trim(), 'github.com', 'rivo', `tview@${version}`);
+  return ensureUpstreamModule({
+    module: FRAMEWORK,
+    version,
+    cachePath: ['github.com', 'rivo', `tview@${version}`],
+    env,
+  });
 }
 
 async function toolchain(env: NodeJS.ProcessEnv): Promise<string> {

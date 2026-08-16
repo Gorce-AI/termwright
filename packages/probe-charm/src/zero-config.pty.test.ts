@@ -15,7 +15,12 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
-import { applyPatchSet, materializeUpstream, writeWorkspace } from '@termwright/probe-go';
+import {
+  applyPatchSet,
+  ensureUpstreamModule,
+  materializeUpstream,
+  writeWorkspace,
+} from '@termwright/probe-go';
 import { afterAll, describe, expect, it } from 'vitest';
 
 const run = promisify(execFile);
@@ -67,9 +72,15 @@ async function buildFixture(): Promise<string> {
   await mkdir(app, { recursive: true });
   await cp(FIXTURE, app, { recursive: true });
 
-  const { stdout } = await run('go', ['env', 'GOMODCACHE']);
   const copy = join(dir, 'bubbletea');
-  await materializeUpstream(join(stdout.trim(), 'charm.land', 'bubbletea', 'v2@v2.0.8'), copy);
+  await materializeUpstream(
+    await ensureUpstreamModule({
+      module: 'charm.land/bubbletea/v2',
+      version: 'v2.0.8',
+      cachePath: ['charm.land', 'bubbletea', 'v2@v2.0.8'],
+    }),
+    copy,
+  );
   await applyPatchSet(copy, PATCH_SET);
 
   const workspace = await writeWorkspace(join(dir, 'generated.work'), {

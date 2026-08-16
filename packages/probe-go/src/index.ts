@@ -54,3 +54,5 @@ export {
   type PatchedFile,
   type PatchManifest,
 } from './patches.js';
+
+export { ensureUpstreamModule, type UpstreamModule } from './patches.js';

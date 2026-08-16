@@ -12,7 +12,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { applyPatchSet, materializeUpstream, writeWorkspace } from '@termwright/probe-go';
+import {
+  applyPatchSet,
+  ensureUpstreamModule,
+  materializeUpstream,
+  writeWorkspace,
+} from '@termwright/probe-go';
 import { afterAll, describe, expect, it } from 'vitest';
 import { BUBBLETEA_MODULES, type CharmMajor } from './detect.js';
 
@@ -51,9 +56,15 @@ async function instrumentedCopy(major: CharmMajor): Promise<{ copy: string; work
   const dir = await realpath(await mkdtemp(join(tmpdir(), `tw-charm-${major}-`)));
   roots.push(dir);
 
-  const { stdout } = await run('go', ['env', 'GOMODCACHE']);
   const copy = join(dir, 'bubbletea');
-  await materializeUpstream(join(stdout.trim(), ...UPSTREAM[major].path), copy);
+  await materializeUpstream(
+    await ensureUpstreamModule({
+      module: BUBBLETEA_MODULES[major],
+      version: UPSTREAM[major].version,
+      cachePath: UPSTREAM[major].path,
+    }),
+    copy,
+  );
   await applyPatchSet(copy, patchSetFor(major));
 
   const workspace = await writeWorkspace(join(dir, 'probe.work'), {
@@ -109,9 +120,15 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     // would fail somewhere inside a diff context on v2's tea.go.
     const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-cross-')));
     roots.push(dir);
-    const { stdout } = await run('go', ['env', 'GOMODCACHE']);
     const copy = join(dir, 'bubbletea');
-    await materializeUpstream(join(stdout.trim(), ...UPSTREAM.v2.path), copy);
+    await materializeUpstream(
+      await ensureUpstreamModule({
+        module: BUBBLETEA_MODULES.v2,
+        version: UPSTREAM.v2.version,
+        cachePath: UPSTREAM.v2.path,
+      }),
+      copy,
+    );
 
     await expect(applyPatchSet(copy, patchSetFor('v1'))).rejects.toThrow(
       /does not match github\.com\/charmbracelet\/bubbletea v1\.3\.10/u,

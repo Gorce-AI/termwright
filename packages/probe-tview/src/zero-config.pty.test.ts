@@ -18,7 +18,13 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
-import { applyPatchSet, canaryCheck, materializeUpstream, writeWorkspace } from '@termwright/probe-go';
+import {
+  applyPatchSet,
+  canaryCheck,
+  ensureUpstreamModule,
+  materializeUpstream,
+  writeWorkspace,
+} from '@termwright/probe-go';
 import { prepareInstrumentedBuild } from './launch.js';
 
 const run = promisify(execFile);
@@ -75,9 +81,15 @@ async function buildFixture(options: { readonly instrumented: boolean }): Promis
   const env: NodeJS.ProcessEnv = { ...process.env };
 
   if (options.instrumented) {
-    const { stdout } = await run('go', ['env', 'GOMODCACHE']);
     const copy = join(dir, 'tview');
-    await materializeUpstream(join(stdout.trim(), 'github.com', 'rivo', 'tview@v0.42.0'), copy);
+    await materializeUpstream(
+      await ensureUpstreamModule({
+        module: 'github.com/rivo/tview',
+        version: 'v0.42.0',
+        cachePath: ['github.com', 'rivo', 'tview@v0.42.0'],
+      }),
+      copy,
+    );
     await applyPatchSet(copy, PATCH_SET);
 
     env['GOWORK'] = await writeWorkspace(join(dir, 'generated.work'), {

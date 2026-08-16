@@ -54,6 +54,7 @@ export class PatchError extends Error {
       | 'unexpected-result'
       | 'apply-failed'
       | 'git-missing'
+      | 'upstream-unavailable'
       | 'manifest-invalid',
     message: string,
   ) {
@@ -192,6 +193,77 @@ export async function applyPatchSet(copyDir: string, patchSetDir: string): Promi
   }
 
   return manifest;
+}
+
+/** A module the probe needs a pristine copy of. */
+export interface UpstreamModule {
+  /** Module path, e.g. `github.com/rivo/tview`. */
+  readonly module: string;
+  /** Exact version, e.g. `v0.42.0`. */
+  readonly version: string;
+  /** Directory layout inside GOMODCACHE, e.g. ['github.com','rivo','tview@v0.42.0']. */
+  readonly cachePath: readonly string[];
+  readonly env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * Locates the pristine module, downloading it when the cache does not have it.
+ *
+ * The cache being warm is a property of *a developer's laptop*, not of a build:
+ * a fresh runner has never seen the module, and assuming otherwise fails with a
+ * bare `ENOENT` on a path nobody recognises. The download happens in a throwaway
+ * module containing only the requirement, so the user's `go.mod`, `go.sum` and
+ * workspace are untouched — the same promise the rest of this package makes.
+ */
+export async function ensureUpstreamModule(upstream: UpstreamModule): Promise<string> {
+  const env = upstream.env ?? process.env;
+
+  const { stdout } = await run('go', ['env', 'GOMODCACHE'], { env });
+  const dir = join(stdout.trim(), ...upstream.cachePath);
+  if (await exists(dir)) return dir;
+
+  const { mkdtemp, writeFile, rm: remove } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const scratch = await mkdtemp(join(tmpdir(), 'tw-fetch-'));
+  try {
+    await writeFile(
+      join(scratch, 'go.mod'),
+      `module termwright.local/fetch\n\ngo 1.22\n\nrequire ${upstream.module} ${upstream.version}\n`,
+      'utf8',
+    );
+    await run('go', ['mod', 'download', `${upstream.module}@${upstream.version}`], {
+      cwd: scratch,
+      // -mod=vendor is incompatible with a download into the cache, and the
+      // user's flags are not this command's business.
+      env: { ...env, GOFLAGS: '' },
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new PatchError(
+      'upstream-unavailable',
+      `${upstream.module}@${upstream.version} is not in the module cache and could not be ` +
+        `downloaded (no network, a blocked proxy, or a wrong version): ${detail}`,
+    );
+  } finally {
+    await remove(scratch, { recursive: true, force: true });
+  }
+
+  if (!(await exists(dir))) {
+    throw new PatchError(
+      'upstream-unavailable',
+      `${upstream.module}@${upstream.version} reported as downloaded but is not at ${dir}`,
+    );
+  }
+  return dir;
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
