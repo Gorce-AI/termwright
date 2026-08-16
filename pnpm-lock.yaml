@@ -267,6 +267,17 @@ importers:
         specifier: workspace:*
         version: link:../ink-testing
 
+  packages/probe-charm:
+    dependencies:
+      '@termwright/probe-go':
+        specifier: workspace:*
+        version: link:../probe-go
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/probe-go: {}
+
   packages/probe-opentui:
     dependencies:
       '@termwright/protocol':
@@ -279,6 +290,9 @@ importers:
 
   packages/probe-tview:
     dependencies:
+      '@termwright/probe-go':
+        specifier: workspace:*
+        version: link:../probe-go
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
