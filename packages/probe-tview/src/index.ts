@@ -33,3 +33,17 @@ export {
   stampPath,
   type CopyKeyInput,
 } from './cache.js';
+
+export {
+  applyPatchSet,
+  digestFile,
+  digestPatchSet,
+  materializeUpstream,
+  PatchError,
+  readManifest,
+  verifyUpstream,
+  writeProvenance,
+  type AddedFile,
+  type PatchedFile,
+  type PatchManifest,
+} from './patches.js';
