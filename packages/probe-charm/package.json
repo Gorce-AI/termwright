@@ -1,0 +1,19 @@
+{
+  "name": "@termwright/probe-charm",
+  "version": "0.1.0",
+  "description": "zero-config Bubble Tea probe: an ephemeral Go workspace redirects the build to an instrumented copy, for both majors",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "upstream-patches"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@termwright/probe-go": "workspace:*",
+    "@termwright/protocol": "workspace:*"
+  }
+}
