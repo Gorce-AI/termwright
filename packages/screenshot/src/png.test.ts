@@ -66,36 +66,17 @@ describe('renderPng', () => {
   });
 
   it(
-    'pays the font scan for an uncoverable character, and declining it is far cheaper',
+    'really rasterises the fallback path, scan and all',
     () => {
-      const frame = textFrame('a\u{F0000}');
-
-      // The one render in this file that deliberately pays resvg's font scan.
-      const paidStart = performance.now();
-      const paid = renderPng(frame, { fontSize: 12 });
-      const paidMs = performance.now() - paidStart;
-
-      expect(paid.selfContained).toBe(false);
-      expect(paid.fallbackCharacters).toContain('\u{F0000}');
-      expect(paid.systemFontsLoaded).toBe(true);
-
-      const declinedStart = performance.now();
-      const declined = renderPng(frame, { fontSize: 12, systemFontFallback: false });
-      const declinedMs = performance.now() - declinedStart;
-      expect(declined.systemFontsLoaded).toBe(false);
-
-      // Relative, not absolute: both renders ran on the same machine moments
-      // apart, so a slow runner scales both. Measured locally the gap is 10–20×
-      // and the escape hatch is pointless below a few, so ×3 fails on a real
-      // regression without failing on a loaded runner.
-      //
-      // Skipped when the scan was cheap anyway. A container with a handful of
-      // fonts has little to enumerate, so the two paths converge and the ratio
-      // stops measuring anything — asserting it there would be the same
-      // machine-dependent trap in a new costume. The flags above still hold.
-      if (paidMs > 200) {
-        expect(declinedMs * 3).toBeLessThan(paidMs);
-      }
+      // The one render in this file that deliberately pays resvg's font scan,
+      // kept because the mocked suite in png-options.test.ts never touches the
+      // real rasteriser. What the *decision* is gets asserted there; this
+      // proves the whole thing still produces an image.
+      const shot = renderPng(textFrame('a\u{F0000}'), { fontSize: 12 });
+      expect(shot.selfContained).toBe(false);
+      expect(shot.fallbackCharacters).toContain('\u{F0000}');
+      expect(shot.systemFontsLoaded).toBe(true);
+      expect([...shot.png.slice(0, 8)]).toEqual(PNG_SIGNATURE);
     },
     FONT_SCAN_TIMEOUT_MS,
   );

@@ -178,22 +178,33 @@ Two consequences:
   the fix for the CI timeout — a per-test budget increase would have papered
   over a cost the library was imposing on its users too.
 
-### Assert the fact, not the stopwatch
+### Assert the decision, not the stopwatch
 
-The first version of the escape-hatch test asserted `elapsed < 500` and failed
-on a macOS runner at 506 ms — a build broken by six milliseconds. The claim
-being made was never about a duration: it was "no font scan happened", and
-`systemFontsLoaded` states that outright, so that is what the test checks now.
+This took two CI failures to get right, and the second one is the instructive
+part.
 
-The performance guard survives as a *relative* comparison inside the one test
-that already pays the scan — declined must be at least 3× faster than paid, on
-the same machine, moments apart, so a loaded runner scales both sides. Measured
-locally the real gap is 10–20×.
+The first version asserted `elapsed < 500 ms` and failed on a macOS runner at
+506 ms — a build broken by six milliseconds. Replacing it with a *relative*
+comparison (declined at least 3× faster than paid, same machine, moments apart)
+looked robust and was not: a starved runner took **2.7 s to do 60 ms of work**,
+hitting the fast path far harder than the slow one and inverting the ratio.
 
-That comparison is itself skipped when the paid render took under 200 ms,
-because a machine with few fonts has little to enumerate and the two paths
-converge. Asserting a ratio there would reintroduce the same
-machine-dependence in a new costume — the flags still hold either way.
+The lesson is that no wall-clock assertion survives a shared runner, because
+scheduling noise is unbounded and hits the two samples independently. Medians
+and wider margins reduce the odds; they do not change the kind of thing being
+measured.
+
+So the property is asserted where it actually lives. The scan is resvg's
+reaction to one boolean this package hands it, and `png-options.test.ts` mocks
+the rasteriser to assert that boolean — deterministic, no render at all, and
+*stronger* than the timing ever was: `systemFontsLoaded` only reports what this
+package decided, while those tests prove the decision reached resvg. One real
+render survives in `png.test.ts` to prove the whole path still produces an
+image.
+
+The performance numbers stay in this file, where a measurement belongs. A
+number written down once and re-measured when it matters is worth more than a
+number re-asserted on every CI run by a machine in no position to judge it.
 
 ## Deduplicated `<defs>`, merged background runs
 
