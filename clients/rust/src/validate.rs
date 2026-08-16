@@ -236,7 +236,7 @@ fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
     Ok(())
 }
 
-const NODE_KEYS: [&str; 14] = [
+const NODE_KEYS: [&str; 17] = [
     "id",
     "parentId",
     "role",
@@ -251,6 +251,19 @@ const NODE_KEYS: [&str; 14] = [
     "textRanges",
     "testId",
     "frameworkType",
+    "occlusion",
+    "p",
+    "px",
+];
+
+/// Where a semantic fact came from. Closed set, so an unknown source is a
+/// rejection rather than a silently ignored annotation.
+const PROVENANCE_SOURCES: [&str; 5] = [
+    "annotation",
+    "recognizer",
+    "framework",
+    "correlation",
+    "heuristic",
 ];
 
 fn check_relations(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
@@ -292,6 +305,43 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
     for key in ["description", "value", "testId", "frameworkType"] {
         if object.contains_key(key) {
             text(object.get(key), path(at, &[key]), limits)?;
+        }
+    }
+    if let Some(occlusion) = object.get("occlusion") {
+        let known = matches!(occlusion.as_str(), Some("known") | Some("unknown"));
+        if !known {
+            return Err(Issue::new(
+                path(at, &["occlusion"]),
+                "expected 'known' or 'unknown'",
+            ));
+        }
+    }
+    if let Some(source) = object.get("p") {
+        if !source
+            .as_str()
+            .is_some_and(|value| PROVENANCE_SOURCES.contains(&value))
+        {
+            return Err(Issue::new(
+                path(at, &["p"]),
+                "expected one of the provenance sources",
+            ));
+        }
+    }
+    if let Some(per_field) = object.get("px") {
+        let Some(fields) = per_field.as_object() else {
+            return Err(Issue::new(path(at, &["px"]), "expected an object"));
+        };
+        for (field, source) in fields {
+            text(Some(&Value::String(field.clone())), path(at, &["px", field]), limits)?;
+            if !source
+                .as_str()
+                .is_some_and(|value| PROVENANCE_SOURCES.contains(&value))
+            {
+                return Err(Issue::new(
+                    path(at, &["px", field]),
+                    "expected one of the provenance sources",
+                ));
+            }
         }
     }
     if object.get("role").and_then(Value::as_str) == Some("generic") {

@@ -8,7 +8,7 @@ validation failure, not "absent".
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
 
 @dataclass(frozen=True)
@@ -90,6 +90,14 @@ class SemanticNode:
     #: ``generic``: an unrecognised widget must at least name its own type, so
     #: a reader can tell one unknown thing from another.
     frameworkType: Optional[str] = None
+    #: Whether the producer can say if these cells are covered by something
+    #: painted later. Only a producer that observes paint order may say
+    #: ``"known"``; the driver refuses pointer actions on anything else.
+    occlusion: Optional[str] = None
+    #: Where this node's facts came from, as a whole.
+    p: Optional[str] = None
+    #: Where individual fields came from, when they differ from ``p``.
+    px: Optional[Mapping[str, str]] = None
 
     def to_wire(self) -> Dict[str, Any]:
         wire: Dict[str, Any] = {"id": self.id, "role": self.role, "name": self.name}
@@ -117,6 +125,12 @@ class SemanticNode:
             wire["testId"] = self.testId
         if self.frameworkType is not None:
             wire["frameworkType"] = self.frameworkType
+        if self.occlusion is not None:
+            wire["occlusion"] = self.occlusion
+        if self.p is not None:
+            wire["p"] = self.p
+        if self.px:
+            wire["px"] = dict(self.px)
         return wire
 
 

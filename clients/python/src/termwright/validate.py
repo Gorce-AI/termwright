@@ -193,7 +193,24 @@ _NODE_KEYS = (
     "textRanges",
     "testId",
     "frameworkType",
+    "occlusion",
+    "p",
+    "px",
 )
+
+#: Where a semantic fact came from. Closed set, so an unknown source is a
+#: rejection rather than a silently ignored annotation.
+PROVENANCE_SOURCES = (
+    "annotation",
+    "recognizer",
+    "framework",
+    "correlation",
+    "heuristic",
+)
+
+#: Whether the producer can say if a node's cells are covered. A producer that
+#: cannot see paint order says `unknown`, and the driver refuses to click it.
+OCCLUSION_VALUES = ("known", "unknown")
 
 
 def _relations(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
@@ -223,6 +240,21 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
     for key in ("description", "value", "testId", "frameworkType"):
         if key in node:
             _text(node[key], tuple(path) + (key,), limits)
+    if "occlusion" in node and node["occlusion"] not in OCCLUSION_VALUES:
+        raise _Issue(tuple(path) + ("occlusion",), "expected 'known' or 'unknown'")
+    if "p" in node and node["p"] not in PROVENANCE_SOURCES:
+        raise _Issue(tuple(path) + ("p",), "expected one of the provenance sources")
+    if "px" in node:
+        per_field = node["px"]
+        if not isinstance(per_field, dict):
+            raise _Issue(tuple(path) + ("px",), "expected an object")
+        for field, source in per_field.items():
+            _text(field, tuple(path) + ("px", str(field)), limits)
+            if source not in PROVENANCE_SOURCES:
+                raise _Issue(
+                    tuple(path) + ("px", str(field)),
+                    "expected one of the provenance sources",
+                )
     if node.get("role") == "generic" and not node.get("frameworkType"):
         # An unrecognised widget must at least name what the framework called
         # it. An empty string carries no more than its absence, so both fail.

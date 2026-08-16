@@ -61,7 +61,36 @@ type Node struct {
 	// Role is RoleGeneric: an unrecognised widget must at least name its own
 	// type, so a reader can tell one unknown thing from another.
 	FrameworkType string `json:"frameworkType,omitempty"`
+	// Occlusion says whether the producer can tell if these cells are covered
+	// by something painted later. Only a producer that observes paint order may
+	// say "known"; the driver refuses pointer actions on anything else.
+	Occlusion string `json:"occlusion,omitempty"`
+	// P is where this node's facts came from, as a whole.
+	P string `json:"p,omitempty"`
+	// PX is where individual fields came from, when they differ from P.
+	PX map[string]string `json:"px,omitempty"`
 }
+
+// Provenance sources: where a semantic fact came from. Closed set.
+const (
+	ProvenanceAnnotation  = "annotation"
+	ProvenanceRecognizer  = "recognizer"
+	ProvenanceFramework   = "framework"
+	ProvenanceCorrelation = "correlation"
+	ProvenanceHeuristic   = "heuristic"
+)
+
+// ProvenanceSources is every value P and PX accept.
+var ProvenanceSources = []string{
+	ProvenanceAnnotation, ProvenanceRecognizer, ProvenanceFramework,
+	ProvenanceCorrelation, ProvenanceHeuristic,
+}
+
+// Occlusion knowledge: whether covered cells are answerable for this node.
+const (
+	OcclusionKnown   = "known"
+	OcclusionUnknown = "unknown"
+)
 
 // Cursor is the terminal cursor position in viewport cells.
 type Cursor struct {

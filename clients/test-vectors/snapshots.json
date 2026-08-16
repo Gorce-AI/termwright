@@ -88,6 +88,86 @@
       }
     },
     {
+      "name": "probe-node-with-occlusion-and-provenance",
+      "snapshot": {
+        "v": 1,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "bounds": {
+              "row": 0,
+              "column": 0,
+              "width": 40,
+              "height": 2
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "bounds": {
+              "row": 1,
+              "column": 2,
+              "width": 9,
+              "height": 1
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "occlusion": "known",
+            "p": "framework",
+            "px": {
+              "name": "annotation",
+              "testId": "annotation"
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "bounds": {
+              "row": 1,
+              "column": 14,
+              "width": 8,
+              "height": 1
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "occlusion": "unknown"
+          }
+        ]
+      }
+    },
+    {
       "name": "minimal-empty-tree",
       "snapshot": {
         "v": 1,
@@ -834,6 +914,236 @@
       },
       "code": "unknown-role",
       "detail": "nodes.1.role: Invalid option: expected one of \"application\"|\"region\"|\"dialog\"|\"alert\"|\"status\"|\"list\"|\"listitem\"|\"menu\"|\"menuitem\"|\"button\"|\"checkbox\"|\"radio\"|\"tab\"|\"textbox\"|\"heading\"|\"text\"|\"progressbar\"|\"separator\"|\"scrollbar\"|\"table\"|\"row\"|\"cell\"|\"generic\""
+    },
+    {
+      "name": "unknown-occlusion",
+      "snapshot": {
+        "v": 1,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "bounds": {
+              "row": 0,
+              "column": 0,
+              "width": 40,
+              "height": 2
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "bounds": {
+              "row": 1,
+              "column": 2,
+              "width": 9,
+              "height": 1
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "occlusion": "maybe"
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "bounds": {
+              "row": 1,
+              "column": 14,
+              "width": 8,
+              "height": 1
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ]
+      },
+      "code": "schema",
+      "detail": "nodes.1.occlusion: Invalid option: expected one of \"known\"|\"unknown\""
+    },
+    {
+      "name": "unknown-provenance",
+      "snapshot": {
+        "v": 1,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "bounds": {
+              "row": 0,
+              "column": 0,
+              "width": 40,
+              "height": 2
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "bounds": {
+              "row": 1,
+              "column": 2,
+              "width": 9,
+              "height": 1
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "p": "vibes"
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "bounds": {
+              "row": 1,
+              "column": 14,
+              "width": 8,
+              "height": 1
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ]
+      },
+      "code": "schema",
+      "detail": "nodes.1.p: Invalid option: expected one of \"annotation\"|\"recognizer\"|\"framework\"|\"correlation\"|\"heuristic\""
+    },
+    {
+      "name": "unknown-provenance-per-field",
+      "snapshot": {
+        "v": 1,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "bounds": {
+              "row": 0,
+              "column": 0,
+              "width": 40,
+              "height": 2
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "bounds": {
+              "row": 1,
+              "column": 2,
+              "width": 9,
+              "height": 1
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "px": {
+              "name": "vibes"
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "bounds": {
+              "row": 1,
+              "column": 14,
+              "width": 8,
+              "height": 1
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ]
+      },
+      "code": "schema",
+      "detail": "nodes.1.px.name: Invalid option: expected one of \"annotation\"|\"recognizer\"|\"framework\"|\"correlation\"|\"heuristic\""
     },
     {
       "name": "root-with-parent",

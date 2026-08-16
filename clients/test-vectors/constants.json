@@ -72,6 +72,47 @@
     "tree-diffs",
     "logs"
   ],
+  "provenanceSources": [
+    "annotation",
+    "recognizer",
+    "framework",
+    "correlation",
+    "heuristic"
+  ],
+  "probeCapabilities": [
+    "stable-identity",
+    "visible-rect",
+    "operations",
+    "annotations",
+    "frame-begin",
+    "paint-order"
+  ],
+  "probeUnobservableFields": [
+    "focused",
+    "disabled",
+    "checked",
+    "expanded",
+    "readonly",
+    "displayed",
+    "value",
+    "selectedIndex",
+    "textSelection",
+    "scroll",
+    "scrollExtent",
+    "intendedRect",
+    "visibleRect",
+    "paintOrder",
+    "text",
+    "parent"
+  ],
+  "probeIdentityKinds": [
+    "stable",
+    "frame-local"
+  ],
+  "occlusionValues": [
+    "known",
+    "unknown"
+  ],
   "defaultLimits": {
     "maxFrameBytes": 1048576,
     "maxSnapshotBytes": 2097152,

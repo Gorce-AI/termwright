@@ -3,6 +3,8 @@
 //! Unset optionals are omitted from the wire form: the schema is strict, so an
 //! explicit `null` is a validation failure rather than "absent".
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::roles::{Action, Role};
@@ -191,6 +193,43 @@ pub struct Node {
     /// type, so a reader can tell one unknown thing from another.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub framework_type: Option<String>,
+    /// Whether the producer can say if these cells are covered by something
+    /// painted later. Only a producer that observes paint order may say
+    /// `Known`; the driver refuses pointer actions on anything else.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub occlusion: Option<Occlusion>,
+    /// Where this node's facts came from, as a whole.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub p: Option<Provenance>,
+    /// Where individual fields came from, when they differ from `p`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub px: Option<BTreeMap<String, Provenance>>,
+}
+
+/// Whether covered cells are answerable for a node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Occlusion {
+    /// The producer observes paint order and can answer.
+    Known,
+    /// It cannot; the driver refuses pointer actions on this node.
+    Unknown,
+}
+
+/// Where a semantic fact came from. Closed set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Provenance {
+    /// What the author wrote.
+    Annotation,
+    /// What our rules concluded.
+    Recognizer,
+    /// What the framework itself reported.
+    Framework,
+    /// What matching across sources implied.
+    Correlation,
+    /// A guess that happened to be useful.
+    Heuristic,
 }
 
 impl Node {
@@ -211,6 +250,9 @@ impl Node {
             text_ranges: None,
             test_id: None,
             framework_type: None,
+            occlusion: None,
+            p: None,
+            px: None,
         }
     }
 

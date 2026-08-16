@@ -73,5 +73,8 @@ pub use marker::{
 };
 pub use messages::{parse_adapter_message, parse_driver_message, PROTOCOL_ID, PROTOCOL_VERSION};
 pub use roles::{Action, Capability, Role};
-pub use tree::{Cursor, CursorShape, Node, Orientation, Rect, Snapshot, State, TextRange};
+pub use tree::{
+    Cursor, CursorShape, Node, Occlusion, Orientation, Provenance, Rect, Snapshot, State,
+    TextRange,
+};
 pub use validate::{apply_tree_delta, validate_snapshot, validate_tree_delta};

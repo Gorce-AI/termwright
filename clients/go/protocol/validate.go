@@ -242,7 +242,16 @@ func checkState(value any, path []string) *issue {
 var nodeKeys = []string{
 	"id", "parentId", "role", "name", "description", "value", "bounds",
 	"state", "actions", "labelledBy", "describedBy", "textRanges", "testId",
-	"frameworkType",
+	"frameworkType", "occlusion", "p", "px",
+}
+
+func oneOf(value string, allowed []string) bool {
+	for _, candidate := range allowed {
+		if value == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func checkRelations(value any, path []string, limits Limits) *issue {
@@ -293,6 +302,33 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 		if present, ok := object[key]; ok {
 			if _, problem := checkText(present, at(path, key), limits); problem != nil {
 				return problem
+			}
+		}
+	}
+	if occlusion, ok := object["occlusion"]; ok {
+		text, isText := occlusion.(string)
+		if !isText || !oneOf(text, []string{OcclusionKnown, OcclusionUnknown}) {
+			return fail(at(path, "occlusion"), "expected 'known' or 'unknown'")
+		}
+	}
+	if source, ok := object["p"]; ok {
+		text, isText := source.(string)
+		if !isText || !oneOf(text, ProvenanceSources) {
+			return fail(at(path, "p"), "expected one of the provenance sources")
+		}
+	}
+	if perField, ok := object["px"]; ok {
+		fields, isObject := perField.(map[string]any)
+		if !isObject {
+			return fail(at(path, "px"), "expected an object")
+		}
+		for field, source := range fields {
+			if _, problem := checkText(field, at(path, "px", field), limits); problem != nil {
+				return problem
+			}
+			text, isText := source.(string)
+			if !isText || !oneOf(text, ProvenanceSources) {
+				return fail(at(path, "px", field), "expected one of the provenance sources")
 			}
 		}
 	}

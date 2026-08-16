@@ -35,6 +35,9 @@ import {
   MARKER_MAC_BYTES,
   MARKER_OSC_CODE,
   MARKER_OSC_PREFIX,
+  PROBE_CAPABILITIES,
+  PROBE_UNOBSERVABLE_FIELDS,
+  PROVENANCE_SOURCES,
   PROTOCOL_ID,
   PROTOCOL_VERSION,
   SEMANTIC_ACTIONS,
@@ -153,6 +156,11 @@ write('constants.json', {
   roles: [...SEMANTIC_ROLES],
   actions: [...SEMANTIC_ACTIONS],
   capabilities: [...ADAPTER_CAPABILITIES],
+  provenanceSources: [...PROVENANCE_SOURCES],
+  probeCapabilities: [...PROBE_CAPABILITIES],
+  probeUnobservableFields: [...PROBE_UNOBSERVABLE_FIELDS],
+  probeIdentityKinds: ['stable', 'frame-local'],
+  occlusionValues: ['known', 'unknown'],
   defaultLimits: { ...DEFAULT_LIMITS },
   absoluteLimits: { ...ABSOLUTE_LIMITS },
 });
@@ -427,6 +435,18 @@ function mutate(fn) {
 const snapshotAccept = [
   { name: 'dialog-with-two-buttons', snapshot: baseSnapshot },
   {
+    // What a probe publishes: paint order observed, so the cells are
+    // answerable and the driver's pointer gate opens; provenance says the
+    // facts came from the framework rather than from an author or a guess.
+    name: 'probe-node-with-occlusion-and-provenance',
+    snapshot: mutate((s) => {
+      s.nodes[1].occlusion = 'known';
+      s.nodes[1].p = 'framework';
+      s.nodes[1].px = { name: 'annotation', testId: 'annotation' };
+      s.nodes[2].occlusion = 'unknown';
+    }),
+  },
+  {
     name: 'minimal-empty-tree',
     snapshot: { v: 1, sessionId: 's', revision: 1, columns: 1, rows: 1, rootIds: [], nodes: [] },
   },
@@ -484,6 +504,18 @@ const snapshotReject = [
     snapshot: mutate((s) => { s.nodes[1].role = 'generic'; s.nodes[1].frameworkType = ''; }),
   },
   { name: 'unknown-role', snapshot: mutate((s) => { s.nodes[1].role = 'slider'; }) },
+  {
+    name: 'unknown-occlusion',
+    snapshot: mutate((s) => { s.nodes[1].occlusion = 'maybe'; }),
+  },
+  {
+    name: 'unknown-provenance',
+    snapshot: mutate((s) => { s.nodes[1].p = 'vibes'; }),
+  },
+  {
+    name: 'unknown-provenance-per-field',
+    snapshot: mutate((s) => { s.nodes[1].px = { name: 'vibes' }; }),
+  },
   { name: 'root-with-parent', snapshot: mutate((s) => { s.nodes[0].parentId = 'n2'; }) },
   {
     name: 'parentless-node-not-in-rootids',
