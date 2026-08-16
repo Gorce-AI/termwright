@@ -116,6 +116,30 @@ fixture is built twice, once against untouched tview and once against the
 instrumented copy, and the two screens must be byte-identical when the
 handshake variables are absent.
 
+## The three test tiers
+
+- **A — the probe.** Go tests inside the patch set: dormancy, the stalled
+  driver, the marker discipline. They need the probe's internals, so they live
+  where the internals are, and the TypeScript suite runs them and asserts they
+  did not skip.
+- **B — the recognizer.** `recognizer.ts` restates the normalisation over Probe
+  IR as a pure function, and `recognizer.test.ts` feeds it IR directly: no
+  build, no toolchain, no pseudo-terminal. It exists because half the
+  interesting cases — an unknown widget from a future release, a pre-layout
+  scroll offset, a state the probe never reported — take one line here and a
+  contrived application there. The duplication with the Go side is deliberate
+  and is a contract: two implementations that disagree describe the same
+  application differently.
+- **C — zero-config integration.** `zero-config.pty.test.ts`: initial tree,
+  focus moving, list selection, a typed value, a component appearing, and a
+  real resize. Plus the golden pair, vanilla against instrumented.
+
+Writing C found a bug in the fixture rather than in the probe, which is worth
+recording because it is the oldest bug in TUI keybinding: a global
+`SetInputCapture` swallowed every `s` typed into the form, so `"release"`
+arrived as `"releae"`. The shortcuts now only fire while the main page is in
+front.
+
 ## Not covered yet
 
 - Windows. Nothing here has run on ConPTY, and the named-pipe endpoint path in

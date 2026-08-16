@@ -47,3 +47,5 @@ export {
   type PatchedFile,
   type PatchManifest,
 } from './patches.js';
+
+export { recognize, roleFor, type RecognizeOptions } from './recognizer.js';

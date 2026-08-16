@@ -38,13 +38,30 @@ func main() {
 	pages.AddPage("main", layout, true, true)
 	pages.AddPage("settings", form, true, false)
 
+	// Tab cycles focus, which is what a test needs in order to observe focus
+	// moving at all: tview does not cycle by default.
+	focusOrder := []tview.Primitive{list, save, quit}
+	focused := 0
+
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab {
+			focused = (focused + 1) % len(focusOrder)
+			app.SetFocus(focusOrder[focused])
+			return nil
+		}
+		// Shortcuts only while the main page is in front. Without this the
+		// global capture swallows every "s" and "q" typed into the form,
+		// which is the oldest bug in TUI keybinding.
+		if name, _ := pages.GetFrontPage(); name != "main" {
+			return event
+		}
 		switch event.Rune() {
 		case 'q':
 			app.Stop()
 			return nil
 		case 's':
 			pages.ShowPage("settings")
+			app.SetFocus(form)
 			status.SetText("status: settings")
 			return nil
 		}

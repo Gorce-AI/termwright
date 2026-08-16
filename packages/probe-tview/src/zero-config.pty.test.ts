@@ -128,6 +128,49 @@ describe.skipIf(!runnable)('a plain tview application under the probe', () => {
     await expect.poll(() => app.getByRole('region', { name: 'Settings' }).isVisible()).toBe(true);
   }, 600_000);
 
+  it('reflects focus, selection, value and resize in the tree', async () => {
+    // The rest of the C list. Each of these is a fact the driver can only get
+    // from the probe: the screen shows a highlight, the tree says which widget
+    // holds the focus and which row is selected.
+    const binary = await buildFixture({ instrumented: true });
+    const app = await launchTerminal({ command: [binary], columns: 80, rows: 24 });
+    sessions.push(app);
+    await app.waitForText('readme.md');
+
+    const state = async (role: 'list' | 'button' | 'listitem' | 'textbox', name: string) =>
+      app.getByRole(role, { name }).semanticState();
+
+    // focus: it starts on the list and Tab moves it to the button.
+    await expect.poll(async () => (await state('list', 'Files'))?.focused).toBe(true);
+    await app.press('Tab');
+    await expect.poll(async () => (await state('button', 'Save'))?.focused).toBe(true);
+    await expect.poll(async () => (await state('list', 'Files'))?.focused).not.toBe(true);
+
+    // selection: moving through the list changes which item is selected, and
+    // the tree names it rather than leaving a highlight to be read off cells.
+    await app.press('Tab Tab');
+    await expect.poll(async () => (await state('listitem', 'readme.md'))?.selected).toBe(true);
+    await app.press('ArrowDown');
+    await expect.poll(async () => (await state('listitem', 'main.go'))?.selected).toBe(true);
+    await expect.poll(async () => (await state('listitem', 'readme.md'))?.selected).not.toBe(true);
+
+    // value: typing into the field on the settings page.
+    await app.press('s');
+    await expect.poll(() => app.getByRole('textbox', { name: 'Name' }).isVisible()).toBe(true);
+    await app.type('release');
+    await expect.poll(() => app.getByRole('textbox', { name: 'Name' }).textContent()).toContain(
+      'release',
+    );
+
+    // resize: a real SIGWINCH, and geometry that follows it.
+    const before = await app.getByRole('list', { name: 'Files' }).boundingBox();
+    await app.resize({ columns: 50, rows: 18 });
+    await expect
+      .poll(async () => (await app.getByRole('list', { name: 'Files' }).boundingBox())?.width)
+      .toBe(50);
+    expect(before?.width).toBe(80);
+  }, 600_000);
+
   it('renders byte-identically to the untouched framework when not instrumented', async () => {
     // The dormancy claim, measured rather than asserted from the source: the
     // instrumented binary run without the handshake variables must paint what
