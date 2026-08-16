@@ -186,15 +186,42 @@ const CANDIDATES: readonly Candidate[] = [
   decset(1002, 'mouse tracking: drag — what the mouse fixtures enable'),
   decset(1006, 'SGR mouse encoding; without it coordinates are unusable past column 95'),
   decset(2004, 'bracketed paste: a mode the driver reports and paste() depends on'),
+  decset(1004, 'focus reporting — contested: reported both as swallowed and as enabled by the host'),
+  decset(1, 'application cursor keys, which decides what an arrow key must send'),
+  {
+    // Not a DECSET: the keypad modes are bare escapes, and a terminal that
+    // filters by sequence family would treat them differently.
+    name: 'deckpam',
+    sequence: `${ESC}=`,
+    signature: /\x1b=/,
+    leak: '=',
+    note: 'application keypad, set by a bare escape rather than a private mode',
+    listen: (terminal, seen) => {
+      terminal.parser.registerEscHandler({ final: '=' }, () => {
+        seen();
+        return false;
+      });
+    },
+  },
   // Switched back immediately: on the alternate screen the sentinels and
   // PROBE-DONE would be written to a buffer this test never reads.
   decset(1049, 'alternate screen — believed to work, since semantic fixtures render', `${ESC}[?1049l`),
 ];
 
-/** Modes the driver reports, read straight off the emulator after the probe. */
+/**
+ * Modes the driver reports, read straight off the emulator after the probe.
+ * Every one of these is a claim the driver makes to a user, and a claim it can
+ * only make if the request that set it survived the trip.
+ */
 function modesLine(terminal: Terminal): string {
   const modes = terminal.modes;
-  return `  modes after probe: mouseTracking=${modes.mouseTrackingMode} bracketedPaste=${modes.bracketedPasteMode}`;
+  return [
+    `  modes after probe: mouseTracking=${modes.mouseTrackingMode}`,
+    `bracketedPaste=${modes.bracketedPasteMode}`,
+    `focusReporting=${modes.sendFocusMode}`,
+    `applicationCursorKeys=${modes.applicationCursorKeysMode}`,
+    `applicationKeypad=${modes.applicationKeypadMode}`,
+  ].join(' ');
 }
 
 interface Verdict {
