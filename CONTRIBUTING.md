@@ -112,6 +112,38 @@ and neither file exists at that commit — the manifest was committed ahead of i
 sources when two agents shared an index. It is an artifact, not a product
 regression, so `git bisect skip` it rather than chasing the failure.
 
+## Reviewing DX: run it, do not read it
+
+When checking whether a feature is actually usable — not whether the code is
+correct, but whether a person can reach it — **describe the behaviour from the
+user's side and verify it by running the thing**. Reading the implementation is
+what makes this kind of review miss.
+
+Four real examples, each found by running a command and none visible in a code
+read:
+
+- the runner's auto-open and test discovery both worked in the library and were
+  never wired into the CLI. The call sites looked right; the option simply was
+  never passed;
+- `termwright usage` printed the MCP cheat sheet instead of the CLI's. It calls
+  a real builder, correctly;
+- a missing archive exited **5 (internal)** where a mistyped path is a **2
+  (usage)** error. The error was raised properly, into the wrong branch of a
+  taxonomy we document as a contract;
+- the runner UI's `close()` waited on connections the browser was holding open,
+  so a suite with every test green timed out in teardown.
+
+The method, in order:
+
+1. list what the READMEs and docs *promise a user can do*;
+2. for each promise, run the command a user would run;
+3. classify: **reachable**, **library-only on purpose** (with a link to where
+   that is documented), or **gap** (with a suggested command or flag);
+4. report gaps rather than fixing them — some are product decisions.
+
+A gap that turns out to be deliberate is worth a sentence in the docs, so the
+next reviewer does not re-file it.
+
 ## Changesets
 
 Every user-visible change to a published package needs one:

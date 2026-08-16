@@ -151,6 +151,12 @@ test. `termwright report --trace <archive>` writes something else — the whole
 [runner UI](../runner-ui/) over one archive, inlined into a single file, for
 exploring what happened rather than seeing what changed. Both open from disk
 with no server.
+
+There is deliberately **no CLI command that generates this report from an
+archive**. It is produced by the reporter during a run, where the whole run's
+results are in hand; for a single archive after the fact, the viewer shows
+strictly more than a diff would. The split is by which information exists at
+each moment, not an oversight.
 :::
 
 With the Vitest preset you get this for free — add `TermwrightReporter` and the
