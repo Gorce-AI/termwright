@@ -96,6 +96,15 @@ both sides pass to the HMAC as the key. Never decode it to bytes first. Use
 
 ## Guarantees worth knowing
 
+- **Log record ordering.** `LogRecord.seq` is **strictly increasing** within a
+  session. A gap upward means records were dropped at the source (rate limit,
+  queue overflow) and is expected under load; a duplicate or a decrease means
+  the sender is broken, and the receiver rejects that record with a diagnostic.
+  Keeping those two distinguishable is the whole point of the counter. This is
+  a rule between records, so `validateLogRecord` cannot check it — it validates
+  one record's shape, and the driver, which is the only party that sees the
+  whole session, enforces the ordering.
+
 - **Framing.** 4-byte big-endian length prefix + UTF-8 JSON. The declared
   length is checked against the ceiling *before* any body is read, so a
   four-byte header claiming 4 GB costs four bytes. Partial frames are buffered
@@ -178,7 +187,10 @@ stripped, so a reader that does understand them still can.
   acquiring behaviour by accident.
 - Any new field on an **adapter → driver** message. That direction is strict,
   so adding one breaks every driver that has not been updated.
-- Changing the meaning, units or clock of an existing field.
+- Changing the meaning, units or clock of an existing field. Tightening
+  `LogRecord.seq` from non-decreasing to strictly increasing is an example:
+  nothing about the shape changed, but a sender that repeated a number was
+  previously conforming and now is not.
 
 The asymmetry is deliberate: *capacity* is negotiated and therefore extensible,
 while *vocabulary* is closed and therefore fixed. When in doubt, ask whether a

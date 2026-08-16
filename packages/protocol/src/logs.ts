@@ -68,9 +68,19 @@ export interface LogRecord {
   /** Logger/channel name, e.g. `http` or `db.pool`. */
   readonly logger?: string;
   /**
-   * Per-session counter, non-decreasing, assigned by the adapter. A gap tells
-   * the driver records were dropped upstream (rate limit, queue overflow)
-   * rather than lost in transit.
+   * Per-session counter assigned by the adapter, **strictly increasing**: every
+   * record carries a `seq` greater than the previous one on the same session.
+   *
+   * The two failure modes are distinguishable on purpose:
+   * - a **gap upward** means records were dropped at the source (rate limit,
+   *   queue overflow) rather than lost in transit, and is expected under load;
+   * - a **duplicate or a decrease** means the sender is broken, so the receiver
+   *   rejects that record and emits a diagnostic instead of retaining it.
+   *
+   * This is a rule *between* records, not about the shape of one, so
+   * {@link validateLogRecord} cannot enforce it — it only checks that `seq` is
+   * a non-negative safe integer. Ordering is enforced by the driver, which is
+   * the only party that sees the whole session.
    */
   readonly seq: number;
   /** Semantic revision current when the record was produced, when known. */
