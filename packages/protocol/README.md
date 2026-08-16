@@ -273,6 +273,121 @@ representation of the `Toggled` enum. This export emits `"true" | "false" |
 real bridge should check that against the adapter they link, and it is a
 one-line change if it turns out to be `"True" | "False" | "Mixed"`.
 
+## Adapter semantics conventions
+
+The vocabulary is already shared: roles, states and actions are closed sets the
+protocol enforces. The **conventions** were not. Where a name comes from, what
+falls back to what, whether an empty value is published — each adapter decided
+for itself, so two conformant adapters could describe the same UI differently
+and a test written against one would fail against another for no reason its
+author could see.
+
+This section is normative for every adapter in every language. An adapter that
+cannot follow a rule because its framework does not expose the data must say so
+in its own README under a `## Deviations` heading (rule 6) — silence is not an
+option, because a silent difference is exactly what costs a test author an
+afternoon.
+
+### 1. Role — three levels, in order
+
+1. explicit author annotation;
+2. the framework's widget-type map;
+3. `generic`.
+
+Stop at the first that produces a role in `SEMANTIC_ROLES`. An adapter may
+resolve level 2 from whatever its framework offers (a class map, an
+accessibility property, a convention prop), and may consult more than one
+source there, but it must not invent a fourth *precedence* level above the
+author's annotation: an explicit annotation always wins.
+
+### 2. Name — ordered sources
+
+1. explicit author annotation (including a deliberate empty string);
+2. the widget's own label, title or placeholder property;
+3. **for name-from-content roles only**: the concatenated text of descendants;
+4. the widget's identifier.
+
+Step 3 is the one that has diverged most, so it is spelled out. The
+name-from-content roles are exactly:
+
+`button`, `listitem`, `menuitem`, `tab`, `checkbox`, `radio`, `cell`, `heading`
+
+**Containers are never named from their content.** A `region`, `dialog`,
+`list`, `table`, `row` or `application` with no label of its own has an empty
+name — it does not inherit the text of everything inside it. Naming containers
+from content is what makes `getByRole('region', { name: 'Approve' })` match the
+dialog *containing* the Approve button, so every ancestor of a label becomes a
+plausible match for it and locators stop being selective.
+
+Descendant text is collapsed on whitespace and bounded by
+`limits.maxStringBytes`.
+
+### 3. testId — native identifier and annotation, both
+
+An adapter must accept **both**:
+
+- the framework's native identifier where one exists (a Textual DOM `id`, an
+  OpenTUI `id`), and
+- an explicit author annotation, which wins over the native one.
+
+Framework-generated identifiers that are not author-chosen (OpenTUI's
+`renderable-<n>`) must be filtered out: a test id that changes when an unrelated
+widget is added is worse than none, because it fails only later and looks
+flaky rather than wrong.
+
+### 4. States — mapped, never guessed
+
+`disabled`, `focused`, `selected`, `checked`, `expanded`, `modal`, `hidden`,
+`readonly` are published **only** when read from a native framework flag or
+supplied by the author. An adapter must not infer a state from appearance,
+position or role.
+
+Omitting a state means "this framework does not report it", which a test can
+handle. Guessing means the tree asserts something the application never said,
+and a passing test then proves nothing.
+
+An adapter that drops hidden nodes from the tree entirely (rather than
+publishing them with `hidden: true`) must say so under `## Deviations`; both are
+defensible, but they are not the same tree.
+
+### 5. `value` versus `name`
+
+`value` carries what the widget *contains*; `name` carries what it is *called*.
+Publish `value` whenever the widget has one, **including the empty string** — an
+empty textbox has `value: ''`, not an absent value.
+
+The distinction is load-bearing: `''` means "the field is empty" and absent
+means "this is not a value-bearing widget". Collapsing them makes
+`toHaveValue('')` unassertable, and a wire format that drops empty strings
+(Go's `omitempty` and friends) silently converts the first into the second.
+
+### 6. Deviations must be declared
+
+Per-adapter differences are permitted **only** where the framework does not
+expose the data, and each one must be listed in that adapter's README under a
+`## Deviations` heading, saying what the rule is, what the adapter does
+instead, and why the framework forces it.
+
+An undeclared deviation is a bug, not a difference.
+
+### Known gaps
+
+Snapshot at 2026-08-16, when these rules were first written down. Each entry is
+either a fix or a `## Deviations` entry for the adapter's owner to decide:
+
+| Adapter | Gap against the rules above |
+|---|---|
+| ink | Names **every** role from concatenated descendant text, containers included (rule 2). Never derives `focused` (rule 4). Never derives `value` (rule 5). |
+| opentui | Derives `value` from any renderable exposing `.value`, ungated by role — permitted, but the role-gated adapters must reconcile with it (rule 5). |
+| textual | No annotation hook for `testId`, native DOM `id` only (rule 3). Includes `row` in its name-from-content set, which ARIA supports but this list does not — see below. |
+| go/tview | Never emits `testId` although the field exists (rule 3). Drops empty `value` via `omitempty`, so `''` reaches the driver as absent (rule 5). |
+| rust | No tree adapter; rules 1–5 do not apply. Logs bridge only. |
+
+One question this list does not settle: ARIA treats `row` as name-from-content
+and the Textual adapter follows ARIA, while the set above does not include it.
+Either the set gains `row` or Textual declares a deviation; the protocol does
+not have a preference, but the five adapters must not answer it differently.
+
 ## Protocol evolution
 
 The protocol grows without a version bump only in ways an already published
