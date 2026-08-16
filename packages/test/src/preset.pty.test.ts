@@ -188,9 +188,21 @@ describe.skipIf(!available)('trace collection', () => {
       readFileSync(join(traces, entry, 'events.jsonl'), 'utf8')
         .split('\n')
         .filter((line) => line.length > 0)
-        .map((line) => JSON.parse(line) as { kind: string; api?: string; title?: string }),
+        .map((line) => JSON.parse(line) as { kind: string; api?: string; title?: string; ref?: string; selector?: string }),
     );
     expect(events.some((event) => event.kind === 'step-start' && event.title === 'a named step')).toBe(true);
     expect(events.some((event) => event.kind === 'assert' && event.api === 'toBeFocused')).toBe(true);
+
+    // Every assertion about a node carries that node's ref: the runner UI
+    // lights up its bounds when someone clicks the row in the command log.
+    const asserts = events.filter(
+      (event): event is { kind: string; api?: string; ref?: string; selector?: string } =>
+        event.kind === 'assert',
+    );
+    const aboutANode = asserts.filter((event) => event.selector?.startsWith('getBy') === true);
+    expect(aboutANode.length).toBeGreaterThan(0);
+    for (const event of aboutANode) {
+      expect(event.ref, `${event.api ?? '?'} on ${event.selector ?? '?'}`).toMatch(/^n\d+@\d+$/u);
+    }
   });
 });

@@ -10,6 +10,9 @@ import { configureTermwright, resetTermwrightConfig } from './config.js';
 import { registerTermwrightMatchers } from './matchers.js';
 import { beginSnapshotScope, resetSnapshotCache } from './snapshot-store.js';
 import { createLogCollection, type CapturedLog } from './logs.js';
+import { enterScope, scopeKey, type TermwrightScope } from './trace-context.js';
+import { resolveTermwrightConfig } from './config.js';
+import type { TraceWriter } from '@termwright/trace';
 
 registerTermwrightMatchers();
 
@@ -451,5 +454,65 @@ describe('toHaveLogged', () => {
     await expect(async () => {
       await expect({ sessionId: 'x' }).toHaveLogged({ level: 'error' });
     }).rejects.toThrow(/call collectLogs\(harness\) first/u);
+  });
+});
+
+describe('what the trace records', () => {
+  /** A writer that keeps the assertions it was handed. */
+  function recordingScope(): { asserts: Record<string, unknown>[]; exit: () => void } {
+    const asserts: Record<string, unknown>[] = [];
+    const writer = {
+      recordAssert: (entry: Record<string, unknown>) => asserts.push(entry),
+      addStep: () => ({ stepId: 's1', title: '', end: () => {} }),
+    } as unknown as TraceWriter;
+    const scope: TermwrightScope = {
+      testId: 't1',
+      testName: 'records refs',
+      testFile: '/repo/a.test.ts',
+      config: resolveTermwrightConfig({}, {}),
+      writers: [writer],
+      traces: [],
+    };
+    return { asserts, exit: enterScope(scope) };
+  }
+
+  it('stores the ref of the node the assertion was about', async () => {
+    const { asserts, exit } = recordingScope();
+    try {
+      await expect(fakeLocator(() => ({ visible: true, ref: 'n8@42' }))).toBeVisible();
+    } finally {
+      exit();
+    }
+    expect(asserts).toHaveLength(1);
+    expect(asserts[0]).toMatchObject({ api: 'toBeVisible', ok: true, ref: 'n8@42' });
+    expect(asserts[0]?.['selector']).toBe('getByRole("button")');
+  });
+
+  it('records a failed assertion without a ref when nothing resolved', async () => {
+    const { asserts, exit } = recordingScope();
+    try {
+      await expect(async () => {
+        await expect(fakeLocator(() => ({ visible: false, resolveError: timeoutError() }))).toBeVisible({
+          timeout: 50,
+        });
+      }).rejects.toThrow();
+    } finally {
+      exit();
+    }
+    expect(asserts[0]).toMatchObject({ api: 'toBeVisible', ok: false });
+    expect(asserts[0]).not.toHaveProperty('ref');
+  });
+
+  it('stores the scope ref for a snapshot taken within a locator', async () => {
+    const { asserts, exit } = recordingScope();
+    try {
+      const harness = fakeHarness(() => ({ tree: permissionDialog() }));
+      await expect(harness).toMatchSemanticSnapshot('- button "Approve" [focused]', {
+        within: fakeLocator(() => ({ ref: 'n1@3' }), 'getByRole("dialog")'),
+      });
+    } finally {
+      exit();
+    }
+    expect(asserts[0]).toMatchObject({ api: 'toMatchSemanticSnapshot', ok: true, ref: 'n1@3' });
   });
 });

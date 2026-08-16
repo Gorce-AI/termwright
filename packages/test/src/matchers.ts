@@ -264,6 +264,7 @@ async function toMatchSemanticSnapshot(
     throw new TypeError('toMatchSemanticSnapshot takes either { within } or { rootId }, not both');
   }
   const timeout = options.timeout ?? getTermwrightConfig().timeouts.expect;
+  let scopeRef: string | undefined;
 
   /** Resolves the scope afresh, so a re-render between attempts is harmless. */
   const scope = async (): Promise<{ rootId?: string; includeRoot?: boolean }> => {
@@ -271,6 +272,7 @@ async function toMatchSemanticSnapshot(
       return options.rootId === undefined ? {} : { rootId: options.rootId };
     }
     const target = await options.within.resolve({ timeout });
+    scopeRef = target.ref;
     const ref = parseRef(target.ref);
     if (ref === null || ref.kind !== 'node') {
       throw new TypeError(
@@ -307,6 +309,7 @@ async function toMatchSemanticSnapshot(
       options.within === undefined
         ? 'semantic tree'
         : `semantic tree within ${options.within.description}`,
+    ref: () => scopeRef,
     // `capabilities().semanticTree` is true from the handshake, but the tree
     // itself only becomes observable once a snapshot and its render-commit
     // marker have been paired — a screen wait can land in that gap.
@@ -438,20 +441,22 @@ async function locatorAssertion(state: MatcherState, spec: LocatorAssertion): Pr
   }
 
   const pass = last.pass;
+  // One bounded resolve, used for both the ref the trace stores and the
+  // diagnostics a failure prints: the UI needs the ref to light up the target's
+  // bounds when someone clicks the row in the command log.
+  const resolution = await resolveTarget(spec.locator);
   recordAssert(
     {
       api: spec.matcher,
       ok: pass !== isNot,
       selector: target,
+      ...(resolution.ref === undefined ? {} : { ref: resolution.ref }),
       ...(pass === isNot ? { error: `expected ${spec.expected}, received ${last.actual}` } : {}),
     },
     testKey(state),
   );
 
-  const diagnostics =
-    pass === isNot
-      ? (spec.diagnostics?.() ?? (await locatorDiagnostics(spec.locator, failure)))
-      : '';
+  const diagnostics = pass === isNot ? failureDiagnostics(spec, failure, resolution.error) : '';
   const actual = last.actual;
   return {
     pass,
@@ -481,6 +486,8 @@ interface SnapshotAssertion {
   readonly inline: string | undefined;
   /** Subject shown in the failure header. Defaults to the snapshot kind. */
   readonly target?: string;
+  /** Ref of the scope the snapshot was taken from, when it was scoped. */
+  ref?(): string | undefined;
   /** Whether the subject can be serialized yet. Absent means always. */
   ready?(): boolean;
   /** Async because a scoped snapshot resolves its locator per attempt. */
@@ -537,10 +544,12 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
   }
 
   const pass = comparison.ok;
+  const scopeRef = spec.ref?.();
   recordAssert(
     {
       api: spec.matcher,
       ok: pass !== isNot,
+      ...(scopeRef === undefined ? {} : { ref: scopeRef }),
       ...(comparison.reason === undefined ? {} : { error: comparison.reason }),
     },
     testKey(state),
@@ -636,16 +645,26 @@ function indent(text: string): string {
     .join('\n');
 }
 
-/** Harvests the driver's own diagnostics (candidates + screen excerpt). */
-async function locatorDiagnostics(locator: Locator | undefined, failure: unknown): Promise<string> {
-  const fromFailure = diagnosticsBlock(failure);
-  if (fromFailure !== '') return fromFailure;
-  if (locator === undefined) return '';
+/** The most specific explanation available for a failed locator assertion. */
+function failureDiagnostics(spec: LocatorAssertion, probeError: unknown, resolveError: unknown): string {
+  const own = spec.diagnostics?.();
+  if (own !== undefined && own !== '') return own;
+  const fromProbe = diagnosticsBlock(probeError);
+  return fromProbe !== '' ? fromProbe : diagnosticsBlock(resolveError);
+}
+
+/**
+ * Resolves a locator once, without waiting and without throwing.
+ *
+ * A matcher that just passed resolves immediately; one that failed yields the
+ * driver's error, whose diagnostics are what the failure message prints.
+ */
+async function resolveTarget(locator: Locator | undefined): Promise<{ ref?: string; error?: unknown }> {
+  if (locator === undefined) return {};
   try {
-    await locator.resolve({ timeout: 1 });
-    return '';
+    return { ref: (await locator.resolve({ timeout: 1 })).ref };
   } catch (error) {
-    return diagnosticsBlock(error);
+    return { error };
   }
 }
 
