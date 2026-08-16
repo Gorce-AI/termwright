@@ -439,3 +439,131 @@ button.active {
 .crash-diagnostics code {
   color: var(--warn);
 }
+
+/* Tabs (tree / logs) ---------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.tabs button.active {
+  background: #1e2430;
+  border-color: var(--line);
+  border-bottom-color: #1e2430;
+  color: var(--text);
+}
+
+.tab-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Log panel ------------------------------------------------------------- */
+
+.pane-head select {
+  font: inherit;
+  font-size: 12px;
+  padding: 1px 4px;
+  color: var(--text);
+  background: #1e2430;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.logs {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.log {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 1px 2px;
+  border-radius: 3px;
+  cursor: default;
+}
+
+.log:hover {
+  background: #1e2430;
+}
+
+.log .at {
+  color: var(--muted);
+  flex: none;
+  min-width: 48px;
+  text-align: right;
+}
+
+.log .level {
+  flex: none;
+  min-width: 40px;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.log .level.warn {
+  color: var(--warn);
+}
+
+.log .level.error,
+.log .level.fatal {
+  color: var(--fail);
+}
+
+.log .from {
+  flex: none;
+  color: var(--accent);
+}
+
+.log .message {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log.marked .message {
+  color: var(--text);
+}
+
+.log .attrs {
+  color: var(--muted);
+}
+
+.trunc {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.marker.log {
+  width: 3px;
+  height: 8px;
+  top: 1px;
+  background: var(--muted);
+  transform: translateX(-1px);
+}
+
+.marker.log.warn {
+  background: var(--warn);
+}
+
+.marker.log.error,
+.marker.log.fatal {
+  background: var(--fail);
+}

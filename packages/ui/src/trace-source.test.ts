@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openTrace, type TraceReader } from '@termwright/trace';
+import { readTraceLogs } from './trace-logs.js';
 import { buildCrashedFixtureTrace, buildFixtureTrace, FIXTURE_TREES } from './__fixtures__/build-trace.js';
 import { UiHub } from './hub.js';
 import { publishTraceTimeline, readTraceOverview, traceStateAt, type TraceOverview } from './trace-source.js';
@@ -90,6 +91,24 @@ describe('traceStateAt', () => {
     const early = await traceStateAt(reader, 400);
     const late = await traceStateAt(reader, 1_400);
     expect(prefix(late).startsWith(prefix(early))).toBe(true);
+  });
+});
+
+describe('application logs in an archive', () => {
+  it('reads back what the session logged, on the cast timeline', async () => {
+    const logs = await readTraceLogs(reader);
+    expect(logs.available).toBe(true);
+    expect(logs.records.map((entry) => entry.message)).toEqual(['listening on 3000', 'pool exhausted']);
+
+    const [line, record] = logs.records;
+    expect(line?.source).toBe('file');
+    expect(line?.level).toBeNull();
+    expect(line?.label).toBe('server.log');
+    expect(record?.level).toBe('warn');
+    expect(record?.attrs).toEqual({ size: 10 });
+    // Positioned on the cast timeline, so a scrub can be compared against it.
+    expect(record?.t).toBeGreaterThan(line?.t ?? 0);
+    expect(record?.t).toBeLessThanOrEqual(overview.durationMs);
   });
 });
 

@@ -108,6 +108,34 @@ the YAML snapshot file on the first run, which is the artefact a reviewer reads 
 and it keeps this package from having to implement the YAML serializer that
 `@termwright/test` already owns.
 
+## Logs: one row shape, and no invented severity
+
+The driver's `app-log` event carries two different payloads — a followed file
+yields `line`, an instrumented adapter yields a structured `record` — and the
+archive's `logs.jsonl` carries the already-flattened form. `app-log.ts` parses
+all three into one `AppLogView`, so the panel, the timeline marks and the
+message validator share one shape.
+
+The one distinction kept is that **a file line has `level: null`**. No regex
+over the text, no heuristics: an unleveled line is shown in the panel (always,
+whatever the filter) and never produces a warn/error mark. A mark that might be
+wrong is worse than no mark, and a filter that hides lines it failed to classify
+is worse than one that shows them.
+
+`UI_LOG_LEVELS` duplicates the protocol's `LOG_LEVELS` because this module is
+bundled into the browser and `@termwright/protocol` is Node-only (it imports
+`node:crypto`). `app-log.test.ts` asserts the two arrays are identical, so the
+fork cannot drift — the assertion runs in Node, where importing the protocol is
+free. That test is the reason no dependency-rule relaxation was needed.
+
+Archive logs arrive over HTTP (`/api/trace/logs`), not on the socket: they are
+state, like the trace overview, and the panel clips them to the scrub position.
+The clip uses the *requested* moment rather than the one `stateAt` clamped to,
+so jumping to a log mark shows the line you jumped to instead of stopping just
+short of it. Live logs, being events, ride the socket as `app-log` messages, and
+`run-start` clears them only for live and recording runs — a post-mortem's logs
+come from the archive and a late socket backlog must not wipe them.
+
 ## The crash section is external data
 
 `meta.crash` reaches the viewer from an archive somebody else recorded — a CI

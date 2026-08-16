@@ -50,6 +50,18 @@ export {
 } from './server.js';
 
 export {
+  isMarked,
+  parseAppLog,
+  passesLevel,
+  UI_LOG_LEVELS,
+  type AppLogView,
+  type LogAttrs,
+  type LogLevel,
+} from './app-log.js';
+
+export { readTraceLogs, type TraceLogs } from './trace-logs.js';
+
+export {
   CRASH_TAIL_WARNING,
   describeCrashCause,
   parseCrash,

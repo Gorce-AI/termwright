@@ -69,6 +69,24 @@ trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it
 is. The browser app never imports Vitest and never reads a `.twtrace` itself.
 
+## What the program said
+
+A TUI cannot print diagnostics to its own screen without corrupting the render,
+so the useful half of what a terminal program has to say never appears in the
+terminal. The **Logs** tab shows it: lines from files the session follows
+(`launch({ logs: [...] })`) and structured records from an instrumented adapter,
+with a level filter and a Follow toggle that switches itself off the moment you
+scroll up.
+
+Warn, error and fatal records also mark the timeline. Clicking a mark jumps
+there — in a replay it moves the terminal, the inspector and the log panel to
+that moment; the strip always shows the whole recording, because "jump to the
+error" is what you want *before* you have scrubbed near it.
+
+A followed file line carries **no level**: severity is never inferred from the
+text of a line, so a log that happens to contain the word `ERROR` produces no
+false mark. Unleveled lines are always shown, whatever the filter is set to.
+
 ## When the program died on its own
 
 If the archive carries a crash section (`meta.crash`, written by

@@ -4,12 +4,22 @@
   "description": "interactive runner: local server + browser app (live view, inspector, time travel, recorder)",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./reporter": { "types": "./dist/reporter.d.ts", "import": "./dist/reporter.js" }
+  "engines": {
+    "node": ">=22"
   },
-  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./reporter": {
+      "types": "./dist/reporter.d.ts",
+      "import": "./dist/reporter.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts src/reporter.ts --format esm --dts --sourcemap && vite build",
     "build:app": "vite build",

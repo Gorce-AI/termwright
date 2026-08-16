@@ -95,9 +95,29 @@ export async function buildFixtureTrace(): Promise<string> {
   session.emit('output', { data: new TextEncoder().encode('Permission required\r\n'), timeMs: 0 });
   session.publish(FIXTURE_TREES[0] as SemanticSnapshot);
 
+  session.emit('app-log', {
+    source: 'file',
+    label: 'server.log',
+    line: 'listening on 3000',
+    timeMs: 0,
+  });
+
   session.clock = 1_000;
   const step = writer.addStep('approve');
   session.emit('output', { data: new TextEncoder().encode('running: ls -la\r\n'), timeMs: 1_000 });
+  session.emit('app-log', {
+    source: 'adapter',
+    timeMs: 1_050,
+    record: {
+      ts: 1_700_000_000_000,
+      seq: 1,
+      level: 'warn',
+      message: 'pool exhausted',
+      logger: 'db.pool',
+      attrs: { size: 10 },
+    },
+  });
+
   session.clock = 1_500;
   session.publish(FIXTURE_TREES[1] as SemanticSnapshot);
   step.end('passed');

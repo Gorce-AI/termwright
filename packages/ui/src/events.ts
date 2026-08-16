@@ -14,6 +14,7 @@
  */
 
 import type { SemanticSnapshot } from '@termwright/protocol';
+import { parseAppLog, type AppLogView } from './app-log.js';
 
 /** Protocol version carried by every message. */
 export const UI_PROTOCOL_VERSION = 1;
@@ -76,7 +77,12 @@ export type ServerMessage =
       readonly traceRef?: string;
       readonly error?: string;
     }
-  | { readonly v: 1; readonly type: 'run-end'; readonly summary: UiRunSummary };
+  | { readonly v: 1; readonly type: 'run-end'; readonly summary: UiRunSummary }
+  | ({
+      readonly v: 1;
+      readonly type: 'app-log';
+      readonly sessionId: string;
+    } & AppLogView);
 
 /** client → server. */
 export type ClientMessage =
@@ -96,6 +102,7 @@ const SERVER_TYPES = new Set([
   'semantic',
   'test-end',
   'run-end',
+  'app-log',
 ]);
 const CLIENT_TYPES = new Set(['rerun', 'stop', 'pick', 'input']);
 
@@ -281,6 +288,11 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         ...(traceRef === undefined ? {} : { traceRef }),
         ...(error === undefined ? {} : { error }),
       };
+    }
+    case 'app-log': {
+      const log = parseAppLog(value);
+      if (log === null) throw new UiProtocolError('app-log: needs a finite t and a message');
+      return { v: 1, type: 'app-log', sessionId: requireString(value, 'sessionId', 'app-log'), ...log };
     }
     case 'run-end': {
       const summary = value['summary'];

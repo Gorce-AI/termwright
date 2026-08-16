@@ -122,3 +122,56 @@ describe('attachSession', () => {
     expect(hub.backlog).toHaveLength(0);
   });
 });
+
+describe('application logs', () => {
+  it('publishes a followed file line without inventing a level', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+    session.clock = 120;
+    session.logLine('ERROR: disk full');
+
+    expect(hub.backlog).toEqual([
+      {
+        v: 1,
+        type: 'app-log',
+        sessionId: 's1',
+        t: 120,
+        source: 'file',
+        level: null,
+        message: 'ERROR: disk full',
+        label: 'server.log',
+      },
+    ]);
+  });
+
+  it('publishes an adapter record with its level and structure', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+    session.logRecord({ level: 'warn', message: 'pool exhausted', logger: 'db.pool', attrs: { size: 10 } });
+
+    const message = hub.backlog[0];
+    expect(message?.type === 'app-log' && message.level).toBe('warn');
+    expect(message?.type === 'app-log' && message.logger).toBe('db.pool');
+    expect(message?.type === 'app-log' && message.attrs).toEqual({ size: 10 });
+  });
+
+  it('drops a log event that carries nothing to show', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+    session.logLine('');
+    expect(hub.backlog).toHaveLength(0);
+  });
+
+  it('evicts logs before lifecycle messages, and never run-start', () => {
+    const hub = new UiHub({ maxMessages: 3 });
+    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login' });
+    for (let index = 0; index < 20; index += 1) {
+      hub.publish({ v: 1, type: 'app-log', sessionId: 's1', t: index, source: 'file', level: null, message: 'noise' });
+    }
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'test-start', 'app-log']);
+  });
+});

@@ -9,13 +9,21 @@
 
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { render } from 'lit-html';
+import { html, render } from 'lit-html';
 import type { SemanticSnapshot } from '@termwright/protocol';
 import { fromBase64, type ServerMessage } from '../events.js';
 import type { GeneratedSelector } from '../selector.js';
 import type { TraceOverview } from '../trace-source.js';
 import { RunnerClient, type ServerState } from './client.js';
 import { renderInspector, type InspectorHandlers } from './inspector.js';
+import { isMarked, type AppLogView } from '../app-log.js';
+import {
+  renderLogPanel,
+  visibleLogs,
+  type LevelFilter,
+  type LogPanelHandlers,
+  type LogPanelModel,
+} from './log-panel.js';
 import { TerminalPane, type Highlight } from './terminal-pane.js';
 import { nextMarker, nodeAt } from '../view-model.js';
 import {
@@ -48,12 +56,29 @@ const state = {
   tests: [] as TimelineTest[],
   trace: null as TraceOverview | null,
   timeMs: 0,
+  /**
+   * The moment that was asked for, before `stateAt` clamped it to the last
+   * recorded event. The terminal shows the clamped state — that is the last
+   * screen that existed — but the log panel cuts at what you asked for, so
+   * jumping to a log mark shows the line you jumped to rather than stopping
+   * just short of it.
+   */
+  requestedMs: 0,
   picking: false,
   selectedId: null as string | null,
   hoveredId: null as string | null,
   status: null as string | null,
   summary: null as string | null,
+  rightTab: 'tree' as 'tree' | 'logs',
+  logs: [] as AppLogView[],
+  logFilter: 'all' as LevelFilter,
+  logAutoscroll: true,
+  logsAvailable: false,
+  logsTruncated: false,
 };
+
+/** Cap on live log rows held in the page. The archive keeps everything. */
+const MAX_LIVE_LOGS = 5_000;
 
 let scheduled = false;
 function schedule(): void {
@@ -73,22 +98,46 @@ function draw(): void {
   const view = active();
   const snapshot = view?.snapshot ?? null;
 
+  const logModel = logPanelModel();
   render(
-    renderInspector(
-      {
-        snapshot,
-        revision: view?.revision ?? null,
-        selectedId: state.selectedId,
-        hoveredId: state.hoveredId,
-        picking: state.picking,
-        recording: state.mode === 'record',
-        variable: 'app',
-        status: state.status,
-      },
-      inspectorHandlers,
-    ),
+    html`
+      <nav class="tabs">
+        <button
+          class=${state.rightTab === 'tree' ? 'active' : ''}
+          data-testid="tab-tree"
+          @click=${() => selectTab('tree')}
+        >
+          Tree
+        </button>
+        <button
+          class=${state.rightTab === 'logs' ? 'active' : ''}
+          data-testid="tab-logs"
+          @click=${() => selectTab('logs')}
+        >
+          Logs${state.logs.length === 0 ? '' : ` (${visibleLogs(logModel).length})`}
+        </button>
+      </nav>
+      <div class="tab-body">
+        ${state.rightTab === 'tree'
+          ? renderInspector(
+              {
+                snapshot,
+                revision: view?.revision ?? null,
+                selectedId: state.selectedId,
+                hoveredId: state.hoveredId,
+                picking: state.picking,
+                recording: state.mode === 'record',
+                variable: 'app',
+                status: state.status,
+              },
+              inspectorHandlers,
+            )
+          : renderLogPanel(logModel, logHandlers)}
+      </div>
+    `,
     inspectorHost as HTMLElement,
   );
+  if (state.rightTab === 'logs' && state.logAutoscroll) followLogs();
 
   render(
     renderTimeline(
@@ -99,6 +148,7 @@ function draw(): void {
         timeMs: state.timeMs,
         connected: state.connected,
         summary: state.summary,
+        logMarks: markedLogs(),
       },
       timelineHandlers,
     ),
@@ -123,6 +173,73 @@ function draw(): void {
   }
   pane.setHighlights(highlights);
 }
+
+/** The model the log pane renders from. */
+function logPanelModel(): LogPanelModel {
+  return {
+    logs: state.logs,
+    filter: state.logFilter,
+    autoscroll: state.logAutoscroll,
+    available: state.logsAvailable,
+    truncated: state.logsTruncated,
+    // Replaying: the log pane shows what had been logged by the moment the
+    // terminal is showing, and nothing that had not happened yet.
+    upToMs: state.trace === null ? null : Math.max(state.timeMs, state.requestedMs),
+  };
+}
+
+/**
+ * Warn/error lines, for the timeline strip.
+ *
+ * Deliberately *not* clipped to the scrub position: the strip is the map of the
+ * whole recording, and "jump to the error" is what you want before you have
+ * scrubbed anywhere near it. The panel is the view that follows the clock.
+ */
+function markedLogs(): AppLogView[] {
+  return state.logs.filter(isMarked);
+}
+
+function selectTab(tab: 'tree' | 'logs'): void {
+  state.rightTab = tab;
+  schedule();
+}
+
+/** Pins the log list to its newest row. */
+function followLogs(): void {
+  const list = document.querySelector<HTMLElement>('[data-testid="logs"]');
+  if (list !== null) list.scrollTop = list.scrollHeight;
+}
+
+const logHandlers: LogPanelHandlers = {
+  setFilter(filter) {
+    state.logFilter = filter;
+    schedule();
+  },
+  toggleAutoscroll() {
+    state.logAutoscroll = !state.logAutoscroll;
+    schedule();
+  },
+  seek(timeMs) {
+    if (state.trace === null) return; // live: there is nothing to seek
+    void seek(timeMs);
+  },
+};
+
+// Scrolling up is how you say "stop following": the pane stops moving under
+// you, and the Follow button shows it is off.
+inspectorHost.addEventListener(
+  'scroll',
+  (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.matches('[data-testid="logs"]')) return;
+    const atBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 4;
+    if (state.logAutoscroll !== atBottom) {
+      state.logAutoscroll = atBottom;
+      schedule();
+    }
+  },
+  true,
+);
 
 const inspectorHandlers: InspectorHandlers = {
   select(nodeId) {
@@ -201,6 +318,7 @@ const timelineHandlers: TimelineHandlers = {
 async function seek(timeMs: number): Promise<void> {
   if (state.trace === null) return;
   state.timeMs = timeMs;
+  state.requestedMs = timeMs;
   schedule();
   const traceState = await client.traceState(timeMs);
   pane.reset();
@@ -245,6 +363,14 @@ function handle(message: ServerMessage): void {
       state.mode = message.mode;
       state.tests = [];
       state.summary = null;
+      // A replayed run's logs come from the archive over HTTP, and the socket's
+      // backlog can arrive after that fetch resolves — clearing here would wipe
+      // them. Only a live or recording run streams its logs over the socket.
+      if (message.mode !== 'post-mortem') {
+        state.logs = [];
+        state.logsAvailable = false;
+        state.logsTruncated = false;
+      }
       if (message.mode !== 'post-mortem') pane.reset();
       break;
     case 'test-start': {
@@ -283,6 +409,17 @@ function handle(message: ServerMessage): void {
       test.status = message.status;
       if (message.traceRef !== undefined) test.traceRef = message.traceRef;
       if (message.error !== undefined) test.error = message.error;
+      break;
+    }
+    case 'app-log': {
+      const { sessionId, type: _type, v: _v, ...log } = message;
+      state.activeSessionId ??= sessionId;
+      state.logsAvailable = true;
+      state.logs.push(log);
+      if (state.logs.length > MAX_LIVE_LOGS) {
+        state.logs.splice(0, state.logs.length - MAX_LIVE_LOGS);
+        state.logsTruncated = true;
+      }
       break;
     }
     case 'run-end': {
@@ -334,6 +471,12 @@ void client
     }
     if (server.trace !== null) {
       state.activeSessionId = server.trace.sessionId;
+      const logs = await client.traceLogs().catch(() => null);
+      if (logs !== null) {
+        state.logs = [...logs.records];
+        state.logsAvailable = logs.available;
+        state.logsTruncated = logs.truncated;
+      }
       await seek(0);
     }
     schedule();

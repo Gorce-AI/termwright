@@ -10,6 +10,7 @@
 
 import type { SessionEvents } from '@termwright/driver';
 import type { SemanticSnapshot } from '@termwright/protocol';
+import { parseAppLog } from './app-log.js';
 import { toBase64 } from './events.js';
 import type { UiHub } from './hub.js';
 
@@ -50,8 +51,17 @@ export function attachSession(hub: UiHub, source: UiSessionSource): () => void {
     if (snapshot === null || snapshot.revision !== revision) return;
     hub.publish({ v: 1, type: 'semantic', sessionId, revision, snapshot });
   });
+  // Application logs: a followed file yields a line, an instrumented adapter a
+  // structured record. Both flatten into one row; a payload that flattens to
+  // nothing is dropped rather than published as an empty line.
+  const offLog = source.events.on('app-log', (event) => {
+    const log = parseAppLog(event);
+    if (log === null) return;
+    hub.publish({ v: 1, type: 'app-log', sessionId, ...log });
+  });
   return () => {
     offOutput();
     offSemantic();
+    offLog();
   };
 }

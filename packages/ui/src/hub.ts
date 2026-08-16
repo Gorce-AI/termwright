@@ -27,6 +27,11 @@ export interface UiHubOptions {
   readonly maxOutputBytes?: number;
 }
 
+function firstIndexOf(messages: readonly ServerMessage[], type: ServerMessage['type']): number | undefined {
+  const index = messages.findIndex((message) => message.type === type);
+  return index === -1 ? undefined : index;
+}
+
 const DEFAULT_MAX_MESSAGES = 4096;
 const DEFAULT_MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
@@ -118,13 +123,20 @@ export class UiHub {
   }
 
   /**
-   * Drops the oldest droppable message. Output is dropped first and lifecycle
-   * messages last: losing a screen fragment degrades the terminal pane, losing a
-   * `test-start` breaks the timeline.
+   * Drops the oldest droppable message, in order of how little it costs:
+   * terminal output first, then application logs, then anything else that is
+   * not `run-start`.
+   *
+   * Losing a screen fragment degrades the terminal pane; losing a log line
+   * degrades the log panel; losing `run-start` would leave a tab that never
+   * learns which mode it is in, so it is the one message never dropped.
    */
   #dropOldest(): ServerMessage | undefined {
-    const outputIndex = this.#backlog.findIndex((message) => message.type === 'output');
-    const index = outputIndex === -1 ? 0 : outputIndex;
+    const index =
+      firstIndexOf(this.#backlog, 'output') ??
+      firstIndexOf(this.#backlog, 'app-log') ??
+      this.#backlog.findIndex((message) => message.type !== 'run-start');
+    if (index < 0) return undefined;
     const [dropped] = this.#backlog.splice(index, 1);
     if (dropped?.type === 'output') this.#outputBytes -= dropped.dataB64.length;
     return dropped;

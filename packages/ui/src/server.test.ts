@@ -175,6 +175,24 @@ describe('live mode', () => {
     viewer.close();
   });
 
+  it('streams application logs to the browser', async () => {
+    const server = await start();
+    const session = new FakeHarness('s1');
+    server.attach({ source: session });
+    const viewer = await Viewer.connect(server);
+
+    session.logLine('starting up');
+    session.logRecord({ level: 'error', message: 'connection refused', logger: 'db' });
+
+    await viewer.until((messages) => messages.filter((m) => m.type === 'app-log').length === 2, 'both logs');
+    const [line, record] = viewer.received.filter((message) => message.type === 'app-log');
+    expect(line?.type === 'app-log' && line.level).toBeNull();
+    expect(line?.type === 'app-log' && line.message).toBe('starting up');
+    expect(record?.type === 'app-log' && record.level).toBe('error');
+    expect(record?.type === 'app-log' && record.logger).toBe('db');
+    viewer.close();
+  });
+
   it('lists attached sessions over HTTP', async () => {
     const server = await start();
     const session = new FakeHarness('s1');
@@ -242,9 +260,34 @@ describe('post-mortem mode', () => {
     expect((await api(server, '/api/trace/state?t=0')).status).toBe(200);
   });
 
+  it('serves the archive’s application logs', async () => {
+    const server = await start({ trace: await buildFixtureTrace() });
+    const body = (await (await api(server, '/api/trace/logs')).json()) as {
+      available: boolean;
+      records: { message: string; level: string | null }[];
+      sources: string[];
+    };
+    expect(body.available).toBe(true);
+    expect(body.records.map((entry) => entry.message)).toEqual(['listening on 3000', 'pool exhausted']);
+    expect(body.records[0]?.level).toBeNull();
+    expect(body.records[1]?.level).toBe('warn');
+    expect(body.sources).toContain('server.log');
+  });
+
+  it('reports an archive that recorded no logs as unavailable', async () => {
+    const server = await start({ trace: await buildCrashedFixtureTrace() });
+    const body = (await (await api(server, '/api/trace/logs')).json()) as {
+      available: boolean;
+      records: unknown[];
+    };
+    expect(body.available).toBe(false);
+    expect(body.records).toEqual([]);
+  });
+
   it('reports no trace when the server is live', async () => {
     const server = await start();
     expect((await api(server, '/api/trace/state?t=0')).status).toBe(409);
+    expect((await api(server, '/api/trace/logs')).status).toBe(409);
   });
 });
 

@@ -41,6 +41,7 @@ import {
   traceStateAt,
   type TraceOverview,
 } from './trace-source.js';
+import { readTraceLogs, type TraceLogs } from './trace-logs.js';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 /** Maximum accepted request body. Bodies here are small by construction. */
@@ -126,11 +127,13 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   let reader: TraceReader | undefined;
   let overview: TraceOverview | undefined;
   let recorder: RecorderSession | undefined;
+  let traceLogs: TraceLogs | undefined;
 
   if (options.trace !== undefined) {
     mode = 'post-mortem';
     reader = await openTrace(options.trace);
     overview = await readTraceOverview(reader);
+    traceLogs = await readTraceLogs(reader);
     publishTraceTimeline(hub, overview);
   } else if (options.record !== undefined) {
     mode = 'record';
@@ -283,6 +286,14 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
                   outFile: options.record?.outFile ?? null,
                 },
         });
+        return;
+      }
+      case 'GET /api/trace/logs': {
+        if (traceLogs === undefined) {
+          sendJson(response, 409, { error: 'no trace is open' });
+          return;
+        }
+        sendJson(response, 200, traceLogs);
         return;
       }
       case 'GET /api/trace/state': {

@@ -14,6 +14,7 @@ import {
   type ServerMessage,
 } from '../events.js';
 import type { TraceOverview, TraceStatePayload } from '../trace-source.js';
+import type { TraceLogs } from '../trace-logs.js';
 import type { GeneratedSelector } from '../selector.js';
 import type { RecordedEvent } from '../codegen.js';
 
@@ -88,6 +89,11 @@ export class RunnerClient {
 
   async state(): Promise<ServerState> {
     return this.#get<ServerState>('/api/state');
+  }
+
+  /** The archive's application logs, validated server-side. */
+  async traceLogs(): Promise<TraceLogs> {
+    return this.#get<TraceLogs>('/api/trace/logs');
   }
 
   async traceState(timeMs: number): Promise<TraceStatePayload> {

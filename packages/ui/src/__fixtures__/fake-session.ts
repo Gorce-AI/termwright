@@ -48,6 +48,26 @@ export class FakeSession implements UiSessionSource {
     this.#emit('semantic-revision', { revision: snapshot.revision, timeMs: this.clock });
   }
 
+  /** Emits a followed-file log line. */
+  logLine(line: string, label = 'server.log'): void {
+    this.#emit('app-log', { source: 'file', label, line, timeMs: this.clock });
+  }
+
+  /** Emits a structured record from an instrumented adapter. */
+  logRecord(record: {
+    level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+    message: string;
+    logger?: string;
+    seq?: number;
+    attrs?: Record<string, string | number | boolean | null>;
+  }): void {
+    this.#emit('app-log', {
+      source: 'adapter',
+      record: { ts: Date.now(), seq: record.seq ?? 1, ...record },
+      timeMs: this.clock,
+    });
+  }
+
   /** Announces a revision the session has not caught up to yet. */
   announceRevision(revision: number): void {
     this.#emit('semantic-revision', { revision, timeMs: this.clock });
