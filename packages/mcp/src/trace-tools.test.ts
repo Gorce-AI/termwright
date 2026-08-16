@@ -495,6 +495,7 @@ describe('a crash recorded in the archive', () => {
       recentInputs: [{ timeMs: 2_400, kind: 'key', bytes: 1, preview: '\\r' }],
       diagnosticsTail: [
         { code: 'pairing-timeout', detail: 'no marker for revision 3', timeMs: 2_450 },
+        { code: 'mode-unverifiable', detail: 'ConPTY hides the mode', timeMs: 40, mode: 'focus' },
       ],
       lastSemanticRevision: 2,
     };
@@ -512,6 +513,7 @@ describe('a crash recorded in the archive', () => {
       exit: { code: number };
       screenTail: string[];
       lastSemanticRevision: number;
+      diagnostics: unknown;
     };
     expect(crash.exit.code).toBe(9);
     expect(crash.screenTail).toContain('  RuntimeError: boom');
@@ -521,6 +523,10 @@ describe('a crash recorded in the archive', () => {
     expect(overview.text).toContain('crash: the program exited on its own');
     expect(overview.text).toContain('RuntimeError: boom');
     expect(overview.text).toContain('diagnostic pairing-timeout');
+    // The platform-blind diagnostic keeps the field naming which mode it means.
+    const diagnostics = crash.diagnostics as { code: string; mode?: string }[];
+    expect(diagnostics.find((entry) => entry.code === 'mode-unverifiable')?.mode).toBe('focus');
+    expect(overview.text).toContain('diagnostic mode-unverifiable (focus)');
   });
 
   it('hands back a cast offset that frame_at can seek to', async () => {
