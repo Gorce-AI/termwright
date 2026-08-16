@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
+import { canaryCheck, writeWorkspace } from './workspace.js';
 import {
   applyPatchSet,
   digestPatchSet,
@@ -64,8 +65,9 @@ describe('the manifest', () => {
 
     expect(manifest.framework).toBe('github.com/rivo/tview');
     expect(manifest.frameworkVersion).toBe('v0.42.0');
-    expect(manifest.patched).toHaveLength(1);
-    expect(manifest.patched[0]?.path).toBe('application.go');
+    // Two files: the anchored hook, and the go.mod line that lets the probe
+    // import the protocol client instead of reimplementing framing.
+    expect(manifest.patched.map((file) => file.path)).toEqual(['application.go', 'go.mod']);
     expect(manifest.added[0]?.path).toBe('termwright_probe.go');
   });
 
@@ -141,21 +143,18 @@ describe.skipIf(upstream === null)('against the real framework', () => {
     expect(await readFile(join(copy, 'termwright_probe.go'), 'utf8')).toContain('package tview');
   }, 120_000);
 
-  it('compiles, and stays dormant without the handshake variables', async () => {
+  it('leaves the copy dormant without the handshake variables', async () => {
     const dir = await scratch();
     const copy = join(dir, 'tview');
     await materializeUpstream(upstream as string, copy);
     await applyPatchSet(copy, PATCH_SET);
 
-    // `go vet` type-checks the package the same way a build would, without
-    // needing a main package around it.
-    await expect(run('go', ['vet', './...'], { cwd: copy })).resolves.toBeDefined();
-
-    // Dormancy is a property of the source, so it is asserted on the source:
-    // the constructor returns nil before anything is allocated.
+    // Dormancy is delegated to the client's own FromEnv, so there is one
+    // definition of "not instrumented" rather than a second one here that
+    // could drift. Compilation is proven by the application test below.
     const probe = await readFile(join(copy, 'termwright_probe.go'), 'utf8');
-    expect(probe).toContain('TERMWRIGHT_ENDPOINT');
-    expect(probe).toContain('return nil');
+    expect(probe).toContain('protocol.FromEnv');
+    expect(probe).toMatch(/if client == nil \{\n\t\treturn nil/u);
   }, 180_000);
 
   it('catches a patch that applies cleanly but produces the wrong bytes', async () => {
@@ -193,6 +192,57 @@ describe.skipIf(upstream === null)('against the real framework', () => {
 
     await expect(applyPatchSet(copy, set)).rejects.toThrow(/hashes sha256:.*not the expected/u);
   }, 120_000);
+
+  it('compiles a real tview application against the instrumented copy', async () => {
+    // The end-to-end shape of the whole slice: an application that imports
+    // plain `github.com/rivo/tview` is built through the generated workspace
+    // and gets the patched package, including the probe's own dependency on
+    // the protocol client.
+    const dir = await scratch();
+    const copy = join(dir, 'tview');
+    await materializeUpstream(upstream as string, copy);
+    await applyPatchSet(copy, PATCH_SET);
+
+    const app = join(dir, 'app');
+    await mkdir(app, { recursive: true });
+    await writeFile(
+      join(app, 'go.mod'),
+      'module example.com/app\n\ngo 1.22\n\nrequire github.com/rivo/tview v0.42.0\n',
+      'utf8',
+    );
+    await writeFile(
+      join(app, 'main.go'),
+      'package main\n\nimport "github.com/rivo/tview"\n\n' +
+        'func main() {\n\tapp := tview.NewApplication()\n' +
+        '\tapp.SetRoot(tview.NewBox().SetTitle("hi"), true)\n}\n',
+      'utf8',
+    );
+
+    const client = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'clients', 'go');
+    const file = await writeWorkspace(join(dir, 'generated.work'), {
+      moduleDir: app,
+      inherited: { uses: [], replaces: [] },
+      replaces: [
+        { from: 'github.com/rivo/tview', to: copy },
+        // A `use` entry does not satisfy a versioned require; the client has
+        // to be replaced, exactly like the framework.
+        { from: 'github.com/gorce-ai/termwright/clients/go', to: client },
+      ],
+    });
+
+    await expect(
+      run('go', ['build', './...'], { cwd: app, env: { ...process.env, GOWORK: file } }),
+    ).resolves.toBeDefined();
+
+    // And the canary proves it was our copy that compiled, not the cache.
+    const canary = await canaryCheck({
+      copyDir: copy,
+      moduleDir: app,
+      workspaceFile: file,
+      packageName: 'tview',
+    });
+    expect(canary.proved).toBe(true);
+  }, 300_000);
 
   it('is idempotent only through a fresh copy, and says so when it is not', async () => {
     const copy = join(await scratch(), 'tview');

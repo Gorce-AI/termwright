@@ -1,21 +1,33 @@
 {
   "framework": "github.com/rivo/tview",
   "frameworkVersion": "v0.42.0",
-  "patchSetVersion": 1,
-  "note": "Anchored at the statement after screen.Show() in draw(); see docs/architecture/audit/tview.md \u00a71.",
+  "patchSetVersion": 2,
+  "note": "Anchored after screen.Show() in draw(); see docs/architecture/audit/tview.md \u00a71. go.mod gains the protocol client, supplied from disk by the generated workspace.",
+  "requires": [
+    {
+      "module": "github.com/gorce-ai/termwright/clients/go",
+      "suppliedBy": "workspace"
+    }
+  ],
   "patched": [
     {
       "path": "application.go",
       "patch": "patches/application.go.patch",
       "sha256Before": "sha256:acf51c64021e45132cd28848f5559b51567df26f1c823cc9249d55581bcd7e39",
       "sha256After": "sha256:f79553c643934bcef1038d19be0473ccd6edbe1a24b2935bffbec4de562538cd"
+    },
+    {
+      "path": "go.mod",
+      "patch": "patches/go.mod.patch",
+      "sha256Before": "sha256:a2f3b131206042b58863c3c04474e7a9dd865c74c54f41d4179b77a34bafd9d9",
+      "sha256After": "sha256:068951344e45181175b58e0ccd002ef7222ca3dd8bf21017df601879d4a1966a"
     }
   ],
   "added": [
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:13d994f8e1c4344203f84e9439eb6d4eb2d32f824d39aa30fe86769cddb6a162"
+      "sha256": "sha256:45a10b6ebb12fc49f1115cbfc12b2ad962eeedcfc17f4b2610ab86ae6a101c89"
     }
   ]
 }

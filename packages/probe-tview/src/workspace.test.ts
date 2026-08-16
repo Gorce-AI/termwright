@@ -54,7 +54,7 @@ describe('rendering', () => {
     const rendered = renderWorkspace({
       moduleDir: '/proj/app',
       inherited: { uses: [], replaces: [] },
-      replace: { from: 'github.com/rivo/tview', to: '/cache/tview' },
+      replaces: [{ from: 'github.com/rivo/tview', to: '/cache/tview' }],
     });
 
     expect(rendered).toContain('use /proj/app');
@@ -67,7 +67,7 @@ describe('rendering', () => {
     const rendered = renderWorkspace({
       moduleDir: '/proj/app',
       inherited: { goVersion: '1.23', uses: [{ dir: '/proj/app' }, { dir: '/proj/lib' }], replaces: [] },
-      replace: { from: 'github.com/rivo/tview', to: '/cache/tview' },
+      replaces: [{ from: 'github.com/rivo/tview', to: '/cache/tview' }],
     });
 
     expect(rendered).toContain('use /proj/app');
@@ -87,7 +87,7 @@ describe('rendering', () => {
           { from: 'github.com/rivo/tview', to: '/proj/my-own-fork' },
         ],
       },
-      replace: { from: 'github.com/rivo/tview', to: '/cache/tview' },
+      replaces: [{ from: 'github.com/rivo/tview', to: '/cache/tview' }],
     });
 
     expect(rendered).toContain('replace example.com/other => /proj/vendored/other');
@@ -99,7 +99,7 @@ describe('rendering', () => {
     const rendered = renderWorkspace({
       moduleDir: '/Users/me/My Projects/app',
       inherited: { uses: [], replaces: [] },
-      replace: { from: 'github.com/rivo/tview', to: '/cache/tview' },
+      replaces: [{ from: 'github.com/rivo/tview', to: '/cache/tview' }],
     });
 
     expect(rendered).toContain('use "/Users/me/My Projects/app"');
@@ -184,7 +184,7 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
       moduleDir: join(dir, 'app'),
       inherited,
       // Nothing to redirect in this fixture; the point is the inherited uses.
-      replace: { from: 'example.com/absent', to: join(dir, 'lib') },
+      replaces: [{ from: 'example.com/absent', to: join(dir, 'lib') }],
     });
 
     await expect(
@@ -207,7 +207,7 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
     const file = await writeWorkspace(join(dir, 'generated.work'), {
       moduleDir: join(dir, 'app'),
       inherited: await readWorkspace(join(dir, 'app')),
-      replace: { from: 'example.com/absent', to: join(dir, 'app') },
+      replaces: [{ from: 'example.com/absent', to: join(dir, 'app') }],
     });
     await run('go', ['build', './...'], {
       cwd: join(dir, 'app'),
@@ -249,7 +249,7 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
     const file = await writeWorkspace(join(dir, 'generated.work'), {
       moduleDir: join(dir, 'app'),
       inherited: { uses: [], replaces: [] },
-      replace: { from: 'example.com/framework', to: join(dir, 'copy') },
+      replaces: [{ from: 'example.com/framework', to: join(dir, 'copy') }],
     });
 
     const result = await canaryCheck({
@@ -283,7 +283,7 @@ describe.skipIf(toolchain === null)('against a real toolchain', () => {
       moduleDir: join(dir, 'app'),
       inherited: { uses: [], replaces: [] },
       // Redirects a module the app never imports: the copy is never compiled.
-      replace: { from: 'example.com/unused', to: join(dir, 'copy') },
+      replaces: [{ from: 'example.com/unused', to: join(dir, 'copy') }],
     });
 
     const result = await canaryCheck({

@@ -1,0 +1,15 @@
+--- a/go.mod
++++ b/go.mod
+@@ -8,6 +8,12 @@
+ 	github.com/rivo/uniseg v0.4.7
+ )
+ 
++// Added by termwright: the injected probe speaks the protocol through the
++// published client rather than reimplementing framing and markers. The
++// generated workspace supplies this module from disk, so no network fetch and
++// no go.sum entry are involved.
++require github.com/gorce-ai/termwright/clients/go v0.0.0
++
+ require (
+ 	github.com/gdamore/encoding v1.0.1 // indirect
+ 	github.com/mattn/go-runewidth v0.0.16 // indirect
