@@ -151,7 +151,7 @@ export class SnapshotCollector {
 
     const resolvedRole = role ?? 'generic';
     const name = this.#clamp(meta?.name ?? asText(convention.semanticName) ?? asText(convention.ariaLabel) ?? text);
-    const value = meta?.value ?? valueOf(node);
+    const value = meta?.value ?? valueOf(node, resolvedRole);
     const state = stateOf(node, meta);
     const actions = meta?.actions ?? defaultActionsFor(resolvedRole, node.focusable);
     const testId = meta?.testId ?? asText(convention.testId) ?? explicitId(node);
@@ -232,11 +232,46 @@ function textOf(node: RenderableLike): string {
   return optionName === undefined ? '' : optionName.replace(/\s+/gu, ' ').trim();
 }
 
-/** The value of a value-bearing widget, as a string. */
-function valueOf(node: RenderableLike): string | undefined {
+/**
+ * The roles whose nodes may carry a derived `value`.
+ *
+ * Gated deliberately, and gated to exactly the set the Textual adapter uses
+ * (`textwright-py`'s `_value_for`). Rule 5 of the adapter conventions permits
+ * deriving `value` from anything that has one, and this adapter used to: every
+ * renderable exposing `.value` published it. That is defensible on its own, but
+ * it made the same UI describe itself differently depending on which adapter
+ * rendered it, and rule 5's own semantics are what makes that expensive —
+ * absent `value` means "not a value-bearing widget", so an ungated adapter and
+ * a gated one disagree about the *kind* of a node, not merely its contents.
+ *
+ * `scrollbar` is not in the set even though it plausibly belongs: Textual does
+ * not include it, and adding it here would trade one divergence for another.
+ * Widening it is a cross-adapter decision, not this file's.
+ */
+const VALUE_BEARING_ROLES: ReadonlySet<SemanticRole> = new Set<SemanticRole>([
+  'textbox',
+  'progressbar',
+]);
+
+/**
+ * The value of a value-bearing widget, as a string.
+ *
+ * Booleans are excluded, again matching Textual: a widget whose `.value` is a
+ * boolean is reporting a checked state, and that belongs in `state.checked`
+ * rather than as the string `'true'`.
+ *
+ * An empty string is a value and is published as one — rule 5 makes `''`
+ * ("the field is empty") and absent ("not a value-bearing widget") mean
+ * different things, and `toHaveValue('')` depends on the difference.
+ *
+ * An explicit `describeRenderable({ value })` bypasses this entirely: an author
+ * who says a node has a value has said so about a node whose role they chose.
+ */
+function valueOf(node: RenderableLike, role: SemanticRole): string | undefined {
+  if (!VALUE_BEARING_ROLES.has(role)) return undefined;
   const value = node.value;
   if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'number') return String(value);
   return undefined;
 }
 

@@ -125,6 +125,61 @@ describe('SnapshotCollector', () => {
     expect(nodes.find((node) => node.role === 'dialog')?.name).toBe('Permission');
   });
 
+  describe('value is gated by role', () => {
+    // The gate exists so the same UI describes itself the same way whichever
+    // adapter rendered it: rule 5 makes an absent `value` mean "not a
+    // value-bearing widget", so an ungated adapter disagrees with a gated one
+    // about a node's kind. The set matches Textual's exactly.
+    it('derives a value for the value-bearing roles', () => {
+      const root = new FakeRenderable({ id: 'root' });
+      root.add(new FakeRenderable({ className: 'InputRenderable', value: 'ada' }));
+      root.add(new FakeRenderable({ role: 'progressbar', value: 42 }));
+
+      const nodes = collect(root).nodes;
+      expect(nodes.find((node) => node.role === 'textbox')?.value).toBe('ada');
+      expect(nodes.find((node) => node.role === 'progressbar')?.value).toBe('42');
+    });
+
+    it('does not derive one for a role that has no value', () => {
+      const root = new FakeRenderable({ id: 'root' });
+      // A slider maps to no role of its own, and a button that happens to carry
+      // a `.value` is still a button.
+      const slider = root.add(new FakeRenderable({ className: 'SliderRenderable', value: 7 }));
+      const button = root.add(new FakeRenderable({ role: 'button', value: 'ignored' }));
+
+      const nodes = collect(root).nodes;
+      expect(nodes.find((node) => node.id === `n${String(slider.num)}`)?.value).toBeUndefined();
+      expect(nodes.find((node) => node.id === `n${String(button.num)}`)?.value).toBeUndefined();
+    });
+
+    it('publishes an empty value rather than dropping it', () => {
+      // `''` means the field is empty; absent means it is not a field at all.
+      // Collapsing the two makes toHaveValue('') unassertable.
+      const root = new FakeRenderable({ id: 'root' });
+      root.add(new FakeRenderable({ className: 'InputRenderable', value: '' }));
+
+      expect(collect(root).nodes.find((node) => node.role === 'textbox')?.value).toBe('');
+    });
+
+    it('treats a boolean value as a checked state, not a value', () => {
+      const root = new FakeRenderable({ id: 'root' });
+      root.add(new FakeRenderable({ role: 'textbox', value: true }));
+
+      expect(collect(root).nodes.find((node) => node.role === 'textbox')?.value).toBeUndefined();
+    });
+
+    it('lets an explicit annotation carry a value on any role', () => {
+      const root = new FakeRenderable({ id: 'root' });
+      const custom = root.add(new FakeRenderable({ role: 'status', value: 'derived' }));
+
+      const registry = new SemanticRegistry();
+      registry.register(custom, { value: '7 of 10' });
+
+      const nodes = collect(root, registry).nodes;
+      expect(nodes.find((node) => node.id === `n${String(custom.num)}`)?.value).toBe('7 of 10');
+    });
+  });
+
   it('never publishes a generated id as a test id', () => {
     const root = new FakeRenderable({ id: 'root' });
     const generated = root.add(new FakeRenderable({ role: 'button' }));

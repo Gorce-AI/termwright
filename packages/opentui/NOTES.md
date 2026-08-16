@@ -103,6 +103,15 @@ reconciler `ref` callback can do. Both are documented in the README.
   to give each option bounds. Publishing option nodes without bounds would put
   un-clickable items in the tree. The selected option's name becomes the list's
   name instead. An open thread, below.
+- **`value` is gated by role**, to `textbox` and `progressbar`. The adapter used
+  to derive it from any renderable exposing `.value`, which rule 5 permits — but
+  Textual gates, and rule 5's own semantics make the disagreement expensive:
+  absent `value` means "not a value-bearing widget", so the two adapters
+  described the same node as a different *kind* of thing. The set matches
+  Textual's `_value_for` exactly rather than the slightly wider one the audit
+  proposed; adding `scrollbar` would have traded one divergence for another.
+  Booleans are excluded for the same reason Textual excludes them — a boolean
+  `.value` is a checked state. An explicit annotation bypasses the gate.
 - **`disabled` comes from a convention property.** OpenTUI has no disabled
   concept; an application that has one says so, and the adapter does not invent
   it from `focusable: false`.

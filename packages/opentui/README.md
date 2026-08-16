@@ -67,6 +67,25 @@ role, focusable ones, and ones carrying text. Layout boxes are skipped and their
 children reparent to the nearest published ancestor, so a tree stays connected
 however much of it is dropped.
 
+## Deviations
+
+Per the adapter conventions (rule 6), everything this adapter does differently
+from the shared rules, and why the framework forces it.
+
+| Rule | What this adapter does | Why |
+|---|---|---|
+| 2 — name sources | A `BoxRenderable`'s `title` is used as an accessible name, and a container is otherwise never named from its descendants' text | OpenTUI's text renderables are leaves; concatenating a container's subtree would give every ancestor of a label that label's name |
+| 3 — `testId` | Only an author-chosen `id` becomes a `testId`; OpenTUI's generated `renderable-<n>` ids never do | Those ids shift with construction order, so publishing them would hand tests a selector that breaks on an unrelated edit |
+| — | `Select` and `TabSelect` options are not individually addressable | Options are data the widget draws itself, not renderables, so there is no honest way to give each one bounds |
+| — | `bounds` are published only under `screenMode: 'alternate-screen'` | `screenX`/`screenY` are renderer coordinates; in the other modes the region's origin is unobservable from inside the process |
+| — | `disabled` is read from a convention property, never inferred | OpenTUI has no disabled concept; inferring it from `focusable: false` would invent state |
+
+Capabilities not claimed: `text-ranges`, `tree-diffs`, `logs`. All three are
+optional and additive.
+
+`value` is **not** a deviation as of the convergence round: it is derived only
+for `textbox` and `progressbar`, the same set the Textual adapter gates on.
+
 ## Coordinates
 
 `bounds` are published only under `screenMode: 'alternate-screen'`, and that is
