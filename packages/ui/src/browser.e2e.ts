@@ -50,6 +50,13 @@ async function open(trace: string): Promise<Page> {
   return page;
 }
 
+/**
+ * Assert terminal *content* against a moment inside the recording, never at the
+ * end of one: an Ink archive replayed to its last byte leaves the alternate
+ * buffer, so the final frame is a blank screen. A test that asserts there is
+ * asserting on nothing.
+ */
+
 /** Text of an element, once it exists. */
 async function textOf(page: Page, selector: string): Promise<string> {
   const element = page.locator(selector).first();
@@ -165,5 +172,97 @@ describe('the runner UI in a browser', () => {
 
     await page.locator(testId('tests')).waitFor({ state: 'attached', timeout: 15_000 });
     expect(await page.locator(testId('crash')).count()).toBe(0);
+  });
+
+  it('lists the commands the session ran', async () => {
+    const page = await open(await buildFixtureTrace());
+
+    await page.locator(testId('tab-commands')).click();
+
+    await expect.poll(() => page.locator(testId('command')).count(), { timeout: 15_000 }).toBeGreaterThan(0);
+    expect(await page.locator(testId('command-count')).isVisible()).toBe(true);
+  });
+
+  it('plays the recording back and cycles the speed', async () => {
+    const page = await open(await buildFixtureTrace());
+
+    const play = page.locator(testId('play'));
+    const speed = page.locator(testId('speed'));
+
+    const speedBefore = await speed.innerText();
+    await speed.click();
+    await expect.poll(() => speed.innerText()).not.toBe(speedBefore);
+
+    // Playback advances the same clock time travel moves; that shared clock is
+    // the point, so assert on it rather than on the button's own label.
+    const clockBefore = await textOf(page, testId('clock'));
+    await play.click();
+    await expect.poll(() => textOf(page, testId('clock')), { timeout: 15_000 }).not.toBe(clockBefore);
+
+    await play.click(); // pause, so the page stops moving under the next assertion
+  });
+});
+
+/**
+ * Live mode, without a pty and without Vitest: the server is told about a run
+ * through the same hub a reporter would publish into, and the browser's rerun
+ * and stop buttons come back as `onRerun` / `onStop`. That round trip is the
+ * whole contract between the page and whatever is driving it.
+ */
+describe('the runner UI against a live run', () => {
+  it('renders a published run and sends the controls back', async () => {
+    const reruns: (readonly string[] | undefined)[] = [];
+    let stopped = 0;
+
+    const server = await startUiServer({
+      onRerun: (testIds) => reruns.push(testIds),
+      onStop: () => {
+        stopped += 1;
+      },
+    });
+    servers.push(server);
+
+    const page = await browser.newPage();
+    pages.push(page);
+    Object.assign(page, { __errors: [] });
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+
+    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
+    server.hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 't1',
+      title: 'approves the command',
+      file: 'src/login.test.ts',
+      startedAt: Date.now(),
+    });
+
+    await expect
+      .poll(() => textOf(page, testId('tests')), { timeout: 15_000 })
+      .toContain('approves the command');
+
+    server.hub.publish({
+      v: 1,
+      type: 'test-end',
+      id: 't1',
+      status: 'failed',
+      durationMs: 12,
+      flaky: false,
+      error: 'button stayed disabled',
+    });
+
+    await expect.poll(() => textOf(page, testId('test-counts')), { timeout: 15_000 }).toMatch(/\d/);
+
+    // Rerun one test, then the whole run, then stop.
+    await page.locator(testId('rerun-one')).first().click();
+    await expect.poll(() => reruns.length, { timeout: 15_000 }).toBe(1);
+    expect(reruns[0]).toEqual(['t1']);
+
+    await page.locator(testId('rerun')).click();
+    await expect.poll(() => reruns.length, { timeout: 15_000 }).toBe(2);
+    expect(reruns[1]).toBeUndefined(); // no ids = the whole run
+
+    await page.locator(testId('stop')).click();
+    await expect.poll(() => stopped, { timeout: 15_000 }).toBe(1);
   });
 });
