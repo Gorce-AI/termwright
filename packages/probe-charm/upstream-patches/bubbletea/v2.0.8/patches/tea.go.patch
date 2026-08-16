@@ -1,0 +1,15 @@
+--- a/tea.go
++++ b/tea.go
+@@ -885,7 +885,11 @@
+ // render renders the given view to the renderer.
+ func (p *Program) render(model Model) {
+ 	if p.renderer != nil {
+-		p.renderer.render(model.View()) // send view to renderer
++		view := model.View()
++		p.renderer.render(view) // send view to renderer
++		// Injected by termwright: one call site covers the loop, the initial
++		// frame and the final one, because v2 consolidated all three here.
++		termwrightAfterView(model, view)
+ 	}
+ }
+ 

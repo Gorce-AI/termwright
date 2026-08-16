@@ -1,0 +1,13 @@
+--- a/go.mod
++++ b/go.mod
+@@ -4,6 +4,10 @@
+ 
+ go 1.25.0
+ 
++// Added by termwright: the injected probe speaks the protocol through the
++// published client. The generated workspace supplies it from disk.
++require github.com/gorce-ai/termwright/clients/go v0.0.0
++
+ require (
+ 	github.com/charmbracelet/colorprofile v0.4.3
+ 	github.com/charmbracelet/ultraviolet v0.0.0-20260703014108-f5a850f9c2b7

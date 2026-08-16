@@ -184,7 +184,9 @@ export interface WorkspacePlan {
  * change.
  */
 export function renderWorkspace(plan: WorkspacePlan): string {
-  const goVersion = plan.inherited.goVersion ?? plan.fallbackGoVersion ?? '1.22';
+  // The highest wins, not the inherited one: a project whose workspace says
+  // 1.22 while a member needs 1.25 must still get a workspace that builds.
+  const goVersion = highest(plan.inherited.goVersion, plan.fallbackGoVersion) ?? '1.22';
 
   const uses = [...plan.inherited.uses.map((entry) => entry.dir)];
   if (!uses.includes(plan.moduleDir)) uses.push(plan.moduleDir);
@@ -207,6 +209,13 @@ export function renderWorkspace(plan: WorkspacePlan): string {
   return lines.join('\n');
 }
 
+/** The newer of two `go` directives, tolerating either being absent. */
+function highest(left: string | undefined, right: string | undefined): string | undefined {
+  if (left === undefined) return right;
+  if (right === undefined) return left;
+  return compareGoVersions(left, right) >= 0 ? left : right;
+}
+
 /** Go's workspace syntax takes a quoted string for any path with spaces. */
 function quote(path: string): string {
   return /[\s"]/u.test(path) ? JSON.stringify(path) : path;
@@ -223,8 +232,21 @@ function quote(path: string): string {
  * Canonicalising here means no caller has to know that.
  */
 export async function writeWorkspace(file: string, plan: WorkspacePlan): Promise<string> {
+  const computed =
+    plan.fallbackGoVersion ??
+    (await highestGoDirective([
+      plan.moduleDir,
+      ...plan.inherited.uses.map((use) => use.dir),
+      ...plan.replaces.map((replace) => replace.to),
+    ]));
+
   const canonical: WorkspacePlan = {
     ...plan,
+    // Computed rather than defaulted. A workspace whose `go` line is older
+    // than any member's refuses the build outright — "module . listed in
+    // go.work file requires go >= 1.25.0, but go.work lists go 1.24" — and a
+    // hardcoded floor turns every modern framework into that error.
+    ...(computed === undefined ? {} : { fallbackGoVersion: computed }),
     moduleDir: await realDir(plan.moduleDir),
     inherited: {
       ...plan.inherited,
@@ -241,6 +263,43 @@ export async function writeWorkspace(file: string, plan: WorkspacePlan): Promise
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, renderWorkspace(canonical), 'utf8');
   return file;
+}
+
+/**
+ * The newest `go` directive among a set of modules.
+ *
+ * The workspace has to be at least as new as everything in it. Reading the
+ * files is cheap and exact; inferring from the toolchain is neither, because
+ * the toolchain may be newer than the modules and the workspace would then
+ * claim a version nothing needs.
+ */
+async function highestGoDirective(dirs: readonly string[]): Promise<string | undefined> {
+  const { readFile } = await import('node:fs/promises');
+  let best: string | undefined;
+
+  for (const dir of dirs) {
+    let text: string;
+    try {
+      text = await readFile(join(dir, 'go.mod'), 'utf8');
+    } catch {
+      continue;
+    }
+    const match = /^go\s+(\d+\.\d+(?:\.\d+)?)\s*$/mu.exec(text);
+    if (match?.[1] === undefined) continue;
+    if (best === undefined || compareGoVersions(match[1], best) > 0) best = match[1];
+  }
+  return best;
+}
+
+/** Orders two `go` directives numerically, so 1.10 beats 1.9. */
+function compareGoVersions(left: string, right: string): number {
+  const a = left.split('.').map(Number);
+  const b = right.split('.').map(Number);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
 }
 
 /** Resolves symlinks, leaving a path that does not exist yet untouched. */

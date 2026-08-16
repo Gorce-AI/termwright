@@ -106,6 +106,44 @@ describe('rendering', () => {
   });
 });
 
+describe('the go directive', () => {
+  it('takes the highest requirement, not the inherited one', () => {
+    // A workspace older than any member is refused outright by the toolchain:
+    // "module . listed in go.work file requires go >= 1.25.0, but go.work
+    // lists go 1.24". Charm v2 is exactly that case.
+    const rendered = renderWorkspace({
+      moduleDir: '/proj/app',
+      inherited: { goVersion: '1.22', uses: [], replaces: [] },
+      replaces: [],
+      fallbackGoVersion: '1.25.0',
+    });
+
+    expect(rendered).toContain('go 1.25.0');
+  });
+
+  it('keeps the inherited one when it is already the highest', () => {
+    const rendered = renderWorkspace({
+      moduleDir: '/proj/app',
+      inherited: { goVersion: '1.24', uses: [], replaces: [] },
+      replaces: [],
+      fallbackGoVersion: '1.22',
+    });
+
+    expect(rendered).toContain('go 1.24');
+  });
+
+  it('orders versions numerically, so 1.10 beats 1.9', () => {
+    const rendered = renderWorkspace({
+      moduleDir: '/proj/app',
+      inherited: { goVersion: '1.9', uses: [], replaces: [] },
+      replaces: [],
+      fallbackGoVersion: '1.10',
+    });
+
+    expect(rendered).toContain('go 1.10');
+  });
+});
+
 describe('vendor mode', () => {
   it('refuses -mod=vendor by name instead of overriding it', () => {
     expect(() => assertNoVendorMode({ GOFLAGS: '-mod=vendor' })).toThrow(WorkspaceError);
