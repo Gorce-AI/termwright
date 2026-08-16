@@ -35,4 +35,13 @@ export interface SemanticMeta {
   readonly actions?: readonly SemanticAction[];
   /** Author-supplied stable test id, matched by `getByTestId`. */
   readonly testId?: string;
+  /**
+   * The id this element's component passed to Ink's `useFocus({id})`.
+   *
+   * Ink publishes which focusable is active (`useFocusManager().activeId`) but
+   * never says which element it belongs to. Naming the id here is what lets the
+   * adapter derive `state.focused` from Ink's own flag instead of leaving it
+   * unreported — `state.focused` still wins if you set it explicitly.
+   */
+  readonly focusId?: string;
 }

@@ -191,7 +191,8 @@ describe('@termwright/ink', () => {
 
       const progress = snapshot!.nodes.find((node) => node.role === 'progressbar');
       expect(progress?.state?.busy).toBe(true);
-      expect(progress?.name).toBe('working');
+      // Not a name-from-content role: its label would have to be annotated.
+      expect(progress?.name).toBe('');
     });
 
     it('keeps node ids stable across revisions', async () => {

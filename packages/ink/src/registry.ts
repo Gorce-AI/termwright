@@ -14,6 +14,13 @@ export class SemanticRegistry {
   readonly #entries = new WeakMap<DOMElement, SemanticMeta>();
 
   /**
+   * The focusable id Ink currently reports as active, or `undefined` when the
+   * application uses no focus management. Written by the provider on every
+   * commit; read by the collector to resolve `focusId` annotations.
+   */
+  activeFocusId: string | undefined;
+
+  /**
    * Record (or replace) the annotation for an element.
    *
    * @returns a disposer that removes the annotation again.

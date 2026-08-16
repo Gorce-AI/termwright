@@ -17,8 +17,9 @@ import type {
   SemanticSnapshot,
   SemanticState,
 } from '@termwright/protocol';
-import { defaultActionsForRole, mapInkAriaRole } from './roles.js';
+import { defaultActionsForRole, mapInkAriaRole, namesFromContent } from './roles.js';
 import type { SemanticRegistry } from './registry.js';
+import type { SemanticMeta } from './types.js';
 
 /** Everything the collector needs that is not derivable from the tree itself. */
 export interface CollectOptions {
@@ -130,17 +131,26 @@ export class SnapshotCollector {
     const ariaState = mapAriaState(accessibility?.state);
     const isText = node.nodeName === 'ink-text';
 
-    const text = isText || meta !== undefined || ariaRole !== undefined ? this.#textOf(node) : '';
     if (meta === undefined && ariaRole === undefined && ariaState === undefined) {
-      if (!isText || text.length === 0) return undefined;
+      if (!isText || this.#textOf(node).length === 0) return undefined;
     }
 
     const role = meta?.role ?? ariaRole ?? (isText ? 'text' : 'generic');
-    const name = this.#clamp(meta?.name ?? text);
+
+    // Naming rules, in order: an explicit annotation (an empty string is a
+    // deliberate choice and wins), then descendant text but ONLY for the roles
+    // that take their name from content. A container keeps an empty name so a
+    // locator cannot match every ancestor of a label.
+    const name = this.#clamp(meta?.name ?? (namesFromContent(role) ? this.#textOf(node) : ''));
+
+    const focused = this.#resolveFocused(meta);
+    const merged: SemanticState = {
+      ...ariaState,
+      ...meta?.state,
+      ...(focused === undefined ? {} : { focused }),
+    };
     const state: SemanticState | undefined =
-      ariaState === undefined && meta?.state === undefined
-        ? undefined
-        : { ...ariaState, ...meta?.state };
+      Object.keys(merged).length === 0 ? undefined : merged;
     const actions = meta?.actions ?? defaultActionsForRole(role);
 
     return {
@@ -161,6 +171,19 @@ export class SnapshotCollector {
       ...(actions === undefined ? {} : { actions: [...actions] }),
       ...(meta?.testId === undefined ? {} : { testId: this.#clamp(meta.testId) }),
     };
+  }
+
+  /**
+   * `focused`, read from Ink's focus manager rather than guessed.
+   *
+   * An explicit `state.focused` always wins. Otherwise the annotation must name
+   * the `useFocus({id})` the component registered, because Ink reports which
+   * focusable is active but never which element it is.
+   */
+  #resolveFocused(meta: SemanticMeta | undefined): boolean | undefined {
+    if (meta?.state?.focused !== undefined) return undefined; // already merged
+    if (meta?.focusId === undefined) return undefined;
+    return this.#registry.activeFocusId === meta.focusId;
   }
 
   /** Concatenated text of an element's subtree, bounded by `maxStringBytes`. */

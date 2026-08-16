@@ -264,6 +264,43 @@ Each of the three plausible mistakes — dropping the resurrection, listing ever
 removed id instead of subtree roots, never sending `rootIds` — is now caught by
 exactly one test, verified by making each break in turn.
 
+## Naming: containers are not named from content
+
+The protocol's naming rules gate descendant-text naming to nine roles
+(`button`, `listitem`, `menuitem`, `tab`, `checkbox`, `radio`, `cell`, `row`,
+`heading`). This adapter used to name *every* role from concatenated descendant
+text, which is the bug the rule exists to prevent: with it,
+`getByRole('region', {name: 'Approve'})` matches the dialog *containing* the
+Approve button, and every ancestor of a label becomes a plausible match.
+
+`text` is treated as a tenth name-from-content role — an `ink-text` element's
+string is its own content, not a descendant widget's — and that reading is
+declared in the README's Deviations rather than left implicit.
+
+One existing test encoded the old behaviour (a `progressbar` named "working"
+from its child text) and now asserts the empty name instead. That is the
+intended break: a progressbar's name is a label, and its content is its value.
+
+## Focus is readable, but not attributable
+
+Worth recording because the first answer looks like "no": Ink *does* expose the
+active focusable publicly, via `useFocusManager().activeId`, and the provider
+reads it on every commit. What Ink never exposes is **which element** that id
+belongs to — `useFocus` ids are `Math.random()` unless the author passes one,
+and the hook returns `isFocused` only to the component that called it.
+
+Calling `useFocus` from the adapter is not an option either: it *registers* a
+focusable and would change the application's Tab order, which the invisibility
+guarantee forbids.
+
+So `focusId` on the annotation is the bridge: the author names the id they
+already gave `useFocus`, and the adapter compares it with `activeId`. That
+satisfies the "read from a native flag, never inferred" rule — without it,
+`focused` stays absent, which is the honest report.
+
+`useFocusManager` only reads context, unlike `useFocus`; the invisibility suite
+(effect-run parity against a plain baseline) is what keeps that claim honest.
+
 ## Validator invariants the collector must keep
 
 `validateSnapshot` enforces three rules that are stricter than the design prose,

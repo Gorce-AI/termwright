@@ -10,7 +10,7 @@
  */
 
 import type { ReactNode, RefObject } from 'react';
-import { Box, type DOMElement } from 'ink';
+import { Box, useFocusManager, type DOMElement } from 'ink';
 import { RegistryContext } from './context.js';
 import type { SemanticRegistry } from './registry.js';
 
@@ -28,6 +28,11 @@ export function SemanticProvider({
   probeRef,
   children,
 }: SemanticProviderProps): ReactNode {
+  // Reading the active focusable is what lets the collector resolve `focusId`
+  // annotations into `state.focused`. Unlike `useFocus`, this registers nothing
+  // and cannot disturb the application's Tab order — it only reads context.
+  registry.activeFocusId = useFocusManager().activeId;
+
   return (
     <RegistryContext.Provider value={registry}>
       <Box ref={probeRef} display="none" />

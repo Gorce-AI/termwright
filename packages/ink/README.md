@@ -182,6 +182,58 @@ on coordinates.**
 - `useSemantic(ref, meta)` — annotate a `<Box>` imperatively. A no-op outside a
   session.
 
+## Deviations
+
+The protocol's adapter conventions are normative; where Ink does not expose what
+a rule needs, the difference is declared here rather than left for you to
+discover. Each entry says what the rule asks, what this adapter does, and why.
+
+**Rule 2 — `text` nodes are named from their own string.** The normative
+name-from-content set is `button`, `listitem`, `menuitem`, `tab`, `checkbox`,
+`radio`, `cell`, `row`, `heading`, and this adapter honours it: containers get
+an empty name unless you annotate one. `text` is treated as a tenth case,
+because an `ink-text` element's string is its *own* content — naming source 2,
+"the widget's own label" — not a descendant widget's text. Without it
+`getByText` would have nothing to match.
+
+**Rule 2 — `aria-label` cannot be read.** Ink turns `aria-label` into a text
+child only when a screen reader is active and drops it otherwise; it is not
+retained on the element. Names therefore come from an annotation or from
+content, never from Ink's own label prop.
+
+**Rule 3 — no native identifier.** Ink elements have no id, so `testId` comes
+from an annotation only. Nothing is filtered, because nothing is generated.
+
+**Rule 4 — `focused` needs the focusable named.** Ink publishes *which*
+focusable is active (`useFocusManager().activeId`) but never which element owns
+it, and `useFocus` cannot be called by the adapter without registering a new
+focusable and changing your Tab order. Pass the same id you gave `useFocus` and
+the adapter derives the state from Ink's own flag:
+
+```tsx
+useFocus({id: 'approve'});
+<Semantic role="button" focusId="approve"><Box>…</Box></Semantic>
+```
+
+Without `focusId` (or an explicit `state={{focused}}`), `focused` is omitted
+rather than guessed.
+
+**Rule 4 — hidden nodes are dropped, not published as `hidden: true`.** A
+subtree under `display: none` is excluded from Yoga layout and from the
+snapshot. Both behaviours are defensible; this one means a test cannot assert
+that something exists but is hidden.
+
+**Rule 5 — `value` comes from annotations only.** Ink has no value-bearing
+widget: text entry is a third-party component built from `<Text>`, so there is
+no native property to read. An annotated `value` is published verbatim,
+**including the empty string** — `value: ''` means an empty field, absent means
+not a value-bearing widget.
+
+**Bounds are omitted rather than approximated.** See *Bounds and
+`alternateScreen`* above: outside the alternate screen, or once `<Static>`
+shifts the live region, the adapter publishes no `bounds` instead of publishing
+coordinates it cannot vouch for.
+
 ## Failure behaviour
 
 The adapter never throws across its boundary. A refused connection, a rejected

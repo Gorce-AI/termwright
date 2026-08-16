@@ -65,6 +65,39 @@ export function mapInkAriaRole(role: string | undefined): SemanticRole | undefin
   return Object.hasOwn(ARIA_ROLE_MAP, role) ? ARIA_ROLE_MAP[role as InkAriaRole] : undefined;
 }
 
+/**
+ * Roles whose accessible name comes from the text they contain.
+ *
+ * Normative, from the protocol's adapter conventions. Everything outside this
+ * set — `region`, `dialog`, `list`, `table`, `application` — is a container and
+ * is **never** named from its content: doing so makes
+ * `getByRole('region', {name: 'Approve'})` match every ancestor of the Approve
+ * button, and locators stop being selective.
+ */
+const NAME_FROM_CONTENT: ReadonlySet<SemanticRole> = new Set<SemanticRole>([
+  'button',
+  'listitem',
+  'menuitem',
+  'tab',
+  'checkbox',
+  'radio',
+  'cell',
+  'row',
+  'heading',
+]);
+
+/**
+ * Whether a role takes its name from the text it contains.
+ *
+ * `text` is included beyond the normative list, and deliberately: an
+ * `ink-text` element's string is its *own* content rather than a descendant
+ * widget's, which is source 2 of the naming rules ("the widget's own label"),
+ * not source 3. Declared in the README's Deviations for the avoidance of doubt.
+ */
+export function namesFromContent(role: SemanticRole): boolean {
+  return role === 'text' || NAME_FROM_CONTENT.has(role);
+}
+
 const ROLE_ACTIONS: Readonly<Partial<Record<SemanticRole, readonly SemanticAction[]>>> =
   Object.freeze({
     button: Object.freeze(['activate', 'focus'] as const),

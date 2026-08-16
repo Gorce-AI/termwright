@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Box, Text, render, type DOMElement, type Instance } from 'ink';
+import { Box, Text, render, useFocus, type DOMElement, type Instance } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { SemanticSnapshot } from '@termwright/protocol';
 import { Semantic, semanticRender } from './index.js';
@@ -257,5 +257,178 @@ describe('<Semantic>', () => {
       expect(node?.state?.disabled).toBe(true);
       expect(snapshot.nodes.some((candidate) => candidate.role === 'button')).toBe(false);
     });
+  });
+});
+
+describe('naming rules', () => {
+  const openApps: Instance[] = [];
+  const openDrivers: FakeDriver[] = [];
+
+  afterEach(async () => {
+    for (const app of openApps.splice(0)) app.unmount();
+    for (const driver of openDrivers.splice(0)) await driver.close();
+  });
+
+  async function snapshot(element: React.ReactNode): Promise<SemanticSnapshot> {
+    const driver = await startFakeDriver();
+    openDrivers.push(driver);
+    const app = semanticRender(element, {
+      ...INK_OPTIONS,
+      stdout: createFakeStdout(),
+      semantics: {
+        env: { TERMWRIGHT_ENDPOINT: driver.endpoint, TERMWRIGHT_TOKEN: driver.token },
+      },
+    });
+    openApps.push(app);
+    const [first] = await driver.waitForSnapshots(1);
+    return first as SemanticSnapshot;
+  }
+
+  it('names name-from-content roles from the text they contain', async () => {
+    const tree = await snapshot(
+      <Box flexDirection="column">
+        <Semantic role="button">
+          <Box>
+            <Text>Approve</Text>
+          </Box>
+        </Semantic>
+        <Semantic role="listitem">
+          <Box>
+            <Text>First item</Text>
+          </Box>
+        </Semantic>
+        <Semantic role="heading">
+          <Box>
+            <Text>Settings</Text>
+          </Box>
+        </Semantic>
+      </Box>,
+    );
+
+    const named = (role: string) => tree.nodes.find((node) => node.role === role)?.name;
+    expect(named('button')).toBe('Approve');
+    expect(named('listitem')).toBe('First item');
+    expect(named('heading')).toBe('Settings');
+  });
+
+  it('never names a container from its content', async () => {
+    const tree = await snapshot(
+      <Semantic role="dialog">
+        <Box flexDirection="column">
+          <Semantic role="region">
+            <Box>
+              <Semantic role="button">
+                <Box>
+                  <Text>Approve</Text>
+                </Box>
+              </Semantic>
+            </Box>
+          </Semantic>
+        </Box>
+      </Semantic>,
+    );
+
+    // This is the whole point: a locator for a region named "Approve" must not
+    // match every ancestor of the Approve button.
+    expect(tree.nodes.find((node) => node.role === 'dialog')?.name).toBe('');
+    expect(tree.nodes.find((node) => node.role === 'region')?.name).toBe('');
+    expect(tree.nodes.find((node) => node.role === 'button')?.name).toBe('Approve');
+  });
+
+  it('lets an explicit name label a container, including an empty one', async () => {
+    const tree = await snapshot(
+      <Semantic role="dialog" name="Permission">
+        <Box>
+          <Text>Allow?</Text>
+        </Box>
+      </Semantic>,
+    );
+
+    expect(tree.nodes.find((node) => node.role === 'dialog')?.name).toBe('Permission');
+  });
+
+  it('still names text nodes from their own string', async () => {
+    const tree = await snapshot(
+      <Box>
+        <Text>plain text</Text>
+      </Box>,
+    );
+
+    expect(tree.nodes.find((node) => node.role === 'text')?.name).toBe('plain text');
+  });
+});
+
+describe('focus, read from Ink rather than guessed', () => {
+  const openApps: Instance[] = [];
+  const openDrivers: FakeDriver[] = [];
+
+  afterEach(async () => {
+    for (const app of openApps.splice(0)) app.unmount();
+    for (const driver of openDrivers.splice(0)) await driver.close();
+  });
+
+  /** Two focusables, the first auto-focused, each linked by its `useFocus` id. */
+  function FocusDemo() {
+    useFocus({ id: 'first', autoFocus: true });
+    useFocus({ id: 'second' });
+    return (
+      <Box flexDirection="column">
+        <Semantic role="button" focusId="first">
+          <Box>
+            <Text>First</Text>
+          </Box>
+        </Semantic>
+        <Semantic role="button" focusId="second">
+          <Box>
+            <Text>Second</Text>
+          </Box>
+        </Semantic>
+      </Box>
+    );
+  }
+
+  it('derives focused from the active focusable', async () => {
+    const driver = await startFakeDriver();
+    openDrivers.push(driver);
+    const app = semanticRender(<FocusDemo />, {
+      ...INK_OPTIONS,
+      stdout: createFakeStdout(),
+      semantics: {
+        env: { TERMWRIGHT_ENDPOINT: driver.endpoint, TERMWRIGHT_TOKEN: driver.token },
+      },
+    });
+    openApps.push(app);
+
+    const [snapshot] = await driver.waitForSnapshots(1);
+    const byName = (name: string) =>
+      (snapshot as SemanticSnapshot).nodes.find((node) => node.name === name);
+
+    expect(byName('First')?.state?.focused).toBe(true);
+    expect(byName('Second')?.state?.focused).toBe(false);
+  });
+
+  it('reports nothing when the annotation names no focusable', async () => {
+    const driver = await startFakeDriver();
+    openDrivers.push(driver);
+    const app = semanticRender(
+      <Semantic role="button">
+        <Box>
+          <Text>Unlinked</Text>
+        </Box>
+      </Semantic>,
+      {
+        ...INK_OPTIONS,
+        stdout: createFakeStdout(),
+        semantics: {
+          env: { TERMWRIGHT_ENDPOINT: driver.endpoint, TERMWRIGHT_TOKEN: driver.token },
+        },
+      },
+    );
+    openApps.push(app);
+
+    const [snapshot] = await driver.waitForSnapshots(1);
+    // Omitted, not guessed false: the framework never said.
+    expect((snapshot as SemanticSnapshot).nodes.find((n) => n.name === 'Unlinked')?.state)
+      .toBeUndefined();
   });
 });
