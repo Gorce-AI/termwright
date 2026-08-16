@@ -32,7 +32,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -129,7 +129,9 @@ describe('the runner UI in a browser', () => {
     // its own place now, and this is the walk to it.
     await page.locator(testId('nav-specs')).click();
     expect(await textOf(page, testId('test-counts'))).not.toBe('');
-    expect(await page.locator(testId('tests')).isVisible()).toBe(true);
+    expect(await page.locator(testId('specs')).isVisible()).toBe(true);
+    // Specs lists files; the tests inside one appear when it is opened.
+    await page.locator(testId('spec-file')).first().click();
     await expect.poll(() => page.locator(testId('test')).count()).toBeGreaterThan(0);
   });
 
@@ -268,9 +270,10 @@ describe('the runner UI against a live run', () => {
       startedAt: Date.now(),
     });
 
+    // The run reports a test in `src/login.test.ts`, so the spec appears.
     await expect
-      .poll(() => textOf(page, testId('tests')), { timeout: 15_000 })
-      .toContain('approves the command');
+      .poll(() => textOf(page, testId('specs')), { timeout: 15_000 })
+      .toContain('login.test.ts');
 
     server.hub.publish({
       v: 1,
@@ -286,6 +289,7 @@ describe('the runner UI against a live run', () => {
     await expect.poll(() => textOf(page, testId('test-counts')), { timeout: 15_000 }).toMatch(/\d/);
 
     // Rerun one test, then the whole run, then stop.
+    await page.locator(testId('spec-file')).first().click();
     await page.locator(testId('rerun-one')).first().click();
     await expect.poll(() => reruns.length, { timeout: 15_000 }).toBe(1);
     expect(reruns[0]).toEqual(['t1']);
@@ -318,8 +322,11 @@ describe('the runner UI with discovered tests', () => {
       onRerun: (testIds) => reruns.push(testIds),
     });
 
+    // Specs lists files; a file shows its tests when opened.
+    await page.locator(testId('spec-file')).first().waitFor({ timeout: 15_000 });
+    await page.locator(testId('spec-file')).first().click();
     await expect.poll(() => page.locator(testId('test')).count(), { timeout: 15_000 }).toBe(2);
-    expect(await textOf(page, testId('tests'))).toContain('approves the command');
+    expect(await textOf(page, testId('specs'))).toContain('approves the command');
 
     // A discovered row is explicitly *not* a result, and says so.
     await expect.poll(() => page.locator('.badge.not-run').count()).toBeGreaterThan(0);
@@ -334,6 +341,8 @@ describe('the runner UI with discovered tests', () => {
       discovery: { cwd: '/repo', run: async () => listing },
     });
 
+    await page.locator(testId('spec-file')).first().waitFor({ timeout: 15_000 });
+    await page.locator(testId('spec-file')).first().click();
     await expect.poll(() => page.locator(testId('test')).count(), { timeout: 15_000 }).toBe(2);
 
     // A run resets results, not the project: the discovered rows survive
@@ -375,6 +384,9 @@ describe('the runner UI with discovered tests', () => {
     Object.assign(late, { __errors: [] });
     await late.goto(server.url, { waitUntil: 'domcontentloaded' });
 
+    // The listing is the file the tab can see; opening it shows both tests.
+    await late.locator(testId('spec-file')).first().waitFor({ timeout: 15_000 });
+    await late.locator(testId('spec-file')).first().click();
     await expect.poll(() => late.locator(testId('test')).count(), { timeout: 15_000 }).toBe(2);
   });
 });
@@ -550,6 +562,86 @@ describe('the runner UI chrome', () => {
     // The point of persisting it: the layout survives a reload.
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect.poll(splitOf, { timeout: 15_000 }).toBe(dragged);
+  });
+});
+
+describe('the Specs view', () => {
+  /** A project on disk with three specs and three runs behind them. */
+  async function project(): Promise<{ cwd: string; runsDir: string; files: string[] }> {
+    const cwd = await mkdtemp(join(tmpdir(), 'termwright-specs-'));
+    const runsDir = join(cwd, '.termwright', 'runs');
+    await mkdir(join(cwd, 'src', 'checkout'), { recursive: true });
+    const files = ['src/login.test.ts', 'src/checkout/pay.test.ts', 'src/checkout/cart.test.ts'];
+    for (const file of files) await writeFile(join(cwd, file), 'test', 'utf8');
+
+    const tests = files.map((file, index) => ({
+      id: `${file}::signs in`,
+      title: 'signs in',
+      file: join(cwd, file),
+      status: index === 1 ? ('failed' as const) : ('passed' as const),
+      durationMs: 100 + index * 100,
+      flaky: false,
+      lostLogRecords: 0,
+    }));
+    for (const [index, id] of ['2026-08-16T09-00-00', '2026-08-16T10-00-00'].entries()) {
+      await writeRunManifest(runsDir, {
+        v: RUN_MANIFEST_VERSION,
+        id,
+        startedAt: Date.parse('2026-08-16T09:00:00Z') + index * 3_600_000,
+        finishedAt: Date.parse('2026-08-16T09:00:30Z') + index * 3_600_000,
+        summary: { total: 3, passed: 2, failed: 1, skipped: 0, flaky: 0, durationMs: 3_000 },
+        tests,
+      });
+    }
+    return { cwd, runsDir, files };
+  }
+
+  it('groups specs by directory and says what the history knows about them', async () => {
+    const { cwd, runsDir, files } = await project();
+    const { page } = await serve({
+      runsDir,
+      discovery: {
+        cwd,
+        run: async () =>
+          JSON.stringify(files.map((file) => ({ file: join(cwd, file), name: 'signs in' }))),
+      },
+    });
+
+    await page.locator(testId('nav-specs')).click();
+    // Directories, not a flat list of paths: `src` holds `checkout`.
+    await expect
+      .poll(() => page.locator(testId('spec-dir')).count(), { timeout: 20_000 })
+      .toBeGreaterThanOrEqual(2);
+    const tree = await textOf(page, '.spec-tree');
+    expect(tree).toContain('checkout');
+    expect(tree).toContain('login.test.ts');
+    // The prefix every path shares is not information.
+    expect(tree).not.toContain(cwd);
+
+    // A dot per past run, and a duration averaged from them.
+    await expect
+      .poll(() => page.locator(testId('spec-dot')).count(), { timeout: 20_000 })
+      .toBeGreaterThan(0);
+    expect(await textOf(page, '.spec-tree')).toMatch(/\d+ms|\d+\.\d+s/);
+  });
+
+  it('counts what a search matches', async () => {
+    const { cwd, runsDir, files } = await project();
+    const { page } = await serve({
+      runsDir,
+      discovery: {
+        cwd,
+        run: async () =>
+          JSON.stringify(files.map((file) => ({ file: join(cwd, file), name: 'signs in' }))),
+      },
+    });
+
+    await page.locator(testId('nav-specs')).click();
+    await page.locator(testId('spec-file')).first().waitFor({ timeout: 20_000 });
+    await page.locator(testId('spec-filter')).fill('checkout');
+
+    await expect.poll(() => textOf(page, testId('spec-matches'))).toBe('2 matches');
+    expect(await textOf(page, '.spec-tree')).not.toContain('login.test.ts');
   });
 });
 

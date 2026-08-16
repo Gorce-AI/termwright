@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENTRY_VIEWS, visibleEntries } from './sidebar.js';
 
-const project = { name: 'demo', branch: 'main', version: '0.1.0' };
+const project = { name: 'demo', root: '/repo', branch: 'main', version: '0.1.0' };
 
 describe('what the frame offers', () => {
   it('offers every place when a server is behind the page', () => {

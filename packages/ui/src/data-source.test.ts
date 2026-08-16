@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-const project = { name: 'demo', branch: 'main', version: '0.1.0' };
+const project = { name: 'demo', root: '/repo', branch: 'main', version: '0.1.0' };
 import {
   INLINE_PAYLOAD_KEY,
   InlineDataSource,

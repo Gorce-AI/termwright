@@ -13,7 +13,8 @@ import type { TraceOverview } from '../trace-source.js';
 import { formatMs } from '../view-model.js';
 import { percentFor, timeAt } from '../timeline-scale.js';
 import { renderCrashPanel } from './crash-panel.js';
-import type { TestListHandlers, TestListModel } from './test-list.js';
+import type { TestRowStep } from './test-row.js';
+import type { TestRow } from '../test-model.js';
 import { renderRunHistory, type RunHistoryHandlers, type RunHistoryModel } from './run-history.js';
 import type { AppLogView } from '../app-log.js';
 import type { PlaybackSpeed } from '../playback.js';
@@ -52,8 +53,8 @@ export interface TimelineModel {
    * in a replay and reveals the line in the log panel in both modes.
    */
   readonly logMarks: readonly AppLogView[];
-  /** The test list, which owns the tests themselves. */
-  readonly testList: TestListModel;
+  /** The test in focus and its steps — what the runner is showing. */
+  readonly focus: FocusModel;
   /**
    * True when the recording on screen stops before the session did — cut by
    * the frame ceiling, or by a report's size budget. Said out loud, because a
@@ -66,7 +67,19 @@ export interface TimelineModel {
 }
 
 /** What the timeline can ask the app to do. */
-export interface TimelineHandlers extends TestListHandlers, RunHistoryHandlers {
+/** The focused test, as the runner pane needs it. */
+export interface FocusModel {
+  readonly tests: readonly TestRow[];
+  readonly selectedId: string | null;
+  readonly steps: readonly TestRowStep[];
+}
+
+export interface TimelineHandlers extends RunHistoryHandlers {
+  /** Rerun everything, or one test. */
+  rerun(testId?: string): void;
+  stop(): void;
+  select(testId: string): void;
+  seek(timeMs: number): void;
   jump(direction: -1 | 1): void;
   togglePlay(): void;
   cycleSpeed(): void;
@@ -84,7 +97,7 @@ export function renderTimeline(model: TimelineModel, handlers: TimelineHandlers)
     ${model.trace === null ? '' : renderScrubber(model, model.trace, handlers)}
     ${renderCrashPanel(model.trace?.crash ?? null, { seek: (timeMs) => handlers.seek(timeMs) })}
 
-    ${renderSteps(model.testList)}
+    ${renderSteps(model.focus)}
     ${model.summary === null ? '' : html`<footer class="summary">${model.summary}</footer>`}
   `;
 }
@@ -97,7 +110,7 @@ export function renderTimeline(model: TimelineModel, handlers: TimelineHandlers)
  * timeline above it. Rendering the list here as well would have been two live
  * copies of one component — the thing this panel exists not to do.
  */
-function renderSteps(model: TestListModel): TemplateResult {
+function renderSteps(model: FocusModel): TemplateResult {
   const test = model.tests.find((candidate) => candidate.id === model.selectedId);
   if (test === undefined) {
     return html`<p class="empty" data-testid="no-focus">

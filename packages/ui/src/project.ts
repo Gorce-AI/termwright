@@ -21,6 +21,11 @@ import { fileURLToPath } from 'node:url';
 export interface ProjectInfo {
   /** `name` from the project's `package.json`, else the directory's name. */
   readonly name: string;
+  /**
+   * Absolute project directory. Spec paths are reported absolute, and a list
+   * of them is unreadable until this prefix comes off.
+   */
+  readonly root: string;
   /** Current git branch, or `null` outside a repository or on a detached head. */
   readonly branch: string | null;
   /** Version of `@termwright/ui` rendering this page. */
@@ -41,7 +46,7 @@ export async function readProjectInfo(cwd: string): Promise<ProjectInfo> {
     readBranch(cwd),
     readOwnVersion(),
   ]);
-  return { name, branch, version };
+  return { name, root: cwd, branch, version };
 }
 
 /**

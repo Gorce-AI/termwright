@@ -19,6 +19,7 @@ import type { TraceCommands, TraceFrames } from './trace-playback.js';
 import type { TraceOverview, TraceStatePayload } from './trace-source.js';
 import type { ProjectInfo } from './project.js';
 import type { RunManifest, RunSummaryEntry } from './runs.js';
+import type { SpecFacts } from './spec-tree.js';
 
 /**
  * The state a viewer starts from: what it is showing and what is attached.
@@ -69,6 +70,8 @@ export interface DataSource {
   traceLogs(query?: LogWindowQuery): Promise<TraceLogs>;
   traceCommands(): Promise<TraceCommands>;
   traceFrames(): Promise<TraceFrames>;
+  /** What the project's spec files look like on disk and in the history. */
+  specs(files: readonly string[]): Promise<{ readonly specs: readonly SpecFacts[] }>;
   runs(): Promise<{ readonly runs: readonly RunSummaryEntry[] }>;
   run(id: string): Promise<RunManifest>;
   openTrace(path: string): Promise<{ readonly trace: TraceOverview | null }>;
@@ -171,6 +174,15 @@ export class InlineDataSource implements DataSource {
 
   async traceFrames(): Promise<TraceFrames> {
     return this.#payload.frames;
+  }
+
+  /**
+   * @returns nothing to say. A report carries one recording, not the project
+   * it came from: there are no files on disk to describe, and inventing an
+   * empty history for them would be a different claim from "not applicable".
+   */
+  async specs(): Promise<{ readonly specs: readonly SpecFacts[] }> {
+    return { specs: [] };
   }
 
   /** @throws Error always; `features.history` is false and the tab is hidden. */

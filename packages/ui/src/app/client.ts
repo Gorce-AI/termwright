@@ -18,6 +18,7 @@ import type { DataSource, DataSourceFeatures, ViewerState } from '../data-source
 import type { LogWindowQuery, TraceLogs } from '../trace-logs.js';
 import type { TraceCommands, TraceFrames } from '../trace-playback.js';
 import type { RunManifest, RunSummaryEntry } from '../runs.js';
+import type { SpecFacts } from '../spec-tree.js';
 import type { GeneratedSelector } from '../selector.js';
 import type { RecordedEvent } from '../codegen.js';
 
@@ -109,6 +110,12 @@ export class RunnerClient implements DataSource {
   /** Every frame of the recording, for local playback. */
   async traceFrames(): Promise<TraceFrames> {
     return this.#get<TraceFrames>('/api/trace/frames');
+  }
+
+  /** Facts about the project's spec files: age, average, recent results. */
+  async specs(files: readonly string[]): Promise<{ readonly specs: readonly SpecFacts[] }> {
+    const query = files.map((file) => `file=${encodeURIComponent(file)}`).join('&');
+    return this.#get(`/api/specs${query === '' ? '' : `?${query}`}`);
   }
 
   /** Runs recorded under the history directory, newest first. */

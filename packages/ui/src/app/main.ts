@@ -17,6 +17,8 @@ import type { TraceOverview } from '../trace-source.js';
 import { RunnerClient, type ServerState } from './client.js';
 import { InlineDataSource, readInlinePayload, type DataSource } from '../data-source.js';
 import { renderSidebar, renderViewHeader, type ViewName } from './sidebar.js';
+import { filesUnder, renderSpecs } from './specs-view.js';
+import { buildSpecTree, type SpecFacts } from '../spec-tree.js';
 import type { ProjectInfo } from '../project.js';
 import { renderInspector, type InspectorHandlers } from './inspector.js';
 import {
@@ -38,7 +40,7 @@ import {
 } from '../playback.js';
 import { renderCommandLog, type CommandLogHandlers } from './command-log.js';
 import { renderRunHistory } from './run-history.js';
-import { renderTestList } from './test-list.js';
+import type { TestRowContext } from './test-row.js';
 import {
   renderLogPanel,
   visibleLogs,
@@ -170,22 +172,108 @@ function renderPage(): TemplateResult {
       </dl>
     `;
   }
-  return renderTestList(
+  const matching = matchingTests();
+  return renderSpecs(
     {
+      tree: buildSpecTree(matching, state.specFacts, state.project.root),
       tests: state.tests,
       query: state.testQuery,
+      matches: new Set(matching.map((test) => test.file ?? '')).size,
+      collapsed: state.specCollapsed,
+      openFile: openSpecFile(),
+      now: state.now,
+      canRun: source.features.live && state.mode !== 'post-mortem',
+    },
+    specsHandlers,
+  );
+}
+
+/**
+ * The file whose tests are shown.
+ *
+ * A file the user opened wins; otherwise the one with a test running, so a run
+ * unfolds where you are looking without anyone clicking. Everything else stays
+ * folded: this is a list of specs, and a project with four hundred tests must
+ * not become a list of four hundred rows the moment a run starts.
+ */
+function openSpecFile(): string | null {
+  if (state.openSpecFile !== null) return state.openSpecFile;
+  const running = state.tests.find((test) => test.status === 'running');
+  return running?.file ?? null;
+}
+
+/** Tests the filter keeps, matched on both the title and the file. */
+function matchingTests(): readonly MutableTest[] {
+  const query = state.testQuery.trim().toLowerCase();
+  if (query === '') return state.tests;
+  return state.tests.filter(
+    (test) =>
+      test.title.toLowerCase().includes(query) || (test.file ?? '').toLowerCase().includes(query),
+  );
+}
+
+const specsHandlers = {
+  search(query: string): void {
+    state.testQuery = query;
+    schedule();
+  },
+  runAll(): void {
+    timelineHandlers.rerun(undefined);
+  },
+  stop(): void {
+    timelineHandlers.stop();
+  },
+  toggle(path: string): void {
+    if (state.specCollapsed.has(path)) state.specCollapsed.delete(path);
+    else state.specCollapsed.add(path);
+    schedule();
+  },
+  openFile(path: string | null): void {
+    state.openSpecFile = path;
+    schedule();
+  },
+  run(paths: readonly string[]): void {
+    // Vitest takes file paths as its filter, so running a folder is running
+    // the files under it — the same operation the row-level button performs.
+    runner?.send({ v: 1, type: 'rerun', testIds: [...paths] });
+    state.view = 'runner';
+    schedule();
+  },
+  openRun(runId: string): void {
+    state.view = 'runs';
+    timelineHandlers.open(runId);
+  },
+  rowContext(): TestRowContext {
+    return {
       selectedId: state.selectedTestId,
-      canRerun: source.features.live && state.mode !== 'post-mortem',
       now: state.now,
       steps: selectedTest()?.steps ?? [],
-    },
-    timelineHandlers,
-  );
+      select: (test) => timelineHandlers.select(test.id),
+      ...(source.features.live && state.mode !== 'post-mortem'
+        ? { rerun: (testId: string) => timelineHandlers.rerun(testId) }
+        : {}),
+    };
+  },
+};
+
+/** Reads the facts behind the Specs columns, when there are files to describe. */
+async function loadSpecFacts(): Promise<void> {
+  const files = [...new Set(state.tests.map((test) => test.file).filter((file): file is string => file !== undefined && file !== ''))];
+  if (files.length === 0) return;
+  try {
+    const { specs } = await source.specs(files);
+    state.specFacts = new Map(specs.map((facts) => [facts.file, facts]));
+    schedule();
+  } catch {
+    // The columns are context, not content: a list without them is still the
+    // list, and a failure here must not cost the user their specs.
+  }
 }
 
 const sidebarHandlers = {
   go(view: ViewName): void {
     state.view = view;
+    if (view === 'specs') void loadSpecFacts();
     // The history is read when its view is opened rather than kept fresh in
     // the background: it changes when a run ends, which is rarely.
     if (view === 'runs') void loadRuns();
@@ -248,7 +336,10 @@ const state = {
   logsLoadingOlder: false,
   logLevels: {} as Readonly<Partial<Record<LogLevel, number>>>,
   view: 'specs' as ViewName,
-  project: { name: '…', branch: null, version: '' } as ProjectInfo,
+  project: { name: '…', root: '', branch: null, version: '' } as ProjectInfo,
+  specFacts: new Map<string, SpecFacts>(),
+  specCollapsed: new Set<string>(),
+  openSpecFile: null as string | null,
   runs: [] as RunSummaryEntry[],
   openRunId: null as string | null,
   openRunTests: [] as RunTest[],
@@ -393,14 +484,9 @@ function draw(): void {
         playing: state.playback.playing,
         recordingCut: state.framesTruncated,
         speed: state.playback.speed,
-        testList: {
+        focus: {
           tests: state.tests,
-          query: state.testQuery,
           selectedId: state.selectedTestId,
-          // A replay is a recording: there is nothing to run again. Neither is
-          // there in a report, which has no runner behind it at all.
-          canRerun: source.features.live && state.mode !== 'post-mortem',
-          now: state.now,
           steps: selectedTest()?.steps ?? [],
         },
       },
@@ -789,10 +875,6 @@ const timelineHandlers: TimelineHandlers = {
     if (sessionId !== undefined && state.sessions.has(sessionId)) {
       state.activeSessionId = sessionId;
     }
-    schedule();
-  },
-  setQuery(query) {
-    state.testQuery = query;
     schedule();
   },
   jump(direction) {

@@ -1412,3 +1412,139 @@ button.active {
 .run-detail .no-trace {
   font-size: 11px;
 }
+
+
+/* ---- Specs -------------------------------------------------------------- */
+
+.specs-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.specs-search input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+/* One grid for the header and every row, so the columns line up without any
+   measuring: the row is a grid with the same template. */
+.spec-columns,
+.spec-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 110px 120px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.spec-columns {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.spec-tree,
+.spec-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.spec-row {
+  border-bottom: 1px solid var(--line);
+  padding-right: 8px;
+}
+
+.spec-row:hover {
+  background: var(--raised);
+}
+
+.spec-row .disclose {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.spec-row .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spec-row.directory .name {
+  font-weight: 600;
+}
+
+.spec-row .count {
+  font-size: 11px;
+}
+
+.spec-row .col {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.spec-row .latest {
+  display: flex;
+  gap: 4px;
+}
+
+.spec-row .latest .dot {
+  border: 0;
+  padding: 0 2px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.spec-row .latest .dot.passed { color: var(--pass); }
+.spec-row .latest .dot.failed { color: var(--fail); }
+.spec-row .latest .dot.skipped { color: var(--muted); }
+
+/* The action appears on hover, as in the reference, but never on keyboard
+   focus alone — a control you can reach with Tab must not be invisible. */
+.spec-row .run-these {
+  visibility: hidden;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.spec-row:hover .run-these,
+.spec-row .run-these:focus-visible {
+  visibility: visible;
+}
+
+.spec-test {
+  border-bottom: 1px solid var(--line);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -34,6 +34,7 @@ import {
 } from './events.js';
 import { discoverTests, type DiscoveryOptions } from './discovery.js';
 import { readProjectInfo } from './project.js';
+import { readSpecFacts } from './specs.js';
 import { DEFAULT_RUNS_DIR, readRunHistory, readRunManifest } from './runs.js';
 import { UiHub, type UiHubOptions } from './hub.js';
 import { attachSession, type UiSessionSource } from './live.js';
@@ -217,10 +218,18 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     });
   }
 
+  /**
+   * The last listing, kept so `/api/specs` knows which files to describe
+   * without listing the project again — a listing takes seconds and the
+   * question "how old is this file" does not deserve one.
+   */
+  let discovered: readonly { readonly file: string }[] = [];
+
   /** Lists the project's tests and publishes them. Failure is not fatal. */
   const publishDiscovery = async (): Promise<void> => {
     if (options.discovery === undefined) return;
     const tests = await discoverTests(options.discovery);
+    discovered = tests;
     if (tests.length > 0) hub.publish({ v: 1, type: 'tests-discovered', tests });
   };
 
@@ -337,6 +346,16 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
                   picking: recorder.picking,
                   outFile: options.record?.outFile ?? null,
                 },
+        });
+        return;
+      }
+      case 'GET /api/specs': {
+        // The files the listing knows about, plus whatever any run touched:
+        // a spec deleted since the last run still has a history worth showing.
+        const files = new Set<string>(discovered.map((test) => test.file));
+        for (const file of url.searchParams.getAll('file')) files.add(file);
+        sendJson(response, 200, {
+          specs: await readSpecFacts([...files], options.runsDir ?? DEFAULT_RUNS_DIR),
         });
         return;
       }
