@@ -11,6 +11,7 @@ import { html, type TemplateResult } from 'lit-html';
 import type { UiTestStatus } from '../events.js';
 import type { TraceOverview } from '../trace-source.js';
 import { formatMs } from '../view-model.js';
+import { renderCrashPanel } from './crash-panel.js';
 
 /** One test on the timeline, with the steps reported for it. */
 export interface TimelineTest {
@@ -65,6 +66,7 @@ export function renderTimeline(model: TimelineModel, handlers: TimelineHandlers)
     </header>
 
     ${model.trace === null ? '' : renderScrubber(model, model.trace, handlers)}
+    ${renderCrashPanel(model.trace?.crash ?? null, { seek: (timeMs) => handlers.seek(timeMs) })}
 
     <ol class="tests" data-testid="tests">
       ${model.tests.map(

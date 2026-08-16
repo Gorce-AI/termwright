@@ -50,9 +50,20 @@ export {
 } from './server.js';
 
 export {
+  CRASH_TAIL_WARNING,
+  describeCrashCause,
+  parseCrash,
+  type CrashDiagnosticView,
+  type CrashExitView,
+  type CrashInputView,
+  type CrashView,
+} from './crash.js';
+
+export {
   publishTraceTimeline,
   readTraceOverview,
   traceStateAt,
+  type TraceMarker,
   type TraceOverview,
   type TraceStatePayload,
 } from './trace-source.js';

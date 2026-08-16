@@ -107,3 +107,48 @@ export async function buildFixtureTrace(): Promise<string> {
   await writer.finalize();
   return dir;
 }
+
+/**
+ * Writes an archive of a session that died on its own: output, a tree, then a
+ * `crash` event followed by the exit — the order the driver emits them in, so
+ * the writer stamps `meta.crash.castOffset` the way it does in a real run.
+ *
+ * @returns the archive directory.
+ */
+export async function buildCrashedFixtureTrace(): Promise<string> {
+  const dir = join(await mkdtemp(join(tmpdir(), 'termwright-ui-crash-')), 'crashed.twtrace');
+  const session = new Recorded();
+  const writer = createTraceWriter(session, {
+    dir,
+    command: ['node', 'agent.js'],
+    columns: 80,
+    rows: 24,
+    now: session.now,
+  });
+
+  session.emit('output', { data: new TextEncoder().encode('starting\r\n'), timeMs: 0 });
+  session.publish(FIXTURE_TREES[0] as SemanticSnapshot);
+
+  session.clock = 1_200;
+  session.emit('output', {
+    data: new TextEncoder().encode('panic: runtime error: index out of range\r\n'),
+    timeMs: 1_200,
+  });
+
+  session.clock = 1_400;
+  session.emit('crash', {
+    exit: { code: null, signal: 'SIGSEGV' },
+    screenTail: ['starting', 'panic: runtime error: index out of range'],
+    lastSemanticTree: FIXTURE_TREES[0] as SemanticSnapshot,
+    recentInputs: [
+      { timeMs: 1_100, kind: 'key', bytes: 1, preview: '\\r' },
+      { timeMs: 1_150, kind: 'paste', bytes: 64 },
+    ],
+    diagnosticsTail: [{ code: 'protocol-violation', detail: 'frame too large', revision: 1, timeMs: 1_300 }],
+    timeMs: 1_400,
+  });
+  session.emit('exit', { code: null, signal: 'SIGSEGV', timeMs: 1_400 });
+
+  await writer.finalize();
+  return dir;
+}

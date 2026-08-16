@@ -69,6 +69,23 @@ trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it
 is. The browser app never imports Vitest and never reads a `.twtrace` itself.
 
+## When the program died on its own
+
+If the archive carries a crash section (`meta.crash`, written by
+`@termwright/trace` when the recorded program dies on a signal or an unasked-for
+non-zero exit), the timeline gets a red marker at that moment and a panel with
+the cause, the screen the terminal ended on, the last inputs and the session
+diagnostics — the same content, in the same order, as the crash section of the
+HTML report. Clicking the marker (or the panel's jump button) moves the terminal
+and the inspector to that instant.
+
+The screen tail is shown behind the same warning the report uses: **it is not
+redacted**. It is what the terminal displayed, secrets included. Treat an
+archive — and this view of it — like a screenshot.
+
+The section is validated as external data: an archive whose crash block is
+malformed loses the panel and the marker, not the rest of the recording.
+
 ## Time travel
 
 Scrubbing asks the server for the state at a millisecond, which comes from

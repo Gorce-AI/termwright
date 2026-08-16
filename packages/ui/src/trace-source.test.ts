@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openTrace, type TraceReader } from '@termwright/trace';
-import { buildFixtureTrace, FIXTURE_TREES } from './__fixtures__/build-trace.js';
+import { buildCrashedFixtureTrace, buildFixtureTrace, FIXTURE_TREES } from './__fixtures__/build-trace.js';
 import { UiHub } from './hub.js';
 import { publishTraceTimeline, readTraceOverview, traceStateAt, type TraceOverview } from './trace-source.js';
 
@@ -90,5 +90,58 @@ describe('traceStateAt', () => {
     const early = await traceStateAt(reader, 400);
     const late = await traceStateAt(reader, 1_400);
     expect(prefix(late).startsWith(prefix(early))).toBe(true);
+  });
+});
+
+describe('a crashed recording', () => {
+  let crashed: TraceReader;
+  let crashedOverview: TraceOverview;
+
+  beforeAll(async () => {
+    crashed = await openTrace(await buildCrashedFixtureTrace());
+    crashedOverview = await readTraceOverview(crashed);
+  });
+
+  afterAll(async () => {
+    await crashed.close();
+  });
+
+  it('surfaces the crash section, validated', () => {
+    expect(crashedOverview.crash?.cause).toBe('signal SIGSEGV');
+    expect(crashedOverview.crash?.screenTail).toEqual([
+      'starting',
+      'panic: runtime error: index out of range',
+    ]);
+    expect(crashedOverview.crash?.recentInputs).toHaveLength(2);
+    expect(crashedOverview.crash?.recentInputs[1]?.preview).toBeUndefined();
+    expect(crashedOverview.crash?.diagnosticsTail[0]?.code).toBe('protocol-violation');
+    expect(crashedOverview.crash?.lastSemanticRevision).toBe(1);
+  });
+
+  it('puts a crash marker on the cast timeline, in time order', () => {
+    const crashMarker = crashedOverview.markers.find((marker) => marker.kind === 'crash');
+    expect(crashMarker?.t).toBe(crashedOverview.crash?.castOffset);
+    expect(crashMarker?.label).toContain('SIGSEGV');
+    const times = crashedOverview.markers.map((marker) => marker.t);
+    expect([...times].sort((left, right) => left - right)).toEqual(times);
+  });
+
+  it('reports the run as failed on the timeline', () => {
+    const hub = new UiHub();
+    publishTraceTimeline(hub, crashedOverview);
+    const end = hub.backlog.find((message) => message.type === 'test-end');
+    expect(end?.type === 'test-end' && end.status).toBe('failed');
+  });
+
+  it('scrubbing to the crash marker shows what the program printed as it died', async () => {
+    const marker = crashedOverview.markers.find((m) => m.kind === 'crash');
+    const state = await traceStateAt(crashed, marker?.t ?? 0);
+    expect(prefix(state)).toContain('panic: runtime error');
+    expect(state.revision).toBe(crashedOverview.crash?.lastSemanticRevision);
+  });
+
+  it('leaves a clean recording without a crash or a crash marker', () => {
+    expect(overview.crash).toBeNull();
+    expect(overview.markers.some((marker) => marker.kind === 'crash')).toBe(false);
   });
 });

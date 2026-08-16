@@ -108,6 +108,32 @@ the YAML snapshot file on the first run, which is the artefact a reviewer reads 
 and it keeps this package from having to implement the YAML serializer that
 `@termwright/test` already owns.
 
+## The crash section is external data
+
+`meta.crash` reaches the viewer from an archive somebody else recorded — a CI
+job, an older writer, a file that was edited. `crash.ts` therefore validates it
+into a `CrashView` rather than trusting the type: two fields are required
+(`castOffset`, because there is nowhere to put the marker without it, and a
+usable `exit`, because a crash with no cause is not a report), everything else
+degrades to an empty list, and a section that fails validation yields `null`.
+The UI then shows no panel and no marker — the archive around it is still what
+the user came to look at.
+
+Everything that survives is bounded: 500 rows of screen tail (the *last* 500 —
+the end is where the panic is), 4 096 characters per row, 100 inputs, 200
+diagnostics.
+
+`CRASH_TAIL_WARNING` duplicates the sentence from the HTML report in
+`@termwright/trace` rather than importing it, because it is not exported there;
+`crash.test.ts` pins its content. **If that report's wording changes**, this is
+the string to change with it — one artefact should read the same way wherever it
+is shown.
+
+Note that the panel puts an unredacted screen tail into `/api/state`, i.e. into
+the browser. That is inherent to the feature and identical to what the HTML
+report does with the same bytes; the token and the loopback bind are what keep
+it from going further.
+
 ## Security posture
 
 Loopback bind, 24 random bytes of token per launch, constant-time comparison,

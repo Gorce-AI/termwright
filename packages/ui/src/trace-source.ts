@@ -15,6 +15,7 @@
 
 import type { SemanticSnapshot } from '@termwright/protocol';
 import type { StepSummary, TraceReader } from '@termwright/trace';
+import { parseCrash, type CrashView } from './crash.js';
 import type { ServerMessage, UiTestStatus } from './events.js';
 import type { UiHub } from './hub.js';
 
@@ -45,14 +46,30 @@ export interface TraceOverview {
   readonly semanticTree: boolean;
   readonly exit: { readonly code: number | null; readonly signal: string | null } | null;
   readonly steps: readonly StepSummary[];
-  /** Cast offsets worth jumping to: step boundaries and semantic revisions. */
-  readonly markers: readonly { readonly t: number; readonly label: string; readonly kind: 'step' | 'revision' }[];
+  /**
+   * The crash section, when the recorded program died on its own and the
+   * section survived validation. `null` for a clean run *and* for an archive
+   * whose crash section is unreadable — see {@link parseCrash}.
+   */
+  readonly crash: CrashView | null;
+  /**
+   * Cast offsets worth jumping to: step boundaries, semantic revisions, and the
+   * moment of the crash.
+   */
+  readonly markers: readonly TraceMarker[];
+}
+
+/** One jumpable moment on the timeline. */
+export interface TraceMarker {
+  readonly t: number;
+  readonly label: string;
+  readonly kind: 'step' | 'revision' | 'crash';
 }
 
 /** Reads the archive and derives everything the UI shows about it. */
 export async function readTraceOverview(reader: TraceReader): Promise<TraceOverview> {
   const steps = await reader.steps();
-  const markers: { t: number; label: string; kind: 'step' | 'revision' }[] = [];
+  const markers: TraceMarker[] = [];
   for (const step of steps) markers.push({ t: step.castOffset, label: step.title, kind: 'step' });
   let last = 0;
   for await (const record of reader.semantics()) {
@@ -64,6 +81,12 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
     for await (const event of reader.castEvents()) last = Math.max(last, event.timeMs);
   } else {
     last = Math.max(last, meta.durationMs);
+  }
+
+  const crash = parseCrash(meta.crash);
+  if (crash !== null) {
+    markers.push({ t: crash.castOffset, label: `crash — ${crash.cause}`, kind: 'crash' });
+    last = Math.max(last, crash.castOffset);
   }
   markers.sort((left, right) => left.t - right.t);
 
@@ -78,6 +101,7 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
     semanticTree: meta.semanticTree,
     exit: meta.exit ?? null,
     steps,
+    crash,
     markers,
   };
 }
@@ -121,11 +145,12 @@ export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void 
       });
     }
   }
-  const status: UiTestStatus = overview.steps.some((step) => step.status === 'failed')
-    ? 'failed'
-    : overview.exit !== null && overview.exit.code !== 0
+  const status: UiTestStatus =
+    overview.crash !== null || overview.steps.some((step) => step.status === 'failed')
       ? 'failed'
-      : 'passed';
+      : overview.exit !== null && overview.exit.code !== 0
+        ? 'failed'
+        : 'passed';
   messages.push({ v: 1, type: 'test-end', id: testId, status, traceRef: overview.path });
   messages.push({
     v: 1,

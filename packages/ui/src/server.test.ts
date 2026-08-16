@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { buildFixtureTrace } from './__fixtures__/build-trace.js';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { buildCrashedFixtureTrace, buildFixtureTrace } from './__fixtures__/build-trace.js';
 import { FakeHarness, node, snapshot } from './__fixtures__/fake-session.js';
 import { encodeMessage, parseServerMessage, toBase64, type ClientMessage, type ServerMessage } from './events.js';
 import { startUiServer, type UiServer } from './server.js';
@@ -212,6 +214,32 @@ describe('post-mortem mode', () => {
     expect(Buffer.from(state.castPrefixB64, 'base64').toString('utf8')).toContain('Permission required');
     expect(state.revision).toBe(1);
     viewer.close();
+  });
+
+  it('serves the crash section of a crashed archive', async () => {
+    const server = await start({ trace: await buildCrashedFixtureTrace() });
+    const body = (await (await api(server, '/api/state')).json()) as {
+      trace: { crash: { cause: string; screenTail: string[] } | null; markers: { kind: string }[] };
+    };
+    expect(body.trace.crash?.cause).toBe('signal SIGSEGV');
+    expect(body.trace.crash?.screenTail.join('\n')).toContain('panic: runtime error');
+    expect(body.trace.markers.some((marker) => marker.kind === 'crash')).toBe(true);
+  });
+
+  it('drops an unreadable crash section instead of failing to open the archive', async () => {
+    const dir = await buildCrashedFixtureTrace();
+    const metaPath = join(dir, 'meta.json');
+    const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
+    await writeFile(metaPath, JSON.stringify({ ...meta, crash: { exit: 'died horribly' } }), 'utf8');
+
+    const server = await start({ trace: dir });
+    const body = (await (await api(server, '/api/state')).json()) as {
+      trace: { crash: unknown; markers: { kind: string }[]; steps: unknown[] };
+    };
+    expect(body.trace.crash).toBeNull();
+    expect(body.trace.markers.some((marker) => marker.kind === 'crash')).toBe(false);
+    // The rest of the archive still opened and is still browsable.
+    expect((await api(server, '/api/trace/state?t=0')).status).toBe(200);
   });
 
   it('reports no trace when the server is live', async () => {
