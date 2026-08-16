@@ -45,9 +45,11 @@ export const crashSchema = z.object({
   ),
   diagnostics: z.array(
     z.object({
-      // Left as a free string on purpose: the driver's code set grows, and a
-      // closed enum here would make one unknown code invalidate a whole crash
-      // report — the moment it is needed most.
+      // A free string on purpose — do not "fix" this into an enum. Tolerant
+      // reader, strict producer: the driver owns the closed code set and pins
+      // it with its own tests, while this consumer must survive a code it has
+      // never heard of. A closed enum here would let one unrecognised code
+      // fail the whole crash report, at the moment it is needed most.
       code: z.string(),
       detail: z.string(),
       timeMs: z.number(),
