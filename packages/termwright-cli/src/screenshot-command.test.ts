@@ -42,7 +42,7 @@ class Recorded {
 }
 
 /** Writes a real archive, so this exercises the format rather than a stand-in. */
-async function buildTrace(): Promise<string> {
+async function buildTrace(text = 'first screen'): Promise<string> {
   const dir = join(await mkdtemp(join(tmpdir(), 'tw-shot-')), 'login.twtrace');
   const session = new Recorded();
   const writer = createTraceWriter(session, {
@@ -53,7 +53,7 @@ async function buildTrace(): Promise<string> {
     now: session.now,
   });
 
-  session.emit('output', { data: new TextEncoder().encode('first screen\r\n'), timeMs: 0 });
+  session.emit('output', { data: new TextEncoder().encode(`${text}\r\n`), timeMs: 0 });
   session.clock = 1_000;
   const step = writer.addStep('approve');
   session.emit('output', { data: new TextEncoder().encode('second screen\r\n'), timeMs: 1_000 });
@@ -145,6 +145,22 @@ describe('capturing a moment of a recording', () => {
     // Not the last byte of the recording: a program that left the alternate
     // screen ends on a blank one, and a screenshot of nothing helps nobody.
     expect(result.chosen).toBe('the last step');
+  });
+
+  it('reports a character the embedded fonts do not cover', async () => {
+    // U+F0000 is in a private-use plane, so no real font claims it: this is the
+    // one way to reach the fallback branch on any machine. impl-trace measured
+    // that coverage is a property of the *installed* fonts rather than of the
+    // text — CJK and emoji are covered on a developer's macOS and not in a bare
+    // CI container — so the branch this pins is the one CI will actually take.
+    const out = join(await mkdtemp(join(tmpdir(), 'tw-pua-')), 'pua.png');
+    const result = await captureScreenshot({ trace: await buildTrace('gap \u{F0000} here'), out });
+
+    expect(result.fallbackCharacters).not.toEqual([]);
+    // The image is now a product of this machine's fonts, which is what the
+    // command has to say out loud: the same archive renders differently
+    // elsewhere. The scan that finds those fonts is what makes it slow.
+    expect(result.systemFontsLoaded).toBe(true);
   });
 
   it('names the archive it could not read', async () => {
