@@ -68,6 +68,7 @@ const marker = verifyMarkerPayload(payload, token, sessionId);
 | `marker` | `encodeMarker`, `verifyMarkerPayload` |
 | `validate` | `validateSnapshot` |
 | `delta` | `TreeDelta`, `validateTreeDelta`, `applyTreeDelta` |
+| `accesskit` | `toAccessKitTreeUpdate`, `accessKitNodeId`, role table |
 | `errors` | `ProtocolViolation`, `ProtocolViolationCode` |
 
 ## Integrating the marker with a VT parser
@@ -191,6 +192,74 @@ every assertion downstream would inherit that error silently.
 
 A delta cannot change the cursor, the viewport or the session id; those are
 inherited from the base snapshot.
+
+## AccessKit export (bridge-ready)
+
+`toAccessKitTreeUpdate` converts a `SemanticSnapshot` into an AccessKit
+`TreeUpdate` in its serde JSON shape. It is a pure transformation — this
+package takes no dependency on AccessKit — so the output is data a bridge can
+hand to a real adapter.
+
+```ts
+import { toAccessKitTreeUpdate } from '@termwright/protocol';
+
+const { update, cellBounds } = toAccessKitTreeUpdate(snapshot, {
+  toolkitName: 'ink',
+  toolkitVersion: '7.1.1',
+});
+```
+
+### Why there is no native bridge in 1.0
+
+AccessKit's platform adapters attach a tree to a **native window**: an `NSView`
+on macOS, an `HWND` on Windows, a toplevel on AT-SPI. A terminal application
+has none of those. The emulator owns the window; the application under test is
+a child process writing bytes to a pseudo-terminal. There is nothing for an
+adapter to attach to, and no path for an assistive technology to route a
+request back to us.
+
+The geometry gap is the same problem from the other side. Our `bounds` are
+**terminal cells** — row 3, column 12 — while AccessKit's `Rect` is in pixels
+relative to the window origin. Converting needs the cell size and window
+position, which live in the emulator, not in the process being tested. Guessing
+a cell size would produce coordinates that look authoritative and point nowhere,
+which is worse than having none.
+
+So this is the half of the problem that can be solved correctly without a
+window. `bounds` is emitted **only** when the caller passes `cellSize`, which
+an embedder that owns the window (a GUI emulator embedding termwright) can do
+honestly. Otherwise cell rects are returned separately as `cellBounds`, because
+AccessKit's `Node` has no extension point for foreign coordinate systems and
+smuggling cells into a pixel field would silently corrupt every consumer.
+
+### Mapping notes
+
+- **Focus is tree-level.** AccessKit puts `focus` on the `TreeUpdate`, not on a
+  node, so the node carrying `state.focused` becomes the update's focus.
+- **Children are explicit.** Our tree is flat and joined by `parentId`;
+  AccessKit nodes carry a `children` array, derived here in snapshot order.
+- **Ids are hashed.** AccessKit's `NodeId` is a `u64`, but JSON numbers are
+  doubles, so `accessKitNodeId` takes SHA-256 of the id truncated to **53
+  bits** — every id stays exactly representable, and a collision (about 1.4e-9
+  at the 5 000-node ceiling) throws rather than merging two nodes.
+- **`select` is dropped.** AccessKit has no selection action; mapping it onto
+  `click` would claim a behaviour the adapter never described. `toggle` does
+  map to `click`, which is how AccessKit expresses toggling.
+- A multiline `textbox` becomes `multilineTextInput`.
+
+### Schema provenance
+
+Verified against `accesskit` 0.24.1 (docs.rs, August 2026):
+`TreeUpdate { nodes, tree, tree_id, focus }`, `Tree { root, toolkit_name,
+toolkit_version }`, `NodeId(u64)`, `Rect { x0, y0, x1, y1 }`, `TreeId(Uuid)`
+with the nil UUID reserved for the root tree, and
+`#[serde(rename_all = "camelCase")]` on `Role`, `Action` and `Node`.
+
+One spelling could not be confirmed from the published docs: the serde
+representation of the `Toggled` enum. This export emits `"true" | "false" |
+"mixed"` for consistency with the crate's other public enums. Anyone building a
+real bridge should check that against the adapter they link, and it is a
+one-line change if it turns out to be `"True" | "False" | "Mixed"`.
 
 ## Protocol evolution
 

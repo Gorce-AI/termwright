@@ -5,6 +5,7 @@ export * from './limits.js';
 export * from './tree.js';
 export * from './logs.js';
 export * from './delta.js';
+export * from './accesskit.js';
 export * from './messages.js';
 export * from './marker.js';
 export * from './framing.js';
