@@ -53,8 +53,15 @@ export interface LogCollection {
   clear(): void;
   /** Entries dropped because {@link MAX_CAPTURED_LOGS} was reached. */
   dropped(): number;
+  /**
+   * `log-dropped` diagnostics seen on the session: records refused by the
+   * driver or lost by the adapter, which never became entries here.
+   */
+  upstreamDrops(): number;
   /** Appends an entry. Used by the fixtures; tests read rather than write. */
   push(entry: CapturedLog): void;
+  /** Records that the session reported a dropped log. Used by {@link collectLogs}. */
+  noteUpstreamDrop(): void;
 }
 
 /**
@@ -79,6 +86,7 @@ export function createLogCollection(): LogCollection {
   const entries: CapturedLog[] = [];
   const seen = new Set<string>();
   let dropped = 0;
+  let upstream = 0;
   const collection: LogCollection = {
     all: () => entries,
     filter: (query) => (query === undefined ? entries : entries.filter((entry) => matchesLog(entry, query))),
@@ -90,8 +98,10 @@ export function createLogCollection(): LogCollection {
       entries.length = 0;
       seen.clear();
       dropped = 0;
+      upstream = 0;
     },
     dropped: () => dropped,
+    upstreamDrops: () => upstream,
     push: (entry) => {
       const identity = identityOf(entry);
       // One record counted once, however many times it arrives.
@@ -109,6 +119,9 @@ export function createLogCollection(): LogCollection {
           dropped += 1;
         }
       }
+    },
+    noteUpstreamDrop: () => {
+      upstream += 1;
     },
   };
   return collection;
@@ -136,14 +149,21 @@ export function collectLogs(
   harness: LogSource,
   into: LogCollection = createLogCollection(),
 ): { readonly collection: LogCollection; dispose(): void } {
-  const unsubscribe = harness.events.on('app-log', (event) => {
+  const unsubscribeLogs = harness.events.on('app-log', (event) => {
     into.push({ ...event, sessionId: harness.sessionId });
+  });
+  // Counted live rather than read from `diagnostics()` at the end: that log
+  // keeps only the most recent entries, so a chatty session would have
+  // evicted the early drops and the count would quietly be too low.
+  const unsubscribeDiagnostics = harness.events.on('diagnostic', (event) => {
+    if (event.code === 'log-dropped') into.noteUpstreamDrop();
   });
   collections.set(harness, into);
   return {
     collection: into,
     dispose: () => {
-      unsubscribe();
+      unsubscribeLogs();
+      unsubscribeDiagnostics();
       if (collections.get(harness) === into) collections.delete(harness);
     },
   };
@@ -228,9 +248,10 @@ export function logsFailingThreshold(
 export function describeLogThresholdFailure(
   entries: readonly CapturedLog[],
   threshold: LogLevel,
+  upstreamDrops = 0,
 ): string | undefined {
   const offenders = logsFailingThreshold(entries, threshold);
-  return offenders.length === 0 ? undefined : formatLogFailure(offenders, threshold);
+  return offenders.length === 0 ? undefined : formatLogFailure(offenders, threshold, upstreamDrops);
 }
 
 /**
@@ -244,16 +265,21 @@ export function logThresholdFailure(
   entries: readonly CapturedLog[],
   threshold: LogLevel | false,
   testAlreadyFailed: boolean,
+  upstreamDrops = 0,
 ): string | undefined {
   if (threshold === false || testAlreadyFailed) return undefined;
-  return describeLogThresholdFailure(entries, threshold);
+  return describeLogThresholdFailure(entries, threshold, upstreamDrops);
 }
 
 /** How many offending entries a failure message lists before summarising. */
 const FAILURE_LIST_LIMIT = 10;
 
 /** The message a test fails with when the program logged something severe. */
-export function formatLogFailure(offenders: readonly CapturedLog[], threshold: LogLevel): string {
+export function formatLogFailure(
+  offenders: readonly CapturedLog[],
+  threshold: LogLevel,
+  upstreamDrops = 0,
+): string {
   const shown = offenders.slice(0, FAILURE_LIST_LIMIT);
   const rest = offenders.length - shown.length;
   return [
@@ -261,6 +287,13 @@ export function formatLogFailure(offenders: readonly CapturedLog[], threshold: L
       `at level ${threshold} or above:`,
     ...shown.map((entry) => `  ${formatLogEntry(entry)}`),
     ...(rest > 0 ? [`  …and ${rest} more`] : []),
+    ...(upstreamDrops > 0
+      ? [
+          '',
+          `The session also reported ${upstreamDrops} log-dropped diagnostic${upstreamDrops === 1 ? '' : 's'}: ` +
+            'records were refused or lost before this test saw them, so the list above may be incomplete.',
+        ]
+      : []),
     '',
     'Assert on them with expect(terminal).toHaveLogged({ level: ... }), or turn the check off:',
     "  for one test:   terminal.failOnLogLevel(false)",

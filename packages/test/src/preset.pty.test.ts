@@ -136,6 +136,20 @@ describe.skipIf(!available)('the preset against a real PTY', () => {
     expect(terminal.logs.all()).toEqual([]);
   });
 
+  test('notices records the session never delivered', { timeout: 30_000 }, async ({ terminal }) => {
+    const app = await terminal.launch();
+    await app.waitForText('Permission required');
+
+    await app.press('g'); // a plain record, so the channel is known to work
+    await expect(terminal).toHaveLogged({ source: 'adapter' });
+    expect(terminal.logs.upstreamDrops()).toBe(0);
+
+    await app.press('S'); // the adapter skips ahead: it lost records at the source
+    await expect
+      .poll(() => terminal.logs.upstreamDrops(), { timeout: 5_000 })
+      .toBeGreaterThan(0);
+  });
+
   test('isolates each test with its own directory and session', { timeout: 30_000 }, async ({ terminal, termwright }) => {
     const app = await terminal.launch();
     await app.waitForText('Permission required');

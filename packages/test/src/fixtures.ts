@@ -225,7 +225,7 @@ export const test = base.extend<TermwrightFixtures>({
 
     // Decided before teardown: a log failure is a failure, so the trace of the
     // session that produced it has to survive `retain-on-failure`.
-    const logFailure = logThresholdFailure(logs.all(), threshold, failed);
+    const logFailure = logThresholdFailure(logs.all(), threshold, failed, logs.upstreamDrops());
     if (logFailure !== undefined) failed = true;
 
     for (const detach of detachers) detach();

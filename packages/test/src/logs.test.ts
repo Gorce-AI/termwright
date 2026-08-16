@@ -181,38 +181,60 @@ describe('text', () => {
 });
 
 describe('collectLogs', () => {
-  function fakeHarness(): { harness: { sessionId: string; events: SessionEvents }; emit: (event: unknown) => void } {
-    const listeners: ((payload: never) => void)[] = [];
+  /** Delivers to the listeners of one event only, the way the driver does. */
+  function fakeHarness(): {
+    harness: { sessionId: string; events: SessionEvents };
+    emit: (event: 'app-log' | 'diagnostic', payload: unknown) => void;
+  } {
+    const listeners = new Map<string, ((payload: never) => void)[]>();
     const harness = {
       sessionId: 'session-9',
       events: {
-        on: (_event: string, callback: (payload: never) => void) => {
-          listeners.push(callback);
+        on: (event: string, callback: (payload: never) => void) => {
+          const bucket = listeners.get(event) ?? [];
+          bucket.push(callback);
+          listeners.set(event, bucket);
           return () => {
-            const index = listeners.indexOf(callback);
-            if (index !== -1) listeners.splice(index, 1);
+            const index = bucket.indexOf(callback);
+            if (index !== -1) bucket.splice(index, 1);
           };
         },
       } as unknown as SessionEvents,
     };
-    return { harness, emit: (event) => listeners.forEach((listener) => listener(event as never)) };
+    return {
+      harness,
+      emit: (event, payload) => (listeners.get(event) ?? []).forEach((listener) => listener(payload as never)),
+    };
   }
 
   it('tags entries with the session and finds them by harness', () => {
     const { harness, emit } = fakeHarness();
     const { collection, dispose } = collectLogs(harness);
-    emit({ source: 'adapter', timeMs: 5, record: { ts: 1, level: 'info', message: 'hi', seq: 1 } });
+    emit('app-log', { source: 'adapter', timeMs: 5, record: { ts: 1, level: 'info', message: 'hi', seq: 1 } });
     expect(collection.all()[0]?.sessionId).toBe('session-9');
     expect(logsOf(harness)).toBe(collection);
     dispose();
     expect(logsOf(harness)).toBeUndefined();
   });
 
+  it('counts log-dropped diagnostics live, and stops on dispose', () => {
+    const { harness, emit } = fakeHarness();
+    const { collection, dispose } = collectLogs(harness);
+    emit('diagnostic', { code: 'log-dropped', detail: 'the adapter dropped 4 log records', timeMs: 5 });
+    emit('diagnostic', { code: 'listener-error', detail: 'unrelated', timeMs: 6 });
+    expect(collection.upstreamDrops()).toBe(1);
+    // A diagnostic is not a log entry.
+    expect(collection.all()).toEqual([]);
+    dispose();
+    emit('diagnostic', { code: 'log-dropped', detail: 'after dispose', timeMs: 7 });
+    expect(collection.upstreamDrops()).toBe(1);
+  });
+
   it('stops capturing once disposed', () => {
     const { harness, emit } = fakeHarness();
     const { collection, dispose } = collectLogs(harness);
     dispose();
-    emit({ source: 'file', timeMs: 5, line: 'after' });
+    emit('app-log', { source: 'file', timeMs: 5, line: 'after' });
     expect(collection.all()).toEqual([]);
   });
 
@@ -224,7 +246,7 @@ describe('collectLogs', () => {
     const shared = createLogCollection();
     collectLogs(harness, shared);
     collectLogs(harness, shared);
-    emit({ source: 'adapter', timeMs: 5, record: { ts: 1, level: 'error', message: 'save failed', seq: 1 } });
+    emit('app-log', { source: 'adapter', timeMs: 5, record: { ts: 1, level: 'error', message: 'save failed', seq: 1 } });
     expect(shared.all()).toHaveLength(1);
   });
 
@@ -234,8 +256,8 @@ describe('collectLogs', () => {
     const shared = createLogCollection();
     collectLogs(first.harness, shared);
     collectLogs(second.harness, shared);
-    first.emit({ source: 'file', timeMs: 1, line: 'a' });
-    second.emit({ source: 'file', timeMs: 2, line: 'b' });
+    first.emit('app-log', { source: 'file', timeMs: 1, line: 'a' });
+    second.emit('app-log', { source: 'file', timeMs: 2, line: 'b' });
     expect(shared.all().map((entry) => entry.line)).toEqual(['a', 'b']);
   });
 });
@@ -259,6 +281,14 @@ describe('the failure threshold', () => {
 
   it('says nothing when nothing crossed the threshold', () => {
     expect(describeLogThresholdFailure([record('warn', 'meh')], 'error')).toBeUndefined();
+  });
+
+  it('warns that the list may be incomplete when records were dropped upstream', () => {
+    const message = describeLogThresholdFailure([record('error', 'save failed')], 'error', 3);
+    expect(message).toContain('reported 3 log-dropped diagnostics');
+    expect(message).toContain('may be incomplete');
+    // Without drops there is nothing to caveat.
+    expect(describeLogThresholdFailure([record('error', 'x')], 'error', 0)).not.toContain('log-dropped');
   });
 
   it('lists the offenders and how to turn the check off', () => {

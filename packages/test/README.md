@@ -299,6 +299,11 @@ Assert on them with expect(terminal).toHaveLogged({ level: ... }), or turn the c
   for the suite:  defineTermwrightConfig({ failOnLogLevel: false })
 ```
 
+When the session reported that records were refused or lost before the test saw
+them, the failure says so — the list it prints is what arrived, and claiming it
+is the whole story would be a lie about incomplete evidence.
+`terminal.logs.upstreamDrops()` exposes the same count.
+
 Two things this deliberately does not do. It never fails on a **file line**:
 a followed file yields text, not levels, and guessing severity from the word
 "error" would fail tests over a URL. And it never fires on a test that already
