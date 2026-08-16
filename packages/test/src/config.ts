@@ -9,6 +9,7 @@
  */
 
 import type { TimeoutClasses } from '@termwright/driver';
+import { LOG_LEVEL_SEVERITY, type LogLevel } from '@termwright/protocol';
 
 /** How much of a session ends up in a `.twtrace` archive. */
 export type TraceMode = 'on' | 'retain-on-failure' | 'off';
@@ -67,6 +68,15 @@ export interface TermwrightConfig {
   /** Overrides selected by the `TERMWRIGHT_PROFILE` environment variable. */
   readonly profiles?: Readonly<Record<string, Omit<TermwrightConfig, 'profiles'>>>;
   /**
+   * Fail an otherwise passing test when the program logged a record at this
+   * level or above. Default `'error'`; `false` turns the check off.
+   *
+   * This is the negative assertion nobody writes: a test that clicks through a
+   * flow while the program logs `error: failed to save` is not a passing test,
+   * it is a test that did not look.
+   */
+  readonly failOnLogLevel?: LogLevel | false;
+  /**
    * Snapshot policy. Normally left unset: it is derived per run from
    * `TERMWRIGHT_UPDATE_SNAPSHOTS` or Vitest's `--update` flag.
    */
@@ -85,6 +95,7 @@ export interface ResolvedTermwrightConfig {
   readonly env: Readonly<Record<string, string>>;
   readonly palette: ColorPalette | undefined;
   readonly updateSnapshots: UpdateSnapshotsMode | undefined;
+  readonly failOnLogLevel: LogLevel | false;
   /** Name of the profile that was applied, when any. */
   readonly profile: string | undefined;
 }
@@ -162,6 +173,15 @@ function validate(config: TermwrightConfig, path: string): void {
   if (config.updateSnapshots !== undefined && !UPDATE_MODES.includes(config.updateSnapshots)) {
     throw new TypeError(`${path}.updateSnapshots must be one of ${UPDATE_MODES.join(' | ')}`);
   }
+  if (
+    config.failOnLogLevel !== undefined &&
+    config.failOnLogLevel !== false &&
+    !(config.failOnLogLevel in LOG_LEVEL_SEVERITY)
+  ) {
+    throw new TypeError(
+      `${path}.failOnLogLevel must be false or one of ${Object.keys(LOG_LEVEL_SEVERITY).join(' | ')}`,
+    );
+  }
   if (config.command !== undefined && config.command.length === 0) {
     throw new TypeError(`${path}.command must not be empty`);
   }
@@ -209,6 +229,7 @@ export function resolveTermwrightConfig(
     env: Object.freeze({ ...(palette?.env ?? {}), ...(merged.env ?? {}) }),
     palette,
     updateSnapshots: merged.updateSnapshots,
+    failOnLogLevel: merged.failOnLogLevel ?? 'error',
     profile: profile === undefined ? undefined : name,
   });
 }

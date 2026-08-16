@@ -21,10 +21,12 @@ import { tmpdir as osTmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test as base } from 'vitest';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
+import type { LogLevel } from '@termwright/protocol';
 import { createTraceWriter, type TraceWriter } from '@termwright/trace';
 import { getTermwrightConfig, type ResolvedTermwrightConfig } from './config.js';
 import { appendCrashSection, collectCrashes, toReportCrash, type ReportCrash } from './crash.js';
 import { collectTestNames } from './declared-tests.js';
+import { collectLogs, createLogCollection, logThresholdFailure, type LogCollection } from './logs.js';
 import {
   beginSnapshotScope,
   pruneObsoleteSnapshots,
@@ -61,6 +63,15 @@ export interface TerminalFactory {
   readonly sessions: readonly TerminalHarness[];
   /** The test's private working directory. */
   readonly tmpdir: string;
+  /** Everything the programs of this test logged, oldest first. */
+  readonly logs: LogCollection;
+  /**
+   * Overrides {@link TermwrightConfig.failOnLogLevel} for this test.
+   *
+   * `false` accepts whatever the program logs — the escape hatch for a test
+   * that *expects* an error path to be exercised.
+   */
+  failOnLogLevel(level: LogLevel | false): void;
 }
 
 /** Fixtures added to Vitest's `test`. */
@@ -144,6 +155,9 @@ export const test = base.extend<TermwrightFixtures>({
     const scope = currentScope(scopeKey(task.file.filepath, fullName(task)));
     const sessions: Session[] = [];
     const harnesses: TerminalHarness[] = [];
+    const logs = createLogCollection();
+    const detachers: (() => void)[] = [];
+    let threshold: LogLevel | false = config.failOnLogLevel;
     const crashed: ReportCrash[] = [];
     const attempt = (attempts.get(task.id) ?? 0) + 1;
     attempts.set(task.id, attempt);
@@ -161,6 +175,10 @@ export const test = base.extend<TermwrightFixtures>({
 
     const factory: TerminalFactory = {
       sessions: harnesses,
+      logs,
+      failOnLogLevel(level: LogLevel | false): void {
+        threshold = level;
+      },
       get tmpdir(): string {
         return termwright.tmpdir;
       },
@@ -195,6 +213,7 @@ export const test = base.extend<TermwrightFixtures>({
                 columns: options.columns ?? config.columns,
                 rows: options.rows ?? config.rows,
               });
+        detachers.push(collectLogs(harness, logs).dispose);
         if (writer !== undefined) scope?.writers.push(writer);
         sessions.push({ harness, writer, dir });
         harnesses.push(harness);
@@ -203,6 +222,13 @@ export const test = base.extend<TermwrightFixtures>({
     };
 
     await use(factory);
+
+    // Decided before teardown: a log failure is a failure, so the trace of the
+    // session that produced it has to survive `retain-on-failure`.
+    const logFailure = logThresholdFailure(logs.all(), threshold, failed);
+    if (logFailure !== undefined) failed = true;
+
+    for (const detach of detachers) detach();
 
     if (crashed.length > 0) {
       task.meta.termwright = { ...(task.meta.termwright ?? {}), crashes: [...crashed] };
@@ -223,6 +249,8 @@ export const test = base.extend<TermwrightFixtures>({
         }
       }
     }
+
+    if (logFailure !== undefined) throw new Error(logFailure);
   },
 });
 

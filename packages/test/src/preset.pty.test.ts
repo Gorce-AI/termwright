@@ -7,7 +7,7 @@
  * `TERMWRIGHT_SKIP_PTY=1` to skip explicitly.
  */
 
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -107,6 +107,39 @@ describe.skipIf(!available)('the preset against a real PTY', () => {
     await app.press('e'); // clean exit
     expect(await app.waitForExit()).toEqual({ code: 0, signal: null });
     expect(collectCrashes([{ harness: app }])).toEqual([]);
+  });
+
+  test('follows a log file and answers questions about it', { timeout: 30_000 }, async ({
+    terminal,
+    termwright,
+  }) => {
+    const logPath = join(termwright.tmpdir, 'app.log');
+    writeFileSync(logPath, '');
+    const app = await terminal.launch({ logs: [{ path: logPath, label: 'app' }] });
+    await app.waitForText('Permission required');
+
+    appendFileSync(logPath, 'starting up\n');
+    await expect(terminal).toHaveLogged({ source: 'file', message: 'starting up' });
+
+    // A file line has no level, so it can never trip failOnLogLevel — this
+    // test passing with "error" in the log IS the assertion.
+    appendFileSync(logPath, 'error: could not reach the cache\n');
+    await expect(terminal).toHaveLogged({ message: 'could not reach the cache' });
+    expect(terminal.logs.filter({ minLevel: 'error' })).toEqual([]);
+
+    // Order and content, not exact equality: the driver's file follower
+    // currently re-emits the previous line when a later poll picks up new
+    // content (reported to impl-driver with a repro). Tighten this to
+    // toBe(...) once that lands — the preset itself stores what it is given.
+    const lines = terminal.logs.text({ source: 'file' }).trimEnd().split('\n');
+    expect(lines[0]).toBe('[app] starting up');
+    expect(lines.at(-1)).toBe('[app] error: could not reach the cache');
+    expect(new Set(lines)).toEqual(
+      new Set(['[app] starting up', '[app] error: could not reach the cache']),
+    );
+
+    terminal.logs.clear();
+    expect(terminal.logs.all()).toEqual([]);
   });
 
   test('isolates each test with its own directory and session', { timeout: 30_000 }, async ({ terminal, termwright }) => {

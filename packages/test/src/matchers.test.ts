@@ -9,6 +9,7 @@ import { node, permissionDialog, snapshot } from './__fixtures__/tree.js';
 import { configureTermwright, resetTermwrightConfig } from './config.js';
 import { registerTermwrightMatchers } from './matchers.js';
 import { beginSnapshotScope, resetSnapshotCache } from './snapshot-store.js';
+import { createLogCollection, type CapturedLog } from './logs.js';
 
 registerTermwrightMatchers();
 
@@ -392,5 +393,59 @@ describe('external snapshots', () => {
     await expect(async () => {
       await expect(fakeHarness(() => ({ tree: permissionDialog() }))).not.toMatchSemanticSnapshot();
     }).rejects.toThrow(/cannot be negated without an inline expected snapshot/u);
+  });
+});
+
+describe('toHaveLogged', () => {
+  function logs(...entries: CapturedLog[]) {
+    const collection = createLogCollection();
+    for (const entry of entries) collection.push(entry);
+    return collection;
+  }
+
+  function record(level: 'info' | 'warn' | 'error', message: string): CapturedLog {
+    return { source: 'adapter', sessionId: 's1', timeMs: 1, record: { ts: 1, level, message, seq: 1 } };
+  }
+
+  it('accepts a log collection and anything holding one', async () => {
+    const collection = logs(record('error', 'save failed'));
+    await expect(collection).toHaveLogged({ level: 'error' });
+    // A terminal factory exposes its logs as `.logs`.
+    await expect({ logs: collection }).toHaveLogged({ message: 'save failed' });
+  });
+
+  it('polls until the entry shows up', async () => {
+    const collection = createLogCollection();
+    setTimeout(() => collection.push(record('warn', 'late arrival')), 80);
+    await expect(collection).toHaveLogged({ message: 'late arrival' });
+  });
+
+  it('supports asserting that nothing was logged', async () => {
+    await expect(logs(record('info', 'fine'))).not.toHaveLogged({ level: 'error' });
+  });
+
+  it('shows what was logged when nothing matched', async () => {
+    const collection = logs(record('info', 'starting'), record('warn', 'disk almost full'));
+    await expect(async () => {
+      await expect(collection).toHaveLogged({ level: 'error' }, { timeout: 50 });
+    }).rejects.toThrow(/logged \(last 2 of 2\):[\s\S]*info starting[\s\S]*warn disk almost full/u);
+  });
+
+  it('says so when the program logged nothing at all', async () => {
+    await expect(async () => {
+      await expect(createLogCollection()).toHaveLogged({ level: 'error' }, { timeout: 50 });
+    }).rejects.toThrow(/the program logged nothing at all/u);
+  });
+
+  it('renders a regular expression in the expectation rather than as {}', async () => {
+    await expect(async () => {
+      await expect(createLogCollection()).toHaveLogged({ message: /ENOENT/u }, { timeout: 50 });
+    }).rejects.toThrow(/"message":"\/ENOENT\/u"/u);
+  });
+
+  it('explains what to do for a harness the fixtures did not launch', async () => {
+    await expect(async () => {
+      await expect({ sessionId: 'x' }).toHaveLogged({ level: 'error' });
+    }).rejects.toThrow(/call collectLogs\(harness\) first/u);
   });
 });

@@ -105,6 +105,24 @@ export { serializeScreen, type CellSnapshotOptions } from './cells.js';
 export { ptyAvailable, resetPtyProbe } from './pty-available.js';
 
 export {
+  atLeast,
+  collectLogs,
+  createLogCollection,
+  describeLogThresholdFailure,
+  formatLogEntry,
+  formatLogFailure,
+  logThresholdFailure,
+  logsFailingThreshold,
+  logsOf,
+  matchesLog,
+  MAX_CAPTURED_LOGS,
+  type CapturedLog,
+  type LogCollection,
+  type LogQuery,
+  type LogSource,
+} from './logs.js';
+
+export {
   collectCrashes,
   describeExit,
   formatCrashSection,

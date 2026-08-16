@@ -240,6 +240,77 @@ time CI ran without a pseudo-terminal.
 compared strictly, `changed` rewrites it on any textual difference — review the
 diff the way you would review the code that caused it.
 
+## Application logs
+
+A program's own log is evidence the screen does not show. Point the session at
+a log file, or let an instrumented adapter publish structured records, and the
+test can query both the same way:
+
+```ts
+test('saves the file', async ({ terminal }) => {
+  const app = await terminal.launch({
+    command: ['node', 'editor.js'],
+    logs: [{ path: 'var/editor.log', label: 'editor' }],
+  });
+
+  await app.getByRole('button', { name: 'Save' }).activate();
+
+  await expect(terminal).toHaveLogged({ level: 'info', message: /saved in \d+ms/ });
+  expect(terminal.logs.filter({ minLevel: 'warn' })).toEqual([]);
+});
+```
+
+`terminal.logs` answers `all()`, `filter(query)`, `text(query)` and `clear()`.
+A query narrows by `level` (one or several), `minLevel`, `source`
+(`'file' | 'adapter'`), `label`, `logger`, `message` (substring or pattern) and
+`sessionId`. `text()` renders entries without timestamps, sequence numbers or
+revisions, so it is stable enough to put in a snapshot:
+
+```
+info starting up
+warn storage: disk almost full free=12
+[editor] plain line from the file
+```
+
+`toHaveLogged` polls like the other matchers, so asserting right after an
+action is safe, and it prints the last entries when nothing matched — usually
+enough to see why.
+
+### An error nobody asserted on fails the test
+
+By default a test that passes while the program logged an `error` fails
+anyway. This is the assertion nobody writes: clicking through a flow while the
+program logs `error: failed to save` is not a passing test, it is a test that
+did not look.
+
+```
+The test passed, but the program logged 1 record at level error or above:
+  error db: save failed
+
+Assert on them with expect(terminal).toHaveLogged({ level: ... }), or turn the check off:
+  for one test:   terminal.failOnLogLevel(false)
+  for the suite:  defineTermwrightConfig({ failOnLogLevel: false })
+```
+
+Two things this deliberately does not do. It never fails on a **file line**:
+a followed file yields text, not levels, and guessing severity from the word
+"error" would fail tests over a URL. And it never fires on a test that already
+failed — the assertion that failed is the story.
+
+Raise or lower the bar with `failOnLogLevel: 'warn' | 'fatal' | false` in the
+config, or per test with `terminal.failOnLogLevel(...)`.
+
+### Logs from a mounted component
+
+For a harness the fixtures did not launch — a `mountInk` component, say —
+subscribe yourself and the matcher finds the collection from the harness:
+
+```ts
+const app = await mountInk(<App />);
+collectLogs(app);
+await expect(app).toHaveLogged({ level: 'error' });
+```
+
 ## When the program dies
 
 A crashed program does not fail a test in any useful way: the assertion that

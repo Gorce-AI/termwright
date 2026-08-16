@@ -36,7 +36,13 @@ export interface ReportCrash {
     readonly code: string;
     readonly detail: string;
     readonly timeMs: number;
+    readonly revision?: number;
   }[];
+  /**
+   * Revision of the last tree the session had, as a pointer into the trace.
+   * The tree itself stays out: `semantics.jsonl` already holds every revision.
+   */
+  readonly lastSemanticRevision?: number | null;
   readonly timeMs: number;
 }
 
@@ -197,8 +203,12 @@ export function toReportCrash(report: CrashReport): ReportCrash {
             code: entry.code,
             detail: entry.detail,
             timeMs: entry.timeMs,
+            ...(entry.revision === undefined ? {} : { revision: entry.revision }),
           })),
         }),
+    ...(report.lastSemanticTree === null
+      ? {}
+      : { lastSemanticRevision: report.lastSemanticTree.revision }),
     timeMs: report.timeMs,
   };
 }

@@ -30,6 +30,7 @@ import {
   type SnapshotKind,
 } from './snapshot-store.js';
 import { recordAssert, scopeKey } from './trace-context.js';
+import { formatLogEntry, logsOf, type LogCollection, type LogQuery } from './logs.js';
 
 /** Every matcher accepts a per-assertion timeout override. */
 export interface PollOptions {
@@ -82,6 +83,8 @@ export interface TermwrightMatchers<R = unknown> {
   toMatchCellSnapshot(expected?: string, options?: CellSnapshotMatcherOptions): R;
   /** Semantic tree as YAML, matched partially (`/CONTRACTS.md` §YAML). */
   toMatchSemanticSnapshot(expected?: string, options?: SemanticSnapshotMatcherOptions): R;
+  /** The program logged an entry matching the query. */
+  toHaveLogged(query: LogQuery, options?: PollOptions): R;
 }
 
 declare module 'vitest' {
@@ -343,6 +346,44 @@ async function toMatchSemanticSnapshot(
       };
     },
   });
+}
+
+async function toHaveLogged(
+  this: MatcherState,
+  received: unknown,
+  query: LogQuery,
+  options: PollOptions = {},
+): Promise<MatcherResult> {
+  const logs = asLogCollection(received, 'toHaveLogged');
+  return locatorAssertion(this, {
+    matcher: 'toHaveLogged',
+    options,
+    expected: `a log entry matching ${JSON.stringify(query, replaceRegExp)}`,
+    probe: async () => {
+      const found = logs.filter(query);
+      return {
+        pass: found.length > 0,
+        actual: found.length > 0 ? `${found.length} matching` : 'nothing matching',
+      };
+    },
+    diagnostics: () => {
+      const all = logs.all();
+      if (all.length === 0) return 'the program logged nothing at all';
+      const shown = all.slice(-LOG_DIAGNOSTIC_LINES);
+      return [
+        `logged (last ${shown.length} of ${all.length}):`,
+        ...shown.map((entry) => `  ${formatLogEntry(entry)}`),
+      ].join('\n');
+    },
+  });
+}
+
+/** Entries shown when a log assertion fails. */
+const LOG_DIAGNOSTIC_LINES = 10;
+
+/** `JSON.stringify` renders a RegExp as `{}`; show its source instead. */
+function replaceRegExp(_key: string, value: unknown): unknown {
+  return value instanceof RegExp ? String(value) : value;
 }
 
 // ---------------------------------------------------------------------------
@@ -726,6 +767,27 @@ function asScreenSource(value: unknown, matcher: string): () => ScreenSnapshot {
   throw new TypeError(`${matcher} expects a terminal or a screen snapshot, received ${describeValue(value)}`);
 }
 
+/** A log collection, a terminal factory holding one, or a harness with one. */
+function asLogCollection(value: unknown, matcher: string): LogCollection {
+  if (isLogCollection(value)) return value;
+  const nested = (value as { logs?: unknown } | null)?.logs;
+  if (isLogCollection(nested)) return nested;
+  if (typeof value === 'object' && value !== null) {
+    const attached = logsOf(value);
+    if (attached !== undefined) return attached;
+  }
+  throw new TypeError(
+    `${matcher} expects a terminal, a harness with collected logs, or a log collection, ` +
+      `received ${describeValue(value)}. For a harness the fixtures did not launch, call collectLogs(harness) first.`,
+  );
+}
+
+function isLogCollection(value: unknown): value is LogCollection {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<LogCollection>;
+  return typeof candidate.all === 'function' && typeof candidate.filter === 'function';
+}
+
 function asTreeSource(value: unknown, matcher: string): () => SemanticSnapshot | null {
   if (isHarness(value)) return () => value.semanticTree();
   if (isSnapshot(value)) return () => value;
@@ -742,6 +804,7 @@ function describeValue(value: unknown): string {
 /** The matcher implementations, exported for manual registration. */
 export const termwrightMatchers = {
   toBeVisible,
+  toHaveLogged,
   toBeFocused,
   toHaveState,
   toHaveText,

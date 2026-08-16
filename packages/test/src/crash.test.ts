@@ -107,10 +107,27 @@ describe('formatCrashSection', () => {
 });
 
 describe('toReportCrash', () => {
-  it('drops the semantic tree the trace already stores', () => {
+  it('drops the semantic tree but keeps a pointer to its revision', () => {
     const payload = toReportCrash(report({ lastSemanticTree: permissionDialog() }));
     expect(payload).not.toHaveProperty('lastSemanticTree');
     expect(JSON.stringify(payload)).not.toContain('Permission');
+    expect(payload.lastSemanticRevision).toBe(permissionDialog().revision);
+  });
+
+  it('says nothing about a revision for a session that never had a tree', () => {
+    expect(toReportCrash(report({ lastSemanticTree: null }))).not.toHaveProperty('lastSemanticRevision');
+  });
+
+  it('keeps the revision a diagnostic is about', () => {
+    const payload = toReportCrash(
+      report({ diagnosticsTail: [{ code: 'protocol-violation', detail: 'bad frame', revision: 7, timeMs: 3 }] }),
+    );
+    expect(payload.diagnostics?.[0]).toEqual({
+      code: 'protocol-violation',
+      detail: 'bad frame',
+      revision: 7,
+      timeMs: 3,
+    });
   });
 
   it('bounds the screen tail for the trip between processes', () => {
