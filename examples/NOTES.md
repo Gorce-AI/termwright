@@ -74,6 +74,39 @@ workaround in this directory.
   file when any change at all should fail the test, and for a pattern —
   scoped with `{ within: locator }` — when the test is about one behaviour.
 
+## Stability, and the one failure that was real
+
+These suites were soaked before 1.0: 50 consecutive runs of all three examples
+in parallel, on a machine deliberately kept at a load average of 180–235, with
+`TERMWRIGHT_DEBUG=all` captured for every run and kept for any that failed.
+**50 of 50 passed.** Ninety-eight commits landed in the repository while it
+ran, so the result covers a moving tree rather than a frozen one.
+
+Two earlier incidents are worth recording, because they look identical from the
+outside and had nothing in common.
+
+- **A real product bug, found here first.** Sessions began reporting
+  `protocol-violation (malformed): limits: unrecognized key(s):
+  maxLogRecordBytes, maxLogQueue`. A new limit key had been added to
+  `ProtocolLimits`, and `limits` was validated with a strict schema that the
+  Python and Go clients faithfully mirror — so every client built before the
+  change rejected the driver's `hello-ack` and the semantic channel died
+  silently. The fix made `limits` a tolerant reader in all three clients: known
+  keys are still type-checked, unknown ones are ignored. Adding a limit is
+  otherwise a breaking wire change for every published client, which is not a
+  thing a patch release can do.
+- **Two failures that were never explained.** An earlier batch failed 2 runs in
+  12 and could not be reproduced in 23 subsequent runs, including under load
+  and during a concurrent rebuild of the driver. Their output was not captured
+  — the reason this directory now soaks with full capture rather than a bare
+  loop. They fell inside the window when the limits change was landing and the
+  signature matches, but that is inference, not evidence.
+
+The lesson worth keeping: when one of these suites fails and the screen looks
+right, read the diagnostics before suspecting the test. A locator reporting
+`matched 0 nodes` against a correctly painted screen means the semantic channel
+is gone, not that the selector is wrong.
+
 ## Not covered here
 
 - Windows. Nothing in this directory has run on ConPTY.
