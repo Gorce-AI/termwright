@@ -60,8 +60,13 @@ export interface LogCollection {
 /**
  * Identity of a structured record within its session.
  *
- * `seq` is strictly increasing per session (CONTRACTS.md; the driver rejects a
- * repeat with a `log-dropped` diagnostic), so the pair identifies a record.
+ * `seq` is strictly increasing per session (CONTRACTS.md), which is what makes
+ * the pair an identity rather than a hint — the driver refuses a repeat before
+ * it ever becomes an event, so a duplicate here cannot come from an adapter.
+ * It can come from this side: {@link collectLogs} on a harness the fixtures
+ * already subscribed pools the same event into the same collection twice, and
+ * one error reported as two would be this package's own bug.
+ *
  * A file line has no `seq` and is never deduplicated — two identical lines in a
  * log file are two lines.
  */
@@ -89,8 +94,7 @@ export function createLogCollection(): LogCollection {
     dropped: () => dropped,
     push: (entry) => {
       const identity = identityOf(entry);
-      // One record counted once, however many times it arrives — a session
-      // subscribed twice must not double the error count a threshold reports.
+      // One record counted once, however many times it arrives.
       if (identity !== undefined) {
         if (seen.has(identity)) return;
         seen.add(identity);

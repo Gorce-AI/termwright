@@ -276,10 +276,12 @@ warn storage: disk almost full free=12
 action is safe, and it prints the last entries when nothing matched — usually
 enough to see why.
 
-A structured record is counted once per session, keyed by its `seq` (strictly
-increasing per session, per `/CONTRACTS.md`), so a session that ends up
-subscribed twice cannot report one error as two. File lines carry no sequence
-and are never deduplicated: two identical lines in a log file are two lines.
+A structured record is counted once per session, keyed by its `seq`. The driver
+refuses a repeated sequence before it becomes an event, so a duplicate can only
+come from this side — `collectLogs` on a harness the fixtures already subscribed
+pools the same event twice — and one error reported as two would be a bug in the
+counting, not in the program under test. File lines carry no sequence and are
+never deduplicated: two identical lines in a log file are two lines.
 
 ### An error nobody asserted on fails the test
 

@@ -216,6 +216,18 @@ describe('collectLogs', () => {
     expect(collection.all()).toEqual([]);
   });
 
+  it('survives the same session being pooled twice', () => {
+    // The footgun this guards: calling collectLogs on a harness the fixtures
+    // already subscribed. Both listeners fire, and without an identity the
+    // failOnLogLevel threshold would report one error as two.
+    const { harness, emit } = fakeHarness();
+    const shared = createLogCollection();
+    collectLogs(harness, shared);
+    collectLogs(harness, shared);
+    emit({ source: 'adapter', timeMs: 5, record: { ts: 1, level: 'error', message: 'save failed', seq: 1 } });
+    expect(shared.all()).toHaveLength(1);
+  });
+
   it('can pool several sessions into one collection', () => {
     const first = fakeHarness();
     const second = fakeHarness();
