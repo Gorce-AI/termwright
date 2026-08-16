@@ -464,3 +464,11 @@
   zwraca `clippedAway` dla węzłów wyciętych całkowicie (normalizator oznacza
   state.hidden — prostokąt zerowy nie przecina viewportu). Węzeł bez bounds
   legalny.
+- 2026-08-16 (driver, #34 dopisek): `ResolvedTarget.occlusion?:
+  'known'|'unknown'` (brak = nieznane). Akcje wskaźnikowe na węzłach z sesji
+  PROBE'OWEJ wymagają occlusion:'known' (stan przejściowy, podnoszony per
+  framework wraz z paint-order); adaptery ręczne zachowują kontrakt sprzed
+  reguły — reguła przychodzi razem z modelem, który umie na nią odpowiedzieć
+  (dosłowna wersja wyłączyłaby klikanie w 4 istniejących adapterach za zero
+  nowej informacji, zmierzone: 4 padnięte suity w samym driverze). Odmowa
+  wskaźnika nazywa drogę klawiaturową.
