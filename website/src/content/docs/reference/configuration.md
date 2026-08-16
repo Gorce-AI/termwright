@@ -83,6 +83,8 @@ const app = await terminal.launch({
 
   terminalProfile: 'default',  // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
   logs: [{path: 'var/app.log', label: 'app'}],
+  template: 'test/fixtures/project',
+  files: {'config.json': '{}'},
   treeUpdates: 'auto',         // 'snapshots' declines deltas
   debug: false,                // same as TERMWRIGHT_DEBUG=1, for one session
 });
@@ -92,6 +94,7 @@ const app = await terminal.launch({
 |---|---|
 | `terminalProfile` | how this session counts characters — [Terminal profiles](../../guides/terminal-profiles/) |
 | `logs` | files to follow, so their lines become assertable — [Application logs](../../guides/app-logs/) |
+| `template`, `files` | the files the program starts with, seeded into the test's private directory — [Test data and fixtures](../../guides/test-data/) |
 | `treeUpdates` | `'snapshots'` declines tree deltas from an adapter that offers them, which is the switch to reach for when a replay and a live session disagree |
 | `debug` | streams the [debug log](../../guides/debugging/) to stderr for this session |
 

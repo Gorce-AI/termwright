@@ -66,6 +66,19 @@ all of them on teardown. Each test gets a fresh temporary directory as its
 default `cwd`, and a minimal environment — only `PATH`, `HOME` and friends are
 inherited — so a stray variable on a laptop cannot change what CI sees.
 
+A program that reads files gets them declared on the launch, into that same
+private directory:
+
+```ts
+const app = await terminal.launch({
+  command: ['node', 'editor.js'],
+  files: {'config.json': JSON.stringify({theme: 'dark'})},
+});
+```
+
+See [Test data and fixtures](../guides/test-data/) for templates, and for
+composing your own fixtures on top of the preset.
+
 ## Adding semantics
 
 `waitForText` and `toHaveText` read the grid, which is honest but positional.

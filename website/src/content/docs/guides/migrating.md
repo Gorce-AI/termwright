@@ -97,6 +97,25 @@ unless it is built on Lip Gloss v2's Canvas/Layer. Read
 version is that you get real pty fidelity, waits, recordings and the report, but
 `getByRole` is not on the table for a string-composed UI.
 
+## From Cypress
+
+Not a terminal tool, but the habits transfer — and two of them need rethinking
+rather than translating.
+
+| Cypress | Here |
+|---|---|
+| `cy.fixture('user.json')` and the shared `fixtures/` directory | `launch({files})` / `launch({template})`, declared per test into its own directory |
+| custom commands (`Cypress.Commands.add`) | a fixture composed with `test.extend` |
+| `beforeEach` that logs in | the same, but as a fixture — it also tears down, and only the tests that ask for it pay for it |
+
+The shape of the change is that setup stops being ambient. A custom command is
+available everywhere and costs every test that loads it; a fixture is requested
+by name, so a test's dependencies are its parameter list. Likewise there is no
+shared fixtures directory: each test declares its files into a directory only it
+can see, so no test can inherit what another one left behind.
+
+See [Test data and fixtures](../test-data/).
+
 ## From an expect script
 
 `expect` and `pexpect` are line-oriented: they match patterns on a stream. That

@@ -34,6 +34,7 @@ export default defineConfig({
 						{label: 'Locators', slug: 'guides/locators'},
 						{label: 'Assertions and snapshots', slug: 'guides/assertions'},
 						{label: 'Component testing', slug: 'guides/component-testing'},
+						{label: 'Test data and fixtures', slug: 'guides/test-data'},
 						{label: 'Traces, recordings, reports', slug: 'guides/traces'},
 						{label: 'Application logs', slug: 'guides/app-logs'},
 						{label: 'Terminal profiles', slug: 'guides/terminal-profiles'},
