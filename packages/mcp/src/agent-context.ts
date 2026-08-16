@@ -65,6 +65,7 @@ const DRIVER_ERROR_KINDS = [
   'capacity',
   'process-exited',
   'session-closed',
+  'not-found',
 ] as const satisfies readonly TermwrightErrorCode[];
 
 type MissingKind = Exclude<TermwrightErrorCode, (typeof DRIVER_ERROR_KINDS)[number]>;

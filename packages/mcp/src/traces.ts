@@ -9,7 +9,7 @@
 import { stat } from 'node:fs/promises';
 import { openTrace, TraceError } from '@termwright/trace';
 import type { TraceReader } from '@termwright/trace';
-import { McpError, noSessionError, usageError } from './errors.js';
+import { McpError, noSessionError } from './errors.js';
 
 /** Ceilings for the replay side of the server. */
 export const TRACE_LIMITS = Object.freeze({
@@ -56,7 +56,11 @@ function rethrowTraceError(error: unknown, path: string): never {
     );
   }
   if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-    throw usageError(`no trace at ${path}`, 'pass the path of a .twtrace directory or zip');
+    throw new McpError(
+      'not-found',
+      `no trace at ${path}`,
+      'pass the path of a .twtrace directory or zip a run wrote',
+    );
   }
   throw error;
 }

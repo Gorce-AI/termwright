@@ -302,10 +302,12 @@ describe('replaying a recorded failure', () => {
 });
 
 describe('trace failures an agent has to handle', () => {
-  it('reports a missing path as a usage error', async () => {
+  it('reports a path that holds nothing as not-found, not as a broken archive', async () => {
     const call = await connectSession();
     const result = await call('trace.open', { path: join(tmpdir(), 'termwright-absent.twtrace') });
-    expect(result.error?.kind).toBe('usage');
+    // A typo in a path and a corrupt artifact are different problems: this one
+    // is 'not-found', the other stays 'protocol-violation'.
+    expect(result.error?.kind).toBe('not-found');
     expect(result.error?.suggestion).toContain('.twtrace');
   });
 

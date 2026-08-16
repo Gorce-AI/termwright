@@ -43,6 +43,10 @@ export function exitCodeFor(kind: ErrorKind): number {
     case 'no-session':
     case 'session-closed':
       return EXIT_CODES.noSession;
+    case 'not-found':
+      // A path the user named that holds nothing is bad input, not our failure
+      // — the same call as a malformed flag, and the same exit code.
+      return EXIT_CODES.usage;
     case 'protocol-violation':
       return EXIT_CODES.ipc;
     case 'internal':
