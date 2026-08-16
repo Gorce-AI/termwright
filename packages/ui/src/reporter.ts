@@ -211,8 +211,10 @@ export class TermwrightUiReporter {
   /**
    * Records the run in the history directory.
    *
-   * Failure is swallowed: a run whose results are already reported must not be
-   * failed by an unwritable history directory.
+   * Failure never fails the run — results are already reported, and an
+   * unwritable history directory is not a test failure — but it is said out
+   * loud. A run that quietly never appears in the history is the kind of gap
+   * people spend an afternoon on.
    */
   async #writeManifest(summary: UiRunSummary): Promise<void> {
     const runsDir = this.#options.runsDir;
@@ -226,8 +228,9 @@ export class TermwrightUiReporter {
         summary,
         tests: this.#tests,
       });
-    } catch {
-      // No history for this run; the run itself still reported everything.
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`termwright: this run was not added to the history (${reason})\n`);
     }
   }
 

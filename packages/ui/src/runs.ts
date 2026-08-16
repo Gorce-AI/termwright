@@ -71,14 +71,24 @@ export function runId(startedAt: number): string {
 /**
  * Writes a run's manifest.
  *
+ * The text is validated with the same parser the reader uses, and nothing is
+ * written when it does not survive the round trip. A manifest the reader
+ * rejects is worse than no manifest: `readRunHistory` skips it, so the run
+ * disappears from the history with nobody told why.
+ *
  * @param runsDir - directory holding all runs.
  * @returns the path written.
+ * @throws Error when the manifest would not read back.
  */
 export async function writeRunManifest(runsDir: string, manifest: RunManifest): Promise<string> {
+  const body = `${JSON.stringify(manifest, null, 2)}\n`;
+  if (parseRunManifest(body) === null) {
+    throw new Error(`run manifest for ${manifest.id} would not read back; not written`);
+  }
   const directory = join(runsDir, manifest.id);
   await mkdir(directory, { recursive: true });
   const path = join(directory, 'manifest.json');
-  await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  await writeFile(path, body, 'utf8');
   return path;
 }
 

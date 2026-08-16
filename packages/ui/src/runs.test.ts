@@ -55,6 +55,19 @@ describe('writeRunManifest / readRunManifest', () => {
     const read = await readRunManifest(dir, manifest().id);
     expect(read?.tests[1]?.traceRef).toBe('/repo/out/t2.twtrace');
   });
+
+  it('refuses to write a manifest the reader would reject', async () => {
+    const dir = await emptyDir();
+    // `summary.durationMs` missing: the writer used to accept this happily and
+    // the reader then returned null, so the run vanished from the history with
+    // nothing said. The two now agree on what a manifest is.
+    const broken = manifest({
+      summary: { total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0 },
+    } as unknown as Partial<RunManifest>);
+
+    await expect(writeRunManifest(dir, broken)).rejects.toThrow(/would not read back/);
+    expect(await readRunManifest(dir, broken.id)).toBeNull();
+  });
 });
 
 describe('readRunHistory', () => {
