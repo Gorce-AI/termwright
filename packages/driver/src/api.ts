@@ -234,7 +234,17 @@ export interface TerminalModes {
   readonly bracketedPaste: boolean;
   readonly applicationCursorKeys: boolean;
   readonly applicationKeypad: boolean;
-  readonly focusReporting: boolean;
+  /**
+   * Whether the child asked for focus in/out reports, or `'unknown'`.
+   *
+   * `'unknown'` means the reading is the host's state and says nothing about
+   * the child — which covers both ways the value gets falsified: a request the
+   * terminal swallowed, and a state the terminal added on its own. ConPTY does
+   * the second: it reports focus reporting as enabled for a child that never
+   * asked, so a driver that believes it sends `CSI I` to a program that will
+   * print it.
+   */
+  readonly focusReporting: 'on' | 'off' | 'unknown';
   readonly synchronizedOutput: boolean;
 }
 
@@ -397,10 +407,11 @@ export type DiagnosticCode =
   /** `waitForReady` fell back to "the screen settled": a heuristic. */
   | 'ready-settled-screen'
   /**
-   * Pointer input was sent while the mouse mode was unobservable — recorded
-   * once per session, since it describes the platform rather than the action.
+   * Input was sent while the mode governing it was unverifiable — recorded
+   * once per session and mode, since it describes the platform rather than the
+   * action. {@link SessionDiagnostic.mode} says which mode.
    */
-  | 'mouse-mode-unverifiable';
+  | 'mode-unverifiable';
 
 /** A log file the session follows. */
 export interface AppLogSource {
@@ -526,6 +537,12 @@ export interface SessionDiagnostic {
    * caller can tell *which* failure closed the channel without parsing prose.
    */
   readonly wireCode?: ProtocolErrorMessage['code'];
+  /**
+   * For `mode-unverifiable`: which mode could not be verified. A field rather
+   * than a code per mode, so a consumer reacting to "the driver is working
+   * blind" writes one branch instead of a list that grows with the platform.
+   */
+  readonly mode?: 'mouse' | 'focus';
   readonly timeMs: number;
 }
 

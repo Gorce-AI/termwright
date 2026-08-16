@@ -157,7 +157,7 @@ export interface LaunchTerminalOptions extends LaunchOptions {
    * path can be exercised on a machine where modes do arrive — a behaviour
    * only one OS reaches is a behaviour only one OS tests.
    */
-  readonly mouseModesObservable?: boolean;
+  readonly modesObservable?: boolean;
 }
 
 function resolveTimeouts(overrides: TimeoutClasses | undefined): Required<TimeoutClasses> {
@@ -206,6 +206,7 @@ interface DiagnosticContext {
   readonly revision?: number | undefined;
   readonly wireCode?: SessionDiagnostic['wireCode'];
   readonly count?: number | undefined;
+  readonly mode?: SessionDiagnostic['mode'];
 }
 
 interface ChangeWaiter {
@@ -244,7 +245,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #lastOutputAt = Date.now();
   #violation: ProtocolViolationError | null = null;
   #crash: CrashReport | null = null;
-  #mouseUnverifiableLogged = false;
+  /** Modes already reported as unverifiable; each is logged once per session. */
+  readonly #unverifiableLogged = new Set<'mouse' | 'focus'>();
   /** Inputs kept for a crash report; a bounded ring, oldest first. */
   readonly #recentInputs: CrashInput[] = [];
   /** True once the harness itself asked the child to go away. */
@@ -276,8 +278,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       rows: options.rows ?? 30,
       scrollbackLines: options.scrollbackLines ?? 2_000,
       ...(options.terminalProfile !== undefined ? { profile: options.terminalProfile } : {}),
-      ...(options.mouseModesObservable !== undefined
-        ? { mouseModesObservable: options.mouseModesObservable }
+      ...(options.modesObservable !== undefined
+        ? { modesObservable: options.modesObservable }
         : {}),
     });
     this.#pairing = new RevisionPairing({
@@ -798,12 +800,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         this.errorDiagnostics(),
       );
     }
-    if (kind === 'mouse' && !this.#mouseUnverifiableLogged && mouseModeUnverifiable(this.modes())) {
-      // Once per session: this describes the platform, not the action, and an
-      // entry per click would bury everything else in the log.
-      this.#mouseUnverifiableLogged = true;
-      this.#diagnostic(
-        'mouse-mode-unverifiable',
+    if (kind === 'mouse' && mouseModeUnverifiable(this.modes())) {
+      this.#noteUnverifiable(
+        'mouse',
         'this platform hides the mouse mode the child asked for, so pointer input is sent in SGR without confirming the child enabled tracking',
       );
     }
@@ -812,6 +811,17 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#rememberInput(data, kind, timeMs);
     this.#emitter.emit('input', { data, timeMs, kind });
     await Promise.resolve();
+  }
+
+  /**
+   * Records that input went out under a mode the platform would not confirm.
+   * Once per mode per session: it describes the platform, not the action, and
+   * an entry per click would bury everything else in the log.
+   */
+  #noteUnverifiable(mode: 'mouse' | 'focus', detail: string): void {
+    if (this.#unverifiableLogged.has(mode)) return;
+    this.#unverifiableLogged.add(mode);
+    this.#diagnostic('mode-unverifiable', detail, { mode });
   }
 
   crashReport(): CrashReport | null {
@@ -943,6 +953,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       ...(about?.revision !== undefined ? { revision: about.revision } : {}),
       ...(about?.wireCode !== undefined ? { wireCode: about.wireCode } : {}),
       ...(about?.count !== undefined ? { count: about.count } : {}),
+      ...(about?.mode !== undefined ? { mode: about.mode } : {}),
       timeMs: this.#now(),
     };
     this.#diagnosticsLog.push(Object.freeze(entry));
@@ -1195,11 +1206,17 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   async #sendFocus(focused: boolean): Promise<void> {
-    if (!this.modes().focusReporting) {
+    const reporting = this.modes().focusReporting;
+    if (reporting === 'off') {
       throw new UnsupportedActionError(
         `the program has not enabled focus reporting, so ${focused ? 'focus' : 'blur'}() has nothing to deliver`,
         this.errorDiagnostics({ suggestion: 'the application under test must enable CSI ? 1004 h' }),
       );
+    }
+    if (reporting === 'unknown') {
+      // Sent rather than refused: this is what the driver already did when it
+      // believed the host's 'true'. The difference is that it now says so.
+      this.#noteUnverifiable('focus', 'this platform reports focus reporting as the host has it, not as the child asked for it, so a focus report is sent without knowing the program wants one');
     }
     await this.sendInput(encodeFocus(focused), 'raw');
   }

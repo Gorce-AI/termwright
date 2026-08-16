@@ -107,7 +107,7 @@ describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout:
     // Pins the known-off branch: echo-app enables nothing, and the flag keeps
     // the mode observable so the verdict is 'none' rather than the 'unknown' a
     // ConPTY host would report. The hidden-mode branch is a separate test.
-    const terminal = await launch('echo-app.mjs', { mouseModesObservable: true });
+    const terminal = await launch('echo-app.mjs', { modesObservable: true });
     await terminal.waitForText('READY');
 
     const error = await terminal
@@ -748,7 +748,7 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
     if (tracking === 'unknown') {
       expect(outcome).toBeNull();
       expect(terminal.diagnostics().map((entry) => entry.code)).toContain(
-        'mouse-mode-unverifiable',
+        'mode-unverifiable',
       );
       return;
     }
@@ -761,11 +761,11 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
     // The whole Windows path, exercised where mouse modes do arrive: the
     // session is told they are unobservable, so it must behave exactly as it
     // does under ConPTY — send SGR, land on the child, and record why.
-    const terminal = await launch('mouse-app.mjs', { mouseModesObservable: false });
+    const terminal = await launch('mouse-app.mjs', { modesObservable: false });
     await terminal.waitForText('MOUSE ON');
     expect(terminal.screen().modes.mouseTracking).toBe('unknown');
     expect(terminal.diagnostics().map((entry) => entry.code)).not.toContain(
-      'mouse-mode-unverifiable',
+      'mode-unverifiable',
     );
 
     await terminal.getByText('MOUSE ON').click();
@@ -774,13 +774,13 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
 
     const unverifiable = terminal
       .diagnostics()
-      .filter((entry) => entry.code === 'mouse-mode-unverifiable');
+      .filter((entry) => entry.code === 'mode-unverifiable');
     // Once per session: it describes the platform, not the click.
     expect(unverifiable).toHaveLength(1);
     await terminal.getByText('MOUSE ON').click({ button: 'right' });
     await terminal.waitForText('MOUSE press b=2');
     expect(
-      terminal.diagnostics().filter((entry) => entry.code === 'mouse-mode-unverifiable'),
+      terminal.diagnostics().filter((entry) => entry.code === 'mode-unverifiable'),
     ).toHaveLength(1);
   });
 
@@ -795,12 +795,40 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
       .then(() => null)
       .catch((cause: unknown) => cause as TermwrightError);
 
-    if (terminal.screen().modes.focusReporting) {
-      expect(outcome).toBeNull();
+    const reporting = terminal.screen().modes.focusReporting;
+    if (reporting === 'off') {
+      expect(outcome?.code).toBe('unsupported-action');
+      expect(outcome?.diagnostics.suggestion).toContain('1004');
       return;
     }
-    expect(outcome?.code).toBe('unsupported-action');
-    expect(outcome?.diagnostics.suggestion).toContain('1004');
+    // 'on' or 'unknown': the host says the mode is live, so the report goes
+    // out. Under 'unknown' the session must also admit it could not check.
+    expect(outcome).toBeNull();
+    if (reporting === 'unknown') {
+      expect(
+        terminal.diagnostics().filter((entry) => entry.code === 'mode-unverifiable'),
+      ).toContainEqual(expect.objectContaining({ mode: 'focus' }));
+    }
+  });
+
+  it('sends a focus report under a hidden mode, and records the one it could not verify', async () => {
+    // The Windows path on any platform: mouse-app never asks for 1004, so a
+    // driver reading the host's answer must neither refuse nor stay quiet.
+    const terminal = await launch('mouse-app.mjs', { modesObservable: false });
+    await terminal.waitForText('MOUSE ON');
+    expect(terminal.screen().modes.focusReporting).toBe('unknown');
+
+    await terminal.focus();
+    await terminal.blur();
+
+    const entries = terminal.diagnostics().filter((entry) => entry.code === 'mode-unverifiable');
+    // One per mode, not one per call: two focus reports, still one entry.
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.mode).toBe('focus');
+
+    await terminal.getByText('MOUSE ON').click();
+    const modes = terminal.diagnostics().filter((entry) => entry.code === 'mode-unverifiable');
+    expect(modes.map((entry) => entry.mode)).toEqual(['focus', 'mouse']);
   });
 });
 

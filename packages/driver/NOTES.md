@@ -62,6 +62,25 @@ that one arrived, and treating it as proof about the rest would report a
 partial view as a complete one. If ConPTY ever starts forwarding these, the
 probe table says so and the default flips deliberately.
 
-`mouseModesObservable` on `launchTerminal` forces the verdict, so the Windows
-path is exercised on every platform — a behaviour only one OS reaches is a
-behaviour only one OS tests.
+`modesObservable` on `launchTerminal` forces the verdict, so the Windows path
+is exercised on every platform — a behaviour only one OS reaches is a behaviour
+only one OS tests.
+
+## Windows: focus reporting is the same disease, catching the other way
+
+The conformance finding read this as a mirror of the mouse: ConPTY swallows
+`CSI ? 1004 h`, the driver reports `false`, and a program that asked for focus
+events is refused. The CI log says otherwise. In run 31939398845 the test
+`refuses focus reports the child never asked for` failed with
+`Cannot read properties of undefined (reading 'code')` — `focus()` **resolved**.
+The gate reads `if (!modes().focusReporting) throw`, so the mode must have been
+reported enabled, for `mouse-app.mjs`, which only ever sends `?1000h` and
+`?1006h` and never asks for 1004.
+
+So the value is not missing, it is *the host's*: ConPTY reports focus reporting
+as enabled whichever program is running. The harm runs the other way — the
+driver sends `CSI I` to a program that will print it — and it was happening
+silently. Hence `'unknown'` is defined as "this reading is the host's state and
+says nothing about the child", which covers both a swallowed request and an
+added one; a definition tied to the mechanism would have covered only the
+mouse.

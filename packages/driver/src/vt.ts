@@ -33,8 +33,9 @@ export interface VtOptions {
   /** Terminal profile; decides how characters are counted. */
   readonly profile?: TerminalProfile | string;
   /**
-   * Whether a child's mouse mode requests can be observed at all. False under
-   * ConPTY, which consumes them; defaults to the platform's answer.
+   * Whether the child's input-mode requests can be observed at all. False
+   * under ConPTY, which consumes the mouse ones and reports focus reporting as
+   * enabled whether or not the child asked; defaults to the platform's answer.
    *
    * This is a property of the transport, so it is not revised by what arrives:
    * a request that got through would only prove that *that* request got
@@ -42,7 +43,7 @@ export interface VtOptions {
    * view as a complete one — the exact mistake that makes a driver refuse a
    * click the child would have understood.
    */
-  readonly mouseModesObservable?: boolean;
+  readonly modesObservable?: boolean;
 }
 
 type Unsubscribe = () => void;
@@ -98,7 +99,7 @@ export class VtScreen {
   #disposed = false;
   #scrollbackLines: number;
   #retainedFloor = 0;
-  #mouseModesObservable: boolean;
+  #modesObservable: boolean;
   #title = '';
   #modes: MutableModes = {
     mouseEncoding: 'default',
@@ -123,7 +124,7 @@ export class VtScreen {
     // ConPTY consumes the child's mouse DECSET on the way out; a probe
     // (escapes.pty.test.ts) measured 1000/1002/1006 never arriving while the
     // child's own mouse handling stayed live.
-    this.#mouseModesObservable = options.mouseModesObservable ?? process.platform !== 'win32';
+    this.#modesObservable = options.modesObservable ?? process.platform !== 'win32';
     // The emulator is built by @termwright/vt, not here: a session, its replay
     // and a screenshot of that replay must count characters identically, and
     // they only do that if one factory builds all three.
@@ -216,20 +217,27 @@ export class VtScreen {
   /**
    * Input-relevant modes, merged from `Terminal.modes` and our own tracking.
    *
-   * Mouse modes read `'unknown'` rather than `'none'`/`'default'` where the
-   * platform swallows the child's request: reporting "off" there would be a
-   * claim we cannot make, and it is the claim that makes pointer actions refuse.
+   * The input modes read `'unknown'` where the platform makes them so: the
+   * reading is then the host's state and says nothing about the child. Both
+   * ways of falsifying it are covered — a request the terminal swallowed
+   * (mouse) and a state the terminal added on its own (focus) — and in either
+   * case reporting a definite value would be a claim we cannot make, which is
+   * exactly the claim that decides whether an action is refused.
+   *
+   * `bracketedPaste`, the application modes and `synchronizedOutput` are not
+   * masked: the probe measured `2004` and `1049` crossing ConPTY intact, and a
+   * mode that arrives is a mode we may report.
    */
   modes(): TerminalModes {
     const m = this.terminal.modes;
-    const mouseKnown = this.#mouseModesObservable;
+    const known = this.#modesObservable;
     return Object.freeze({
-      mouseTracking: mouseKnown ? m.mouseTrackingMode : ('unknown' as const),
-      mouseEncoding: mouseKnown ? this.#modes.mouseEncoding : ('unknown' as const),
+      mouseTracking: known ? m.mouseTrackingMode : ('unknown' as const),
+      mouseEncoding: known ? this.#modes.mouseEncoding : ('unknown' as const),
       bracketedPaste: m.bracketedPasteMode,
       applicationCursorKeys: m.applicationCursorKeysMode,
       applicationKeypad: m.applicationKeypadMode,
-      focusReporting: m.sendFocusMode,
+      focusReporting: known ? (m.sendFocusMode ? ('on' as const) : ('off' as const)) : ('unknown' as const),
       synchronizedOutput: m.synchronizedOutputMode,
     });
   }

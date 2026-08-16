@@ -11,7 +11,7 @@ function createVt(columns = 40, rows = 6): VtScreen {
   // Mouse modes are forced observable: these tests drive the emulator directly,
   // so they are about what it tracks, not about what a pty hides. The hidden
   // case has its own tests, which pass the flag the other way.
-  vt = new VtScreen({ columns, rows, scrollbackLines: 20, mouseModesObservable: true });
+  vt = new VtScreen({ columns, rows, scrollbackLines: 20, modesObservable: true });
   return vt;
 }
 
@@ -99,14 +99,14 @@ describe('VtScreen', () => {
     // driver cannot make — and it is that claim that makes pointer actions
     // refuse. Driven by the option rather than the platform so the Windows
     // behaviour is covered on every machine that runs the suite.
-    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, mouseModesObservable: false });
+    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, modesObservable: false });
 
     expect(vt.modes().mouseTracking).toBe('unknown');
     expect(vt.modes().mouseEncoding).toBe('unknown');
   });
 
   it('keeps modes unknown when a mode arrives that says nothing about the mouse', async () => {
-    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, mouseModesObservable: false });
+    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, modesObservable: false });
 
     await vt.write('\x1b[?2004h');
 
@@ -119,7 +119,7 @@ describe('VtScreen', () => {
     // Promoting that to "the modes are observable" would report a partial view
     // as a complete one, and a partial view is what makes a driver refuse a
     // click the child would have understood.
-    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, mouseModesObservable: false });
+    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, modesObservable: false });
 
     await vt.write('\x1b[?1000h\x1b[?1006h');
 
@@ -146,7 +146,22 @@ describe('VtScreen', () => {
     const modes = screen.modes();
     expect(modes.bracketedPaste).toBe(true);
     expect(modes.applicationCursorKeys).toBe(true);
-    expect(modes.focusReporting).toBe(true);
+    expect(modes.focusReporting).toBe('on');
+  });
+
+  it('reports focus reporting as unknown where the reading belongs to the host', async () => {
+    // ConPTY reports it enabled whether or not the child asked, so a definite
+    // value there would describe the terminal and be read as the program.
+    vt = new VtScreen({ columns: 40, rows: 6, scrollbackLines: 0, modesObservable: false });
+    expect(vt.modes().focusReporting).toBe('unknown');
+
+    await vt.write('\x1b[?1004h');
+    expect(vt.modes().focusReporting).toBe('unknown');
+  });
+
+  it('separates a program that never asked from one whose answer is hidden', async () => {
+    const screen = createVt();
+    expect(screen.modes().focusReporting).toBe('off');
   });
 
   it('tracks cursor visibility and shape', async () => {
