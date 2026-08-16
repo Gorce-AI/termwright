@@ -106,7 +106,25 @@ export type ServerMessage =
       readonly v: 1;
       readonly type: 'app-log';
       readonly sessionId: string;
-    } & AppLogView);
+    } & AppLogView)
+  | {
+      readonly v: 1;
+      readonly type: 'action';
+      /** `action` for a driver call, `assert` for an expectation. */
+      readonly kind: 'action' | 'assert';
+      /** Driver API name, e.g. `locator.click`, or the matcher's name. */
+      readonly api: string;
+      /** Milliseconds on the session clock. */
+      readonly t: number;
+      readonly ok: boolean;
+      readonly testId?: string;
+      readonly sessionId?: string;
+      readonly selector?: string;
+      /** Resolved target ref, `n8@42`. */
+      readonly ref?: string;
+      readonly error?: string;
+      readonly stepId?: string;
+    };
 
 /** client → server. */
 export type ClientMessage =
@@ -127,6 +145,7 @@ const SERVER_TYPES = new Set([
   'test-end',
   'run-end',
   'app-log',
+  'action',
 ]);
 const CLIENT_TYPES = new Set(['rerun', 'stop', 'pick', 'input']);
 
@@ -331,6 +350,33 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         ...(error === undefined ? {} : { error }),
         ...(durationMs === undefined ? {} : { durationMs }),
         ...(flaky === undefined ? {} : { flaky }),
+      };
+    }
+    case 'action': {
+      const kind = value['kind'];
+      if (kind !== 'action' && kind !== 'assert') {
+        throw new UiProtocolError('action: kind must be action or assert');
+      }
+      if (typeof value['ok'] !== 'boolean') throw new UiProtocolError('action: ok must be a boolean');
+      const optionalText = (key: string): Record<string, string> => {
+        const found = value[key];
+        if (found === undefined) return {};
+        if (typeof found !== 'string') throw new UiProtocolError(`action: ${key} must be a string`);
+        return { [key]: found };
+      };
+      return {
+        v: 1,
+        type: 'action',
+        kind,
+        api: requireString(value, 'api', 'action'),
+        t: requireNumber(value, 't', 'action'),
+        ok: value['ok'],
+        ...optionalText('testId'),
+        ...optionalText('sessionId'),
+        ...optionalText('selector'),
+        ...optionalText('ref'),
+        ...optionalText('error'),
+        ...optionalText('stepId'),
       };
     }
     case 'app-log': {

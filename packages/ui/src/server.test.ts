@@ -265,13 +265,13 @@ describe('post-mortem mode', () => {
     const body = (await (await api(server, '/api/trace/logs')).json()) as {
       available: boolean;
       records: { message: string; level: string | null }[];
-      sources: string[];
+      sources: { label?: string; path?: string }[];
     };
     expect(body.available).toBe(true);
     expect(body.records.map((entry) => entry.message)).toEqual(['listening on 3000', 'pool exhausted']);
     expect(body.records[0]?.level).toBeNull();
     expect(body.records[1]?.level).toBe('warn');
-    expect(body.sources).toContain('server.log');
+    expect(body.sources.map((source) => source.label)).toContain('server.log');
   });
 
   it('reports an archive that recorded no logs as unavailable', async () => {
@@ -282,6 +282,35 @@ describe('post-mortem mode', () => {
     };
     expect(body.available).toBe(false);
     expect(body.records).toEqual([]);
+  });
+
+  it('serves the command log and the frames of a recording', async () => {
+    const server = await start({ trace: await buildFixtureTrace() });
+
+    const commands = (await (await api(server, '/api/trace/commands')).json()) as {
+      commands: { kind: string; label: string; t: number }[];
+    };
+    expect(commands.commands.map((row) => [row.kind, row.label])).toEqual([['step', 'approve']]);
+
+    const frames = (await (await api(server, '/api/trace/frames')).json()) as {
+      frames: { t: number; kind: string; dataB64?: string }[];
+      durationMs: number;
+      revisions: { t: number; revision: number }[];
+      truncated: boolean;
+    };
+    expect(frames.truncated).toBe(false);
+    expect(frames.frames.length).toBeGreaterThan(0);
+    expect(frames.frames.every((frame) => frame.t <= frames.durationMs)).toBe(true);
+    expect(Buffer.from(frames.frames[0]?.dataB64 ?? '', 'base64').toString('utf8')).toContain(
+      'Permission required',
+    );
+    expect(frames.revisions.map((entry) => entry.revision)).toEqual([1, 2]);
+  });
+
+  it('has no command log or frames when the server is live', async () => {
+    const server = await start();
+    expect((await api(server, '/api/trace/commands')).status).toBe(409);
+    expect((await api(server, '/api/trace/frames')).status).toBe(409);
   });
 
   it('reports no trace when the server is live', async () => {

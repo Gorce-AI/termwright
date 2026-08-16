@@ -14,6 +14,7 @@ import { formatMs } from '../view-model.js';
 import { renderCrashPanel } from './crash-panel.js';
 import { renderTestList, type TestListHandlers, type TestListModel } from './test-list.js';
 import type { AppLogView } from '../app-log.js';
+import type { PlaybackSpeed } from '../playback.js';
 
 /** One test on the timeline, with the steps reported for it. */
 export interface TimelineTest {
@@ -51,11 +52,16 @@ export interface TimelineModel {
   readonly logMarks: readonly AppLogView[];
   /** The test list, which owns the tests themselves. */
   readonly testList: TestListModel;
+  /** Playback state, when a recording is open. */
+  readonly playing: boolean;
+  readonly speed: PlaybackSpeed;
 }
 
 /** What the timeline can ask the app to do. */
 export interface TimelineHandlers extends TestListHandlers {
   jump(direction: -1 | 1): void;
+  togglePlay(): void;
+  cycleSpeed(): void;
 }
 
 /** Renders the timeline pane. */
@@ -82,7 +88,23 @@ function renderScrubber(
 ): TemplateResult {
   return html`
     <div class="scrubber">
-      <button title="Previous marker" @click=${() => handlers.jump(-1)}>◀</button>
+      <button
+        class="play"
+        data-testid="play"
+        title=${model.playing ? 'Pause (space)' : 'Play (space)'}
+        @click=${() => handlers.togglePlay()}
+      >
+        ${model.playing ? '❚❚' : '▶'}
+      </button>
+      <button
+        class="speed"
+        data-testid="speed"
+        title="Playback speed"
+        @click=${() => handlers.cycleSpeed()}
+      >
+        ${model.speed}×
+      </button>
+      <button title="Previous action (←)" @click=${() => handlers.jump(-1)}>◀</button>
       <input
         type="range"
         data-testid="scrub"
@@ -91,7 +113,7 @@ function renderScrubber(
         .value=${String(model.timeMs)}
         @input=${(event: Event) => handlers.seek(Number((event.target as HTMLInputElement).value))}
       />
-      <button title="Next marker" @click=${() => handlers.jump(1)}>▶</button>
+      <button title="Next action (→)" @click=${() => handlers.jump(1)}>▶</button>
       <span class="clock" data-testid="clock">${formatMs(model.timeMs)}</span>
     </div>
   `;

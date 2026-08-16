@@ -15,6 +15,8 @@ import {
 } from '../events.js';
 import type { TraceOverview, TraceStatePayload } from '../trace-source.js';
 import type { TraceLogs } from '../trace-logs.js';
+import type { TraceFrames } from '../trace-playback.js';
+import type { CommandRow } from '../commands.js';
 import type { GeneratedSelector } from '../selector.js';
 import type { RecordedEvent } from '../codegen.js';
 
@@ -94,6 +96,16 @@ export class RunnerClient {
   /** The archive's application logs, validated server-side. */
   async traceLogs(): Promise<TraceLogs> {
     return this.#get<TraceLogs>('/api/trace/logs');
+  }
+
+  /** The command log of the opened archive. */
+  async traceCommands(): Promise<{ commands: readonly CommandRow[] }> {
+    return this.#get('/api/trace/commands');
+  }
+
+  /** Every frame of the recording, for local playback. */
+  async traceFrames(): Promise<TraceFrames> {
+    return this.#get<TraceFrames>('/api/trace/frames');
   }
 
   async traceState(timeMs: number): Promise<TraceStatePayload> {

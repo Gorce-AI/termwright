@@ -18,6 +18,14 @@ import { parseAppLog, UI_LOG_LEVELS, type AppLogView, type LogLevel } from './ap
 /** Maximum records kept for display. The archive keeps them all. */
 const MAX_RECORDS = 5_000;
 
+/** One log stream the recording carried. */
+export interface LogSourceView {
+  /** Display name: a file's label, or an adapter logger's name. */
+  readonly label?: string;
+  /** Followed files only: the path the driver tailed. */
+  readonly path?: string;
+}
+
 /** What the panel shows about an archive's logs. */
 export interface TraceLogs {
   /** Records, oldest first, positioned on the cast timeline. */
@@ -36,8 +44,12 @@ export interface TraceLogs {
    * existed. Distinguishes "nothing was recorded" from "nothing matched".
    */
   readonly available: boolean;
-  /** Log file labels and logger names seen, in first-seen order. */
-  readonly sources: readonly string[];
+  /**
+   * Streams the recording carried, in first-seen order: a log file's label and
+   * the path being tailed, or an adapter logger's name. Older archives stored
+   * bare labels; both forms are read.
+   */
+  readonly sources: readonly LogSourceView[];
   /**
    * Entry count per level, straight from `meta.logs.levels` — the writer counted
    * the whole recording, so the header is honest even when this list is
@@ -69,9 +81,7 @@ export async function readTraceLogs(reader: TraceReader): Promise<TraceLogs> {
   if (summary === undefined || typeof reader.logs !== 'function') return EMPTY;
 
   const dropped = Number.isFinite(summary.dropped) ? summary.dropped : 0;
-  const sources = Array.isArray(summary.sources)
-    ? summary.sources.filter((source): source is string => typeof source === 'string')
-    : [];
+  const sources = parseSources(summary.sources);
 
   const levels = countsByLevel(summary.levels);
   const records: AppLogView[] = [];
@@ -95,6 +105,28 @@ export async function readTraceLogs(reader: TraceReader): Promise<TraceLogs> {
   }
   records.sort((left, right) => left.t - right.t);
   return { records, truncated, dropped, available: true, sources, levels };
+}
+
+/**
+ * Reads `meta.logs.sources`, which is a list of `{label?, path?}` objects and
+ * used to be a list of bare label strings.
+ */
+function parseSources(value: unknown): LogSourceView[] {
+  if (!Array.isArray(value)) return [];
+  const out: LogSourceView[] = [];
+  for (const entry of value) {
+    if (typeof entry === 'string') {
+      if (entry !== '') out.push({ label: entry });
+      continue;
+    }
+    if (typeof entry !== 'object' || entry === null) continue;
+    const source = entry as Record<string, unknown>;
+    const label = typeof source['label'] === 'string' ? source['label'] : undefined;
+    const path = typeof source['path'] === 'string' ? source['path'] : undefined;
+    if (label === undefined && path === undefined) continue;
+    out.push({ ...(label === undefined ? {} : { label }), ...(path === undefined ? {} : { path }) });
+  }
+  return out;
 }
 
 /** Keeps only the counters that name a level this build knows. */

@@ -17,6 +17,17 @@ import type { TraceOverview } from '../trace-source.js';
 import { RunnerClient, type ServerState } from './client.js';
 import { renderInspector, type InspectorHandlers } from './inspector.js';
 import { isMarked, type AppLogView, type LogLevel } from '../app-log.js';
+import { currentCommand, parseRef, stepCommand, type CommandRow } from '../commands.js';
+import {
+  advance,
+  framesUpTo,
+  initialPlayback,
+  nextSpeed,
+  revisionAt,
+  type PlaybackFrame,
+  type PlaybackState,
+} from '../playback.js';
+import { renderCommandLog, type CommandLogHandlers } from './command-log.js';
 import {
   renderLogPanel,
   visibleLogs,
@@ -92,13 +103,20 @@ const state = {
   hoveredId: null as string | null,
   status: null as string | null,
   summary: null as string | null,
-  rightTab: 'tree' as 'tree' | 'logs',
+  rightTab: 'tree' as 'tree' | 'logs' | 'commands',
   logs: [] as AppLogView[],
   logFilter: 'all' as LevelFilter,
   logAutoscroll: true,
   logsAvailable: false,
   logsTruncated: false,
   logLevels: {} as Readonly<Partial<Record<LogLevel, number>>>,
+  commands: [] as CommandRow[],
+  selectedCommandId: null as string | null,
+  frames: [] as PlaybackFrame[],
+  playback: initialPlayback(),
+  /** Revision boundaries, so playback knows when the tree on screen went stale. */
+  revisions: [] as { t: number; revision: number }[],
+  shownRevision: null as number | null,
 };
 
 /** Cap on live log rows held in the page. The archive keeps everything. */
@@ -140,9 +158,26 @@ function draw(): void {
         >
           Logs${state.logs.length === 0 ? '' : ` (${visibleLogs(logModel).length})`}
         </button>
+        <button
+          class=${state.rightTab === 'commands' ? 'active' : ''}
+          data-testid="tab-commands"
+          @click=${() => selectTab('commands')}
+        >
+          Commands${state.commands.length === 0 ? '' : ` (${state.commands.length})`}
+        </button>
       </nav>
       <div class="tab-body">
-        ${state.rightTab === 'tree'
+        ${state.rightTab === 'commands'
+          ? renderCommandLog(
+              {
+                rows: state.commands,
+                currentIndex: currentCommand(state.commands, state.timeMs, state.selectedCommandId),
+                selectedId: state.selectedCommandId,
+                available: state.mode === 'post-mortem' || state.commands.length > 0,
+              },
+              commandHandlers,
+            )
+          : state.rightTab === 'tree'
           ? renderInspector(
               {
                 snapshot,
@@ -162,6 +197,7 @@ function draw(): void {
     inspectorHost as HTMLElement,
   );
   if (state.rightTab === 'logs' && state.logAutoscroll) followLogs();
+  if (state.rightTab === 'commands') revealCurrentCommand();
 
   render(
     renderTimeline(
@@ -173,6 +209,8 @@ function draw(): void {
         connected: state.connected,
         summary: state.summary,
         logMarks: markedLogs(),
+        playing: state.playback.playing,
+        speed: state.playback.speed,
         testList: {
           tests: state.tests,
           query: state.testQuery,
@@ -244,7 +282,7 @@ function countLevels(logs: readonly AppLogView[]): Partial<Record<LogLevel, numb
   return counts;
 }
 
-function selectTab(tab: 'tree' | 'logs'): void {
+function selectTab(tab: 'tree' | 'logs' | 'commands'): void {
   state.rightTab = tab;
   schedule();
 }
@@ -342,6 +380,101 @@ const inspectorHandlers: InspectorHandlers = {
   },
 };
 
+/**
+ * Applies the recording up to `timeMs` by writing frames into the terminal.
+ *
+ * Forward moves write only what is new, which is what makes playback smooth;
+ * moving backwards resets the emulator and replays from the start, because a
+ * terminal cannot un-write.
+ */
+function applyFrames(timeMs: number): void {
+  const { frames, cursor, rewind } = framesUpTo(state.frames, state.playback, timeMs);
+  if (rewind) pane.reset();
+  for (const frame of frames) {
+    if (frame.kind === 'resize') {
+      if (frame.columns !== undefined && frame.rows !== undefined) {
+        pane.resize(frame.columns, frame.rows);
+      }
+    } else if (frame.dataB64 !== undefined) {
+      pane.write(fromBase64(frame.dataB64));
+    }
+  }
+  state.playback = { ...state.playback, cursor, timeMs };
+  state.timeMs = timeMs;
+  state.requestedMs = timeMs;
+}
+
+/**
+ * Keeps the semantic tree in step with playback: when the position crosses a
+ * revision boundary, the snapshot for that moment is fetched once and cached by
+ * revision. Playback never blocks on it — the terminal keeps running while the
+ * tree catches up.
+ */
+function syncTree(timeMs: number): void {
+  const revision = revisionAt(state.revisions, timeMs);
+  if (revision === null || revision === state.shownRevision) return;
+  state.shownRevision = revision;
+  const sessionId = state.activeSessionId ?? state.trace?.sessionId ?? 'trace';
+  void client
+    .traceState(timeMs)
+    .then((traceState) => {
+      if (state.shownRevision !== revision) return; // playback moved on
+      state.sessions.set(sessionId, { snapshot: traceState.snapshot, revision: traceState.revision });
+      schedule();
+    })
+    .catch(() => undefined);
+}
+
+let lastFrameAt = 0;
+function playbackTick(now: number): void {
+  requestAnimationFrame(playbackTick);
+  const elapsed = lastFrameAt === 0 ? 0 : now - lastFrameAt;
+  lastFrameAt = now;
+  if (!state.playback.playing) return;
+  const duration = Math.max(state.trace?.durationMs ?? 0, 1);
+  const next = advance(state.playback, elapsed, duration);
+  state.playback = next;
+  applyFrames(next.timeMs);
+  syncTree(next.timeMs);
+  schedule();
+}
+requestAnimationFrame(playbackTick);
+
+/** Scrolls the current command into view without yanking the list around. */
+function revealCurrentCommand(): void {
+  const index = currentCommand(state.commands, state.timeMs);
+  const row = state.commands[index];
+  if (row === undefined) return;
+  const element = document.querySelector<HTMLElement>(`[data-command-id="${row.id}"]`);
+  element?.scrollIntoView({ block: 'nearest' });
+}
+
+/** Highlights the node an action targeted, from the ref it resolved to. */
+function highlightRef(ref: string | undefined): void {
+  if (ref === undefined) return;
+  const parsed = parseRef(ref);
+  if (parsed === null) return;
+  const snapshot = active()?.snapshot;
+  if (snapshot?.nodes.some((node) => node.id === parsed.nodeId) === true) {
+    state.selectedId = parsed.nodeId;
+  }
+}
+
+const commandHandlers: CommandLogHandlers = {
+  select(row) {
+    state.selectedCommandId = row.id;
+    if (state.trace !== null) {
+      state.playback = { ...state.playback, playing: false };
+      applyFrames(row.t);
+      syncTree(row.t);
+      // The tree for that moment may still be in flight; highlight what we can
+      // now, and the fetch above re-renders with the rest.
+      highlightRef(row.ref);
+    }
+    schedule();
+  },
+};
+
 const timelineHandlers: TimelineHandlers = {
   seek(timeMs) {
     void seek(timeMs);
@@ -361,9 +494,26 @@ const timelineHandlers: TimelineHandlers = {
     schedule();
   },
   jump(direction) {
-    const markers = state.trace?.markers ?? [];
-    const target = nextMarker(markers, state.timeMs, direction);
+    // Arrows walk actions when there are any; otherwise they fall back to the
+    // timeline's own markers (steps and revisions).
+    const command = stepCommand(state.commands, state.timeMs, direction);
+    if (command !== undefined) {
+      commandHandlers.select(command);
+      return;
+    }
+    const target = nextMarker(state.trace?.markers ?? [], state.timeMs, direction);
     if (target !== undefined) void seek(target);
+  },
+  togglePlay() {
+    if (state.trace === null) return;
+    const atEnd = state.timeMs >= (state.trace.durationMs ?? 0) - 1;
+    if (atEnd && !state.playback.playing) applyFrames(0);
+    state.playback = { ...state.playback, playing: !state.playback.playing };
+    schedule();
+  },
+  cycleSpeed() {
+    state.playback = { ...state.playback, speed: nextSpeed(state.playback.speed) };
+    schedule();
   },
   rerun(testId) {
     client.send({ v: 1, type: 'rerun', ...(testId === undefined ? {} : { testIds: [testId] }) });
@@ -379,6 +529,14 @@ async function seek(timeMs: number): Promise<void> {
   state.timeMs = timeMs;
   state.requestedMs = timeMs;
   schedule();
+  // With frames loaded, seeking is the same operation playback performs; only
+  // an archive too large to send whole falls back to the server's prefix.
+  if (state.frames.length > 0) {
+    applyFrames(timeMs);
+    syncTree(timeMs);
+    schedule();
+    return;
+  }
   const traceState = await client.traceState(timeMs);
   pane.reset();
   pane.resize(traceState.columns, traceState.rows);
@@ -444,6 +602,10 @@ function handle(message: ServerMessage): void {
       state.mode = message.mode;
       state.tests = [];
       state.selectedTestId = null;
+      if (message.mode !== 'post-mortem') {
+        state.commands = [];
+        state.selectedCommandId = null;
+      }
       state.summary = null;
       // A replayed run's logs come from the archive over HTTP, and the socket's
       // backlog can arrive after that fetch resolves — clearing here would wipe
@@ -505,6 +667,23 @@ function handle(message: ServerMessage): void {
       retick();
       break;
     }
+    case 'action': {
+      state.commands.push({
+        id: `a${state.commands.length}`,
+        kind: message.kind,
+        t: message.t,
+        label: message.api,
+        depth: message.stepId === undefined ? 0 : 1,
+        ok: message.ok,
+        ...(message.selector === undefined ? {} : { selector: message.selector }),
+        ...(message.ref === undefined ? {} : { ref: message.ref }),
+        ...(message.error === undefined ? {} : { error: message.error }),
+        ...(message.stepId === undefined ? {} : { stepId: message.stepId }),
+      });
+      // A live run has no scrubber; the log follows the newest row.
+      if (state.trace === null) state.timeMs = message.t;
+      break;
+    }
     case 'app-log': {
       const { sessionId, type: _type, v: _v, ...log } = message;
       state.activeSessionId ??= sessionId;
@@ -557,6 +736,25 @@ pane.on({
   },
 });
 
+// Space plays and pauses, arrows walk actions — but not while you are typing
+// in the filter box or the search field.
+window.addEventListener('keydown', (event) => {
+  const target = event.target;
+  if (target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'SELECT')) {
+    return;
+  }
+  if (event.key === ' ') {
+    event.preventDefault();
+    timelineHandlers.togglePlay();
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault();
+    timelineHandlers.jump(1);
+  } else if (event.key === 'ArrowLeft') {
+    event.preventDefault();
+    timelineHandlers.jump(-1);
+  }
+});
+
 client.connect(handle, (connected) => {
   state.connected = connected;
   schedule();
@@ -574,6 +772,15 @@ void client
     }
     if (server.trace !== null) {
       state.activeSessionId = server.trace.sessionId;
+      const [commands, frames] = await Promise.all([
+        client.traceCommands().catch(() => null),
+        client.traceFrames().catch(() => null),
+      ]);
+      if (commands !== null) state.commands = [...commands.commands];
+      if (frames !== null) {
+        state.frames = [...frames.frames];
+        state.revisions = [...frames.revisions];
+      }
       const logs = await client.traceLogs().catch(() => null);
       if (logs !== null) {
         state.logs = [...logs.records];

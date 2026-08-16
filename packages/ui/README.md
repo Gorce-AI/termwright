@@ -69,6 +69,22 @@ trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it
 is. The browser app never imports Vitest and never reads a `.twtrace` itself.
 
+## Watching a replay
+
+A recording plays like a video: **Play/Pause** (or the space bar) runs it at the
+recording's own pace, with 0.5×/1×/2×/4× on the speed button. Frames carry their
+real timestamps, so a test that waited on a spinner plays back exactly as long
+as it actually waited — minus the idle the writer trimmed at record time. The
+terminal, the command log, the inspector and the log panel all follow the clock;
+the scrubber is still there for jumping.
+
+The **Commands** tab is the command log: every step, driver action and assertion
+the test made, nested under its step, with the selector it used and whether it
+passed. The row currently playing is highlighted and scrolled into view;
+clicking a row moves the replay to that moment, and — when the recorded action
+carried a resolved `ref` — lights up the node it targeted. The arrow keys walk
+action by action.
+
 ## The test list
 
 The bottom pane is the run: every reported test, grouped by file, with its

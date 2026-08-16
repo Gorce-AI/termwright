@@ -54,6 +54,8 @@ describe('publishTraceTimeline', () => {
     expect(testStart?.type === 'test-start' && testStart.title).toBe('node agent.js');
     const testEnd = hub.backlog.find((message) => message.type === 'test-end');
     expect(testEnd?.type === 'test-end' && testEnd.status).toBe('passed');
+    // A replay reports the recording's length, not the age of the message.
+    expect(testEnd?.type === 'test-end' && testEnd.durationMs).toBe(overview.durationMs);
   });
 });
 

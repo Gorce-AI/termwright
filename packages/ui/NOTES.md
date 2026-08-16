@@ -108,6 +108,36 @@ the YAML snapshot file on the first run, which is the artefact a reviewer reads 
 and it keeps this package from having to implement the YAML serializer that
 `@termwright/test` already owns.
 
+## Playback plays locally; scrubbing used to be a round trip
+
+`/api/trace/frames` hands the page the whole recording once (bounded at 8 MiB),
+and the browser plays it against `requestAnimationFrame`. A round trip per frame
+was never going to hold 4× playback, and once the frames are local, seeking is
+the same operation as playing — `applyFrames` writes forward from the cursor and
+resets the emulator only when moving backwards, because a terminal cannot
+un-write. The server's `stateAt` path remains for archives too large to send.
+
+Two consequences worth knowing. The semantic tree is *not* local: playback
+fetches a snapshot when it crosses a revision boundary and never blocks the
+terminal on it, so the tree can lag a frame at 4× and catch up. And playing to
+the very end of an Ink recording lands on an empty screen — the app leaves the
+alternate buffer as it exits, which is what the archive says happened.
+
+## The command log, and the one thing missing upstream
+
+Rows come from `events.jsonl`, which already holds steps, actions and
+assertions; nothing is recorded twice. Live runs get the same rows from a new
+`action` message, which the reporter builds from Vitest 3.2 **test annotations**
+(`onTestAnnotate`) — the only channel a worker has to a reporter. Until
+`@termwright/test` emits `termwright:action` annotations, live runs show an
+empty command log with a line saying so, and replays show everything.
+
+Clicking a row can highlight the node an action targeted, but only when the
+recorded event carries a `ref` (`n8@42`, node plus the revision it resolved at).
+The archives our matchers write today carry `selector` and no `ref`, so that
+highlight stays dark on them. The UI side is done and tested; filling in `ref`
+is a change in whoever calls `recordAction`/`recordAssert`.
+
 ## The test list, and what the protocol had to grow
 
 `§UI events` carried enough to *list* tests but not enough to make the list

@@ -42,6 +42,8 @@ import {
   type TraceOverview,
 } from './trace-source.js';
 import { readTraceLogs, type TraceLogs } from './trace-logs.js';
+import { readCommandLog, readFrames, type TraceFrames } from './trace-playback.js';
+import type { CommandRow } from './commands.js';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 /** Maximum accepted request body. Bodies here are small by construction. */
@@ -128,12 +130,18 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   let overview: TraceOverview | undefined;
   let recorder: RecorderSession | undefined;
   let traceLogs: TraceLogs | undefined;
+  let traceCommands: readonly CommandRow[] | undefined;
+  let traceFrames: TraceFrames | undefined;
 
   if (options.trace !== undefined) {
     mode = 'post-mortem';
     reader = await openTrace(options.trace);
     overview = await readTraceOverview(reader);
     traceLogs = await readTraceLogs(reader);
+    traceCommands = await readCommandLog(reader);
+    // Frames are read once here rather than per request: a page playing at 4x
+    // asks for nothing, and a second tab gets the same array for free.
+    traceFrames = await readFrames(reader);
     publishTraceTimeline(hub, overview);
   } else if (options.record !== undefined) {
     mode = 'record';
@@ -286,6 +294,22 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
                   outFile: options.record?.outFile ?? null,
                 },
         });
+        return;
+      }
+      case 'GET /api/trace/commands': {
+        if (traceCommands === undefined) {
+          sendJson(response, 409, { error: 'no trace is open' });
+          return;
+        }
+        sendJson(response, 200, { commands: traceCommands });
+        return;
+      }
+      case 'GET /api/trace/frames': {
+        if (traceFrames === undefined) {
+          sendJson(response, 409, { error: 'no trace is open' });
+          return;
+        }
+        sendJson(response, 200, traceFrames);
         return;
       }
       case 'GET /api/trace/logs': {

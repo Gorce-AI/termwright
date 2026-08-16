@@ -59,7 +59,30 @@ export {
   type LogLevel,
 } from './app-log.js';
 
-export { readTraceLogs, type TraceLogs } from './trace-logs.js';
+export { readTraceLogs, type LogSourceView, type TraceLogs } from './trace-logs.js';
+
+export {
+  buildCommandLog,
+  currentCommand,
+  parseRef,
+  stepCommand,
+  type CommandKind,
+  type CommandRow,
+} from './commands.js';
+
+export {
+  PLAYBACK_SPEEDS,
+  advance,
+  framesUpTo,
+  initialPlayback,
+  nextSpeed,
+  revisionAt,
+  type PlaybackFrame,
+  type PlaybackSpeed,
+  type PlaybackState,
+} from './playback.js';
+
+export { readCommandLog, readFrames, type TraceFrames } from './trace-playback.js';
 
 export {
   CRASH_TAIL_WARNING,

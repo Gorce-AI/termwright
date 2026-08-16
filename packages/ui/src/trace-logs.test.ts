@@ -8,7 +8,7 @@ function readerWith(
   options: {
     throwAfter?: number;
     dropped?: number;
-    sources?: readonly string[];
+    sources?: readonly unknown[];
     levels?: Record<string, unknown>;
   } = {},
 ): TraceReader {
@@ -17,7 +17,7 @@ function readerWith(
       logs: {
         count: records.length,
         dropped: options.dropped ?? 0,
-        sources: options.sources ?? ['server.log'],
+        sources: options.sources ?? [{ label: 'server.log' }],
         levels: options.levels ?? {},
       },
     },
@@ -51,10 +51,17 @@ describe('readTraceLogs', () => {
   });
 
   it('reports what the writer evicted as missing, not as all there is', async () => {
-    const logs = await readTraceLogs(readerWith([record()], { dropped: 42, sources: ['app.log'] }));
+    const logs = await readTraceLogs(
+      readerWith([record()], { dropped: 42, sources: [{ label: 'app.log', path: '/var/log/app.log' }] }),
+    );
     expect(logs.dropped).toBe(42);
     expect(logs.truncated).toBe(true);
-    expect(logs.sources).toEqual(['app.log']);
+    expect(logs.sources).toEqual([{ label: 'app.log', path: '/var/log/app.log' }]);
+  });
+
+  it('reads the older bare-label form of sources too', async () => {
+    const logs = await readTraceLogs(readerWith([record()], { sources: ['app.log', '', 7] }));
+    expect(logs.sources).toEqual([{ label: 'app.log' }]);
   });
 
   it('carries the writer’s per-level counts, ignoring levels it does not know', async () => {

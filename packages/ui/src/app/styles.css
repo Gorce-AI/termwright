@@ -691,3 +691,95 @@ button.active {
     opacity: 0.35;
   }
 }
+
+/* Command log ----------------------------------------------------------- */
+
+.commands {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.command {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 1px 6px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.command:hover {
+  background: #1e2430;
+}
+
+.command.current {
+  background: #22293a;
+  border-left-color: var(--accent);
+}
+
+.command.selected {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.command.step {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.command.assert .api {
+  color: var(--warn);
+}
+
+.command.action .api {
+  color: var(--accent);
+}
+
+.command.failed {
+  background: rgb(247 118 142 / 10%);
+}
+
+.command.failed .api {
+  color: var(--fail);
+}
+
+.command .at {
+  flex: none;
+  min-width: 48px;
+  text-align: right;
+  color: var(--muted);
+}
+
+.command .selector {
+  color: var(--pass);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command .ref {
+  color: var(--muted);
+  flex: none;
+}
+
+.command-error {
+  flex: none;
+  color: var(--fail);
+  font-size: 11px;
+}
+
+.command-error pre {
+  margin: 2px 0;
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.scrubber .play,
+.scrubber .speed {
+  flex: none;
+  min-width: 34px;
+}

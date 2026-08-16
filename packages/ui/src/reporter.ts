@@ -49,6 +49,19 @@ export interface UiReporterOptions {
   readonly stepsFromTraces?: boolean;
 }
 
+/**
+ * A test annotation, as Vitest 3.2 delivers it to `onTestAnnotate`.
+ *
+ * This is the channel a worker has to a reporter: `@termwright/test` can
+ * annotate each driver action, and the annotation arrives here while the test
+ * is still running. Read structurally, like everything else in this file.
+ */
+interface AnnotationLike {
+  readonly type?: string;
+  readonly message?: string;
+  readonly attachment?: { readonly body?: unknown; readonly contentType?: string };
+}
+
 /** Structural view of the Vitest 3 `TestCase` this reporter reads. */
 interface TestCaseLike {
   readonly id?: string;
@@ -121,6 +134,41 @@ export class TermwrightUiReporter {
       ...(error === undefined ? {} : { error }),
       ...(diagnostic?.duration === undefined ? {} : { durationMs: diagnostic.duration }),
       ...(flaky ? { flaky: true } : {}),
+    });
+  }
+
+  /**
+   * A `termwright:action` annotation from the test process becomes an `action`
+   * message, so the command log fills in while the test runs rather than only
+   * after its trace is written.
+   *
+   * Annotations of any other type are ignored: this reporter shares the channel
+   * with whatever else the suite annotates.
+   */
+  onTestAnnotate(testCase: TestCaseLike, annotation: AnnotationLike): void {
+    if (annotation.type !== 'termwright:action') return;
+    const body = annotation.attachment?.body;
+    const parsed = typeof body === 'string' ? safeParse(body) : body;
+    if (typeof parsed !== 'object' || parsed === null) return;
+    const action = parsed as Record<string, unknown>;
+    const api = action['api'];
+    const t = action['t'] ?? action['timeMs'];
+    if (typeof api !== 'string' || typeof t !== 'number' || !Number.isFinite(t)) return;
+    const optional = (key: string): Record<string, string> =>
+      typeof action[key] === 'string' ? { [key]: action[key] } : {};
+    this.#publish({
+      v: 1,
+      type: 'action',
+      kind: action['kind'] === 'assert' ? 'assert' : 'action',
+      api,
+      t,
+      ok: action['ok'] !== false,
+      ...(testCase.id === undefined ? {} : { testId: testCase.id }),
+      ...optional('sessionId'),
+      ...optional('selector'),
+      ...optional('ref'),
+      ...optional('error'),
+      ...optional('stepId'),
     });
   }
 
@@ -242,6 +290,14 @@ class SocketSink implements UiMessageSink {
       this.#socket.once('close', () => done());
       this.#socket.close();
     });
+  }
+}
+
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
   }
 }
 

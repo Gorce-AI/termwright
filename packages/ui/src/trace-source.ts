@@ -151,7 +151,16 @@ export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void 
       : overview.exit !== null && overview.exit.code !== 0
         ? 'failed'
         : 'passed';
-  messages.push({ v: 1, type: 'test-end', id: testId, status, traceRef: overview.path });
+  messages.push({
+    v: 1,
+    type: 'test-end',
+    id: testId,
+    status,
+    traceRef: overview.path,
+    // The recording's own length: a replayed "test" took as long as what was
+    // recorded, not as long as the page took to receive the message.
+    durationMs: overview.durationMs,
+  });
   messages.push({
     v: 1,
     type: 'run-end',
