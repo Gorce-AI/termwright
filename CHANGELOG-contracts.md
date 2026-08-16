@@ -380,3 +380,10 @@
   (0 reprezentowalne; „nic nie zginęło" ≠ „nikt nie liczył"). Manifest runów
   v2: licznik per test WYMAGANY; wpisy v1 odrzucane przez istniejący
   mechanizm wersji.
+- 2026-08-16 (ui/cli): `termwright report --trace <plik> [--out-file] [--json]`
+  emituje samowystarczalny raport HTML (bundle viewera + dane inline, file://,
+  0 żądań sieciowych; budżet 8 MiB — klatki cięte od końca, logi od
+  najstarszych, oba cięcia widoczne). `DataSource` = szew panelu: Server/Inline,
+  źródło DEKLARUJE features {live, history, openTrace}. Raport HTML w
+  packages/trace pozostaje osobnym artefaktem crash-owym (ui zależy od trace,
+  nigdy odwrotnie — bundla viewera nie da się dosięgnąć z trace).
