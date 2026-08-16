@@ -165,6 +165,25 @@ first tree after the handshake, where `semanticTree()` is still `null` while
 through that gap, and a snapshot being written for the first time waits for a
 tree rather than storing the absence of one.
 
+### Two keys in one `press()` arrive together
+
+`press('Tab Space')` encodes both chords into a **single** write, so a program
+that batches its input handling sees them in one go — the space reaches the
+element Tab was leaving, not the one it moved to. When the program has to
+re-render between two keys, send them separately and put the assertion in
+between:
+
+```ts
+await app.press('Tab');
+await expect(app.getByRole('list', { name: 'Todos' })).toHaveState({ focused: true });
+await app.press('Space');
+```
+
+The assertion is not decoration here: it is the wait that lets the program
+handle the first key before the second arrives, and it costs nothing extra
+because the matcher polls anyway. Several chords in one `press()` are for
+sequences the program consumes as a unit, like `'Control+K Control+F'`.
+
 A failure reads like the driver's own errors: what was expected, what was
 observed, the timeout that elapsed, the candidate nodes and an excerpt of the
 screen.
