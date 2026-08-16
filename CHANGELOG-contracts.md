@@ -451,3 +451,16 @@
   domyślnie — to identyfikator frameworka, nie proza). Hit-test nigdy nie
   pyta komórki, czyja jest (własność komórki nieosiągalna w 6/6 frameworków)
   — opiera się na paintOrder + geometrii.
+- 2026-08-16 (protocol, #34 Phase 1, geometria IR→drzewo):
+  `SemanticNode.bounds` GWARANTOWANE jako najlepsza znana geometria WIDOCZNA
+  (przecięcie policzone przez framework → intendedRect ∩ clip → intendedRect
+  jako ostatnia deska); konsument nigdy nie pyta, który to prostokąt (wariant
+  dwóch prostokątów odrzucony — przesuwałby pytanie na każdego konsumenta).
+  Nowe `occlusion?: 'known' | 'unknown'`; BRAK POLA = 'unknown' (wiedza ma
+  być zgłoszona, nie założona); 'known' wymaga capability paint-order (3/6).
+  Konsument akcji wskaźnikowych MUSI odmówić przy 'unknown' (cichy fałszywy
+  zielony ≠ brak informacji); odmowa jest stanem przejściowym per framework.
+  `resolveNodeBounds()` w probe/bounds.ts = jedna implementacja zwijania;
+  zwraca `clippedAway` dla węzłów wyciętych całkowicie (normalizator oznacza
+  state.hidden — prostokąt zerowy nie przecina viewportu). Węzeł bez bounds
+  legalny.
