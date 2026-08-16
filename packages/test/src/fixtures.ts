@@ -26,6 +26,7 @@ import { createTraceWriter, type TraceWriter } from '@termwright/trace';
 import { getTermwrightConfig, type ResolvedTermwrightConfig } from './config.js';
 import { appendCrashSection, collectCrashes, toReportCrash, type ReportCrash } from './crash.js';
 import { collectTestNames } from './declared-tests.js';
+import { seedDirectory, type SeedFiles, type SeedTemplate } from './seed.js';
 import { collectLogs, createLogCollection, logThresholdFailure, type LogCollection } from './logs.js';
 import {
   beginSnapshotScope,
@@ -41,6 +42,23 @@ import './task-meta.js';
 export interface LaunchFixtureOptions extends Omit<LaunchOptions, 'command'> {
   /** Defaults to `config.command`. */
   readonly command?: readonly string[];
+  /**
+   * Files to create in the working directory before the program starts, keyed
+   * by relative path. Directories are created as needed.
+   *
+   * @example
+   * ```ts
+   * await terminal.launch({
+   *   files: { 'config.json': '{"theme":"dark"}', 'notes/todo.md': '- write tests\n' },
+   * });
+   * ```
+   */
+  readonly files?: SeedFiles;
+  /**
+   * A directory to copy in first, so a test can start from a whole project and
+   * change only what it is about. `files` are written over it.
+   */
+  readonly template?: SeedTemplate | string;
 }
 
 /** Runs a titled step; it becomes a marker in the recording and a trace event. */
@@ -189,13 +207,23 @@ export const test = base.extend<TermwrightFixtures>({
             'terminal.launch() needs a command: pass one, or set `command` in defineTermwrightConfig()',
           );
         }
+        const { files, template, ...launchOptions } = options;
+        const cwd = options.cwd ?? termwright.tmpdir;
+        if (files !== undefined || template !== undefined) {
+          // Before the program starts: a program that reads its config at
+          // startup must find it there, not a moment later.
+          seedDirectory(cwd, {
+            ...(files === undefined ? {} : { files }),
+            ...(template === undefined ? {} : { template }),
+          });
+        }
         const { expect: _expect, ...driverTimeouts } = config.timeouts;
         const harness = await launchTerminal({
-          ...options,
+          ...launchOptions,
           command,
           columns: options.columns ?? config.columns,
           rows: options.rows ?? config.rows,
-          cwd: options.cwd ?? termwright.tmpdir,
+          cwd,
           env: { ...inheritedEnv(), ...config.env, ...(options.env ?? {}) },
           timeouts: { ...driverTimeouts, ...(options.timeouts ?? {}) },
         });

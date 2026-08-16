@@ -152,6 +152,24 @@ describe.skipIf(!available)('the preset against a real PTY', () => {
     await expect.poll(() => terminal.logs.lostRecords(), { timeout: 5_000 }).toBeGreaterThan(0);
   });
 
+  test('starts the program on files the test declared', { timeout: 30_000 }, async ({ terminal }) => {
+    const app = await terminal.launch({
+      // A program that reads its config at startup must find it already there.
+      command: [
+        process.execPath,
+        '-e',
+        "const fs=require('node:fs');" +
+          "process.stdout.write('CONFIG '+fs.readFileSync('config.json','utf8')+'\\r\\n');" +
+          "process.stdout.write('NOTE '+fs.readFileSync('notes/todo.md','utf8')+'\\r\\n');" +
+          'setInterval(() => {}, 1000);',
+      ],
+      files: { 'config.json': '{"theme":"dark"}', 'notes/todo.md': 'write tests' },
+    });
+
+    await expect(app).toHaveText('CONFIG {"theme":"dark"}');
+    await expect(app).toHaveText('NOTE write tests');
+  });
+
   test('isolates each test with its own directory and session', { timeout: 30_000 }, async ({ terminal, termwright }) => {
     const app = await terminal.launch();
     await app.waitForText('Permission required');

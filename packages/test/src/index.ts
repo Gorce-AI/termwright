@@ -105,6 +105,14 @@ export { serializeScreen, type CellSnapshotOptions } from './cells.js';
 export { ptyAvailable, resetPtyProbe } from './pty-available.js';
 
 export {
+  seedDirectory,
+  type SeedFile,
+  type SeedFiles,
+  type SeedOptions,
+  type SeedTemplate,
+} from './seed.js';
+
+export {
   atLeast,
   collectLogs,
   createLogCollection,

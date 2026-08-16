@@ -82,6 +82,36 @@ describe.skipIf(!pty)('the app', () => {
 The result is memoized, and `TERMWRIGHT_SKIP_PTY=1` forces it to `false` when
 you want to skip these suites deliberately.
 
+## Files the program starts with
+
+A terminal program's input is mostly files. Declare them on the launch and they
+exist in the test's private directory — which is also the program's `cwd` —
+before it starts:
+
+```ts
+const app = await terminal.launch({
+  command: ['node', 'editor.js'],
+  files: {
+    'config.json': JSON.stringify({ theme: 'dark' }),
+    'notes/todo.md': '- write tests\n',
+  },
+});
+```
+
+Directories are created as needed, and a `Uint8Array` is written as bytes. To
+start from a whole project, copy a template first — the declared files are
+written over it, so a test can take a fixture project and change only the one
+file it is about:
+
+```ts
+await terminal.launch({ template: 'test/fixtures/project', files: { 'config.json': '{}' } });
+```
+
+There is no shared fixtures directory on purpose. Files are declared by the test
+that needs them, into a directory only that test can see, so no test can depend
+on what another one left behind. A path that would escape that directory is
+refused rather than written.
+
 ## Matchers
 
 All of them are asynchronous — `await expect(...)` — and the locator ones poll
@@ -399,6 +429,43 @@ configureTermwright(config);
 `TERMWRIGHT_PROFILE=ci` selects a profile. A profile's palette pins the 16 ANSI
 colors and the `TERM`/`COLORTERM` a launched program sees, which is what makes
 color assertions and cell snapshots stable between a laptop and CI.
+
+## Building your own fixtures
+
+`test` is Vitest's own `test.extend`, so the way to make a suite terse is to
+compose on top of it rather than wait for an option:
+
+```ts
+import { test as base, expect } from '@termwright/test';
+import type { TerminalHarness } from '@termwright/driver';
+
+const test = base.extend<{ app: TerminalHarness }>({
+  app: async ({ terminal }, use) => {
+    const app = await terminal.launch({ files: { 'config.json': '{}' } });
+    await app.waitForText('ready');
+    await use(app);
+    // Still inside the terminal fixture: the session is alive here, so a
+    // fixture that logs out or asserts a final state can still do it.
+  },
+});
+
+test('saves on ctrl-s', async ({ app }) => {
+  await app.press('Control+s');
+  await expect(app).toHaveText('saved');
+});
+```
+
+The preset's fixtures stay injectable next to yours (`{ app, terminal, step }`),
+teardown runs inside-out, and the types flow through — this package pins all
+three in `composition.test.ts`.
+
+### Coming from Cypress
+
+| Cypress | Here |
+|---|---|
+| `cy.fixture('user.json')` and the shared `fixtures/` directory | `launch({ files })` / `launch({ template })`, declared per test into its own directory |
+| custom commands (`Cypress.Commands.add`) | a fixture composed with `test.extend`, as above |
+| `beforeEach` that logs in | the same, but as a fixture: it also tears down, and only the tests that ask for it pay for it |
 
 ## Reporter
 
