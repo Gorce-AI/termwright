@@ -125,6 +125,25 @@ if client is not None and await client.start():
 `publish_nowait` is the same thing for synchronous render callbacks: it returns
 the marker immediately and sends the frames on a background task, in order.
 
+## Application logs
+
+```python
+from termwright import client_from_env
+from termwright.client import CAPABILITIES_WITH_LOGS
+from termwright.logging_bridge import install_log_handler
+
+client = client_from_env(adapter_name="my-tui", adapter_version="1.0.0",
+                         capabilities=CAPABILITIES_WITH_LOGS)
+if client is not None and await client.start():
+    install_log_handler(client)          # every logging call now reaches the driver
+```
+
+`install_log_handler(None)` is a no-op, so an app can call it unconditionally.
+Levels map onto the wire's closed ladder (anything below `DEBUG` is `trace`,
+`CRITICAL` is `fatal`), `extra=` fields become flat dotted attributes, and the
+client drops what the budget does not allow — leaving a gap in `seq` so the
+driver can report the loss.
+
 ## Conformance
 
 `tests/` runs against `clients/test-vectors/`, which is generated from the

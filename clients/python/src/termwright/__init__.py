@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from .client import (
+    CAPABILITIES_WITH_LOGS,
     DEFAULT_CAPABILITIES,
     ENV_ENDPOINT,
     ENV_PROTOCOL,
@@ -29,6 +30,15 @@ from .client import (
 from .errors import ProtocolViolation, TermwrightError
 from .framing import FRAME_HEADER_BYTES, FrameDecoder, encode_frame, project_dto
 from .limits import ABSOLUTE_LIMITS, DEFAULT_LIMITS, ProtocolLimits
+from .logs import (
+    LOG_LEVEL_SEVERITY,
+    LOG_LEVELS,
+    MAX_LOG_ATTRS,
+    LogRecord,
+    LogValidationResult,
+    flatten_attrs,
+    validate_log_record,
+)
 from .marker import (
     MARKER_DCS_FINAL,
     MARKER_DCS_PREFIX,
@@ -61,6 +71,14 @@ _LAZY = {"enable_semantics", "TermwrightApp", "TextualSemantics"}
 
 __all__ = [
     "ABSOLUTE_LIMITS",
+    "CAPABILITIES_WITH_LOGS",
+    "LOG_LEVELS",
+    "LOG_LEVEL_SEVERITY",
+    "MAX_LOG_ATTRS",
+    "LogRecord",
+    "LogValidationResult",
+    "flatten_attrs",
+    "validate_log_record",
     "ADAPTER_CAPABILITIES",
     "DEFAULT_CAPABILITIES",
     "DEFAULT_LIMITS",

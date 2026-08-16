@@ -25,6 +25,43 @@ constructor that returns nothing — `client_from_env() -> None`,
 `termwright.Attach() -> (nil, nil)` — so the calling app needs no feature flag
 and shipping the adapter in production costs one import.
 
+## Application logs
+
+A TUI cannot print diagnostics without corrupting the render, so the usual
+advice is a log file. Under the driver they can go somewhere better: announce
+the `logs` capability and the records the application already emits become
+assertable test state.
+
+Each client bridges its ecosystem's standard logger, so application code does
+not change:
+
+| Client | Bridge | Install |
+|---|---|---|
+| Python | `logging.Handler` | `install_log_handler(client, logger)` |
+| Go | `slog.Handler` | `slog.New(protocol.NewSlogHandler(client, nil))` |
+| Rust | `tracing` Layer (feature `tracing`) | `registry().with(TermwrightLayer::new(client))` |
+
+Four rules the clients enforce for you:
+
+- **No budget, no logs.** `hello-ack` carries `logs` only when the adapter
+  announced the capability, and an absent field means the channel is off. A
+  client with no budget sends nothing at all.
+- **The rate is enforced at the source.** Each client holds a token bucket
+  sized from the budget and drops locally, which is what stops a log storm
+  eating the frame budget the semantic tree needs.
+- **A drop leaves a gap.** Every attempt consumes a sequence number, delivered
+  or not, so a hole in `seq` tells the driver records died in the adapter
+  rather than in transit. Renumbering would hide exactly what the counter
+  exists to report.
+- **`attrs` are flat.** Nested context makes a record's size unbounded and
+  depth-dependent, so each bridge flattens to dotted keys (`db.host`) before
+  sending — the same spelling in all three languages, so an assertion written
+  against one reads the same against another.
+
+`ts` is Unix epoch milliseconds, not session-relative: an adapter cannot know
+when the driver considers the session to have started, so the wall clock is the
+only clock both sides agree on without negotiating. The driver rebases it.
+
 ## Protocol evolution
 
 Capacity is negotiated and therefore extensible; vocabulary is closed and

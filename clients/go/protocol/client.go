@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -22,6 +23,11 @@ const (
 var DefaultCapabilities = []Capability{
 	CapTree, CapBounds, CapAbsoluteBounds, CapStates, CapActions, CapRenderRevisions,
 }
+
+// CapabilitiesWithLogs adds the log channel. Announcing `logs` is what makes
+// the driver grant a budget; without it the driver sends none and the adapter
+// must stay silent.
+var CapabilitiesWithLogs = append(append([]Capability{}, DefaultCapabilities...), CapLogs)
 
 // snapshotHistory is how many recent revisions stay answerable by get-tree.
 const snapshotHistory = 8
@@ -51,17 +57,20 @@ type Client struct {
 	token    string
 	options  Options
 
-	mu        sync.Mutex
-	conn      net.Conn
-	limits    Limits
-	sessionID string
-	revision  int64
-	marker    bool
-	logBudget *LogBudget
-	subscribe string
-	closed    bool
-	history   map[int64]json.RawMessage
-	order     []int64
+	mu          sync.Mutex
+	conn        net.Conn
+	limits      Limits
+	sessionID   string
+	revision    int64
+	marker      bool
+	logBudget   *LogBudget
+	subscribe   string
+	closed      bool
+	history     map[int64]json.RawMessage
+	order       []int64
+	logSeq      int64
+	logBucket   *tokenBucket
+	logsDropped int64
 
 	ready chan error
 	once  sync.Once
@@ -260,6 +269,135 @@ func (c *Client) Publish(snapshot *Snapshot) (string, error) {
 	return EncodeMarker(c.token, sessionID, revision)
 }
 
+// tokenBucket rate-limits the log channel: `burst` capacity on top of the
+// sustained rate, refilled continuously. The adapter enforces its own budget
+// and drops locally, which is what keeps a log storm from eating the frame
+// budget the semantic tree needs.
+type tokenBucket struct {
+	perSecond float64
+	capacity  float64
+	tokens    float64
+	updated   time.Time
+}
+
+func newTokenBucket(perSecond, burst int, now time.Time) *tokenBucket {
+	rate := math.Max(0, float64(perSecond))
+	capacity := rate + math.Max(0, float64(burst))
+	return &tokenBucket{perSecond: rate, capacity: capacity, tokens: capacity, updated: now}
+}
+
+// take consumes one token, refilling first. False means "over budget".
+func (b *tokenBucket) take(now time.Time) bool {
+	if b.perSecond <= 0 {
+		return false
+	}
+	elapsed := now.Sub(b.updated).Seconds()
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	b.updated = now
+	b.tokens = math.Min(b.capacity, b.tokens+elapsed*b.perSecond)
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+// LogsDropped counts records this adapter dropped locally, for being over
+// budget or over a limit. Each one left a gap in the sequence.
+func (c *Client) LogsDropped() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.logsDropped
+}
+
+// Log forwards one application log record, if the driver asked for logs.
+//
+// Reports whether the record went out. A record is dropped when the session is
+// not live, when the driver granted no budget, when this adapter is over its
+// rate, or when the record breaks a limit.
+//
+// Every attempt consumes a sequence number, dropped or not: the gap left in
+// Seq is precisely how the driver learns records were lost here rather than in
+// transit.
+func (c *Client) Log(level LogLevel, message string, attrs map[string]any) bool {
+	c.mu.Lock()
+	if c.sessionID == "" || c.closed || c.conn == nil || c.logBucket == nil {
+		c.mu.Unlock()
+		return false
+	}
+	c.logSeq++
+	record := &LogRecord{
+		TS:       time.Now().UnixMilli(),
+		Level:    level,
+		Message:  message,
+		Seq:      c.logSeq,
+		Revision: c.revision,
+	}
+	if len(attrs) > 0 {
+		record.Attrs = FlattenAttrs(attrs)
+	}
+	allowed := c.logBucket.take(time.Now())
+	if !allowed {
+		c.logsDropped++
+	}
+	limits := c.limits
+	c.mu.Unlock()
+
+	if !allowed {
+		return false
+	}
+	if err := record.Validate(limits); err != nil {
+		// An oversized or malformed record is dropped locally rather than
+		// taking the channel down; the gap in seq reports it.
+		c.mu.Lock()
+		c.logsDropped++
+		c.mu.Unlock()
+		return false
+	}
+	if err := c.send(NewLogMessage(record), limits); err != nil {
+		return false
+	}
+	return true
+}
+
+// LogRecordWith sends a record the caller built, for a bridge that already has
+// a timestamp and logger name of its own. Seq and Revision are still assigned
+// here: an adapter never picks its own sequence numbers.
+func (c *Client) LogRecordWith(record LogRecord) bool {
+	c.mu.Lock()
+	if c.sessionID == "" || c.closed || c.conn == nil || c.logBucket == nil {
+		c.mu.Unlock()
+		return false
+	}
+	c.logSeq++
+	record.Seq = c.logSeq
+	if record.Revision == 0 {
+		record.Revision = c.revision
+	}
+	if record.TS == 0 {
+		record.TS = time.Now().UnixMilli()
+	}
+	allowed := c.logBucket.take(time.Now())
+	if !allowed {
+		c.logsDropped++
+	}
+	limits := c.limits
+	c.mu.Unlock()
+
+	if !allowed {
+		return false
+	}
+	if err := record.Validate(limits); err != nil {
+		c.mu.Lock()
+		c.logsDropped++
+		c.mu.Unlock()
+		return false
+	}
+	return c.send(NewLogMessage(&record), limits) == nil
+}
+
 func (c *Client) remember(revision int64, body json.RawMessage) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -335,6 +473,11 @@ func (c *Client) handle(frame Frame) bool {
 		c.limits = ack.Limits
 		c.marker = ack.Marker.Enabled
 		c.logBudget = ack.Logs
+		if ack.Logs != nil && ack.Logs.Enabled {
+			c.logBucket = newTokenBucket(ack.Logs.MaxRecordsPerSecond, ack.Logs.Burst, time.Now())
+		} else {
+			c.logBucket = nil
+		}
 		c.subscribe = ack.Subscribe
 		c.mu.Unlock()
 		c.once.Do(func() {

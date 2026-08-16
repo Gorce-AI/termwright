@@ -19,6 +19,9 @@ import { Buffer } from 'node:buffer';
 import {
   ABSOLUTE_LIMITS,
   ADAPTER_CAPABILITIES,
+  LOG_LEVELS,
+  LOG_LEVEL_SEVERITY,
+  MAX_LOG_ATTRS,
   DEFAULT_LIMITS,
   FRAME_HEADER_BYTES,
   MARKER_DCS_FINAL,
@@ -62,6 +65,9 @@ write('constants.json', {
     token: 'TERMWRIGHT_TOKEN',
     protocol: 'TERMWRIGHT_PROTOCOL',
   },
+  logLevels: [...LOG_LEVELS],
+  logLevelSeverity: { ...LOG_LEVEL_SEVERITY },
+  maxLogAttrs: MAX_LOG_ATTRS,
   roles: [...SEMANTIC_ROLES],
   actions: [...SEMANTIC_ACTIONS],
   capabilities: [...ADAPTER_CAPABILITIES],
@@ -438,7 +444,49 @@ const adapterAccept = [
   { name: 'get-tree-result-ok', message: { type: 'get-tree-result', requestId: 0, snapshot: baseSnapshot } },
   { name: 'get-tree-result-error', message: { type: 'get-tree-result', requestId: 1, error: 'no such revision' } },
   { name: 'error', message: { type: 'error', code: 'internal', message: 'boom' } },
+  ...LOG_LEVELS.map((level) => ({
+    name: `log-${level}`,
+    message: { type: 'log', record: { ts: 1_755_300_000_000, level, message: `a ${level} line`, seq: 0 } },
+  })),
+  {
+    name: 'log-with-attrs',
+    message: {
+      type: 'log',
+      record: {
+        ts: 1_755_300_000_001,
+        level: 'error',
+        message: 'connection refused',
+        // Flat scalars only: every bridge flattens before it sends.
+        attrs: { 'db.host': 'localhost', 'db.port': 5432, retrying: true, cause: null },
+        logger: 'db.pool',
+        seq: 7,
+        revision: 3,
+      },
+    },
+  },
+  {
+    name: 'log-attrs-at-the-ceiling',
+    message: {
+      type: 'log',
+      record: {
+        ts: 1_755_300_000_002,
+        level: 'debug',
+        message: 'wide record',
+        attrs: Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`k${i}`, i])),
+        seq: 8,
+      },
+    },
+  },
 ];
+
+/** A record built on the minimal shape, mutated for one specific defect. */
+const logRecord = (overrides) => ({
+  ts: 1_755_300_000_000,
+  level: 'info',
+  message: 'hello',
+  seq: 1,
+  ...overrides,
+});
 
 const adapterReject = [
   { name: 'unknown-type', message: { type: 'nope' } },
@@ -453,6 +501,47 @@ const adapterReject = [
   { name: 'get-tree-result-both', message: { type: 'get-tree-result', requestId: 0, snapshot: baseSnapshot, error: 'x' } },
   { name: 'get-tree-result-neither', message: { type: 'get-tree-result', requestId: 0 } },
   { name: 'error-unknown-code', message: { type: 'error', code: 'meltdown', message: 'x' } },
+  { name: 'log-unknown-level', message: { type: 'log', record: logRecord({ level: 'verbose' }) } },
+  { name: 'log-missing-seq', message: { type: 'log', record: logRecord({ seq: undefined }) } },
+  { name: 'log-negative-seq', message: { type: 'log', record: logRecord({ seq: -1 }) } },
+  { name: 'log-zero-ts', message: { type: 'log', record: logRecord({ ts: 0 }) } },
+  { name: 'log-float-ts', message: { type: 'log', record: logRecord({ ts: 1.5 }) } },
+  { name: 'log-zero-revision', message: { type: 'log', record: logRecord({ revision: 0 }) } },
+  {
+    // Nested attrs are what makes a record's size unbounded and
+    // depth-dependent, so the bridge flattens before it sends, never here.
+    name: 'log-nested-attrs',
+    message: { type: 'log', record: logRecord({ attrs: { db: { host: 'localhost' } } }) },
+  },
+  {
+    name: 'log-array-attrs',
+    message: { type: 'log', record: logRecord({ attrs: { tags: ['a', 'b'] } }) },
+  },
+  {
+    name: 'log-attrs-over-the-ceiling',
+    message: {
+      type: 'log',
+      record: logRecord({
+        attrs: Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`k${i}`, i])),
+      }),
+    },
+  },
+  {
+    name: 'log-oversized-record',
+    message: {
+      type: 'log',
+      record: logRecord({ message: 'x'.repeat(DEFAULT_LIMITS.maxLogRecordBytes + 1) }),
+    },
+  },
+  {
+    name: 'log-unknown-record-property',
+    message: { type: 'log', record: logRecord({ hostname: 'laptop' }) },
+  },
+  {
+    name: 'log-unknown-envelope-field',
+    message: { type: 'log', record: logRecord({}), priority: 'high' },
+  },
+  { name: 'log-record-not-an-object', message: { type: 'log', record: 'oops' } },
 ];
 
 const driverAccept = [

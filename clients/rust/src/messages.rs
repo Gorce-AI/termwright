@@ -11,6 +11,7 @@ use serde_json::{Map, Value};
 use crate::error::ParseError;
 use crate::framing::project_dto;
 use crate::limits::Limits;
+use crate::logs::{validate_log_record, LogRecord};
 use crate::marker::MAX_SAFE_INTEGER;
 use crate::roles::{valid_capability, Capability, ADAPTER_CAPABILITIES};
 use crate::tree::Snapshot;
@@ -220,6 +221,26 @@ impl GetTreeResult {
             request_id,
             snapshot: None,
             error: Some(detail.into()),
+        }
+    }
+}
+
+/// Carries one application log record to the driver.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LogMessage<'a> {
+    /// Wire discriminator (`type` on the wire).
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+    /// The record.
+    pub record: &'a LogRecord,
+}
+
+impl<'a> LogMessage<'a> {
+    /// Wrap a record in its envelope.
+    pub fn new(record: &'a LogRecord) -> Self {
+        Self {
+            kind: "log",
+            record,
         }
     }
 }
@@ -462,8 +483,27 @@ pub fn parse_adapter_message(value: &Value, limits: &Limits) -> Result<(), Parse
             }
             check_embedded_snapshot(&object["snapshot"], limits)
         }
+        "log" => {
+            require_keys(object, &["type", "record"], &[])?;
+            check_embedded_log_record(&object["record"], limits)
+        }
         "error" => check_error_message(object, true),
         _ => Err(ParseError::malformed("unknown or missing message type")),
+    }
+}
+
+/// Map a record failure onto the wire taxonomy: capacity failures are
+/// `limit-exceeded`, the rest are `malformed`.
+fn check_embedded_log_record(value: &Value, limits: &Limits) -> Result<(), ParseError> {
+    match validate_log_record(value, limits) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            let code = match error.code {
+                "bytes" | "count" | "depth" | "string-bytes" => "limit-exceeded",
+                _ => "malformed",
+            };
+            Err(ParseError::new(code, format!("log record {error}")))
+        }
     }
 }
 

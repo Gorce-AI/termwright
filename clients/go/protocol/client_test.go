@@ -23,16 +23,24 @@ type fakeDriver struct {
 	frames   []map[string]any
 	conn     net.Conn
 	arrived  chan struct{}
+	logs     *LogBudget
 }
 
 func startFakeDriver(t *testing.T) *fakeDriver {
+	return startFakeDriverWithLogs(t, nil)
+}
+
+// startFakeDriverWithLogs grants a log budget in the handshake. A nil budget
+// means the ack carries no `logs` field at all, which is what tells an adapter
+// that logs are disabled.
+func startFakeDriverWithLogs(t *testing.T, budget *LogBudget) *fakeDriver {
 	t.Helper()
 	path := filepath.Join(shortTempDir(t), "s")
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatalf("listening on %s: %v", path, err)
 	}
-	driver := &fakeDriver{listener: listener, arrived: make(chan struct{}, 64)}
+	driver := &fakeDriver{listener: listener, arrived: make(chan struct{}, 256), logs: budget}
 	go driver.serve(t)
 	t.Cleanup(func() { _ = listener.Close() })
 	return driver
@@ -81,6 +89,7 @@ func (d *fakeDriver) serve(t *testing.T) {
 						Limits:    DefaultLimits,
 						Subscribe: "snapshots",
 						Marker:    MarkerConfig{Enabled: true},
+						Logs:      d.logs,
 					})
 					continue
 				}

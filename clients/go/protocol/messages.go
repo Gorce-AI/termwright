@@ -360,6 +360,15 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 		}
 		return object, nil
 
+	case "log":
+		if problem := requireKeys(object, []string{"type", "record"}, nil); problem != nil {
+			return nil, problem
+		}
+		if problem := checkLogRecord(object["record"], limits); problem != nil {
+			return nil, problem
+		}
+		return object, nil
+
 	case "error":
 		if problem := checkErrorMessage(object, true); problem != nil {
 			return nil, problem
@@ -367,6 +376,21 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 		return object, nil
 	}
 	return nil, malformed("unknown or missing message type")
+}
+
+// checkLogRecord maps a record failure onto the wire taxonomy: capacity
+// failures are limit-exceeded, the rest are malformed.
+func checkLogRecord(value any, limits Limits) *ParseError {
+	err := ValidateLogRecord(value, limits)
+	if err == nil {
+		return nil
+	}
+	wire := "malformed"
+	switch ValidationCode(err) {
+	case "bytes", "count", "depth", "string-bytes":
+		wire = "limit-exceeded"
+	}
+	return &ParseError{Code: wire, Detail: "log record " + err.Error()}
 }
 
 // ParseDriverMessage validates one driver → adapter message.

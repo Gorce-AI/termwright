@@ -15,12 +15,16 @@ swallow, and rather than ctrl+c, which Textual 8 binds to copy.
 
 from __future__ import annotations
 
+import logging
+
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.widgets import Button, Input, Label
 
 from termwright import enable_semantics
+from termwright.client import CAPABILITIES_WITH_LOGS
+from termwright.logging_bridge import install_log_handler
 
 
 class PermissionApp(App):
@@ -39,8 +43,25 @@ class PermissionApp(App):
 
     def on_mount(self) -> None:
         # Returns None when no driver is attached; nothing is installed then.
-        enable_semantics(self)
+        semantics = enable_semantics(self, capabilities=CAPABILITIES_WITH_LOGS)
         self.query_one("#approve", Button).focus()
+        if semantics is not None:
+            self.call_later(self._log_once, semantics)
+
+    async def _log_once(self, semantics) -> None:
+        """Log one ERROR the screen never shows.
+
+        A TUI cannot print diagnostics without corrupting the render, so this
+        goes to the driver instead. With no driver attached the handler is
+        never installed and the line goes nowhere, exactly as it would with a
+        file logger and no file.
+        """
+        await semantics.start()
+        install_log_handler(semantics.client, logging.getLogger("permission"))
+        logging.getLogger("permission").error(
+            "permission dialog opened with no policy loaded",
+            extra={"policy_path": "/etc/app/policy.json", "io": {"errno": 2}},
+        )
 
     def on_descendant_focus(self, event) -> None:
         """Mirror focus into the text, so a byte-level probe can see it move."""

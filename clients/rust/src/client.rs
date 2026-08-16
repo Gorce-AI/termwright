@@ -14,7 +14,7 @@
 use std::collections::VecDeque;
 use std::io::{ErrorKind, Read, Write};
 use std::os::unix::net::UnixStream;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::value::RawValue;
 use serde_json::Value;
@@ -22,10 +22,11 @@ use serde_json::Value;
 use crate::error::Error;
 use crate::framing::{encode_frame, FrameDecoder};
 use crate::limits::{Limits, DEFAULT_LIMITS};
+use crate::logs::{LogLevel, LogRecord};
 use crate::marker::encode_marker;
 use crate::messages::{
     default_capabilities, parse_driver_message, GetTree, GetTreeResult, Hello, HelloAck,
-    ProtocolErrorMessage, RevisionCommit, SnapshotMessage,
+    LogMessage, ProtocolErrorMessage, RevisionCommit, SnapshotMessage,
 };
 use crate::roles::Capability;
 use crate::tree::Snapshot;
@@ -58,6 +59,16 @@ pub struct Options {
 }
 
 impl Options {
+    /// Options for an adapter that also forwards application logs.
+    ///
+    /// Announcing `logs` is what makes the driver grant a budget; without it
+    /// the driver sends none and the adapter must stay silent.
+    pub fn with_logs(adapter_name: impl Into<String>, adapter_version: impl Into<String>) -> Self {
+        let mut options = Self::new(adapter_name, adapter_version);
+        options.capabilities.push(Capability::Logs);
+        options
+    }
+
     /// Options for an adapter with the default capability set.
     pub fn new(adapter_name: impl Into<String>, adapter_version: impl Into<String>) -> Self {
         Self {
@@ -66,6 +77,56 @@ impl Options {
             capabilities: default_capabilities(),
             limits: DEFAULT_LIMITS,
         }
+    }
+}
+
+/// Wall-clock milliseconds, the only clock both sides agree on without
+/// negotiating: an adapter cannot know when the driver opened the session.
+fn epoch_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|since| since.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+/// Rate limiter for the log channel: `burst` capacity on top of the sustained
+/// rate, refilled continuously.
+///
+/// The adapter enforces its own budget and drops locally, which is what keeps
+/// a log storm from eating the frame budget the semantic tree needs.
+#[derive(Debug)]
+struct TokenBucket {
+    per_second: f64,
+    capacity: f64,
+    tokens: f64,
+    updated: Instant,
+}
+
+impl TokenBucket {
+    fn new(per_second: i64, burst: i64, now: Instant) -> Self {
+        let rate = per_second.max(0) as f64;
+        let capacity = rate + burst.max(0) as f64;
+        Self {
+            per_second: rate,
+            capacity,
+            tokens: capacity,
+            updated: now,
+        }
+    }
+
+    /// Consume one token, refilling first. `false` means "over budget".
+    fn take(&mut self, now: Instant) -> bool {
+        if self.per_second <= 0.0 {
+            return false;
+        }
+        let elapsed = now.saturating_duration_since(self.updated).as_secs_f64();
+        self.updated = now;
+        self.tokens = (self.tokens + elapsed * self.per_second).min(self.capacity);
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
     }
 }
 
@@ -85,6 +146,9 @@ pub struct Client {
     revision: i64,
     marker_enabled: bool,
     log_budget: Option<crate::messages::LogBudget>,
+    log_seq: i64,
+    log_bucket: Option<TokenBucket>,
+    logs_dropped: u64,
     subscribe: String,
     history: VecDeque<(i64, Box<RawValue>)>,
 }
@@ -104,6 +168,9 @@ impl Client {
             revision: 0,
             marker_enabled: false,
             log_budget: None,
+            log_seq: 0,
+            log_bucket: None,
+            logs_dropped: 0,
             subscribe: "snapshots".to_owned(),
             history: VecDeque::new(),
         }
@@ -263,6 +330,59 @@ impl Client {
         Ok(Some(encode_marker(&self.token, &session_id, revision)?))
     }
 
+    /// Records this adapter dropped locally, for being over budget or over a
+    /// limit. Each one left a gap in the sequence.
+    pub fn logs_dropped(&self) -> u64 {
+        self.logs_dropped
+    }
+
+    /// Forward one application log record, if the driver asked for logs.
+    ///
+    /// Returns whether the record went out. A record is dropped when the
+    /// session is not live, when the driver granted no budget, when this
+    /// adapter is over its rate, or when the record breaks a limit.
+    ///
+    /// Every attempt consumes a sequence number, dropped or not: the gap left
+    /// in `seq` is precisely how the driver learns records were lost here
+    /// rather than in transit. `seq`, `revision` and an unset `ts` are filled
+    /// in here — an adapter never picks its own sequence numbers.
+    pub fn log(&mut self, mut record: LogRecord) -> bool {
+        if self.session_id.is_none() || self.stream.is_none() || self.log_bucket.is_none() {
+            return false;
+        }
+
+        self.log_seq += 1;
+        record.seq = self.log_seq;
+        if record.ts == 0 {
+            record.ts = epoch_millis();
+        }
+        if record.revision.is_none() && self.revision > 0 {
+            record.revision = Some(self.revision);
+        }
+
+        let now = Instant::now();
+        let allowed = self
+            .log_bucket
+            .as_mut()
+            .is_some_and(|bucket| bucket.take(now));
+        if !allowed {
+            self.logs_dropped += 1;
+            return false;
+        }
+        if record.validate(&self.limits).is_err() {
+            // An oversized or malformed record is dropped locally rather than
+            // taking the channel down; the gap in seq reports it.
+            self.logs_dropped += 1;
+            return false;
+        }
+        self.send(&LogMessage::new(&record)).is_ok()
+    }
+
+    /// Convenience for the common call: a level and a message.
+    pub fn log_message(&mut self, level: LogLevel, message: impl Into<String>) -> bool {
+        self.log(LogRecord::new(level, message))
+    }
+
     /// Read and answer whatever the driver has sent, without blocking.
     ///
     /// Call it on every render tick, or whenever convenient: `get-tree`
@@ -317,6 +437,14 @@ impl Client {
                 self.limits = ack.limits;
                 self.marker_enabled = ack.marker.enabled;
                 self.log_budget = ack.logs;
+                self.log_bucket = match ack.logs {
+                    Some(budget) if budget.enabled => Some(TokenBucket::new(
+                        budget.max_records_per_second,
+                        budget.burst,
+                        Instant::now(),
+                    )),
+                    _ => None,
+                };
                 self.subscribe = ack.subscribe;
             }
             Some("get-tree") => {

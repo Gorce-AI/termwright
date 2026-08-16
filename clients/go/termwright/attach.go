@@ -50,6 +50,7 @@ type config struct {
 	describe     Describer
 	adapterName  string
 	version      string
+	capabilities []protocol.Capability
 }
 
 // WithScreen supplies the screen to draw on, instead of letting Attach create
@@ -73,6 +74,13 @@ func WithChildren(fn ChildrenFunc) Option {
 // WithDescriber overrides roles and names per primitive.
 func WithDescriber(fn Describer) Option {
 	return func(c *config) { c.describe = fn }
+}
+
+// WithLogs announces the `logs` capability, which is what makes the driver
+// grant a log budget. Pair it with protocol.NewSlogHandler to forward the
+// application's own slog records.
+func WithLogs() Option {
+	return func(c *config) { c.capabilities = protocol.CapabilitiesWithLogs }
 }
 
 // WithAdapterIdentity overrides the name and version sent in the handshake,
@@ -113,6 +121,7 @@ func Attach(app *tview.Application, root tview.Primitive, options ...Option) (*S
 	client := protocol.FromEnv(protocol.Options{
 		AdapterName:    settings.adapterName,
 		AdapterVersion: settings.version,
+		Capabilities:   settings.capabilities,
 	})
 	if client == nil {
 		return nil, nil // dormant: not instrumented

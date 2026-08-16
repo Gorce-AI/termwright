@@ -47,9 +47,14 @@ pub mod client;
 pub mod error;
 pub mod framing;
 pub mod limits;
+pub mod logs;
 pub mod marker;
 pub mod messages;
 pub mod roles;
+/// Bridge from `tracing`, enabled by the `tracing` feature.
+#[cfg(feature = "tracing")]
+pub mod tracing_layer;
+
 pub mod tree;
 pub mod validate;
 
@@ -57,6 +62,7 @@ pub use client::{Client, Options, DIAL_TIMEOUT, ENV_ENDPOINT, ENV_PROTOCOL, ENV_
 pub use error::{Error, ParseError, ValidationError, Violation};
 pub use framing::{encode_frame, project_dto, Frame, FrameDecoder, FRAME_HEADER_BYTES};
 pub use limits::{Limits, ABSOLUTE_LIMITS, DEFAULT_LIMITS, DEFAULT_NEGOTIATION_MS};
+pub use logs::{validate_log_record, AttrValue, LogLevel, LogRecord, LOG_LEVELS, MAX_LOG_ATTRS};
 pub use marker::{
     compute_mac, encode_marker, verify_marker_payload, RenderMarker, MARKER_DCS_FINAL,
     MARKER_DCS_PREFIX, MARKER_MAC_BYTES,

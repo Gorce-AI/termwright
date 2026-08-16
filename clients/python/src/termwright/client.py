@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from collections import OrderedDict
 from typing import Any, Dict, Mapping, MutableMapping, Optional, Sequence
 
@@ -18,10 +19,12 @@ from .errors import ProtocolViolation, TermwrightError
 from .framing import FrameDecoder, encode_frame
 from .limits import DEFAULT_LIMITS, ProtocolLimits
 from .marker import encode_marker
+from .logs import LogRecord, flatten_attrs, validate_log_record
 from .messages import (
     PROTOCOL_ID,
     get_tree_result,
     hello,
+    log_message,
     parse_driver_message,
     protocol_error,
     revision_commit,
@@ -43,8 +46,39 @@ DEFAULT_CAPABILITIES = (
     "render-revisions",
 )
 
+#: Capabilities for an adapter that also forwards application logs. Announcing
+#: `logs` is what makes the driver send a budget back; without it the driver
+#: sends none and the adapter must stay silent.
+CAPABILITIES_WITH_LOGS = DEFAULT_CAPABILITIES + ("logs",)
+
 #: How many recent snapshots stay answerable by a ``get-tree`` for a past revision.
 _SNAPSHOT_HISTORY = 8
+
+
+class _TokenBucket:
+    """Rate limiter for the log channel: `burst` capacity, refilled per second.
+
+    The adapter enforces its own budget and drops locally, which is what keeps
+    a log storm from eating the frame budget the semantic tree needs.
+    """
+
+    def __init__(self, per_second: int, burst: int, now: float) -> None:
+        self._per_second = max(0, per_second)
+        self._capacity = float(max(0, burst) + max(0, per_second))
+        self._tokens = self._capacity
+        self._updated = now
+
+    def take(self, now: float) -> bool:
+        """Consume one token, refilling first. False means "over budget"."""
+        if self._per_second <= 0:
+            return False
+        elapsed = max(0.0, now - self._updated)
+        self._updated = now
+        self._tokens = min(self._capacity, self._tokens + elapsed * self._per_second)
+        if self._tokens < 1.0:
+            return False
+        self._tokens -= 1.0
+        return True
 
 
 class SemanticClient:
@@ -84,6 +118,10 @@ class SemanticClient:
         self.marker_enabled = False
         #: Log-channel budget from ``hello-ack``; ``None`` means logs are off.
         self.log_budget: Optional[Dict[str, Any]] = None
+        self._log_seq = 0
+        self._log_bucket: Optional[_TokenBucket] = None
+        #: Records dropped locally for being over budget or over a limit.
+        self.logs_dropped = 0
         self.subscribe = "snapshots"
         self.closed = False
 
@@ -201,6 +239,54 @@ class SemanticClient:
             await self._send(snapshot_message(wire))
         await self._send(revision_commit(wire["revision"]))
 
+    def log(
+        self,
+        level: str,
+        message: str,
+        *,
+        attrs: Optional[Mapping[str, Any]] = None,
+        logger: Optional[str] = None,
+        ts: Optional[int] = None,
+    ) -> bool:
+        """Forward one application log record, if the driver asked for logs.
+
+        Returns whether the record went out. A record is dropped when the
+        session is not live, when the driver granted no budget, when this
+        adapter is over its rate, or when the record breaks a limit.
+
+        Every attempt consumes a sequence number, dropped or not: the gap left
+        in ``seq`` is precisely how the driver learns records were lost here
+        rather than in transit.
+        """
+        if not self.connected or self._log_bucket is None:
+            return False
+
+        self._log_seq += 1
+        record = LogRecord(
+            ts=int(time.time() * 1000) if ts is None else ts,
+            level=level,
+            message=message,
+            seq=self._log_seq,
+            attrs=flatten_attrs(attrs) if attrs else None,
+            logger=logger,
+            revision=self.revision or None,
+        )
+
+        if not self._log_bucket.take(time.monotonic()):
+            self.logs_dropped += 1
+            return False
+
+        wire = record.to_wire()
+        result = validate_log_record(wire, self._limits)
+        if not result.ok:
+            # An oversized or malformed record is dropped locally rather than
+            # taking the channel down; the gap in seq reports it.
+            self.logs_dropped += 1
+            return False
+
+        asyncio.ensure_future(self._send(log_message(record)))
+        return True
+
     def marker(self, revision: int) -> Optional[str]:
         """Marker sequence committing ``revision``, or ``None`` if not enabled."""
         if not self.marker_enabled or self.session_id is None:
@@ -255,6 +341,13 @@ class SemanticClient:
             self.session_id = message["sessionId"]
             self.marker_enabled = bool(message["marker"]["enabled"])
             self.log_budget = message.get("logs")
+            budget = self.log_budget
+            if budget is not None and budget.get("enabled"):
+                self._log_bucket = _TokenBucket(
+                    int(budget["maxRecordsPerSecond"]), int(budget["burst"]), time.monotonic()
+                )
+            else:
+                self._log_bucket = None
             self.subscribe = message["subscribe"]
             self._limits = ProtocolLimits.from_wire(message["limits"])
             if self._ready is not None and not self._ready.done():

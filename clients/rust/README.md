@@ -66,6 +66,24 @@ The client is blocking and single-threaded on purpose: a TUI renders on one
 thread, and the marker has to follow that render. `poll()` picks up driver
 requests without blocking — call it on each tick.
 
+## Application logs
+
+```toml
+termwright-protocol = { version = "0.1", features = ["tracing"] }
+```
+
+```rust
+let layer = TermwrightLayer::new(Arc::new(Mutex::new(client)));
+tracing_subscriber::registry().with(layer).init();
+
+tracing::error!(path = "/etc/app/policy.json", "policy missing");  // never painted
+```
+
+The `tracing` feature is off by default: the crate stays dependency-light for
+adapters that do not want a logging framework. Without it, `Client::log` takes
+a `LogRecord` directly. Either way the client owns the sequence numbers and the
+budget, and a dropped record leaves a gap in `seq` rather than being renumbered.
+
 ## Conformance
 
 `tests/vectors.rs` runs against `clients/test-vectors/`, generated from the

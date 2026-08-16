@@ -14,6 +14,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 from .errors import ProtocolViolation
 from .framing import project_dto
 from .limits import DEFAULT_LIMITS, LIMIT_FIELDS, ProtocolLimits
+from .logs import LogRecord, validate_log_record
 from .roles import CAPABILITY_SET
 from .validate import validate_snapshot
 
@@ -79,6 +80,11 @@ def get_tree_result(request_id: int, snapshot: Optional[Mapping[str, Any]] = Non
     return {"type": "get-tree-result", "requestId": request_id, "error": error}
 
 
+def log_message(record: LogRecord) -> Dict[str, Any]:
+    """Wrap a log record in its envelope."""
+    return {"type": "log", "record": record.to_wire()}
+
+
 def protocol_error(code: str, message: str) -> Dict[str, Any]:
     """Build a terminal error message; the sender closes after emitting it."""
     if code not in ERROR_CODES:
@@ -139,6 +145,19 @@ def _exact_keys(message: Mapping[str, Any], required: Sequence[str], optional: S
     if unknown:
         return f"unrecognized key(s): {', '.join(unknown)}"
     return None
+
+
+def _check_log_record(value: Any, limits: ProtocolLimits) -> Optional[ParseResult]:
+    """Map a record failure onto the wire taxonomy, as the reference does."""
+    result = validate_log_record(value, limits)
+    if result.ok:
+        return None
+    over_capacity = result.code in ("bytes", "count", "depth", "string-bytes")
+    return ParseResult(
+        ok=False,
+        code="limit-exceeded" if over_capacity else "malformed",
+        detail=f"log record {result.code}: {result.detail}",
+    )
 
 
 def _check_log_budget(value: Any) -> Optional[str]:
@@ -256,6 +275,13 @@ def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -
             issue = _identifier(message["error"], "error", allow_empty=True)
             return _malformed(issue) if issue else ParseResult(ok=True, message=message)
         bad = _check_snapshot(message["snapshot"], limits)
+        return bad if bad is not None else ParseResult(ok=True, message=message)
+
+    if kind == "log":
+        issue = _exact_keys(message, ("type", "record"))
+        if issue:
+            return _malformed(issue)
+        bad = _check_log_record(message["record"], limits)
         return bad if bad is not None else ParseResult(ok=True, message=message)
 
     if kind == "error":

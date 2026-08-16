@@ -135,6 +135,20 @@ if client != nil && client.Start(protocol.DialTimeout) == nil {
 }
 ```
 
+## Application logs
+
+```go
+session, _ := termwright.Attach(app, root, termwright.WithLogs())
+slog.SetDefault(slog.New(protocol.NewSlogHandler(session.Client(), nil)))
+
+slog.Error("policy missing", "path", "/etc/app/policy.json")  // never painted
+```
+
+`NewSlogHandler(nil, nil)` is never enabled, so the dormant path costs nothing.
+Groups and attributes flatten to dotted keys, `slog` levels map onto the wire's
+closed ladder, and the client drops what the budget does not allow — leaving a
+gap in `seq` so the driver can report the loss.
+
 ## Conformance
 
 `protocol/vectors_test.go` runs against `clients/test-vectors/`, generated from

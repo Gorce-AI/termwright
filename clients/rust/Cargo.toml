@@ -18,3 +18,11 @@ sha2 = "0.10"
 hmac = "0.12"
 base64 = "0.22"
 subtle = "2"
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", optional = true, default-features = false, features = ["registry", "std"] }
+
+[features]
+default = []
+# The tracing bridge is opt-in: the protocol client stays dependency-light for
+# adapters that do not want a logging framework pulled in with it.
+tracing = ["dep:tracing", "dep:tracing-subscriber"]

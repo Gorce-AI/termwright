@@ -40,8 +40,9 @@ def sample_snapshot() -> SemanticSnapshot:
 class FakeDriver:
     """Minimal driver end: completes the handshake, records adapter frames."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, logs: Optional[Dict[str, Any]] = None) -> None:
         self.path = path
+        self.logs = logs
         self.received: List[Dict[str, Any]] = []
         self._server: Optional[asyncio.AbstractServer] = None
         self._writer: Optional[asyncio.StreamWriter] = None
@@ -62,16 +63,19 @@ class FakeDriver:
                 for message in decoder.push(chunk):
                     if message.get("type") == "hello":
                         self.hello = message
-                        await self.send(
-                            {
-                                "type": "hello-ack",
-                                "protocol": "termwright/1",
-                                "sessionId": SESSION,
-                                "limits": DEFAULT_LIMITS.to_wire(),
-                                "subscribe": "snapshots",
-                                "marker": {"enabled": True},
-                            }
-                        )
+                        ack: Dict[str, Any] = {
+                            "type": "hello-ack",
+                            "protocol": "termwright/1",
+                            "sessionId": SESSION,
+                            "limits": DEFAULT_LIMITS.to_wire(),
+                            "subscribe": "snapshots",
+                            "marker": {"enabled": True},
+                        }
+                        # Absent unless the test asks for it: no budget means
+                        # the adapter must not log at all.
+                        if self.logs is not None:
+                            ack["logs"] = self.logs
+                        await self.send(ack)
                     else:
                         self.received.append(message)
                         self.frame_arrived.set()
