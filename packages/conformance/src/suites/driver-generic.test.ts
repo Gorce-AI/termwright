@@ -13,6 +13,7 @@ import {
   createSessionPool,
   enableFocusReporting,
   enableMouseReporting,
+  focusMode,
   mouseModeHidden,
   ptyAvailable,
   rejection,
@@ -186,9 +187,15 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
   it('refuses focus reports and drags the child never enabled', async () => {
     const terminal = await launch();
 
-    const noFocus = await rejection(terminal.focus());
-    expect((noFocus as TermwrightError).code).toBe('unsupported-action');
-    expect((noFocus as TermwrightError).diagnostics.suggestion).toContain('1004');
+    // "The child never asked" is a claim only a terminal that can see the
+    // request may make. Where the platform reports its own focus mode instead
+    // — ConPTY has `1004` on for a child that never sent it — there is nothing
+    // to refuse from, and the driver says so rather than refusing.
+    if (focusMode(terminal) === 'off') {
+      const noFocus = (await rejection(terminal.focus())) as TermwrightError;
+      expect(noFocus.code).toBe('unsupported-action');
+      expect(noFocus.diagnostics.suggestion).toContain('1004');
+    }
 
     const observable = await enableMouseReporting(terminal, 'click'); // clicks only: no motion
     const drag = terminal.getByText('Alpha').drag({ from: { row: 1, column: 2 }, to: { row: 3, column: 2 } });

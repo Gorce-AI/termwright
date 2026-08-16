@@ -131,14 +131,16 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
     // needs: a program that lost PATH or TERM fails much later, in ways that
     // look like a driver bug rather than a missing environment.
     //
-    // The allowlist can only forward what the parent had. `HOME` is a POSIX
-    // convention — Windows uses `USERPROFILE` — so it is asserted only where
-    // this process has one, rather than pinning the suite to one platform's
-    // environment.
+    // The allowlist is per platform by design — a Windows child started
+    // without `SystemRoot` aborts, and there is no `HOME` there to forward —
+    // so the home variable asserted here is the one that platform's list
+    // actually names. Conditioning on what *this* process happens to have was
+    // the wrong question: a Windows runner does have `HOME` (bash sets it) and
+    // the driver still, correctly, does not forward it.
     await terminal.waitForText('allow: PATH=yes');
     const line = terminal.screen().text().split('\n').find((row) => row.startsWith('allow: ')) ?? '';
     expect(line).toContain('TERM=yes');
-    if (process.env['HOME'] !== undefined) expect(line).toContain('HOME=yes');
+    expect(line).toContain(`${process.platform === 'win32' ? 'USERPROFILE' : 'HOME'}=yes`);
     expect(terminal.screen().text()).toContain('env: unset');
   });
 

@@ -228,9 +228,15 @@ has to delete an assertion that explains itself.
   is not assertable from the exit status. What is invariant is the session's
   obligation: it notices the death and stops pretending the program can be
   driven. That is what the peer-crash test asserts.
-- **`HOME` is a POSIX convention.** The env allowlist can only forward what the
-  parent had, and Windows uses `USERPROFILE`, so the allowlist test asserts
-  `PATH` and `TERM` unconditionally and `HOME` only where this process has one.
+- **The env allowlist is per platform, and "what the parent had" is the wrong
+  question.** The first attempt asserted `HOME` only where this process has one
+  — which failed on Windows, because a bash runner *does* have `HOME` and the
+  driver's Windows list correctly does not forward it (`USERPROFILE` and the
+  profile variables are what a program uses there, and `SystemRoot` is what
+  keeps a Node child from aborting outright). The fixture now names the home
+  variable its platform's list names, and the test asserts that one. Whenever a
+  conditional is about to key on the runner's environment, check whether the
+  contract is actually a property of the platform instead.
 - **Resolve an interpreter to an absolute path before handing it to a pty.**
   `python3` on POSIX is often only `python` on Windows, and `node-pty` failed
   with `File not found:` for a name a `spawnSync` probe had just accepted.
@@ -247,6 +253,14 @@ has to delete an assertion that explains itself.
   mode is hidden the effect is asserted instead: the child decodes the report,
   and the session records `mode-unverifiable` for that mode exactly once,
   because that entry describes the platform rather than any one action.
+- **Budget a long chain by progress, not by the clock.** The two 200-revision
+  floods were given 45 s, then failed on Windows anyway, where a pty re-encodes
+  every byte. Raising the number would only have hidden which of two very
+  different things was happening — slow, or stuck. `waitForRevision` waits for
+  the chain to *stop advancing* instead: a slow pipe finishes late, and a stall
+  fails at once, naming the revision it died on and the diagnostics recorded
+  there. That message is the diagnosis a wall-clock timeout never gives, and
+  "Matcher did not succeed in time" was exactly that non-diagnosis twice over.
 - **A tri-state mode is not a boolean, and truthiness will not say so.**
   `focusReporting` gained `'unknown'` once the driver stopped reporting the
   host's focus mode as the child's. The helper here still returned it as a
@@ -256,7 +270,11 @@ has to delete an assertion that explains itself.
   worst way to learn it: the machine, not the platform, decided the branch.
   Helpers now wait for a settled answer (`'on'` or `'unknown'`) and return the
   three states, and `pnpm typecheck` catches the next such rename, which is how
-  this one was actually found.
+  this one was actually found. The follow-up bite: the *pre*-condition of those
+  tests — "focus is refused before the child asks" — is a claim about the child
+  too, and ConPTY has `1004` on for a child that never sent it, so that
+  assertion also had to move behind the observed mode. Wherever a refusal is
+  asserted, ask first whether the terminal can see the fact being refused on.
 - **A socket and a pty are two transports, and only one of them is fast.**
   Frames reach the driver long before the pty has re-encoded a byte, so a test
   can wait for a line of output and then read state only a frame carries — and

@@ -76,8 +76,11 @@ function draw() {
   // process reached the child, which is what `envMode` decides.
   out(`env: ${process.env['CONFORMANCE_ECHO'] ?? 'unset'}\r\n`);
   // Which of the documented allowlist actually arrived. A child that lost PATH
-  // or TERM is broken in ways that look like a driver bug much later.
-  const allow = ['PATH', 'HOME', 'TERM', 'LANG']
+  // or TERM is broken in ways that look like a driver bug much later. The home
+  // variable is named per platform because the allowlist is: Windows has no
+  // `HOME`, and a program there uses the profile variables instead.
+  const home = process.platform === 'win32' ? 'USERPROFILE' : 'HOME';
+  const allow = ['PATH', home, 'TERM', 'LANG']
     .map((name) => `${name}=${process.env[name] === undefined ? 'no' : 'yes'}`)
     .join(' ');
   out(`allow: ${allow}\r\n`);

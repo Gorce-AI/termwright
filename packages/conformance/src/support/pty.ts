@@ -324,6 +324,53 @@ export async function enableFocusReporting(
   return terminal.screen().modes.focusReporting;
 }
 
+/**
+ * Waits for a revision chain to reach `target`, budgeting by progress.
+ *
+ * A wall-clock budget for "two hundred revisions arrived" is a bet on the
+ * platform's throughput, and it is the wrong question to ask: a pty that
+ * re-encodes every byte makes the chain slow, not stuck, and raising the number
+ * until it passes would only hide which of the two it is. Waiting for progress
+ * to *stop* separates them — a chain that keeps advancing gets as long as it
+ * needs, and one that stops fails at once, saying where it stopped and what the
+ * session recorded there. That message is the diagnosis.
+ */
+export async function waitForRevision(
+  terminal: TerminalHarness,
+  target: number,
+  stallMs = 20_000,
+): Promise<void> {
+  let seen = terminal.semanticTree()?.revision ?? 0;
+  let progressed = Date.now();
+  for (;;) {
+    const current = terminal.semanticTree()?.revision ?? 0;
+    if (current >= target) return;
+    if (current > seen) {
+      seen = current;
+      progressed = Date.now();
+    }
+    if (Date.now() - progressed > stallMs) {
+      const counts = new Map<string, number>();
+      for (const entry of terminal.diagnostics()) {
+        counts.set(entry.code, (counts.get(entry.code) ?? 0) + 1);
+      }
+      const recorded = [...counts].map(([code, count]) => `${code}×${count}`).join(', ');
+      throw new Error(
+        `conformance: the revision chain stopped at ${seen} of ${target} and made no progress for ${stallMs}ms; diagnostics: ${recorded || 'none'}`,
+      );
+    }
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 25);
+      timer.unref?.();
+    });
+  }
+}
+
+/** What the emulator currently makes of the child's focus-reporting request. */
+export function focusMode(terminal: TerminalHarness): 'on' | 'off' | 'unknown' {
+  return terminal.screen().modes.focusReporting;
+}
+
 /** True while the emulator cannot see which mouse mode the child asked for. */
 export function mouseModeHidden(terminal: TerminalHarness): boolean {
   return terminal.screen().modes.mouseTracking === 'unknown';

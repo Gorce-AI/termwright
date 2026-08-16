@@ -15,6 +15,7 @@ import {
   createSessionPool,
   enableFocusReporting,
   enableMouseReporting,
+  focusMode,
   mouseModeHidden,
   ptyAvailable,
   rejection,
@@ -190,8 +191,13 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
 
   it('reports focus in and out only while the child asks for it', async () => {
     const terminal = await generic();
-    const before = (await rejection(terminal.focus())) as TermwrightError;
-    expect(before.code).toBe('unsupported-action');
+    // Refusing is a claim about the child, so only a terminal that can see the
+    // request may make it: ConPTY reports `1004` as on for a child that never
+    // asked, and there the driver delivers instead of refusing.
+    if (focusMode(terminal) === 'off') {
+      const before = (await rejection(terminal.focus())) as TermwrightError;
+      expect(before.code).toBe('unsupported-action');
+    }
 
     const reporting = await enableFocusReporting(terminal);
     if (reporting === 'unknown') {

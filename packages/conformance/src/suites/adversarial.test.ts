@@ -14,7 +14,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_LIMITS } from '@termwright/protocol';
 import type { SessionDiagnostic, TerminalHarness } from '@termwright/driver';
 import { TermwrightError } from '@termwright/driver';
-import { CONFORMANCE_FIXTURES, createSessionPool, ptyAvailable, rejection } from '../support/pty.js';
+import {
+  CONFORMANCE_FIXTURES,
+  createSessionPool,
+  ptyAvailable,
+  rejection,
+  waitForRevision,
+} from '../support/pty.js';
 
 const sessions = createSessionPool();
 
@@ -273,16 +279,22 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expectSurvives(terminal);
   });
 
-  it('survives a rerender storm and settles on the last revision', async () => {
-    const terminal = await arm('rapid-rerender');
-    await fire(terminal);
+  it(
+    'survives a rerender storm and settles on the last revision',
+    async () => {
+      const terminal = await arm('rapid-rerender');
+      await fire(terminal);
 
-    // 199 revisions over a pipe ConPTY re-encodes: the chain still arrives, it
-    // just takes longer than a default poll allows.
-    await expect.poll(() => terminal.semanticTree()?.revision, { timeout: 45_000 }).toBe(200);
-    expect(await terminal.getByRole('button').textContent()).toBe('Rev200');
-    await expectSurvives(terminal);
-  });
+      // 199 revisions over a pipe that re-encodes every byte: how long that
+      // takes is the platform's business, so the wait is on the chain still
+      // advancing rather than on a clock. A stall fails here with the revision
+      // it died on; a slow pipe simply finishes later.
+      await waitForRevision(terminal, 200);
+      expect(await terminal.getByRole('button').textContent()).toBe('Rev200');
+      await expectSurvives(terminal);
+    },
+    180_000,
+  );
 
   it('survives an output flood with a retained scrollback floor', async () => {
     const terminal = await sessions.launch(CONFORMANCE_FIXTURES.adversarialPeer(), {
@@ -548,19 +560,24 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expectSurvives(terminal);
   });
 
-  it('survives a delta flood and lands on the last revision', async () => {
-    const terminal = await arm('delta-flood');
-    await fire(terminal);
+  it(
+    'survives a delta flood and lands on the last revision',
+    async () => {
+      const terminal = await arm('delta-flood');
+      await fire(terminal);
 
-    await expect.poll(() => terminal.semanticTree()?.revision, { timeout: 45_000 }).toBe(200);
-    expect(await terminal.getByRole('button').textContent()).toBe('Rev200');
+      // Progress, not a clock — see the rerender storm above.
+      await waitForRevision(terminal, 200);
+      expect(await terminal.getByRole('button').textContent()).toBe('Rev200');
 
-    // A flood is pressure on the pairing, not a reason to give up composing:
-    // the chain still ends where it should, and nothing had to be repaired.
-    expect(codes(terminal)).not.toContain('delta-resync');
-    expect(terminal.capabilities().semanticTree).toBe(true);
-    await expectSurvives(terminal);
-  });
+      // A flood is pressure on the pairing, not a reason to give up composing:
+      // the chain still ends where it should, and nothing had to be repaired.
+      expect(codes(terminal)).not.toContain('delta-resync');
+      expect(terminal.capabilities().semanticTree).toBe(true);
+      await expectSurvives(terminal);
+    },
+    180_000,
+  );
 
   it('accepts a marker closed with ST as readily as one closed with BEL', async () => {
     const terminal = await arm('marker-st-terminator');
