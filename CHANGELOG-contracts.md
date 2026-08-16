@@ -408,3 +408,10 @@
   rozjazdu platform, nie nowa polityka: node-pty na POSIX już nadpisywał TERM
   nazwą terminala (unixTerminal.js:53-54), na Windows nie zapisywał nic —
   dziecko jest podpięte do naszego emulatora, nie do terminala rodzica.
+- 2026-08-16 (driver): nowy kod `not-found` w `TermwrightErrorCode` (+ klasa
+  `NotFoundError`): „wskazany zasób nie istnieje" — kontrast z
+  `protocol-violation` (zasób istnieje i jest zniekształcony). Konsumenci:
+  trace (openTrace: brakująca ścieżka / katalog bez meta.json; zepsute
+  archiwum pozostaje protocol-violation), driver (nieistniejący cwd/command
+  odrzucany PRZED powstaniem pty; tylko polecenia będące ścieżką — goła nazwa
+  nadal idzie w PATH), CLI mapuje not-found → exit 2.
