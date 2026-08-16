@@ -224,6 +224,28 @@ describe('RevisionPairing', () => {
     }
   });
 
+  it('takes a frame end without a beginning, for probes that only have a post-frame hook', async () => {
+    // Frame boundaries are a capability, not a guarantee: Textual is
+    // post-frame only, tview's pre-draw hook can veto, OpenTUI's sits inside
+    // the loop. An end with no matching beginning must be a no-op, and the
+    // absence of beginnings must read as "frames unannounced" — the quiet
+    // barrier still applies — rather than "there is no frame".
+    vi.useFakeTimers();
+    try {
+      const { pairing, diagnostics, published } = createPairing();
+      pairing.offerSnapshot(snapshot(1));
+      pairing.frameClosed(1);
+      expect(pairing.hasOpenFrame).toBe(false);
+
+      pairing.offerMarker(1, 3);
+      expect(published).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(diagnostics).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('publishes on arrival when the adapter has no marker capability', () => {
     const { pairing, published } = createPairing(false);
     pairing.offerSnapshot(snapshot(1));
