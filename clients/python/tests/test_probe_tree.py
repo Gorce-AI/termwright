@@ -148,11 +148,14 @@ async def test_bounds_are_the_visible_rectangle_not_the_region():
 
 
 async def test_clipped_away_and_not_displayed_are_told_apart():
-    """v1 has one `hidden` flag; the encoding still distinguishes the two.
+    """`state.offscreen` says which kind of hidden this is.
 
-    Not displayed carries no bounds at all. Displayed but entirely clipped
-    carries a zero-area rectangle at its own origin — "it is somewhere, and
-    none of it is on screen".
+    Not displayed is hidden with no bounds at all. Displayed but entirely
+    clipped is hidden *and* offscreen, with a zero-area rectangle at its own
+    origin — "it is somewhere, and none of it is on screen". The earlier
+    encoding leaned on absent bounds to mean "not displayed", which collides
+    with what absent bounds already means for a producer that cannot report
+    geometry at all.
     """
     app = HiddenApp()
     async with app.run_test(size=(40, 10)) as pilot:
@@ -160,6 +163,9 @@ async def test_clipped_away_and_not_displayed_are_told_apart():
         undisplayed = build_snapshot(app, Identities(), session_id="s", revision=1).to_wire()
     gone = by_test_id(undisplayed)["gone"]
     assert gone["state"]["hidden"] is True
+    assert "offscreen" not in gone["state"], (
+        "a widget that was never laid out is not scrolled away"
+    )
     assert "bounds" not in gone, "a widget Textual is not displaying has no rectangle"
 
     app = ScrollingApp()
@@ -173,6 +179,9 @@ async def test_clipped_away_and_not_displayed_are_told_apart():
     ]
     assert clipped, "nothing was reported as on-screen-but-clipped"
     assert all(node["bounds"]["width"] == 0 for node in clipped)
+    assert all(node["state"].get("offscreen") is True for node in clipped), (
+        "a clipped node did not say why it is hidden"
+    )
     assert validate_snapshot(scrolled, DEFAULT_LIMITS).ok
 
 

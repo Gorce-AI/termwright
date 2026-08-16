@@ -443,6 +443,15 @@ function mutate(fn) {
 const snapshotAccept = [
   { name: 'dialog-with-two-buttons', snapshot: baseSnapshot },
   {
+    // A node scrolled entirely out of a viewport: hidden, and specifically
+    // hidden because of scrolling rather than because it was never displayed.
+    name: 'offscreen-implies-hidden',
+    snapshot: mutate((s) => {
+      s.nodes[2].state = { hidden: true, offscreen: true };
+      s.nodes[2].bounds = { row: 1, column: 14, width: 0, height: 0 };
+    }),
+  },
+  {
     // What a probe publishes: paint order observed, so the cells are
     // answerable and the driver's pointer gate opens; provenance says the
     // facts came from the framework rather than from an author or a guess.
@@ -512,6 +521,13 @@ const snapshotReject = [
     snapshot: mutate((s) => { s.nodes[1].role = 'generic'; s.nodes[1].frameworkType = ''; }),
   },
   { name: 'unknown-role', snapshot: mutate((s) => { s.nodes[1].role = 'slider'; }) },
+  {
+    // state.offscreen is a claim about scrolling, not a second way of saying
+    // hidden: every cell outside the visible area means the node is not
+    // visible, so the pair without `hidden` is a contradiction.
+    name: 'offscreen-without-hidden',
+    snapshot: mutate((s) => { s.nodes[1].state = { offscreen: true }; }),
+  },
   {
     name: 'unknown-occlusion',
     snapshot: mutate((s) => { s.nodes[1].occlusion = 'maybe'; }),

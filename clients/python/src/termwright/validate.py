@@ -146,6 +146,7 @@ _STATE_BOOLS = (
     "modal",
     "busy",
     "hidden",
+    "offscreen",
     "readonly",
     "multiline",
 )
@@ -267,6 +268,16 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
         _rect(node["bounds"], tuple(path) + ("bounds",))
     if "state" in node:
         _state(node["state"], tuple(path) + ("state",))
+        state = node["state"]
+        if isinstance(state, dict) and state.get("offscreen") is True and state.get("hidden") is not True:
+            # Every cell outside the visible area and the node still visible
+            # cannot both be true. Refusing the pair keeps `offscreen` a claim
+            # about scrolling rather than a second, weaker way of saying hidden.
+            raise _Issue(
+                tuple(path) + ("state", "offscreen"),
+                f"node {node.get('id')}: state.offscreen implies state.hidden — every cell is "
+                "outside the visible area, so the node cannot also be visible",
+            )
     if "actions" in node:
         actions = node["actions"]
         if not isinstance(actions, list):

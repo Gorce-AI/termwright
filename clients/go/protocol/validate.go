@@ -190,7 +190,7 @@ func checkRect(value any, path []string) (map[string]float64, *issue) {
 
 var stateBoolKeys = []string{
 	"disabled", "focused", "selected", "expanded", "modal",
-	"busy", "hidden", "readonly", "multiline",
+	"busy", "hidden", "offscreen", "readonly", "multiline",
 }
 
 var stateKeys = append(append([]string{}, stateBoolKeys...),
@@ -350,6 +350,18 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 	if state, ok := object["state"]; ok {
 		if problem := checkState(state, at(path, "state")); problem != nil {
 			return problem
+		}
+		// Every cell outside the visible area and the node still visible cannot
+		// both be true. Refusing the pair keeps `offscreen` a claim about
+		// scrolling rather than a second, weaker way of saying hidden.
+		if fields, isObject := state.(map[string]any); isObject {
+			offscreen, _ := fields["offscreen"].(bool)
+			hidden, _ := fields["hidden"].(bool)
+			if offscreen && !hidden {
+				return fail(at(path, "state", "offscreen"), fmt.Sprintf(
+					"node %s: state.offscreen implies state.hidden — every cell is outside "+
+						"the visible area, so the node cannot also be visible", id))
+			}
 		}
 	}
 	if actions, ok := object["actions"]; ok {

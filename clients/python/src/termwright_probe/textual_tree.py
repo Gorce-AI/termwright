@@ -16,12 +16,14 @@ lexicographically. Ranking the frame's widgets by that same key gives a
 lets every node claim `occlusion: 'known'` and unlocks pointer actions the
 driver otherwise refuses.
 
-**Not displayed and scrolled out of view stop being the same fact.** Both are
-`hidden`, because v1 has one flag, but they are encoded differently and both
-encodings validate: a widget Textual is not displaying carries no `bounds` at
-all, while one that is displayed and entirely clipped carries a zero-area
-rectangle at its own origin. A consumer can tell them apart; neither invents a
-field.
+**Not displayed and scrolled out of view are different facts, and the tree now
+says which.** A widget Textual is not displaying is `hidden` with no bounds; one
+that is displayed and entirely clipped is `hidden` **and** `offscreen`, with a
+zero-area rectangle at its own origin. The earlier encoding leaned on absent
+`bounds` to mean "not displayed", which collided with what absent bounds
+already means — "this producer cannot report geometry" — so a consumer reading
+the tree generically could not tell them apart. `state.offscreen` removes the
+ambiguity at the source.
 
 The Textual knowledge below — which class means which role, where a widget
 keeps its text — is deliberately copied from the adapter rather than imported
@@ -339,7 +341,7 @@ def build_snapshot(
         if parent_id is None:
             root_ids.append(node_id)
 
-        bounds, hidden = _geometry_of(item)
+        bounds, hidden, offscreen = _geometry_of(item)
         annotated = _annotated_fields(widget)
         nodes.append(
             SemanticNode(
@@ -350,7 +352,7 @@ def build_snapshot(
                 testId=test_id_for(widget),
                 value=value_for(widget, role),
                 bounds=bounds,
-                state=_state_of(item, widget, focused, hidden),
+                state=_state_of(item, widget, focused, hidden, offscreen),
                 actions=actions_for(role),
                 frameworkType=type(widget).__name__ if role == "generic" else None,
                 occlusion="known" if item.paint_order is not None else "unknown",
@@ -383,35 +385,39 @@ def _app_name(app: Any) -> str:
     return type(app).__name__
 
 
-def _geometry_of(item: Observation) -> Tuple[Optional[Rect], bool]:
-    """Bounds to publish, and whether the node counts as hidden.
+def _geometry_of(item: Observation) -> Tuple[Optional[Rect], bool, bool]:
+    """Bounds to publish, whether the node is hidden, and whether it is offscreen.
 
-    Three cases, and the encoding keeps two of them apart that v1's single
-    `hidden` flag would otherwise merge:
+    Three cases, and the tree distinguishes all of them:
 
-    - not displayed: no bounds at all;
-    - displayed but entirely clipped: a zero-area rect at its own origin, which
-      says "it is somewhere, and none of it is on screen";
+    - not displayed: `hidden`, no bounds at all;
+    - displayed but entirely clipped: `hidden` and `offscreen`, with a
+      zero-area rect at its own origin — "it is somewhere, and none of it is
+      on screen";
     - visible: the intersection of its region with the clip.
     """
-    if not item.displayed:
-        return None, True
-    if item.geometry is None:
-        return None, True
+    if not item.displayed or item.geometry is None:
+        return None, True, False
 
     visible = _rect(getattr(item.geometry, "visible_region", None))
     if visible is None:
         # An older Textual without the property: fall back to the region and
         # say so by refusing the occlusion claim elsewhere.
-        return _rect(getattr(item.geometry, "region", None)), False
+        return _rect(getattr(item.geometry, "region", None)), False, False
     if visible.width == 0 or visible.height == 0:
         region = _rect(getattr(item.geometry, "region", None))
         origin = region if region is not None else visible
-        return Rect(row=origin.row, column=origin.column, width=0, height=0), True
-    return visible, False
+        return Rect(row=origin.row, column=origin.column, width=0, height=0), True, True
+    return visible, False, False
 
 
-def _state_of(item: Observation, widget: Any, focused: Any, hidden: bool) -> Optional[SemanticState]:
+def _state_of(
+    item: Observation,
+    widget: Any,
+    focused: Any,
+    hidden: bool,
+    offscreen: bool,
+) -> Optional[SemanticState]:
     is_focused = focused is widget
     checked: Optional[bool] = None
     if role_for(widget) in ("checkbox", "radio"):
@@ -426,6 +432,9 @@ def _state_of(item: Observation, widget: Any, focused: Any, hidden: bool) -> Opt
         focused=True if is_focused and not hidden else None,
         disabled=True if bool(getattr(widget, "disabled", False)) else None,
         hidden=True if hidden else None,
+        # Only claimed for a node Textual laid out and then clipped entirely
+        # away; a widget with display off is hidden without being anywhere.
+        offscreen=True if offscreen else None,
         checked=checked,
         expanded=(not collapsed) if isinstance(collapsed, bool) else None,
         multiline=True if type(widget).__name__ == "TextArea" else None,

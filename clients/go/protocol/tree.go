@@ -11,14 +11,17 @@ type Rect struct {
 // State is the closed state set. Pointers distinguish "unset" from "false":
 // an omitted state is not an assertion, a false one is.
 type State struct {
-	Disabled      *bool  `json:"disabled,omitempty"`
-	Focused       *bool  `json:"focused,omitempty"`
-	Selected      *bool  `json:"selected,omitempty"`
-	Checked       any    `json:"checked,omitempty"` // bool or the string "mixed"
-	Expanded      *bool  `json:"expanded,omitempty"`
-	Modal         *bool  `json:"modal,omitempty"`
-	Busy          *bool  `json:"busy,omitempty"`
-	Hidden        *bool  `json:"hidden,omitempty"`
+	Disabled *bool `json:"disabled,omitempty"`
+	Focused  *bool `json:"focused,omitempty"`
+	Selected *bool `json:"selected,omitempty"`
+	Checked  any   `json:"checked,omitempty"` // bool or the string "mixed"
+	Expanded *bool `json:"expanded,omitempty"`
+	Modal    *bool `json:"modal,omitempty"`
+	Busy     *bool `json:"busy,omitempty"`
+	Hidden   *bool `json:"hidden,omitempty"`
+	// Offscreen says every cell is outside the visible area — scrolled away,
+	// not undisplayed. Implies Hidden; the pair without it is refused.
+	Offscreen     *bool  `json:"offscreen,omitempty"`
 	ReadOnly      *bool  `json:"readonly,omitempty"`
 	Multiline     *bool  `json:"multiline,omitempty"`
 	Orientation   string `json:"orientation,omitempty"`

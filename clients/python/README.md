@@ -230,7 +230,7 @@ the claim that the probe observes rather than redraws.
 | `occlusion: "known"` | widgets ranked by `MapGeometry.order`, the compositor's own sort key |
 | roles for your own widget classes | the MRO, so `SaveButton(Button)` is a button with no registration |
 | `frameworkType` on anything unrecognised | the widget's class name |
-| scrolled out of view vs `display = False` | both `hidden`; the first carries a zero-area rect, the second no rect |
+| scrolled out of view vs `display = False` | both `hidden`; the first also `state.offscreen`, with a zero-area rect |
 
 Because paint order is real here, the driver allows pointer actions against
 Textual nodes; it refuses them for producers that cannot say whether a node's

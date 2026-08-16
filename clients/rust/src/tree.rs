@@ -103,6 +103,11 @@ pub struct State {
     /// Present in the tree but not painted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hidden: Option<bool>,
+    /// Every cell is outside the visible area — scrolled away, not
+    /// undisplayed. Implies [`State::hidden`]; the pair without it is refused
+    /// by validation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offscreen: Option<bool>,
     /// Value is displayed but cannot be edited.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub readonly: Option<bool>,

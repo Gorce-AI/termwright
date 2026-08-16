@@ -141,6 +141,7 @@
     "modal",
     "busy",
     "hidden",
+    "offscreen",
     "readonly",
     "multiline",
     "orientation",

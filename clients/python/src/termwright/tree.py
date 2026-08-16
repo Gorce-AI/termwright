@@ -36,6 +36,9 @@ class SemanticState:
     modal: Optional[bool] = None
     busy: Optional[bool] = None
     hidden: Optional[bool] = None
+    #: Every cell is outside the visible area — scrolled away, not undisplayed.
+    #: Implies ``hidden``; the pair without it is refused by validation.
+    offscreen: Optional[bool] = None
     readonly: Optional[bool] = None
     multiline: Optional[bool] = None
     orientation: Optional[str] = None

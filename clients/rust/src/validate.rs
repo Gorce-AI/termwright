@@ -168,7 +168,7 @@ struct Rect {
     height: i64,
 }
 
-const STATE_BOOL_KEYS: [&str; 9] = [
+const STATE_BOOL_KEYS: [&str; 10] = [
     "disabled",
     "focused",
     "selected",
@@ -176,12 +176,13 @@ const STATE_BOOL_KEYS: [&str; 9] = [
     "modal",
     "busy",
     "hidden",
+    "offscreen",
     "readonly",
     "multiline",
 ];
 
 /// Every field a `state` object may carry, as this client knows them.
-pub const STATE_KEYS: [&str; 16] = [
+pub const STATE_KEYS: [&str; 17] = [
     "disabled",
     "focused",
     "selected",
@@ -189,6 +190,7 @@ pub const STATE_KEYS: [&str; 16] = [
     "modal",
     "busy",
     "hidden",
+    "offscreen",
     "readonly",
     "multiline",
     "checked",
@@ -373,6 +375,21 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
     }
     if let Some(state) = object.get("state") {
         check_state(state, &path(at, &["state"]))?;
+        // Every cell outside the visible area and the node still visible
+        // cannot both be true. Refusing the pair keeps `offscreen` a claim
+        // about scrolling rather than a second, weaker way of saying hidden.
+        let offscreen = state.get("offscreen").and_then(Value::as_bool) == Some(true);
+        let hidden = state.get("hidden").and_then(Value::as_bool) == Some(true);
+        if offscreen && !hidden {
+            let id = object.get("id").and_then(Value::as_str).unwrap_or("");
+            return Err(Issue::new(
+                path(at, &["state", "offscreen"]),
+                format!(
+                    "node {id}: state.offscreen implies state.hidden — every cell is outside \
+                     the visible area, so the node cannot also be visible"
+                ),
+            ));
+        }
     }
     if let Some(actions) = object.get("actions") {
         let Some(items) = actions.as_array() else {
