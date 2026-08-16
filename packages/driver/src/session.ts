@@ -1277,24 +1277,66 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 }
 
 /**
- * Variables a child genuinely needs to run under `envMode: 'replace'`.
+ * Variables a POSIX child genuinely needs under `envMode: 'replace'`.
  * Deliberately short: the tokens, cloud credentials and CI secrets sitting in a
  * test runner's environment are not the application under test's business.
- * Kept in sync with `@termwright/mcp`, which applies the same allowlist.
  */
-const SAFE_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'SHELL', 'TMPDIR', 'USER', 'TERM'] as const;
+const POSIX_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'SHELL', 'TMPDIR', 'USER', 'TERM'] as const;
 
-/** Builds the child environment; the handshake variables are added afterwards. */
-function buildChildEnv(mode: EnvMode, overrides: Readonly<Record<string, string>> | undefined): Record<string, string> {
+/**
+ * The same list for Windows, which needs a different and longer one.
+ *
+ * This is not a portability nicety: a Node process started without
+ * `SystemRoot` **aborts** rather than reporting an error, so a POSIX-shaped
+ * allowlist makes every child die with exit code 134 and no explanation.
+ * `PATHEXT` and `COMSPEC` decide whether an executable can be found at all,
+ * and the profile variables are what a program uses instead of `HOME`.
+ */
+const WINDOWS_ENV_KEYS = [
+  'PATH',
+  'PATHEXT',
+  'SystemRoot',
+  'SystemDrive',
+  'windir',
+  'TEMP',
+  'TMP',
+  'COMSPEC',
+  'USERPROFILE',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'PROCESSOR_ARCHITECTURE',
+  'NUMBER_OF_PROCESSORS',
+  'OS',
+  'TERM',
+] as const;
+
+/** The allowlist for the platform the driver is running on. */
+function safeEnvKeys(): readonly string[] {
+  return process.platform === 'win32' ? WINDOWS_ENV_KEYS : POSIX_ENV_KEYS;
+}
+
+/**
+ * Builds the child environment; the handshake variables are added afterwards.
+ *
+ * Exported for tests only — the public surface is `index.ts`.
+ */
+export function buildChildEnv(mode: EnvMode, overrides: Readonly<Record<string, string>> | undefined): Record<string, string> {
   const env: Record<string, string> = {};
   if (mode === 'inherit') {
     for (const [key, value] of Object.entries(process.env)) {
       if (value !== undefined) env[key] = value;
     }
   } else {
-    for (const key of SAFE_ENV_KEYS) {
-      const value = process.env[key];
-      if (value !== undefined) env[key] = value;
+    // Windows environment names are case-insensitive and the OS decides the
+    // casing, so the allowlist is matched against the real keys rather than
+    // read by an assumed spelling.
+    const insensitive = process.platform === 'win32';
+    const wanted = new Set(safeEnvKeys().map((key) => (insensitive ? key.toLowerCase() : key)));
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value === undefined) continue;
+      if (wanted.has(insensitive ? key.toLowerCase() : key)) env[key] = value;
     }
   }
   for (const [key, value] of Object.entries(overrides ?? {})) env[key] = value;
