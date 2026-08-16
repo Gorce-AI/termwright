@@ -8,23 +8,22 @@
  * terminal handles, and internal faults.
  */
 import { TermwrightError } from '@termwright/driver';
+import type { TermwrightErrorCode } from '@termwright/driver';
 import { CrashContextError, renderCrash } from './crash.js';
 import type { CrashProjection } from './crash.js';
 
-/** Kinds an agent can branch on. Superset of `TermwrightErrorCode`. */
-export type ErrorKind =
-  | 'timeout'
-  | 'stale-snapshot'
-  | 'ambiguous-locator'
-  | 'unsupported-action'
-  | 'history-truncated'
-  | 'protocol-violation'
-  | 'capacity'
-  | 'process-exited'
-  | 'session-closed'
-  | 'usage'
-  | 'no-session'
-  | 'internal';
+/**
+ * Kinds an agent can branch on: every driver code, plus the three failures that
+ * never reach the driver.
+ *
+ * Derived from `TermwrightErrorCode` rather than restated, so a code added
+ * upstream is publishable here the moment it lands instead of failing the
+ * assignment in {@link toErrorPayload}.
+ */
+export type ErrorKind = TermwrightErrorCode | 'usage' | 'no-session' | 'internal';
+
+/** The kinds this layer adds; everything else comes from the driver. */
+export const MCP_ERROR_KINDS = ['usage', 'no-session', 'internal'] as const satisfies readonly ErrorKind[];
 
 /** CLI exit codes (CONTRACTS.md §MCP). */
 export const EXIT_CODES = Object.freeze({

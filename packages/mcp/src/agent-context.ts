@@ -9,8 +9,9 @@
  * rather than shelling out.
  */
 import { z } from 'zod';
-import { EXIT_CODES } from './errors.js';
+import { EXIT_CODES, MCP_ERROR_KINDS } from './errors.js';
 import type { ErrorKind } from './errors.js';
+import type { TermwrightErrorCode } from '@termwright/driver';
 import { SEMANTIC_ROLES, SIGNALS } from './model.js';
 import { STATE_NAMES } from './schemas.js';
 import { MCP_LIMITS } from './sessions.js';
@@ -46,7 +47,15 @@ export interface AgentContext {
   readonly conventions: readonly string[];
 }
 
-const ERROR_KINDS: readonly ErrorKind[] = [
+/**
+ * The kinds published to agents.
+ *
+ * The driver's codes are listed rather than derived, because a runtime array
+ * cannot be generated from a type — but {@link ERROR_KINDS_ARE_COMPLETE} fails
+ * to compile if the driver adds one that is missing here, which is how
+ * `not-found` will announce itself rather than quietly going undocumented.
+ */
+const DRIVER_ERROR_KINDS = [
   'timeout',
   'stale-snapshot',
   'ambiguous-locator',
@@ -56,10 +65,18 @@ const ERROR_KINDS: readonly ErrorKind[] = [
   'capacity',
   'process-exited',
   'session-closed',
-  'usage',
-  'no-session',
-  'internal',
-];
+] as const satisfies readonly TermwrightErrorCode[];
+
+type MissingKind = Exclude<TermwrightErrorCode, (typeof DRIVER_ERROR_KINDS)[number]>;
+
+/** Compile-time lock over the driver's closed code set. */
+export const ERROR_KINDS_ARE_COMPLETE: [MissingKind] extends [never]
+  ? true
+  : ['undocumented error kinds', MissingKind] = true as [MissingKind] extends [never]
+  ? true
+  : ['undocumented error kinds', MissingKind];
+
+const ERROR_KINDS: readonly ErrorKind[] = [...DRIVER_ERROR_KINDS, ...MCP_ERROR_KINDS];
 
 const CONVENTIONS = [
   'A ref looks like n8@42: node id at semantic revision 42. It is valid only while 42 is the live ' +
