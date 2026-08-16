@@ -240,3 +240,7 @@
   (sessionId) or genuinely absent (traceRef, error). Receiver-side fallbacks
   removed. General rule for all in-repo contracts until 1.0 ships: no
   backward-compat shims, no "older producer" branches.
+- 2026-08-16 (driver 3a1f27a): SessionDiagnostic.count is filled only where
+  the entry AGGREGATES lost items; a rejected seq-duplicate is not a loss and
+  carries no count; single-item entries identify via `revision`. Absent count
+  means "this entry does not aggregate", NOT zero.
