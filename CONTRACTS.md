@@ -93,12 +93,18 @@ those readers.
 ## §UI events — runner ↔ browser
 
 WebSocket, JSON messages `{ v: 1, type, ... }`:
-- server→client: `run-start`, `test-start {id, title, file}`,
+- server→client: `run-start`,
+  `test-start {id, title, file?, startedAt?, sessionId?}`,
   `step {testId, title, phase}`, `output {sessionId, dataB64, t}`,
   `semantic {sessionId, revision, snapshot}`,
   `app-log {sessionId, t, source, level, message, label?, logger?, seq?,
-  revision?, attrs?}`, `test-end {id, status, traceRef}`,
-  `run-end {summary}`.
+  revision?, attrs?}`,
+  `test-end {id, status, traceRef?, error?, durationMs?, flaky?}`,
+  `run-end {summary: {total, passed, failed, skipped, flaky?, durationMs?}}`.
+  Optional fields are additive: an older producer simply omits them; receivers
+  fall back (duration measured client-side, flaky counted from rows).
+  `summary.flaky` is counted separately from `passed` — hiding flaky inside
+  passes is how flaky stays forever.
 
 `app-log` carries one application log entry: `source` is `'file'` (a followed
 file line) or `'adapter'` (a record from an instrumented adapter), `t` is

@@ -229,3 +229,8 @@
   how many things the entry covers (records dropped at source / by driver
   budget, file lines rate-limited, revisions dropped). Filled wherever the
   number previously lived only in `detail` prose. Closed code set stays 16.
+- 2026-08-16 (ui 880a7fe): §UI events extended — test-start gains file?,
+  startedAt?, sessionId?; test-end gains error?, durationMs?, flaky?;
+  run-end summary gains flaky?, durationMs?. All optional/additive. test↔
+  session binding remains optional (reporter cannot know worker sessions);
+  no testId on output/semantic.
