@@ -71,6 +71,9 @@ await runAdapterConformance({
   // obligation waits for the record instead of provoking one.
   logs: { expect: 'no policy loaded' },
   interaction: { input: '\t', expect: 'focus: reject' },
+  // tview exposes no native identifier, so the id-based checks have nothing to
+  // address; its README declares that under rule 3.
+  conventions: { readmePath: repositoryPath('clients', 'go', 'README.md') },
   // `clients/README.md` documents `q`, and `q` does quit — but only while the
   // focus has not cycled onto the reason field, where it types normally. The
   // suite sends the interaction more than once, so it needs the unconditional

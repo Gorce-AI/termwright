@@ -133,12 +133,29 @@ has to delete an assertion that explains itself.
   and the value-derivation gate needs to know which values were author-
   annotated, since an annotation may legitimately put one on any role.
 - **A declared deviation is not a failure, and must not look like one.** The
-  reason goes in the test title rather than into a comment, so an exemption is
-  visible in the run output instead of becoming folklore. The README check for
-  rule 6 is advisory on purpose: rules 1, 2 and 4 cannot be judged from outside
-  a subprocess, so a missing heading is a documentation gap, and failing a
-  conformance run over something no user can observe would train people to
-  ignore the run.
+  declarations are read from the adapter's own `## Deviations` section rather
+  than repeated in the registration — two copies of the same fact disagree
+  eventually, and the README is the copy a user reads. A rule that fails while
+  declared is reported as a documented limitation; a rule that fails without one
+  is an error. Failing the first would give the author who honestly describes
+  their framework a red run for doing exactly what rule 6 asks.
+- **"Declared but no longer needed" cannot be derived, only hinted at.** The
+  request was for the report to flag a declaration the tests have outgrown. It
+  cannot: one rule has more aspects than a subprocess can observe. Ink declares
+  a rule 3 limitation about native identifiers while satisfying the annotation
+  half of the same rule, and both are true at once — the first version of this
+  code called that stale and printed a warning for every adapter, which is a
+  false signal on a suite whose whole value is being believed. The summary now
+  records "the checks that run for this rule pass" as information, and leaves
+  the verdict to whoever re-reads the README.
+- **Two prose shapes for a declaration, both accepted.** `**Rule 2 — …**` (Ink)
+  and `- **…** (rule 3).` (the language clients). The suite parses both rather
+  than making authors converge on one, because the rule it is enforcing is about
+  adapters, not about markdown.
+- The README check for rule 6 is advisory on purpose: rules 1, 2 and 4 cannot be
+  judged from outside a subprocess, so a missing heading is a documentation gap,
+  and failing a conformance run over something no user can observe would train
+  people to ignore the run.
 - **Delta composition is checked against an oracle, not a self-check.** The
   probe composes with the protocol's own `applyTreeDelta` and compares the
   result against a tree the adapter builds itself in answer to `get-tree`. An

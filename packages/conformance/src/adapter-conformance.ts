@@ -12,7 +12,9 @@
  * frames, so a Python, Go or Rust adapter self-certifies exactly like the Ink
  * one — nothing here imports an adapter.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ADAPTER_CAPABILITIES, validateSnapshot, DEFAULT_LIMITS } from '@termwright/protocol';
 import type { SemanticSnapshot } from '@termwright/protocol';
 import { AdapterProbe, MARKER_TEXT_PREFIX, type AdapterCommand, type ProbeObservation } from './support/probe.js';
@@ -94,9 +96,13 @@ export interface AdapterConformanceOptions {
      * the registration knows which is which.
      */
     readonly annotatedValues?: readonly string[];
-    /** Rule number → why this adapter cannot follow it. */
-    readonly deviations?: Readonly<Record<string, string>>;
-    /** The adapter's README, for the advisory `## Deviations` check (rule 6). */
+    /**
+     * The adapter's README. Its `## Deviations` section is the single source of
+     * truth for what this adapter cannot do (rule 6), so a declared limitation
+     * is read from there rather than repeated in the registration — two copies
+     * of the same fact disagree eventually, and the README is the one a user
+     * reads.
+     */
     readonly readmePath?: string;
   };
   readonly logs?: {
@@ -151,6 +157,52 @@ async function assertDeltasCompose(probe: AdapterProbe, timeoutMs: number): Prom
   expect([...truth.rootIds].sort()).toEqual([...composed.rootIds].sort());
 }
 
+/**
+ * Directory the convention summaries are written to, and read back by
+ * `scripts/conformance.mjs` when it prints the matrix.
+ */
+export const CONVENTION_SUMMARY_DIR = join(tmpdir(), 'termwright-conformance-conventions');
+
+/**
+ * Records what each rule concluded, so the matrix can print a per-adapter
+ * roll-up of declared deviations.
+ *
+ * This exists because a hand-maintained table of per-adapter gaps went stale
+ * within one round of being written — a generated one cannot. Nothing here is
+ * a gate: the file is a report, and the tests already decided pass or fail.
+ */
+function writeConventionSummary(
+  name: string,
+  declared: Map<string, string[]>,
+  outcomes: readonly ConventionOutcome[],
+): void {
+  try {
+    mkdirSync(CONVENTION_SUMMARY_DIR, { recursive: true });
+    const file = join(CONVENTION_SUMMARY_DIR, `${name.replace(/[^\w.-]+/gu, '_')}.json`);
+    writeFileSync(
+      file,
+      JSON.stringify(
+        {
+          adapter: name,
+          declared: Object.fromEntries(declared),
+          outcomes,
+          // A rule declared in the README that no check covers: the suite
+          // cannot confirm or refute it, and saying so is more honest than
+          // letting it read as verified.
+          unverified: [...declared.keys()].filter(
+            (rule) => !outcomes.some((outcome) => outcome.rule === rule),
+          ),
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+  } catch {
+    // A report that cannot be written must not fail a conformance run.
+  }
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms);
@@ -175,6 +227,44 @@ async function settle(probe: AdapterProbe, quietMs = 250, budgetMs = 5_000): Pro
       setTimeout(resolve, quietMs);
     });
   }
+}
+
+/**
+ * Rule numbers declared in an adapter's `## Deviations` section.
+ *
+ * Two shapes are in use and both are accepted, because the suite should not
+ * dictate anyone's prose: `**Rule 2 — …**` (a heading per entry) and
+ * `- **…** (rule 3).` (the number at the end of a bullet).
+ */
+export function parseDeclaredDeviations(readme: string): Map<string, string[]> {
+  const declared = new Map<string, string[]>();
+  const start = readme.indexOf('## Deviations');
+  if (start < 0) return declared;
+  const rest = readme.slice(start + '## Deviations'.length);
+  const end = rest.indexOf('\n## ');
+  const section = end < 0 ? rest : rest.slice(0, end);
+
+  for (const line of section.split('\n')) {
+    for (const match of line.matchAll(/\*\*Rule (\d+)\s*—\s*([^*]+?)\.?\*\*/gu)) {
+      add(declared, match[1] as string, (match[2] as string).trim());
+    }
+    for (const match of line.matchAll(/\*\*(.+?)\*\*\s*\(rule (\d+)\)/gu)) {
+      add(declared, match[2] as string, (match[1] as string).trim());
+    }
+  }
+  return declared;
+}
+
+function add(map: Map<string, string[]>, key: string, value: string): void {
+  map.set(key, [...(map.get(key) ?? []), value]);
+}
+
+/** What a convention check concluded, for the run summary. */
+interface ConventionOutcome {
+  readonly rule: string;
+  readonly what: string;
+  readonly status: 'compliant' | 'documented' | 'checked-despite-declaration' | 'violation';
+  readonly detail?: string;
 }
 
 /** Roles that are containers: never named from what they contain (rule 2). */
@@ -443,74 +533,105 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
       });
 
       const conventions = options.conventions ?? {};
-      const deviation = (rule: string): string | undefined => conventions.deviations?.[rule];
-      const ruleTitle = (rule: string, what: string): string => {
-        const declared = deviation(rule);
-        return declared === undefined
-          ? `convention ${rule}: ${what}`
-          : `convention ${rule}: ${what} (declared deviation: ${declared})`;
+      const readme =
+        conventions.readmePath !== undefined && existsSync(conventions.readmePath)
+          ? readFileSync(conventions.readmePath, 'utf8')
+          : '';
+      const declared = parseDeclaredDeviations(readme);
+      const outcomes: ConventionOutcome[] = [];
+
+      /**
+       * Runs one rule and decides what its result means.
+       *
+       * Three states, not two. A rule an adapter cannot follow and *says* it
+       * cannot follow is a documented limitation, not a failure — failing it
+       * would give the first author who honestly describes their framework a
+       * red run for doing exactly what rule 6 asks, which is the shortest path
+       * to people hiding deviations instead of declaring them.
+       *
+       * A check that passes while a declaration exists is deliberately *not*
+       * called stale. One rule has more aspects than a subprocess can observe:
+       * Ink declares a rule 3 limitation about native identifiers while
+       * satisfying the annotation half of the same rule, and both are true.
+       * The summary records the coincidence so a reader can re-read the
+       * README; calling it a defect would be a false signal, and a suite that
+       * cries wolf gets ignored.
+       */
+      const convention = (rule: string, what: string, check: () => string | null): void => {
+        const failure = check();
+        const titles = declared.get(rule) ?? [];
+        if (failure === null) {
+          outcomes.push(
+            titles.length === 0
+              ? { rule, what, status: 'compliant' }
+              : { rule, what, status: 'checked-despite-declaration', detail: titles.join('; ') },
+          );
+          return;
+        }
+        if (titles.length > 0) {
+          outcomes.push({ rule, what, status: 'documented', detail: `${titles.join('; ')} — ${failure}` });
+          return;
+        }
+        outcomes.push({ rule, what, status: 'violation', detail: failure });
+        expect.fail(`convention ${rule} (${what}): ${failure}`);
       };
 
-      it(
-        ruleTitle('3', 'an author-annotated test id reaches the wire'),
-        { skip: conventions.annotatedTestId === undefined || deviation('3') !== undefined },
-        () => {
-          const wanted = conventions.annotatedTestId as string;
+      afterAll(() => {
+        writeConventionSummary(options.name, declared, outcomes);
+      });
+
+      it('convention 3: an author-annotated test id reaches the wire', () => {
+        if (conventions.annotatedTestId === undefined) return;
+        const wanted = conventions.annotatedTestId;
+        convention('3', 'an annotated test id reaches the wire', () => {
           const latest = snapshotsOf(beforeInput).at(-1);
           const node = latest?.nodes.find((entry) => entry.testId === wanted);
-          expect(node, `no node carries the annotated test id ${JSON.stringify(wanted)}`).toBeDefined();
-        },
-      );
+          return node === undefined ? `no node carries the test id ${JSON.stringify(wanted)}` : null;
+        });
+      });
 
-      it(
-        ruleTitle('5', 'an empty textbox publishes an empty value, not an absent one'),
-        { skip: conventions.emptyTextboxTestId === undefined || deviation('5') !== undefined },
-        () => {
-          const wanted = conventions.emptyTextboxTestId as string;
+      it('convention 5: an empty textbox publishes an empty value', () => {
+        if (conventions.emptyTextboxTestId === undefined) return;
+        const wanted = conventions.emptyTextboxTestId;
+        convention('5', 'an empty textbox publishes an empty value', () => {
           const latest = snapshotsOf(beforeInput).at(-1);
           const node = latest?.nodes.find((entry) => entry.testId === wanted);
-          expect(node, `no node carries the test id ${JSON.stringify(wanted)}`).toBeDefined();
-
+          if (node === undefined) return `no node carries the test id ${JSON.stringify(wanted)}`;
           // `''` means the field is empty; absent means "not a value-bearing
           // widget". A wire format that drops empty strings turns the first
           // into the second and makes `toHaveValue('')` unassertable.
-          expect(node?.value, 'an empty textbox published no value at all').toBe('');
-        },
-      );
+          return node.value === '' ? null : `the value is ${JSON.stringify(node.value)}, not an empty string`;
+        });
+      });
 
-      it(
-        ruleTitle('5', 'value is derived only for value-bearing roles'),
-        { skip: deviation('5') !== undefined },
-        () => {
+      it('convention 5: value is derived only for value-bearing roles', () => {
+        convention('5', 'value is derived only for value-bearing roles', () => {
           const annotated = new Set(conventions.annotatedValues ?? []);
-          const latest = snapshotsOf(beforeInput).at(-1);
-          const offenders = (latest?.nodes ?? []).filter(
+          const nodes = snapshotsOf(beforeInput).at(-1)?.nodes ?? [];
+          const offenders = nodes.filter(
             (node) =>
               node.value !== undefined &&
               node.role !== 'textbox' &&
               node.role !== 'progressbar' &&
               !(node.testId !== undefined && annotated.has(node.testId)),
           );
-          expect(
-            offenders.map((node) => `${node.role} ${JSON.stringify(node.name)}`),
-            'these nodes carry a derived value outside {textbox, progressbar}',
-          ).toEqual([]);
-
+          if (offenders.length > 0) {
+            return `derived a value outside {textbox, progressbar}: ${offenders
+              .map((node) => `${node.role} ${JSON.stringify(node.name)}`)
+              .join(', ')}`;
+          }
           // A boolean is a state, not contents: publishing `value: "true"`
           // makes a checkbox look like a textbox containing that word.
-          const booleans = (latest?.nodes ?? []).filter(
-            (node) => node.value === 'true' || node.value === 'false',
-          );
-          expect(booleans.map((node) => node.role), 'a boolean was published as a value').toEqual([]);
-        },
-      );
+          const booleans = nodes.filter((node) => node.value === 'true' || node.value === 'false');
+          return booleans.length === 0
+            ? null
+            : `published a boolean as a value on ${booleans.map((node) => node.role).join(', ')}`;
+        });
+      });
 
-      it(
-        ruleTitle('2', 'no container is named from the text it contains'),
-        { skip: deviation('2') !== undefined },
-        () => {
-          const latest = snapshotsOf(beforeInput).at(-1);
-          const nodes = latest?.nodes ?? [];
+      it('convention 2: no container is named from the text it contains', () => {
+        convention('2', 'no container is named from the text it contains', () => {
+          const nodes = snapshotsOf(beforeInput).at(-1)?.nodes ?? [];
           const children = new Map<string, string[]>();
           for (const node of nodes) {
             if (node.parentId === undefined) continue;
@@ -531,9 +652,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           // Naming containers from content is what makes
           // getByRole('region', {name: 'Approve'}) match the dialog *around*
           // the button, so every ancestor of a label becomes a plausible match
-          // for it and locators stop being selective. Checked without any
-          // declaration: both failure shapes — taking one descendant's label,
-          // and concatenating them all — are visible from the tree alone.
+          // for it. Both failure shapes are visible from the tree alone.
           const offenders = nodes
             .filter((node) => CONTAINER_ROLES.has(node.role) && node.name.length > 0)
             .filter((node) => {
@@ -541,24 +660,23 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
               const joined = texts.join(' ').replace(/\s+/gu, ' ').trim();
               return texts.includes(node.name) || (joined.length > 0 && joined === node.name);
             });
-          expect(
-            offenders.map((node) => `${node.role} ${JSON.stringify(node.name)}`),
-            'these containers took their name from their content',
-          ).toEqual([]);
-        },
-      );
+          return offenders.length === 0
+            ? null
+            : `named from content: ${offenders.map((node) => `${node.role} ${JSON.stringify(node.name)}`).join(', ')}`;
+        });
+      });
 
-      it(
-        ruleTitle('2', 'a container with no label of its own has an empty name'),
-        { skip: conventions.unnamedContainerTestId === undefined || deviation('2') !== undefined },
-        () => {
-          const wanted = conventions.unnamedContainerTestId as string;
-          const latest = snapshotsOf(beforeInput).at(-1);
-          const node = latest?.nodes.find((entry) => entry.testId === wanted);
-          expect(node, `no node carries the test id ${JSON.stringify(wanted)}`).toBeDefined();
-          expect(node?.name, 'a container took its name from its content').toBe('');
-        },
-      );
+      it('convention 2: a container with no label of its own has an empty name', () => {
+        if (conventions.unnamedContainerTestId === undefined) return;
+        const wanted = conventions.unnamedContainerTestId;
+        convention('2', 'an unlabelled container has an empty name', () => {
+          const node = snapshotsOf(beforeInput)
+            .at(-1)
+            ?.nodes.find((entry) => entry.testId === wanted);
+          if (node === undefined) return `no node carries the test id ${JSON.stringify(wanted)}`;
+          return node.name === '' ? null : `the container is named ${JSON.stringify(node.name)}`;
+        });
+      });
 
       it.skipIf(conventions.readmePath === undefined)(
         'declares its deviations in its README (advisory)',

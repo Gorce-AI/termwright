@@ -75,21 +75,31 @@ provoking one.
 
 Conventions the fixture has to opt into — an annotated test id, an empty
 textbox, a container with no label — are declared under `conventions`; the rest
-run for every adapter. A rule an adapter genuinely cannot follow is a *declared
-deviation*, not a failure:
+run for every adapter:
 
 ```ts
 conventions: {
   emptyTextboxTestId: 'reason',
-  deviations: { '3': 'tview exposes no native identifier' },
   readmePath: 'clients/go/README.md',
 },
 ```
 
-The reason appears in the test title, so the exemption stays visible. Rules 1, 2
-and 4 cannot be judged in full from outside a subprocess, so the README check is
-advisory: a missing `## Deviations` heading writes a warning to stderr rather
-than failing the run.
+Deviations are **not** declared here. They are read from the adapter's own
+`## Deviations` section, which is where rule 6 puts them and where a user reads
+them; repeating them in a registration would give two copies of one fact that
+eventually disagree. That gives three outcomes rather than two: compliant, a
+failure the README declares (a documented limitation, not an error), and a
+failure it does not (an error).
+
+Every run writes a per-adapter roll-up of those declarations, which
+`pnpm conformance` prints under the matrix. It is generated rather than
+maintained: a hand-written table of per-adapter gaps went stale within a round
+of being written, and a stale overview in a document people trust is worse than
+none.
+
+Rules 1, 2 and 4 cannot be judged in full from outside a subprocess, so the
+README check is advisory: a missing `## Deviations` heading writes a warning to
+stderr rather than failing the run.
 
 It checks the five obligations an adapter has:
 
