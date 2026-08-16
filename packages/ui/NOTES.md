@@ -224,6 +224,24 @@ The archives our matchers write today carry `selector` and no `ref`, so that
 highlight stays dark on them. The UI side is done and tested; filling in `ref`
 is a change in whoever calls `recordAction`/`recordAssert`.
 
+## Run history is a manifest, not a database
+
+`.termwright/runs/<id>/manifest.json` holds the run's counters, its tests, and
+**paths** to the archives — never copies of them. The reporter writes it at the
+end of a run because that is where every piece already is; a failure to write is
+swallowed, since a run whose results are already reported must not be failed by
+an unwritable directory.
+
+Opening a run's test goes through `POST /api/trace/open`, which is the same code
+path `--trace` uses at startup: one `openArchive` function replaces the reader
+and republishes the timeline, commands, frames and log summary, then closes the
+previous reader. Two ways in, one behaviour out.
+
+Reading a manifest validates it like any other file on disk, and the id that
+names a run directory is checked for separators and `..` before it is used as a
+path — a run id arrives from an HTTP query, and treating it as a trusted path
+component is how directory traversal happens.
+
 ## Discovery: what the project has, before it runs
 
 `vitest list --json` prints `{name, file}` and **no id**, so discovered tests get

@@ -871,3 +871,91 @@ button.active {
   font-size: 10px;
   background: #1e2430;
 }
+
+/* Segmented control (Tests / Runs) -------------------------------------- */
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: #1a1f29;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.segmented button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 1px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.segmented button.active {
+  background: #2a3247;
+  color: var(--text);
+}
+
+/* Run history ----------------------------------------------------------- */
+
+.runs,
+.run-detail {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 8px;
+}
+
+.run {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.run:hover {
+  background: #1e2430;
+}
+
+.run .when {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.run .duration,
+.run-detail .duration {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.run-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 6px;
+}
+
+.run-detail .test {
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.run-detail .test:hover {
+  background: #1e2430;
+}
+
+.run-detail .test.selected {
+  outline: 1px solid var(--accent);
+}
+
+.run-detail .replay {
+  color: var(--accent);
+}
+
+.run-detail .no-trace {
+  font-size: 11px;
+}

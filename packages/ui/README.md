@@ -96,6 +96,19 @@ meaning. `aria-selected` on a `listitem` would be ignored, so a selected list
 item gets `aria-current` instead. Nothing in this view acts on the application —
 activating an element selects its node, exactly like clicking it in the tree.
 
+## Run history
+
+Every run writes a small manifest under `.termwright/runs/<timestamp>/` — its
+counters, its tests, and the path of the archive each test left behind. The
+**Runs** tab lists them newest first; opening one shows its tests, and clicking
+a test replays its archive in place, with the same terminal, command log,
+inspector and timeline as `--trace` gives you.
+
+Manifests hold paths, not archives: the traces are already where the fixtures
+wrote them, and copying them would double the size of a CI artifact for nothing.
+A test whose archive was not retained says so rather than offering a replay that
+would fail.
+
 ## Watching a replay
 
 A recording plays like a video: **Play/Pause** (or the space bar) runs it at the

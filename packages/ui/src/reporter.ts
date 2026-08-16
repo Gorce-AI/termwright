@@ -23,7 +23,8 @@
  */
 
 import { openTrace } from '@termwright/trace';
-import { encodeMessage, type ServerMessage, type UiTestStatus } from './events.js';
+import { DEFAULT_RUNS_DIR, runId, writeRunManifest, type RunTest } from './runs.js';
+import { encodeMessage, type ServerMessage, type UiRunSummary, type UiTestStatus } from './events.js';
 import type { UiHub } from './hub.js';
 import { WebSocket } from 'ws';
 
@@ -41,6 +42,12 @@ export interface UiReporterOptions {
   readonly url?: string;
   /** Publish directly instead of over a socket, when the server is in-process. */
   readonly sink?: UiMessageSink;
+  /**
+   * Where run manifests are written, so the panel can list past runs. Default
+   * `.termwright/runs` under the current working directory; `null` disables
+   * history for this reporter.
+   */
+  readonly runsDir?: string | null;
   /**
    * Read the steps of each finished test's trace and emit them on the timeline.
    * Default true. Steps arrive when the test ends, not while it runs: Vitest
@@ -82,6 +89,7 @@ export class TermwrightUiReporter {
   #socket: SocketSink | undefined;
   #counts = { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0 };
   #startedAt = 0;
+  #tests: RunTest[] = [];
   #pending: Promise<void>[] = [];
 
   constructor(options: UiReporterOptions = {}) {
@@ -89,6 +97,7 @@ export class TermwrightUiReporter {
   }
 
   onTestRunStart(): void {
+    this.#tests = [];
     this.#pending = [];
     this.#counts = { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0 };
     this.#startedAt = Date.now();
@@ -127,6 +136,16 @@ export class TermwrightUiReporter {
     if (trace !== undefined && this.#options.stepsFromTraces !== false) {
       this.#pending.push(this.#publishSteps(id, trace));
     }
+    this.#tests.push({
+      id,
+      title: testCase.fullName ?? testCase.name ?? id,
+      file: testCase.module?.moduleId ?? '',
+      status,
+      durationMs: diagnostic?.duration ?? 0,
+      flaky,
+      ...(trace === undefined ? {} : { traceRef: trace }),
+      ...(error === undefined ? {} : { error }),
+    });
     this.#publish({
       v: 1,
       type: 'test-end',
@@ -181,14 +200,35 @@ export class TermwrightUiReporter {
     // declared over, or a fast suite ends with an empty timeline.
     await Promise.all(this.#pending);
     this.#pending = [];
-    this.#publish({
-      v: 1,
-      type: 'run-end',
-      summary: { ...this.#counts, durationMs: Date.now() - this.#startedAt },
-    });
+    const summary = { ...this.#counts, durationMs: Date.now() - this.#startedAt };
+    this.#publish({ v: 1, type: 'run-end', summary });
+    await this.#writeManifest(summary);
     await this.#socket?.close();
     this.#socket = undefined;
     this.#sink = undefined;
+  }
+
+  /**
+   * Records the run in the history directory.
+   *
+   * Failure is swallowed: a run whose results are already reported must not be
+   * failed by an unwritable history directory.
+   */
+  async #writeManifest(summary: UiRunSummary): Promise<void> {
+    const runsDir = this.#options.runsDir;
+    if (runsDir === null) return;
+    try {
+      await writeRunManifest(runsDir ?? DEFAULT_RUNS_DIR, {
+        v: 1,
+        id: runId(this.#startedAt),
+        startedAt: this.#startedAt,
+        finishedAt: Date.now(),
+        summary,
+        tests: this.#tests,
+      });
+    } catch {
+      // No history for this run; the run itself still reported everything.
+    }
   }
 
   #connect(): UiMessageSink | undefined {

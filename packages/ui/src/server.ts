@@ -33,6 +33,7 @@ import {
   type UiServerMode,
 } from './events.js';
 import { discoverTests, type DiscoveryOptions } from './discovery.js';
+import { DEFAULT_RUNS_DIR, readRunHistory, readRunManifest } from './runs.js';
 import { UiHub, type UiHubOptions } from './hub.js';
 import { attachSession, type UiSessionSource } from './live.js';
 import { startRecorder, type RecorderOptions, type RecorderSession } from './recorder.js';
@@ -80,6 +81,11 @@ export interface UiServerOptions {
    * the panel shows what a run *would* contain before one happens.
    */
   readonly discovery?: DiscoveryOptions & { readonly watch?: boolean };
+  /**
+   * Directory holding run manifests. Default `.termwright/runs`. The panel
+   * lists what it finds there and can open any run's archives.
+   */
+  readonly runsDir?: string;
   /** Backlog limits. */
   readonly hub?: UiHubOptions;
 }
@@ -141,17 +147,30 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   let traceCommands: TraceCommands | undefined;
   let traceFrames: TraceFrames | undefined;
 
-  if (options.trace !== undefined) {
+  /**
+   * Opens an archive and republishes everything derived from it.
+   *
+   * Used at startup and by `/api/trace/open`, so opening the third failing test
+   * of yesterday's run goes through exactly the same path as `--trace`.
+   */
+  const openArchive = async (path: string): Promise<void> => {
+    const opened = await openTrace(path);
+    const previous = reader;
+    reader = opened;
     mode = 'post-mortem';
-    reader = await openTrace(options.trace);
-    overview = await readTraceOverview(reader);
+    overview = await readTraceOverview(opened);
     // Logs are windowed per request; only the summary is precomputed.
-    traceLogs = await readTraceLogs(reader, { limit: 1 });
-    traceCommands = await readCommandLog(reader);
+    traceLogs = await readTraceLogs(opened, { limit: 1 });
+    traceCommands = await readCommandLog(opened);
     // Frames are read once here rather than per request: a page playing at 4x
     // asks for nothing, and a second tab gets the same array for free.
-    traceFrames = await readFrames(reader);
+    traceFrames = await readFrames(opened);
     publishTraceTimeline(hub, overview);
+    await previous?.close();
+  };
+
+  if (options.trace !== undefined) {
+    await openArchive(options.trace);
   } else if (options.record !== undefined) {
     mode = 'record';
     recorder = await startRecorder(options.record);
@@ -312,6 +331,36 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
                   outFile: options.record?.outFile ?? null,
                 },
         });
+        return;
+      }
+      case 'GET /api/runs': {
+        sendJson(response, 200, { runs: await readRunHistory(options.runsDir ?? DEFAULT_RUNS_DIR) });
+        return;
+      }
+      case 'GET /api/run': {
+        const id = url.searchParams.get('id');
+        const manifest = id === null ? null : await readRunManifest(options.runsDir ?? DEFAULT_RUNS_DIR, id);
+        if (manifest === null) {
+          sendJson(response, 404, { error: 'no such run' });
+          return;
+        }
+        sendJson(response, 200, manifest);
+        return;
+      }
+      case 'POST /api/trace/open': {
+        const body = await readJsonBody(request);
+        const path = body['path'];
+        if (typeof path !== 'string' || path === '') {
+          sendJson(response, 400, { error: 'path must be a non-empty string' });
+          return;
+        }
+        try {
+          await openArchive(path);
+        } catch (error) {
+          sendJson(response, 409, { error: describeError(error) });
+          return;
+        }
+        sendJson(response, 200, { mode, trace: overview });
         return;
       }
       case 'GET /api/trace/commands': {

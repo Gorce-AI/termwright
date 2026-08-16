@@ -44,6 +44,7 @@ import { TerminalPane, type Highlight } from './terminal-pane.js';
 import { childrenOf, nextMarker, nodeAt, rootsOf } from '../view-model.js';
 import { navigateTree, type TreeRow } from '../tree-nav.js';
 import { renderTimeline, type TimelineHandlers } from './timeline.js';
+import type { RunSummaryEntry, RunTest } from '../runs.js';
 import type { TestRow } from '../test-model.js';
 import { describeCounts } from '../test-model.js';
 
@@ -122,6 +123,12 @@ const state = {
   logsHasMoreBefore: false,
   logsLoadingOlder: false,
   logLevels: {} as Readonly<Partial<Record<LogLevel, number>>>,
+  paneView: 'tests' as 'tests' | 'runs',
+  runs: [] as RunSummaryEntry[],
+  openRunId: null as string | null,
+  openRunTests: [] as RunTest[],
+  openRunLoading: false,
+  openTracePath: null as string | null,
   commands: [] as CommandRow[],
   commandsIncomplete: false,
   commandsError: null as string | null,
@@ -241,6 +248,14 @@ function draw(): void {
         logMarks: markedLogs(),
         playing: state.playback.playing,
         speed: state.playback.speed,
+        view: state.paneView,
+        runHistory: {
+          runs: state.runs,
+          openId: state.openRunId,
+          tests: state.openRunTests,
+          openTracePath: state.openTracePath,
+          loading: state.openRunLoading,
+        },
         testList: {
           tests: state.tests,
           query: state.testQuery,
@@ -653,6 +668,47 @@ const timelineHandlers: TimelineHandlers = {
     const target = nextMarker(state.trace?.markers ?? [], state.timeMs, direction);
     if (target !== undefined) void seek(target);
   },
+  setView(view) {
+    state.paneView = view;
+    // The history is read when the tab is opened rather than kept fresh in the
+    // background: it changes when a run ends, which is rarely.
+    if (view === 'runs') void loadRuns();
+    schedule();
+  },
+  open(id) {
+    state.openRunId = id;
+    state.openRunTests = [];
+    state.openRunLoading = true;
+    schedule();
+    void client
+      .run(id)
+      .then((manifest) => {
+        state.openRunTests = [...manifest.tests];
+      })
+      .catch((error: unknown) => note(describe(error)))
+      .finally(() => {
+        state.openRunLoading = false;
+        schedule();
+      });
+  },
+  back() {
+    state.openRunId = null;
+    state.openRunTests = [];
+    schedule();
+  },
+  openTrace(path) {
+    void client
+      .openTrace(path)
+      .then(async (result) => {
+        state.trace = result.trace;
+        state.openTracePath = path;
+        state.mode = 'post-mortem';
+        // The new archive has its own frames, commands and logs.
+        await loadArchive();
+        note(`replaying ${path.split(/[/\\]/).at(-1) ?? path}`);
+      })
+      .catch((error: unknown) => note(describe(error)));
+  },
   togglePlay() {
     if (state.trace === null) return;
     const atEnd = state.timeMs >= (state.trace.durationMs ?? 0) - 1;
@@ -721,6 +777,47 @@ function warnAboutProfile(profile: string | null): void {
   notice.textContent = mismatched
     ? `profile "${profile}" — this view measures with Unicode 11 widths`
     : '';
+}
+
+/**
+ * Loads everything derived from the opened archive: commands, frames, the first
+ * window of logs, and the state at its start.
+ *
+ * Shared by the initial `--trace` and by opening a run's test from the history,
+ * so both land in exactly the same place.
+ */
+async function loadArchive(): Promise<void> {
+  warnAboutProfile(state.trace?.terminalProfile ?? null);
+  const [commands, frames] = await Promise.all([
+    client.traceCommands().catch(() => null),
+    client.traceFrames().catch(() => null),
+  ]);
+  state.commands = commands === null ? [] : [...commands.commands];
+  state.commandsIncomplete = commands?.incomplete ?? false;
+  state.commandsError = commands?.error ?? null;
+  state.frames = frames === null ? [] : [...frames.frames];
+  state.revisions = frames === null ? [] : [...frames.revisions];
+  state.playback = { ...initialPlayback(), speed: state.playback.speed };
+  pane.reset();
+
+  const logs = await client.traceLogs({ after: 0 }).catch(() => null);
+  state.logs = logs === null ? [] : [...logs.records];
+  state.logsAvailable = logs?.available ?? false;
+  state.logsTruncated = logs?.truncated ?? false;
+  state.logsHasMoreBefore = logs?.hasMoreBefore ?? false;
+  state.logLevels = logs?.levels ?? {};
+
+  await seek(0);
+}
+
+/** Reads the run history. */
+async function loadRuns(): Promise<void> {
+  try {
+    state.runs = [...(await client.runs()).runs];
+    schedule();
+  } catch (error) {
+    note(describe(error));
+  }
 }
 
 function note(message: string): void {
@@ -989,29 +1086,7 @@ void client
     }
     if (server.trace !== null) {
       state.activeSessionId = server.trace.sessionId;
-      warnAboutProfile(server.trace.terminalProfile);
-      const [commands, frames] = await Promise.all([
-        client.traceCommands().catch(() => null),
-        client.traceFrames().catch(() => null),
-      ]);
-      if (commands !== null) {
-        state.commands = [...commands.commands];
-        state.commandsIncomplete = commands.incomplete;
-        if (commands.error !== undefined) state.commandsError = commands.error;
-      }
-      if (frames !== null) {
-        state.frames = [...frames.frames];
-        state.revisions = [...frames.revisions];
-      }
-      const logs = await client.traceLogs({ after: 0 }).catch(() => null);
-      if (logs !== null) {
-        state.logs = [...logs.records];
-        state.logsAvailable = logs.available;
-        state.logsTruncated = logs.truncated;
-        state.logsHasMoreBefore = logs.hasMoreBefore;
-        state.logLevels = logs.levels;
-      }
-      await seek(0);
+      await loadArchive();
     }
     schedule();
   })

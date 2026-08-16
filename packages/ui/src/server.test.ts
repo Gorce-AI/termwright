@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { writeRunManifest } from './runs.js';
 import { buildCrashedFixtureTrace, buildFixtureTrace } from './__fixtures__/build-trace.js';
 import { FakeHarness, node, snapshot } from './__fixtures__/fake-session.js';
 import { encodeMessage, parseServerMessage, toBase64, type ClientMessage, type ServerMessage } from './events.js';
@@ -259,6 +261,93 @@ describe('live mode', () => {
     detach();
     const after = (await (await api(server, '/api/state')).json()) as { sessions: unknown[] };
     expect(after.sessions).toHaveLength(0);
+  });
+});
+
+describe('run history', () => {
+  it('lists recorded runs and serves one by id', async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), 'tw-server-runs-'));
+    await writeRunManifest(runsDir, {
+      v: 1,
+      id: '2026-08-16T10-00-00-000Z',
+      startedAt: 1_760_000_000_000,
+      finishedAt: 1_760_000_002_000,
+      summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0, durationMs: 2_000 },
+      tests: [
+        {
+          id: 't1',
+          title: 'logs in',
+          file: '/repo/a.test.ts',
+          status: 'failed',
+          durationMs: 500,
+          flaky: false,
+          traceRef: '/repo/out/t1.twtrace',
+        },
+      ],
+    });
+    const server = await start({ runsDir });
+
+    const list = (await (await api(server, '/api/runs')).json()) as {
+      runs: { id: string; testCount: number }[];
+    };
+    expect(list.runs.map((run) => run.id)).toEqual(['2026-08-16T10-00-00-000Z']);
+    expect(list.runs[0]?.testCount).toBe(1);
+
+    const detail = (await (
+      await api(server, '/api/run?id=2026-08-16T10-00-00-000Z')
+    ).json()) as { tests: { traceRef?: string }[] };
+    expect(detail.tests[0]?.traceRef).toBe('/repo/out/t1.twtrace');
+  });
+
+  it('reports no history rather than failing when nothing was recorded', async () => {
+    const server = await start({ runsDir: join(await mkdtemp(join(tmpdir(), 'tw-empty-')), 'none') });
+    const body = (await (await api(server, '/api/runs')).json()) as { runs: unknown[] };
+    expect(body.runs).toEqual([]);
+  });
+
+  it('404s a run that is not there', async () => {
+    const server = await start({ runsDir: await mkdtemp(join(tmpdir(), 'tw-empty-')) });
+    expect((await api(server, '/api/run?id=nope')).status).toBe(404);
+    expect((await api(server, '/api/run')).status).toBe(404);
+  });
+
+  it('opens an archive on demand, replacing the one being replayed', async () => {
+    const first = await buildFixtureTrace();
+    const second = await buildCrashedFixtureTrace();
+    const server = await start({ trace: first });
+
+    const before = (await (await api(server, '/api/state')).json()) as { trace: { path: string } };
+    expect(before.trace.path).toBe(first);
+
+    const opened = await api(server, '/api/trace/open', {
+      method: 'POST',
+      body: JSON.stringify({ path: second }),
+    });
+    expect(opened.status).toBe(200);
+
+    const after = (await (await api(server, '/api/state')).json()) as {
+      trace: { path: string; crash: unknown };
+    };
+    expect(after.trace.path).toBe(second);
+    // Everything derived from the archive followed it.
+    expect(after.trace.crash).not.toBeNull();
+    const commands = (await (await api(server, '/api/trace/commands')).json()) as { commands: unknown[] };
+    expect(Array.isArray(commands.commands)).toBe(true);
+  });
+
+  it('refuses to open something that is not an archive', async () => {
+    const server = await start({ trace: await buildFixtureTrace() });
+    expect(
+      (
+        await api(server, '/api/trace/open', {
+          method: 'POST',
+          body: JSON.stringify({ path: '/nonexistent.twtrace' }),
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (await api(server, '/api/trace/open', { method: 'POST', body: JSON.stringify({}) })).status,
+    ).toBe(400);
   });
 });
 

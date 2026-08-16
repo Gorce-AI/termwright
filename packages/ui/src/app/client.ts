@@ -16,6 +16,7 @@ import {
 import type { TraceOverview, TraceStatePayload } from '../trace-source.js';
 import type { TraceLogs } from '../trace-logs.js';
 import type { TraceCommands, TraceFrames } from '../trace-playback.js';
+import type { RunManifest, RunSummaryEntry } from '../runs.js';
 import type { GeneratedSelector } from '../selector.js';
 import type { RecordedEvent } from '../codegen.js';
 
@@ -112,6 +113,21 @@ export class RunnerClient {
   /** Every frame of the recording, for local playback. */
   async traceFrames(): Promise<TraceFrames> {
     return this.#get<TraceFrames>('/api/trace/frames');
+  }
+
+  /** Runs recorded under the history directory, newest first. */
+  async runs(): Promise<{ runs: readonly RunSummaryEntry[] }> {
+    return this.#get('/api/runs');
+  }
+
+  /** One run's manifest, with its tests. */
+  async run(id: string): Promise<RunManifest> {
+    return this.#get<RunManifest>(`/api/run?id=${encodeURIComponent(id)}`);
+  }
+
+  /** Replaces the replayed archive with another one. */
+  async openTrace(path: string): Promise<{ trace: TraceOverview | null }> {
+    return this.#post('/api/trace/open', { path });
   }
 
   async traceState(timeMs: number): Promise<TraceStatePayload> {

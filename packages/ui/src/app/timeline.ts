@@ -13,6 +13,7 @@ import type { TraceOverview } from '../trace-source.js';
 import { formatMs } from '../view-model.js';
 import { renderCrashPanel } from './crash-panel.js';
 import { renderTestList, type TestListHandlers, type TestListModel } from './test-list.js';
+import { renderRunHistory, type RunHistoryHandlers, type RunHistoryModel } from './run-history.js';
 import type { AppLogView } from '../app-log.js';
 import type { PlaybackSpeed } from '../playback.js';
 
@@ -55,20 +56,39 @@ export interface TimelineModel {
   /** Playback state, when a recording is open. */
   readonly playing: boolean;
   readonly speed: PlaybackSpeed;
+  /** Which half of the pane is showing. */
+  readonly view: 'tests' | 'runs';
+  readonly runHistory: RunHistoryModel;
 }
 
 /** What the timeline can ask the app to do. */
-export interface TimelineHandlers extends TestListHandlers {
+export interface TimelineHandlers extends TestListHandlers, RunHistoryHandlers {
   jump(direction: -1 | 1): void;
   togglePlay(): void;
   cycleSpeed(): void;
+  setView(view: 'tests' | 'runs'): void;
 }
 
 /** Renders the timeline pane. */
 export function renderTimeline(model: TimelineModel, handlers: TimelineHandlers): TemplateResult {
   return html`
     <header class="pane-head">
-      <h2>Tests</h2>
+      <nav class="segmented" aria-label="Panel view">
+        <button
+          class=${model.view === 'tests' ? 'active' : ''}
+          data-testid="view-tests"
+          @click=${() => handlers.setView('tests')}
+        >
+          Tests
+        </button>
+        <button
+          class=${model.view === 'runs' ? 'active' : ''}
+          data-testid="view-runs"
+          @click=${() => handlers.setView('runs')}
+        >
+          Runs
+        </button>
+      </nav>
       <span class="muted">${model.mode}${model.connected ? '' : ' — reconnecting…'}</span>
     </header>
 
@@ -76,7 +96,9 @@ export function renderTimeline(model: TimelineModel, handlers: TimelineHandlers)
     ${renderMarks(model, handlers)}
     ${renderCrashPanel(model.trace?.crash ?? null, { seek: (timeMs) => handlers.seek(timeMs) })}
 
-    ${renderTestList(model.testList, handlers)}
+    ${model.view === 'runs'
+      ? renderRunHistory(model.runHistory, handlers)
+      : renderTestList(model.testList, handlers)}
     ${model.summary === null ? '' : html`<footer class="summary">${model.summary}</footer>`}
   `;
 }

@@ -62,6 +62,19 @@ export {
 export { readTraceLogs, type LogSourceView, type TraceLogs } from './trace-logs.js';
 
 export {
+  DEFAULT_RUNS_DIR,
+  RUN_MANIFEST_VERSION,
+  parseRunManifest,
+  readRunHistory,
+  readRunManifest,
+  runId,
+  writeRunManifest,
+  type RunManifest,
+  type RunSummaryEntry,
+  type RunTest,
+} from './runs.js';
+
+export {
   discoverTests,
   discoveredId,
   parseDiscoveredId,
