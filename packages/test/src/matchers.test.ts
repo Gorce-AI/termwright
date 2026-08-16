@@ -78,7 +78,12 @@ const directories: string[] = [];
 beforeEach(() => {
   const dir = mkdtempSync(join(tmpdir(), 'tw-matchers-'));
   directories.push(dir);
-  configureTermwright({ timeouts: { expect: 250 }, snapshotDir: dir });
+  // The snapshot mode is pinned, never inherited. Left ambient, these tests
+  // would run in whatever mode the environment implies — and on CI Vitest
+  // implies `none`, which is right for a real suite (a missing baseline must
+  // fail rather than be written) and fatal for tests whose subject is writing
+  // one. Tests that need another mode set it themselves.
+  configureTermwright({ timeouts: { expect: 250 }, snapshotDir: dir, updateSnapshots: 'missing' });
   beginSnapshotScope();
   resetSnapshotCache();
 });

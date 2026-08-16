@@ -218,7 +218,7 @@ resolved as:
 | `TERMWRIGHT_UPDATE_SNAPSHOTS=all` | rewrite every snapshot, even matching ones |
 | `TERMWRIGHT_UPDATE_SNAPSHOTS=changed`, or `vitest -u` | write missing, overwrite mismatching |
 | `TERMWRIGHT_UPDATE_SNAPSHOTS=missing`, or a plain run | write missing; a mismatch fails |
-| `TERMWRIGHT_UPDATE_SNAPSHOTS=none`, or `--update=none` | never write; a missing snapshot fails |
+| `TERMWRIGHT_UPDATE_SNAPSHOTS=none`, `--update=none`, or **CI** | never write; a missing snapshot fails |
 
 ### Snapshots nobody claims any more
 
@@ -239,6 +239,12 @@ time CI ran without a pseudo-terminal.
 `config.updateSnapshots` overrides all of it. Because a stored snapshot is
 compared strictly, `changed` rewrites it on any textual difference — review the
 diff the way you would review the code that caused it.
+
+**On CI a missing snapshot fails.** Vitest turns updating off when `CI` is set,
+and this preset follows: a baseline that appears during the run would make CI
+green by writing the very thing it was supposed to check. Commit snapshots from
+a local run instead. A test whose *subject* is writing a snapshot should pin
+`updateSnapshots` in its own configuration rather than inherit the environment's.
 
 ## Application logs
 
