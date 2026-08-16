@@ -186,3 +186,15 @@ Auditing the rest of the writer for the same shape: `truncated` (output byte
 ceiling) is a flag read at finalize, hidden windows are closed at finalize, and
 open steps are closed at finalize. None of them defer work to a next event, so
 the log buffer was the only place the pattern could have appeared.
+
+### Known gap: log sources have labels, not paths
+
+`meta.logs.sources` lists labels, because a label is all the archive can know:
+`AppLogSource.path` is a `launchTerminal` option and the driver's `app-log`
+event carries only `label`. A consumer that wants to show *which file on disk*
+an entry came from needs `path` added to the event (or to capabilities) on the
+driver side first — there is nothing trace can do about it locally.
+
+Raised while agreeing the format with the runner UI, which wanted
+`sources: {label?, path}[]`. Not blocking: labels are enough to group and
+filter, and the UI shipped on labels.
