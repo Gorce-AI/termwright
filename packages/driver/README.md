@@ -190,6 +190,11 @@ so treat a crash report like a screenshot when storing or forwarding it.
 
 ## Diagnostics
 
+Entries that stand for several things carry a `count`, so a caller never has to
+parse the message text: summing `count` over `log-dropped` answers "how many log
+entries never reached me". A repeated log record carries none — a duplicate is
+not a loss.
+
 `terminal.diagnostics()` returns the bounded, oldest-first log of what the
 session decided on its own — negotiation timeouts, superseded or expired
 revisions, unverified markers, advisory `revision-commit` messages, protocol

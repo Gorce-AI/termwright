@@ -427,6 +427,17 @@ export interface SessionDiagnostic {
   /** The semantic revision the entry is about, when it is about one. */
   readonly revision?: number;
   /**
+   * How many items the entry accounts for, when it stands for several — the
+   * number that would otherwise be readable only by parsing {@link detail}.
+   *
+   * Present on aggregate entries: records an adapter dropped upstream, records
+   * or lines the driver refused over budget. Absent when the entry is about one
+   * identified thing (a single revision, a single refused duplicate), because
+   * there is nothing to count there. Summing `count` over `log-dropped`
+   * entries therefore answers "how many log entries never reached me".
+   */
+  readonly count?: number;
+  /**
    * For `protocol-violation`: the wire error code sent to the adapter, so a
    * caller can tell *which* failure closed the channel without parsing prose.
    */

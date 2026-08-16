@@ -43,7 +43,7 @@ export type LogDiagnosticCode = 'log-dropped' | 'log-source';
 /** Callbacks the session installs on the tailer. */
 export interface LogTailHooks {
   onLine(source: AppLogSource, line: string): void;
-  onDiagnostic(code: LogDiagnosticCode, detail: string): void;
+  onDiagnostic(code: LogDiagnosticCode, detail: string, count?: number): void;
 }
 
 interface SourceState {
@@ -308,6 +308,7 @@ export class LogTailer {
       'log-dropped',
       `dropped ${dropped} line${dropped === 1 ? '' : 's'} from ${label(state.source)}: ` +
         `more than ${MAX_LINES_PER_WINDOW} lines arrived within ${RATE_WINDOW_MS} ms`,
+      dropped,
     );
   }
 }

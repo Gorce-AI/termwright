@@ -169,6 +169,9 @@ describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, ()
 
     const dropped = logDiagnostics.find((entry) => entry.code === 'log-dropped');
     expect(dropped?.detail).toMatch(/dropped \d+ lines/u);
+    // The number is readable without parsing the prose.
+    expect(dropped?.count).toBeGreaterThan(0);
+    expect(dropped?.detail).toContain(String(dropped?.count));
     // Bounded, not unbounded: far fewer than the 2000 lines written.
     expect(lines.length).toBeLessThan(2_000);
     expect(lines.length).toBeGreaterThan(0);
@@ -278,6 +281,7 @@ describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout:
 
     const dropped = logDiagnostics.find((entry) => entry.code === 'log-dropped');
     expect(dropped?.detail).toContain('the adapter dropped 5 log records');
+    expect(dropped?.count).toBe(5);
     expect(lines[1]?.record?.message).toBe('after a local drop');
   });
 
@@ -297,6 +301,10 @@ describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout:
       .toBe(true);
     expect(lines).toHaveLength(1);
     expect(lines.map((entry) => entry.record?.message)).not.toContain('a repeated seq');
+    // A duplicate is not a loss, so it carries no count: summing counts over
+    // 'log-dropped' must answer "how many entries never reached me".
+    const refusal = logDiagnostics.find((entry) => entry.detail.includes('strictly increase'));
+    expect(refusal?.count).toBeUndefined();
 
     // The channel is untouched: a miscounting adapter is a bug, not an attack.
     await terminal.press('g');
@@ -316,6 +324,8 @@ describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout:
     // Far fewer than the 400 records the fixture sent, and the session lives on.
     expect(lines.length).toBeLessThan(400);
     expect(lines.length).toBeGreaterThan(0);
+    const refused = logDiagnostics.find((entry) => entry.detail.includes('refused'));
+    expect(refused?.count).toBeGreaterThan(0);
     expect(await terminal.getByTestId('approve').textContent()).toBe('Approve');
   });
 });

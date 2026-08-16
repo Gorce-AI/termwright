@@ -195,6 +195,7 @@ export async function launchTerminal(options: LaunchTerminalOptions): Promise<Te
 interface DiagnosticContext {
   readonly revision?: number | undefined;
   readonly wireCode?: SessionDiagnostic['wireCode'];
+  readonly count?: number | undefined;
 }
 
 interface ChangeWaiter {
@@ -357,7 +358,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     if (sources.length > 0) {
       this.#logs = new LogTailer(sources, {
         onLine: (source, line) => this.#publishLogLine(source, line),
-        onDiagnostic: (code, detail) => this.#diagnostic(code, detail),
+        onDiagnostic: (code, detail, count) => this.#diagnostic(code, detail, { count }),
       });
       await this.#logs.start();
     }
@@ -844,6 +845,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       detail,
       ...(about?.revision !== undefined ? { revision: about.revision } : {}),
       ...(about?.wireCode !== undefined ? { wireCode: about.wireCode } : {}),
+      ...(about?.count !== undefined ? { count: about.count } : {}),
       timeMs: this.#now(),
     };
     this.#diagnosticsLog.push(Object.freeze(entry));
@@ -937,6 +939,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         'log-dropped',
         `the adapter dropped ${lost} log record${lost === 1 ? '' : 's'} before seq ${record.seq}: ` +
           'it was over the budget granted in the handshake',
+        { count: lost },
       );
     }
     this.#lastLogSeq = record.seq;
@@ -993,6 +996,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       'log-dropped',
       `refused ${dropped} log record${dropped === 1 ? '' : 's'} from the adapter: ` +
         `more than ${LOG_RECORDS_PER_SECOND} records per second arrived despite the negotiated budget`,
+      { count: dropped },
     );
   }
 
