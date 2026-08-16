@@ -277,6 +277,12 @@ importers:
         specifier: ^0.5.3
         version: 0.5.3(typescript@5.9.3)(web-tree-sitter@0.25.10)
 
+  packages/probe-tview:
+    dependencies:
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/protocol:
     dependencies:
       zod:
