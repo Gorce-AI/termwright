@@ -10,9 +10,9 @@
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect } from 'vitest';
+import { afterAll, describe } from 'vitest';
 import type { TerminalHarness } from '@termwright/driver';
-import { configureTermwright, ptyAvailable, test } from './index.js';
+import { configureTermwright, expect, ptyAvailable, test } from './index.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'driver', 'test-fixtures');
 
@@ -39,7 +39,12 @@ const appTest = test.extend<{ app: TerminalHarness }>({
     // Still inside the terminal fixture, so the session is alive here: a
     // fixture that logs out, deletes a record or asserts a final state can do
     // it with the program still running.
-    expect(app.screen().text()).toContain('Permission required');
+    //
+    // Through the polling matcher, not `screen().text()`. The program repaints
+    // by clearing the screen and then writing it again, so a single read can
+    // land in the gap and see nothing — which is exactly what a slow machine
+    // did to this assertion on CI.
+    await expect(app).toHaveText('Permission required');
     order.push('app:teardown');
   },
 });
