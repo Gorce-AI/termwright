@@ -4,21 +4,49 @@
   "description": "OpenTUI semantic adapter (role convention, screenX/screenY bounds, frame-commit marker)",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/testing.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:conformance": "vitest run src/conformance.test.ts"
+    "test:conformance": "vitest run src/conformance.test.ts",
+    "test:mount": "vitest run src/mount.test.ts"
   },
-  "dependencies": { "@termwright/protocol": "workspace:*" },
+  "dependencies": {
+    "@termwright/protocol": "workspace:*"
+  },
   "peerDependencies": {
-    "@opentui/core": ">=0.5.0"
+    "@opentui/core": ">=0.5.0",
+    "@termwright/driver": "workspace:*",
+    "@termwright/ink-testing": "workspace:*"
   },
   "devDependencies": {
     "@opentui/core": "^0.5.3",
-    "@termwright/conformance": "workspace:*"
+    "@termwright/conformance": "workspace:*",
+    "@termwright/driver": "workspace:*",
+    "@termwright/ink-testing": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@termwright/driver": {
+      "optional": true
+    },
+    "@termwright/ink-testing": {
+      "optional": true
+    }
   }
 }

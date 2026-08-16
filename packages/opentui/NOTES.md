@@ -111,6 +111,46 @@ reconciler `ref` callback can do. Both are documented in the README.
   across its boundary at all — every channel fault degrades to "disabled". Same
   reasoning as the Ink adapter.
 
+## Why the mount lives on a subpath
+
+`mountOpenTui` needs `@termwright/driver` (for `launchTerminal` and the harness
+type) and `@termwright/ink-testing` (for the in-process pty stand-in). CONTRACTS
+§Dependency rules says adapters depend on `protocol` + their framework and
+**never** on the driver, and that rule has a concrete reason rather than a
+bureaucratic one: an adapter is imported by the application in *production*, and
+the driver carries a pty binary. Ink solved the same problem by putting
+`mountInk` in a separate package, `@termwright/ink-testing`.
+
+Task #27b asked for the mount inside `packages/opentui`, so the rule is honoured
+structurally instead of by package boundary:
+
+- the mount is reachable only through `@termwright/opentui/testing`, never from
+  the root entry;
+- `@termwright/driver` and `@termwright/ink-testing` are **optional peer**
+  dependencies, so a production install of the adapter resolves neither;
+- `mount.test.ts` asserts against the build output that `dist/index.js` contains
+  no reference to either. If someone re-exports the mount from `src/index.ts`,
+  that test fails rather than a user's bundle quietly gaining a pty.
+
+Recorded in CHANGELOG-contracts.md. If a second consumer ever needs the mount's
+dependencies at the root, the honest move is a separate
+`@termwright/opentui-testing` package, mirroring Ink.
+
+## Building the renderer synchronously
+
+`createInProcessBackend`'s `start` is synchronous — the driver spawns and the
+backend must hand back a live application in the same tick — but
+`createCliRenderer` is async. The mount therefore uses the **`CliRenderer`
+constructor**, which is public and does all the stream wiring, and runs the part
+that actually awaits (`setupTerminal()`, then instrumenting, then building the
+scene) as a promise the `stop()` path joins. OpenTUI's own factory is documented
+as "constructor + `await setupTerminal()`" plus a `--delay-start` flag, so this
+is the supported decomposition rather than a workaround.
+
+A scene that throws is remembered and rethrown in preference to the settle
+timeout it would otherwise surface as, because "your builder threw" is the
+useful failure and "no frame in 5s" is only its symptom.
+
 ## The duplicated channel client
 
 `src/channel.ts` is, deliberately, a near-copy of the Ink adapter's. Adapters

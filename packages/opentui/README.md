@@ -85,6 +85,42 @@ drain, and writes the DCS render-commit marker. The driver pairs tree and pixels
 on that marker. A frame superseded before its snapshot goes out is dropped
 rather than mispaired.
 
+## Component testing
+
+`@termwright/opentui/testing` mounts a scene in the current process, over the
+same headless terminal an end-to-end test drives:
+
+```ts
+import { BoxRenderable, TextRenderable } from '@opentui/core';
+import { describeRenderable } from '@termwright/opentui';
+import { mountOpenTui } from '@termwright/opentui/testing';
+
+const harness = await mountOpenTui((renderer) => {
+  const approve = new BoxRenderable(renderer, { id: 'approve', width: 13, height: 1 });
+  approve.add(new TextRenderable(renderer, { content: '[ Approve ]' }));
+  approve.onMouseDown = () => { /* … */ };
+  renderer.root.add(approve);
+  describeRenderable(approve, { role: 'button', name: 'Approve' });
+}, { columns: 40, rows: 10 });
+
+await harness.getByRole('button', { name: 'Approve' }).click();
+await harness.commit(() => { status.content = 'Approved'; });
+await harness.close();
+```
+
+The harness is a `TerminalHarness` — the same locators, actions and waits as a
+real-pty session — plus `renderer` and `commit(mutate)`. A click is a mouse
+report on stdin, not a call into your handler.
+
+**It requires Bun**, because `@opentui/core` loads its native library through
+`bun:ffi`. Under Node it fails immediately with an `unsupported-action` error
+naming the runtime, rather than deep inside OpenTUI's FFI shim.
+
+The mount lives on a subpath and not on the root entry on purpose: it imports
+`@termwright/driver`, which carries a pty binary, and the adapter you ship in
+production must not. `@termwright/driver` and `@termwright/ink-testing` are
+optional peer dependencies — a production install needs neither.
+
 ## Testing this package
 
 ```sh
@@ -93,7 +129,9 @@ pnpm build && pnpm typecheck && pnpm test
 
 `src/conformance.test.ts` runs the shared adapter contract suite from
 `@termwright/conformance` against a real OpenTUI application in a real
-pseudo-terminal. It skips itself, loudly, when `bun` is not on PATH or when
-`dist/` has not been built.
+pseudo-terminal, and `src/mount.test.ts` exercises `mountOpenTui` by spawning
+`src/testing/mount-fixture.ts` under Bun. Both skip themselves, loudly, when
+`bun` is not on PATH; set `TERMWRIGHT_REQUIRE_CONFORMANCE=1` (as CI does) to
+turn those skips into failures.
 
 Implementation decisions and open threads: [`NOTES.md`](./NOTES.md).
