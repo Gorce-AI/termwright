@@ -275,3 +275,40 @@ async def test_a_revisions_subscription_gets_commits_only(endpoint):
 
     await client.close()
     await driver.close()
+
+
+# -- transport selection ---------------------------------------------------
+
+
+def test_the_endpoint_shape_picks_the_transport():
+    """The driver hands out a pipe on Windows and a unix socket elsewhere."""
+    from termwright.client import _is_pipe_path
+
+    assert _is_pipe_path(r"\\.\pipe\termwright-abc")
+    assert _is_pipe_path(r"\\?\pipe\termwright-abc")
+    assert not _is_pipe_path("/tmp/termwright/semantic.sock")
+
+
+def test_a_pipe_endpoint_is_a_client_not_a_dormant_case(endpoint):
+    """A pipe path is a real endpoint; whether it can be opened is the
+    transport's business, not the constructor's."""
+    client = client_from_env(
+        adapter_name="test",
+        adapter_version="0.1.0",
+        env={ENV_ENDPOINT: r"\\.\pipe\termwright-abc", ENV_TOKEN: TOKEN},
+    )
+    assert isinstance(client, SemanticClient)
+
+
+async def test_a_pipe_endpoint_on_a_loop_that_cannot_open_one_fails_soft():
+    """On POSIX there is no proactor loop, so the connect must fail quietly.
+
+    The app has to keep rendering: a side channel that cannot be opened is not
+    an error the application should ever see.
+    """
+    client = SemanticClient(
+        r"\\.\pipe\termwright-abc", TOKEN, adapter_name="test", adapter_version="0.1.0"
+    )
+    assert await client.start(timeout=1.0) is False
+    assert client.publish_nowait(sample_snapshot()) is None
+    await client.close()

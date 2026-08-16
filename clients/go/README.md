@@ -154,6 +154,11 @@ gap in `seq` so the driver can report the loss.
 Measured against the adapter conventions in the protocol README. Everything
 not listed here follows them.
 
+- **Windows support is compiled, not yet observed here.** The named-pipe
+  transport (`go-winio`, behind a `windows` build tag) cross-compiles and vets
+  clean, but this repository's checks run on POSIX, so the verdict for a live
+  pipe comes from CI rather than from a local run.
+
 - **`testId` has no native source** (rule 3). tview exposes no identifier — a
   Box title is display text, not an id — so the only source is the annotation,
   via `WithTestIDs` or `Session.SetTestID`. A widget with neither publishes no

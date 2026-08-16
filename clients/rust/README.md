@@ -117,5 +117,8 @@ not detectable here. Those cases are marked `"optional": true` in
 ## Platform support
 
 Unix domain sockets only. On Windows the driver hands out a named pipe, which
-needs a different transport; `from_env` returns `None` for a `\\.\pipe\…`
-endpoint rather than half-working.
+needs a different transport (`CreateFile` on the pipe path, or a crate such as
+`tokio`'s named-pipe support); this crate does not open one, so a
+`\\.\pipe\…` endpoint simply fails to connect and the application carries on
+without a side channel. The Go and Python clients do reach the pipe, so the
+gap is this crate's, not the protocol's.

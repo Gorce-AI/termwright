@@ -56,6 +56,35 @@ CAPABILITIES_WITH_LOGS = DEFAULT_CAPABILITIES + ("logs",)
 _SNAPSHOT_HISTORY = 8
 
 
+def _is_pipe_path(endpoint: str) -> bool:
+    """Whether the endpoint names a Windows pipe rather than a unix socket."""
+    return endpoint.startswith("\\\\.\\pipe\\") or endpoint.startswith("\\\\?\\pipe\\")
+
+
+async def _open_connection(endpoint: str):
+    """Open the driver's endpoint on whichever transport it needs.
+
+    The driver listens on a unix socket everywhere but Windows, where it
+    listens on a named pipe (``\\\\.\\pipe\\termwright-<hex>``). asyncio reaches a
+    pipe only through the proactor loop's ``create_pipe_connection``, and does
+    not expose ``open_unix_connection`` on Windows at all — so choosing by the
+    endpoint's shape is what keeps one client working on both.
+    """
+    loop = asyncio.get_event_loop()
+    if _is_pipe_path(endpoint):
+        connect = getattr(loop, "create_pipe_connection", None)
+        if connect is None:
+            # A pipe path under a loop that cannot open one: nothing to do but
+            # stay silent, which the caller treats as no side channel.
+            raise NotImplementedError("this event loop cannot open a named pipe")
+        reader = asyncio.StreamReader(loop=loop)
+        protocol = asyncio.StreamReaderProtocol(reader, loop=loop)
+        transport, _ = await connect(lambda: protocol, endpoint)
+        writer = asyncio.StreamWriter(transport, protocol, reader, loop)
+        return reader, writer
+    return await asyncio.open_unix_connection(endpoint)
+
+
 class _TokenBucket:
     """Rate limiter for the log channel: `burst` capacity, refilled per second.
 
@@ -145,14 +174,14 @@ class SemanticClient:
             raises — when the endpoint is unreachable or the driver rejects us:
             a failed side-channel must not take the application down with it.
         """
-        if self._endpoint.startswith("\\\\.\\pipe\\") or self._endpoint.startswith("\\\\?\\pipe\\"):
-            # Windows named pipes need a different transport; fail dormant.
-            return False
         try:
             self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_unix_connection(self._endpoint), timeout
+                _open_connection(self._endpoint), timeout
             )
-        except (OSError, asyncio.TimeoutError, NotImplementedError):
+        except (OSError, asyncio.TimeoutError, NotImplementedError, AttributeError):
+            # AttributeError belongs here: `asyncio.open_unix_connection` does
+            # not exist on Windows at all, so a wrong transport choice raises
+            # rather than failing to connect, and that must not reach the app.
             self.closed = True
             return False
 

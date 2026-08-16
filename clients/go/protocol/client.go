@@ -6,7 +6,6 @@ import (
 	"math"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -117,11 +116,9 @@ func fromEnvValues(endpoint, token, protocol string, options Options) *Client {
 	if protocol != "" && protocol != ProtocolID && protocol != "1" {
 		return nil
 	}
-	if strings.HasPrefix(endpoint, `\\.\pipe\`) || strings.HasPrefix(endpoint, `\\?\pipe\`) {
-		// Named pipes need a Windows-only transport; stay dormant instead of
-		// half-working.
-		return nil
-	}
+	// The endpoint's shape is not the constructor's business: on Windows the
+	// driver hands out `\\.\pipe\…`, and which transport can open it is
+	// decided by dialEndpoint, per platform.
 	return New(endpoint, token, options)
 }
 
@@ -130,7 +127,7 @@ func fromEnvValues(endpoint, token, protocol string, options Options) *Client {
 // A side-channel failure must never take the application down, so callers are
 // expected to ignore the error and carry on rendering.
 func (c *Client) Start(timeout time.Duration) error {
-	conn, err := net.DialTimeout("unix", c.endpoint, timeout)
+	conn, err := dialEndpoint(c.endpoint, timeout)
 	if err != nil {
 		c.mu.Lock()
 		c.closed = true

@@ -178,7 +178,6 @@ func TestNoClientWithoutACompleteEnvironment(t *testing.T) {
 		{"/tmp/nope.sock", "", ""},
 		{"", testToken, ""},
 		{"/tmp/nope.sock", testToken, "termwright/9"},
-		{`\\.\pipe\termwright`, testToken, ""},
 	}
 	for _, testCase := range cases {
 		if client := fromEnvValues(testCase.endpoint, testCase.token, testCase.protocol, Options{}); client != nil {
@@ -187,6 +186,13 @@ func TestNoClientWithoutACompleteEnvironment(t *testing.T) {
 	}
 	if client := fromEnvValues("/tmp/tw.sock", testToken, ProtocolID, Options{}); client == nil {
 		t.Error("a fully instrumented environment produced no client")
+	}
+
+	// A Windows pipe path is a real endpoint, not a reason to stay dormant:
+	// the driver hands one out on win32, and which transport can open it is
+	// the dialer's business, not the constructor's.
+	if client := fromEnvValues(`\\.\pipe\termwright-abc`, testToken, "", Options{}); client == nil {
+		t.Error("a named-pipe endpoint produced no client")
 	}
 }
 

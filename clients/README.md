@@ -199,8 +199,12 @@ cd clients/rust   && cargo test                             # 19 tests + 1 docte
 
 ## What is not here
 
-- Windows named pipes. Every client stays dormant on a `\\.\pipe\…` endpoint
-  rather than half-working.
+- Windows named pipes in Rust. The crate dials unix sockets only, so a
+  `\\.\pipe\…` endpoint fails to connect and the app carries on unpublished.
+  Go and Python reach the pipe: Go through `go-winio` behind a build tag,
+  Python through the proactor loop's `create_pipe_connection`. Both are
+  compiled and reasoned about here but proven by CI, since this machine is not
+  Windows.
 - A Rust framework adapter. The crate is protocol-only by design; ratatui and
   cursive draw too differently for one adapter to serve both honestly.
 - `tview.Grid` children in Go, which tview exposes no accessor for — supply

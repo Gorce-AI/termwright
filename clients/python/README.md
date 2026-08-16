@@ -149,6 +149,12 @@ driver can report the loss.
 Measured against the adapter conventions in the protocol README. Everything
 not listed here follows them.
 
+- **Windows support is written, not yet observed here.** A `\\.\pipe\…`
+  endpoint is opened through the proactor loop's `create_pipe_connection`,
+  which exists only on Windows; every test in this repository runs on POSIX,
+  so the verdict for a live pipe comes from CI. On a loop without that method
+  the connect fails quietly and the application keeps rendering.
+
 - **`multiline` is derived from the widget type, not a flag** (rule 4). Textual
   has no `multiline` property: `TextArea` accepts newlines and `Input` does
   not, as a matter of what the classes are. The state is published from the
