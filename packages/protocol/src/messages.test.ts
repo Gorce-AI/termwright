@@ -248,6 +248,40 @@ describe('parseAdapterMessage — tree deltas', () => {
   });
 });
 
+describe('parseAdapterMessage — probe lifecycle', () => {
+  const probe = {
+    framework: 'opentui',
+    frameworkVersion: '0.5.3',
+    probeVersion: '0.1.0',
+    identityKind: 'stable',
+    capabilities: ['stable-identity', 'operations'],
+  };
+
+  it('accepts a hello carrying a probe block, and one without', () => {
+    expect(adapterCode(hello())).toBe('ok');
+    expect(adapterCode({ ...hello(), probe })).toBe('ok');
+  });
+
+  it('rejects a probe block that claims stable identity while frame-local', () => {
+    expect(
+      adapterCode({
+        ...hello(),
+        probe: { ...probe, identityKind: 'frame-local', capabilities: ['stable-identity'] },
+      }),
+    ).toBe('malformed');
+  });
+
+  it('accepts frame-begin and rejects a non-positive revision', () => {
+    expect(adapterCode({ type: 'frame-begin', revision: 12 })).toBe('ok');
+    expect(adapterCode({ type: 'frame-begin', revision: 0 })).toBe('malformed');
+    expect(adapterCode({ type: 'frame-begin', revision: 12, extra: 1 })).toBe('malformed');
+  });
+
+  it('keeps frame-begin on the adapter side only', () => {
+    expect(driverCode({ type: 'frame-begin', revision: 1 })).toBe('malformed');
+  });
+});
+
 describe('parseDriverMessage', () => {
   it('accepts each driver → adapter message', () => {
     expect(driverCode(helloAck())).toBe('ok');

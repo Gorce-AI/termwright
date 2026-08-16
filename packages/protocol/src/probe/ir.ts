@@ -134,6 +134,7 @@ export const PROBE_UNOBSERVABLE_FIELDS = [
   'scrollExtent',
   'intendedRect',
   'visibleRect',
+  'paintOrder',
   'text',
   'parent',
 ] as const;
@@ -176,6 +177,16 @@ export interface ProbeObject {
   /** Text the object itself carries, not its descendants'. */
   readonly text?: string;
   readonly annotations?: ProbeAnnotations;
+  /**
+   * Where this object sits in paint order: higher was painted later, and
+   * therefore on top.
+   *
+   * Available in three of the six frameworks (a compositor hit-test, a z-order
+   * child list, a paint-order key) and absent in the rest. It is the only fact
+   * that makes "is my target actually the thing at this cell" answerable
+   * without inventing cell ownership, which no framework records.
+   */
+  readonly paintOrder?: number;
   /**
    * Facts this framework cannot report for this object. Distinct from a field
    * simply being absent, which means the probe did not report it this time.
@@ -226,6 +237,8 @@ export const PROBE_CAPABILITIES = [
   'annotations',
   /** A frame-start signal is emitted. Absent for most frameworks — see below. */
   'frame-begin',
+  /** `paintOrder` is reported, so occlusion can be reasoned about. */
+  'paint-order',
 ] as const;
 
 export type ProbeCapability = (typeof PROBE_CAPABILITIES)[number];

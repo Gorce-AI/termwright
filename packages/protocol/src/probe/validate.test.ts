@@ -67,8 +67,16 @@ describe('validateProbeInfo', () => {
   });
 
   it('keeps the capability set closed', () => {
-    expect([...PROBE_CAPABILITIES]).toContain('frame-begin');
-    expect(PROBE_CAPABILITIES).toHaveLength(5);
+    // Spelled out rather than counted: a diff here says which capability
+    // arrived, which is what the reader needs when this fails.
+    expect([...PROBE_CAPABILITIES]).toEqual([
+      'stable-identity',
+      'visible-rect',
+      'operations',
+      'annotations',
+      'frame-begin',
+      'paint-order',
+    ]);
   });
 });
 
@@ -270,5 +278,40 @@ describe('provenance vocabulary', () => {
       'correlation',
       'heuristic',
     ]);
+  });
+});
+
+describe('"I do not know" is not "not any more"', () => {
+  // The driver raised this as the risk in dropping a separate retraction
+  // mechanism. It is covered, but only because the two are separate encodings:
+  // a node resent without a field says the fact is gone, while an object
+  // listing the field as unobservable says the framework cannot see it. The
+  // contradiction — reporting both at once — is refused.
+  it('distinguishes an unreported field from an unobservable one', () => {
+    const silent = frame({ objects: [object('a')] });
+    const blind = frame({ objects: [object('a', { unobservable: ['focused'] })] });
+    const known = frame({ objects: [object('a', { state: { focused: false } })] });
+
+    for (const candidate of [silent, blind, known]) {
+      expect(codeOf(candidate)).toBe('ok');
+    }
+
+    const parsedBlind = validateProbeFrame(blind, DEFAULT_LIMITS);
+    if (!parsedBlind.ok) throw new Error(parsedBlind.detail);
+    expect(parsedBlind.frame.objects[0]!.unobservable).toEqual(['focused']);
+    expect(parsedBlind.frame.objects[0]!.state?.focused).toBeUndefined();
+
+    const parsedKnown = validateProbeFrame(known, DEFAULT_LIMITS);
+    if (!parsedKnown.ok) throw new Error(parsedKnown.detail);
+    // Known-false is a fact, and it is not the same as either of the others.
+    expect(parsedKnown.frame.objects[0]!.state?.focused).toBe(false);
+    expect(parsedKnown.frame.objects[0]!.unobservable).toBeUndefined();
+  });
+
+  it('accepts paintOrder and refuses it alongside an unobservable claim', () => {
+    expect(codeOf(frame({ objects: [object('a', { paintOrder: 3 })] }))).toBe('ok');
+    expect(
+      codeOf(frame({ objects: [object('a', { paintOrder: 3, unobservable: ['paintOrder'] })] })),
+    ).toBe('schema');
   });
 });

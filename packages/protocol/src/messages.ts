@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { SemanticSnapshot } from './tree.js';
 import type { LogRecord } from './logs.js';
 import type { TreeDelta } from './delta.js';
+import type { ProbeInfo } from './probe/ir.js';
 import type { ProtocolLimits } from './limits.js';
 import { PROTOCOL_ID } from './env.js';
 import { ProtocolViolation } from './errors.js';
@@ -9,6 +10,7 @@ import { projectDto } from './framing.js';
 import { validateSnapshot } from './validate.js';
 import { validateLogRecord } from './logs.js';
 import { validateTreeDelta } from './delta.js';
+import { probeInfoSchema, validateProbeInfo } from './probe/validate.js';
 
 /**
  * Wire messages. Transport: length-prefixed JSON frames (see framing.ts).
@@ -36,6 +38,14 @@ export interface HelloMessage {
   readonly token: string;
   readonly adapter: { readonly name: string; readonly version: string };
   readonly capabilities: readonly AdapterCapability[];
+  /**
+   * Present when the sender is a probe rather than a hand-written adapter.
+   *
+   * Carries what the probe can actually offer — framework and versions, the
+   * best identity it can produce, and its optional abilities — so the driver
+   * negotiates against measured capability rather than assuming a floor.
+   */
+  readonly probe?: ProbeInfo;
 }
 
 /** driver → adapter, reply to hello. */
@@ -102,6 +112,28 @@ export interface GetTreeResponse {
 }
 
 /**
+ * adapter → driver, a frame has started (capability `frame-begin`).
+ *
+ * **Optional, and its absence means nothing.** No audited framework offers a
+ * hook guaranteed to fire before every frame: one lets a pre-draw hook veto the
+ * frame entirely, so the post-draw hook never runs; one exposes only a
+ * post-frame hook; one decouples submission from the flush with a ticker. A
+ * receiver that reads "no frame-begin" as "no frame in progress" turns four of
+ * the six frameworks into a hang rather than an error.
+ *
+ * `FRAME_END` is the existing `revision-commit`, which stays advisory.
+ *
+ * **Abandoned frames**: a probe may begin a frame and never finish it — a
+ * crash, an interrupted render. A `frame-begin` for revision N implicitly
+ * closes every frame below N. Without that rule an open frame waits forever,
+ * which is the timeout it replaced, only now wearing a false air of precision.
+ */
+export interface FrameBeginMessage {
+  readonly type: 'frame-begin';
+  readonly revision: number;
+}
+
+/**
  * adapter → driver, an incremental tree update (capability `tree-diffs`,
  * `subscribe: 'diffs'`).
  *
@@ -143,6 +175,7 @@ export type AdapterToDriverMessage =
   | SnapshotMessage
   | GetTreeResponse
   | TreeDeltaMessage
+  | FrameBeginMessage
   | LogMessage
   | ProtocolErrorMessage;
 
@@ -220,6 +253,12 @@ const helloSchema = z.strictObject({
   token: nonEmptyIdentifier,
   adapter: z.strictObject({ name: nonEmptyIdentifier, version: nonEmptyIdentifier }),
   capabilities: z.array(z.enum(ADAPTER_CAPABILITIES)).max(ADAPTER_CAPABILITIES.length),
+  probe: probeInfoSchema.optional(),
+});
+
+const frameBeginSchema = z.strictObject({
+  type: z.literal('frame-begin'),
+  revision: revisionNumber,
 });
 
 const revisionCommitSchema = z.strictObject({
@@ -389,7 +428,17 @@ export function parseAdapterMessage(
         return { ok: false, code: 'bad-version', detail: `unsupported protocol ${protocol}` };
       }
       const issue = check(helloSchema, dto);
-      return issue === null ? { ok: true, message: dto as HelloMessage } : malformed(issue);
+      if (issue !== null) return malformed(issue);
+      // The shape check cannot see the one incoherent pair: a probe declaring
+      // frame-local identity while claiming it can be correlated across
+      // frames. That rule has to hold on the wire, not only when a caller
+      // remembers to run the helper.
+      const probe = (dto as { probe?: unknown }).probe;
+      if (probe !== undefined) {
+        const checked = validateProbeInfo(probe);
+        if (!checked.ok) return malformed(`probe: ${checked.detail}`);
+      }
+      return { ok: true, message: dto as HelloMessage };
     }
     case 'revision-commit': {
       const issue = check(revisionCommitSchema, dto);
@@ -412,6 +461,12 @@ export function parseAdapterMessage(
         if (bad !== null) return bad;
       }
       return { ok: true, message: dto as GetTreeResponse };
+    }
+    case 'frame-begin': {
+      const issue = check(frameBeginSchema, dto);
+      return issue === null
+        ? { ok: true, message: dto as FrameBeginMessage }
+        : malformed(issue);
     }
     case 'tree-delta': {
       const issue = check(treeDeltaTypeSchema, dto);

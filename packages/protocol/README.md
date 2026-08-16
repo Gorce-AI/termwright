@@ -201,6 +201,19 @@ if (!composed.ok) {
   list and validation rejects it.
 - Removals are applied **before** upserts, so one delta can rescue a node out
   of a subtree it also removes.
+- **Retraction is wholesale replacement.** A recognizer that loses confidence
+  in a fact sends the full node *without* that field; there is no separate
+  "unset" operation, and none is needed, because a replacement node's silence
+  about a field is already the signal. Partial node patches would buy back the
+  bytes but reintroduce the third state ("leave this alone") that wholesale
+  replacement exists to avoid, so they stay a future option contingent on
+  measured `px` cost.
+- **A producer that dropped facts sends a full snapshot, not a delta.** Under
+  backpressure a probe may sample, coalesce or discard; a delta built on top of
+  facts it never saw describes a tree that never existed. `get-tree` resync is
+  the same mechanism with a new trigger, and it is the producer's obligation:
+  the receiver cannot detect the difference, because a delta missing a change
+  is indistinguishable from a delta whose producer had nothing to say.
 - `cursor`, when present, replaces the cursor; absent means **unchanged**.
   Without it a diffs-only session could never move the cursor, which in a TUI
   moves on nearly every keystroke — the mode would be useless for exactly the

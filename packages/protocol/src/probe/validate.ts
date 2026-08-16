@@ -91,6 +91,7 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
         description: text.optional(),
       })
       .optional(),
+    paintOrder: safeInt.optional(),
     unobservable: z
       .array(z.enum(PROBE_UNOBSERVABLE_FIELDS))
       .max(PROBE_UNOBSERVABLE_FIELDS.length)
@@ -242,6 +243,7 @@ export function validateProbeFrame(
       ['parent', object.parent !== undefined],
       ['intendedRect', object.geometry?.intendedRect !== undefined],
       ['visibleRect', object.geometry?.visibleRect !== undefined],
+      ['paintOrder', object.paintOrder !== undefined],
     ] as const) {
       if (declared.has(field) && present) {
         return fail(
