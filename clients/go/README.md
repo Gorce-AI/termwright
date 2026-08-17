@@ -17,11 +17,14 @@ what the app renders. A `nil` `*Session` is safe to use and to `Close`.
 go get github.com/gorce-ai/termwright/clients/go
 ```
 
-Two packages:
+Three packages:
 
 - `.../clients/go/protocol` — framing, marker, message and snapshot validation,
   socket client. Depends on the standard library only.
 - `.../clients/go/termwright` — the tview adapter. Depends on tview and tcell.
+- `.../clients/go/annotate` — describe your widgets to the zero-config probes.
+  Standard library only, and dormant when no driver is attached. Needs Go 1.24
+  (`runtime.AddCleanup`).
 
 ## tview in 30 lines
 
@@ -134,6 +137,64 @@ if client != nil && client.Start(protocol.DialTimeout) == nil {
 	os.Stdout.WriteString(marker) // only after the render is fully written
 }
 ```
+
+## Annotations
+
+The zero-config probes (`@termwright/probe-tview`, `@termwright/probe-charm`)
+observe facts: this is a button, it holds this text, it has the focus, it was
+drawn here. What they cannot observe is intent — that this list is the inbox,
+that a row is *overdue* in the sense your domain means. `annotate` is where the
+author supplies that, and it is the only package here that a zero-config
+application imports.
+
+There are two shapes because the two frameworks differ in one property, widget
+identity.
+
+**tview retains its primitives**, so an address is a usable key and a widget
+you did not write can be described from outside:
+
+```go
+import "github.com/gorce-ai/termwright/clients/go/annotate"
+
+annotate.Tag(unreadBadge, annotate.Semantics{
+	Role:   "status",
+	Name:   "Unread messages",
+	TestID: "unread-badge",
+	Domain: map[string]string{"sync": "pending"},
+})
+```
+
+`Tag` is generic over a pointer so that `Tag(myStruct, …)` fails to compile
+rather than annotating a copy. Tagging twice replaces; tagging with an empty
+`Semantics` is `Untag`. Nothing is retained — the entry is released by a
+cleanup attached to the widget, so a long-running TUI that creates and discards
+widgets does not grow a map forever.
+
+**A Bubble Tea component is a value**: `Update` returns a copy, and the address
+stops meaning anything after the first keystroke. There the component declares
+its own semantics, which the compiler checks and nothing has to release:
+
+```go
+func (g gauge) TermwrightSemantics() annotate.Semantics {
+	return annotate.Semantics{Role: "meter", Name: "Disk usage"}
+}
+```
+
+Both are read on the side channel only. An annotated run and an unannotated one
+paint the same bytes.
+
+### What an annotation may not say
+
+`Semantics` carries `Role`, `Name`, `TestID`, `Description` and `Domain`, and
+nothing else. There is deliberately no field for bounds, focus or rendered
+text: the screen is the authority on those, and an annotation able to restate
+them would eventually contradict them — turning a passing test into a lie
+rather than a failure. Physical facts stay with the probe, wording comes from
+here, and where both speak the merge order is the one in the protocol README:
+annotation above recognizer, but never above an observed fact.
+
+A role outside the vocabulary is dropped rather than guessed, so a typo costs
+you the override and not the node.
 
 ## Application logs
 

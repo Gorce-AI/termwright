@@ -45,6 +45,29 @@ missing, so a test can tell "not on screen" from "not there".
 Identity is the primitive's pointer: tview retains its widget tree, so the same
 `*Button` is the same button across frames.
 
+## Describing what the probe cannot see
+
+Zero-config means the probe reads facts. It cannot read intent — which button
+is the destructive one, which list is the inbox, what "overdue" means here. For
+that, and only for that, an application may import
+`github.com/gorce-ai/termwright/clients/go/annotate`:
+
+```go
+annotate.Tag(unreadBadge, annotate.Semantics{
+	Role: "status", Name: "Unread messages", TestID: "unread-badge",
+})
+```
+
+The probe merges this with what it observed: the wording is the author's, the
+bounds and the focus stay the probe's. `Semantics` has no field for bounds,
+focus or rendered text — not by convention but structurally, so an annotation
+cannot go stale against the screen. Tagging retains nothing; the entry is
+released with the widget.
+
+This is the one import that makes an application no longer zero-config, which
+is why it is optional and why the two example fixtures in this package are kept
+apart.
+
 ## Dormant without instrumentation
 
 Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` the instrumented copy opens
