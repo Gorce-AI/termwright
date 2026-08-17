@@ -96,7 +96,16 @@ export function buildShimSource(target: string): string {
 export * from ${original};
 
 const __termwright_wrapped = async function createCliRenderer(config) {
-  const renderer = await __termwright_original.createCliRenderer(config);
+  let effective = config;
+  try {
+    // The probe gets to amend the config before the renderer exists. This is
+    // the only moment a custom stdout can be installed, and a custom stdout is
+    // what routes frame bytes back into JS — the measured marker route.
+    effective = globalThis.__termwright_onConfig?.(config) ?? config;
+  } catch {
+    effective = config;
+  }
+  const renderer = await __termwright_original.createCliRenderer(effective);
   try {
     globalThis.__termwright_onRenderer?.(renderer);
   } catch {

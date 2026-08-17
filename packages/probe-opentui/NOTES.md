@@ -1,5 +1,22 @@
 # @termwright/probe-opentui — implementation notes
 
+## The marker must share the frame's queue
+
+The sink hands OpenTUI a custom stdout so the frame bytes come back into JS —
+that part was measured. The part that was not obvious: **the marker has to be
+written through the sink, not to the underlying stream.**
+
+The first version called `target.write(marker)` directly. Every byte still
+arrived, in a plausible-looking order, and one test caught it: writing straight
+to the target jumps the Writable's own queue, so a marker overtook the frame it
+was committing. A receiver would then pair a tree with the screen that came
+*before* it — a wrong pairing rather than a missing one, which is the worse
+failure and the exact thing the marker exists to prevent.
+
+Both now go through one queue, so ordering is structural rather than a matter of
+timing. The consequence for tests is that assertions have to let the stream
+drain first; a zero-length write with a callback is the cheapest way.
+
 ## Two specifier forms, and why they are not unified
 
 CI turned both of these up, and the second one reversed a decision that read as

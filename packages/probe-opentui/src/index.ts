@@ -10,10 +10,14 @@
 
 export { withProbe, PROBE_ENTRIES } from './launch.js';
 export type { ProbeCommand } from './launch.js';
-export { onRendererCreated, RENDERER_HOOK } from './attach.js';
+export { onRendererCreated, onRendererConfig, RENDERER_HOOK, CONFIG_HOOK } from './attach.js';
 export type { ObservedRenderer } from './attach.js';
 export { detectRuntime, isInstrumented } from './runtime.js';
 export type { EnvSource, ProbeRuntime } from './runtime.js';
 export { buildShimSource, shouldShim, originalUrl, toModuleUrl, ORIGINAL_MARKER, OPENTUI_ENTRY_PATTERN } from './shim.js';
 export { observeTree } from './observe.js';
+export { createMarkerSink } from './sink.js';
+export type { MarkerSink } from './sink.js';
+export { startSession, probeInfo } from './session.js';
+export type { ObservableRenderer, Publisher, ProbeSession, SessionOptions } from './session.js';
 export type { ObservableNode, ObserveOptions, Observation } from './observe.js';

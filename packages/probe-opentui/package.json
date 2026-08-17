@@ -4,18 +4,36 @@
   "description": "zero-config OpenTUI probe: module interception plus Probe IR observation, with no import in the application",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./node-hook": { "types": "./dist/node-hook.d.ts", "import": "./dist/node-hook.js" },
-    "./bun-preload": { "types": "./dist/bun-preload.d.ts", "import": "./dist/bun-preload.js" }
+  "engines": {
+    "node": ">=22"
   },
-  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./node-hook": {
+      "types": "./dist/node-hook.d.ts",
+      "import": "./dist/node-hook.js"
+    },
+    "./bun-preload": {
+      "types": "./dist/bun-preload.d.ts",
+      "import": "./dist/bun-preload.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts src/node-hook.ts src/bun-preload.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@termwright/protocol": "workspace:*" },
-  "devDependencies": { "@opentui/core": "^0.5.3" }
+  "dependencies": {
+    "@termwright/protocol": "workspace:*",
+    "@termwright/recognizers": "workspace:^"
+  },
+  "devDependencies": {
+    "@opentui/core": "^0.5.3"
+  }
 }

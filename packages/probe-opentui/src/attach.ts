@@ -10,8 +10,32 @@
 /** Name of the global the shim calls when a renderer is created. */
 export const RENDERER_HOOK = '__termwright_onRenderer';
 
+/** Name of the global the shim calls to amend the config before creation. */
+export const CONFIG_HOOK = '__termwright_onConfig';
+
 /** Minimal shape the probe needs; the real type lives in `@opentui/core`. */
 export type ObservedRenderer = object;
+
+/**
+ * Register the callback that may amend a renderer config before it is built.
+ *
+ * Returning a new config replaces the application's; returning nothing leaves
+ * it alone. This is the only point at which a custom stdout can be installed,
+ * and without one the frame bytes never reach JS at all — they are written by
+ * a Zig thread (see NOTES).
+ *
+ * @returns a disposer that removes the hook again.
+ */
+export function onRendererConfig(
+  handler: (config: Record<string, unknown>) => Record<string, unknown> | undefined,
+): () => void {
+  const scope = globalThis as Record<string, unknown>;
+  const previous = scope[CONFIG_HOOK];
+  scope[CONFIG_HOOK] = handler;
+  return () => {
+    if (scope[CONFIG_HOOK] === handler) scope[CONFIG_HOOK] = previous;
+  };
+}
 
 /**
  * Register the callback the shim invokes for every renderer the application
