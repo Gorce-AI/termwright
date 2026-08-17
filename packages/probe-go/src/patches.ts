@@ -156,7 +156,16 @@ export async function applyPatchSet(copyDir: string, patchSetDir: string): Promi
   for (const file of manifest.patched) {
     const patch = join(patchSetDir, file.patch);
     try {
-      await run('git', ['apply', '-p1', '--whitespace=nowarn', patch], { cwd: copyDir });
+      // `core.autocrlf=true` is the default on GitHub's Windows runners, and it
+      // makes `git apply` write the patched file with CRLF. Go source from the
+      // module cache has LF, so the result applies cleanly and then fails the
+      // after-hash — the same patch producing different bytes per platform.
+      // Measured: the CRLF run yields exactly the sha the Windows lane reported.
+      await run(
+        'git',
+        ['-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '-p1', '--whitespace=nowarn', patch],
+        { cwd: copyDir },
+      );
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       if (/ENOENT/u.test(detail)) {

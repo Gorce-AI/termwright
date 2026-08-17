@@ -53,7 +53,25 @@ async function upstreamDir(): Promise<string | null> {
   }
 }
 
-const hasGo = process.env['TERMWRIGHT_SKIP_GO'] !== '1';
+/**
+ * Whether a Go toolchain can actually be run.
+ *
+ * Reading the opt-out variable alone assumes Go is present unless someone says
+ * otherwise, which is false on any lane that installs Node and nothing else:
+ * the arms then ran and died on `spawn go ENOENT`. Ask the toolchain instead of
+ * assuming it — the same question `workspace.test.ts` already asks.
+ */
+async function goAvailable(): Promise<boolean> {
+  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;
+  try {
+    await run('go', ['version']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const hasGo = await goAvailable();
 const upstream = await upstreamDir();
 const roots: string[] = [];
 
@@ -207,6 +225,34 @@ describe.skipIf(upstream === null)('against the real framework', () => {
     // Injected after the flush, which is the whole reason for the copy.
     expect(patched.indexOf('screen.Show()\n\n\t// Injected by termwright')).toBeGreaterThan(0);
     expect(await readFile(join(copy, 'termwright_probe.go'), 'utf8')).toContain('package tview');
+  }, 120_000);
+
+  it('produces the same bytes under a checkout configured for CRLF', async () => {
+    // The Windows lane failed here and nowhere else: `core.autocrlf=true` is
+    // the default on GitHub's Windows runners, and `git apply` then rewrites
+    // the patched file with CRLF. It applies cleanly and fails the after-hash,
+    // so one patch produced two results depending on the machine.
+    //
+    // Reproduced on any platform by pointing git at a global config that turns
+    // it on: without the override this throws with the sha the Windows lane
+    // reported.
+    const dir = await scratch();
+    const copy = join(dir, 'tview');
+    await materializeUpstream(upstream as string, copy);
+
+    const globalConfig = join(dir, 'gitconfig-crlf');
+    await writeFile(globalConfig, '[core]\n\tautocrlf = true\n');
+    const previous = process.env['GIT_CONFIG_GLOBAL'];
+    process.env['GIT_CONFIG_GLOBAL'] = globalConfig;
+    try {
+      await applyPatchSet(copy, PATCH_SET);
+    } finally {
+      if (previous === undefined) delete process.env['GIT_CONFIG_GLOBAL'];
+      else process.env['GIT_CONFIG_GLOBAL'] = previous;
+    }
+
+    const patched = await readFile(join(copy, 'application.go'), 'utf8');
+    expect(patched).not.toContain('\r\n');
   }, 120_000);
 
   it('leaves the copy dormant without the handshake variables', async () => {
