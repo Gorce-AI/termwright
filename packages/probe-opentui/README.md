@@ -38,6 +38,34 @@ entry points install **nothing** — no module hook, no global, no allocation �
 so a preload that ends up somewhere it was not meant to be is inert. The test
 suite asserts this in both runtimes.
 
+## What an instrumented run produces
+
+A vanilla application — no import, no annotation, no configuration — publishes a
+semantic tree built from what OpenTUI exposes: roles from the widget classes,
+real terminal cells for bounds, focus from the renderer, values from the input
+widgets. Output stays byte-identical to an uninstrumented run apart from the
+render-commit markers, which is asserted rather than asserted-to.
+
+What OpenTUI has no concept of — roles, `checked`, `disabled`, `expanded` — is
+reported as **unobservable** rather than as absent, so a test can tell "this is
+off" from "this framework never said".
+
+## Deviations
+
+**`frameworkType` comes from `constructor.name`.** OpenTUI has no accessibility
+layer at all, so a class name is the only signal there is. It does not survive
+minification: a bundled application's widgets arrive as `generic` with a mangled
+type. Nothing is lost that was not already unknowable, but the names get worse.
+
+**`visibleRect` is never reported.** OpenTUI clips with scissor rects at render
+time and exposes no per-node visible rectangle. Bounds are the intended
+rectangle, and the visible one is listed as unobservable rather than derived.
+
+**`paint-order` is announced but omitted per tree where it cannot be honoured.**
+The z-order child list is a protected field upstream; when a version stops
+exposing it, the walk falls back to document order and drops `paintOrder`
+entirely rather than passing one off as the other.
+
 ## Runtime notes
 
 Both are measured against `@opentui/core@0.5.3`, Bun 1.2.15 and Node 22/24; see
