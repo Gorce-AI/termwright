@@ -7,7 +7,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,8 +57,30 @@ const hasGo = process.env['TERMWRIGHT_SKIP_GO'] !== '1';
 const upstream = await upstreamDir();
 const roots: string[] = [];
 
+/**
+ * Removes a tree that may contain a Go module cache.
+ *
+ * The cold-cache test points `GOMODCACHE` at a scratch directory, and the
+ * toolchain writes what it downloads read-only — directories included. Removing
+ * a file needs write permission on its *parent*, so a plain `rm -rf` fails with
+ * `EACCES … unlink CONTRIBUTING.md` on files that are themselves irrelevant.
+ * The failure only appears once the download actually happened, which is why an
+ * offline run never saw it.
+ */
+async function removeTree(dir: string): Promise<void> {
+  try {
+    await chmod(dir, 0o700);
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) await removeTree(join(dir, entry.name));
+    }
+  } catch {
+    // Already gone, or never a directory: rm below settles it either way.
+  }
+  await rm(dir, { recursive: true, force: true });
+}
+
 afterAll(async () => {
-  await Promise.all(roots.map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(roots.map(removeTree));
 });
 
 async function scratch(): Promise<string> {
