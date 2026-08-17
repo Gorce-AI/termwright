@@ -16,6 +16,7 @@
 
 import { buildShimSource, shouldShim, OPENTUI_ENTRY_PATTERN } from './shim.js';
 import { isInstrumented } from './runtime.js';
+import { bootstrap } from './bootstrap.js';
 
 interface BunPluginBuild {
   onLoad(
@@ -52,3 +53,4 @@ export function installBunPreload(env: Record<string, string | undefined> = proc
 }
 
 installBunPreload();
+bootstrap();

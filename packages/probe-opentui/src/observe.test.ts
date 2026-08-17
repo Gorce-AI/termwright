@@ -260,3 +260,34 @@ describe('the protocol accepts what this produces', () => {
     expect(result.ok ? null : result.detail).toBeNull();
   });
 });
+
+describe('an unreadable z-order is reported, not papered over', () => {
+  it('omits paintOrder entirely rather than passing off document order as it', () => {
+    const root = node('RootRenderable', 1, {
+      getChildren: () => [node('BoxRenderable', 2), node('BoxRenderable', 3)],
+    });
+
+    const { frame, paintOrderKnown } = observeTree(root, { frame: 1 });
+
+    expect(paintOrderKnown).toBe(false);
+    for (const object of frame.objects) {
+      // Document order is not paint order. Publishing it as such would make a
+      // receiver gate clicks on an ordering nobody computed.
+      expect(object.paintOrder).toBeUndefined();
+      expect(object.unobservable).toContain('paintOrder');
+    }
+  });
+
+  it('keeps paintOrder when the framework did expose the ordering', () => {
+    const front = node('BoxRenderable', 3);
+    const back = node('BoxRenderable', 2);
+    const root = node('RootRenderable', 1, {
+      getChildren: () => [back, front],
+      _childrenInZIndexOrder: [front, back],
+    });
+
+    const { frame } = observeTree(root, { frame: 1 });
+
+    expect(frame.objects.every((object) => object.paintOrder !== undefined)).toBe(true);
+  });
+});

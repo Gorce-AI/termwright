@@ -19,6 +19,7 @@ import { register, registerHooks } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { buildShimSource, shouldShim } from './shim.js';
 import { isInstrumented } from './runtime.js';
+import { bootstrap } from './bootstrap.js';
 
 type LoadResult = { format?: string | null; source?: string | ArrayBufferView | undefined; shortCircuit?: boolean };
 type NextLoad = (url: string, context: unknown) => LoadResult;
@@ -65,3 +66,4 @@ export { loadHook as load };
 export const NODE_HOOK_PATH = fileURLToPath(import.meta.url);
 
 installNodeHook();
+bootstrap();

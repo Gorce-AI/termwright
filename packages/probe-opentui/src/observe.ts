@@ -225,8 +225,19 @@ export function observeTree(root: ObservableNode, options: ObserveOptions): Obse
 
   visit(root, undefined);
 
+  // Announced as a capability, but a tree whose z-order list was unreadable
+  // cannot honour it. Reporting document order as paint order would be a
+  // silent lie — the receiver would gate clicks on an ordering nobody
+  // computed. Absent, and listed as unobservable, is the honest report.
+  const published = paintOrderKnown
+    ? objects
+    : objects.map(({ paintOrder: _dropped, ...rest }) => ({
+        ...rest,
+        unobservable: [...(rest.unobservable ?? []), 'paintOrder' as const],
+      }));
+
   return {
-    frame: { frame: options.frame, objects },
+    frame: { frame: options.frame, objects: published },
     paintOrderKnown,
     truncated,
   };

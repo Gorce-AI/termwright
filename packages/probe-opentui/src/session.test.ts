@@ -65,6 +65,10 @@ describe('what the probe says about itself', () => {
     expect(info.frameworkVersion).toBe('0.5.3');
   });
 
+  it('claims paint-order, which is what makes occlusion answerable', () => {
+    expect(probeInfo().capabilities).toContain('paint-order');
+  });
+
   it('does not claim frame-begin, which OpenTUI cannot promise', () => {
     // Its callback sits inside loop(), so there is no hook guaranteed to fire
     // before every frame. Claiming it would make a consumer wait for something

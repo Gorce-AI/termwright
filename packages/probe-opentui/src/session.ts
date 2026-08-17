@@ -37,7 +37,14 @@ export interface SessionOptions {
   readonly renderer: ObservableRenderer;
   readonly publisher: Publisher;
   readonly sink?: MarkerSink;
-  readonly sessionId: string;
+  /**
+   * The driver's session id, or a function returning it.
+   *
+   * A function matters: the renderer can exist before the handshake finishes,
+   * and a session that captured the id at construction would stamp every later
+   * snapshot with a placeholder.
+   */
+  readonly sessionId: string | (() => string);
   /** Terminal size, when the renderer does not report it. */
   readonly columns?: number;
   readonly rows?: number;
@@ -63,7 +70,13 @@ export function probeInfo(frameworkVersion?: string): ProbeInfo {
     // `num` is a readonly monotonic counter that survives re-render and even
     // removal from the tree, so correlating identities across frames is sound.
     identityKind: 'stable',
-    capabilities: ['stable-identity', 'annotations'],
+    // `paint-order` earns occlusion reasoning, which is what lets a driver
+    // gate a click on "is my target the thing at this cell". OpenTUI exposes a
+    // z-order child list and builds its hit grid from the same coordinates, so
+    // the probe can generally report it — and omits it per object on any tree
+    // where the list turned out to be unreadable, rather than passing off
+    // document order as paint order.
+    capabilities: ['stable-identity', 'annotations', 'paint-order'],
   };
 }
 
@@ -76,7 +89,9 @@ export function probeInfo(frameworkVersion?: string): ProbeInfo {
  * none.
  */
 export function startSession(options: SessionOptions): ProbeSession {
-  const { renderer, publisher, sink, sessionId } = options;
+  const { renderer, publisher, sink } = options;
+  const sessionIdOf = (): string =>
+    typeof options.sessionId === 'function' ? options.sessionId() : options.sessionId;
   let revision = 0;
   let frames = 0;
   let stopped = false;
@@ -91,7 +106,7 @@ export function startSession(options: SessionOptions): ProbeSession {
       const observation = observeTree(renderer.root, { frame: frames });
       revision += 1;
       snapshot = recognize(observation.frame, {
-        sessionId,
+        sessionId: sessionIdOf(),
         revision,
         columns: options.columns ?? renderer.width ?? 80,
         rows: options.rows ?? renderer.height ?? 24,
