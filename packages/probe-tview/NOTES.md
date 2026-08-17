@@ -140,6 +140,45 @@ recording because it is the oldest bug in TUI keybinding: a global
 arrived as `"releae"`. The shortcuts now only fire while the main page is in
 front.
 
+## Annotations
+
+A tview application holds its primitives: the same `*tview.Button` pointer is
+on the grid this frame and the next. That makes identity usable as a key, so
+the annotation API is a registry rather than an interface — the author does not
+have to wrap or subclass anything to describe a widget they did not write.
+
+```go
+annotate.Tag(badge, annotate.Semantics{
+    Role: "status", Name: "Unread messages", TestID: "unread-badge",
+})
+```
+
+The probe calls `annotate.Lookup` while walking the tree and merges the result
+under D2 precedence: the annotation supplies wording, the probe supplies facts.
+The end-to-end fixture pins both halves — a custom `badge` primitive that no
+recognizer knows is found by `getByTestId` and by `getByRole('status')`, while
+a Save button annotated with a name only keeps the focus the probe observed
+after `Tab`.
+
+Two properties are worth stating because they are easy to get wrong:
+
+- **The registry does not retain widgets.** Keying by address and holding the
+  key in a `sync.Map` would keep every tagged primitive alive for the life of
+  the process. Entries are removed by `runtime.AddCleanup`, and the tests check
+  both directions: two hundred transient widgets are collected, and a widget
+  still referenced keeps its annotation. (This puts a Go 1.24 floor on anything
+  importing the package.)
+- **A declaration cannot state a physical fact.** `Semantics` carries only
+  `Role`, `Name`, `TestID`, `Description` and `Domain` — no bounds, no focus,
+  no rendered text — and a test reflects over the field set so that adding one
+  fails rather than merely being frowned upon. An unknown role is dropped, not
+  guessed.
+
+The annotated application lives in its own fixture. Putting the calls into the
+zero-config fixture would have broken that fixture's own test, the one
+asserting it imports nothing of ours — which is the test doing its job, and the
+reason the two are separate.
+
 ## Not covered yet
 
 - Windows. Nothing here has run on ConPTY, and the named-pipe endpoint path in

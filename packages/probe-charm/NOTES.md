@@ -91,11 +91,60 @@ spaces indistinguishable from content, and truncation discards the tail without
 recording that it existed.
 
 v2 has two channels that could restore it — the layer compositor, which already
-keeps absolute bounds per identified layer, and per-cell OSC 8 parameters,
+keeps absolute bounds per identified layer, and per-cell OSC 8 hyperlinks,
 which travel with the character through wrapping and truncation. Until one is
 wired, the capability set says so: v1 never claims `bounds`, and the probe
 reports component, name and value **without a position** rather than inventing
 coordinates.
+
+The hyperlink channel is narrower than the specification suggests, and the
+difference is measured rather than assumed. OSC 8 admits
+`key=value:key=value`, but `@xterm/headless` parses those parameters and keeps
+**only `id`** — impl-driver put four variants through the emulator (b79c62f)
+and `frag=btn7` disappears whether it travels beside an `id` or alone. This is
+not a field we decline to read; the parameter is absent from the buffer,
+because the emulator did not retain it. So a future emission design has exactly
+one carrier field: a single opaque string such as `id=twf:btn7`, with a
+separator we choose and parse ourselves, not several independent parameters.
+The reception side that landed is `CellSnapshot.link?: { uri, id?, truncated? }`
+— note `uri`, not `url`, and `truncated` set when the URI exceeded
+`maxStringBytes`, since a cut URI is a wrong URI rather than a shorter one.
+
+Cell attribution is not an alternative route: "which component painted this
+glyph" is unavailable in all six audited frameworks, so anything of that shape
+must stand on paint order plus geometry.
+
+## Annotations
+
+A Charm component is a value: `Update` returns a copy, and the model the
+program holds this frame is not the one it held last frame. An address-keyed
+registry — the shape tview uses — would key on an address that stops meaning
+anything after the first update. So Charm takes the other idiomatic Go route:
+the component declares its own semantics.
+
+```go
+func (g gauge) TermwrightSemantics() annotate.Semantics {
+    return annotate.Semantics{Role: "meter", Name: "Disk usage"}
+}
+```
+
+The probe consults `TermwrightSemantics()` **before** recognition, and that
+order is the whole point. A custom type that no recognizer knows would
+otherwise be walked past in silence; with a declaration it is reported as what
+its author says it is. A component the probe does recognise gets both — the
+author's wording and the probe's observed facts — merged under D2 precedence,
+so a name from the annotation never displaces a focus the probe measured.
+
+What a declaration may say is fixed by the struct, not by review:
+`Semantics` has only `Role`, `Name`, `TestID`, `Description` and `Domain`.
+There is deliberately no field for bounds, focus or rendered text, and a test
+in `clients/go/annotate` reflects over the field set and fails if one appears.
+Physical facts belong to the probe; an annotation that could restate them could
+also contradict them. An unrecognised role is dropped rather than guessed.
+
+Because a declaration is computed per frame from the live value, it stays
+fresh: the end-to-end test presses `+`, disk usage moves to 82 %, and the
+declared name follows the value without any invalidation step.
 
 ## Traps
 
