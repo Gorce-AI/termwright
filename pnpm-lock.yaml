@@ -287,6 +287,9 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@termwright/recognizers':
+        specifier: workspace:^
+        version: link:../recognizers
     devDependencies:
       '@opentui/core':
         specifier: ^0.5.3
