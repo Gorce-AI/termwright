@@ -27,6 +27,7 @@ const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, 'testing', 'fixture-v2');
 const FIXTURE_BUBBLES = join(here, 'testing', 'fixture-bubbles');
+const FIXTURE_ANNOTATED = join(here, 'testing', 'fixture-annotated');
 const BUBBLES_PATCH_SET = join(here, '..', 'upstream-patches', 'bubbles', 'v2.1.1');
 const PATCH_SET = join(here, '..', 'upstream-patches', 'bubbletea', 'v2.0.8');
 const CLIENT = join(here, '..', '..', '..', 'clients', 'go');
@@ -209,6 +210,65 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     // secret leaking through some other field would pass the assertion above.
     const tree = JSON.stringify(app.semanticTree());
     expect(tree).not.toContain('hunter2');
+  }, 900_000);
+});
+
+describe.skipIf(!runnable)('developer annotations', () => {
+  it('lets a component answer for itself', async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-ann-')));
+    roots.push(dir);
+    const app = join(dir, 'app');
+    await mkdir(app, { recursive: true });
+    await cp(FIXTURE_ANNOTATED, app, { recursive: true });
+
+    const tea = join(dir, 'bubbletea');
+    await materializeUpstream(
+      await ensureUpstreamModule({
+        module: 'charm.land/bubbletea/v2',
+        version: 'v2.0.8',
+        cachePath: ['charm.land', 'bubbletea', 'v2@v2.0.8'],
+      }),
+      tea,
+    );
+    await applyPatchSet(tea, PATCH_SET);
+
+    const workspace = await writeWorkspace(join(dir, 'generated.work'), {
+      moduleDir: app,
+      inherited: { uses: [], replaces: [] },
+      replaces: [
+        { from: 'charm.land/bubbletea/v2', to: tea },
+        { from: 'github.com/gorce-ai/termwright/clients/go', to: await realpath(CLIENT) },
+      ],
+    });
+
+    const binary = join(dir, 'app-binary');
+    await run('go', ['build', '-o', binary, '.'], {
+      cwd: app,
+      env: { ...process.env, GOWORK: workspace },
+    });
+
+    const session = await launchTerminal({ command: [binary], columns: 60, rows: 10 });
+    sessions.push(session);
+    await session.waitForText('disk 81%');
+
+    // A component the probe knows nothing about, reported as what its author
+    // says it is — through an interface rather than a registry, because a
+    // Bubble Tea component is copied on every update.
+    await expect.poll(() => session.getByTestId('disk-gauge').isVisible()).toBe(true);
+    await expect
+      .poll(() => session.getByRole('progressbar', { name: 'Disk usage' }).isVisible())
+      .toBe(true);
+
+    // The declaration is recomputed per frame, so domain state follows the
+    // component instead of going stale the way a registered copy would.
+    await session.press('+');
+    await session.waitForText('disk 82%');
+    await expect.poll(() => session.getByTestId('disk-gauge').isVisible()).toBe(true);
+
+    // And the recognised component beside it keeps the probe's own facts.
+    await expect
+      .poll(async () => (await session.getByRole('textbox').semanticState())?.focused)
+      .toBe(true);
   }, 900_000);
 });
 

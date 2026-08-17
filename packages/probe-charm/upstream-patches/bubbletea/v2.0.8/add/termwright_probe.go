@@ -28,11 +28,13 @@ package tea
 import (
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/gorce-ai/termwright/clients/go/annotate"
 	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
@@ -144,10 +146,34 @@ func (p *termwrightProbeState) walk(
 		return
 	}
 
+	// An author's own semantics come first, because Charm has no widget
+	// registry to key on: a component is a value copied on every update, so
+	// the only stable place for intent is the component itself. Asked before
+	// recognition so an annotated custom type is reported as what its author
+	// says it is, rather than being skipped for not being a Bubbles type.
+	if declared, ok := termwrightDeclaredSemantics(value); ok {
+		id := p.identity(parentID + "/" + fieldName + "/declared")
+		node := protocol.Node{
+			ID:            id,
+			ParentID:      parentID,
+			Role:          protocol.RoleGeneric,
+			Name:          fieldName,
+			FrameworkType: value.Type().Name(),
+		}
+		termwrightApplyAnnotation(declared, &node)
+		snapshot.Nodes = append(snapshot.Nodes, node)
+		return
+	}
+
 	if component := termwrightRecognise(value, fieldName); component != nil {
 		id := p.identity(parentID + "/" + fieldName + "/" + component.frameworkType)
 		component.node.ID = id
 		component.node.ParentID = parentID
+		// A recognised component may also declare semantics; the author's
+		// wording wins for what it *is*, the probe keeps what it observed.
+		if declared, ok := termwrightDeclaredSemantics(value); ok {
+			termwrightApplyAnnotation(declared, &component.node)
+		}
 		snapshot.Nodes = append(snapshot.Nodes, component.node)
 		// A recognised component's own fields are its business; descending
 		// into it would report its internals as siblings of the application's.
@@ -225,6 +251,65 @@ func termwrightRecognise(value reflect.Value, fieldName string) *recognised {
 	termwrightLibraryState(value, component, &node)
 
 	return &recognised{frameworkType: component, node: node}
+}
+
+// termwrightDeclaredSemantics asks a value for its own semantics.
+//
+// The interface, not a registry: Bubble Tea copies components on every update,
+// so an address recorded once names a copy that no longer exists. A value that
+// answers for itself is always current, and the compiler checks the wiring.
+func termwrightDeclaredSemantics(value reflect.Value) (annotate.Semantics, bool) {
+	if provider, ok := value.Interface().(annotate.Provider); ok {
+		return provider.TermwrightSemantics(), true
+	}
+	if value.CanAddr() {
+		if provider, ok := value.Addr().Interface().(annotate.Provider); ok {
+			return provider.TermwrightSemantics(), true
+		}
+	}
+	return annotate.Semantics{}, false
+}
+
+// termwrightApplyAnnotation merges what the application declared.
+//
+// Only what the probe cannot observe. There is no field here for bounds or
+// focus, and that is the guarantee rather than an omission.
+func termwrightApplyAnnotation(meta annotate.Semantics, node *protocol.Node) {
+	if meta.Role != "" {
+		// Dropped when outside the closed set: a typo in an annotation is the
+		// author's to fix, and exhaustive switches downstream depend on that
+		// set staying closed.
+		if role := protocol.Role(meta.Role); protocol.ValidRole(role) {
+			node.Role = role
+		}
+	}
+	if meta.Name != "" {
+		node.Name = meta.Name
+	}
+	if meta.TestID != "" {
+		node.TestID = meta.TestID
+	}
+	if meta.Description != "" {
+		node.Description = meta.Description
+	}
+	if len(meta.Domain) > 0 {
+		keys := make([]string, 0, len(meta.Domain))
+		for key := range meta.Domain {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		var builder strings.Builder
+		builder.WriteString(node.Description)
+		for _, key := range keys {
+			if builder.Len() > 0 {
+				builder.WriteString(" ")
+			}
+			builder.WriteString(key)
+			builder.WriteString("=")
+			builder.WriteString(meta.Domain[key])
+		}
+		node.Description = builder.String()
+	}
 }
 
 // termwrightLibraryState reads the accessors the Bubbles patch set adds.
