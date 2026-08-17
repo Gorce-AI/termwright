@@ -1,6 +1,6 @@
 module github.com/gorce-ai/termwright/clients/go
 
-go 1.22
+go 1.24
 
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
