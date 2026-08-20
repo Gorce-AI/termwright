@@ -20,6 +20,7 @@ import {
   parseAdapterMessage,
   DEFAULT_LIMITS,
   PROTOCOL_ID,
+  type ProtocolId,
   type HelloMessage,
   type SemanticSnapshot,
 } from '@termwright/protocol';
@@ -40,7 +41,7 @@ export interface FakeDriver {
 }
 
 /** Start one on a private endpoint. */
-export async function startFakeDriver(): Promise<FakeDriver> {
+export async function startFakeDriver(protocol: ProtocolId = PROTOCOL_ID): Promise<FakeDriver> {
   const directory = await mkdtemp(join(tmpdir(), 'termwright-probe-driver-'));
   const endpoint =
     process.platform === 'win32'
@@ -89,7 +90,7 @@ export async function startFakeDriver(): Promise<FakeDriver> {
               encodeFrame(
                 {
                   type: 'hello-ack',
-                  protocol: PROTOCOL_ID,
+                  protocol,
                   sessionId,
                   limits,
                   subscribe: 'snapshots',

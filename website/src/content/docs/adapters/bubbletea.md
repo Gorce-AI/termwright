@@ -1,73 +1,49 @@
 ---
-title: Bubble Tea
-description: Why Bubble Tea degrades to generic text mode, what you still get, and the one path to real semantics.
+title: Bubble Tea and Bubbles
+description: Build verified Bubble Tea applications with frame-local semantic component state.
 ---
 
-Bubble Tea gets an honest page rather than an adapter, because the limitation is
-structural and no amount of engineering on our side removes it.
+Bubble Tea models are values rather than retained widgets. Termwright observes
+the model at each rendered frame and recognizes supported Bubbles components.
 
-## Why there is no tree to publish
+## Install and prepare the build
 
-A Bubble Tea `View()` returns a **string**. Lip Gloss composes that string by
-joining styled fragments, and a join does not retain what was joined: after
-`lipgloss.JoinHorizontal` there is no object that says "a button labelled
-Approve occupies columns 14–24 of row 23". The positions exist only as a
-consequence of the concatenation.
-
-That places Bubble Tea in **class B** — string composition — in the
-[feasibility classes](../). Class A frameworks (Ink, Textual, tview, OpenTUI)
-retain a widget tree with positions, which is what an adapter walks. There is
-nothing analogous to walk here.
-
-We are not forking Bubble Tea, and we are not shipping an adapter that infers a
-tree by parsing the rendered string. Guessed roles are worse than no roles: a
-locator that silently matches the wrong cell is a test that lies.
-
-## What you get anyway
-
-A Bubble Tea program is a first-class **generic-mode** target, which is most of
-the product:
-
-- a real pseudo-terminal — raw mode, `SIGWINCH`, signals, exit codes;
-- the full VT model: text, cells, colours, attributes, cursor, alternate screen,
-  mouse-encoding modes, bracketed paste;
-- text and regex locators, style predicates (`getByText('FAILED', {fg: 'red'})`),
-  occurrence selection, region scoping, scrollback search;
-- revision-based waits instead of sleeps;
-- cell snapshots, recordings, and the HTML failure report;
-- the same session driven by an [agent over MCP](../../guides/mcp/).
-
-```ts
-test('quits on q', async ({terminal}) => {
-  const app = await terminal.launch({command: ['./my-bubbletea-app']});
-
-  await app.waitForText('Permission required');
-  await app.press('Tab');
-  await expect(app).toHaveText('[Reject]');
-
-  await app.press('q');
-  expect((await app.waitForExit()).code).toBe(0);
-});
+```sh
+npm install --save-dev @termwright/probe-charm
 ```
 
-What you do not get is `getByRole`, semantic YAML snapshots, or the semantic
-half of the failure diff. Diagnostics say `semanticTree: false` throughout, so
-nothing degrades silently.
+```ts
+import {prepareInstrumentedBuild} from '@termwright/probe-charm';
 
-## The path to real semantics
+const build = await prepareInstrumentedBuild({moduleDir: appDirectory});
+await execFile('go', ['build', '-o', binaryPath, '.'], {
+  cwd: appDirectory,
+  env: {...process.env, ...build.env},
+});
+const app = await terminal.launch({command: [binaryPath]});
+```
 
-There is one, and it belongs to the application author rather than to us:
-**Lip Gloss v2's Canvas / Layer API**. A program that positions its content
-through layers has real coordinates for its parts, and those can be published —
-either through explicit annotations or through a Canvas-aware adapter.
+Supported Bubble Tea versions are verified and unknown versions are refused.
 
-If your program is built that way and you want a semantic tree, open an issue:
-the protocol and the Go client are already there, and it is the composition
-model that has been the blocker.
+## Add stable application meaning
 
-## Migrating from teatest
+```go
+func (serverInput) TermwrightSemantics() annotate.Semantics {
+    return annotate.Semantics{
+        Key: "server-host",
+        Name: "Server host",
+        TestID: "server-host",
+    }
+}
+```
 
-`teatest` drives a `Model` in process and asserts on its output; it stays useful
-for exactly that. See [Migrating](../../guides/migrating/) for how the two fit
-together — the short version is that termwright adds process fidelity, waits and
-forensics, not locators, for a string-composed UI.
+A unique key stabilizes an annotated copied value between frames. Duplicate or
+missing keys remain frame-local and cannot become relation targets.
+
+## Supported behavior
+
+Bubble Tea 1.3.10 and 2.0.8 with Go 1.24+ are verified. Roles, names, values,
+selection, and observable component state are available. Password values are
+withheld. Geometry and hit testing are unsupported; use keyboard input.
+
+See [Framework compatibility](../../reference/compatibility/) for current coverage.

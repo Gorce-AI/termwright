@@ -54,20 +54,44 @@ default. `exports.test.ts` constructs both defaults for that reason.
 The one place the umbrella adds a rule of its own is `ui`: a failing test run
 exits 1 (assertion), not 5 (internal). A red suite is the tool working.
 
-## Driving Vitest through its stdin
+## One watcher for the terminal, one-shot runs for the browser
 
 `termwright ui` needs two things at once: the browser's rerun/stop buttons must
 work, and the developer's terminal must keep watch mode's own hotkeys.
 
-Vitest is therefore spawned with `stdin: 'pipe'` and `stdout`/`stderr`
-inherited, and this process forwards its own stdin into the child. `onRerun`
-writes `r` and `onStop` writes `q` — the same keys a person would press. No IPC
-channel, no Vitest Node API dependency, and nothing to keep in step when Vitest
-changes its internals.
+The long-lived `vitest watch` process therefore inherits stdin, stdout and
+stderr. Vitest sees a real TTY and owns its native keyboard shortcuts; piping
+stdin and forwarding bytes disabled the very hotkeys it was meant to preserve.
+
+A browser Run/Rerun starts a separate `vitest run`. That child can receive an
+authoritative file or stable case selection, and Stop terminates only that
+one-shot process rather than killing the watcher and taking the UI server down
+with it. A second browser run is refused while the first is active. There is no
+Vitest Node API dependency and no fake keystroke protocol to keep in step with
+Vitest internals.
+
+The browser selection replaces the watcher's positional and
+`-t`/`--testNamePattern` filters rather than intersecting with them. Other flags
+survive. The selected ids also reach the UI reporter through
+`TERMWRIGHT_UI_SELECTION`, so Vitest's filter-generated skipped siblings are not
+published as genuine skipped results.
 
 The binary is resolved from the *project's* `node_modules` via
 `createRequire(cwd)`, not from this package's, so the version that runs the tests
 is the version the project pinned.
+
+## The CLI injects the UI reporter
+
+Both watcher and one-shot commands receive `--reporter=default` plus the
+absolute installed path of `@termwright/ui/reporter`. A project does not need to
+edit `vitest.config.ts` before `termwright ui` can show a run, and a bare package
+specifier is not resolved against whichever dependencies a strict project
+happens to expose.
+
+Vitest CLI reporter flags replace the reporters declared in its config. That is
+a real tradeoff: JUnit, HTML or another configured reporter is not silently run
+by the panel. A reporter explicitly forwarded after `--` composes with the two
+injected entries.
 
 ## Why `ui` closes the server in a `finally`
 
@@ -86,19 +110,19 @@ cannot be faked meaningfully (resolving the project's real Vitest binary, and th
 `TERMWRIGHT_UI_URL` name the reporter reads) have their own assertions in
 `ui-command.test.ts`.
 
-Verified by hand, since no automated test starts a real server: `node
-dist/bin.js ui --no-watch --json` prints its URL, serves the app over HTTP 200,
-and shuts down cleanly on SIGINT.
+The CLI suite injects the server boundary and separately starts a real child
+process to pin watcher/one-shot/Stop lifecycle. The UI package's committed
+Playwright suite owns the real-server/browser boundary. A manual smoke remains
+useful for the assembled binary: `node dist/bin.js ui --no-watch --json` prints
+its URL, serves the app over HTTP 200, and shuts down cleanly on SIGINT.
 
 ## Open threads
 
-- **`--open`** to launch a browser is not implemented; printing the URL is
-  enough on a developer machine and the right thing over SSH.
-- **`termwright/opentui`** is not a subpath. Re-exporting the OpenTUI adapter
+- **`termwright/opentui`** is not a subpath. Re-exporting the OpenTUI annotation SDK
   would put `@opentui/core` in the umbrella's peer dependencies for the benefit
   of the minority of users who need it; installing `@termwright/opentui`
   directly costs one line and keeps everyone else's install clean. Revisit if
-  OpenTUI becomes the common case.
+  OpenTUI annotations become the common case.
 - **Multi-runner support.** The `ui` command assumes Vitest. The driver is
   runner-agnostic, and `--no-watch` plus a manually started run already works
   for anything else; a `--runner` flag can come when someone asks.

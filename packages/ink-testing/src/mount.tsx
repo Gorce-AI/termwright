@@ -4,30 +4,16 @@
  */
 
 import type { ComponentType, ReactNode } from 'react';
-import type { Instance, RenderOptions } from 'ink';
-import { semanticRender } from '@termwright/ink';
+import { Box, measureElement, render, type Instance, type RenderOptions } from 'ink';
+import { wrapInkRender } from '@termwright/probe-ink/internal/testing';
 import {
   launchTerminal,
   SessionClosedError,
   type AppLogSource,
-  type CellSnapshot,
-  type CrashReport,
   type EnvMode,
-  type ExitStatus,
-  type Locator,
-  type RoleLocatorOptions,
-  type ScreenSnapshot,
-  type ScrollbackApi,
-  type SelectionApi,
-  type SessionCapabilities,
-  type SessionDiagnostic,
-  type SessionEvents,
   type TerminalHarness,
-  type TextLocatorOptions,
   type TimeoutClasses,
-  type WaitOptions,
 } from '@termwright/driver';
-import type { SemanticRole, SemanticSnapshot } from '@termwright/protocol';
 import { createInProcessBackend } from './backend.js';
 import { ForwardingHarness } from './forwarding.js';
 import { MountErrorBoundary } from './error-boundary.js';
@@ -37,9 +23,9 @@ import { commitFrame, waitForFirstFrame, type SettleOptions } from './settle.js'
  * The Ink render options a mount may override.
  *
  * The rest are the harness's own and cannot be changed: `stdout` and `stdin`
- * are the wires to the session, `interactive` and `alternateScreen` are what
- * make Ink's coordinates viewport-absolute (and therefore clickable), and
- * `onRender` belongs to the adapter.
+ * are the wires to the session, `interactive` and `alternateScreen` establish
+ * the probe's only defensible coordinate premise, and `onRender` belongs to
+ * the injected probe.
  *
  * `debug` is absent on purpose: it makes Ink append every frame instead of
  * repainting, which turns the screen model into a transcript and breaks every
@@ -67,24 +53,14 @@ export interface MountInkOptions {
    * render failure.
    */
   readonly wrapper?: ComponentType<{ readonly children: ReactNode }>;
-  /**
-   * Extra environment variables for the *session*, merged into the environment
-   * the driver hands the adapter.
-   *
-   * This is not `process.env`. A mount shares the runner's process and never
-   * writes to the real environment, so the component under test does not
-   * observe these through `process.env` — only the adapter does. Launch a
-   * fixture when the component itself must read an environment variable.
-   */
+  /** Extra variables for the in-process probe session, never written to `process.env`. */
   readonly env?: Readonly<Record<string, string>>;
   /**
    * How the session environment is built, as in `launchTerminal`. Default
    * `'replace'`.
    *
    * **What this can and cannot do in a mount.** It shapes the environment the
-   * driver computes and hands to the adapter, which is what decides whether an
-   * instrumented component sees a variable through `semanticRender`'s
-   * `semantics.env`. It cannot touch what the component reads from
+   * driver computes and hands to the internal probe. It cannot touch what the component reads from
    * `process.env`, because that object belongs to the test runner and a mount
    * deliberately never mutates it. `'replace'` therefore isolates the session,
    * not the process.
@@ -102,19 +78,6 @@ export interface MountInkOptions {
    * reads them straight off the harness.
    */
   readonly logs?: readonly AppLogSource[];
-  /**
-   * Let the adapter capture `console.*` as log records. Default `false` here,
-   * unlike a fixture or a production run, where it defaults to `true`.
-   *
-   * A mount shares the runner's console object with the test framework and
-   * with every other test in the file. Capturing it would attribute Vitest's
-   * own output to the component under test, and would leave a wrapper on a
-   * global for as long as the mount is alive. Neither is a property this
-   * package is willing to give up by default — a component whose console
-   * output is the thing under test belongs in `launchInkFixture`, where the
-   * console is genuinely its own.
-   */
-  readonly captureConsole?: boolean;
   /** Driver timeout classes, as in `launchTerminal`. */
   readonly timeouts?: TimeoutClasses;
   /** How long the initial mount and each `rerender` may take to commit. */
@@ -162,9 +125,10 @@ const MOUNT_MAX_FPS = 1_000;
  *
  * The component runs against a headless VT emulator fed by Ink's own output, so
  * everything the driver offers a real terminal applies here: `getByRole`,
- * viewport coordinates, `click()` as a mouse report on stdin, `press()` as key
- * bytes. No callback is ever invoked directly on the component — asserting a
- * prop spy *after* physical input is the point.
+ * viewport cells and `press()` as key bytes. No callback is ever invoked
+ * directly on the component — asserting a prop spy *after* physical input is
+ * the point. Ink currently leaves occlusion unknown, so semantic click is
+ * deliberately refused; drive activation with the keyboard.
  *
  * The mount resolves once the first frame has been published, so locators work
  * immediately.
@@ -173,7 +137,9 @@ const MOUNT_MAX_FPS = 1_000;
  * ```tsx
  * const onPress = vi.fn();
  * const harness = await mountInk(<Approve onPress={onPress} />, { columns: 40, rows: 10 });
- * await harness.getByRole('button', { name: 'Approve' }).click();
+ * await harness.press('Tab');
+ * await harness.waitForStable();
+ * await harness.press('Enter');
  * await harness.waitForText('approved');
  * await vi.waitFor(() => expect(onPress).toHaveBeenCalledOnce());
  * await harness.close();
@@ -189,11 +155,16 @@ export async function mountInk(element: ReactNode, options: MountInkOptions = {}
   const tree = (node: ReactNode): ReactNode => wrapTree(node, state, options.wrapper);
 
   const backend = createInProcessBackend((io) => {
-    const instance = semanticRender(tree(element), {
+    const instrumentedRender = wrapInkRender({
+      render,
+      Box: Box as never,
+      measureElement: measureElement as never,
+    }, { env: io.env });
+    const instance = instrumentedRender(tree(element), {
       stdout: io.stdout,
       stdin: io.stdin,
-      // Interactive + alternate screen is what lets the adapter claim
-      // `absolute-bounds`, which is what makes clicking by role possible.
+      // Interactive + alternate screen establish the probe's qualified
+      // absolute-bounds premise. Occlusion remains unknown.
       interactive: true,
       alternateScreen: true,
       maxFps: MOUNT_MAX_FPS,
@@ -201,7 +172,6 @@ export async function mountInk(element: ReactNode, options: MountInkOptions = {}
       // leaves no trace of itself outside its own wires.
       patchConsole: false,
       ...options.ink,
-      semantics: { env: io.env, captureConsole: options.captureConsole ?? false },
     });
     state.instance = instance;
     // Awaited exactly once and shared. `waitUntilExit()` registers a

@@ -1,7 +1,7 @@
 //! Semantic side-channel client for the [termwright] terminal test driver.
 //!
 //! An instrumented TUI publishes its widget tree over a unix socket and
-//! commits each render with a signed DCS marker, so tests can assert on *roles
+//! commits each render with a signed OSC marker, so tests can assert on *roles
 //! and names* instead of screen-scraping cells. This crate is the protocol
 //! side of that contract: framing, the marker, message and snapshot
 //! validation, and a blocking socket client. It ships no framework adapter —
@@ -73,11 +73,12 @@ pub use marker::{
 };
 pub use messages::{
     parse_adapter_message, parse_driver_message, ProbeIdentityKind, ProbeInfo, PROTOCOL_ID,
-    PROTOCOL_VERSION,
+    PROTOCOL_V2_ID, PROTOCOL_VERSION,
 };
 pub use roles::{Action, Capability, Role};
 pub use tree::{
-    Cursor, CursorShape, Node, Occlusion, Orientation, Provenance, Rect, Snapshot, State, TextRange,
+    Cursor, CursorShape, Node, NodeGeometryObservations, Observation, Occlusion, Orientation,
+    PointerHitGrid, PointerHitRegion, Provenance, Rect, Snapshot, State, TextRange,
 };
 pub use validate::{apply_tree_delta, validate_snapshot, validate_tree_delta};
 

@@ -38,6 +38,8 @@ import {
   type ProbeCapability,
   type ProbeInfo,
   type ProtocolLimits,
+  type ProtocolId,
+  type SemanticNode,
   type SemanticSnapshot,
 } from '@termwright/protocol';
 import type { DiagnosticCode } from './api.js';
@@ -47,6 +49,7 @@ import { tokenMatches } from './internal/token.js';
 
 /** Everything the driver learns from a successful handshake. */
 export interface SemanticAttachment {
+  readonly protocol: ProtocolId;
   readonly adapter: { readonly name: string; readonly version: string };
   readonly capabilities: readonly AdapterCapability[];
   /** True when the adapter promised render-commit markers in stdout. */
@@ -340,10 +343,13 @@ export class SemanticChannel {
     this.#attached = socket;
     const markerEnabled = capabilities.includes(MARKER_CAPABILITY);
     const logsEnabled = capabilities.includes(LOGS_CAPABILITY);
-    const deltasEnabled = this.#options.acceptDeltas && capabilities.includes(DIFFS_CAPABILITY);
+    // V2 deltas need their own qualified-field patch semantics. Until those
+    // are negotiated, v2 is full-snapshot only rather than silently applying
+    // the v1 delta projection to qualified observations.
+    const deltasEnabled = hello.protocol === PROTOCOL_ID && this.#options.acceptDeltas && capabilities.includes(DIFFS_CAPABILITY);
     const ack: HelloAckMessage = {
       type: 'hello-ack',
-      protocol: PROTOCOL_ID,
+      protocol: hello.protocol,
       sessionId: this.#options.sessionId,
       limits: this.#options.limits,
       subscribe: deltasEnabled ? 'diffs' : 'snapshots',
@@ -353,12 +359,19 @@ export class SemanticChannel {
     };
     this.#send(socket, ack);
     this.#attachment = Object.freeze({
+      protocol: hello.protocol,
       adapter: Object.freeze({ name: hello.adapter.name, version: hello.adapter.version }),
       capabilities: Object.freeze(capabilities),
       markerEnabled,
       logsEnabled,
       deltasEnabled,
-      probe: hello.probe === undefined ? null : Object.freeze({ ...hello.probe }),
+      probe:
+        hello.probe === undefined
+          ? null
+          : Object.freeze({
+              ...hello.probe,
+              capabilities: Object.freeze([...hello.probe.capabilities]),
+            }),
     });
     this.#options.hooks.onAttach(this.#attachment);
     if (!markerEnabled) {
@@ -397,10 +410,25 @@ export class SemanticChannel {
           this.#fail(socket, 'malformed', 'snapshot carries a foreign sessionId');
           return false;
         }
+        const expectedVersion = this.#attachment?.protocol === 'termwright/2' ? 2 : 1;
+        if (message.snapshot.v !== expectedVersion) {
+          this.#fail(socket, 'bad-version', `snapshot v${message.snapshot.v} does not match negotiated termwright/${expectedVersion}`);
+          return false;
+        }
+        if (!this.#acceptsTreeFields(socket, message.snapshot.nodes, 'snapshot')) return false;
+        if (message.snapshot.v === 2 && message.snapshot.hitGrid?.status === 'known' && this.#attachment?.capabilities.includes('pointer-hit-grid') !== true) {
+          this.#fail(socket, 'malformed', "snapshot contains a known hit grid without the 'pointer-hit-grid' capability");
+          return false;
+        }
         this.#acceptTree(message.snapshot);
         return true;
       }
       case 'tree-delta': {
+        if (this.#attachment?.deltasEnabled !== true) {
+          this.#fail(socket, 'malformed', 'tree-delta sent without negotiated tree-diffs');
+          return false;
+        }
+        if (!this.#acceptsTreeFields(socket, message.changed, 'tree-delta')) return false;
         if (this.#resyncing) {
           // A full tree is already on its way; patching onto a base we know is
           // wrong would only produce a second wrong tree.
@@ -466,6 +494,11 @@ export class SemanticChannel {
           this.#fail(socket, 'malformed', 'get-tree-result carries a foreign sessionId');
           return false;
         }
+        if (!this.#acceptsTreeFields(socket, message.snapshot.nodes, 'get-tree-result')) return false;
+        if (message.snapshot.v === 2 && message.snapshot.hitGrid?.status === 'known' && this.#attachment?.capabilities.includes('pointer-hit-grid') !== true) {
+          this.#fail(socket, 'malformed', "get-tree-result contains a known hit grid without the 'pointer-hit-grid' capability");
+          return false;
+        }
         this.#finishResync();
         const held = this.#composed;
         const current = held !== null && message.snapshot.revision <= held.revision;
@@ -494,6 +527,50 @@ export class SemanticChannel {
   #acceptTree(snapshot: SemanticSnapshot): void {
     this.#composed = snapshot;
     this.#options.hooks.onSnapshot(snapshot);
+  }
+
+  /**
+   * Enforces the promises made by Hello before any optional tree fact can
+   * influence locators. Shape validation proves that a field is well-formed;
+   * this gate proves that the sender was entitled to send it.
+   *
+   * Geometry is accepted under `bounds`; physical pointer actions separately
+   * require `absolute-bounds`. Keeping those checks separate lets consumers
+   * inspect relative geometry without ever treating it as a terminal address.
+   */
+  #acceptsTreeFields(socket: Socket, nodes: readonly SemanticNode[], message: string): boolean {
+    const capabilities = this.#attachment?.capabilities ?? [];
+    const has = (capability: AdapterCapability): boolean => capabilities.includes(capability);
+    const reject = (detail: string): false => {
+      this.#fail(socket, 'malformed', `${message} ${detail}`);
+      return false;
+    };
+
+    if (!has('tree')) return reject("sent without the 'tree' capability");
+    if (this.#attachment?.protocol === 'termwright/2' && !has('qualified-observations')) {
+      return reject("uses termwright/2 without the 'qualified-observations' capability");
+    }
+    for (const node of nodes) {
+      if (node.bounds !== undefined) {
+        if (!has('bounds')) return reject("contains bounds without the 'bounds' capability");
+      }
+      if (node.geometry !== undefined && !has('qualified-observations')) {
+        return reject("contains qualified geometry without the 'qualified-observations' capability");
+      }
+      if (node.state !== undefined && !has('states')) {
+        return reject("contains state without the 'states' capability");
+      }
+      if (node.extended !== undefined && !has('states')) {
+        return reject("contains extended state without the 'states' capability");
+      }
+      if (node.actions !== undefined && !has('actions')) {
+        return reject("contains actions without the 'actions' capability");
+      }
+      if (node.textRanges !== undefined && !has('text-ranges')) {
+        return reject("contains text ranges without the 'text-ranges' capability");
+      }
+    }
+    return true;
   }
 
   /**

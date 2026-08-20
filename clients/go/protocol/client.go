@@ -61,6 +61,11 @@ type Options struct {
 	// AdapterName and AdapterVersion identify the adapter in the handshake.
 	AdapterName    string
 	AdapterVersion string
+	// Protocol selects termwright/1 (default) or qualified termwright/2.
+	Protocol string
+	// Probe describes the instrumented framework. Hand-written adapters leave
+	// it nil; framework probes must report only facts they can actually observe.
+	Probe *ProbeInfo
 	// Capabilities defaults to DefaultCapabilities.
 	Capabilities []Capability
 	// Limits applies until hello-ack replaces it.
@@ -104,6 +109,7 @@ type Client struct {
 	logBucket   *tokenBucket
 	logsDropped int64
 	forceFull   bool
+	performance clientPerformanceCounters
 
 	ready chan error
 	once  sync.Once
@@ -159,9 +165,18 @@ func fromEnvValues(endpoint, token, protocol string, options Options) *Client {
 		options.Debug.Line("diag", "dormant: "+strings.Join(missing, " and ")+" not set")
 		return nil
 	}
-	if protocol != "" && protocol != ProtocolID && protocol != "1" {
+	if protocol != "" && protocol != ProtocolID && protocol != ProtocolV2ID && protocol != "1" && protocol != "2" {
 		options.Debug.Line("diag", fmt.Sprintf("dormant: %s=%q is not %q", EnvProtocol, protocol, ProtocolID))
 		return nil
+	}
+	if protocol == ProtocolV2ID || protocol == "2" {
+		options.Protocol = ProtocolV2ID
+		if len(options.Capabilities) == 0 {
+			options.Capabilities = append([]Capability(nil), DefaultCapabilities...)
+		}
+		if !containsCapability(options.Capabilities, CapQualifiedObservations) {
+			options.Capabilities = append(options.Capabilities, CapQualifiedObservations)
+		}
 	}
 	// The endpoint's shape is not the constructor's business: on Windows the
 	// driver hands out `\\.\pipe\…`, and which transport can open it is
@@ -191,10 +206,19 @@ func (c *Client) Start(timeout time.Duration) error {
 
 	go c.readLoop(conn)
 
-	hello, err := NewHello(c.token, c.options.AdapterName, c.options.AdapterVersion, c.options.Capabilities)
+	hello, err := newHello(
+		c.token,
+		c.options.AdapterName,
+		c.options.AdapterVersion,
+		c.options.Capabilities,
+		c.options.Probe,
+	)
 	if err != nil {
 		c.Close()
 		return err
+	}
+	if c.options.Protocol == ProtocolV2ID {
+		hello.Protocol = ProtocolV2ID
 	}
 	if err := c.send(hello, limits); err != nil {
 		c.options.Debug.Line("diag", "hello could not be sent, staying dormant: "+errorLabel(err))
@@ -223,8 +247,8 @@ func (c *Client) Close() error {
 	c.mu.Lock()
 	conn := c.conn
 	wasOpen := !c.closed
-	summary := fmt.Sprintf("close r%d snapshots=%d deltas=%d logs_dropped=%d",
-		c.revision, c.snapsSent, c.deltasSent, c.logsDropped)
+	summary := fmt.Sprintf("close r%d snapshots=%d deltas=%d logs_dropped=%d performance_dropped=%d",
+		c.revision, c.snapsSent, c.deltasSent, c.logsDropped, c.performance.droppedEvents)
 	c.conn = nil
 	c.closed = true
 	c.mu.Unlock()
@@ -279,7 +303,18 @@ func (c *Client) Limits() Limits {
 	return c.limits
 }
 
-// Publish sends a snapshot for the next revision and returns the DCS marker
+// QualifiedObservations reports whether this session negotiated termwright/2.
+//
+// Producers need this before constructing a snapshot: strict v1 forbids the
+// qualified fields, while v2 requires them on every node. Publish cannot add
+// those framework facts after the producer has finished observing the frame.
+func (c *Client) QualifiedObservations() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.options.Protocol == ProtocolV2ID
+}
+
+// Publish sends a snapshot for the next revision and returns the OSC marker
 // committing it. Write that marker to stdout after the render's last byte.
 //
 // The snapshot's SessionID and Revision are overwritten with the session's
@@ -293,7 +328,11 @@ func (c *Client) Publish(snapshot *Snapshot) (string, error) {
 	}
 	c.revision++
 	revision := c.revision
-	snapshot.V = 1
+	if c.options.Protocol == ProtocolV2ID {
+		snapshot.V = 2
+	} else {
+		snapshot.V = 1
+	}
 	snapshot.SessionID = c.sessionID
 	snapshot.Revision = revision
 	limits := c.limits
@@ -306,11 +345,21 @@ func (c *Client) Publish(snapshot *Snapshot) (string, error) {
 		c.mu.Lock()
 		c.revision--
 		c.mu.Unlock()
+		c.performanceDrop()
 		return "", err
 	}
 
+	var serializationStarted time.Time
+	if c.options.Debug != nil {
+		serializationStarted = time.Now()
+	}
 	body, err := marshalCanonical(snapshot)
+	serialization := time.Duration(0)
+	if !serializationStarted.IsZero() {
+		serialization = time.Since(serializationStarted)
+	}
 	if err != nil {
+		c.performanceDrop()
 		return "", err
 	}
 	c.remember(revision, body)
@@ -318,18 +367,25 @@ func (c *Client) Publish(snapshot *Snapshot) (string, error) {
 	if subscribe != "revisions" {
 		message, err := c.treeMessage(snapshot, subscribe, body)
 		if err != nil {
+			c.performanceDrop()
 			return "", err
 		}
-		if err := c.send(message, limits); err != nil {
+		bytes, encodedFor, err := c.sendMeasured(message, limits, c.options.Debug != nil)
+		serialization += encodedFor
+		if err != nil {
+			c.performanceDrop()
 			return "", err
 		}
+		c.performancePublication(snapshot, bytes, serialization)
 	}
 	if err := c.send(RevisionCommit{Type: "revision-commit", Revision: revision}, limits); err != nil {
+		c.performanceDrop()
 		return "", err
 	}
 	if !markerEnabled {
 		return "", nil
 	}
+	c.performanceMarker()
 	return EncodeMarker(c.token, sessionID, revision)
 }
 
@@ -583,15 +639,31 @@ func (c *Client) remember(revision int64, body json.RawMessage) {
 }
 
 func (c *Client) send(message any, limits Limits) error {
+	_, _, err := c.sendMeasured(message, limits, false)
+	return err
+}
+
+// sendMeasured is send plus the two facts performance diagnostics need. The
+// timer wraps only canonical encoding; socket enqueue/write is deliberately
+// outside a metric named serialization.
+func (c *Client) sendMeasured(message any, limits Limits, measure bool) (int, time.Duration, error) {
+	var started time.Time
+	if measure {
+		started = time.Now()
+	}
 	frame, err := EncodeFrame(message, limits.MaxFrameBytes)
+	elapsed := time.Duration(0)
+	if !started.IsZero() {
+		elapsed = time.Since(started)
+	}
 	if err != nil {
-		return err
+		return 0, elapsed, err
 	}
 	c.mu.Lock()
 	conn := c.conn
 	c.mu.Unlock()
 	if conn == nil {
-		return nil
+		return 0, elapsed, nil
 	}
 
 	timeout := c.writeTimeout()
@@ -601,7 +673,7 @@ func (c *Client) send(message any, limits Limits) error {
 			// publishing into it from a render loop is the risk we refuse.
 			c.options.Debug.Line("diag", "cannot bound this write: "+errorLabel(err))
 			c.Close()
-			return err
+			return 0, elapsed, err
 		}
 	}
 	written, err := conn.Write(frame)
@@ -619,18 +691,18 @@ func (c *Client) send(message any, limits Limits) error {
 				"write deadline exceeded after %d of %d bytes; session is unrecoverable",
 				written, len(frame)))
 			c.Close()
-			return fmt.Errorf("%w after %d of %d bytes: %v", ErrWriteTimeout, written, len(frame), err)
+			return 0, elapsed, fmt.Errorf("%w after %d of %d bytes: %v", ErrWriteTimeout, written, len(frame), err)
 		}
 		c.Close()
-		return err
+		return 0, elapsed, err
 	}
 	if written != len(frame) {
 		c.options.Debug.Line("diag", fmt.Sprintf(
 			"short write, %d of %d bytes; session is unrecoverable", written, len(frame)))
 		c.Close()
-		return fmt.Errorf("%w: wrote %d of %d bytes", ErrWriteTimeout, written, len(frame))
+		return 0, elapsed, fmt.Errorf("%w: wrote %d of %d bytes", ErrWriteTimeout, written, len(frame))
 	}
-	return nil
+	return len(frame), elapsed, nil
 }
 
 func (c *Client) writeTimeout() time.Duration {

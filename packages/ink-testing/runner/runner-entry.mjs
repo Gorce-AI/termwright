@@ -13,7 +13,7 @@
 
 import { connect } from 'node:net';
 import { createElement } from 'react';
-import { semanticRender } from '@termwright/ink';
+import { render } from 'ink';
 
 /**
  * Mirrors `MAX_PAYLOAD_BYTES` in `src/payload.ts`.
@@ -175,7 +175,7 @@ if (typeof Component !== 'function') {
   );
 }
 
-const app = semanticRender(createElement(Component, payload.props), {
+const app = render(createElement(Component, payload.props), {
   // The same configuration mountInk uses, so a component's semantic tree does
   // not depend on which mode the test picked.
   interactive: true,

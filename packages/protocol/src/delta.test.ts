@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LIMITS, type ProtocolLimits } from './limits.js';
 import type { SemanticNode, SemanticSnapshot } from './tree.js';
-import { applyTreeDelta, validateTreeDelta, type TreeDelta } from './delta.js';
+import { applyTreeDelta, validateTreeDelta } from './delta.js';
 
 function baseSnapshot(): SemanticSnapshot {
   return {

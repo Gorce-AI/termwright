@@ -31,7 +31,6 @@ import (
 	"errors"
 	"os"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,8 +45,9 @@ import (
 // probeName and probeVersion identify this probe in the handshake, distinctly
 // from the hand-written adapter so a session can be told apart in diagnostics.
 const (
-	probeName    = "termwright-probe-tview"
-	probeVersion = "0.1.0"
+	probeName        = "termwright-probe-tview"
+	probeVersion     = "0.1.0"
+	frameworkVersion = "v0.42.0"
 )
 
 // termwrightProbeState is nil for an uninstrumented run, which is every run
@@ -55,9 +55,9 @@ const (
 type termwrightProbeState struct {
 	client *protocol.Client
 
-	mu      sync.Mutex
-	ids     map[Primitive]string
-	nextID  int
+	mu       sync.Mutex
+	ids      map[Primitive]string
+	nextID   int
 	dropped  atomic.Uint64
 	timedOut atomic.Uint64
 	frames   atomic.Uint64
@@ -98,6 +98,16 @@ func newTermwrightProbe() *termwrightProbeState {
 	client := protocol.FromEnv(protocol.Options{
 		AdapterName:    probeName,
 		AdapterVersion: probeVersion,
+		Probe: &protocol.ProbeInfo{
+			Framework:        "tview",
+			FrameworkVersion: frameworkVersion,
+			ProbeVersion:     probeVersion,
+			IdentityKind:     protocol.ProbeIdentityStable,
+			Capabilities: []protocol.ProbeCapability{
+				protocol.ProbeCapStableIdentity,
+				protocol.ProbeCapAnnotations,
+			},
+		},
 		// Bounds one frame write. The publish below happens under the
 		// application's write lock, so an unbounded write would freeze
 		// rendering whenever the driver stops reading — a frozen debugger, a
@@ -136,7 +146,7 @@ func (p *termwrightProbeState) afterFrame(a *Application, screen tcell.Screen) {
 		return
 	}
 
-	snapshot := p.snapshot(a, columns, rows)
+	snapshot := p.snapshot(a, columns, rows, p.client.QualifiedObservations())
 	marker, err := p.client.Publish(snapshot)
 	if err != nil || marker == "" {
 		p.onPublishFailed(err)
@@ -192,13 +202,36 @@ func (p *termwrightProbeState) identity(primitive Primitive) string {
 }
 
 // snapshot walks the retained tree into the wire form.
-func (p *termwrightProbeState) snapshot(a *Application, columns, rows int) *protocol.Snapshot {
-	snapshot := &protocol.Snapshot{Columns: columns, Rows: rows}
+func (p *termwrightProbeState) snapshot(a *Application, columns, rows int, qualified bool) *protocol.Snapshot {
+	var snapshot *protocol.Snapshot
+	if qualified {
+		snapshot = protocol.NewSnapshotV2("", 0, columns, rows)
+		snapshot.HitGrid = termwrightUnsupportedHitGrid()
+	} else {
+		snapshot = protocol.NewSnapshot("", 0, columns, rows)
+	}
 	if a.root == nil {
 		return snapshot
 	}
-	p.walk(a.root, "", false, columns, rows, snapshot)
+	keys := make(map[annotate.SemanticKey]string)
+	duplicates := make(map[annotate.SemanticKey]struct{})
+	pending := make([]termwrightRelations, 0)
+	p.walk(a.root, "", false, columns, rows, qualified, snapshot, keys, duplicates, &pending)
+	maxRelations := protocol.DefaultLimits.MaxRelationTargets
+	if p.client != nil {
+		maxRelations = p.client.Limits().MaxRelationTargets
+	}
+	termwrightResolveRelations(snapshot, keys, duplicates, pending, maxRelations)
 	return snapshot
+}
+
+// termwrightRelations holds author references until every node has been
+// visited. A label may be drawn after the control it labels, so resolving in
+// walk order would make declaration order part of the API.
+type termwrightRelations struct {
+	nodeIndex   int
+	labelledBy  []annotate.SemanticKey
+	describedBy []annotate.SemanticKey
 }
 
 // walk appends one node and recurses.
@@ -210,7 +243,11 @@ func (p *termwrightProbeState) walk(
 	parentID string,
 	hidden bool,
 	columns, rows int,
+	qualified bool,
 	snapshot *protocol.Snapshot,
+	keys map[annotate.SemanticKey]string,
+	duplicates map[annotate.SemanticKey]struct{},
+	pending *[]termwrightRelations,
 ) {
 	if primitive == nil {
 		return
@@ -230,8 +267,16 @@ func (p *termwrightProbeState) walk(
 		Role:     role,
 		Name:     termwrightName(primitive),
 		Value:    termwrightValue(primitive),
-		Bounds:   termwrightBounds(primitive, columns, rows),
 		State:    termwrightState(primitive, focused, hidden),
+		P:        protocol.ProvenanceFramework,
+		PX: map[string]string{
+			"role": protocol.ProvenanceRecognizer,
+		},
+	}
+	if qualified {
+		node.Geometry = termwrightGeometry(primitive, hidden, columns, rows)
+	} else {
+		node.Bounds = termwrightBounds(primitive, columns, rows)
 	}
 	// Required for a generic node, and useful on every other one: it is what
 	// keeps a widget this probe does not know about alive and identifiable
@@ -240,16 +285,97 @@ func (p *termwrightProbeState) walk(
 	// An author's annotation is merged on top of the observed facts, and only
 	// where the probe has nothing better: it may say what a widget *is*, never
 	// where it is or whether it has the focus. Those the probe measured.
-	termwrightApplyAnnotation(primitive, &node)
+	meta, annotated := annotate.Lookup(primitive)
+	if annotated {
+		termwrightApplyAnnotation(meta, &node)
+		termwrightRegisterKey(meta.Key, id, keys, duplicates)
+	}
 	if parentID == "" {
 		snapshot.RootIDs = append(snapshot.RootIDs, id)
 	}
 	snapshot.Nodes = append(snapshot.Nodes, node)
+	if annotated && (len(meta.LabelledBy) > 0 || len(meta.DescribedBy) > 0) {
+		*pending = append(*pending, termwrightRelations{
+			nodeIndex:   len(snapshot.Nodes) - 1,
+			labelledBy:  meta.LabelledBy,
+			describedBy: meta.DescribedBy,
+		})
+	}
 
 	for _, child := range children {
-		p.walk(child.primitive, id, hidden || child.hidden, columns, rows, snapshot)
+		p.walk(child.primitive, id, hidden || child.hidden, columns, rows, qualified, snapshot, keys, duplicates, pending)
 	}
-	p.appendSynthetic(primitive, id, hidden, snapshot)
+	p.appendSynthetic(primitive, id, hidden, qualified, snapshot)
+}
+
+func termwrightRegisterKey(
+	key annotate.SemanticKey,
+	id string,
+	keys map[annotate.SemanticKey]string,
+	duplicates map[annotate.SemanticKey]struct{},
+) {
+	if key == "" {
+		return
+	}
+	if _, duplicate := duplicates[key]; duplicate {
+		return
+	}
+	if previous, exists := keys[key]; exists && previous != id {
+		delete(keys, key)
+		duplicates[key] = struct{}{}
+		return
+	}
+	keys[key] = id
+}
+
+func termwrightResolveRelations(
+	snapshot *protocol.Snapshot,
+	keys map[annotate.SemanticKey]string,
+	duplicates map[annotate.SemanticKey]struct{},
+	pending []termwrightRelations,
+	maxRelations int,
+) {
+	resolve := func(references []annotate.SemanticKey) []string {
+		resolved := make([]string, 0, len(references))
+		seen := make(map[string]struct{}, len(references))
+		for _, key := range references {
+			if len(resolved) >= maxRelations {
+				break
+			}
+			if _, duplicate := duplicates[key]; duplicate {
+				continue
+			}
+			id, found := keys[key]
+			if !found {
+				continue
+			}
+			if _, repeated := seen[id]; repeated {
+				continue
+			}
+			seen[id] = struct{}{}
+			resolved = append(resolved, id)
+		}
+		return resolved
+	}
+
+	for _, relation := range pending {
+		node := &snapshot.Nodes[relation.nodeIndex]
+		if ids := resolve(relation.labelledBy); len(ids) > 0 {
+			node.LabelledBy = ids
+			termwrightProvenance(node, "labelledBy", protocol.ProvenanceAnnotation)
+		}
+		if ids := resolve(relation.describedBy); len(ids) > 0 {
+			node.DescribedBy = ids
+			termwrightProvenance(node, "describedBy", protocol.ProvenanceAnnotation)
+		}
+	}
+}
+
+func termwrightProvenance(node *protocol.Node, field, source string) {
+	if node.PX == nil {
+		node.PX = make(map[string]string)
+	}
+	node.PX[field] = source
 }
 
 // termwrightApplyAnnotation merges what the application declared.
@@ -257,54 +383,51 @@ func (p *termwrightProbeState) walk(
 // tview retains its widgets, so a registry keyed by the primitive's identity
 // works here — which is why tview annotates by registration while Charm, whose
 // components are copied values, annotates through an interface.
-func termwrightApplyAnnotation(primitive Primitive, node *protocol.Node) {
-	meta, ok := annotate.Lookup(primitive)
-	if !ok {
-		return
-	}
+func termwrightApplyAnnotation(meta annotate.Semantics, node *protocol.Node) {
 	if meta.Role != "" {
 		// Validated against the closed set and dropped when unknown, rather
 		// than guessed at: exhaustive switches downstream depend on that set
 		// staying closed, and a typo in an annotation is the author's to fix.
 		if role := protocol.Role(meta.Role); protocol.ValidRole(role) {
 			node.Role = role
+			termwrightProvenance(node, "role", protocol.ProvenanceAnnotation)
 		}
 	}
 	if meta.Name != "" {
 		node.Name = meta.Name
+		termwrightProvenance(node, "name", protocol.ProvenanceAnnotation)
 	}
 	if meta.TestID != "" {
 		node.TestID = meta.TestID
+		termwrightProvenance(node, "testId", protocol.ProvenanceAnnotation)
 	}
 	if meta.Description != "" {
 		node.Description = meta.Description
+		termwrightProvenance(node, "description", protocol.ProvenanceAnnotation)
 	}
-	// Domain state has no home in the closed state set, so it rides along as
-	// description text rather than being invented into a state flag.
+	// Domain state has its own namespace, so it cannot pollute the closed
+	// portable state vocabulary or masquerade as prose.
 	if len(meta.Domain) > 0 {
-		node.Description = termwrightJoinDomain(node.Description, meta.Domain)
-	}
-}
-
-// termwrightJoinDomain renders domain pairs deterministically.
-func termwrightJoinDomain(prefix string, domain map[string]string) string {
-	keys := make([]string, 0, len(domain))
-	for key := range domain {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	var builder strings.Builder
-	builder.WriteString(prefix)
-	for _, key := range keys {
-		if builder.Len() > 0 {
-			builder.WriteString(" ")
+		node.Extended = make(map[string]any, len(meta.Domain))
+		for key, value := range meta.Domain {
+			node.Extended[key] = value
 		}
-		builder.WriteString(key)
-		builder.WriteString("=")
-		builder.WriteString(domain[key])
+		termwrightProvenance(node, "extended", protocol.ProvenanceAnnotation)
 	}
-	return builder.String()
+	seenActions := make(map[protocol.Action]struct{}, len(meta.Actions))
+	for _, action := range meta.Actions {
+		if !protocol.ValidAction(action) {
+			continue
+		}
+		if _, duplicate := seenActions[action]; duplicate {
+			continue
+		}
+		seenActions[action] = struct{}{}
+		node.Actions = append(node.Actions, action)
+	}
+	if len(node.Actions) > 0 {
+		termwrightProvenance(node, "actions", protocol.ProvenanceAnnotation)
+	}
 }
 
 // termwrightChild is a child plus whether its container is showing it.
@@ -477,6 +600,62 @@ func termwrightBounds(p Primitive, columns, rows int) *protocol.Rect {
 	return &protocol.Rect{Row: y, Column: x, Width: width, Height: height}
 }
 
+// termwrightGeometry qualifies only facts the retained tview tree exposes.
+// GetRect is the parent's intended allocation. The framework exposes no
+// general nested clipping or paint ownership, so visibleRect is limited to the
+// exact viewport intersection and pointer hit testing remains unsupported.
+func termwrightGeometry(p Primitive, hidden bool, columns, rows int) *protocol.NodeGeometryObservations {
+	displayed := !hidden
+	geometry := &protocol.NodeGeometryObservations{
+		Displayed: protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: "probe"},
+	}
+	if hidden {
+		geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-displayed"}
+		geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-displayed"}
+		return geometry
+	}
+
+	x, y, width, height := p.GetRect()
+	if width <= 0 || height <= 0 {
+		geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-laid-out"}
+		geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-laid-out"}
+		return geometry
+	}
+	intended := protocol.Rect{Row: y, Column: x, Width: width, Height: height}
+	visible := termwrightViewportIntersection(intended, columns, rows)
+	geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "known", Value: &intended, Evidence: "probe"}
+	geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "known", Value: &visible, Evidence: "viewport-clip"}
+	return geometry
+}
+
+func termwrightViewportIntersection(rect protocol.Rect, columns, rows int) protocol.Rect {
+	left := termwrightMax(0, termwrightMin(rect.Column, columns))
+	top := termwrightMax(0, termwrightMin(rect.Row, rows))
+	right := termwrightMax(left, termwrightMin(rect.Column+rect.Width, columns))
+	bottom := termwrightMax(top, termwrightMin(rect.Row+rect.Height, rows))
+	return protocol.Rect{Row: top, Column: left, Width: right - left, Height: bottom - top}
+}
+
+func termwrightMin(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func termwrightMax(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func termwrightUnsupportedHitGrid() *protocol.Observation[protocol.PointerHitGrid] {
+	return &protocol.Observation[protocol.PointerHitGrid]{
+		Status: "unsupported", Capability: "pointer-hit-grid", Reason: "framework-unobservable",
+	}
+}
+
 // termwrightScroll reports a scroll offset only when it is a fact.
 //
 // Several of these fields are meaningless until the widget has been drawn once
@@ -579,6 +758,7 @@ func (p *termwrightProbeState) appendSynthetic(
 	primitive Primitive,
 	parentID string,
 	hidden bool,
+	qualified bool,
 	snapshot *protocol.Snapshot,
 ) {
 	switch widget := primitive.(type) {
@@ -587,26 +767,49 @@ func (p *termwrightProbeState) appendSynthetic(
 		count := widget.GetItemCount()
 		for index := 0; index < count; index++ {
 			main, secondary := widget.GetItemText(index)
-			snapshot.Nodes = append(snapshot.Nodes, protocol.Node{
+			node := protocol.Node{
 				ID:       parentID + ":item" + strconv.Itoa(index),
 				ParentID: parentID,
 				Role:     protocol.RoleListItem,
 				Name:     termwrightFirst(main, secondary),
 				State:    termwrightItemState(index == current, index, count, hidden),
-			})
+				P:        protocol.ProvenanceFramework,
+				PX: map[string]string{
+					"role": protocol.ProvenanceRecognizer,
+				},
+			}
+			termwrightSyntheticGeometry(&node, qualified)
+			snapshot.Nodes = append(snapshot.Nodes, node)
 		}
 	case *DropDown:
 		current, _ := widget.GetCurrentOption()
 		count := widget.GetOptionCount()
 		for index := 0; index < count; index++ {
-			snapshot.Nodes = append(snapshot.Nodes, protocol.Node{
+			node := protocol.Node{
 				ID:       parentID + ":option" + strconv.Itoa(index),
 				ParentID: parentID,
 				Role:     protocol.RoleListItem,
 				Name:     widget.options[index].Text,
 				State:    termwrightItemState(index == current, index, count, hidden),
-			})
+				P:        protocol.ProvenanceFramework,
+				PX: map[string]string{
+					"role": protocol.ProvenanceRecognizer,
+				},
+			}
+			termwrightSyntheticGeometry(&node, qualified)
+			snapshot.Nodes = append(snapshot.Nodes, node)
 		}
+	}
+}
+
+func termwrightSyntheticGeometry(node *protocol.Node, qualified bool) {
+	if !qualified {
+		return
+	}
+	node.Geometry = &protocol.NodeGeometryObservations{
+		Displayed:    protocol.Observation[bool]{Status: "unknown", Reason: "not-reported"},
+		IntendedRect: protocol.Observation[protocol.Rect]{Status: "unknown", Reason: "not-reported"},
+		VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unknown", Reason: "clip-unobservable"},
 	}
 }
 

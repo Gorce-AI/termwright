@@ -21,6 +21,19 @@ import { discoveredId } from './test-model.js';
 
 export { discoveredId, parseDiscoveredId } from './test-model.js';
 
+export type DiscoveredTestKind = 'test' | 'gherkin-scenario' | 'gherkin-outline-example';
+
+export interface DiscoveredTestSource {
+  readonly file: string;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface DiscoveredTestAncestor {
+  readonly kind: 'feature' | 'rule';
+  readonly title: string;
+}
+
 /** One test the project holds. */
 export interface DiscoveredTest {
   /** `<file>::<full name>` — parseable back into a Vitest invocation. */
@@ -28,6 +41,15 @@ export interface DiscoveredTest {
   /** Full name, as Vitest prints it: `suite > case`. */
   readonly title: string;
   readonly file: string;
+  /** Declaration-time provider identity. Never inferred from an import path or title. */
+  readonly provider?: { readonly id: string; readonly version: number };
+  /** Provider-authored catalogue kind. */
+  readonly kind?: DiscoveredTestKind;
+  /** Provider-authored hierarchy, outermost first. */
+  readonly ancestors?: readonly DiscoveredTestAncestor[];
+  readonly tags?: readonly string[];
+  /** Physical authoring location, which can differ from the transformed module location. */
+  readonly source?: DiscoveredTestSource;
 }
 
 /** Options for {@link discoverTests}. */
@@ -36,6 +58,8 @@ export interface DiscoveryOptions {
   readonly cwd: string;
   /** Command to run. Default `npx vitest list --json`. */
   readonly command?: readonly string[];
+  /** Existing Vitest filters/options, so discovery matches the CLI's scope. */
+  readonly args?: readonly string[];
   /** Milliseconds before the listing is abandoned. Default 30 000. */
   readonly timeoutMs?: number;
   /** Injectable runner, so tests do not spawn Vitest. */
@@ -44,7 +68,7 @@ export interface DiscoveryOptions {
 
 /** Maximum tests kept from one listing. */
 const MAX_TESTS = 10_000;
-const DEFAULT_COMMAND = ['npx', 'vitest', 'list', '--json'] as const;
+const DEFAULT_COMMAND = ['npx', 'vitest', 'list'] as const;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
@@ -95,14 +119,75 @@ export function parseListing(output: string): readonly DiscoveredTest[] {
     const id = discoveredId(file, title);
     if (seen.has(id)) continue; // a parameterised test can list twice
     seen.add(id);
-    tests.push({ id, title, file });
+    const provider = parseProvider(record['provider']);
+    const kind = parseKind(record['kind']);
+    const ancestors = parseAncestors(record['ancestors']);
+    const tags = parseStringList(record['tags']);
+    const source = parseSource(record['source']);
+    tests.push({
+      id,
+      title,
+      file,
+      ...(provider === undefined ? {} : { provider }),
+      ...(kind === undefined ? {} : { kind }),
+      ...(ancestors === undefined ? {} : { ancestors }),
+      ...(tags === undefined ? {} : { tags }),
+      ...(source === undefined ? {} : { source }),
+    });
   }
   return tests;
 }
 
+function parseProvider(value: unknown): DiscoveredTest['provider'] {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record['id'] !== 'string' || record['id'] === '') return undefined;
+  if (!Number.isInteger(record['version']) || (record['version'] as number) < 1) return undefined;
+  return { id: record['id'], version: record['version'] as number };
+}
+
+function parseKind(value: unknown): DiscoveredTestKind | undefined {
+  return value === 'test' || value === 'gherkin-scenario' || value === 'gherkin-outline-example'
+    ? value
+    : undefined;
+}
+
+function parseAncestors(value: unknown): readonly DiscoveredTestAncestor[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const ancestors: DiscoveredTestAncestor[] = [];
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) return undefined;
+    const record = item as Record<string, unknown>;
+    if (record['kind'] !== 'feature' && record['kind'] !== 'rule') return undefined;
+    if (typeof record['title'] !== 'string' || record['title'] === '') return undefined;
+    ancestors.push({ kind: record['kind'], title: record['title'] });
+  }
+  return ancestors;
+}
+
+function parseStringList(value: unknown): readonly string[] | undefined {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string' && item !== '')) {
+    return undefined;
+  }
+  return value;
+}
+
+function parseSource(value: unknown): DiscoveredTestSource | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record['file'] !== 'string' || record['file'] === '') return undefined;
+  if (!Number.isInteger(record['line']) || (record['line'] as number) < 1) return undefined;
+  if (!Number.isInteger(record['column']) || (record['column'] as number) < 1) return undefined;
+  return {
+    file: record['file'],
+    line: record['line'] as number,
+    column: record['column'] as number,
+  };
+}
+
 /** Runs the listing command and returns its stdout. */
 async function runCommand(options: DiscoveryOptions): Promise<string> {
-  const [command, ...args] = options.command ?? DEFAULT_COMMAND;
+  const [command, ...args] = options.command ?? defaultDiscoveryCommand(options.args);
   if (command === undefined) throw new Error('discovery: empty command');
 
   return await new Promise<string>((resolve, reject) => {
@@ -129,4 +214,16 @@ async function runCommand(options: DiscoveryOptions): Promise<string> {
       else reject(new Error(`discovery: listing exited with ${String(code)}`));
     });
   });
+}
+
+/**
+ * Builds the default command with `--json` last.
+ *
+ * Vitest's `--json` accepts an optional output path. Putting a positional test
+ * filter immediately after it makes Vitest overwrite that test file with the
+ * listing. Keeping the flag last is therefore a data-safety invariant, not a
+ * cosmetic CLI preference.
+ */
+export function defaultDiscoveryCommand(args: readonly string[] = []): readonly string[] {
+  return [...DEFAULT_COMMAND, ...args, '--json'];
 }

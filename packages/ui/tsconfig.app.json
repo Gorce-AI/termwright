@@ -5,16 +5,18 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     // `node` is here for the modules the app shares with the server (their
     // Node-only branches are dead code in the bundle), not for the app itself.
     "types": ["node"]
   },
   "include": [
     "src/app",
+    "src/browser-client.ts",
+    "src/data-source.ts",
     "src/events.ts",
     "src/selector.ts",
     "src/codegen.ts",
-    "src/trace-source.ts",
-    "src/browser.e2e.ts"
+    "src/trace-source.ts"
   ]
 }

@@ -1,5 +1,10 @@
 # Upstream audit — Ratatui
 
+> **Historical Phase 0 evidence.** This snapshot predates the Ratatui probe and
+> intentionally preserves the original support assessment. Current setup and
+> support status live in the website Ratatui adapter guide and compatibility
+> reference.
+
 Phase 0 of the zero-config instrumentation campaign. Ratatui is a framework
 termwright does not support today — the Rust crate is a protocol client with no
 tree adapter — so this audit starts from zero and asks what a probe could
@@ -344,3 +349,9 @@ not a bug to fix.
 8. Instrumentation must be `no_std`-safe. `ratatui-core` declares `#![no_std]`
    and only gets `std` because the facade enables it, so every patched line
    lives behind `#[cfg(feature = "std")]`.
+
+**Phase 8 amendment:** upstream still has no native annotation storage, but
+the public `termwright-ratatui::Annotated<W>` wrapper can attach author intent
+to the exact `Frame::render_widget` call intercepted by the Phase 6 patch. It
+does not add stable identity or any physical fact, and direct nested
+`Widget::render` calls remain outside the interception surface.

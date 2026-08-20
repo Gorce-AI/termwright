@@ -20,3 +20,13 @@ export {
   type CharmFlavour,
   type CharmMajor,
 } from './detect.js';
+
+export {
+  BUBBLES_MODULES,
+  CharmPrepareError,
+  CLIENT_MODULE,
+  prepareInstrumentedBuild,
+  PROBE_VERSION,
+  type PreparedBuild,
+  type PrepareOptions,
+} from './launch.js';

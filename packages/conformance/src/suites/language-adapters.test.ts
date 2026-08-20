@@ -1,11 +1,8 @@
 /**
  * The adapter contract, instantiated for the non-JavaScript adapters.
  *
- * This file is the point of the whole exercise: the suite that certifies
- * `@termwright/ink` certifies a Textual app and a tview app with no changes to
- * itself, because it only ever observes bytes and frames. If an adapter in
- * another language needs the suite bent to fit it, the contract is not a
- * contract.
+ * The reusable suite only observes bytes and frames. If an adapter in another
+ * language needs it bent to fit, the contract is not a contract.
  *
  * Both registrations are skipped — with the reason in the block's name — when
  * the language's toolchain is not installed here. A missing interpreter is not
@@ -22,9 +19,10 @@ import { pythonWith, repositoryPath } from '../support/pty.js';
 const PYTHON_APP = repositoryPath('clients', 'python', 'examples', 'permission_app.py');
 /** `null` when no interpreter here can import the client; the row then skips. */
 const PYTHON = pythonWith(['termwright', 'textual']);
-const GO_MODULE = repositoryPath('clients', 'go');
 /** Built once by the toolchain probe, so no `go run` wrapper outlives a test. */
-const GO_BINARY = join(tmpdir(), 'termwright-conformance-permission');
+const GO_BINARY = join(tmpdir(), 'termwright-conformance-tview');
+const GO_BASELINE = join(tmpdir(), 'termwright-conformance-tview-plain');
+const GO_BUILD = repositoryPath('packages', 'conformance', 'scripts', 'build-tview-fixture.mjs');
 
 await runAdapterConformance({
   name: 'termwright (Textual)',
@@ -35,12 +33,14 @@ await runAdapterConformance({
     probe: [PYTHON ?? 'python3', '-c', 'import termwright, textual'],
     label: 'a python with termwright and textual installed',
   },
-  spawn: () => ({ command: [PYTHON ?? 'python3', PYTHON_APP] }),
+  spawn: () => {
+    const interpreter = PYTHON ?? 'python3';
+    return {
+      command: [interpreter, '-m', 'termwright_probe', '--', interpreter, PYTHON_APP],
+    };
+  },
   ready: 'Permission required',
   interaction: { input: '\t', expect: 'focus: reject' },
-  // Logs once at startup through the stdlib logging bridge, like the tview
-  // example, so the obligation waits for the record rather than provoking it.
-  logs: { expect: 'no policy loaded' },
   conventions: {
     // Textual exposes DOM ids natively, which rule 3 requires an adapter to
     // accept alongside an explicit annotation.
@@ -63,9 +63,8 @@ await runAdapterConformance({
   // produces the binary `spawn` runs, so no test pays a compile and no
   // `go run` parent process is left holding a child.
   requires: {
-    probe: ['go', 'build', '-o', GO_BINARY, './examples/permission'],
+    probe: [process.execPath, GO_BUILD],
     label: 'go toolchain able to build the tview example',
-    cwd: GO_MODULE,
     timeoutMs: 180_000,
   },
   // This row was skipped on win32 while the Go client dialled a unix socket
@@ -76,10 +75,8 @@ await runAdapterConformance({
   // Certified on Windows by CI rather than here: this machine can only say
   // that the example still cross-compiles for it.
   spawn: () => ({ command: [GO_BINARY] }),
+  baseline: () => ({ command: [GO_BASELINE] }),
   ready: 'Permission required',
-  // The tview example logs at startup rather than on a keystroke, so the
-  // obligation waits for the record instead of provoking one.
-  logs: { expect: 'no policy loaded' },
   interaction: { input: '\t', expect: 'focus: reject' },
   // tview exposes no native identifier, so the id-based checks have nothing to
   // address; its README declares that under rule 3.

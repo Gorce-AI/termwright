@@ -50,6 +50,14 @@ What OpenTUI has no concept of — roles, `checked`, `disabled`, `expanded` — 
 reported as **unobservable** rather than as absent, so a test can tell "this is
 off" from "this framework never said".
 
+An application may optionally call `describeRenderable` from
+`@termwright/opentui`. The SDK stores only developer intent in a process-local
+weak registry; this injected probe consumes it and merges it with framework
+geometry, text, focus, value, selection, and visibility. The annotation API can
+provide `role`, `name`, `description`, `testId`, JSON `extended` domain state,
+actions, and relationships, but cannot override those physical/runtime facts.
+The renderer is still created and owned entirely by the application.
+
 ## Deviations
 
 **`frameworkType` comes from `constructor.name`.** OpenTUI has no accessibility
@@ -57,9 +65,12 @@ layer at all, so a class name is the only signal there is. It does not survive
 minification: a bundled application's widgets arrive as `generic` with a mangled
 type. Nothing is lost that was not already unknowable, but the names get worse.
 
-**`visibleRect` is never reported.** OpenTUI clips with scissor rects at render
-time and exposes no per-node visible rectangle. Bounds are the intended
-rectangle, and the visible one is listed as unobservable rather than derived.
+**`visibleRect` is never reported.** OpenTUI clips with ancestor scissor rects
+at render time and exposes no per-node visible rectangle, so those intermediate
+clips remain unobservable. The recognizer does apply the terminal viewport — a
+real outer clip known from the frame itself — to intended bounds. A non-empty
+widget entirely outside that viewport is reported `hidden + offscreen`; an
+intrinsically zero-area widget is only hidden when the framework says it is.
 
 **`paint-order` is announced but omitted per tree where it cannot be honoured.**
 The z-order child list is a protected field upstream; when a version stops

@@ -1,10 +1,8 @@
 // Command tview-menu is a small tview application: a menu on the left, and a
 // settings form that appears when the menu asks for it.
 //
-// The instrumentation is one call. Without TERMWRIGHT_ENDPOINT and
-// TERMWRIGHT_TOKEN in the environment, Attach returns (nil, nil): no socket is
-// opened, no marker is written, and the screen is byte for byte what it would
-// have been. That is why shipping it costs nothing.
+// The application contains no Termwright integration. The test build redirects
+// tview to an ephemeral instrumented copy; a normal `go run` is untouched.
 //
 //	go run ./app        # just a menu
 package main
@@ -15,8 +13,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/gorce-ai/termwright/clients/go/termwright"
 )
 
 func main() {
@@ -67,14 +63,6 @@ func main() {
 		}
 		return event
 	})
-
-	// Returns (nil, nil) when no driver is attached; nothing is installed then.
-	session, err := termwright.Attach(app, pages)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "termwright:", err)
-		os.Exit(1)
-	}
-	defer session.Close()
 
 	// Mouse reporting is the application's decision. A driver that finds it
 	// disabled refuses to click rather than sending bytes nothing will read.

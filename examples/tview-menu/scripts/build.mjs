@@ -6,7 +6,9 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { prepareInstrumentedBuild } from '@termwright/probe-tview';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const probe = spawnSync('go', ['version'], { stdio: 'ignore' });
@@ -16,8 +18,11 @@ if (probe.status !== 0) {
   process.exit(0);
 }
 
+mkdirSync(fileURLToPath(new URL('../dist', import.meta.url)), { recursive: true });
+const prepared = await prepareInstrumentedBuild({ moduleDir: root });
 const build = spawnSync('go', ['build', '-o', 'dist/tview-menu', './app'], {
   cwd: root,
+  env: prepared.env,
   stdio: 'inherit',
 });
 

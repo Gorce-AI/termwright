@@ -103,6 +103,29 @@ describe('validateSnapshot — happy path', () => {
     (snapshot['nodes'] as Record<string, unknown>[])[1]!['actions'] = ['focus', 'activate'];
     expect(codeOf(snapshot)).toBe('ok');
   });
+
+  it('accepts bounded JSON domain state in its explicit namespace', () => {
+    const snapshot = baseSnapshot();
+    (snapshot['nodes'] as Record<string, unknown>[])[1]!['extended'] = {
+      deploymentStatus: 'rolling-out',
+      retryCount: 2,
+      overdue: false,
+      rollout: { regions: ['eu', 'us'], progress: 0.5 },
+    };
+    expect(codeOf(snapshot)).toBe('ok');
+  });
+
+  it('rejects unbounded domain containers and strings', () => {
+    const tooMany = baseSnapshot();
+    (tooMany['nodes'] as Record<string, unknown>[])[1]!['extended'] = {
+      values: ['a', 'b', 'c'],
+    };
+    expect(codeOf(tooMany, withLimits({ maxRelationTargets: 2 }))).toBe('count');
+
+    const tooLong = baseSnapshot();
+    (tooLong['nodes'] as Record<string, unknown>[])[1]!['extended'] = { key: 'oversized' };
+    expect(codeOf(tooLong, withLimits({ maxStringBytes: 4 }))).toBe('string-bytes');
+  });
 });
 
 describe('validateSnapshot — generic nodes and provenance (D1, D2)', () => {
@@ -334,7 +357,7 @@ describe('validateSnapshot — scalar and shape checks', () => {
   });
 
   it('rejects a wrong version tag', () => {
-    expect(codeOf({ ...baseSnapshot(), v: 2 })).toBe('schema');
+    expect(codeOf({ ...baseSnapshot(), v: 2 })).toBe('bad-rect');
   });
 
   it('rejects unsafe integers in rects', () => {

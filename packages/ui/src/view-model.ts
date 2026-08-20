@@ -107,6 +107,8 @@ export function statusGlyph(status: string): string {
       return '✕';
     case 'running':
       return '◍';
+    case 'cancelled':
+      return '■';
     case 'skipped':
       return '–';
     case 'not-run':

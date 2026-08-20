@@ -17,7 +17,7 @@ import asyncio
 import sys
 from typing import Any, Dict, Optional
 
-from termwright.client import CAPABILITIES_WITH_LOGS, SemanticClient, client_from_env
+from termwright.client import DEFAULT_CAPABILITIES, SemanticClient, client_from_env
 
 from . import __version__
 from .textual_tree import Identities, build_snapshot
@@ -55,10 +55,15 @@ class ProbeSession:
         self._identities = Identities()
         self._starting = False
         self._started = False
+        # Coalesced snapshot of the latest *completed* frame seen while the
+        # handshake is in flight. It is not an event queue: one immutable
+        # terminal state is retained so a stationary application still gets a
+        # semantic tree after connecting, without waiting for an unrelated
+        # future repaint.
+        self._pending_snapshot = None
         #: Frames that arrived before the handshake finished, or while a
-        #: previous publish was still in flight. Counted, not queued: the next
-        #: publish carries the current state, which is newer than anything a
-        #: queue could have held.
+        #: previous publish was still in flight. Counted, never queued: at most
+        #: one coalesced observation of the latest completed frame is retained.
         self.frames_dropped = 0
 
     @property
@@ -75,18 +80,36 @@ class ProbeSession:
     def _on_frame(self) -> None:
         if not self._started:
             self._begin()
+            self._capture_pending()
             self._drop()
             return
         if not self._client.connected:
+            self._capture_pending()
             self._drop()
             return
 
-        snapshot = build_snapshot(
+        snapshot = self._snapshot()
+        marker = self._client.publish_nowait(snapshot)
+        if marker:
+            self._write(marker)
+
+    def _snapshot(self):
+        return build_snapshot(
             self._app,
             self._identities,
             session_id=self._client.session_id or "pending",
             revision=self._client.revision + 1,
+            qualified=self._client.protocol == "termwright/2",
         )
+
+    def _capture_pending(self) -> None:
+        """Retain only the newest completed frame while connecting."""
+        self._pending_snapshot = self._snapshot()
+
+    def _publish_pending(self) -> None:
+        snapshot, self._pending_snapshot = self._pending_snapshot, None
+        if snapshot is None or not self._client.connected:
+            return
         marker = self._client.publish_nowait(snapshot)
         if marker:
             self._write(marker)
@@ -111,7 +134,9 @@ class ProbeSession:
         async def connect() -> None:
             ok = await self._client.start()
             self._started = ok
-            if not ok:
+            if ok:
+                self._publish_pending()
+            else:
                 _log("diag", "probe session did not start; publishing nothing")
 
         try:
@@ -154,7 +179,11 @@ def session_for(app: Any, framework_version: Optional[str] = None) -> Optional[P
     client = client_from_env(
         adapter_name="textual-probe",
         adapter_version=__version__,
-        capabilities=CAPABILITIES_WITH_LOGS,
+        # The zero-config probe publishes semantic frames only. Application
+        # logs remain an explicit client feature: no handler is installed here,
+        # so advertising `logs` would promise traffic this path cannot emit.
+        capabilities=DEFAULT_CAPABILITIES,
+        qualified_capabilities=("pointer-hit-grid",),
         probe=probe_info(framework_version),
     )
     if client is None:

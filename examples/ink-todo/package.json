@@ -20,6 +20,7 @@
   "devDependencies": {
     "@termwright/driver": "workspace:*",
     "@termwright/ink-testing": "workspace:*",
+    "@termwright/probe-ink": "workspace:*",
     "@termwright/test": "workspace:*",
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.18",

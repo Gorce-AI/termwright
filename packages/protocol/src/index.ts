@@ -3,6 +3,8 @@ export * from './errors.js';
 export * from './roles.js';
 export * from './limits.js';
 export * from './tree.js';
+export * from './observation.js';
+export * from './geometry-capabilities.js';
 export * from './node-keys.js';
 export * from './logs.js';
 export * from './delta.js';

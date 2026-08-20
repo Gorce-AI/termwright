@@ -45,6 +45,9 @@ async function launchDeltaApp(options: Record<string, unknown> = {}): Promise<Ha
     columns: 60,
     rows: 10,
     semanticNegotiationMs: 5_000,
+    // Tree deltas are the explicit v1 compatibility transport. Qualified v2
+    // uses full snapshots until qualified-field patch semantics exist.
+    semanticProtocol: 'termwright/1',
     env: { TERMWRIGHT_FIXTURE_DELTAS: '1' },
     ...options,
   });

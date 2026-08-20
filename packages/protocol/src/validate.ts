@@ -37,6 +37,7 @@ function codeForIssue(issue: z.core.$ZodIssue): ValidationErrorCode {
   if (path.includes('role')) return 'unknown-role';
   if (path.includes('revision')) return 'revision';
   if (path.includes('bounds') || path.includes('rect')) return 'bad-rect';
+  if (issue.code === 'custom' && issue.message?.includes('hit regions')) return 'bad-rect';
   if (issue.code === 'too_big' && (path.includes('nodes') || path.includes('rootIds'))) {
     return 'count';
   }
@@ -242,6 +243,24 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
   }
 
   const ids: ReadonlySet<string> = new Set(byId.keys());
+
+  if (snapshot.v === 2) {
+    if (snapshot.coordinateSpace?.status === 'known' && snapshot.coordinateSpace.value !== 'viewport-cells') {
+      // Framework-local geometry is inspectable, but it cannot be addressed by
+      // terminal input. Keeping it valid is intentional; pointer ownership is
+      // independently qualified by the hit grid.
+    }
+    if (snapshot.hitGrid?.status === 'known') {
+      for (const region of snapshot.hitGrid.value.regions) {
+        if (!ids.has(region.recipientId)) {
+          return fail('missing-parent', `hitGrid references unknown recipient ${region.recipientId}`);
+        }
+        if (!rectIntersectsViewport(region.rect, snapshot.columns, snapshot.rows)) {
+          return fail('bad-rect', `hitGrid region for ${region.recipientId} does not intersect the viewport`);
+        }
+      }
+    }
+  }
 
   for (const node of snapshot.nodes) {
     if (node.parentId === undefined) {

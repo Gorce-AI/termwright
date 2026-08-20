@@ -12,10 +12,8 @@ import hook, no patch, no socket — so a `PYTHONPATH` that outlived the run it
 was written for is inert.
 
 The probe depends on the protocol half of `termwright` (framing, marker,
-messages, validation, client) and never on `termwright.textual_adapter`: the
-hand-written adapter is the thing this replaces, and a probe that imported it
-would inherit its decisions instead of making its own from what Textual
-actually reports.
+messages, validation, client) and on the metadata-only Textual annotation SDK.
+It does not import Textual until the application itself chooses to.
 """
 
 from __future__ import annotations

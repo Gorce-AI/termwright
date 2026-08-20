@@ -64,15 +64,12 @@ export default function CounterApp({ label = 'Approve', greeting = 'ready', onPr
     role: 'button',
     name: label,
     testId: 'action',
-    state: { focused: focus === 'button' },
   });
 
   useSemantic(inputRef, {
     role: 'textbox',
     name: 'Message',
-    value: message,
     testId: 'message',
-    state: { focused: focus === 'input' },
   });
 
   const press = useCallback(() => {

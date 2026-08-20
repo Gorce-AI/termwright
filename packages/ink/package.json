@@ -1,8 +1,13 @@
 {
   "name": "@termwright/ink",
   "version": "0.1.0",
-  "description": "Ink 7 semantic adapter (aria props, measureElement, render flush, DCS marker)",
+  "description": "Optional annotation-only SDK for the zero-config Ink probe",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/ink"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -17,12 +22,11 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@termwright/logs": "workspace:*",
     "@termwright/protocol": "workspace:*"
   },
   "peerDependencies": {

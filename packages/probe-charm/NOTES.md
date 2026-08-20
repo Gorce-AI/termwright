@@ -93,9 +93,9 @@ recording that it existed.
 v2 has two channels that could restore it — the layer compositor, which already
 keeps absolute bounds per identified layer, and per-cell OSC 8 hyperlinks,
 which travel with the character through wrapping and truncation. Until one is
-wired, the capability set says so: v1 never claims `bounds`, and the probe
-reports component, name and value **without a position** rather than inventing
-coordinates.
+wired, the capability set says so: neither patch set claims `bounds`, and the
+probe reports component, name and value **without a position** rather than
+inventing coordinates.
 
 The hyperlink channel is narrower than the specification suggests, and the
 difference is measured rather than assumed. OSC 8 admits
@@ -124,23 +124,34 @@ the component declares its own semantics.
 
 ```go
 func (g gauge) TermwrightSemantics() annotate.Semantics {
-    return annotate.Semantics{Role: "meter", Name: "Disk usage"}
+    return annotate.Semantics{
+        Key: "disk", Role: "progressbar", Name: "Disk usage",
+        Actions: []protocol.Action{protocol.ActionFocus},
+    }
 }
 ```
 
-The probe consults `TermwrightSemantics()` **before** recognition, and that
-order is the whole point. A custom type that no recognizer knows would
-otherwise be walked past in silence; with a declaration it is reported as what
-its author says it is. A component the probe does recognise gets both — the
-author's wording and the probe's observed facts — merged under D2 precedence,
-so a name from the annotation never displaces a focus the probe measured.
+The probe consults `TermwrightSemantics()` before deciding what to publish. A
+custom type that no recognizer knows would otherwise be walked past in silence;
+with a declaration it is reported as what its author says it is. A local type
+that embeds a recognised Bubbles component gets both — the author's wording
+and the native value/state — merged under D2 precedence, so a name from the
+annotation never displaces a focus the probe measured.
 
-What a declaration may say is fixed by the struct, not by review:
-`Semantics` has only `Role`, `Name`, `TestID`, `Description` and `Domain`.
-There is deliberately no field for bounds, focus or rendered text, and a test
-in `clients/go/annotate` reflects over the field set and fails if one appears.
-Physical facts belong to the probe; an annotation that could restate them could
-also contradict them. An unrecognised role is dropped rather than guessed.
+What a declaration may say is fixed by the struct, not by review: identity and
+intent (`Key`, role/name/test id/description/domain, closed actions and key
+relationships). There is deliberately no field for bounds, focus, visibility,
+value, rendered text or framework state, and a test in `clients/go/annotate`
+reflects over the field set and fails if one appears. Physical facts belong to
+the probe; an annotation that could restate them could also contradict them.
+Unknown roles and actions are dropped rather than guessed.
+
+Provider methods are evaluated once into candidates. A second pass counts
+`SemanticKey` values, gives unique keys stable ids, resolves `LabelledBy` and
+`DescribedBy`, and refuses ambiguity: duplicate keys fall back to distinct
+structural frame-local ids and cannot resolve. Relations are bounded by the
+negotiated session limit. Primary provenance stays `framework`, with role,
+author fields, relationships and key-stabilized ids recorded in `px`.
 
 Because a declaration is computed per frame from the live value, it stays
 fresh: the end-to-end test presses `+`, disk usage moves to 82 %, and the

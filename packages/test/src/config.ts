@@ -135,6 +135,46 @@ const DEFAULT_TIMEOUTS: Required<TestTimeoutClasses> = Object.freeze({
 
 const TRACE_MODES: readonly TraceMode[] = ['on', 'retain-on-failure', 'off'];
 const UPDATE_MODES: readonly UpdateSnapshotsMode[] = ['all', 'changed', 'missing', 'none'];
+const MAX_RETRIES = 100;
+
+export interface TermwrightRetryOptions {
+  /** Additional attempts on CI. Default 2. */
+  readonly ci?: number;
+  /** Additional attempts outside CI. Default 0. */
+  readonly local?: number;
+  /** Environment used for CI detection and `TERMWRIGHT_RETRIES`. */
+  readonly env?: Readonly<Record<string, string | undefined>>;
+}
+
+/**
+ * Resolves the number for Vitest's native `test.retry` option.
+ *
+ * `TERMWRIGHT_RETRIES` wins when present and always means additional attempts,
+ * matching Vitest's own `retry` semantics. Termwright never schedules a second
+ * whole-suite run.
+ */
+export function termwrightRetry(options: TermwrightRetryOptions = {}): number {
+  const env = options.env ?? process.env;
+  const overridden = env['TERMWRIGHT_RETRIES'];
+  if (overridden !== undefined && overridden !== '') {
+    return retryCount(overridden, 'TERMWRIGHT_RETRIES');
+  }
+  const ci = env['CI'];
+  return retryCount(
+    ci !== undefined && ci !== '' && ci !== '0' && ci.toLowerCase() !== 'false'
+      ? (options.ci ?? 2)
+      : (options.local ?? 0),
+    ci !== undefined ? 'ci' : 'local',
+  );
+}
+
+function retryCount(value: string | number, name: string): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_RETRIES) {
+    throw new TypeError(`${name} retries must be an integer from 0 to ${MAX_RETRIES}, received ${String(value)}`);
+  }
+  return parsed;
+}
 
 /**
  * Validates a configuration object and returns it unchanged.

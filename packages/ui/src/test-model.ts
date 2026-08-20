@@ -15,7 +15,7 @@ export interface TestRow {
   readonly title: string;
   readonly file?: string;
   /** `not-run` before a run touches it, `running` until it ends. */
-  readonly status: UiTestStatus | 'running' | 'not-run';
+  readonly status: UiTestStatus | 'running' | 'cancelled' | 'not-run';
   /** Wall-clock start, for the elapsed time of a running test. */
   readonly startedAt?: number;
   /** Final duration, reported when the test ended. */
@@ -51,6 +51,7 @@ export interface TestCounts {
   readonly skipped: number;
   readonly flaky: number;
   readonly running: number;
+  readonly cancelled: number;
   /** Discovered but not run in this session. */
   readonly notRun: number;
 }
@@ -113,7 +114,16 @@ export function groupTests(tests: readonly TestRow[]): readonly TestGroup[] {
 
 /** Counts for the header. `flaky` overlaps `passed`, as it does in Vitest. */
 export function countTests(tests: readonly TestRow[]): TestCounts {
-  const counts = { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, running: 0, notRun: 0 };
+  const counts = {
+    total: 0,
+    passed: 0,
+    failed: 0,
+    skipped: 0,
+    flaky: 0,
+    running: 0,
+    cancelled: 0,
+    notRun: 0,
+  };
   for (const test of tests) {
     counts.total += 1;
     if (test.status === 'running') counts.running += 1;
@@ -154,6 +164,7 @@ export function describeCounts(counts: TestCounts): string {
   if (counts.flaky > 0) parts.push(`${counts.flaky} flaky`);
   if (counts.skipped > 0) parts.push(`${counts.skipped} skipped`);
   if (counts.running > 0) parts.push(`${counts.running} running`);
+  if (counts.cancelled > 0) parts.push(`${counts.cancelled} cancelled`);
   if (counts.notRun > 0) parts.push(`${counts.notRun} not run`);
   return parts.join(', ');
 }

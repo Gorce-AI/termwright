@@ -49,6 +49,8 @@ export interface ReportTestResult {
   readonly status: StepStatus;
   readonly durationMs?: number;
   readonly error?: { readonly message: string; readonly stack?: string };
+  /** Ordered native-runner attempts for this stable case identity. */
+  readonly attempts?: readonly ReportTestAttempt[];
   /** `.twtrace` directory or zip; diffs and the player are derived from it. */
   readonly tracePath?: string;
   /** Overrides the visual diff derived from the trace. */
@@ -70,6 +72,15 @@ export interface ReportTestResult {
    * trace is present its `meta.crash` is used, and this field wins over it.
    */
   readonly crash?: ReportCrash;
+}
+
+/** One native runner attempt, including the exact reasons captured before retry. */
+export interface ReportTestAttempt {
+  readonly attempt: number;
+  readonly status: 'passed' | 'failed' | 'skipped';
+  readonly durationMs?: number;
+  readonly errors: readonly { readonly message: string; readonly stack?: string }[];
+  readonly tracePaths?: readonly string[];
 }
 
 /**
@@ -448,6 +459,10 @@ function renderSection(section: TestSection): string {
   const open = result.status === 'failed' ? ' open' : '';
   const parts: string[] = [];
 
+  if (result.attempts !== undefined && result.attempts.length > 1) {
+    parts.push(renderAttempts(result.attempts));
+  }
+
   if (result.error !== undefined) {
     parts.push(
       `<section class="tw-block"><h3>Error</h3><pre class="tw-error">${escapeHtml(
@@ -507,6 +522,25 @@ function renderSection(section: TestSection): string {
   </summary>
   ${parts.join('\n  ')}
 </details>`;
+}
+
+function renderAttempts(attempts: readonly ReportTestAttempt[]): string {
+  const items = attempts.map((attempt) => {
+    const reasons = attempt.errors.length === 0
+      ? ''
+      : `<pre class="tw-error">${escapeHtml(attempt.errors
+          .map((error) => error.stack === undefined ? error.message : `${error.message}\n${error.stack}`)
+          .join('\n\n'))}</pre>`;
+    const traces = attempt.tracePaths === undefined || attempt.tracePaths.length === 0
+      ? ''
+      : `<p class="tw-note">trace${attempt.tracePaths.length === 1 ? '' : 's'}: ${attempt.tracePaths
+          .map((path) => `<code class="tw-path">${escapeHtml(path)}</code>`)
+          .join(', ')}</p>`;
+    return `<li><strong>Attempt ${attempt.attempt}</strong> — ${attempt.status}${
+      attempt.durationMs === undefined ? '' : ` · ${formatMs(attempt.durationMs)}`
+    }${reasons}${traces}</li>`;
+  }).join('\n      ');
+  return `<section class="tw-block"><h3>Attempts · ${attempts.length}</h3><ol class="tw-attempts">${items}</ol></section>`;
 }
 
 function renderSemantic(diff: SemanticDiff): string {

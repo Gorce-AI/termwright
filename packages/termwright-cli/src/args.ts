@@ -20,6 +20,9 @@ export type CliCommand =
   | 'help'
   | 'version';
 
+/** The one surface `ui` may open. Runtime conditions can reduce this to `none`. */
+export type UiSurface = 'desktop' | 'browser' | 'none';
+
 /** How one command is documented. */
 export interface CommandDoc {
   /** Invocation lines shown under "Usage:", without the binary name. */
@@ -50,7 +53,7 @@ export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
   ui: {
     headline: 'open the runner: live terminal, semantic inspector, timeline.',
     synopsis: [
-      'ui [--trace <file>] [--port N] [--host H] [--no-watch] [--no-open] [-- <vitest args>]',
+      'ui [--trace <file>] [--port N] [--host H] [--no-watch] [--browser | --no-open] [-- <vitest args>]',
       'ui --record [--out-file <file>] -- <command>',
     ],
     summary: [
@@ -58,7 +61,8 @@ export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
       'With no flags it starts Vitest in watch mode and points it at',
       'the runner; --trace opens a .twtrace archive instead, and',
       '--record drives a program you name and writes the test.',
-      'The runner opens in your browser; --no-open just prints the URL.',
+      'The runner opens in the Termwright desktop window. --browser uses',
+      'your system browser; --no-open just prints the URL.',
     ],
   },
   report: {
@@ -137,8 +141,8 @@ export interface ParsedArgs {
   readonly host: string | undefined;
   /** Whether `ui` should also run the test suite in watch mode. Default true. */
   readonly watch: boolean;
-  /** Whether `ui` should open the runner in a browser. Default true. */
-  readonly open: boolean;
+  /** Requested UI surface. Interactive use defaults to the desktop host. */
+  readonly surface: UiSurface;
   /** `screenshot --at <ms>`: a moment on the cast timeline. */
   readonly atMs: number | undefined;
   /** `screenshot --step N`: a step, numbered from 1 as the overview lists them. */
@@ -203,7 +207,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let port: number | undefined;
   let host: string | undefined;
   let watch = true;
-  let open = true;
+  let surface: UiSurface = 'desktop';
   let atMs: number | undefined;
   let step: number | undefined;
   let scale: number | undefined;
@@ -276,15 +280,20 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         watch = false;
         break;
       case '--no-open':
-        open = false;
+        if (surface === 'browser') throw usageError('--browser and --no-open cannot be used together');
+        surface = 'none';
+        break;
+      case '--browser':
+        if (surface === 'none') throw usageError('--browser and --no-open cannot be used together');
+        surface = 'browser';
         break;
       case '--help':
       case '-h':
-        command ??= 'help';
+        command = 'help';
         break;
       case '--version':
       case '-v':
-        command ??= 'version';
+        command = 'version';
         break;
       case 'ui':
       case 'report':
@@ -295,7 +304,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case 'usage':
       case 'skill':
       case 'help':
-        if (command !== undefined && command !== 'help' && command !== 'version') {
+        if (command === 'help' || command === 'version') break;
+        if (command !== undefined) {
           throw usageError(`${arg} cannot follow ${command}`, 'run `termwright --help`');
         }
         command = arg === 'help' ? 'help' : arg;
@@ -346,7 +356,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     port,
     host,
     watch,
-    open,
+    surface,
     atMs,
     step,
     scale,

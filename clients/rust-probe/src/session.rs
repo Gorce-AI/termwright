@@ -24,8 +24,9 @@ use std::time::Duration;
 use termwright_protocol::client::{Client, Options};
 use termwright_protocol::debug::{Category, DebugLog};
 use termwright_protocol::roles::Capability;
+use termwright_protocol::Error;
 
-use crate::tree::snapshot_from;
+use crate::tree::snapshot_from_with_relation_limit;
 use crate::{probe_info, take_frame};
 
 /// How long the handshake may take before the probe gives up on this run.
@@ -85,16 +86,28 @@ pub fn on_frame_end(frame: u64, columns: u16, rows: u16) {
     };
 
     let calls = take_frame();
-    let mut snapshot = snapshot_from(&calls, frame, columns, rows);
+    let mut snapshot = snapshot_from_with_relation_limit(
+        &calls,
+        frame,
+        columns,
+        rows,
+        client.limits().max_relation_targets,
+        client.qualified_observations(),
+    );
     match client.publish(&mut snapshot) {
         Ok(Some(marker)) => write_marker(&marker),
         Ok(None) => {}
         Err(error) => {
-            // A refused snapshot is our bug and will recur; a write timeout
-            // means the driver stopped reading and the session is already
-            // closed. Neither is the application's problem.
+            // A local validation/encoding refusal can disappear on the next
+            // frame (for example when a large annotation is removed). Keep
+            // the channel, retain the same revision, and force a full recovery
+            // tree. Transport failures may have written a partial frame and
+            // are therefore permanently unrecoverable.
             log(Category::Diag, &format!("publish failed: {error}"));
-            *guard = State::Done;
+            client.require_full_snapshot();
+            if matches!(error, Error::Io(_) | Error::WriteTimeout) {
+                *guard = State::Done;
+            }
         }
     }
 }
@@ -135,6 +148,8 @@ fn connect() -> Option<Client> {
         Capability::Tree,
         Capability::Bounds,
         Capability::AbsoluteBounds,
+        Capability::States,
+        Capability::Actions,
         Capability::RenderRevisions,
     ];
     options.probe = Some(probe_info(Some(ratatui_version())));

@@ -6,11 +6,11 @@
 //! follows from that, and this crate is written to respect it rather than to
 //! paper over it:
 //!
-//! - **Identity is frame-local.** `Widget::render` takes `self` by value, so
-//!   the widget is consumed by the call and nothing survives to be named
-//!   again. Ordinals within a frame are honest; correlating them across frames
-//!   is not, and the probe says so in its handshake rather than inventing a
-//!   handle a test would later be written against.
+//! - **Identity is frame-local by default.** `Widget::render` takes `self` by
+//!   value, so the widget is consumed by the call and nothing survives to be
+//!   named again. Ordinals within a frame are honest; a custom widget may opt
+//!   into an explicit author-owned semantic key, but the probe never invents
+//!   one for ordinary widgets.
 //! - **`area` is intent, not ownership.** A later write silently wins and
 //!   nothing records that it happened, so the rectangle a widget was drawn
 //!   into is not the cells it ended up with. It is reported as the intended
@@ -24,16 +24,142 @@
 //! contained, and the protocol client — everything that needs `std`, kept out
 //! of the `no_std` crate that calls it.
 
+pub mod launch;
 pub mod patchset;
 pub mod session;
 pub mod tree;
 
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use serde_json::Value;
 use termwright_protocol::client::{ENV_ENDPOINT, ENV_TOKEN};
 use termwright_protocol::debug::{Category, DebugLog};
 use termwright_protocol::{ProbeIdentityKind, ProbeInfo};
+
+pub use termwright_protocol::{Action, Role};
+
+/// Author intent attached to one immediate-mode render call.
+///
+/// This type deliberately cannot carry bounds, focus, visibility, cells or
+/// collection state. Those facts belong to the framework and the terminal.
+/// Its actions are descriptive members of the protocol's closed vocabulary,
+/// not callbacks. `extended` is application-domain JSON only; keys that happen
+/// to be named `bounds`, `state` or `actions` remain nested domain data and are
+/// never promoted into protocol fields.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Annotation {
+    /// Semantic role chosen by the application author.
+    pub role: Option<Role>,
+    /// Accessible name chosen by the application author.
+    pub name: Option<String>,
+    /// Longer author description.
+    pub description: Option<String>,
+    /// Stable selector/correlation hint. Never promoted to node identity.
+    pub test_id: Option<String>,
+    /// Explicit application-domain JSON state.
+    pub extended: BTreeMap<String, Value>,
+    /// Descriptive protocol actions. They are capability hints, never callbacks.
+    pub actions: Vec<Action>,
+    /// Semantic keys of nodes that label this node in the same frame.
+    pub labelled_by: Vec<String>,
+    /// Semantic keys of nodes that describe this node in the same frame.
+    pub described_by: Vec<String>,
+    /// Author-owned identity for a value recreated on every frame.
+    pub semantic_key: Option<String>,
+}
+
+impl Annotation {
+    /// Start with no asserted intent.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the semantic role.
+    #[must_use]
+    pub fn role(mut self, role: Role) -> Self {
+        self.role = Some(role);
+        self
+    }
+
+    /// Set the accessible name.
+    #[must_use]
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// Set the longer description.
+    #[must_use]
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Set the stable selector/correlation hint.
+    ///
+    /// Ratatui still has frame-local identity. The value becomes `testId`, so
+    /// locators may use it and consumers may correlate deliberately, but the
+    /// node id and handshake remain frame-local.
+    #[must_use]
+    pub fn test_id(mut self, test_id: impl Into<String>) -> Self {
+        self.test_id = Some(test_id.into());
+        self
+    }
+
+    /// Add one application-domain JSON value.
+    #[must_use]
+    pub fn domain(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
+        self.extended.insert(key.into(), value.into());
+        self
+    }
+
+    /// Replace the complete application-domain JSON object.
+    #[must_use]
+    pub fn extended(mut self, extended: BTreeMap<String, Value>) -> Self {
+        self.extended = extended;
+        self
+    }
+
+    /// Add one descriptive action from the protocol's closed vocabulary.
+    ///
+    /// The driver still performs the corresponding real terminal input; this
+    /// never registers or invokes an application callback.
+    #[must_use]
+    pub fn action(mut self, action: Action) -> Self {
+        if !self.actions.contains(&action) {
+            self.actions.push(action);
+        }
+        self
+    }
+
+    /// Relate this node to the node carrying `semantic_key` as its label.
+    #[must_use]
+    pub fn labelled_by(mut self, semantic_key: impl Into<String>) -> Self {
+        self.labelled_by.push(semantic_key.into());
+        self
+    }
+
+    /// Relate this node to the node carrying `semantic_key` as its description.
+    #[must_use]
+    pub fn described_by(mut self, semantic_key: impl Into<String>) -> Self {
+        self.described_by.push(semantic_key.into());
+        self
+    }
+
+    /// Give this annotated render call stable author-owned identity.
+    ///
+    /// A key must be unique among the frame's annotated widgets. Duplicate or
+    /// empty keys safely degrade to frame-local ids rather than invalidating
+    /// the snapshot or picking a winner by render order.
+    #[must_use]
+    pub fn semantic_key(mut self, semantic_key: impl Into<String>) -> Self {
+        self.semantic_key = Some(semantic_key.into());
+        self
+    }
+}
 
 /// What a collection widget reported about its own contents.
 ///
@@ -78,6 +204,9 @@ pub struct RenderCall {
     pub height: u16,
     /// Present when the widget is a collection that reported its contents.
     pub collection: Option<Collection>,
+    /// Author intent supplied by `termwright-ratatui`, when the exact wrapper
+    /// was rendered through the intercepted `Frame` entry point.
+    pub annotation: Option<Annotation>,
 }
 
 /// What the probe collected for the frame currently being drawn.
@@ -151,7 +280,49 @@ pub fn on_render(type_name: &'static str, x: u16, y: u16, width: u16, height: u1
         width,
         height,
         collection: None,
+        annotation: None,
     });
+}
+
+/// Attach author intent to the render call announced immediately before it.
+///
+/// `wrapper_type_name` is compared with the framework-observed type before
+/// anything is changed. This matters for immediate-mode composition: a nested
+/// annotated widget may call `Widget::render` directly and never pass through
+/// `Frame`; without the match it would steal the outer widget's last call.
+/// An already annotated call is never overwritten, which also handles a
+/// recursive wrapper with the same concrete type.
+pub fn on_annotation(
+    wrapper_type_name: &'static str,
+    widget_type_name: &'static str,
+    annotation: Annotation,
+) {
+    if !instrumented() || DISABLED.load(Ordering::Relaxed) {
+        return;
+    }
+    let Ok(mut frame) = buffer().lock() else {
+        DISABLED.store(true, Ordering::Relaxed);
+        return;
+    };
+    attach_annotation(&mut frame, wrapper_type_name, widget_type_name, annotation);
+}
+
+fn attach_annotation(
+    frame: &mut FrameBuffer,
+    wrapper_type_name: &'static str,
+    widget_type_name: &'static str,
+    annotation: Annotation,
+) {
+    let Some(call) = frame.calls.last_mut() else {
+        return;
+    };
+    if call.type_name != wrapper_type_name || call.annotation.is_some() {
+        return;
+    }
+    // The wrapper is transport machinery. The inner W is the application or
+    // framework widget Ratatui actually rendered, so keep that truthful type.
+    call.type_name = widget_type_name;
+    call.annotation = Some(annotation);
 }
 
 /// Called by a patched `ratatui-widgets` once a collection has rendered.
@@ -257,18 +428,80 @@ mod tests {
             width: 3,
             height: 4,
             collection: None,
+            annotation: None,
         };
         // The ordinal is the only identity available, and it is frame-local.
         assert_eq!(call.ordinal, 0);
         assert!(call.type_name.contains("Paragraph"));
+    }
+
+    #[test]
+    fn an_annotation_attaches_only_to_its_exact_unclaimed_frame_call() {
+        let mut frame = FrameBuffer {
+            calls: vec![RenderCall {
+                ordinal: 0,
+                type_name: "my_app::Outer",
+                x: 1,
+                y: 2,
+                width: 3,
+                height: 4,
+                collection: None,
+                annotation: None,
+            }],
+        };
+
+        // An Annotated<Inner> rendered directly inside Outer was never
+        // announced by Frame and must not steal Outer's physical record.
+        attach_annotation(
+            &mut frame,
+            "termwright_ratatui::Annotated<my_app::Inner>",
+            "my_app::Inner",
+            Annotation::new().name("nested"),
+        );
+        assert_eq!(frame.calls[0].type_name, "my_app::Outer");
+        assert!(frame.calls[0].annotation.is_none());
+
+        attach_annotation(
+            &mut frame,
+            "my_app::Outer",
+            "my_app::Inner",
+            Annotation::new().name("first"),
+        );
+        assert_eq!(frame.calls[0].type_name, "my_app::Inner");
+        assert_eq!(
+            frame.calls[0]
+                .annotation
+                .as_ref()
+                .and_then(|annotation| annotation.name.as_deref()),
+            Some("first")
+        );
+
+        // A recursively rendered wrapper of the same type cannot overwrite
+        // intent after the outer call has been claimed.
+        attach_annotation(
+            &mut frame,
+            "my_app::Inner",
+            "my_app::Other",
+            Annotation::new().name("second"),
+        );
+        assert_eq!(frame.calls[0].type_name, "my_app::Inner");
+        assert_eq!(
+            frame.calls[0]
+                .annotation
+                .as_ref()
+                .and_then(|annotation| annotation.name.as_deref()),
+            Some("first")
+        );
     }
 }
 
 /// What this probe tells the driver it can observe.
 ///
 /// The interesting part is what is absent. Ratatui offers no stable identity,
-/// no computed visible rectangle, no paint order and no author annotations, so
-/// none of those capabilities is claimed. A driver that negotiates against
+/// no computed visible rectangle and no paint order, so none of those
+/// capabilities is claimed. Optional author annotations are supported through
+/// `termwright-ratatui`; they add intent without changing physical facts. A
+/// driver that negotiates against
 /// this gets an accurate picture of a framework that can be read but not
 /// pointed at, rather than a floor it has to guess at.
 ///
@@ -281,7 +514,7 @@ pub fn probe_info(framework_version: Option<&str>) -> ProbeInfo {
         framework_version: framework_version.map(str::to_owned),
         probe_version: env!("CARGO_PKG_VERSION").to_owned(),
         identity_kind: ProbeIdentityKind::FrameLocal,
-        capabilities: vec!["operations".to_owned()],
+        capabilities: vec!["operations".to_owned(), "annotations".to_owned()],
     }
 }
 
@@ -292,8 +525,8 @@ mod handshake_tests {
     /// The declaration must not promise anything the framework cannot do.
     ///
     /// Each absent capability is a fact from the Phase 0 audit: identity dies
-    /// with the frame, no visible rectangle is computed anywhere, paint order
-    /// is not exposed, and there is nowhere for an author to annotate.
+    /// with the frame, no visible rectangle is computed anywhere and paint
+    /// order is not exposed. The separate SDK supplies author intent.
     #[test]
     fn it_claims_only_what_ratatui_gives() {
         let declared = serde_json::to_string(&probe_info(Some("0.30.2"))).expect("serialises");
@@ -305,7 +538,6 @@ mod handshake_tests {
             "stable-identity",
             "visible-rect",
             "paint-order",
-            "annotations",
             "frame-begin",
         ] {
             assert!(
@@ -314,6 +546,7 @@ mod handshake_tests {
             );
         }
         assert!(declared.contains("\"operations\""), "{declared}");
+        assert!(declared.contains("\"annotations\""), "{declared}");
         assert!(declared.contains("0.30.2"), "{declared}");
     }
 

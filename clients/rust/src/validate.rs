@@ -240,7 +240,7 @@ fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
 }
 
 /// Every field a node may carry, as this client knows them.
-pub const NODE_KEYS: [&str; 17] = [
+pub const NODE_KEYS: [&str; 18] = [
     "id",
     "parentId",
     "role",
@@ -249,6 +249,7 @@ pub const NODE_KEYS: [&str; 17] = [
     "value",
     "bounds",
     "state",
+    "extended",
     "actions",
     "labelledBy",
     "describedBy",
@@ -259,6 +260,113 @@ pub const NODE_KEYS: [&str; 17] = [
     "p",
     "px",
 ];
+const NODE_V2_KEYS: [&str; 17] = [
+    "id",
+    "parentId",
+    "role",
+    "name",
+    "description",
+    "value",
+    "geometry",
+    "state",
+    "extended",
+    "actions",
+    "labelledBy",
+    "describedBy",
+    "textRanges",
+    "testId",
+    "frameworkType",
+    "p",
+    "px",
+];
+
+fn check_observation<F>(
+    value: &Value,
+    at: &[String],
+    limits: &Limits,
+    known: F,
+) -> Result<(), Issue>
+where
+    F: Fn(&Value, &[String]) -> Result<(), Issue>,
+{
+    let object = as_object(value, at)?;
+    match object.get("status").and_then(Value::as_str) {
+        Some("known") => {
+            strict(object, &["status", "value", "evidence"], at)?;
+            text(object.get("evidence"), path(at, &["evidence"]), limits)?;
+            known(
+                object.get("value").unwrap_or(&Value::Null),
+                &path(at, &["value"]),
+            )
+        }
+        Some("absent") | Some("unknown") => {
+            strict(object, &["status", "reason"], at)?;
+            text(object.get("reason"), path(at, &["reason"]), limits)?;
+            Ok(())
+        }
+        Some("unsupported") => {
+            strict(object, &["status", "capability", "reason"], at)?;
+            text(object.get("capability"), path(at, &["capability"]), limits)?;
+            text(object.get("reason"), path(at, &["reason"]), limits)?;
+            Ok(())
+        }
+        _ => Err(Issue::new(
+            path(at, &["status"]),
+            "invalid observation status",
+        )),
+    }
+}
+
+fn check_extended(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
+    match value {
+        Value::Null | Value::Bool(_) => Ok(()),
+        Value::String(_) => {
+            text(Some(value), at.to_vec(), limits)?;
+            Ok(())
+        }
+        Value::Number(number) => {
+            let valid = number
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && value.abs() <= MAX_SAFE_INTEGER as f64);
+            if valid {
+                Ok(())
+            } else {
+                Err(Issue::new(
+                    at.to_vec(),
+                    "expected a finite JSON number in the safe range",
+                ))
+            }
+        }
+        Value::Array(items) => {
+            if items.len() > limits.max_relation_targets {
+                return Err(Issue::too_big(
+                    at.to_vec(),
+                    format!("expected at most {} items", limits.max_relation_targets),
+                ));
+            }
+            for (index, item) in items.iter().enumerate() {
+                check_extended(item, &path(at, &[&index.to_string()]), limits)?;
+            }
+            Ok(())
+        }
+        Value::Object(fields) => {
+            if fields.len() > limits.max_relation_targets {
+                return Err(Issue::too_big(
+                    at.to_vec(),
+                    format!(
+                        "expected at most {} properties",
+                        limits.max_relation_targets
+                    ),
+                ));
+            }
+            for (key, item) in fields {
+                text(Some(&Value::String(key.clone())), path(at, &[key]), limits)?;
+                check_extended(item, &path(at, &[key]), limits)?;
+            }
+            Ok(())
+        }
+    }
+}
 
 /// Where a semantic fact came from. Closed set, so an unknown source is a
 /// rejection rather than a silently ignored annotation.
@@ -286,9 +394,16 @@ fn check_relations(value: &Value, at: &[String], limits: &Limits) -> Result<(), 
     Ok(())
 }
 
-fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
+fn check_node_schema(value: &Value, at: &[String], limits: &Limits, v2: bool) -> Result<(), Issue> {
     let object = as_object(value, at)?;
-    strict(object, &NODE_KEYS, at)?;
+    if v2 && object.contains_key("bounds") {
+        return Err(Issue::new(
+            path(at, &["bounds"]),
+            "legacy bounds are forbidden in v2",
+        ));
+    }
+    let node_keys: &[&str] = if v2 { &NODE_V2_KEYS } else { &NODE_KEYS };
+    strict(object, node_keys, at)?;
 
     if text(object.get("id"), path(at, &["id"]), limits)?.is_empty() {
         return Err(Issue::new(path(at, &["id"]), "node id must not be empty"));
@@ -373,6 +488,32 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
     if let Some(bounds) = object.get("bounds") {
         check_rect(bounds, &path(at, &["bounds"]))?;
     }
+    if v2 {
+        let geometry_path = path(at, &["geometry"]);
+        let geometry = as_object(
+            object.get("geometry").unwrap_or(&Value::Null),
+            &geometry_path,
+        )?;
+        strict(
+            geometry,
+            &["displayed", "intendedRect", "visibleRect"],
+            &geometry_path,
+        )?;
+        check_observation(
+            geometry.get("displayed").unwrap_or(&Value::Null),
+            &path(&geometry_path, &["displayed"]),
+            limits,
+            |value, at| boolean(Some(value), at.to_vec()).map(|_| ()),
+        )?;
+        for field in ["intendedRect", "visibleRect"] {
+            check_observation(
+                geometry.get(field).unwrap_or(&Value::Null),
+                &path(&geometry_path, &[field]),
+                limits,
+                |value, at| check_rect(value, at).map(|_| ()),
+            )?;
+        }
+    }
     if let Some(state) = object.get("state") {
         check_state(state, &path(at, &["state"]))?;
         // Every cell outside the visible area and the node still visible
@@ -390,6 +531,12 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
                 ),
             ));
         }
+    }
+    if let Some(extended) = object.get("extended") {
+        if !extended.is_object() {
+            return Err(Issue::new(path(at, &["extended"]), "expected an object"));
+        }
+        check_extended(extended, &path(at, &["extended"]), limits)?;
     }
     if let Some(actions) = object.get("actions") {
         let Some(items) = actions.as_array() else {
@@ -470,14 +617,33 @@ const SNAPSHOT_KEYS: [&str; 8] = [
     "rootIds",
     "nodes",
 ];
+const SNAPSHOT_V2_KEYS: [&str; 10] = [
+    "v",
+    "sessionId",
+    "revision",
+    "columns",
+    "rows",
+    "cursor",
+    "rootIds",
+    "nodes",
+    "coordinateSpace",
+    "hitGrid",
+];
 
 fn check_snapshot_schema(value: &Value, limits: &Limits) -> Result<(), Issue> {
     let root: Vec<String> = Vec::new();
     let object = as_object(value, &root)?;
-    strict(object, &SNAPSHOT_KEYS, &root)?;
+    let version = object.get("v").and_then(Value::as_i64);
+    let v2 = version == Some(2);
+    let snapshot_keys: &[&str] = if v2 {
+        &SNAPSHOT_V2_KEYS
+    } else {
+        &SNAPSHOT_KEYS
+    };
+    strict(object, snapshot_keys, &root)?;
 
-    if object.get("v").and_then(Value::as_i64) != Some(1) {
-        return Err(Issue::new(vec!["v".into()], "expected the literal 1"));
+    if !matches!(version, Some(1) | Some(2)) {
+        return Err(Issue::new(vec!["v".into()], "expected the literal 1 or 2"));
     }
     if text(object.get("sessionId"), vec!["sessionId".into()], limits)?.is_empty() {
         return Err(Issue::new(
@@ -519,7 +685,75 @@ fn check_snapshot_schema(value: &Value, limits: &Limits) -> Result<(), Issue> {
         ));
     }
     for (index, node) in nodes.iter().enumerate() {
-        check_node_schema(node, &["nodes".to_owned(), index.to_string()], limits)?;
+        check_node_schema(node, &["nodes".to_owned(), index.to_string()], limits, v2)?;
+    }
+    if v2 {
+        check_observation(
+            object.get("coordinateSpace").unwrap_or(&Value::Null),
+            &["coordinateSpace".into()],
+            limits,
+            |value, at| {
+                if matches!(
+                    value.as_str(),
+                    Some("viewport-cells") | Some("framework-local-cells")
+                ) {
+                    Ok(())
+                } else {
+                    Err(Issue::new(at.to_vec(), "invalid coordinate space"))
+                }
+            },
+        )?;
+        check_observation(
+            object.get("hitGrid").unwrap_or(&Value::Null),
+            &["hitGrid".into()],
+            limits,
+            |value, at| {
+                let grid = as_object(value, at)?;
+                strict(grid, &["regions"], at)?;
+                let regions = grid
+                    .get("regions")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| Issue::new(path(at, &["regions"]), "expected an array"))?;
+                if regions.len() > limits.max_nodes {
+                    return Err(Issue::too_big(
+                        path(at, &["regions"]),
+                        "too many hit regions",
+                    ));
+                }
+                let mut previous: Option<Rect> = None;
+                for (index, raw) in regions.iter().enumerate() {
+                    let rp = path(at, &["regions", &index.to_string()]);
+                    let region = as_object(raw, &rp)?;
+                    strict(region, &["rect", "recipientId"], &rp)?;
+                    let rect = check_rect(
+                        region.get("rect").unwrap_or(&Value::Null),
+                        &path(&rp, &["rect"]),
+                    )?;
+                    if rect.width <= 0 || rect.height != 1 {
+                        return Err(Issue::new(
+                            path(&rp, &["rect"]),
+                            "hit regions must be non-empty row runs",
+                        ));
+                    }
+                    if previous.as_ref().is_some_and(|last| {
+                        rect.row < last.row
+                            || (rect.row == last.row && rect.column < last.column + last.width)
+                    }) {
+                        return Err(Issue::new(
+                            path(&rp, &["rect"]),
+                            "hit regions must be non-overlapping row-major runs",
+                        ));
+                    }
+                    previous = Some(rect);
+                    text(
+                        region.get("recipientId"),
+                        path(&rp, &["recipientId"]),
+                        limits,
+                    )?;
+                }
+                Ok(())
+            },
+        )?;
     }
     Ok(())
 }
@@ -803,7 +1037,12 @@ fn check_tree_delta_schema(value: &Value, limits: &Limits) -> Result<(), Issue> 
         ));
     }
     for (index, node) in changed.iter().enumerate() {
-        check_node_schema(node, &["changed".to_owned(), index.to_string()], limits)?;
+        check_node_schema(
+            node,
+            &["changed".to_owned(), index.to_string()],
+            limits,
+            false,
+        )?;
     }
 
     let Some(removed) = delta.get("removed").and_then(Value::as_array) else {
@@ -944,6 +1183,36 @@ pub fn validate_snapshot(value: &Value, limits: &Limits) -> Result<(), Validatio
     }
 
     let ids: HashSet<&str> = by_id.keys().copied().collect();
+
+    if snapshot["v"].as_i64() == Some(2) {
+        let hit_grid = snapshot["hitGrid"]
+            .as_object()
+            .expect("checked by the schema layer");
+        if hit_grid.get("status").and_then(Value::as_str) == Some("known") {
+            for raw in hit_grid["value"]["regions"]
+                .as_array()
+                .expect("checked by the schema layer")
+            {
+                let region = raw.as_object().expect("checked by the schema layer");
+                let recipient_id = region["recipientId"].as_str().unwrap_or_default();
+                if !ids.contains(recipient_id) {
+                    return Err(ValidationError::new(
+                        "missing-parent",
+                        format!("hitGrid references unknown recipient {recipient_id}"),
+                    ));
+                }
+                let rect = check_rect(&region["rect"], &[]).map_err(Issue::into_error)?;
+                if !intersects_viewport(&rect, columns, rows) {
+                    return Err(ValidationError::new(
+                        "bad-rect",
+                        format!(
+                            "hitGrid region for {recipient_id} does not intersect the viewport"
+                        ),
+                    ));
+                }
+            }
+        }
+    }
 
     for node in &nodes {
         let id = node_id(node);

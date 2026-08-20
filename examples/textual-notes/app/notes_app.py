@@ -1,10 +1,9 @@
 """A small Textual notebook: a list of notes, a field to add one, and a modal
 confirmation before anything is deleted.
 
-The instrumentation is one call. Without TERMWRIGHT_ENDPOINT and
-TERMWRIGHT_TOKEN in the environment ``enable_semantics`` returns ``None``: no
-socket is opened, no marker is written, and the screen is byte for byte what it
-would have been.
+The application contains no Termwright integration.  The test runner injects
+the Textual probe at Python startup; running this file directly is an ordinary
+Textual process.
 
     python3 app/notes_app.py        # just a notebook
 """
@@ -16,8 +15,6 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, ListItem, ListView
-
-from termwright import enable_semantics
 
 INITIAL = ["buy milk", "call the bank", "write the release notes"]
 
@@ -85,8 +82,6 @@ class NotesApp(App[None]):
             yield Label("status: ready", id="status")
 
     def on_mount(self) -> None:
-        # Returns None when no driver is attached; nothing is installed then.
-        enable_semantics(self)
         self.query_one("#notes", ListView).focus()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

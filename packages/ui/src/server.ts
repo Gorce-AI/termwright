@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { openTrace, type TraceReader } from '@termwright/trace';
 import {
   fromBase64,
+  MAX_UI_WIRE_STRING_LENGTH,
   parseClientMessage,
   parseServerMessage,
   UiProtocolError,
@@ -32,7 +33,7 @@ import {
   type ServerMessage,
   type UiServerMode,
 } from './events.js';
-import { discoverTests, type DiscoveryOptions } from './discovery.js';
+import { discoverTests, parseDiscoveredId, type DiscoveredTest, type DiscoveryOptions } from './discovery.js';
 import { readProjectInfo } from './project.js';
 import { readSpecFacts } from './specs.js';
 import { DEFAULT_RUNS_DIR, readRunHistory, readRunManifest } from './runs.js';
@@ -84,7 +85,7 @@ export interface UiServerOptions {
    */
   readonly onRerun?: (testIds: readonly string[] | undefined) => void | Promise<void>;
   /** Called when a client asks to stop the run. */
-  readonly onStop?: () => void;
+  readonly onStop?: () => void | Promise<void>;
   /**
    * List the project's tests at startup, and again when its files change, so
    * the panel shows what a run *would* contain before one happens.
@@ -154,6 +155,14 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   const project = await readProjectInfo(options.discovery?.cwd ?? options.record?.cwd ?? process.cwd());
 
   let mode: UiServerMode = 'live';
+  let stopping = false;
+  let nextRequestedRunGeneration = 0;
+  let requestedRun: { readonly generation: number } | undefined;
+  let nextProducerGeneration = 0;
+  const producerRuns = new Map<
+    WebSocket,
+    { readonly generation: number; readonly requestedRunGeneration: number | undefined }
+  >();
   let reader: TraceReader | undefined;
   let overview: TraceOverview | undefined;
   let recorder: RecorderSession | undefined;
@@ -216,6 +225,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     recordOptions = request;
     recorder = await startRecorder(request);
     mode = 'record';
+    // Start the run before attaching the session. `run-start` resets event
+    // history, so the opposite order erased the only session announcement for
+    // every browser that connected after recording began.
+    hub.publish({ v: 1, type: 'run-start', mode: 'record', startedAt: Date.now() });
     detachRecorder = attach({
       source: recorder.harness,
       write: (bytes) => recorder?.handleInput(bytes) ?? Promise.resolve(),
@@ -224,7 +237,6 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       },
       command: request.command,
     });
-    hub.publish({ v: 1, type: 'run-start', mode: 'record', startedAt: Date.now() });
     hub.publish({
       v: 1,
       type: 'test-start',
@@ -255,9 +267,16 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     mode = 'live';
     await live.close();
     pending = { source, outFile: recordOptions?.outFile };
-    // No `run-end`: stopping a recording is not a run finishing. Publishing one
-    // made the panel announce "run finished" and offer to open a run that was
-    // never recorded.
+    // No `run-end`: stopping a recording is not a run finishing. A new
+    // `run-start`, however, is the authoritative mode transition and replaces
+    // the old recording backlog. Without it a tab opened after Stop replayed
+    // the stale `record` start and showed a ghost REC banner for a process that
+    // no longer existed. Resetting the hub also drops discovery, so republish
+    // the cached listing immediately.
+    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
+    if (options.discovery !== undefined) {
+      hub.publish({ v: 1, type: 'tests-discovered', tests: discovered });
+    }
     return source;
   };
 
@@ -265,8 +284,6 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     await openArchive(options.trace);
   } else if (options.record !== undefined) {
     await beginRecording(options.record);
-  } else {
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
   }
 
   /**
@@ -274,14 +291,22 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
    * without listing the project again — a listing takes seconds and the
    * question "how old is this file" does not deserve one.
    */
-  let discovered: readonly { readonly file: string }[] = [];
+  let discovered: readonly DiscoveredTest[] = [];
+  let discoveryGeneration = 0;
+  let discoveryReady = options.discovery === undefined;
 
   /** Lists the project's tests and publishes them. Failure is not fatal. */
   const publishDiscovery = async (): Promise<void> => {
     if (options.discovery === undefined) return;
+    const generation = ++discoveryGeneration;
     const tests = await discoverTests(options.discovery);
+    // A slow older listing must not overwrite a newer filesystem result.
+    if (generation !== discoveryGeneration) return;
     discovered = tests;
-    if (tests.length > 0) hub.publish({ v: 1, type: 'tests-discovered', tests });
+    discoveryReady = true;
+    // Empty is state too: deleting the last case must clear the browser's
+    // stable catalogue rather than leave a ghost row behind.
+    hub.publish({ v: 1, type: 'tests-discovered', tests });
   };
 
   const http = createServer((request, response) => {
@@ -294,7 +319,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
 
   http.on('upgrade', (request, socket, head) => {
-    if (!authorized(request, token)) {
+    // A cookie is host-wide rather than port/origin-bound. Another service on
+    // 127.0.0.1 must not be able to use the browser's Termwright cookie to
+    // become a producer or send control messages.
+    if (!authorized(request, token, false)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
@@ -316,7 +344,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         if (error instanceof UiProtocolError) return; // a bad frame is not fatal
         throw error;
       }
-      void handleClientMessage(message);
+      // Session input and runner callbacks are allowed to be asynchronous. A
+      // failed child write must not become an unhandled rejection that takes
+      // the long-lived UI server down; stop has its own explicit failure event.
+      void handleClientMessage(message).catch(() => undefined);
     });
     ws.on('close', remove);
     ws.on('error', remove);
@@ -324,6 +355,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
 
   /** A producer (the Vitest reporter) publishes into the hub. */
   function acceptProducer(ws: WebSocket): void {
+    // Producers are observers living in test workers. A worker can disappear
+    // at any point; an unhandled EventEmitter `error` must never take the UI
+    // server down with it.
+    ws.on('error', () => undefined);
     ws.on('message', (raw: Buffer) => {
       let message: ServerMessage;
       try {
@@ -332,17 +367,84 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         if (error instanceof UiProtocolError) return; // a bad frame is not fatal
         throw error;
       }
+      if (message.type === 'run-start') {
+        producerRuns.set(ws, {
+          generation: ++nextProducerGeneration,
+          requestedRunGeneration: requestedRun?.generation,
+        });
+      } else if (message.type === 'run-end' || message.type === 'run-cancelled') {
+        // A producer owns its lifecycle. Never let an old watcher completion
+        // release a newer browser run (or vice versa).
+        producerRuns.delete(ws);
+      }
       hub.publish(message);
     });
+    // The reporter normally sends run-end before closing. If it crashes or
+    // cannot finish the WebSocket handshake, retaining its lease forever
+    // would make every later run impossible.
+    ws.on('close', () => producerRuns.delete(ws));
+  }
+
+  function runIsBusy(): boolean {
+    return stopping || requestedRun !== undefined || producerRuns.size > 0;
+  }
+
+  function validateRunTargets(testIds: readonly string[] | undefined): void {
+    if (options.discovery === undefined || testIds === undefined || testIds.length === 0) return;
+    if (!discoveryReady) throw new RunRequestError(409, 'the scoped test catalogue is still loading');
+    const providerTests = discovered.filter((test) => test.provider !== undefined);
+    for (const target of testIds) {
+      const parsed = parseDiscoveredId(target);
+      const allowed = parsed === null
+        ? providerTests.some((test) => test.file === target)
+        : providerTests.some((test) => test.id === target);
+      if (!allowed) throw new RunRequestError(400, 'run targets must belong to the scoped provider catalogue');
+    }
+  }
+
+  async function requestRun(testIds: readonly string[] | undefined): Promise<void> {
+    if (options.onRerun === undefined) {
+      throw new RunRequestError(409, 'this panel has no test runner behind it');
+    }
+    validateRunTargets(testIds);
+    if (runIsBusy()) throw new RunRequestError(409, 'a live run is already in progress');
+    const generation = ++nextRequestedRunGeneration;
+    requestedRun = { generation };
+    try {
+      await options.onRerun(testIds);
+    } finally {
+      // A cancelled/older callback must not unlock a later request.
+      if (requestedRun?.generation === generation) requestedRun = undefined;
+    }
   }
 
   async function handleClientMessage(message: ClientMessage): Promise<void> {
     switch (message.type) {
       case 'rerun':
-        options.onRerun?.(message.testIds);
+        // Legacy socket controls have no response channel, but they share the
+        // exact same validation and atomic lease as POST /api/run. A rejected
+        // request therefore starts no child instead of bypassing the gate.
+        await requestRun(message.testIds);
         return;
       case 'stop':
-        options.onStop?.();
+        if (stopping) return;
+        stopping = true;
+        const stoppedRequestedGeneration = requestedRun?.generation;
+        try {
+          await options.onStop?.();
+          if (stoppedRequestedGeneration !== undefined) {
+            for (const [producer, run] of producerRuns) {
+              if (run.requestedRunGeneration === stoppedRequestedGeneration) {
+                producerRuns.delete(producer);
+              }
+            }
+          }
+          hub.publish({ v: 1, type: 'run-cancelled', stoppedAt: Date.now() });
+        } catch (error) {
+          hub.publish({ v: 1, type: 'run-cancel-failed', error: boundedWireError(error) });
+        } finally {
+          stopping = false;
+        }
         return;
       case 'pick':
         sessions.get(message.sessionId)?.setPickMode?.(message.enabled ?? true);
@@ -358,7 +460,13 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
 
   async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? '/', 'http://localhost');
-    if (!authorized(request, token)) {
+    // Static subresources may use the HttpOnly cookie set by index.html; API
+    // calls must present the unguessable token explicitly in query/header.
+    // Cookies are scoped to a site, not a localhost port, so accepting one for
+    // POST /api/record/start would let an unrelated local origin start a
+    // command through a cross-site request.
+    const allowCookie = !url.pathname.startsWith('/api/');
+    if (!authorized(request, token, allowCookie)) {
       sendJson(response, 401, { error: 'missing or invalid token' });
       return;
     }
@@ -378,6 +486,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       case 'GET /api/state': {
         sendJson(response, 200, {
           mode,
+          canRun: options.onRerun !== undefined,
           project,
           sessions: [...sessions.values()].map((session) => ({
             sessionId: session.source.sessionId,
@@ -410,11 +519,24 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         });
         return;
       }
-      case 'POST /api/run': {
-        if (options.onRerun === undefined) {
-          sendJson(response, 409, { error: 'this panel has no test runner behind it' });
+      case 'POST /api/specs': {
+        const body = await readJsonBody(request);
+        const requested = body['files'];
+        if (
+          !Array.isArray(requested) ||
+          requested.some((file) => typeof file !== 'string')
+        ) {
+          sendJson(response, 400, { error: 'files must be an array of strings' });
           return;
         }
+        const files = new Set<string>(discovered.map((test) => test.file));
+        for (const file of requested) files.add(file as string);
+        sendJson(response, 200, {
+          specs: await readSpecFacts([...files], options.runsDir ?? DEFAULT_RUNS_DIR),
+        });
+        return;
+      }
+      case 'POST /api/run': {
         const body = await readJsonBody(request);
         const files = body['files'];
         if (files !== undefined && (!Array.isArray(files) || files.some((f) => typeof f !== 'string'))) {
@@ -425,10 +547,10 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           // Awaited so the answer says whether it *started*, not whether it
           // passed: the panel shows results over the event stream, and the one
           // thing it cannot learn from there is that nothing began.
-          await options.onRerun(files as string[] | undefined);
+          await requestRun(files as string[] | undefined);
           sendJson(response, 200, { started: true });
         } catch (error) {
-          sendJson(response, 500, { error: describeError(error) });
+          sendJson(response, error instanceof RunRequestError ? error.status : 500, { error: describeError(error) });
         }
         return;
       }
@@ -443,7 +565,18 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           sendJson(response, 404, { error: 'no such run' });
           return;
         }
-        sendJson(response, 200, manifest);
+        sendJson(response, 200, {
+          ...manifest,
+          tests: await Promise.all(
+            manifest.tests.map(async (test) => {
+              if (test.traceRef === undefined) return test;
+              const traceAvailable = await stat(test.traceRef)
+                .then((entry) => entry.isDirectory())
+                .catch(() => false);
+              return { ...test, traceAvailable };
+            }),
+          ),
+        });
         return;
       }
       case 'POST /api/trace/open': {
@@ -453,16 +586,37 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           sendJson(response, 400, { error: 'path must be a non-empty string' });
           return;
         }
+        let contextual: TraceReader | undefined;
         try {
-          await openArchive(path);
+          contextual = await openTrace(path);
+          // Opening a recording from Runs (or when LIVE turns into replay) is
+          // a choice made by one browser tab. It must not replace the server's
+          // live mode, reset the shared test catalogue, or publish a synthetic
+          // pseudo-run into every other tab. Subsequent reads carry this path
+          // explicitly and are therefore contextual too.
+          const trace = await readTraceOverview(contextual);
+          sendJson(response, 200, { mode: 'post-mortem', trace });
         } catch (error) {
           sendJson(response, 409, { error: describeError(error) });
-          return;
+        } finally {
+          await contextual?.close();
         }
-        sendJson(response, 200, { mode, trace: overview });
         return;
       }
       case 'GET /api/trace/commands': {
+        const archive = url.searchParams.get('archive');
+        if (archive !== null) {
+          let contextual: TraceReader | undefined;
+          try {
+            contextual = await openTrace(archive);
+            sendJson(response, 200, await readCommandLog(contextual));
+          } catch (error) {
+            sendJson(response, 409, { error: describeError(error) });
+          } finally {
+            await contextual?.close();
+          }
+          return;
+        }
         if (traceCommands === undefined) {
           sendJson(response, 409, { error: 'no trace is open' });
           return;
@@ -471,6 +625,19 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         return;
       }
       case 'GET /api/trace/frames': {
+        const archive = url.searchParams.get('archive');
+        if (archive !== null) {
+          let contextual: TraceReader | undefined;
+          try {
+            contextual = await openTrace(archive);
+            sendJson(response, 200, await readFrames(contextual));
+          } catch (error) {
+            sendJson(response, 409, { error: describeError(error) });
+          } finally {
+            await contextual?.close();
+          }
+          return;
+        }
         if (traceFrames === undefined) {
           sendJson(response, 409, { error: 'no trace is open' });
           return;
@@ -479,6 +646,30 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         return;
       }
       case 'GET /api/trace/logs': {
+        const archive = url.searchParams.get('archive');
+        if (archive !== null) {
+          let contextual: TraceReader | undefined;
+          try {
+            contextual = await openTrace(archive);
+            const before = numberParam(url, 'before');
+            const after = numberParam(url, 'after');
+            const limit = numberParam(url, 'limit');
+            sendJson(
+              response,
+              200,
+              await readTraceLogs(contextual, {
+                ...(before === undefined ? {} : { before }),
+                ...(after === undefined ? {} : { after }),
+                ...(limit === undefined ? {} : { limit }),
+              }),
+            );
+          } catch (error) {
+            sendJson(response, 409, { error: describeError(error) });
+          } finally {
+            await contextual?.close();
+          }
+          return;
+        }
         if (reader === undefined || traceLogs === undefined) {
           sendJson(response, 409, { error: 'no trace is open' });
           return;
@@ -498,6 +689,20 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         return;
       }
       case 'GET /api/trace/state': {
+        const archive = url.searchParams.get('archive');
+        if (archive !== null) {
+          let contextual: TraceReader | undefined;
+          try {
+            contextual = await openTrace(archive);
+            const t = Number.parseFloat(url.searchParams.get('t') ?? '0');
+            sendJson(response, 200, await traceStateAt(contextual, Number.isFinite(t) ? t : 0));
+          } catch (error) {
+            sendJson(response, 409, { error: describeError(error) });
+          } finally {
+            await contextual?.close();
+          }
+          return;
+        }
         if (reader === undefined) {
           sendJson(response, 409, { error: 'no trace is open' });
           return;
@@ -698,7 +903,7 @@ function watchForChanges(cwd: string, onChange: () => Promise<void>): (() => voi
     const watcher = watch(cwd, { recursive: true }, (_event, filename) => {
       const name = filename === null ? '' : filename.toString();
       if (name === '' || IGNORED_DIRECTORIES.test(name)) return;
-      if (!/\.(ts|tsx|js|jsx|mts|cts)$/.test(name)) return;
+      if (!/\.(ts|tsx|js|jsx|mts|cts|feature)$/.test(name)) return;
       if (timer !== undefined) clearTimeout(timer);
       timer = setTimeout(() => void onChange(), 300);
     });
@@ -734,16 +939,19 @@ function listen(server: Server, port: number, host: string): Promise<number> {
 }
 
 /**
- * Constant-time token comparison over the query string, the header, or the
- * cookie the app page was given.
+ * Constant-time token comparison over the query string/header and, only for
+ * static subresources, the cookie the app page was given.
  *
  * The cookie exists because a page loads sub-resources on its own, without the
  * token the user opened it with; it is `SameSite=Strict` and `HttpOnly`, so it
  * rides only on requests this page makes.
  */
-function authorized(request: IncomingMessage, token: string): boolean {
+function authorized(request: IncomingMessage, token: string, allowCookie: boolean): boolean {
   const url = new URL(request.url ?? '/', 'http://localhost');
-  const provided = url.searchParams.get('token') ?? headerToken(request) ?? cookieToken(request);
+  const provided =
+    url.searchParams.get('token') ??
+    headerToken(request) ??
+    (allowCookie ? cookieToken(request) : undefined);
   if (provided === undefined || provided === null) return false;
   const left = Buffer.from(provided);
   const right = Buffer.from(token);
@@ -855,4 +1063,16 @@ function escapeHtml(text: string): string {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+class RunRequestError extends Error {
+  constructor(readonly status: 400 | 409, message: string) {
+    super(message);
+  }
+}
+
+/** Keep server-authored errors valid for the same wire parser that receives them. */
+function boundedWireError(error: unknown): string {
+  const message = describeError(error) || 'unknown error';
+  return message.slice(0, MAX_UI_WIRE_STRING_LENGTH);
 }

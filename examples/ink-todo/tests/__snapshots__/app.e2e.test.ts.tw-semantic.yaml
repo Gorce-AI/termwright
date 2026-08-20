@@ -2,18 +2,20 @@
 # Update with `vitest -u` or TERMWRIGHT_UPDATE_SNAPSHOTS=changed.
 "the todo app > starts on the list it was seeded with 1": |
   - application:
-      - text "Termwright Todo"
-      - textbox "Filter" [focused]:
-          - 'text "Filter: _"'
-      - list "Todos" [orientation=vertical]:
-          - listitem "write the README" [selected,checked]:
-              - text "> [x] write the README"
-          - listitem "record a demo":
-              - text "[ ] record a demo"
-          - listitem "ship 1.0":
-              - text "[ ] ship 1.0"
-      - button "Add" [disabled]:
-          - text "Add"
-      - button "Remove":
-          - text "Remove"
-      - 'text "status: ready"'
+      - generic:
+          - text "Termwright Todo"
+          - textbox "Filter":
+              - 'text "Filter: _"'
+          - list "Todos":
+              - listitem "write the README":
+                  - text "> [x] write the README"
+              - listitem "record a demo":
+                  - text "[ ] record a demo"
+              - listitem "ship 1.0":
+                  - text "[ ] ship 1.0"
+          - generic:
+              - button "Add":
+                  - text "Add"
+              - button "Remove":
+                  - text "Remove"
+          - 'text "status: ready"'

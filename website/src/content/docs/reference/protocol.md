@@ -1,5 +1,5 @@
 ---
-title: Protocol v1
+title: Protocol v1 and v2
 description: The semantic wire protocol — transport, handshake, framing, the render marker, the data model and its ceilings.
 ---
 
@@ -7,6 +7,20 @@ The protocol is language-neutral, and `@termwright/protocol` is its normative
 implementation: where a client differs from it, the client is wrong. Everything
 here **fails closed** — untrusted input is rejected with a typed violation, never
 partially accepted.
+
+## Protocol majors
+
+`termwright/2` is the default protocol. `termwright/1` is available only through
+an explicit compatibility option for existing adapters. Its optional
+`bounds` field is a legacy, unqualified projection; paint-order knowledge is
+not pointer ownership.
+
+`termwright/2` requires `qualified-observations` and snapshot `v: 2`. Nodes
+carry separate evidence-qualified `displayed`, `intendedRect` and `visibleRect`
+facts. The snapshot carries its coordinate space and an explicit `hitGrid`
+observation. A known grid additionally requires `pointer-hit-grid`. The driver
+echoes the selected major and rejects mixed-major traffic. See
+[Geometry, visibility and pointer ownership](../geometry-visibility/).
 
 ## Transport and lifecycle
 
@@ -20,16 +34,21 @@ Three variables are injected into the child:
 |---|---|
 | `TERMWRIGHT_ENDPOINT` | the socket or pipe path |
 | `TERMWRIGHT_TOKEN` | 256 bits of randomness, opaque |
-| `TERMWRIGHT_PROTOCOL` | `1` |
+| `TERMWRIGHT_PROTOCOL` | `termwright/2` by default; `termwright/1` only for an explicit compatibility session |
 
 Without them an adapter is [dormant](../../adapters/writing-an-adapter/): it
 opens nothing and the run is byte-identical to an uninstrumented one.
 
 The handshake is a bounded `hello` carrying the token, the protocol version, the
-adapter identity and a capability list. The driver replies with the selected
-version, session limits and marker configuration. No valid hello inside the
-negotiation window (250 ms by default) means `semanticTree: false` and a
-generic session; a late or malformed hello never flips an already-selected mode.
+producer identity and an adapter capability list. A framework probe additionally
+sends `probe {framework, frameworkVersion?, probeVersion, identityKind,
+capabilities}`. Adapter capabilities describe wire traffic such as trees,
+bounds, diffs and logs; probe capabilities describe observable framework facts
+such as stable identity, visible rectangles, annotations and paint order. The
+driver replies with the selected version, session limits and marker
+configuration. No valid hello inside the negotiation window (250 ms by default)
+means `semanticTree: false` and a generic session; a late or malformed hello
+never flips an already-selected mode.
 
 ## Framing
 
@@ -134,7 +153,7 @@ it after the last byte of the render for revision N, and its payload is N plus a
 MAC, so ordinary program output cannot forge one.
 
 ```
-ESC P t wm;{revision};{mac} ESC \
+ESC ] 8487 ; twm;{revision};{mac} BEL
 ```
 
 The MAC is `base64url(HMAC-SHA256(token, "{sessionId}:{revision}"))` truncated to
@@ -142,21 +161,24 @@ The MAC is `base64url(HMAC-SHA256(token, "{sessionId}:{revision}"))` truncated t
 is not `1`); and the MAC binds both session and revision, so it cannot be
 replayed across either.
 
-A private DCS sequence is used rather than APC because xterm.js does not support
-APC, and a registered DCS handler removes the sequence from the visible grid.
+A private OSC number is used because a cross-platform PTY probe found ConPTY
+drops DCS, APC and OSC 8 while forwarding private OSC and OSC 133. One encoding
+is used on every platform. BEL is the emitted terminator because it was the most
+reliable form in that probe; parsers may still pass a trailing BEL or ST to the
+verifier.
 
 :::caution[The trap when integrating with a VT parser]
-Parsers dispatch on the DCS **final byte** and consume it, so a handler
-registered on `{final: 't'}` receives only `wm;{rev};{mac}`. Verification
-expects the payload *including* the final byte — prepend it, or every marker
-silently fails to verify.
+Register an OSC handler for code `8487`. The parser consumes the OSC number and
+separator; pass the remaining `twm;{revision};{mac}` payload directly to the
+verifier. Registering the removed DCS handler or prepending a DCS final byte
+makes every current marker disappear.
 :::
 
 ```ts
-import {MARKER_DCS_FINAL, verifyMarkerPayload} from '@termwright/protocol';
+import {MARKER_OSC_CODE, verifyMarkerPayload} from '@termwright/protocol';
 
-term.parser.registerDcsHandler({final: MARKER_DCS_FINAL}, (data) => {
-  const marker = verifyMarkerPayload(MARKER_DCS_FINAL + data, token, sessionId);
+term.parser.registerOscHandler(MARKER_OSC_CODE, (data) => {
+  const marker = verifyMarkerPayload(data, token, sessionId);
   if (marker !== null) commit(marker.revision);
   return true; // consumed: keeps the sequence out of the visible grid
 });
@@ -170,15 +192,28 @@ fully paired revision is published.
 ## The data model
 
 A snapshot carries a session id, a revision, the viewport, `rootIds`, the nodes,
-and optionally a `cursor` (position, visibility, shape). A node carries an id, an
-optional `parentId`, a role, a name, states, action hints, an optional `testId`
-and optional `bounds`.
+and optionally a `cursor` (position, visibility, shape). A node carries an id,
+an optional `parentId`, role and name, plus optional description, value,
+portable `state`, application-owned JSON `extended` state, action hints,
+`labelledBy` / `describedBy` relationships, text ranges, `testId` and `bounds`.
+An unrecognised widget survives as `role: 'generic'` and must carry its native
+`frameworkType` rather than disappearing from the tree.
+
+`p` records the node's primary provenance and `px` records per-field
+exceptions. Both use the closed set `annotation | recognizer | framework |
+correlation | heuristic`. Legacy v1 `occlusion: known` means only that paint
+order was observable. It does **not** identify the topmost input recipient and
+cannot vouch for pointer targeting. Bounds without `absolute-bounds` may still
+be useful for inspection, but the driver never treats them as terminal cell
+addresses. New consumers use the qualified observations described in
+[Geometry, visibility and pointer ownership](../geometry-visibility/).
 
 Validation enforces: unique ids, parents that exist, acyclic parent chains,
 depth / count / byte ceilings, UTF-8 byte bounds on strings, safe-integer rects
 that intersect the viewport unless the node is hidden, a positive revision, and
-a closed role and action set. Unknown properties are rejected, not ignored, and
-checks run cheapest-first so an oversized snapshot is rejected before any
+a closed role, action, state and provenance vocabulary. It also bounds extended
+JSON and relationship targets. Unknown properties are rejected, not ignored,
+and checks run cheapest-first so an oversized snapshot is rejected before any
 per-node work.
 
 Two invariants are stricter than the prose spec and every adapter must satisfy
@@ -192,8 +227,11 @@ By design, from day one. Class-B and class-C frameworks publish role-and-name
 nodes without trustworthy coordinates, and even a class-A adapter drops bounds
 wholesale when it cannot observe its own offset — Ink does exactly that when the
 tree contains `<Static>`. **A snapshot carrying no bounds at all is valid.**
-Consumers treat it as a normal state and fall back to their non-geometric path;
-only hit-testing genuinely needs geometry.
+Consumers can still use non-geometric APIs such as attachment, text, and
+keyboard input; geometric APIs remain unavailable. A pointer action additionally needs
+the producer's `absolute-bounds` capability and proof of the exact recipient;
+paint-order knowledge alone is insufficient. Keyboard locators remain
+available when either fact is absent.
 
 ### Roles
 

@@ -27,6 +27,13 @@ describe('subpath entry points', () => {
     expect(ink.launchInkFixture).toBeTypeOf('function');
   });
 
+  it('exposes Gherkin authoring and the explicit plugin from termwright/gherkin', async () => {
+    const gherkin = await import('./gherkin.js');
+    expect(gherkin.Given).toBeTypeOf('function');
+    expect(gherkin.defineSteps).toBeTypeOf('function');
+    expect(gherkin.gherkinPlugin).toBeTypeOf('function');
+  });
+
   it('exposes the trace reporter, default export included', async () => {
     const reporter = await import('./reporter.js');
     expect(reporter.default).toBeTypeOf('function');

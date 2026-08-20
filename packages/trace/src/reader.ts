@@ -213,6 +213,7 @@ class ArchiveReader implements TraceReader {
           stepId: event.stepId,
           title: event.title,
           ...(event.parentStepId === undefined ? {} : { parentStepId: event.parentStepId }),
+          ...(event.gherkin === undefined ? {} : { gherkin: event.gherkin }),
           startedAt: event.t,
           endedAt: null,
           castOffset,

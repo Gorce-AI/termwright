@@ -149,7 +149,8 @@ have to wrap or subclass anything to describe a widget they did not write.
 
 ```go
 annotate.Tag(badge, annotate.Semantics{
-    Role: "status", Name: "Unread messages", TestID: "unread-badge",
+    Key: "unread", Role: "status", Name: "Unread messages", TestID: "unread-badge",
+    Actions: []protocol.Action{protocol.ActionFocus},
 })
 ```
 
@@ -168,11 +169,19 @@ Two properties are worth stating because they are easy to get wrong:
   both directions: two hundred transient widgets are collected, and a widget
   still referenced keeps its annotation. (This puts a Go 1.24 floor on anything
   importing the package.)
-- **A declaration cannot state a physical fact.** `Semantics` carries only
-  `Role`, `Name`, `TestID`, `Description` and `Domain` — no bounds, no focus,
-  no rendered text — and a test reflects over the field set so that adding one
-  fails rather than merely being frowned upon. An unknown role is dropped, not
-  guessed.
+- **A declaration cannot state a physical fact.** `Semantics` carries author
+  identity and intent (`Key`, role/name/test id/description/domain, closed
+  actions and key relationships) — no bounds, focus, visibility, value,
+  rendered text or framework state. A test reflects over the field set so that
+  adding one fails rather than merely being frowned upon. Unknown roles and
+  actions are dropped, not guessed.
+- **Relations are a bounded second pass.** `LabelledBy` and `DescribedBy` hold
+  framework-neutral `SemanticKey` strings rather than target pointers. That
+  avoids both an import cycle and retaining another primitive. Missing and
+  duplicate keys do not emit references; declaration order is irrelevant.
+- **Provenance remains mixed honestly.** Retained widget facts use
+  `p: framework`; recognised roles and author-supplied fields are per-field
+  `px` exceptions.
 
 The annotated application lives in its own fixture. Putting the calls into the
 zero-config fixture would have broken that fixture's own test, the one

@@ -1,0 +1,113 @@
+{
+  "kind": "termwright-performance-report",
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-20T10:39:33.470Z",
+  "environment": {
+    "runtime": "bun 1.2.15; @opentui/core 0.5.3",
+    "platform": "darwin",
+    "architecture": "arm64"
+  },
+  "scenarios": [
+    {
+      "id": "opentui-threaded-marker-route",
+      "framework": "opentui",
+      "renderingMode": "retained",
+      "description": "real OpenTUI 0.5.3 threaded renderer with a changing frame and three stdout/marker routes",
+      "workload": {
+        "frames": 596,
+        "warmupFrames": 0,
+        "targetNodesPerFrame": 2
+      },
+      "metrics": {
+        "probeEventsPerFrame": {
+          "status": "unavailable",
+          "unit": "events/frame",
+          "value": null,
+          "reason": "The marker-route benchmark isolates renderer routing, not Probe IR observation."
+        },
+        "bytesPerFrame": {
+          "status": "unavailable",
+          "unit": "bytes/frame",
+          "value": null,
+          "reason": "bytesSeenInJs contains terminal render bytes and markers, not semantic-channel bytes."
+        },
+        "fullSnapshots": {
+          "status": "unavailable",
+          "unit": "count",
+          "value": null,
+          "reason": "The marker-route benchmark deliberately has no semantic driver."
+        },
+        "deltas": {
+          "status": "unavailable",
+          "unit": "count",
+          "value": null,
+          "reason": "The marker-route benchmark deliberately has no semantic driver."
+        },
+        "droppedEvents": {
+          "status": "unavailable",
+          "unit": "count",
+          "value": null,
+          "reason": "No semantic producer queue is active in this route-isolation benchmark."
+        },
+        "coalescedEvents": {
+          "status": "unavailable",
+          "unit": "count",
+          "value": null,
+          "reason": "OpenTUI does not expose skipped native renders as a counter here."
+        },
+        "semanticNodesPerFrame": {
+          "status": "unavailable",
+          "unit": "nodes/frame",
+          "value": null,
+          "reason": "No semantic snapshot is built in this route-isolation benchmark."
+        },
+        "unknownFrameworkNodesPerFrame": {
+          "status": "unavailable",
+          "unit": "nodes/frame",
+          "value": null,
+          "reason": "No semantic snapshot is built in this route-isolation benchmark."
+        },
+        "renderCorrelationRate": {
+          "status": "measured",
+          "unit": "ratio",
+          "value": 1,
+          "note": "Marker writes divided by rendered frames; every sampled first marker was structurally after frame bytes."
+        },
+        "probeSerializationTime": {
+          "status": "unavailable",
+          "unit": "microseconds/frame",
+          "value": null,
+          "reason": "No semantic snapshot is serialized in this route-isolation benchmark."
+        },
+        "parentNormalizationTime": {
+          "status": "unavailable",
+          "unit": "microseconds/frame",
+          "value": null,
+          "reason": "No semantic parent is connected."
+        },
+        "parentProtocolValidationTime": {
+          "status": "unavailable",
+          "unit": "microseconds/frame",
+          "value": null,
+          "reason": "No semantic parent is connected."
+        },
+        "probeHotPathTime": {
+          "status": "unavailable",
+          "unit": "microseconds/frame",
+          "value": null,
+          "reason": "The benchmark reports renderer throughput rather than isolating a per-frame CPU duration."
+        },
+        "applicationOverheadRatio": {
+          "status": "measured",
+          "unit": "ratio",
+          "value": 1.0100502512562815,
+          "note": "Native/feed throughput ratio; 1.0 means equal. Feed-only routing was 199 fps versus 201 native fps."
+        }
+      }
+    }
+  ],
+  "caveats": [
+    "Each arm ran 3 times for 1000 ms with useThread=true and a changing frame.",
+    "This isolates native frame routing and marker placement; semantic payload cost is measured by semantic-pipeline.json."
+  ]
+}

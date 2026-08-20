@@ -12,8 +12,14 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'termwright',
+			logo: {
+				src: './src/assets/termwright-logo.svg',
+				alt: '',
+				replacesTitle: true,
+			},
+			favicon: '/favicon.svg',
 			description:
-				'Playwright for the terminal: a real PTY, a standards-grade VT emulator, and an application-published semantic tree.',
+				'Test terminal applications through a real PTY, terminal input, rendered cells, and framework semantics.',
 			social: [
 				{
 					icon: 'github',
@@ -27,47 +33,90 @@ export default defineConfig({
 			lastUpdated: true,
 			customCss: ['./src/styles/custom.css'],
 			sidebar: [
-				{label: 'Getting started', slug: 'getting-started'},
 				{
-					label: 'Guides',
+					label: 'Start',
 					items: [
-						{label: 'Locators', slug: 'guides/locators'},
-						{label: 'Assertions and snapshots', slug: 'guides/assertions'},
-						{label: 'Component testing', slug: 'guides/component-testing'},
-						{label: 'Test data and fixtures', slug: 'guides/test-data'},
-						{label: 'Traces, recordings, reports', slug: 'guides/traces'},
-						{label: 'Application logs', slug: 'guides/app-logs'},
-						{label: 'Terminal profiles', slug: 'guides/terminal-profiles'},
-						{label: 'Debugging a failing test', slug: 'guides/debugging'},
-						{label: 'Runner UI', slug: 'guides/runner-ui'},
-						{label: 'MCP for agents', slug: 'guides/mcp'},
-						{label: 'Why not tmux?', slug: 'guides/why-not-tmux'},
-						{label: 'Migrating', slug: 'guides/migrating'},
+						{label: 'Getting started', slug: 'getting-started'},
+						{label: 'Writing tests', slug: 'writing-tests'},
 					],
 				},
 				{
-					label: 'Adapters',
+					label: 'Write tests',
+					items: [
+						{label: 'Locators', slug: 'guides/locators'},
+						{label: 'Actions and input', slug: 'guides/actions'},
+						{label: 'Assertions', slug: 'guides/assertions'},
+						{label: 'Snapshots', slug: 'guides/snapshots'},
+						{label: 'Test data and fixtures', slug: 'guides/test-data'},
+						{label: 'Gherkin scenarios', slug: 'guides/gherkin'},
+						{label: 'Ink component tests', slug: 'guides/component-testing'},
+					],
+				},
+				{
+					label: 'Runner and debugging',
+					items: [
+						{label: 'Runner UI', slug: 'tools/runner-ui'},
+						{label: 'Debug a failed test', slug: 'tools/debugging'},
+						{label: 'Traces and reports', slug: 'tools/traces-reports'},
+						{label: 'Record a test', slug: 'tools/recorder'},
+						{label: 'Application logs', slug: 'guides/app-logs'},
+					],
+				},
+				{
+					label: 'Framework integrations',
+					collapsed: true,
 					items: [
 						{label: 'Overview', slug: 'adapters'},
 						{label: 'Ink', slug: 'adapters/ink'},
 						{label: 'OpenTUI', slug: 'adapters/opentui'},
 						{label: 'Textual (Python)', slug: 'adapters/textual'},
 						{label: 'tview (Go)', slug: 'adapters/tview'},
+						{label: 'Ratatui (Rust)', slug: 'adapters/ratatui'},
 						{label: 'Bubble Tea', slug: 'adapters/bubbletea'},
-						{label: 'Writing an adapter', slug: 'adapters/writing-an-adapter'},
+						{label: 'Write an integration', slug: 'adapters/writing-an-adapter'},
+					],
+				},
+				{
+					label: 'Configuration and CI',
+					collapsed: true,
+					items: [
+						{label: 'Configuration', slug: 'reference/configuration'},
+						{label: 'CI and retries', slug: 'guides/ci'},
+						{label: 'Terminal profiles', slug: 'guides/terminal-profiles'},
+					],
+				},
+				{
+					label: 'Concepts',
+					collapsed: true,
+					items: [
+						{label: 'Terminal semantics', slug: 'concepts/semantics'},
+						{label: 'Waiting and retries', slug: 'concepts/waiting-retries'},
+						{label: 'Why a real terminal?', slug: 'guides/why-not-tmux'},
 					],
 				},
 				{
 					label: 'Reference',
+					collapsed: true,
 					items: [
-						{label: 'Packages', slug: 'reference/packages'},
-						{label: 'Protocol v1', slug: 'reference/protocol'},
-						{label: 'Configuration', slug: 'reference/configuration'},
-						{label: 'Accessibility', slug: 'reference/accessibility'},
+						{label: 'Test API', slug: 'reference/test-api'},
 						{label: 'CLI and exit codes', slug: 'reference/cli'},
+						{label: 'Errors', slug: 'reference/errors'},
+						{label: 'Framework compatibility', slug: 'reference/compatibility'},
+						{label: 'Geometry and visibility', slug: 'reference/geometry-visibility'},
+						{label: 'Packages and exports', slug: 'reference/packages'},
+						{label: 'Platforms and limitations', slug: 'reference/limitations'},
+						{label: 'MCP tools', slug: 'guides/mcp'},
+					],
+				},
+				{
+					label: 'Internals and contributing',
+					collapsed: true,
+					items: [
+						{label: 'Semantic protocol', slug: 'reference/protocol'},
+						{label: 'Accessibility', slug: 'reference/accessibility'},
 						{label: 'Releasing', slug: 'reference/releasing'},
-						{label: 'Limitations and FAQ', slug: 'reference/limitations'},
-						{label: 'Decisions (ADRs)', slug: 'reference/decisions'},
+						{label: 'Architecture decisions', slug: 'reference/decisions'},
+						{label: 'Migrate to current APIs', slug: 'guides/migrating'},
 					],
 				},
 			],

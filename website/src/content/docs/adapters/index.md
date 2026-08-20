@@ -1,56 +1,74 @@
 ---
-title: Adapters overview
-description: Which frameworks can publish a semantic tree, which cannot, and what you get in each case.
+title: Framework integrations
+description: Decide whether your terminal application needs a probe and choose the supported integration for its framework.
 ---
 
-An adapter is the piece that lets an application publish what it *means*, not
-just what it paints. It is small, it ships in production, and outside a test run
-it does nothing at all: without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in
-the environment a conforming adapter opens no socket, writes no marker, and
-renders byte-for-byte identical output. That rule is called the **dormant rule**
-and the [conformance suite](../reference/protocol/) enforces it.
+Every terminal application can be tested through its rendered screen and PTY.
+A framework integration additionally publishes elements with roles, names,
+state, relationships, and the physical facts that framework can observe.
 
-## Feasibility classes
+## Do you need an integration?
 
-Whether a framework *can* publish a useful tree is a property of the framework,
-not of our effort, and it is worth knowing before you plan a migration:
+| You want to test | Integration required? |
+| --- | --- |
+| Rendered text, cells, colors, keyboard input, paste, resize, exit, signals | No |
+| `getByRole()`, `getByLabel()`, semantic state, semantic snapshots | Yes |
+| Semantic pointer actions | Yes, and the framework must expose exact hit testing |
+| Framework-specific values or relationships | Usually; annotations may also be needed |
 
-| Class | Shape | Result | Examples |
-|---|---|---|---|
-| **A** | retains a widget tree with positions | full semantic tree with bounds | Ink, OpenTUI, Textual, tview, prompt_toolkit |
-| **B** | composes strings | role+name only where the author annotates; otherwise generic text mode | Bubble Tea + Lip Gloss joins |
-| **C** | immediate mode — positions exist only during the draw call | instrumented mode: the author wraps their draws | Ratatui, cursive, urwid |
+Start without an integration if screen-level behavior is enough. Add one when
+semantic locators make the test clearer or when you need framework state.
 
-Class A adapters certify as `full-semantic`. Class C can reach the same tree
-through a one-line wrapper by the application author. Class B degrades to
-generic text mode, and we say so rather than pretending otherwise.
+## Choose your framework
 
-## Status
+| Framework | Integration | Semantic identity | Viewport visibility | Exact pointer recipient |
+| --- | --- | --- | --- | --- |
+| [Ink](ink/) | `@termwright/probe-ink` | stable | unsupported | unsupported |
+| [OpenTUI](opentui/) | `@termwright/probe-opentui` | stable | unsupported | supported |
+| [Textual](textual/) | Python `termwright` probe | stable | supported | supported |
+| [tview](tview/) | `@termwright/probe-tview` instrumented build | stable | conditional | unsupported |
+| [Ratatui](ratatui/) | `termwright-probe-ratatui` instrumented build | frame-local by default | conditional | unsupported |
+| [Bubble Tea / Bubbles](bubbletea/) | `@termwright/probe-charm` instrumented build | frame-local by default | unsupported | unsupported |
 
-| Adapter | Package | Status |
-|---|---|---|
-| [Ink](ink/) | `@termwright/ink` | full, and the reference implementation |
-| [OpenTUI](opentui/) | `@termwright/opentui` | 1.0 |
-| [Textual](textual/) | `termwright` (PyPI) | 1.0 |
-| [tview](tview/) | `github.com/gorce-ai/termwright/clients/go` | 1.0 |
-| [Bubble Tea](bubbletea/) | — | honest degradation; read before adopting |
-| Ratatui | `termwright-protocol` (crate) | protocol client only; instrumented adapter in 1.x |
+The generated [compatibility reference](../reference/compatibility/) is the
+source of truth for exact versions, runtimes, packages, and limitations.
 
-Explicitly not planned: blessed (dead), termui (stagnant).
+## What integration changes
 
-## What you get without one
+A probe observes the framework at runtime and publishes a semantic tree. It
+does not replace rendering or call application callbacks for test actions.
+Keyboard and pointer input still cross the PTY boundary.
 
-A great deal, and it is worth saying plainly: text and regex locators, cell and
-colour assertions, style predicates, scrollback search, mouse, paste, resize,
-signals, recordings and the failure report. Generic matches resolve to
-rectangles, never to invented roles, and every diagnostic says
-`semanticTree: false` so a test never silently degrades into asserting on
-nothing.
+Supported probes remain dormant without the Termwright endpoint and token. A
+normal application launch does not connect or publish semantic data.
 
-The semantic tree is an upgrade, not a requirement.
+## Add application intent only when needed
 
-## Writing your own
+Some frameworks discard application-specific names, roles, or relationships.
+Their annotation SDKs can add those facts. Annotations cannot override physical
+facts such as current bounds, focus, clipping, or pointer ownership.
 
-The protocol is language-neutral and the contract suite runs against any adapter
-in any language, over a subprocess. See
-[Writing an adapter](writing-an-adapter/).
+Prefer framework-native accessibility metadata first. Add a Termwright
+annotation when the framework does not retain the intent you need.
+
+## Verify the integration
+
+Write one test that waits for the initial screen and asserts an element by
+role:
+
+```ts
+const app = await terminal.launch({command});
+await app.waitForText('Permission required');
+await expect(app.getByRole('button', {name: 'Approve'})).toBeAttached();
+```
+
+Then inspect `app.capabilities()` or the Runner inspector. Do not infer a
+working integration from the package being installed; the launch command must
+actually inject or use the probe.
+
+## Add another framework
+
+Read [Writing a framework integration](writing-an-adapter/) after confirming
+that none of the supported integrations applies. That page is for probe and
+adapter authors and includes the protocol, lifecycle, validation, capability,
+and conformance requirements.

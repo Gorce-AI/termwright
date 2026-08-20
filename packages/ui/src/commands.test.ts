@@ -29,6 +29,44 @@ describe('buildCommandLog', () => {
     expect(log[1]?.stepId).toBe('s1');
   });
 
+  it('shows one logical interaction instead of raw PTY input followed by its driver action', () => {
+    const rows = buildCommandLog([
+      { kind: 'step-start', t: 0, castOffset: 0, stepId: 'focus', title: 'move the focus' },
+      { kind: 'input', t: 10, castOffset: 10, dataB64: 'CQ==', inputKind: 'key' },
+      { kind: 'action', t: 11, castOffset: 11, api: 'press', ok: true, stepId: 'focus' },
+      { kind: 'assert', t: 12, castOffset: 12, api: 'toBeFocused', ok: true, stepId: 'focus' },
+      { kind: 'step-end', t: 13, castOffset: 13, stepId: 'focus', status: 'passed' },
+    ]);
+
+    expect(rows.map((row) => [row.kind, row.label, row.depth, row.t])).toEqual([
+      ['step', 'move the focus', 0, 0],
+      ['action', 'press Tab', 1, 10],
+      ['assert', 'toBeFocused', 1, 12],
+    ]);
+  });
+
+  it('keeps genuinely raw input when no high-level driver action follows it', () => {
+    const rows = buildCommandLog([
+      { kind: 'input', t: 10, castOffset: 10, dataB64: 'Aw==', inputKind: 'raw' },
+      { kind: 'assert', t: 11, castOffset: 11, api: 'toHaveText', ok: true },
+    ]);
+    expect(rows.map((row) => row.label)).toEqual(['input (raw)', 'toHaveText']);
+  });
+
+  it('keeps a command inside its step when legacy producer clocks overlap', () => {
+    const rows = buildCommandLog([
+      { kind: 'step-start', t: 20, castOffset: 20, stepId: 's1', title: 'move the focus' },
+      { kind: 'input', t: 10, castOffset: 10, dataB64: 'CQ==', inputKind: 'key' },
+      { kind: 'action', t: 11, castOffset: 11, api: 'press', ok: true, stepId: 's1' },
+      { kind: 'assert', t: 21, castOffset: 21, api: 'toBeFocused', ok: true, stepId: 's1' },
+    ]);
+    expect(rows.map((row) => [row.label, row.t, row.depth])).toEqual([
+      ['move the focus', 20, 0],
+      ['press Tab', 20, 1],
+      ['toBeFocused', 21, 1],
+    ]);
+  });
+
   it('closes a step with its outcome and end time', () => {
     expect(log[0]?.endT).toBe(240);
     expect(log[0]?.ok).toBe(false);

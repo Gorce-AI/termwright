@@ -50,15 +50,17 @@ type Capability string
 
 // The v1 capabilities.
 const (
-	CapTree            Capability = "tree"
-	CapBounds          Capability = "bounds"
-	CapAbsoluteBounds  Capability = "absolute-bounds"
-	CapStates          Capability = "states"
-	CapActions         Capability = "actions"
-	CapTextRanges      Capability = "text-ranges"
-	CapRenderRevisions Capability = "render-revisions"
-	CapTreeDiffs       Capability = "tree-diffs"
-	CapLogs            Capability = "logs"
+	CapTree                  Capability = "tree"
+	CapBounds                Capability = "bounds"
+	CapAbsoluteBounds        Capability = "absolute-bounds"
+	CapStates                Capability = "states"
+	CapActions               Capability = "actions"
+	CapTextRanges            Capability = "text-ranges"
+	CapRenderRevisions       Capability = "render-revisions"
+	CapTreeDiffs             Capability = "tree-diffs"
+	CapLogs                  Capability = "logs"
+	CapQualifiedObservations Capability = "qualified-observations"
+	CapPointerHitGrid        Capability = "pointer-hit-grid"
 )
 
 var roleSet = map[Role]struct{}{
@@ -78,7 +80,8 @@ var actionSet = map[Action]struct{}{
 var capabilitySet = map[Capability]struct{}{
 	CapTree: {}, CapBounds: {}, CapAbsoluteBounds: {}, CapStates: {},
 	CapActions: {}, CapTextRanges: {}, CapRenderRevisions: {}, CapTreeDiffs: {},
-	CapLogs: {},
+	CapLogs:                  {},
+	CapQualifiedObservations: {}, CapPointerHitGrid: {},
 }
 
 // ValidRole reports whether r is one of the v1 roles.
@@ -94,4 +97,4 @@ func ValidCapability(c Capability) bool { _, ok := capabilitySet[c]; return ok }
 const ActionCount = 7
 
 // CapabilityCount is the size of the closed capability set.
-const CapabilityCount = 9
+const CapabilityCount = 11

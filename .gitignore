@@ -11,3 +11,5 @@ coverage/
 .claude/
 .termwright/
 .playwright-mcp/
+test-results/
+playwright-report/

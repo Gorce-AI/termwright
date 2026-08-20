@@ -109,8 +109,13 @@ export async function prepareInstrumentedBuild(
     replaces: [
       { from: FRAMEWORK, to: copy },
       // A `use` entry does not satisfy the copy's versioned require; only a
-      // replace does.
-      { from: CLIENT_MODULE, to: options.clientDir ?? defaultClientDir() },
+      // replace does. When the application module is the client module itself
+      // (our zero-import Go fixture is kept there), replacing a workspace
+      // module at all versions is illegal and unnecessary: `use` already
+      // supplies it.
+      ...((await modulePath(options.moduleDir, env)) === CLIENT_MODULE
+        ? []
+        : [{ from: CLIENT_MODULE, to: options.clientDir ?? (await defaultClientDir(env)) }]),
     ],
   });
 
@@ -123,6 +128,14 @@ async function detectFrameworkVersion(moduleDir: string, env: NodeJS.ProcessEnv)
     cwd: moduleDir,
     // Without this a workspace already in effect could report a replaced
     // version, and the patch set would be chosen for the wrong source.
+    env: { ...env, GOWORK: 'off' },
+  });
+  return stdout.trim();
+}
+
+async function modulePath(moduleDir: string, env: NodeJS.ProcessEnv): Promise<string> {
+  const { stdout } = await run('go', ['list', '-m', '-f', '{{.Path}}'], {
+    cwd: moduleDir,
     env: { ...env, GOWORK: 'off' },
   });
   return stdout.trim();
@@ -143,6 +156,13 @@ async function toolchain(env: NodeJS.ProcessEnv): Promise<string> {
   return stdout.trim();
 }
 
+/** Directory layout used by Go for the lowercase client module path. */
+function moduleCachePath(module: string, version: string): readonly string[] {
+  const parts = module.split('/');
+  const last = parts.pop();
+  return last === undefined ? [] : [...parts, `${last}@${version}`];
+}
+
 function patchSetFor(version: string): string {
   return join(packageRoot(), 'upstream-patches', 'tview', version);
 }
@@ -150,23 +170,28 @@ function patchSetFor(version: string): string {
 /**
  * Where the protocol client lives.
  *
- * Published, it is vendored into the package as `go-client/`. In this
- * repository it is the workspace source, so a change to the client is picked
- * up without a copy step. Checked in that order, and reported rather than
- * guessed when neither exists — a missing client shows up as an unresolvable
- * module deep in a Go build otherwise.
+ * A package may vendor it as `go-client/`; this repository uses the workspace
+ * source so client edits are picked up without a copy. A published standalone
+ * probe resolves the matching tagged Go module into GOMODCACHE, the same
+ * release strategy as probe-charm.
  */
-function defaultClientDir(): string {
+async function defaultClientDir(env: NodeJS.ProcessEnv): Promise<string> {
   const vendored = join(packageRoot(), 'go-client');
   if (existsSync(join(vendored, 'go.mod'))) return vendored;
 
   const inRepo = join(packageRoot(), '..', '..', 'clients', 'go');
   if (existsSync(join(inRepo, 'go.mod'))) return inRepo;
 
-  throw new Error(
-    'the termwright Go client was not found next to the probe (expected go-client/ in the ' +
-      'package, or clients/go in the repository); pass clientDir explicitly',
-  );
+  // Published probes and the Go client are released from one versioned
+  // commit. Outside the monorepo, materialise that exact module version in the
+  // normal Go cache instead of requiring a second manually supplied path.
+  const version = `v${PROBE_VERSION}`;
+  return ensureUpstreamModule({
+    module: CLIENT_MODULE,
+    version,
+    cachePath: moduleCachePath(CLIENT_MODULE, version),
+    env,
+  });
 }
 
 function packageRoot(): string {

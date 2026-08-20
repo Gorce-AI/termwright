@@ -12,9 +12,14 @@ import { encodeFrame, encodeMarker } from '@termwright/protocol';
 
 const endpoint = process.env['TERMWRIGHT_ENDPOINT'];
 const token = process.env['TERMWRIGHT_TOKEN'];
+const qualifiedProtocol = process.env['TERMWRIGHT_PROTOCOL'] === 'termwright/2' ||
+  process.env['TERMWRIGHT_PROTOCOL'] === '2';
 // Class-B/C adapters — and Ink itself when a <Static> region is present —
 // publish role+name nodes without trustworthy coordinates. Legal, not an error.
 const withoutBounds = process.env['TERMWRIGHT_FIXTURE_NO_BOUNDS'] === '1';
+// A bounds-only adapter may expose useful relative geometry, but the driver
+// must refuse to turn it into physical pointer input.
+const withoutAbsoluteBounds = process.env['TERMWRIGHT_FIXTURE_RELATIVE_BOUNDS'] === '1';
 // Simulates a child that is slow to reach its handshake — routine on a loaded
 // machine running suites in parallel, where node's own startup outruns the
 // negotiation window.
@@ -128,6 +133,44 @@ function stripBounds(snapshot) {
   };
 }
 
+function qualifiedSnapshot(snapshot) {
+  const known = (value, evidence) => ({ status: 'known', value, evidence });
+  const unknown = { status: 'unknown', reason: 'not-reported' };
+  const unsupportedHitGrid = {
+    status: 'unsupported',
+    capability: 'pointer-hit-grid',
+    reason: 'framework-unobservable',
+  };
+  const nodes = snapshot.nodes.map(({ bounds, ...node }) => ({
+    ...node,
+    geometry: {
+      displayed: known(true, 'adapter'),
+      intendedRect: bounds === undefined ? unknown : known(bounds, 'adapter'),
+      visibleRect: bounds === undefined ? unknown : known(bounds, 'viewport-clip'),
+    },
+  }));
+  const hitGrid = withoutBounds || withoutAbsoluteBounds || probeMode !== undefined
+    ? unsupportedHitGrid
+    : known({
+        regions: snapshot.nodes
+          .filter((node) => node.id !== 'n1' && node.bounds !== undefined)
+          .flatMap((node) => Array.from({ length: node.bounds.height }, (_, offset) => ({
+            rect: { ...node.bounds, row: node.bounds.row + offset, height: 1 },
+            recipientId: node.id,
+          })))
+          .sort((left, right) => left.rect.row - right.rect.row || left.rect.column - right.rect.column),
+      }, 'hit-grid');
+  return {
+    ...snapshot,
+    v: 2,
+    nodes,
+    coordinateSpace: withoutBounds
+      ? unknown
+      : known(withoutAbsoluteBounds ? 'framework-local-cells' : 'viewport-cells', 'adapter'),
+    hitGrid,
+  };
+}
+
 function sendLog(level, message, extra = {}, reuseSeq = false) {
   if (socket === null || logBudget === null) return;
   if (!reuseSeq) logSeq += 1;
@@ -143,7 +186,8 @@ function sendLog(level, message, extra = {}, reuseSeq = false) {
 }
 
 function fullSnapshot() {
-  const snapshot = withoutBounds ? stripBounds(tree()) : tree();
+  const legacy = withoutBounds ? stripBounds(tree()) : tree();
+  const snapshot = qualifiedProtocol ? qualifiedSnapshot(legacy) : legacy;
   if (!cursorGone) return snapshot;
   // A delta can set a cursor but never clear it, so dropping one is exactly
   // the transition the contract says must travel as a full snapshot.
@@ -291,17 +335,22 @@ if (endpoint === undefined || token === undefined) {
       encodeFrame(
         {
           type: 'hello',
-          protocol: 'termwright/1',
+          protocol: qualifiedProtocol ? 'termwright/2' : 'termwright/1',
           token,
           adapter: { name: 'fixture', version: '0.1.0' },
           capabilities: [
             'tree',
             'bounds',
+            ...(!withoutAbsoluteBounds ? ['absolute-bounds'] : []),
             'states',
             'actions',
             'render-revisions',
             'logs',
             ...(deltaMode ? ['tree-diffs'] : []),
+            ...(qualifiedProtocol ? ['qualified-observations'] : []),
+            ...(qualifiedProtocol && !withoutBounds && !withoutAbsoluteBounds && probeMode === undefined
+              ? ['pointer-hit-grid']
+              : []),
           ],
           ...(probeMode === undefined
             ? {}

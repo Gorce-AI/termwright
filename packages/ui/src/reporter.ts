@@ -28,19 +28,32 @@ import {
   RUN_MANIFEST_VERSION,
   runId,
   writeRunManifest,
+  type RunTestAttempt,
   type RunTest,
 } from './runs.js';
 import { readRunGit } from './project.js';
 import { encodeMessage, type ServerMessage, type UiRunSummary, type UiTestStatus } from './events.js';
-import type { UiHub } from './hub.js';
+import { parseDiscoveredId } from './test-model.js';
+import { hasTermwrightProvider } from './provider.js';
 import { WebSocket } from 'ws';
 
 /** Environment variable `termwright ui` sets for the reporter to find it. */
 export const UI_URL_ENV = 'TERMWRIGHT_UI_URL';
 
+/** Browser-selected files/cases, used to hide Vitest's filter-generated skips. */
+export const UI_SELECTION_ENV = 'TERMWRIGHT_UI_SELECTION';
+
 /** Where published messages go. */
 export interface UiMessageSink {
   publish(message: ServerMessage): void;
+}
+
+/** What a filtered Vitest process is expected to report as real results. */
+export interface UiReporterSelection {
+  /** Stable discovery ids or physical files selected by the browser. */
+  readonly targets?: readonly string[];
+  /** Vitest's CLI name pattern, used by the initial long-lived watcher. */
+  readonly testNamePattern?: string;
 }
 
 /** Options for {@link TermwrightUiReporter}. */
@@ -61,10 +74,12 @@ export interface UiReporterOptions {
    * reports tests, and step boundaries only exist inside the worker.
    */
   readonly stepsFromTraces?: boolean;
+  /** Browser targets or a watcher filter. Defaults to the worker environment. */
+  readonly selection?: readonly string[] | UiReporterSelection;
 }
 
 /**
- * A test annotation, as Vitest 3.2 delivers it to `onTestAnnotate`.
+ * A test annotation, as Vitest 3.2 delivers it to `onTestCaseAnnotate`.
  *
  * This is the channel a worker has to a reporter: `@termwright/test` can
  * annotate each driver action, and the annotation arrives here while the test
@@ -85,7 +100,18 @@ interface TestCaseLike {
   result?: () => { state?: string; errors?: readonly { message?: string }[] } | undefined;
   diagnostic?: () => { duration?: number; retryCount?: number; flaky?: boolean } | undefined;
   meta?: () =>
-    | { termwright?: { traces?: readonly string[]; lostLogRecords?: number } }
+    | {
+        termwright?: {
+          provider?: unknown;
+          traces?: readonly string[];
+          lostLogRecords?: number;
+          attemptFailures?: readonly {
+            attempt?: number;
+            errors?: readonly { message?: string; stack?: string }[];
+            traceRefs?: readonly string[];
+          }[];
+        };
+      }
     | undefined;
 }
 
@@ -100,14 +126,22 @@ export class TermwrightUiReporter {
   #startedAt = 0;
   #tests: RunTest[] = [];
   #pending: Promise<void>[] = [];
+  #started = new Set<string>();
+  #testStartedAt = new Map<string, number>();
+  #annotatedSteps = new Map<string, Set<string>>();
+  readonly #selection: ResolvedSelection | null;
 
   constructor(options: UiReporterOptions = {}) {
     this.#options = options;
+    this.#selection = resolveSelection(options.selection ?? selectionFromEnvironment());
   }
 
   onTestRunStart(): void {
     this.#tests = [];
     this.#pending = [];
+    this.#started.clear();
+    this.#testStartedAt.clear();
+    this.#annotatedSteps.clear();
     this.#counts = { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0 };
     this.#startedAt = Date.now();
     this.#sink = this.#options.sink ?? this.#connect();
@@ -115,8 +149,13 @@ export class TermwrightUiReporter {
   }
 
   onTestCaseReady(testCase: TestCaseLike): void {
+    if (!hasTermwrightProvider(testCase.meta?.())) return;
     const id = testCase.id;
     if (id === undefined) return;
+    if (!this.#isSelected(testCase)) return;
+    this.#started.add(id);
+    const startedAt = Date.now();
+    this.#testStartedAt.set(id, startedAt);
     this.#publish({
       v: 1,
       type: 'test-start',
@@ -126,15 +165,34 @@ export class TermwrightUiReporter {
       // the field present, which the protocol requires, rather than dropping
       // the message.
       file: testCase.module?.moduleId ?? '',
-      startedAt: Date.now(),
+      startedAt,
     });
   }
 
   onTestCaseResult(testCase: TestCaseLike): void {
+    if (!hasTermwrightProvider(testCase.meta?.())) return;
     const id = testCase.id;
     if (id === undefined) return;
     const status = toStatus(testCase.result?.()?.state);
     if (status === undefined) return;
+    // Vitest reports every sibling excluded by file:line/name filtering as
+    // skipped. Those are not test results. A genuinely skipped selected case
+    // still matches the selection and remains visible.
+    if (status === 'skipped' && !this.#isSelected(testCase)) return;
+    // Vitest does not call onTestCaseReady for a declared `.skip`. Publish the
+    // case metadata once here so the result reconciles with discovery rather
+    // than appearing as a second, source-less row.
+    if (status === 'skipped' && !this.#started.has(id)) {
+      this.#started.add(id);
+      this.#publish({
+        v: 1,
+        type: 'test-start',
+        id,
+        title: testCase.fullName ?? testCase.name ?? id,
+        file: testCase.module?.moduleId ?? '',
+        startedAt: Date.now(),
+      });
+    }
     const diagnostic = testCase.diagnostic?.();
     const flaky = diagnostic?.flaky === true || (status === 'passed' && (diagnostic?.retryCount ?? 0) > 0);
     this.#counts.total += 1;
@@ -146,7 +204,8 @@ export class TermwrightUiReporter {
     // field means zero here — that is the producer's documented encoding, not
     // this reporter guessing at a missing value.
     const lostLogRecords = meta?.lostLogRecords ?? 0;
-    const error = testCase.result?.()?.errors?.[0]?.message;
+    const error = status === 'failed' ? testCase.result?.()?.errors?.[0]?.message : undefined;
+    const attempts = attemptsFor(testCase, status, diagnostic?.retryCount ?? 0, diagnostic?.duration);
     if (trace !== undefined && this.#options.stepsFromTraces !== false) {
       this.#pending.push(this.#publishSteps(id, trace));
     }
@@ -160,6 +219,7 @@ export class TermwrightUiReporter {
       lostLogRecords,
       ...(trace === undefined ? {} : { traceRef: trace }),
       ...(error === undefined ? {} : { error }),
+      ...(attempts.length <= 1 ? {} : { attempts }),
     });
     this.#publish({
       v: 1,
@@ -173,6 +233,12 @@ export class TermwrightUiReporter {
       lostLogRecords,
       ...(trace === undefined ? {} : { traceRef: trace }),
       ...(error === undefined ? {} : { error }),
+      ...(attempts.length <= 1 ? {} : {
+        attempt: attempts.at(-1)?.attempt ?? 1,
+        priorFailures: attempts
+          .filter((attempt) => attempt.status === 'failed' && attempt.attempt < (attempts.at(-1)?.attempt ?? 1))
+          .map((attempt) => ({ attempt: attempt.attempt, errors: attempt.errors })),
+      }),
     });
   }
 
@@ -184,12 +250,38 @@ export class TermwrightUiReporter {
    * Annotations of any other type are ignored: this reporter shares the channel
    * with whatever else the suite annotates.
    */
-  onTestAnnotate(testCase: TestCaseLike, annotation: AnnotationLike): void {
-    if (annotation.type !== 'termwright:action') return;
+  onTestCaseAnnotate(testCase: TestCaseLike, annotation: AnnotationLike): void {
+    if (!hasTermwrightProvider(testCase.meta?.())) return;
     const body = annotation.attachment?.body;
     const parsed = typeof body === 'string' ? safeParse(body) : body;
     if (typeof parsed !== 'object' || parsed === null) return;
     const action = parsed as Record<string, unknown>;
+    if (annotation.type === 'termwright:step') {
+      const title = action['title'];
+      const phase = action['phase'];
+      if (testCase.id === undefined || typeof title !== 'string' || (phase !== 'start' && phase !== 'end')) return;
+      const status = action['status'];
+      const gherkin = validGherkinAnnotation(action['gherkin']);
+      if (typeof action['stepId'] === 'string') {
+        const ids = this.#annotatedSteps.get(testCase.id) ?? new Set<string>();
+        ids.add(action['stepId']);
+        this.#annotatedSteps.set(testCase.id, ids);
+      }
+      this.#publish({
+        v: 1,
+        type: 'step',
+        testId: testCase.id,
+        title,
+        phase,
+        t: Math.max(0, Date.now() - (this.#testStartedAt.get(testCase.id) ?? Date.now())),
+        ...(typeof action['stepId'] === 'string' ? { stepId: action['stepId'] } : {}),
+        ...(status === 'passed' || status === 'failed' ? { status } : {}),
+        ...(typeof action['error'] === 'string' ? { error: action['error'] } : {}),
+        ...(gherkin === undefined ? {} : { gherkin }),
+      });
+      return;
+    }
+    if (annotation.type !== 'termwright:action') return;
     const api = action['api'];
     const t = action['t'] ?? action['timeMs'];
     if (typeof api !== 'string' || typeof t !== 'number' || !Number.isFinite(t)) return;
@@ -217,8 +309,10 @@ export class TermwrightUiReporter {
     await Promise.all(this.#pending);
     this.#pending = [];
     const summary = { ...this.#counts, durationMs: Date.now() - this.#startedAt };
-    this.#publish({ v: 1, type: 'run-end', summary });
+    // The toast behind `run-end` links to Runs. Make the manifest observable
+    // before that event so a fast click cannot land on an empty history page.
     await this.#writeManifest(summary);
+    this.#publish({ v: 1, type: 'run-end', summary });
     await this.#socket?.close();
     this.#socket = undefined;
     this.#sink = undefined;
@@ -262,6 +356,31 @@ export class TermwrightUiReporter {
     return this.#socket;
   }
 
+  #isSelected(testCase: TestCaseLike): boolean {
+    if (this.#selection === null) return true;
+    const id = testCase.id;
+    const title = testCase.fullName ?? testCase.name ?? id ?? '';
+    const file = testCase.module?.moduleId ?? '';
+    const targetsMatch =
+      this.#selection.targets === undefined ||
+      this.#selection.targets.some((target) => {
+        if (target === id || target === file) return true;
+        const parsed = parseDiscoveredId(target);
+        return parsed !== null && parsed.file === file && parsed.title === title;
+      });
+    if (!targetsMatch) return false;
+    const pattern = this.#selection.testNamePattern;
+    if (pattern === undefined) return true;
+    // Vitest applies `-t` to suite and test names joined with spaces, while its
+    // reporter exposes `fullName` with ` > ` separators. Test both forms: the
+    // literal form also protects titles which contain `>` themselves.
+    for (const candidate of new Set([title, title.replaceAll(' > ', ' ')])) {
+      pattern.lastIndex = 0;
+      if (pattern.test(candidate)) return true;
+    }
+    return false;
+  }
+
   #publish(message: ServerMessage): void {
     this.#sink?.publish(message);
   }
@@ -276,6 +395,10 @@ export class TermwrightUiReporter {
       const trace = await openTrace(tracePath);
       try {
         for (const step of await trace.steps()) {
+          // Worker annotations already published this exact stable lifecycle
+          // live. Re-reading it from the retained trace must enrich history,
+          // not append a visually identical second step.
+          if (this.#annotatedSteps.get(testId)?.has(step.stepId) === true) continue;
           this.#publish({
             v: 1,
             type: 'step',
@@ -284,6 +407,7 @@ export class TermwrightUiReporter {
             title: step.title,
             phase: 'start',
             t: step.castOffset,
+            ...(step.gherkin === undefined ? {} : { gherkin: step.gherkin }),
           });
           if (step.castEndOffset === null) continue;
           this.#publish({
@@ -295,6 +419,8 @@ export class TermwrightUiReporter {
             phase: 'end',
             t: step.castEndOffset,
             status: step.status === 'failed' ? 'failed' : 'passed',
+            ...(step.error === undefined ? {} : { error: step.error }),
+            ...(step.gherkin === undefined ? {} : { gherkin: step.gherkin }),
           });
         }
       } finally {
@@ -304,6 +430,65 @@ export class TermwrightUiReporter {
       // No timeline detail for this test; the test result itself still arrives.
     }
   }
+}
+
+function validGherkinAnnotation(value: unknown): import('./events.js').UiGherkinStep | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const sourceValue = record['source'];
+  if (typeof sourceValue !== 'object' || sourceValue === null) return undefined;
+  const source = sourceValue as Record<string, unknown>;
+  if (
+    typeof record['keyword'] !== 'string' ||
+    typeof record['text'] !== 'string' ||
+    typeof source['file'] !== 'string' ||
+    !Number.isInteger(source['line']) ||
+    !Number.isInteger(source['column']) ||
+    (record['background'] !== undefined && typeof record['background'] !== 'boolean')
+  ) return undefined;
+  return {
+    keyword: record['keyword'],
+    text: record['text'],
+    source: { file: source['file'], line: source['line'] as number, column: source['column'] as number },
+    ...(record['background'] === true ? { background: true } : {}),
+  };
+}
+
+function attemptsFor(
+  testCase: TestCaseLike,
+  finalStatus: UiTestStatus,
+  retryCount: number,
+  durationMs: number | undefined,
+): readonly RunTestAttempt[] {
+  const raw = testCase.meta?.()?.termwright?.attemptFailures;
+  const attempts: RunTestAttempt[] = [];
+  for (const failure of raw ?? []) {
+    if (!Number.isInteger(failure.attempt) || (failure.attempt ?? 0) < 1) continue;
+    const errors = (failure.errors ?? [])
+      .map((error) => error.message)
+      .filter((message): message is string => typeof message === 'string' && message !== '');
+    attempts.push({
+      attempt: failure.attempt as number,
+      status: 'failed',
+      errors: errors.length === 0 ? ['test failed'] : errors,
+      ...(failure.traceRefs === undefined ? {} : { traceRefs: failure.traceRefs }),
+    });
+  }
+  const finalAttempt = retryCount + 1;
+  const finalErrors = (testCase.result?.()?.errors ?? [])
+    .map((error) => error.message)
+    .filter((message): message is string => typeof message === 'string' && message !== '');
+  const existing = attempts.findIndex((attempt) => attempt.attempt === finalAttempt);
+  const exactFinalErrors = existing === -1 ? undefined : attempts[existing]?.errors;
+  const final: RunTestAttempt = {
+    attempt: finalAttempt,
+    status: finalStatus,
+    errors: finalStatus === 'failed' ? (exactFinalErrors ?? (finalErrors.length > 0 ? finalErrors : ['test failed'])) : [],
+    ...(durationMs === undefined ? {} : { durationMs }),
+  };
+  if (existing === -1) attempts.push(final);
+  else attempts[existing] = { ...attempts[existing] as RunTestAttempt, ...final };
+  return attempts.sort((left, right) => left.attempt - right.attempt);
 }
 
 export default TermwrightUiReporter;
@@ -369,6 +554,59 @@ function safeParse(text: string): unknown {
   }
 }
 
+interface ResolvedSelection {
+  readonly targets?: readonly string[];
+  readonly testNamePattern?: RegExp;
+}
+
+function resolveSelection(
+  selection: readonly string[] | UiReporterSelection | null,
+): ResolvedSelection | null {
+  if (selection === null) return null;
+  // `Array.isArray` narrows mutable arrays only; the public legacy form is
+  // readonly, so spell out the safe structural cast after the runtime check.
+  const input: UiReporterSelection = Array.isArray(selection)
+    ? { targets: selection as readonly string[] }
+    : (selection as UiReporterSelection);
+  let testNamePattern: RegExp | undefined;
+  if (input.testNamePattern !== undefined && input.testNamePattern !== '') {
+    try {
+      testNamePattern = new RegExp(input.testNamePattern);
+    } catch {
+      // Vitest will reject the same invalid pattern. Do not hide evidence if a
+      // different runner nevertheless reaches this reporter.
+      return null;
+    }
+  }
+  if (input.targets === undefined && testNamePattern === undefined) return null;
+  return {
+    ...(input.targets === undefined ? {} : { targets: input.targets }),
+    ...(testNamePattern === undefined ? {} : { testNamePattern }),
+  };
+}
+
+function selectionFromEnvironment(): readonly string[] | UiReporterSelection | null {
+  const raw = process.env[UI_SELECTION_ENV];
+  if (raw === undefined || raw === '') return null;
+  const parsed = safeParse(raw);
+  if (Array.isArray(parsed)) {
+    return parsed.every((entry): entry is string => typeof entry === 'string') ? parsed : null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const record = parsed as Record<string, unknown>;
+  const targets = record['targets'];
+  const testNamePattern = record['testNamePattern'];
+  if (targets !== undefined && (!Array.isArray(targets) || !targets.every((entry) => typeof entry === 'string'))) {
+    return null;
+  }
+  if (testNamePattern !== undefined && typeof testNamePattern !== 'string') return null;
+  if (targets === undefined && testNamePattern === undefined) return null;
+  return {
+    ...(targets === undefined ? {} : { targets: targets as string[] }),
+    ...(testNamePattern === undefined ? {} : { testNamePattern }),
+  };
+}
+
 function toStatus(state: string | undefined): UiTestStatus | undefined {
   if (state === 'passed' || state === 'pass') return 'passed';
   if (state === 'failed' || state === 'fail') return 'failed';
@@ -377,11 +615,9 @@ function toStatus(state: string | undefined): UiTestStatus | undefined {
 }
 
 /**
- * Live sessions are attached to the hub, not to the reporter: a Vitest worker
- * runs in its own process and cannot reach the server's hub, and shipping every
- * PTY byte through the reporter's IPC channel would slow down the run it is
- * supposed to observe. In-process runs (`termwright ui` driving Vitest through
- * its Node API) attach with `attachSession` from the package root; out-of-process
- * runs get their output and semantics from the trace, on the timeline.
+ * Direct Node integrations attach to an in-process hub with this helper.
+ * Vitest workers use `@termwright/ui/live-client` instead: it transports the
+ * same translation over the producer WebSocket while this reporter publishes
+ * run/test lifecycle from Vitest's coordinator process.
  */
 export { attachSession } from './live.js';

@@ -4,8 +4,9 @@ Why these three suites are shaped the way they are, and what cost time while
 writing them. The README says how to use the examples; this file is for whoever
 changes them.
 
-Verified against the driver, the preset and all three adapters as of
-2026-08-16.
+Verified against the driver, the preset and the injected Ink, Textual and tview
+probes as of 2026-08-20. The application-side Termwright imports that remain are
+annotation SDKs, not adapters that own rendering or transport.
 
 ## What these examples are for
 
@@ -57,10 +58,9 @@ workaround in this directory.
   polling matcher first — it is what waits for the handshake — and read the
   capability after it.
 - **A spy is not a frame.** Every wait in the harness is driven by rendered
-  frames, and a callback that only notifies its parent renders nothing. After a
-  physical click, `expect(spy).toHaveBeenCalledOnce()` is a race; `vi.waitFor`
-  is not. The example in `@termwright/ink-testing`'s README works only because
-  its component re-renders.
+  frames, and a callback that only notifies its parent renders nothing. After
+  physical input, `expect(spy).toHaveBeenCalledOnce()` is a race; `vi.waitFor`
+  is not.
 - **A click needs the frame to hold still.** Matchers read the tree, but a
   click aims at cell coordinates. Textual fades a modal in, so its buttons
   exist at coordinates that are still moving — `waitForStable()` before the

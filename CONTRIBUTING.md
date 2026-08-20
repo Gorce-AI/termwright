@@ -175,6 +175,12 @@ list is the point of certifying.
 The site lives in [`website/`](website) (Astro Starlight) and deploys to GitHub
 Pages from `main`.
 
+Substantial documentation changes must follow the canonical
+[`Termwright documentation guide`](docs/DOCUMENTATION_GUIDE.md). It defines the
+audience, page types, information architecture, tone, example validation,
+screenshot workflow, and review checklist. Keep that file as the single source
+of truth instead of copying its rules into contributor or agent instructions.
+
 ```sh
 pnpm --filter @termwright/website run dev
 pnpm --filter @termwright/website run build

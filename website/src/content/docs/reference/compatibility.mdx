@@ -1,0 +1,103 @@
+---
+title: Framework compatibility
+description: Exact framework versions, runtimes, automatic probe capabilities, annotation APIs and known limits.
+---
+
+import registry from '../../../../../compatibility/registry.json';
+
+This page is rendered from the same registry that launch and patch declarations
+are checked against. Use the
+[JSON registry](../../compatibility/registry.json) and its
+[JSON Schema](../../compatibility/schema.json) when another tool needs the
+matrix. `verified` means a version has a real fixture, audit or CI lane;
+`declared` is the wider range the package accepts. They are deliberately
+separate.
+
+## Matrix
+
+<table>
+  <thead>
+    <tr>
+      <th>Framework</th>
+      <th>Declared / verified</th>
+      <th>Runtime</th>
+      <th>Probe</th>
+      <th>Automatic probe capabilities</th>
+      <th>Annotations</th>
+    </tr>
+  </thead>
+  <tbody>
+    {registry.frameworks.map((entry) => (
+      <tr>
+        <td><a href={`#${entry.id}`}>{entry.name}</a></td>
+        <td>
+          <code>{entry.versions.declared}</code><br />
+          verified: <code>{entry.versions.verified.join(', ')}</code>
+        </td>
+        <td>{entry.runtimes.map((runtime) => <><code>{runtime.name} {runtime.version}</code><br /></>)}</td>
+        <td><code>{entry.probe.package} {entry.probe.packageVersion}</code></td>
+        <td>
+          identity: <code>{entry.probe.identityKind}</code><br />
+          {entry.probe.capabilities.length === 0
+            ? 'none'
+            : <code>{entry.probe.capabilities.join(', ')}</code>}
+        </td>
+        <td>
+          {entry.annotations === null
+            ? 'none'
+            : <><code>{entry.annotations.package} {entry.annotations.packageVersion}</code><br />{entry.annotations.apis.join(', ')}</>}
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+The capability column is the probe vocabulary inside `hello.probe`. The
+adapter message capabilities in the same handshake can vary with the launch —
+Ink, for example, only claims absolute bounds when it owns an interactive
+alternate screen. Every variant is listed in the registry and in the detail
+below.
+
+## Details and limits
+
+{registry.frameworks.map((entry) => (
+  <section>
+    <h3 id={entry.id}>{entry.name}</h3>
+    <p>
+      <strong>Instrumentation:</strong> {entry.instrumentation.strategy}
+    </p>
+    {entry.instrumentation.variants.length > 0 && (
+      <p>
+        <strong>Exact patched modules:</strong>{' '}
+        {entry.instrumentation.variants.map((variant) => (
+          <span>
+            <code>{variant.modules.map((module) => `${module.name} ${module.version} (patch ${module.patchSetVersion})`).join('; ')}</code>{' '}
+          </span>
+        ))}
+      </p>
+    )}
+    <p>
+      <strong>Adapter capability variants:</strong>{' '}
+      {entry.probe.adapterCapabilityVariants.map((variant) => (
+        <span><em>{variant.when}</em>: <code>{variant.capabilities.join(', ')}</code>{' '}</span>
+      ))}
+    </p>
+    {entry.annotations !== null && <p><strong>Annotation contract:</strong> {entry.annotations.notes}</p>}
+    <ul>
+      {entry.limitations.map((limitation) => <li>{limitation}</li>)}
+    </ul>
+  </section>
+))}
+
+## What the registry guarantees
+
+The compatibility test fails when a checksummed patch manifest is missing from
+the registry, when a package version moves, or when a probe's `ProbeInfo` or
+adapter capability declaration no longer matches this data. This prevents the
+common failure mode where the documentation promises geometry, annotations or
+stable identity that the actual handshake does not announce.
+
+Versions outside an exact patch row are refused by name. For range-based
+preload probes, an unverified version may attach only when its audited runtime
+assumptions are still present; the probe disables semantics instead of
+guessing when they are not.

@@ -5,7 +5,7 @@ owners need to know about.
 
 ## The socket carries events; HTTP carries state
 
-`/CONTRACTS.md` §UI events is a closed list of seven server messages and four
+`/CONTRACTS.md` §UI events is a closed list of server messages and four
 client messages, and this package implements exactly that list — no extra
 message types, no "while we're here" additions.
 
@@ -15,9 +15,15 @@ millisecond, the session list, the generated source. All of it lives under
 
 | Route | Purpose |
 |---|---|
-| `GET /api/state` | mode, attached sessions, opened trace, recorder status |
-| `GET /api/trace/state?t=` | `openTrace().stateAt(t)`, base64-encoded |
+| `GET /api/state` | server mode, attached sessions, startup trace, recorder status |
+| `POST /api/specs` | file facts for the discovered catalogue and history |
+| `POST /api/run` | start all cases or the stable ids selected by this tab |
+| `GET /api/runs`, `GET /api/run?id=` | bounded history and one validated manifest |
+| `POST /api/trace/open` | validate one archive and return its overview to the requesting tab |
+| `GET /api/trace/state?t=&archive=` | `openTrace().stateAt(t)` for the tab's archive |
+| `GET /api/trace/commands`, `/frames`, `/logs` | the other windowed/bounded replay data |
 | `GET /api/record/events` | recorded events + current generated source |
+| `POST /api/record/start`, `/stop`, `/discard` | recorder lifecycle inside the running panel |
 | `POST /api/record/action` | record a click / visibility assertion on a node |
 | `POST /api/record/assert` | `toMatchSemanticSnapshot()`, `toHaveText`, `waitForText` |
 | `POST /api/record/step` | open a `test.step()` grouping |
@@ -32,16 +38,12 @@ in the page.
 scrubbing session, say), it grows in CONTRACTS.md first, and these routes are
 where the shape has already been proven.
 
-## What the browser app is, and why it is not React
+## The browser app has one React renderer
 
-Vanilla TypeScript with lit-html for the two rendered panes; xterm.js keeps its
-own DOM because it owns a canvas-ish render loop. lit-html is ~3 kB gzipped and
-is a template function, not a framework: no build-time transform, no component
-model to learn, no reconciler between us and a pane that redraws on every
-`output` message. The whole bundle is ~82 kB gzipped, most of it xterm.
-
-State lives in one object in `app/main.ts` and every message schedules one
-`requestAnimationFrame` render, so the panes cannot disagree about the run.
+`src/app` is the only browser application. React owns navigation, catalog,
+runner, terminal framing, playback, inspection, history, recorder and settings.
+xterm.js owns only its terminal canvas-like DOM inside the React component.
+There is no legacy renderer or fallback application.
 
 ## The pane must measure characters the way the driver does
 
@@ -75,6 +77,17 @@ Where the profile comes from differs by mode, and both are deliberate:
   somebody else's format and termwright does not litter it with its own fields.
 
 `null` in a replay means the recording predates profiles.
+
+## One test can own more than one live screen
+
+Each test keeps every linked `sessionId`, not just the first terminal that
+produced output. The newest launched session is the useful live default. When a
+test has more than one, the command-log header renders a **Screen** selector;
+changing it calls the same `activateSession` path used by test-row navigation,
+so the terminal, semantic inspector and pick mode move together. Starting a new
+run clears the old session list instead of offering terminals from the previous
+attempt. A trace is still one recorded session, so replay does not invent this
+switcher.
 
 ## One function from a moment to a place
 
@@ -117,12 +130,14 @@ test finishes, by reading the steps out of the `.twtrace` the fixtures wrote
 (`task.meta.termwright.traces`). Steps therefore arrive as a batch at the end of
 each test rather than as it runs.
 
-The same reason explains why `output` and `semantic` are missing from
-out-of-process live runs: a worker cannot reach the server's hub, and pushing
-every PTY byte through the reporter's IPC channel would slow down the run the UI
-exists to observe. In-process runs (a future `termwright ui` driving Vitest
-through its Node API) call `attachSession(hub, harness)` and get the full stream;
-out-of-process runs get the timeline, and the trace is one click away.
+The worker does not need the reporter's IPC channel for terminal traffic.
+`@termwright/test` opens `@termwright/ui/live-client` beside each harness; that
+bounded, fail-open producer socket applies the same `streamSession` translation
+as an in-process `attachSession`. Out-of-process live runs therefore carry the
+session announcement, output, semantic revisions, driver actions and
+application logs while the program is running. The reporter remains the
+coordinator-side producer for run/test lifecycle, assertions and the post-hoc
+step batch.
 
 **If Vitest grows a step-reporting hook**, `#publishSteps` in `reporter.ts` is
 the one place that changes.
@@ -175,11 +190,8 @@ lookup table rather than a heuristic. Three decisions are worth knowing:
   something on `tab` and `row` and nothing on `listitem`; a selected list item
   therefore gets `aria-current`. Emitting an ignored attribute would look right
   in a DOM dump and say nothing to a screen reader.
-- **ARIA is applied after render, not in the template.** lit-html cannot bind a
-  variable set of attribute names, and a template per combination would be
-  unreadable, so `applyAriaAttributes` walks the rendered nodes. It also
-  *removes* attributes that no longer apply — a stale `aria-disabled` on a
-  button the app has since enabled is the expensive kind of lie.
+- **Attributes track current state.** React omits attributes that no longer
+  apply, so a control that becomes enabled does not retain `aria-disabled`.
 - **Decorative text is a hidden span, not CSS generated content.** `::before`
   content is announced by screen readers, so the role/name caption each element
   shows visually is a real `<span aria-hidden="true">`.
@@ -225,15 +237,16 @@ normally, because `castOffset` was required there from the start.
 Rows come from `events.jsonl`, which already holds steps, actions and
 assertions; nothing is recorded twice.
 
-Live runs have **two** producers for the same `action` message, and they cover
-different things:
+Live runs have **two producer paths** for the same `action` message, and they
+cover different things:
 
-- `attachSession` translates the driver's own `action` event, so anything that
-  drives a session in-process — the recorder, a future in-process runner — fills
-  the command log without the test framework being involved at all;
-- the reporter translates Vitest 3.2 **test annotations** (`onTestAnnotate`),
-  which is the only channel a worker process has to a reporter. Assertions can
-  only come this way, since the driver never sees them.
+- `streamSession`, reached through either in-process `attachSession` or the
+  worker-side `connectLiveSession`, translates the driver's own `action` event;
+  the recorder and ordinary Vitest workers therefore fill the command log from
+  the harness that actually owns the terminal;
+- the reporter translates Vitest 3.2 **test annotations** (`onTestCaseAnnotate`),
+  which join framework-owned facts such as the test id and assertion outcome.
+  Assertions can only come this way, since the driver never sees them.
 
 The driver's event fires *after* the action finished, so the output it caused is
 already on the timeline ahead of it. The log marks when an action completed and
@@ -260,8 +273,11 @@ messages, or the archive readers behind `/api/`) and that a replay has a
 scrubber and speeds while a live run follows.
 
 Run history is navigation inside that same application — runs → run → test →
-the test in archive mode — and opening a test calls the same `openArchive` that
-`--trace` calls at startup. `--trace` is a deep link, not a second program.
+the test in archive mode. `--trace` remains a deep link into the viewer, but an
+archive chosen later belongs to the requesting browser tab: it is loaded over
+contextual HTTP reads and is never republished as a synthetic run on the shared
+hub. Two tabs can inspect two recordings while the live catalogue keeps
+receiving its real run.
 
 The one place this had already gone wrong was the test row: the run history had
 grown its own, next to the live list's. They are one component now
@@ -308,10 +324,13 @@ end of a run because that is where every piece already is; a failure to write is
 swallowed, since a run whose results are already reported must not be failed by
 an unwritable directory.
 
-Opening a run's test goes through `POST /api/trace/open`, which is the same code
-path `--trace` uses at startup: one `openArchive` function replaces the reader
-and republishes the timeline, commands, frames and log summary, then closes the
-previous reader. Two ways in, one behaviour out.
+Opening a run's test goes through `POST /api/trace/open`, which validates the
+archive and returns its overview only to the requesting tab. Commands, frames,
+logs and seeks then name that same contextual archive on their HTTP reads. It
+does not change the server's live mode, replace a shared reader or publish a
+post-mortem pseudo-run into the hub. Startup `--trace` still owns one baseline
+reader because every tab connected to that server intentionally opens the same
+artifact.
 
 Reading a manifest validates it like any other file on disk, and the id that
 names a run directory is checked for separators and `..` before it is used as a
@@ -340,10 +359,12 @@ reconciles with a running test by file and title, and a runner receiving it in
 "<name>"` with no lookup table on either side.
 
 Two consequences the code makes explicit. A discovered row is *adopted* by the
-run that reaches it (`testFor` matches file+title and takes the run's id), so a
-test never appears twice. And clicking a row that has never run means "run this
-one" rather than "show me its steps", because there are no steps to show — the
-same thing clicking it in Cypress does.
+run that reaches it (`testFor` matches file+title), but keeps that stable id;
+the current Vitest id lives separately as `runtimeId` for wire joins, so a test
+never appears twice and selection does not change identity between runs. And
+clicking a row that has never run means "run this one" rather than "show me its
+steps", because there are no steps to show — the same thing clicking it in
+Cypress does.
 
 Discovery is a convenience and never a blocker: the listing runs in the
 background after the server is already serving, a failure yields an empty list
@@ -482,13 +503,13 @@ is the point of the feature, and it is the reason the token is not optional.
 
 ## Verified in a real browser
 
-The three panes, selector generation, pick-mode hit testing and time travel were
-exercised through Playwright against a running server on a fixture archive:
-scrubbing to the second marker replayed the recording into a fresh terminal and
-switched the inspector to the matching revision, and pick mode produced an
-overlay box positioned from cell metrics. There is no automated browser suite in
-this package yet — a Playwright project would be the next step, and belongs with
-the CI lane rather than in `vitest run`.
+`src/browser.e2e.ts` drives Chromium through Playwright against running servers
+and real archives. It covers the Specs/Runner/Runs/Settings navigation, selector
+generation, pick-mode hit testing, live controls and session streaming,
+time-travel playback, contextual replay isolation across tabs, the log/crash
+panels, the inline report and compact-window layout. The separate
+`test:browser` script is required by the dedicated `ui-browser` CI lane; keeping
+it outside ordinary `vitest run` avoids requiring Chromium for unit tests.
 
 ## Opening a browser
 
@@ -554,14 +575,8 @@ way round, so the viewer's bundle cannot be reached from there. The trace
 package keeps its own HTML report, which is a different artifact — a failure
 report with visual and semantic diffs, not a viewer.
 
-## Open threads
+## Current boundaries
 
-- **`termwright ui` binary** (task #10, the umbrella CLI) wires the flags:
-  `--trace <file>`, `--record -- <command>`, `--port`, and spawning Vitest in
-  watch mode with `TERMWRIGHT_UI_URL` set. `startUiServer` is the whole surface it
-  needs; `onRerun` / `onStop` are the hooks for the watch controls.
-- **Multiple sessions in one test** are attached and listed, but the terminal
-  pane shows the first one that produced output. A session switcher is a small
-  addition to `app/main.ts` when a test that runs two programs at once shows up.
-- **SVG screenshots** (design §8.3) are not here; they were scoped as a separate
-  optional package.
+Execution attempts have a distinct identity from catalog cases. UI screenshot
+generation lives in `scripts/capture-docs-screenshots.mjs`; trace-to-image
+rendering remains owned by `@termwright/screenshot`.

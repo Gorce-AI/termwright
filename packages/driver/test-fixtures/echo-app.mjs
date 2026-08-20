@@ -5,6 +5,9 @@
  */
 process.stdout.write('\x1b]0;echo-app\x07');
 process.stdout.write('READY\r\n');
+process.stdout.on('resize', () => {
+  process.stdout.write(`SIZE:${process.stdout.columns}x${process.stdout.rows}\r\n`);
+});
 
 process.stdin.setRawMode?.(true);
 process.stdin.resume();

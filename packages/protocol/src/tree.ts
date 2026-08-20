@@ -1,6 +1,7 @@
 import type { SemanticAction, SemanticRole } from './roles.js';
 import type { ProvenanceSource } from './probe/ir.js';
 import type { OcclusionKnowledge } from './probe/bounds.js';
+import type { CoordinateSpace, Observation } from './observation.js';
 
 /** Zero-based viewport cell coordinates. */
 export interface Rect {
@@ -60,6 +61,29 @@ export interface SemanticTextRange {
   readonly rect: Rect;
 }
 
+/**
+ * Deterministic JSON data owned by the application domain, not by the portable
+ * semantic vocabulary. Containers are allowed, but runtime objects/functions
+ * are not; validation applies the protocol's normal depth, byte and collection
+ * ceilings recursively.
+ */
+export interface SemanticExtendedArray extends ReadonlyArray<SemanticExtendedValue> {}
+
+export interface SemanticExtendedObject {
+  readonly [key: string]: SemanticExtendedValue;
+}
+
+export type SemanticExtendedValue =
+  | null
+  | boolean
+  | number
+  | string
+  | SemanticExtendedArray
+  | SemanticExtendedObject;
+
+/** Application-defined state, deliberately separate from {@link SemanticState}. */
+export type SemanticExtendedState = SemanticExtendedObject;
+
 export interface SemanticNode {
   readonly id: string;
   readonly parentId?: string;
@@ -96,6 +120,8 @@ export interface SemanticNode {
    */
   readonly occlusion?: OcclusionKnowledge;
   readonly state?: SemanticState;
+  /** Application-specific, serializable state; never promoted to portable flags. */
+  readonly extended?: SemanticExtendedState;
   readonly actions?: readonly SemanticAction[];
   readonly labelledBy?: readonly string[];
   readonly describedBy?: readonly string[];
@@ -125,6 +151,30 @@ export interface SemanticNode {
   readonly p?: ProvenanceSource;
   /** Per-field provenance, for fields whose source differs from `p`. */
   readonly px?: Readonly<Record<string, ProvenanceSource>>;
+  /**
+   * Protocol v2 qualified layout facts. V1 snapshots MUST omit this field;
+   * their legacy `bounds` projection deliberately remains unchanged.
+   */
+  readonly geometry?: NodeGeometryObservations;
+}
+
+/** Layout facts reported independently so absence never masquerades as false. */
+export interface NodeGeometryObservations {
+  readonly displayed: Observation<boolean>;
+  readonly intendedRect: Observation<Rect>;
+  readonly visibleRect: Observation<Rect>;
+}
+
+/** One half-open run of cells with an exact pointer recipient. */
+export interface PointerHitRegion {
+  /** Canonical non-empty row run: `height` is always 1. */
+  readonly rect: Rect;
+  readonly recipientId: string;
+}
+
+/** A complete point-ownership map for a committed frame. */
+export interface PointerHitGrid {
+  readonly regions: readonly PointerHitRegion[];
 }
 
 export interface CursorInfo {
@@ -135,7 +185,7 @@ export interface CursorInfo {
 }
 
 export interface SemanticSnapshot {
-  readonly v: 1;
+  readonly v: 1 | 2;
   readonly sessionId: string;
   /** Positive, strictly increasing within a semantic session. */
   readonly revision: number;
@@ -144,4 +194,11 @@ export interface SemanticSnapshot {
   readonly cursor?: CursorInfo;
   readonly rootIds: readonly string[];
   readonly nodes: readonly SemanticNode[];
+  /** Required by v2, forbidden by strict v1 validation. */
+  readonly coordinateSpace?: Observation<CoordinateSpace>;
+  /**
+   * Required by v2. `known` means a complete map, not a sample or paint-order
+   * approximation. Cells absent from a known map have no semantic recipient.
+   */
+  readonly hitGrid?: Observation<PointerHitGrid>;
 }

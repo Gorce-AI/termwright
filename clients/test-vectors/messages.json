@@ -23,6 +23,25 @@
         }
       },
       {
+        "name": "hello-v2-qualified",
+        "message": {
+          "type": "hello",
+          "protocol": "termwright/2",
+          "token": "test-token",
+          "adapter": {
+            "name": "vectors",
+            "version": "0.1.0"
+          },
+          "capabilities": [
+            "tree",
+            "states",
+            "render-revisions",
+            "qualified-observations",
+            "pointer-hit-grid"
+          ]
+        }
+      },
+      {
         "name": "revision-commit",
         "message": {
           "type": "revision-commit",
@@ -534,7 +553,7 @@
         "name": "hello-wrong-protocol",
         "message": {
           "type": "hello",
-          "protocol": "termwright/2",
+          "protocol": "termwright/99",
           "token": "test-token",
           "adapter": {
             "name": "vectors",
@@ -550,7 +569,7 @@
           ]
         },
         "code": "bad-version",
-        "detail": "unsupported protocol termwright/2"
+        "detail": "unsupported protocol termwright/99"
       },
       {
         "name": "hello-empty-token",
@@ -589,7 +608,60 @@
           ]
         },
         "code": "malformed",
-        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"bounds\"|\"absolute-bounds\"|\"states\"|\"actions\"|\"text-ranges\"|\"render-revisions\"|\"tree-diffs\"|\"logs\""
+        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"bounds\"|\"absolute-bounds\"|\"states\"|\"actions\"|\"text-ranges\"|\"render-revisions\"|\"tree-diffs\"|\"logs\"|\"qualified-observations\"|\"pointer-hit-grid\""
+      },
+      {
+        "name": "hello-v2-without-qualified-capability",
+        "message": {
+          "type": "hello",
+          "protocol": "termwright/2",
+          "token": "test-token",
+          "adapter": {
+            "name": "vectors",
+            "version": "0.1.0"
+          },
+          "capabilities": [
+            "tree"
+          ]
+        },
+        "code": "malformed",
+        "detail": "termwright/2 requires the 'qualified-observations' capability"
+      },
+      {
+        "name": "hello-v1-with-qualified-capability",
+        "message": {
+          "type": "hello",
+          "protocol": "termwright/1",
+          "token": "test-token",
+          "adapter": {
+            "name": "vectors",
+            "version": "0.1.0"
+          },
+          "capabilities": [
+            "tree",
+            "qualified-observations"
+          ]
+        },
+        "code": "malformed",
+        "detail": "'qualified-observations' requires termwright/2"
+      },
+      {
+        "name": "hello-pointer-grid-without-qualified-capability",
+        "message": {
+          "type": "hello",
+          "protocol": "termwright/1",
+          "token": "test-token",
+          "adapter": {
+            "name": "vectors",
+            "version": "0.1.0"
+          },
+          "capabilities": [
+            "tree",
+            "pointer-hit-grid"
+          ]
+        },
+        "code": "malformed",
+        "detail": "'pointer-hit-grid' requires qualified observations"
       },
       {
         "name": "hello-extra-field",
@@ -1576,6 +1648,31 @@
         "message": {
           "type": "hello-ack",
           "protocol": "termwright/1",
+          "sessionId": "s-0001",
+          "limits": {
+            "maxFrameBytes": 1048576,
+            "maxSnapshotBytes": 2097152,
+            "maxNodes": 5000,
+            "maxDepth": 64,
+            "maxStringBytes": 16384,
+            "maxRelationTargets": 64,
+            "maxQueuedFrames": 32,
+            "maxPendingWaiters": 256,
+            "maxSessions": 16,
+            "maxLogRecordBytes": 32768,
+            "maxLogQueue": 1000
+          },
+          "subscribe": "snapshots",
+          "marker": {
+            "enabled": true
+          }
+        }
+      },
+      {
+        "name": "hello-ack-v2",
+        "message": {
+          "type": "hello-ack",
+          "protocol": "termwright/2",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,

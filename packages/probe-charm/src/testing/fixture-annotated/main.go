@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/gorce-ai/termwright/clients/go/annotate"
+	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
 // gauge is a component termwright has never heard of. It answers for itself
@@ -25,10 +26,11 @@ type gauge struct {
 
 func (g gauge) TermwrightSemantics() annotate.Semantics {
 	return annotate.Semantics{
+		Key:    "disk-gauge",
 		Role:   "progressbar",
 		Name:   "Disk usage",
 		TestID: "disk-gauge",
-		Domain: map[string]string{"level": fmt.Sprint(g.Level), "status": g.Status},
+		Domain: map[string]any{"level": g.Level, "status": g.Status},
 	}
 }
 
@@ -36,16 +38,60 @@ func (g gauge) View() string {
 	return fmt.Sprintf("disk %d%% (%s)", g.Level, g.Status)
 }
 
+// annotatedTextInput is the normal Go shape for annotating a type owned by
+// another module: embed the native Bubbles value and add the provider method
+// on the local wrapper. The probe must merge this intent with the embedded
+// component's live value and focus rather than replacing it with a generic
+// annotation-only node.
+type annotatedTextInput struct {
+	textinput.Model
+}
+
+func (annotatedTextInput) TermwrightSemantics() annotate.Semantics {
+	return annotate.Semantics{
+		Key:         "server-host",
+		Name:        "Server host",
+		TestID:      "server-host",
+		Domain:      map[string]any{"environment": "production"},
+		Actions:     []protocol.Action{protocol.ActionFocus, protocol.ActionSetValue},
+		LabelledBy:  []annotate.SemanticKey{"server-label"},
+		DescribedBy: []annotate.SemanticKey{"server-help"},
+	}
+}
+
+// semanticText supplies relationship targets. They are ordinary copied model
+// values; explicit keys, not addresses, are the identity that survives Update.
+type semanticText struct {
+	Key  annotate.SemanticKey
+	Name string
+	Text string
+}
+
+func (text semanticText) TermwrightSemantics() annotate.Semantics {
+	return annotate.Semantics{Key: text.Key, Role: "text", Name: text.Name}
+}
+
+func (text semanticText) View() string { return text.Text }
+
 type model struct {
-	Host  textinput.Model
-	Gauge gauge
+	// Host deliberately precedes its relationship targets. Resolution must be
+	// a second pass over semantic keys, not an accident of reflection order.
+	Host      annotatedTextInput
+	HostLabel semanticText
+	HostHelp  semanticText
+	Gauge     gauge
 }
 
 func initialModel() model {
 	host := textinput.New()
 	host.Placeholder = "host"
 	host.Focus()
-	return model{Host: host, Gauge: gauge{Level: 81, Status: "warning"}}
+	return model{
+		Host:      annotatedTextInput{Model: host},
+		HostLabel: semanticText{Key: "server-label", Name: "Server host", Text: "Server host"},
+		HostHelp:  semanticText{Key: "server-help", Name: "DNS host name", Text: "DNS host name"},
+		Gauge:     gauge{Level: 81, Status: "warning"},
+	}
 }
 
 func (m model) Init() tea.Cmd { return textinput.Blink }
@@ -61,12 +107,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	var command tea.Cmd
-	m.Host, command = m.Host.Update(msg)
+	m.Host.Model, command = m.Host.Model.Update(msg)
 	return m, command
 }
 
 func (m model) View() tea.View {
-	return tea.NewView(fmt.Sprintf("Server\n\n%s\n%s\n", m.Host.View(), m.Gauge.View()))
+	return tea.NewView(fmt.Sprintf("%s\n%s\n%s\n%s\n", m.HostLabel.View(), m.Host.View(), m.HostHelp.View(), m.Gauge.View()))
 }
 
 func main() {

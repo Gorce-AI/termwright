@@ -15,8 +15,9 @@ async function fakeApp(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'tw-app-'));
   const { writeFile, mkdir } = await import('node:fs/promises');
   await mkdir(join(directory, 'assets'), { recursive: true });
-  await writeFile(join(directory, 'assets', 'app.js'), 'console.log("viewer");\n', 'utf8');
+  await writeFile(join(directory, 'assets', 'app.js'), 'console.log("viewer", "./assets/icon.svg");\n', 'utf8');
   await writeFile(join(directory, 'assets', 'app.css'), '.pane { color: red }\n', 'utf8');
+  await writeFile(join(directory, 'assets', 'icon.svg'), '<svg viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>\n', 'utf8');
   await writeFile(
     join(directory, 'index.html'),
     '<!doctype html><html><head><link rel="stylesheet" href="/assets/app.css"></head>' +
@@ -82,11 +83,13 @@ describe('the emitted file', () => {
     const result = await writeInlineReport(await buildFixtureTrace(), path, { appDir: await fakeApp() });
 
     const html = await readFile(result.path, 'utf8');
-    expect(html).toContain('console.log("viewer")'); // the bundle, inlined
+    expect(html).toContain('console.log("viewer"'); // the bundle, inlined
     expect(html).toContain('.pane { color: red }'); // the stylesheet, inlined
     expect(html).toContain(INLINE_PAYLOAD_KEY);
     expect(html).not.toMatch(/<script[^>]+src=/);
     expect(html).not.toMatch(/<link[^>]+stylesheet/);
+    expect(html).toContain('data:image/svg+xml;base64,');
+    expect(html).not.toContain('./assets/icon.svg');
     expect(result.bytes).toBeGreaterThan(0);
   });
 
@@ -98,6 +101,7 @@ describe('the emitted file', () => {
       state: { mode: 'post-mortem', project, sessions: [], trace: null, record: null },
       frames: { frames: [], truncated: false, durationMs: 0, revisions: [] },
       commands: { commands: [], incomplete: false },
+      traceState: { timeMs: 0, castPrefixB64: '', columns: 80, rows: 24, revision: null, snapshot: null, step: null },
       logs: {
         records: [{ t: 0, source: 'adapter', level: 'error', message: 'oops </script><script>alert(1)</script>' }],
         hasMoreBefore: false,

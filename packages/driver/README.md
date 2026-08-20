@@ -5,8 +5,8 @@ Playwright-shaped locators, actions and waits on top.
 
 One session owns one pseudo-terminal, one `@xterm/headless` emulator and one
 private semantic endpoint. Uninstrumented programs are observed through the grid
-(text, cells, colors, modes, scrollback). Programs that ship a termwright
-adapter additionally publish a **semantic tree**, which unlocks
+(text, cells, colors, modes, scrollback). Programs launched through a framework
+probe, or wired to a custom semantic producer, additionally publish a **semantic tree**, which unlocks
 `getByRole('button', { name: 'Approve' })` instead of text scraping. Both modes
 share the same `TerminalHarness` interface, so tests degrade honestly rather
 than breaking.
@@ -39,19 +39,29 @@ await terminal.waitForText('Ready');
 console.log(terminal.screen().text());
 console.log(terminal.screen().cell(0, 0).fg);
 
-// Semantic locators work when the program ships an adapter.
+// Semantic locators work when the program publishes a semantic tree.
 if (terminal.capabilities().semanticTree) {
+  // Present only for an instrumented framework probe. Adapter capabilities
+  // describe wire traffic; probe.capabilities describe observable framework facts.
+  console.log(terminal.capabilities().probe);
   const approve = terminal.getByRole('button', { name: 'Approve' });
-  console.log(await approve.boundingBox());
+
+  // Evidence-qualified observations preserve unknown and unsupported instead
+  // of inventing a boolean or rectangle.
+  // is distinct from false, and every result names the screen/tree revisions.
+  console.log(await approve.geometry());
+  console.log(await approve.visibility());
+  console.log(await approve.hitTest());
+  console.log(await approve.extendedState()); // application-domain JSON, if published
   const receipt = await approve.activate(); // 'click' | 'focus-enter' | 'focus-space'
   console.log(receipt.strategy);
 
   await terminal.locator('dialog button#reject').click();
 }
 
-// A ref can be turned back into a locator; it stays bound to its revision.
+// Stable refs can be turned back into locators across later frames.
 const target = await terminal.getByRole('button').first().resolve();
-await terminal.locatorForRef(target.ref).click();
+if (target.identity === 'stable') await terminal.locatorForRef(target.ref).click();
 
 // Keyboard, paste and resize honor the modes the child actually enabled.
 await terminal.press('Control+K Control+U');
@@ -75,22 +85,26 @@ await terminal.close();
   semantic revision or a process event. `waitForStable` also knows whether a
   render is still unpaired.
 - **Frame↔tree pairing.** A semantic revision becomes observable only when both
-  its tree (semantic socket) and its render-commit marker (a private DCS
-  sequence in stdout, MAC-signed with the session token) have arrived.
+  its tree (semantic socket) and its render-commit marker (private OSC 8487 in
+  stdout, BEL-terminated and MAC-signed with the session token) have arrived.
   Superseded or half-delivered revisions are dropped with a diagnostic.
 - **Strict locators.** Zero matches wait until the deadline; more than one fails
-  with bounded candidates. Refs (`n8@42`) bind their revision and raise
-  `stale-snapshot` when reused after it.
+  with bounded candidates. A semantic ref such as `n8@42` re-resolves across
+  revisions only when the probe provides stable identity. Frame-local semantic
+  refs are refused, grid refs remain revision-bound, and a removed stable node
+  raises `stale-snapshot`.
 - **Typed failures.** `timeout`, `stale-snapshot`, `ambiguous-locator`,
   `unsupported-action`, `history-truncated`, `protocol-violation`, `capacity`,
   `process-exited`, `session-closed` — each with a screen excerpt, candidates
   and a suggestion.
 - **Honest degradation.** No mouse tracking means `click()` fails with
-  `unsupported-action` instead of sending bytes nobody reads; no semantic tree
-  means no invented roles.
+  `unsupported-action` instead of sending bytes nobody reads. Semantic pointer
+  actions also require negotiated `absolute-bounds` and proof of the exact
+  pointer recipient. Legacy paint-order knowledge is not that proof. No
+  semantic tree means no invented roles.
 - **Dormant by default.** The endpoint and token are injected as
   `TERMWRIGHT_ENDPOINT` / `TERMWRIGHT_TOKEN` / `TERMWRIGHT_PROTOCOL`; without
-  them a conforming adapter opens nothing and the run is byte-identical.
+  them a conforming probe or adapter opens nothing and the run is byte-identical.
 
 ## Terminal profiles
 
@@ -165,6 +179,12 @@ The last good tree stays observable throughout.
 `treeUpdates: 'snapshots'` declines deltas from an adapter that offers them —
 the switch to reach for when a replay and a live session disagree and the delta
 path is a suspect.
+
+Evidence-qualified geometry, visibility and exact pointer ownership use
+`termwright/2`, which is the default. `semanticProtocol: 'termwright/1'` is an
+explicit compatibility mode for an older producer. V1 never enables pointer
+actions from unqualified bounds. V2 always uses full snapshots; the driver
+never applies v1 delta semantics to qualified observations.
 
 ## Knowing when the verdict is final
 

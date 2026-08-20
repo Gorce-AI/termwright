@@ -80,8 +80,8 @@ export const ERROR_KINDS_ARE_COMPLETE: [MissingKind] extends [never]
 const ERROR_KINDS: readonly ErrorKind[] = [...DRIVER_ERROR_KINDS, ...MCP_ERROR_KINDS];
 
 const CONVENTIONS = [
-  'A ref looks like n8@42: node id at semantic revision 42. It is valid only while 42 is the live ' +
-    'semantic revision; reusing it later fails with kind "stale-snapshot" — take a fresh snapshot.',
+  'A ref looks like n8@42: node id minted at semantic revision 42. A stable semantic identity may ' +
+    'be re-resolved in later revisions; frame-local identities and grid refs must be refreshed.',
   'terminal.snapshot returns a screen revision; pass it to terminal.capture_since as cursor to get ' +
     'only the rows and semantic subtrees that changed.',
   'Any name or text argument may be written as "/pattern/flags" to match as a regular expression.',

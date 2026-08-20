@@ -36,7 +36,11 @@ describe('actions from the driver', () => {
     const writer = createTraceWriter(session, { dir, now: session.now });
 
     session.tick(50);
-    session.action('click', { selector: "getByRole('button', { name: 'Submit' })", ref: 'n8@42' });
+    session.action('click', {
+      selector: "getByRole('button', { name: 'Submit' })",
+      ref: 'n8@42',
+      observation: { sessionId: 't1', screenRevision: 7, semanticRevision: 42 },
+    });
     await writer.finalize();
 
     const events = await readEvents(dir);
@@ -49,6 +53,7 @@ describe('actions from the driver', () => {
       ok: true,
       t: 50,
       castOffset: 50,
+      observation: { sessionId: 't1', screenRevision: 7, semanticRevision: 42 },
     });
     expect((events[0] as ActionEvent).error).toBeUndefined();
   });

@@ -43,7 +43,10 @@ on a `Pages` page that is not shown reports as **hidden** rather than going
 missing, so a test can tell "not on screen" from "not there".
 
 Identity is the primitive's pointer: tview retains its widget tree, so the same
-`*Button` is the same button across frames.
+`*Button` is the same button across frames. The handshake therefore reports
+`identityKind: 'stable'` and only the probe capabilities it earns:
+`stable-identity` and `annotations`. Its `frameworkVersion` is the exact
+version selected by the verified patch set, not the Go runtime version.
 
 ## Describing what the probe cannot see
 
@@ -53,16 +56,33 @@ that, and only for that, an application may import
 `github.com/gorce-ai/termwright/clients/go/annotate`:
 
 ```go
+import (
+	"github.com/gorce-ai/termwright/clients/go/annotate"
+	"github.com/gorce-ai/termwright/clients/go/protocol"
+)
+
+annotate.Tag(label, annotate.Semantics{Key: "unread-label"})
 annotate.Tag(unreadBadge, annotate.Semantics{
 	Role: "status", Name: "Unread messages", TestID: "unread-badge",
+	Actions: []protocol.Action{protocol.ActionFocus, protocol.ActionActivate},
+	LabelledBy: []annotate.SemanticKey{"unread-label"},
 })
 ```
 
 The probe merges this with what it observed: the wording is the author's, the
 bounds and the focus stay the probe's. `Semantics` has no field for bounds,
-focus or rendered text — not by convention but structurally, so an annotation
-cannot go stale against the screen. Tagging retains nothing; the entry is
-released with the widget.
+focus, visibility, value, rendered text or framework state — not by convention
+but structurally, so an annotation cannot go stale against the screen. Actions
+come from the protocol's closed descriptive set and never install callbacks.
+Tagging retains nothing; the entry is released with the widget.
+
+`LabelledBy` and `DescribedBy` use framework-neutral `SemanticKey` strings, so
+one annotation does not retain its targets. The probe resolves them after the
+whole tree has been walked. Missing or duplicate keys are omitted instead of
+becoming dangling or arbitrary node references. Pointer identity remains the
+stable node id; a key is only the relation target for tview. Primary framework
+provenance is reported in `p`, with recognizer and annotation exceptions in
+`px`.
 
 This is the one import that makes an application no longer zero-config, which
 is why it is optional and why the two example fixtures in this package are kept

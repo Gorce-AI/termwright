@@ -13,8 +13,18 @@
  * @packageDocumentation
  */
 
-import type { SemanticSnapshot } from '@termwright/protocol';
+import type {
+  ProbeCapability,
+  ProbeInfo,
+  SemanticSnapshot,
+} from '@termwright/protocol';
 import { parseAppLog, type AppLogView } from './app-log.js';
+import type {
+  DiscoveredTest,
+  DiscoveredTestAncestor,
+  DiscoveredTestKind,
+  DiscoveredTestSource,
+} from './discovery.js';
 
 /** Protocol version carried by every message. */
 export const UI_PROTOCOL_VERSION = 1;
@@ -22,8 +32,22 @@ export const UI_PROTOCOL_VERSION = 1;
 /** Outcome of a test, as the timeline pane shows it. */
 export type UiTestStatus = 'passed' | 'failed' | 'skipped';
 
+/** A failed native Vitest attempt preceding the final case result. */
+export interface UiPriorFailure {
+  readonly attempt: number;
+  readonly errors: readonly string[];
+}
+
 /** Whether a `step` message opens or closes a step. */
 export type UiStepPhase = 'start' | 'end';
+
+/** Physical Gherkin prose attached to a native Termwright step. */
+export interface UiGherkinStep {
+  readonly keyword: string;
+  readonly text: string;
+  readonly source: { readonly file: string; readonly line: number; readonly column: number };
+  readonly background?: boolean;
+}
 
 /** Counters closing a run. */
 export interface UiRunSummary {
@@ -44,6 +68,9 @@ export interface UiRunSummary {
 /** What the server is doing: watching a run, replaying a trace, or recording. */
 export type UiServerMode = 'live' | 'post-mortem' | 'record';
 
+/** Last known state of the semantic adapter connection. */
+export type UiAdapterStatus = 'attached' | 'disconnected' | 'error';
+
 /** server → client. */
 export type ServerMessage =
   | {
@@ -55,12 +82,14 @@ export type ServerMessage =
        * invocation and the browser can reconcile a discovered row with the
        * running test that replaces it.
        */
-      readonly tests: readonly { readonly id: string; readonly title: string; readonly file: string }[];
+      readonly tests: readonly DiscoveredTest[];
     }
   | {
       readonly v: 1;
       readonly type: 'session';
       readonly sessionId: string;
+      /** Vitest test which launched this worker-side session, when known. */
+      readonly testId?: string;
       /**
        * Terminal profile the session runs with. The browser has to measure
        * characters the way the session does, or say which widths it used —
@@ -68,6 +97,10 @@ export type ServerMessage =
        * expensive kind of wrong.
        */
       readonly terminalProfile: string;
+      readonly adapter?: { readonly name: string; readonly version: string };
+      readonly probe?: ProbeInfo;
+      readonly capabilities?: readonly string[];
+      readonly adapterStatus?: UiAdapterStatus;
       readonly columns: number;
       readonly rows: number;
     }
@@ -102,6 +135,8 @@ export type ServerMessage =
       /** Milliseconds on the producer's timeline. */
       readonly t?: number;
       readonly status?: 'passed' | 'failed';
+      readonly error?: string;
+      readonly gherkin?: UiGherkinStep;
     }
   | {
       readonly v: 1;
@@ -137,8 +172,13 @@ export type ServerMessage =
       readonly traceRef?: string;
       /** Absent on a pass. */
       readonly error?: string;
+      /** One-based final attempt number. Absent for pre-retry producers. */
+      readonly attempt?: number;
+      readonly priorFailures?: readonly UiPriorFailure[];
     }
   | { readonly v: 1; readonly type: 'run-end'; readonly summary: UiRunSummary }
+  | { readonly v: 1; readonly type: 'run-cancelled'; readonly stoppedAt: number }
+  | { readonly v: 1; readonly type: 'run-cancel-failed'; readonly error: string }
   | ({
       readonly v: 1;
       readonly type: 'app-log';
@@ -146,11 +186,25 @@ export type ServerMessage =
     } & AppLogView)
   | {
       readonly v: 1;
+      readonly type: 'action-start';
+      /** Session-local id, paired with the eventual `action` message. */
+      readonly actionId: string;
+      readonly api: string;
+      readonly t: number;
+      readonly testId?: string;
+      readonly sessionId?: string;
+      readonly selector?: string;
+      readonly stepId?: string;
+    }
+  | {
+      readonly v: 1;
       readonly type: 'action';
       /** `action` for a driver call, `assert` for an expectation. */
       readonly kind: 'action' | 'assert';
       /** Driver API name, e.g. `locator.click`, or the matcher's name. */
       readonly api: string;
+      /** Present for driver actions with a live start edge. */
+      readonly actionId?: string;
       /** Milliseconds on the session clock. */
       readonly t: number;
       readonly ok: boolean;
@@ -183,7 +237,10 @@ const SERVER_TYPES = new Set([
   'semantic',
   'test-end',
   'run-end',
+  'run-cancelled',
+  'run-cancel-failed',
   'app-log',
+  'action-start',
   'action',
 ]);
 const CLIENT_TYPES = new Set(['rerun', 'stop', 'pick', 'input']);
@@ -293,23 +350,89 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
             throw new UiProtocolError(`tests-discovered: tests[${index}] must be an object`);
           }
           const test = entry as Record<string, unknown>;
+          const context = `tests-discovered.tests[${index}]`;
+          const provider = parseDiscoveredProvider(test['provider'], context);
+          const kind = parseDiscoveredKind(test['kind'], context);
+          const ancestors = parseDiscoveredAncestors(test['ancestors'], context);
+          const tags = parseDiscoveredTags(test['tags'], context);
+          const source = parseDiscoveredSource(test['source'], context);
           return {
             id: requireString(test, 'id', `tests-discovered.tests[${index}]`),
             title: requireString(test, 'title', `tests-discovered.tests[${index}]`),
             file: requireString(test, 'file', `tests-discovered.tests[${index}]`),
+            ...(provider === undefined ? {} : { provider }),
+            ...(kind === undefined ? {} : { kind }),
+            ...(ancestors === undefined ? {} : { ancestors }),
+            ...(tags === undefined ? {} : { tags }),
+            ...(source === undefined ? {} : { source }),
           };
         }),
       };
     }
-    case 'session':
+    case 'session': {
+      const adapterValue = value['adapter'];
+      let adapter: { readonly name: string; readonly version: string } | undefined;
+      if (adapterValue !== undefined) {
+        if (typeof adapterValue !== 'object' || adapterValue === null) {
+          throw new UiProtocolError('session: adapter must be an object');
+        }
+        const record = adapterValue as Record<string, unknown>;
+        adapter = {
+          name: requireBoundedString(record, 'name', 'session.adapter'),
+          version: requireBoundedString(record, 'version', 'session.adapter'),
+        };
+      }
+      const probeValue = value['probe'];
+      let probe: ProbeInfo | undefined;
+      if (probeValue !== undefined) {
+        probe = parseProbeInfo(probeValue);
+      }
+      if (probe !== undefined && adapter === undefined) {
+        throw new UiProtocolError('session: probe requires an adapter');
+      }
+      const capabilitiesValue = value['capabilities'];
+      let capabilities: readonly string[] | undefined;
+      if (capabilitiesValue !== undefined) {
+        if (
+          !Array.isArray(capabilitiesValue) ||
+          capabilitiesValue.length > ADAPTER_CAPABILITY_SET.size ||
+          !capabilitiesValue.every(
+            (item) => typeof item === 'string' && ADAPTER_CAPABILITY_SET.has(item),
+          ) ||
+          new Set(capabilitiesValue).size !== capabilitiesValue.length
+        ) {
+          throw new UiProtocolError('session: capabilities contains an unsupported or duplicate value');
+        }
+        capabilities = Object.freeze([...capabilitiesValue] as string[]);
+      }
+      const adapterStatus = value['adapterStatus'];
+      if (
+        adapterStatus !== undefined &&
+        adapterStatus !== 'attached' &&
+        adapterStatus !== 'disconnected' &&
+        adapterStatus !== 'error'
+      ) {
+        throw new UiProtocolError('session: adapterStatus is invalid');
+      }
+      if (adapterStatus !== undefined && adapter === undefined) {
+        throw new UiProtocolError('session: adapterStatus requires an adapter');
+      }
       return {
         v: 1,
         type: 'session',
         sessionId: requireString(value, 'sessionId', 'session'),
+        ...(value['testId'] === undefined
+          ? {}
+          : { testId: requireString(value, 'testId', 'session') }),
         terminalProfile: requireString(value, 'terminalProfile', 'session'),
+        ...(adapter === undefined ? {} : { adapter }),
+        ...(probe === undefined ? {} : { probe }),
+        ...(capabilities === undefined ? {} : { capabilities }),
+        ...(adapterStatus === undefined ? {} : { adapterStatus }),
         columns: requireNumber(value, 'columns', 'session'),
         rows: requireNumber(value, 'rows', 'session'),
       };
+    }
     case 'run-start': {
       const mode = value['mode'];
       if (mode !== 'live' && mode !== 'post-mortem' && mode !== 'record') {
@@ -347,6 +470,9 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       }
       const t = value['t'];
       if (t !== undefined && typeof t !== 'number') throw new UiProtocolError('step: t must be a number');
+      const error = value['error'];
+      if (error !== undefined && typeof error !== 'string') throw new UiProtocolError('step: error must be a string');
+      const gherkin = parseGherkinStep(value['gherkin']);
       return {
         v: 1,
         type: 'step',
@@ -356,6 +482,8 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         ...(stepId === undefined ? {} : { stepId }),
         ...(t === undefined ? {} : { t }),
         ...(status === undefined ? {} : { status }),
+        ...(error === undefined ? {} : { error }),
+        ...(gherkin === undefined ? {} : { gherkin }),
       };
     }
     case 'output':
@@ -399,6 +527,17 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         throw new UiProtocolError('test-end: flaky must be a boolean');
       }
       const lostLogRecords = requireNumber(value, 'lostLogRecords', 'test-end');
+      const attempt = value['attempt'];
+      if (attempt !== undefined && (!Number.isInteger(attempt) || (attempt as number) < 1)) {
+        throw new UiProtocolError('test-end: attempt must be a positive integer');
+      }
+      const priorFailures = parsePriorFailures(value['priorFailures']);
+      if (priorFailures !== undefined && attempt === undefined) {
+        throw new UiProtocolError('test-end: priorFailures requires attempt');
+      }
+      if (priorFailures?.some((failure) => failure.attempt >= (attempt as number))) {
+        throw new UiProtocolError('test-end: prior failure must precede final attempt');
+      }
       return {
         v: 1,
         type: 'test-end',
@@ -409,6 +548,27 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         lostLogRecords,
         ...(traceRef === undefined ? {} : { traceRef }),
         ...(error === undefined ? {} : { error }),
+        ...(attempt === undefined ? {} : { attempt: attempt as number }),
+        ...(priorFailures === undefined ? {} : { priorFailures }),
+      };
+    }
+    case 'action-start': {
+      const optionalText = (key: string): Record<string, string> => {
+        const found = value[key];
+        if (found === undefined) return {};
+        if (typeof found !== 'string') throw new UiProtocolError(`action-start: ${key} must be a string`);
+        return { [key]: found };
+      };
+      return {
+        v: 1,
+        type: 'action-start',
+        actionId: requireString(value, 'actionId', 'action-start'),
+        api: requireString(value, 'api', 'action-start'),
+        t: requireNumber(value, 't', 'action-start'),
+        ...optionalText('testId'),
+        ...optionalText('sessionId'),
+        ...optionalText('selector'),
+        ...optionalText('stepId'),
       };
     }
     case 'action': {
@@ -428,6 +588,7 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         type: 'action',
         kind,
         api: requireString(value, 'api', 'action'),
+        ...optionalText('actionId'),
         t: requireNumber(value, 't', 'action'),
         ok: value['ok'],
         ...optionalText('testId'),
@@ -457,9 +618,221 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       }
       return { v: 1, type: 'run-end', summary: summary as UiRunSummary };
     }
+    case 'run-cancelled':
+      return {
+        v: 1,
+        type: 'run-cancelled',
+        stoppedAt: requireNumber(value, 'stoppedAt', 'run-cancelled'),
+      };
+    case 'run-cancel-failed':
+      return {
+        v: 1,
+        type: 'run-cancel-failed',
+        error: requireBoundedString(value, 'error', 'run-cancel-failed'),
+      };
     default:
       throw new UiProtocolError(`unknown server message type: ${String(value.type)}`);
   }
+}
+
+function parseGherkinStep(value: unknown): UiGherkinStep | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null) throw new UiProtocolError('step: gherkin must be an object');
+  const record = value as Record<string, unknown>;
+  const sourceValue = record['source'];
+  if (typeof sourceValue !== 'object' || sourceValue === null) {
+    throw new UiProtocolError('step: gherkin.source must be an object');
+  }
+  const source = sourceValue as Record<string, unknown>;
+  const background = record['background'];
+  if (background !== undefined && typeof background !== 'boolean') {
+    throw new UiProtocolError('step: gherkin.background must be a boolean');
+  }
+  return {
+    keyword: requireString(record, 'keyword', 'step.gherkin'),
+    text: requireString(record, 'text', 'step.gherkin'),
+    source: {
+      file: requireString(source, 'file', 'step.gherkin.source'),
+      line: requireNumber(source, 'line', 'step.gherkin.source'),
+      column: requireNumber(source, 'column', 'step.gherkin.source'),
+    },
+    ...(background === undefined ? {} : { background }),
+  };
+}
+
+function parsePriorFailures(value: unknown): readonly UiPriorFailure[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 100) {
+    throw new UiProtocolError('test-end: priorFailures must be a bounded array');
+  }
+  let previous = 0;
+  return value.map((entry) => {
+    if (typeof entry !== 'object' || entry === null) throw new UiProtocolError('test-end: invalid prior failure');
+    const record = entry as Record<string, unknown>;
+    const attempt = record['attempt'];
+    const errors = record['errors'];
+    if (!Number.isInteger(attempt) || (attempt as number) <= previous) {
+      throw new UiProtocolError('test-end: prior failure attempts must be positive and ordered');
+    }
+    if (!Array.isArray(errors) || errors.length === 0 || errors.length > 100) {
+      throw new UiProtocolError('test-end: prior failure errors must be a bounded non-empty array');
+    }
+    const parsed = errors.map((error) => {
+      if (typeof error !== 'string' || error === '') throw new UiProtocolError('test-end: prior failure errors must be strings');
+      return error.slice(0, MAX_UI_WIRE_STRING_LENGTH);
+    });
+    previous = attempt as number;
+    return { attempt: attempt as number, errors: parsed };
+  });
+}
+
+const PROBE_CAPABILITY_SET: ReadonlySet<string> = new Set([
+  'stable-identity',
+  'visible-rect',
+  'operations',
+  'annotations',
+  'frame-begin',
+  'paint-order',
+]);
+
+// Kept browser-local deliberately: importing the protocol package's runtime
+// schema would also pull its Node transport/crypto entrypoint into the Vite
+// bundle. This is the same closed set as `ADAPTER_CAPABILITIES` in protocol.
+const ADAPTER_CAPABILITY_SET: ReadonlySet<string> = new Set([
+  'tree',
+  'bounds',
+  'absolute-bounds',
+  'states',
+  'actions',
+  'text-ranges',
+  'render-revisions',
+  'tree-diffs',
+  'logs',
+]);
+
+/** Maximum UTF-16 length of the short labels carried by UI wire events. */
+export const MAX_UI_WIRE_STRING_LENGTH = 256;
+
+function parseDiscoveredProvider(
+  value: unknown,
+  context: string,
+): DiscoveredTest['provider'] {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new UiProtocolError(`${context}: provider must be an object`);
+  }
+  const provider = value as Record<string, unknown>;
+  const id = requireBoundedString(provider, 'id', `${context}.provider`);
+  const version = requireNumber(provider, 'version', `${context}.provider`);
+  if (!Number.isInteger(version) || version < 1) {
+    throw new UiProtocolError(`${context}.provider: version must be a positive integer`);
+  }
+  return { id, version };
+}
+
+function parseDiscoveredKind(value: unknown, context: string): DiscoveredTestKind | undefined {
+  if (value === undefined) return undefined;
+  if (value !== 'test' && value !== 'gherkin-scenario' && value !== 'gherkin-outline-example') {
+    throw new UiProtocolError(`${context}: kind is invalid`);
+  }
+  return value;
+}
+
+function parseDiscoveredAncestors(
+  value: unknown,
+  context: string,
+): readonly DiscoveredTestAncestor[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 16) {
+    throw new UiProtocolError(`${context}: ancestors must be a bounded array`);
+  }
+  return value.map((item, index) => {
+    const itemContext = `${context}.ancestors[${index}]`;
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      throw new UiProtocolError(`${itemContext} must be an object`);
+    }
+    const ancestor = item as Record<string, unknown>;
+    const kind = ancestor['kind'];
+    if (kind !== 'feature' && kind !== 'rule') {
+      throw new UiProtocolError(`${itemContext}: kind is invalid`);
+    }
+    return { kind, title: requireBoundedString(ancestor, 'title', itemContext) };
+  });
+}
+
+function parseDiscoveredTags(value: unknown, context: string): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 256) {
+    throw new UiProtocolError(`${context}: tags must be a bounded array`);
+  }
+  return value.map((tag, index) => {
+    if (typeof tag !== 'string' || tag.length === 0 || tag.length > MAX_UI_WIRE_STRING_LENGTH) {
+      throw new UiProtocolError(`${context}.tags[${index}] must be a non-empty bounded string`);
+    }
+    return tag;
+  });
+}
+
+function parseDiscoveredSource(value: unknown, context: string): DiscoveredTestSource | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new UiProtocolError(`${context}: source must be an object`);
+  }
+  const source = value as Record<string, unknown>;
+  const line = requireNumber(source, 'line', `${context}.source`);
+  const column = requireNumber(source, 'column', `${context}.source`);
+  if (!Number.isInteger(line) || line < 1 || !Number.isInteger(column) || column < 1) {
+    throw new UiProtocolError(`${context}.source: line and column must be positive integers`);
+  }
+  const file = requireString(source, 'file', `${context}.source`);
+  if (file === '') throw new UiProtocolError(`${context}.source: file must be non-empty`);
+  return { file, line, column };
+}
+
+function parseProbeInfo(value: unknown): ProbeInfo {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new UiProtocolError('session: probe must be an object');
+  }
+  const probe = value as Record<string, unknown>;
+  const framework = requireBoundedString(probe, 'framework', 'session.probe');
+  const probeVersion = requireBoundedString(probe, 'probeVersion', 'session.probe');
+  const frameworkVersion = probe['frameworkVersion'];
+  if (
+    frameworkVersion !== undefined &&
+    (typeof frameworkVersion !== 'string' ||
+      frameworkVersion.length === 0 ||
+      frameworkVersion.length > MAX_UI_WIRE_STRING_LENGTH)
+  ) {
+    throw new UiProtocolError('session: probe.frameworkVersion must be a non-empty bounded string');
+  }
+  const identityKind = probe['identityKind'];
+  if (identityKind !== 'stable' && identityKind !== 'frame-local') {
+    throw new UiProtocolError('session: probe.identityKind is invalid');
+  }
+  const rawCapabilities = probe['capabilities'];
+  if (
+    !Array.isArray(rawCapabilities) ||
+    rawCapabilities.length > PROBE_CAPABILITY_SET.size ||
+    !rawCapabilities.every(
+      (capability) => typeof capability === 'string' && PROBE_CAPABILITY_SET.has(capability),
+    ) ||
+    new Set(rawCapabilities).size !== rawCapabilities.length
+  ) {
+    throw new UiProtocolError('session: probe.capabilities contains an unsupported value');
+  }
+  const capabilities = Object.freeze([...rawCapabilities] as ProbeCapability[]);
+  if (identityKind === 'frame-local' && capabilities.includes('stable-identity')) {
+    throw new UiProtocolError(
+      "session: a frame-local probe cannot claim the 'stable-identity' capability",
+    );
+  }
+  return Object.freeze({
+    framework,
+    ...(frameworkVersion === undefined ? {} : { frameworkVersion }),
+    probeVersion,
+    identityKind,
+    capabilities,
+  });
 }
 
 function parseEnvelope(
@@ -490,6 +863,14 @@ function parseEnvelope(
 function requireString(value: Record<string, unknown>, key: string, type: string): string {
   const found = value[key];
   if (typeof found !== 'string') throw new UiProtocolError(`${type}: ${key} must be a string`);
+  return found;
+}
+
+function requireBoundedString(value: Record<string, unknown>, key: string, type: string): string {
+  const found = requireString(value, key, type);
+  if (found.length === 0 || found.length > MAX_UI_WIRE_STRING_LENGTH) {
+    throw new UiProtocolError(`${type}: ${key} must be a non-empty bounded string`);
+  }
   return found;
 }
 

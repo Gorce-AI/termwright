@@ -140,6 +140,23 @@ describe('parseRunManifest', () => {
     expect(parsed?.tests.map((test) => test.id)).toEqual(['t1']);
     expect(parsed?.tests[0]?.durationMs).toBe(0);
   });
+
+  it('keeps ordered retry attempts and remains compatible when they are absent', () => {
+    const current = manifest();
+    const withAttempts = {
+      ...current,
+      tests: current.tests.map((test, index) => index === 0 ? {
+        ...test,
+        flaky: true,
+        attempts: [
+          { attempt: 1, status: 'failed', errors: ['first failure'], traceRefs: ['retry-1.twtrace'] },
+          { attempt: 2, status: 'passed', durationMs: 12, errors: [] },
+        ],
+      } : test),
+    };
+    expect(parseRunManifest(JSON.stringify(withAttempts))?.tests[0]?.attempts).toEqual(withAttempts.tests[0]?.attempts);
+    expect(parseRunManifest(JSON.stringify(current))?.tests[0]).not.toHaveProperty('attempts');
+  });
 });
 
 describe('readRunManifest', () => {

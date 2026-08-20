@@ -38,19 +38,16 @@ export function ConfirmDialog({
     role: 'dialog',
     name: 'Confirm',
     description: title,
-    state: { modal: true },
     testId: 'confirm-dialog',
   });
   useSemantic(confirmRef, {
     role: 'button',
     name: confirmLabel,
-    state: { focused: focus === 'confirm' },
     testId: 'confirm',
   });
   useSemantic(cancelRef, {
     role: 'button',
     name: 'Cancel',
-    state: { focused: focus === 'cancel' },
     testId: 'cancel',
   });
 

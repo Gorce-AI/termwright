@@ -26,7 +26,10 @@ import type {
   ProbeObservedState,
   ProbeRect,
   ProbeUnobservableField,
+  ProtocolLimits,
 } from '@termwright/protocol';
+import { DEFAULT_LIMITS } from '@termwright/protocol';
+import { annotationForRenderable } from './annotations.js';
 
 /**
  * The shape this module reads off a Renderable.
@@ -73,6 +76,8 @@ export interface ObserveOptions {
   readonly frame: number;
   /** Ceiling on objects per frame, so a runaway tree degrades rather than floods. */
   readonly maxObjects?: number;
+  /** Limits negotiated with the driver, also applied to optional annotations. */
+  readonly limits?: ProtocolLimits;
 }
 
 /** What an observation produced, plus what it could not do. */
@@ -124,11 +129,19 @@ function textOf(node: ObservableNode): string | undefined {
   return undefined;
 }
 
-function stateOf(node: ObservableNode): ProbeObservedState | undefined {
+function stateOf(
+  node: ObservableNode,
+  inheritedDisplayed: boolean,
+): ProbeObservedState | undefined {
   const state: Record<string, unknown> = {};
 
   if (typeof node.focused === 'boolean') state['focused'] = node.focused;
-  if (typeof node.visible === 'boolean') state['displayed'] = node.visible;
+  // OpenTUI's `visible` flag is local to a renderable. A visible child of a
+  // hidden container is still not displayed, so publish the effective value
+  // from the complete ancestor chain rather than the tempting local boolean.
+  if (typeof node.visible === 'boolean' || !inheritedDisplayed) {
+    state['displayed'] = inheritedDisplayed && node.visible !== false;
+  }
 
   // `value` first, then the edit buffer's plain text: an InputRenderable has
   // both, and `value` is the one the application set.
@@ -182,13 +195,18 @@ function unobservableFor(node: ObservableNode): readonly ProbeUnobservableField[
  * @param options - Frame number and ceilings.
  */
 export function observeTree(root: ObservableNode, options: ObserveOptions): Observation {
-  const maxObjects = options.maxObjects ?? 5_000;
+  const limits = options.limits ?? DEFAULT_LIMITS;
+  const maxObjects = Math.min(options.maxObjects ?? limits.maxNodes, limits.maxNodes);
   const objects: ProbeObject[] = [];
   let paintOrderKnown = true;
   let truncated = false;
   let paintOrder = 0;
 
-  const visit = (node: ObservableNode, parent: ObservableNode | undefined): void => {
+  const visit = (
+    node: ObservableNode,
+    parent: ObservableNode | undefined,
+    ancestorsDisplayed: boolean,
+  ): void => {
     if (objects.length >= maxObjects) {
       truncated = true;
       return;
@@ -196,7 +214,9 @@ export function observeTree(root: ObservableNode, options: ObserveOptions): Obse
 
     const rect = rectOf(node);
     const text = textOf(node);
-    const state = stateOf(node);
+    const displayed = ancestorsDisplayed && node.visible !== false;
+    const state = stateOf(node, ancestorsDisplayed);
+    const annotations = annotationForRenderable(node, limits);
 
     objects.push({
       identity: { kind: 'stable', value: String(node.num) },
@@ -208,6 +228,7 @@ export function observeTree(root: ObservableNode, options: ObserveOptions): Obse
       ...(rect === undefined ? {} : { geometry: { intendedRect: rect } }),
       ...(state === undefined ? {} : { state }),
       ...(text === undefined ? {} : { text }),
+      ...(annotations === undefined ? {} : { annotations }),
       paintOrder: paintOrder,
       unobservable: unobservableFor(node),
     });
@@ -220,10 +241,10 @@ export function observeTree(root: ObservableNode, options: ObserveOptions): Obse
     // an only child, is unambiguous whether or not the z-order list is there —
     // counting those as "unknown" would forfeit the capability on every tree.
     if (!Array.isArray(zOrder) && documentOrder.length > 1) paintOrderKnown = false;
-    for (const child of children) visit(child, node);
+    for (const child of children) visit(child, node, displayed);
   };
 
-  visit(root, undefined);
+  visit(root, undefined, true);
 
   // Announced as a capability, but a tree whose z-order list was unreadable
   // cannot honour it. Reporting document order as paint order would be a

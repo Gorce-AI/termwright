@@ -17,14 +17,51 @@ const script = fileURLToPath(new URL('../app/notes_app.py', import.meta.url));
 const runnable = python !== null && (await ptyAvailable());
 
 /** `python` is non-null wherever this command is used. */
-const command = [python ?? 'python3', script];
+const interpreter = python ?? 'python3';
+const command = [interpreter, '-m', 'termwright_probe', '--', interpreter, script];
 
 describe.skipIf(!runnable)('the notes app', () => {
+  test('publishes qualified v2 geometry and exact pointer ownership', async ({ terminal }) => {
+    const app = await terminal.launch({ command });
+    await app.waitForText('write the release notes');
+    const add = app.getByRole('button', { name: 'Add' });
+    await expect(add).toBeAttached();
+    const geometry = await add.geometry();
+    expect(geometry.intendedRect.status).toBe('known');
+    expect(geometry.visibleRect.status).toBe('known');
+    const hit = await add.hitTest();
+    expect(hit.receivesEvents).toMatchObject({ status: 'known', value: true });
+    expect(hit.recipient).toMatchObject({ status: 'known' });
+
+    const draft = app.getByRole('textbox');
+    await app.waitForStable();
+    await draft.click();
+    await app.type('v2 pointer');
+    await expect(draft).toHaveText('v2 pointer');
+  });
+
+  test('refuses a covered v2 pointer target instead of firing through the modal', async ({ terminal }) => {
+    const app = await terminal.launch({ command });
+    await app.waitForText('write the release notes');
+    await app.getByRole('button', { name: 'Delete' }).activate();
+    await expect(app.getByRole('dialog')).toBeVisible();
+    await app.waitForStable();
+
+    const covered = app.getByTestId('add');
+    const hit = await covered.hitTest();
+    // ModalScreen removes the underlying screen from layout entirely. This is
+    // even stronger than an overlapping recipient: the point is absent, and
+    // input still must fail closed.
+    expect(hit.receivesEvents).toMatchObject({ status: 'absent' });
+    await expect(covered.click({ timeout: 0 })).rejects.toThrow(/matched 0 nodes|not laid out|cannot receive/u);
+    await expect(app.getByRole('dialog')).toBeVisible();
+  });
+
   test('publishes the notebook as a semantic tree', async ({ terminal }) => {
     const app = await terminal.launch({ command });
     await app.waitForText('write the release notes');
 
-    // The matcher polls, so it is what waits for the adapter's handshake — a
+    // The matcher polls, so it is what waits for the probe's handshake — a
     // plain read of the capability is only meaningful once a tree arrived.
     await expect(app).toMatchSemanticSnapshot();
     expect(app.capabilities().semanticTree).toBe(true);

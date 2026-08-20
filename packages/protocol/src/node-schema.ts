@@ -14,6 +14,7 @@
 import { Buffer } from 'node:buffer';
 import { z } from 'zod';
 import type { ProtocolLimits } from './limits.js';
+import type { SemanticExtendedValue } from './tree.js';
 import { SEMANTIC_ACTIONS, SEMANTIC_ROLES } from './roles.js';
 import { PROVENANCE_SOURCES } from './probe/ir.js';
 
@@ -48,6 +49,8 @@ export interface TreeSchemas {
   readonly node: z.ZodType;
   readonly cursor: z.ZodType;
   readonly snapshot: z.ZodType;
+  readonly snapshotV1: z.ZodType;
+  readonly snapshotV2: z.ZodType;
   /** Field names of `SemanticNode`, read off the schema itself. */
   readonly nodeKeys: readonly string[];
   /** Field names of `SemanticState`, read off the schema itself. */
@@ -66,6 +69,14 @@ function build(limits: ProtocolLimits): TreeSchemas {
     width: nonNegativeInt(),
     height: nonNegativeInt(),
   });
+
+  const observation = <T extends z.ZodType>(value: T): z.ZodType =>
+    z.discriminatedUnion('status', [
+      z.strictObject({ status: z.literal('known'), value, evidence: z.enum(['adapter', 'probe', 'terminal-grid', 'viewport-clip', 'paint-order', 'hit-grid', 'legacy-v1']) }),
+      z.strictObject({ status: z.literal('absent'), reason: z.enum(['detached', 'not-displayed', 'not-laid-out']) }),
+      z.strictObject({ status: z.literal('unknown'), reason: z.enum(['not-reported', 'temporary', 'clip-unobservable', 'legacy-unqualified']) }),
+      z.strictObject({ status: z.literal('unsupported'), capability: text, reason: z.enum(['capability', 'framework-unobservable', 'not-negotiated']) }),
+    ]);
 
   const state = z.strictObject({
     disabled: z.boolean().optional(),
@@ -93,7 +104,32 @@ function build(limits: ProtocolLimits): TreeSchemas {
     rect,
   });
 
-  const node = z.strictObject({
+  const extendedValue: z.ZodType<SemanticExtendedValue> = z.lazy(() =>
+    z.union([
+      z.null(),
+      z.boolean(),
+      z.number().finite().refine(
+        (value) => Math.abs(value) <= Number.MAX_SAFE_INTEGER,
+        'expected a finite JSON number in the safe range',
+      ),
+      text,
+      z.array(extendedValue).max(limits.maxRelationTargets),
+      z
+        .record(text, extendedValue)
+        .refine(
+          (value) => Object.keys(value).length <= limits.maxRelationTargets,
+          `expected at most ${limits.maxRelationTargets} properties`,
+        ),
+    ]),
+  );
+  const extended = z
+    .record(text, extendedValue)
+    .refine(
+      (value) => Object.keys(value).length <= limits.maxRelationTargets,
+      `expected at most ${limits.maxRelationTargets} properties`,
+    );
+
+  const nodeFields = {
     id: text.refine((s) => s.length > 0, 'node id must not be empty'),
     parentId: text.optional(),
     role: z.enum(SEMANTIC_ROLES),
@@ -102,6 +138,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     value: text.optional(),
     bounds: rect.optional(),
     state: state.optional(),
+    extended: extended.optional(),
     actions: z.array(z.enum(SEMANTIC_ACTIONS)).max(SEMANTIC_ACTIONS.length).optional(),
     labelledBy: relations.optional(),
     describedBy: relations.optional(),
@@ -111,6 +148,18 @@ function build(limits: ProtocolLimits): TreeSchemas {
     occlusion: z.enum(['known', 'unknown']).optional(),
     p: z.enum(PROVENANCE_SOURCES).optional(),
     px: z.record(text, z.enum(PROVENANCE_SOURCES)).optional(),
+  } as const;
+  const node = z.strictObject(nodeFields);
+  const geometry = z.strictObject({
+    displayed: observation(z.boolean()),
+    intendedRect: observation(rect),
+    visibleRect: observation(rect),
+  });
+  const nodeV2 = z.strictObject({
+    ...nodeFields,
+    bounds: z.never().optional(),
+    occlusion: z.never().optional(),
+    geometry,
   });
 
   const cursor = z.strictObject({
@@ -120,7 +169,7 @@ function build(limits: ProtocolLimits): TreeSchemas {
     shape: z.union([z.literal('block'), z.literal('underline'), z.literal('bar')]).optional(),
   });
 
-  const snapshot = z.strictObject({
+  const snapshotV1 = z.strictObject({
     v: z.literal(1),
     sessionId: text.refine((s) => s.length > 0, 'sessionId must not be empty'),
     revision: positiveInt(),
@@ -130,12 +179,60 @@ function build(limits: ProtocolLimits): TreeSchemas {
     rootIds: z.array(text).max(limits.maxNodes),
     nodes: z.array(node).max(limits.maxNodes),
   });
+  const hitRun = z.strictObject({
+    rect: z.strictObject({
+      row: nonNegativeInt(),
+      column: nonNegativeInt(),
+      width: positiveInt(),
+      height: z.literal(1),
+    }),
+    recipientId: text,
+  });
+  const hitGrid = z.strictObject({
+    // Canonical row runs make ambiguity validation linear and keep hostile
+    // snapshots from forcing an O(n²) rectangle-overlap check.
+    regions: z.array(hitRun).max(limits.maxNodes).superRefine((regions, ctx) => {
+      let previous: (typeof regions)[number] | undefined;
+      for (let index = 0; index < regions.length; index += 1) {
+        const current = regions[index]!;
+        if (
+          previous !== undefined &&
+          (current.rect.row < previous.rect.row ||
+            (current.rect.row === previous.rect.row &&
+              current.rect.column < previous.rect.column + previous.rect.width))
+        ) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'rect'],
+            message: 'hit regions must be non-overlapping row-major runs',
+          });
+          return;
+        }
+        previous = current;
+      }
+    }),
+  });
+  const snapshotV2 = z.strictObject({
+    v: z.literal(2),
+    sessionId: text.refine((s) => s.length > 0, 'sessionId must not be empty'),
+    revision: positiveInt(),
+    columns: positiveInt(),
+    rows: positiveInt(),
+    cursor: cursor.optional(),
+    rootIds: z.array(text).max(limits.maxNodes),
+    nodes: z.array(nodeV2).max(limits.maxNodes),
+    coordinateSpace: observation(z.enum(['viewport-cells', 'framework-local-cells'])),
+    hitGrid: observation(hitGrid),
+  });
+  const snapshot = z.discriminatedUnion('v', [snapshotV1, snapshotV2]);
 
   return {
     text,
     node,
     cursor,
     snapshot,
+    snapshotV1,
+    snapshotV2,
     nodeKeys: Object.freeze(Object.keys(node.shape)),
     stateKeys: Object.freeze(Object.keys(state.shape)),
   };

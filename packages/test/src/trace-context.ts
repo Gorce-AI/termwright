@@ -10,7 +10,8 @@
  * correct for concurrent tests instead of guessing.
  */
 
-import type { StepHandle, TraceWriter } from '@termwright/trace';
+import type { GherkinStepMetadata, StepHandle, StepStatus, TraceWriter } from '@termwright/trace';
+import type { ObservationStamp } from '@termwright/protocol';
 import type { ResolvedTermwrightConfig } from './config.js';
 
 /** A recorded assertion, mirroring `AssertEvent` without the trace bookkeeping. */
@@ -21,6 +22,7 @@ export interface AssertRecord {
   readonly ref?: string;
   readonly ok: boolean;
   readonly error?: string;
+  readonly observation?: ObservationStamp;
 }
 
 /** What a running test exposes to matchers and helpers. */
@@ -38,6 +40,14 @@ export interface TermwrightScope {
 
 const active: TermwrightScope[] = [];
 const byKey = new Map<string, TermwrightScope>();
+interface ActiveStep {
+  readonly id: string;
+  readonly title: string;
+  readonly metadata: { readonly stepId: string; readonly gherkin?: GherkinStepMetadata };
+  readonly handles: StepHandle[];
+}
+const stepStacks = new WeakMap<TermwrightScope, ActiveStep[]>();
+const stepCounters = new WeakMap<TermwrightScope, number>();
 
 /** The registry key for a test: its file and its full name. */
 export function scopeKey(testFile: string, testName: string): string {
@@ -89,6 +99,7 @@ export function recordAssert(record: AssertRecord, key?: string): void {
       ...(record.selector === undefined ? {} : { selector: record.selector }),
       ...(record.ref === undefined ? {} : { ref: record.ref }),
       ...(record.error === undefined ? {} : { error: record.error }),
+      ...(record.observation === undefined ? {} : { observation: record.observation }),
     });
   }
 }
@@ -97,4 +108,51 @@ export function recordAssert(record: AssertRecord, key?: string): void {
 export function openStep(title: string, scope = currentScope()): StepHandle[] {
   if (scope === undefined) return [];
   return scope.writers.map((writer) => writer.addStep(title));
+}
+
+/** Opens a scope-owned step, including on writers launched while it is active. */
+export function beginStep(
+  title: string,
+  metadata?: { readonly gherkin?: GherkinStepMetadata },
+  scope = currentScope(),
+): { readonly stepId?: string; end(status?: StepStatus, error?: string): void } {
+  if (scope === undefined) return { end: () => undefined };
+  const next = (stepCounters.get(scope) ?? 0) + 1;
+  stepCounters.set(scope, next);
+  const id = `tw-step-${next}`;
+  const writerMetadata = { stepId: id, ...(metadata?.gherkin === undefined ? {} : { gherkin: metadata.gherkin }) };
+  const frame: ActiveStep = {
+    id,
+    title,
+    metadata: writerMetadata,
+    handles: scope.writers.map((writer) => writer.addStep(title, writerMetadata)),
+  };
+  const stack = stepStacks.get(scope) ?? [];
+  stack.push(frame);
+  stepStacks.set(scope, stack);
+  let ended = false;
+  return {
+    stepId: frame.id,
+    end(status: StepStatus = 'passed', error?: string): void {
+      if (ended) return;
+      ended = true;
+      const index = stack.indexOf(frame);
+      if (index !== -1) stack.splice(index, 1);
+      for (const handle of frame.handles) handle.end(status, error);
+    },
+  };
+}
+
+/** Registers a new trace writer and re-opens steps that began before launch. */
+export function attachWriter(scope: TermwrightScope | undefined, writer: TraceWriter): void {
+  if (scope === undefined) return;
+  scope.writers.push(writer);
+  for (const frame of stepStacks.get(scope) ?? []) {
+    frame.handles.push(writer.addStep(frame.title, frame.metadata));
+  }
+}
+
+/** External live-wire id of the innermost authored step. */
+export function currentStepId(scope: TermwrightScope | undefined): string | undefined {
+  return scope === undefined ? undefined : stepStacks.get(scope)?.at(-1)?.id;
 }

@@ -1,8 +1,13 @@
 {
   "name": "@termwright/opentui",
   "version": "0.1.0",
-  "description": "OpenTUI semantic adapter (role convention, screenX/screenY bounds, frame-commit marker)",
+  "description": "Optional annotation-only SDK for the zero-config OpenTUI probe",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/opentui"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -11,42 +16,24 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./testing": {
-      "types": "./dist/testing.d.ts",
-      "import": "./dist/testing.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/testing.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:conformance": "vitest run src/conformance.test.ts",
-    "test:mount": "vitest run src/mount.test.ts"
+    "test:annotations": "vitest run src/annotations.test.ts"
   },
   "dependencies": {
     "@termwright/protocol": "workspace:*"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.5.0",
-    "@termwright/driver": "workspace:*",
-    "@termwright/ink-testing": "workspace:*"
+    "@opentui/core": ">=0.5.0"
   },
   "devDependencies": {
-    "@opentui/core": "^0.5.3",
-    "@termwright/conformance": "workspace:*",
-    "@termwright/driver": "workspace:*",
-    "@termwright/ink-testing": "workspace:*"
-  },
-  "peerDependenciesMeta": {
-    "@termwright/driver": {
-      "optional": true
-    },
-    "@termwright/ink-testing": {
-      "optional": true
-    }
+    "@opentui/core": "^0.5.3"
   }
 }

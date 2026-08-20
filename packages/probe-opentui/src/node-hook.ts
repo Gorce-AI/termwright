@@ -7,15 +7,13 @@
  *   Measured present on Node 22.22.0 and 24.1.0, **absent on 22.9.0** — our
  *   `engines` say `>= 22`, so it cannot be assumed.
  * - `module.register` runs hooks on a loader thread and exists across the whole
- *   supported range. It is the fallback rather than the default because it
- *   emitted `ExperimentalWarning: Importing JSON modules` on 22.9.0, and a line
- *   on the application's stderr is exactly the kind of trace this probe is not
- *   allowed to leave.
+ *   supported range. It is the fallback rather than the default because the
+ *   synchronous API also covers CJS and avoids cross-thread hook state.
  *
  * Both were verified to replace a bare `import('@opentui/core')` with the shim.
  */
 
-import { register, registerHooks } from 'node:module';
+import * as nodeModule from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { buildShimSource, shouldShim } from './shim.js';
 import { isInstrumented } from './runtime.js';
@@ -27,7 +25,7 @@ type NextLoad = (url: string, context: unknown) => LoadResult;
 /** The `load` hook, shared by both installation paths. */
 function load(url: string, context: unknown, nextLoad: NextLoad): LoadResult {
   if (!shouldShim(url)) return nextLoad(url, context);
-  return { format: 'module', shortCircuit: true, source: buildShimSource(url.split('?')[0] ?? url) };
+  return { format: 'module', shortCircuit: true, source: buildShimSource(url) };
 }
 
 /**
@@ -39,6 +37,11 @@ function load(url: string, context: unknown, nextLoad: NextLoad): LoadResult {
 export function installNodeHook(env: NodeJS.ProcessEnv = process.env): 'sync' | 'thread' | null {
   if (!isInstrumented(env)) return null;
 
+  // Do not named-import `registerHooks`: early Node 22 does not export it and
+  // would fail module instantiation before this compatibility check ran.
+  const registerHooks = (nodeModule as typeof nodeModule & {
+    readonly registerHooks?: (hooks: { load: never }) => unknown;
+  }).registerHooks;
   if (typeof registerHooks === 'function') {
     registerHooks({ load: load as never });
     return 'sync';
@@ -46,7 +49,7 @@ export function installNodeHook(env: NodeJS.ProcessEnv = process.env): 'sync' | 
 
   // Older Node 22: the off-thread loader is the only option. It needs its own
   // module file, which is this same file re-entered through `--import`.
-  register(new URL(import.meta.url), { parentURL: new URL(import.meta.url) });
+  nodeModule.register(new URL(import.meta.url), { parentURL: new URL(import.meta.url) });
   return 'thread';
 }
 
@@ -57,7 +60,7 @@ export async function loadHook(
   nextLoad: (url: string, context: unknown) => Promise<LoadResult>,
 ): Promise<LoadResult> {
   if (!shouldShim(url)) return nextLoad(url, context);
-  return { format: 'module', shortCircuit: true, source: buildShimSource(url.split('?')[0] ?? url) };
+  return { format: 'module', shortCircuit: true, source: buildShimSource(url) };
 }
 
 export { loadHook as load };

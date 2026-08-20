@@ -106,11 +106,11 @@ describe('readTraceLogs', () => {
 
   it('returns a window of the size asked for, and says what is outside it', async () => {
     const many = Array.from({ length: 50 }, (_, index) => record({ castOffset: index * 10 }));
-    const first = await readTraceLogs(readerWith(many), { limit: 10 });
-    expect(first.records.map((entry) => entry.t)).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80, 90]);
-    expect(first.hasMoreBefore).toBe(false);
-    expect(first.hasMoreAfter).toBe(true);
-    expect(first.total).toBe(50);
+    const latest = await readTraceLogs(readerWith(many), { limit: 10 });
+    expect(latest.records.map((entry) => entry.t)).toEqual([400, 410, 420, 430, 440, 450, 460, 470, 480, 490]);
+    expect(latest.hasMoreBefore).toBe(true);
+    expect(latest.hasMoreAfter).toBe(false);
+    expect(latest.total).toBe(50);
   });
 
   it('reads backwards from a cursor, keeping the entries closest to it', async () => {
@@ -133,7 +133,7 @@ describe('readTraceLogs', () => {
     const many = Array.from({ length: 2_000 }, (_, index) => record({ castOffset: index }));
     const huge = await readTraceLogs(readerWith(many), { limit: 10_000 });
     expect(huge.records).toHaveLength(500);
-    expect(huge.hasMoreAfter).toBe(true);
+    expect(huge.hasMoreBefore).toBe(true);
   });
 
   it('skips a line it cannot read, and keeps the rest', async () => {
@@ -168,6 +168,6 @@ describe('readTraceLogs', () => {
     const many = Array.from({ length: 6_000 }, (_, index) => record({ castOffset: index }));
     const logs = await readTraceLogs(readerWith(many));
     expect(logs.records).toHaveLength(200);
-    expect(logs.hasMoreAfter).toBe(true);
+    expect(logs.hasMoreBefore).toBe(true);
   });
 });

@@ -9,8 +9,15 @@
  */
 
 import { expect } from 'vitest';
-import { parseRef, type Locator, type ScreenSnapshot, type TerminalHarness } from '@termwright/driver';
-import type { SemanticSnapshot, SemanticState } from '@termwright/protocol';
+import { parseRef, type BoundsExpectation, type Locator, type ScreenSnapshot, type SpatialRelationExpectation, type TerminalHarness } from '@termwright/driver';
+import type {
+  Observation,
+  Rect,
+  SemanticExtendedState,
+  SemanticExtendedValue,
+  SemanticSnapshot,
+  SemanticState,
+} from '@termwright/protocol';
 import { getTermwrightConfig } from './config.js';
 import { serializeScreen, type CellSnapshotOptions } from './cells.js';
 import {
@@ -73,10 +80,21 @@ export interface SemanticSnapshotMatcherOptions extends PollOptions {
 export interface TermwrightMatchers<R = unknown> {
   /** The locator resolves to a node that is on screen and not hidden. */
   toBeVisible(options?: PollOptions): R;
+  toBeAttached(options?: PollOptions): R;
+  toBeDetached(options?: PollOptions): R;
+  toBeDisplayed(options?: PollOptions): R;
+  toBeHidden(options?: PollOptions): R;
+  toBeOffscreen(options?: PollOptions): R;
+  toBeInViewport(options?: PollOptions & { readonly ratio?: number; readonly fully?: boolean }): R;
+  toReceivePointerEvents(options?: PollOptions): R;
+  toHaveBounds(expected: BoundsExpectation, options?: PollOptions & { readonly box?: 'visible' | 'intended' }): R;
+  toHaveSpatialRelation(expected: SpatialRelationExpectation, options?: PollOptions & { readonly box?: 'visible' | 'intended' }): R;
   /** The locator resolves to the node carrying `state.focused`. */
   toBeFocused(options?: PollOptions): R;
   /** Every listed state key holds; unlisted keys are not constrained. */
   toHaveState(expected: Partial<SemanticState>, options?: PollOptions): R;
+  /** Every listed application-domain key deep-equals the expected JSON value. */
+  toHaveExtendedState(expected: SemanticExtendedState, options?: PollOptions): R;
   /** Accessible text of a locator, or the visible grid of a terminal. */
   toHaveText(expected: string | RegExp, options?: TextMatcherOptions): R;
   /** Framed rendering of the visible grid, inline or from `__snapshots__`. */
@@ -88,7 +106,7 @@ export interface TermwrightMatchers<R = unknown> {
 }
 
 declare module 'vitest' {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mirrors Vitest's own declaration
+  // `any` mirrors Vitest's own declaration and keeps matcher augmentation compatible.
   interface Matchers<T = any> extends TermwrightMatchers<T> {}
 }
 
@@ -137,10 +155,132 @@ async function toBeVisible(
     options,
     expected: 'visible',
     probe: async () => {
-      const visible = await locator.isVisible();
-      return { pass: visible, actual: visible ? 'visible' : 'hidden' };
+      const observation = await locator.visibility();
+      if (
+        observation.attached.status === 'absent' ||
+        (observation.attached.status === 'known' && observation.attached.value === false)
+      ) return { pass: false, actual: 'detached' };
+      if (observation.displayed.status === 'known' && !observation.displayed.value) return { pass: false, actual: 'hidden' };
+      if (observation.viewport.status === 'known') {
+        const visible = observation.viewport.value.ratio > 0;
+        return { pass: visible, actual: visible ? 'visible' : 'offscreen' };
+      }
+      return inconclusive(observation.viewport, 'visibility');
     },
   });
+}
+
+async function toBeAttached(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toBeAttached');
+  return locatorAssertion(this, { matcher: 'toBeAttached', locator, options, expected: 'attached', probe: async () => {
+    const value = await locator.visibility();
+    return observedBoolean(value.attached, 'attached', 'detached');
+  }});
+}
+
+async function toBeDetached(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toBeDetached');
+  return locatorAssertion(this, { matcher: 'toBeDetached', locator, options, expected: 'detached', probe: async () => {
+    const value = (await locator.visibility()).attached;
+    if (value.status === 'known') return { pass: !value.value, actual: value.value ? 'attached' : 'detached' };
+    if (value.status === 'absent') return { pass: true, actual: 'detached' };
+    return inconclusive(value, 'attachment');
+  }});
+}
+
+async function toBeDisplayed(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toBeDisplayed');
+  return locatorAssertion(this, { matcher: 'toBeDisplayed', locator, options, expected: 'displayed', probe: async () => {
+    const value = await locator.visibility();
+    return observedBoolean(value.displayed, 'displayed', 'not displayed');
+  }});
+}
+
+async function toBeHidden(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toBeHidden');
+  return locatorAssertion(this, { matcher: 'toBeHidden', locator, options, expected: 'hidden or detached', probe: async () => {
+    const value = await locator.visibility();
+    if (value.attached.status === 'absent' || (value.attached.status === 'known' && !value.attached.value)) {
+      return { pass: true, actual: 'detached' };
+    }
+    if (value.attached.status !== 'known') return inconclusive(value.attached, 'attachment');
+    if (value.displayed.status === 'known') {
+      return { pass: !value.displayed.value, actual: value.displayed.value ? 'displayed' : 'hidden' };
+    }
+    if (value.displayed.status === 'absent') return { pass: true, actual: value.displayed.reason };
+    return inconclusive(value.displayed, 'display state');
+  }});
+}
+
+async function toBeOffscreen(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toBeOffscreen');
+  return locatorAssertion(this, { matcher: 'toBeOffscreen', locator, options, expected: 'offscreen', probe: async () => {
+    const value = await locator.visibility();
+    return observedBoolean(value.offscreen, 'offscreen', 'on screen');
+  }});
+}
+
+async function toBeInViewport(this: MatcherState, received: unknown, options: PollOptions & { readonly ratio?: number; readonly fully?: boolean } = {}): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toBeInViewport');
+  if (options.ratio !== undefined && (!Number.isFinite(options.ratio) || options.ratio < 0 || options.ratio > 1)) {
+    throw new TypeError('toBeInViewport ratio must be a finite number from 0 through 1');
+  }
+  const threshold = options.ratio;
+  return locatorAssertion(this, { matcher: 'toBeInViewport', locator, options, expected: options.fully === true ? 'fully inside viewport' : threshold === undefined ? 'any viewport intersection' : `viewport ratio >= ${threshold}`, probe: async () => {
+    const value = (await locator.visibility()).viewport;
+    if (value.status !== 'known') return inconclusive(value, 'viewport intersection');
+    const pass = options.fully === true
+      ? value.value.fullyInside
+      : threshold === undefined
+        ? value.value.ratio > 0
+        : value.value.ratio >= threshold;
+    return { pass, actual: `ratio ${value.value.ratio}` };
+  }});
+}
+
+async function toReceivePointerEvents(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toReceivePointerEvents');
+  return locatorAssertion(this, { matcher: 'toReceivePointerEvents', locator, options, expected: 'receives pointer events', probe: async () => {
+    const value = (await locator.hitTest()).receivesEvents;
+    return observedBoolean(value, 'receives pointer events', 'does not receive pointer events');
+  }});
+}
+
+async function toHaveBounds(this: MatcherState, received: unknown, expected: BoundsExpectation, options: PollOptions & { readonly box?: 'visible' | 'intended' } = {}): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toHaveBounds');
+  const box = options.box ?? 'visible';
+  return locatorAssertion(this, { matcher: 'toHaveBounds', locator, options, expected: `${box} bounds ${JSON.stringify(expected)}`, probe: async () => {
+    const observation = (await locator.geometry())[box === 'visible' ? 'visibleRect' : 'intendedRect'];
+    if (observation.status !== 'known') return inconclusive(observation, `${box} bounds`);
+    const pass = (Object.keys(expected) as (keyof Rect)[]).every((key) => expected[key] === undefined || observation.value[key] === expected[key]);
+    return { pass, actual: JSON.stringify(observation.value) };
+  }});
+}
+
+async function toHaveSpatialRelation(this: MatcherState, received: unknown, expected: SpatialRelationExpectation, options: PollOptions & { readonly box?: 'visible' | 'intended' } = {}): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toHaveSpatialRelation');
+  const box = options.box ?? 'visible';
+  return locatorAssertion(this, { matcher: 'toHaveSpatialRelation', locator, options, expected: `${expected.relation} ${expected.target.description}`, probe: async () => {
+    const [a, b] = await Promise.all([locator.geometry(), expected.target.geometry()]);
+    if (a.stamp.sessionId !== b.stamp.sessionId) {
+      return { pass: false, conclusive: false, fatal: true, actual: 'locators belong to different terminal sessions' };
+    }
+    if (a.stamp.screenRevision !== b.stamp.screenRevision || a.stamp.semanticRevision !== b.stamp.semanticRevision) {
+      return { pass: false, conclusive: false, actual: 'locators were observed at different revisions' };
+    }
+    if (a.coordinateSpace.status !== 'known') return inconclusive(a.coordinateSpace, 'source coordinate space');
+    if (b.coordinateSpace.status !== 'known') return inconclusive(b.coordinateSpace, 'target coordinate space');
+    if (a.coordinateSpace.value !== b.coordinateSpace.value) {
+      return { pass: false, conclusive: false, fatal: true, actual: `incompatible coordinate spaces: ${a.coordinateSpace.value} and ${b.coordinateSpace.value}` };
+    }
+    const left = a[box === 'visible' ? 'visibleRect' : 'intendedRect'];
+    const right = b[box === 'visible' ? 'visibleRect' : 'intendedRect'];
+    if (left.status !== 'known') return inconclusive(left, 'source bounds');
+    if (right.status !== 'known') return inconclusive(right, 'target bounds');
+    const { spatialRelation } = await import('@termwright/protocol');
+    const pass = spatialRelation(left.value, expected.relation, right.value);
+    return { pass, actual: `${JSON.stringify(left.value)} ${expected.relation} ${JSON.stringify(right.value)}` };
+  }});
 }
 
 async function toBeFocused(
@@ -188,6 +328,58 @@ async function toHaveState(
   });
 }
 
+async function toHaveExtendedState(
+  this: MatcherState,
+  received: unknown,
+  expected: SemanticExtendedState,
+  options: PollOptions = {},
+): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toHaveExtendedState');
+  return locatorAssertion(this, {
+    matcher: 'toHaveExtendedState',
+    locator,
+    options,
+    expected: JSON.stringify(expected),
+    probe: async () => {
+      const state = await locator.extendedState();
+      if (state === null) return { pass: false, actual: 'not a semantic node (no extended state)' };
+      const keys = Object.keys(expected);
+      const differing = keys.filter(
+        (key) => !sameExtended(state[key], expected[key] as SemanticExtendedValue),
+      );
+      return {
+        pass: differing.length === 0,
+        actual: JSON.stringify(Object.fromEntries(keys.map((key) => [key, state[key]]))),
+      };
+    },
+  });
+}
+
+function sameExtended(left: SemanticExtendedValue | undefined, right: SemanticExtendedValue): boolean {
+  if (left === right) return true;
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
+    return false;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => sameExtended(value, right[index] as SemanticExtendedValue))
+    );
+  }
+  const leftObject = left as Readonly<Record<string, SemanticExtendedValue>>;
+  const rightObject = right as Readonly<Record<string, SemanticExtendedValue>>;
+  const leftKeys = Object.keys(leftObject);
+  const rightKeys = Object.keys(rightObject);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) => key in rightObject && sameExtended(leftObject[key], rightObject[key] as SemanticExtendedValue),
+    )
+  );
+}
+
 async function toHaveText(
   this: MatcherState,
   received: unknown,
@@ -231,10 +423,11 @@ async function toMatchCellSnapshot(
   expected?: string,
   options: CellSnapshotMatcherOptions = {},
 ): Promise<MatcherResult> {
-  const screen = asScreenSource(received, 'toMatchCellSnapshot');
+  const locator = isLocator(received) ? received : undefined;
+  const screen = locator === undefined ? asScreenSource(received, 'toMatchCellSnapshot') : undefined;
   const config = getTermwrightConfig();
-  const serialize = (): string =>
-    serializeScreen(screen(), {
+  const serialize = async (): Promise<string> =>
+    serializeScreen(locator === undefined ? (screen as () => ScreenSnapshot)() : await locator.cellSnapshot(), {
       ...(config.palette === undefined ? {} : { palette: config.palette }),
       ...options,
     });
@@ -244,12 +437,13 @@ async function toMatchCellSnapshot(
     options,
     inline: expected,
     serialize,
-    compare: (stored) => {
-      const actual = serialize();
+    compare: async (stored) => {
+      const actual = await serialize();
       return actual.trimEnd() === stored.trimEnd()
         ? { ok: true, actual }
         : { ok: false, actual, reason: 'the visible grid differs from the stored snapshot' };
     },
+    ...(locator === undefined ? {} : { target: locator.description }),
   });
 }
 
@@ -395,6 +589,30 @@ function replaceRegExp(_key: string, value: unknown): unknown {
 interface Probe {
   readonly pass: boolean;
   readonly actual: string;
+  readonly conclusive?: boolean;
+  /** Inconclusive fact that cannot improve by polling (for example unsupported). */
+  readonly fatal?: boolean;
+}
+
+function inconclusive(observation: Observation<unknown>, label: string): Probe {
+  if (observation.status === 'known') {
+    throw new TypeError(`internal matcher error: ${label} was passed to inconclusive() with a known value`);
+  }
+  if (observation.status === 'unsupported') {
+    return {
+      pass: false,
+      conclusive: false,
+      fatal: true,
+      actual: `${label} unsupported (${observation.capability}: ${observation.reason})`,
+    };
+  }
+  return { pass: false, conclusive: false, actual: `${label} ${observation.status}: ${observation.reason}` };
+}
+
+function observedBoolean(observation: Observation<boolean>, yes: string, no: string): Probe {
+  if (observation.status === 'known') return { pass: observation.value, actual: observation.value ? yes : no };
+  if (observation.status === 'absent') return { pass: false, actual: observation.reason };
+  return inconclusive(observation, yes);
 }
 
 interface LocatorAssertion {
@@ -436,11 +654,13 @@ async function locatorAssertion(state: MatcherState, spec: LocatorAssertion): Pr
       failure = error;
       last = { pass: false, actual: errorSummary(error) };
     }
-    if (last.pass !== isNot || Date.now() >= deadline) break;
+    if (last.fatal === true || (last.conclusive !== false && last.pass !== isNot) || Date.now() >= deadline) break;
     await delay(POLL_INTERVAL_MS);
   }
 
-  const pass = last.pass;
+  // An unknown observation must fail both a positive assertion and `.not`.
+  // Returning `isNot` makes Vitest's negation invert it to failure.
+  const pass = last.conclusive === false ? isNot : last.pass;
   // One bounded resolve, used for both the ref the trace stores and the
   // diagnostics a failure prints: the UI needs the ref to light up the target's
   // bounds when someone clicks the row in the command log.
@@ -451,6 +671,7 @@ async function locatorAssertion(state: MatcherState, spec: LocatorAssertion): Pr
       ok: pass !== isNot,
       selector: target,
       ...(resolution.ref === undefined ? {} : { ref: resolution.ref }),
+      ...(resolution.observation === undefined ? {} : { observation: resolution.observation }),
       ...(pass === isNot ? { error: `expected ${spec.expected}, received ${last.actual}` } : {}),
     },
     testKey(state),
@@ -659,10 +880,12 @@ function failureDiagnostics(spec: LocatorAssertion, probeError: unknown, resolve
  * A matcher that just passed resolves immediately; one that failed yields the
  * driver's error, whose diagnostics are what the failure message prints.
  */
-async function resolveTarget(locator: Locator | undefined): Promise<{ ref?: string; error?: unknown }> {
+async function resolveTarget(locator: Locator | undefined): Promise<{ ref?: string; observation?: import('@termwright/protocol').ObservationStamp; error?: unknown }> {
   if (locator === undefined) return {};
   try {
-    return { ref: (await locator.resolve({ timeout: 1 })).ref };
+    const ref = (await locator.resolve({ timeout: 1 })).ref;
+    const observation = typeof locator.geometry === 'function' ? (await locator.geometry()).stamp : undefined;
+    return { ref, ...(observation === undefined ? {} : { observation }) };
   } catch (error) {
     return { error };
   }
@@ -754,7 +977,7 @@ function describeLocator(locator: Locator): string {
 function isLocator(value: unknown): value is Locator {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Partial<Locator>;
-  return typeof candidate.resolve === 'function' && typeof candidate.isVisible === 'function';
+  return typeof candidate.resolve === 'function' && typeof candidate.visibility === 'function';
 }
 
 function isHarness(value: unknown): value is TerminalHarness {
@@ -823,9 +1046,19 @@ function describeValue(value: unknown): string {
 /** The matcher implementations, exported for manual registration. */
 export const termwrightMatchers = {
   toBeVisible,
+  toBeAttached,
+  toBeDetached,
+  toBeDisplayed,
+  toBeHidden,
+  toBeOffscreen,
+  toBeInViewport,
+  toReceivePointerEvents,
+  toHaveBounds,
+  toHaveSpatialRelation,
   toHaveLogged,
   toBeFocused,
   toHaveState,
+  toHaveExtendedState,
   toHaveText,
   toMatchCellSnapshot,
   toMatchSemanticSnapshot,

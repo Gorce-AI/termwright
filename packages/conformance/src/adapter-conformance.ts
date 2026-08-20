@@ -312,7 +312,7 @@ const snapshotsOf = (observation: ProbeObservation): SemanticSnapshot[] =>
  * @example
  * ```ts
  * await runAdapterConformance({
- *   name: '@termwright/ink',
+ *   name: 'my-framework-probe',
  *   spawn: () => ({ command: ['node', 'app.mjs'] }),
  *   ready: 'Ready',
  *   interaction: { input: '\t', expect: '[Save]' },
@@ -393,16 +393,23 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
       /** Everything observed before a single byte was written to the child. */
       let beforeInput: ProbeObservation;
 
-      beforeAll(async () => {
-        probe = await AdapterProbe.start(options.spawn(), probeOptions);
-        await probe.waitForText(options.ready, timeout);
-        await probe.waitFor(
-          (observation) => snapshotsOf(observation).length > 0,
-          timeout,
-          'a first snapshot from the adapter',
-        );
-        beforeInput = probe.observe();
-      });
+      beforeAll(
+        async () => {
+          probe = await AdapterProbe.start(options.spawn(), probeOptions);
+          await probe.waitForText(options.ready, timeout);
+          await probe.waitFor(
+            (observation) => snapshotsOf(observation).length > 0,
+            timeout,
+            'a first snapshot from the adapter',
+          );
+          beforeInput = probe.observe();
+        },
+        // Starting the process, waiting for its first frame, and completing the
+        // adapter handshake are separate bounded operations. Vitest otherwise
+        // applies its 10-second hook default even though the suite has a larger
+        // timeout, which makes real adapters flaky under a parallel root run.
+        timeout * 4,
+      );
 
       afterAll(async () => {
         await probe?.stop();

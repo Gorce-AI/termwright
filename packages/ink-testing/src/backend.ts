@@ -22,7 +22,7 @@ export interface InProcessIo {
    * The environment the driver computed for the child, including
    * `TERMWRIGHT_ENDPOINT`, `TERMWRIGHT_TOKEN` and `TERMWRIGHT_PROTOCOL`.
    *
-   * Hand this to `semanticRender` as `semantics.env`. It is deliberately *not*
+   * Hand this to the internal injected probe. It is deliberately *not*
    * `process.env`: an in-process mount must not leave instrumentation variables
    * behind in the test runner (design §4.1, the dormant rule).
    */
@@ -68,10 +68,10 @@ const SIGNAL_STATUS: Readonly<Record<PtySignal, ExitStatus>> = Object.freeze({
  * @example
  * ```ts
  * const backend = createInProcessBackend((io) => {
- *   const app = semanticRender(<App />, {
+ *   const instrumented = wrapInkRender({render, Box, measureElement}, {env: io.env});
+ *   const app = instrumented(<App />, {
  *     stdout: io.stdout,
  *     stdin: io.stdin,
- *     semantics: { env: io.env },
  *   });
  *   return { stop: async () => app.unmount(), exited: app.waitUntilExit() };
  * });

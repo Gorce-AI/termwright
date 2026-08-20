@@ -8,11 +8,25 @@
  * Every action goes through the PTY. There is no semantic callback channel —
  * clicking a button writes the same bytes a human's terminal would.
  */
-import type { Rect, SemanticNode, SemanticState } from '@termwright/protocol';
+import type {
+  LocatorGeometry,
+  LocatorVisibility,
+  CoordinateSpace,
+  Observation,
+  ObservationStamp,
+  PointerHitTest,
+  Rect,
+  SemanticExtendedState,
+  SemanticNode,
+  SemanticState,
+} from '@termwright/protocol';
 import type {
   ActivateReceipt,
+  CellSnapshot,
   ErrorDiagnostics,
   Locator,
+  LocatorCellSnapshot,
+  LocatorCellSnapshotOptions,
   PointerOptions,
   ResolvedTarget,
   TerminalModes,
@@ -35,6 +49,7 @@ import type { GenericQuery, LocatorQuery, RefQuery, SemanticQuery } from './sele
 
 /** Everything a locator needs from its session. */
 export interface LocatorContext {
+  readonly sessionId: string;
   readonly timeouts: Required<TimeoutClasses>;
   /** Resolves once semantic negotiation has settled one way or the other. */
   negotiationSettled(): Promise<void>;
@@ -51,13 +66,16 @@ export interface LocatorContext {
   modes(): TerminalModes;
   /** The best identity the attached producer can offer for a node. */
   identityKind(): ResolvedTarget['identity'];
-  /** True when the attached producer is a probe rather than a hand-written adapter. */
-  producerIsProbe(): boolean;
+  /** True only when semantic bounds address absolute terminal cells. */
+  semanticBoundsAreAbsolute(): boolean;
   /** Resolves when a screen or semantic revision is published, or the deadline passes. */
   waitForChange(deadline: number): Promise<void>;
   sendInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): Promise<void>;
-  /** Publishes one action event; the session owns the clock and the emitter. */
-  emitAction(
+  /** Publishes the start of an action and returns its session-local id. */
+  beginAction(api: string, about?: { selector?: string }): string;
+  /** Publishes the authoritative completion of an action. */
+  endAction(
+    actionId: string,
     api: string,
     ok: boolean,
     about?: { selector?: string; ref?: string; error?: string },
@@ -71,6 +89,10 @@ const MAX_CANDIDATES = 10;
 
 /** Wheel events sent per unit of `deltaY`, capped so a typo cannot spin forever. */
 const MAX_WHEEL_STEPS = 100;
+
+function known<T>(value: T, evidence: 'adapter' | 'probe' | 'terminal-grid' | 'viewport-clip' | 'paint-order' | 'hit-grid' | 'legacy-v1'): Observation<T> {
+  return Object.freeze({ status: 'known', value, evidence });
+}
 
 interface LocatorState {
   readonly parent?: LocatorImpl;
@@ -87,7 +109,12 @@ function nodeTarget(
     ref: `${node.id}@${revision}`,
     revision,
     semantic: true,
-    rect: node.bounds ?? null,
+    rect:
+      node.geometry?.visibleRect.status === 'known'
+        ? node.geometry.visibleRect.value
+        : node.geometry?.intendedRect.status === 'known'
+          ? node.geometry.intendedRect.value
+          : node.bounds ?? null,
     role: node.role,
     name: node.name,
     identity,
@@ -165,6 +192,7 @@ export class LocatorImpl implements Locator {
     await this.#ctx.negotiationSettled();
     const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
     for (;;) {
+      this.#ctx.assertOpen();
       const scope = await this.#resolveScope(deadline);
       const matches = this.#evaluate(scope);
       const selected = this.#select(matches);
@@ -191,13 +219,15 @@ export class LocatorImpl implements Locator {
     const wanted = opts?.state ?? 'visible';
     const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
     for (;;) {
+      this.#ctx.assertOpen();
       const matches = await this.#tryEvaluate(deadline);
-      const satisfied =
-        wanted === 'hidden'
-          ? matches.length === 0 || !matches.some((match) => this.#isVisibleTarget(match))
-          : wanted === 'attached'
-            ? matches.length > 0
-            : matches.some((match) => this.#isVisibleTarget(match));
+      const selected = this.#select(matches);
+      const visible = selected === null ? false : this.#knownVisibleState(selected);
+      const satisfied = wanted === 'attached'
+        ? selected !== null
+        : wanted === 'hidden'
+          ? selected === null || visible === false
+          : visible === true;
       if (satisfied) return;
       if (Date.now() >= deadline) {
         throw new TimeoutError(
@@ -209,11 +239,222 @@ export class LocatorImpl implements Locator {
     }
   }
 
-  async isVisible(): Promise<boolean> {
-    this.#ctx.assertOpen();
-    await this.#ctx.negotiationSettled();
-    const matches = await this.#tryEvaluate(Date.now() + this.#ctx.timeouts.action);
-    return matches.some((match) => this.#isVisibleTarget(match));
+  async geometry(): Promise<LocatorGeometry> {
+    const target = await this.#readStrict();
+    const stamp = this.#stamp();
+    if (target === null) {
+      const absent = Object.freeze({ status: 'absent', reason: 'detached' } as const);
+      return Object.freeze({ stamp, coordinateSpace: absent, intendedRect: absent, visibleRect: absent });
+    }
+    if (!target.semantic && target.rect !== null) {
+      return Object.freeze({
+        stamp,
+        coordinateSpace: known<CoordinateSpace>('viewport-cells', 'terminal-grid'),
+        intendedRect: known(target.rect, 'terminal-grid'),
+        visibleRect: known(this.#clip(target.rect), 'viewport-clip'),
+      });
+    }
+    const qualifiedNode = this.#node(target);
+    if (qualifiedNode.geometry !== undefined) {
+      return Object.freeze({
+        stamp,
+        coordinateSpace:
+          this.#ctx.semanticIndex()?.snapshot.coordinateSpace ??
+          Object.freeze({ status: 'unknown', reason: 'not-reported' } as const),
+        intendedRect: qualifiedNode.geometry.intendedRect,
+        visibleRect: qualifiedNode.geometry.visibleRect,
+      });
+    }
+    if (target.rect === null) {
+      const unknown = Object.freeze({ status: 'unknown', reason: 'not-reported' } as const);
+      return Object.freeze({ stamp, coordinateSpace: unknown, intendedRect: unknown, visibleRect: unknown });
+    }
+    // termwright/1 did not qualify whether bounds were intended, clipped or
+    // actually visible. Preserve that uncertainty rather than retroactively
+    // changing the v1 wire contract.
+    return Object.freeze({
+      stamp,
+      coordinateSpace: this.#ctx.semanticBoundsAreAbsolute()
+        ? known<CoordinateSpace>('viewport-cells', 'legacy-v1')
+        : known<CoordinateSpace>('framework-local-cells', 'legacy-v1'),
+      intendedRect: Object.freeze({ status: 'unknown', reason: 'legacy-unqualified' } as const),
+      visibleRect: Object.freeze({ status: 'unknown', reason: 'legacy-unqualified' } as const),
+    });
+  }
+
+  async visibility(): Promise<LocatorVisibility> {
+    const target = await this.#readStrict();
+    const stamp = this.#stamp();
+    if (target === null) {
+      const absent = Object.freeze({ status: 'absent', reason: 'detached' } as const);
+      return Object.freeze({
+        stamp,
+        attached: known(false, 'adapter'),
+        displayed: absent,
+        viewport: absent,
+        offscreen: absent,
+      });
+    }
+    if (!target.semantic && target.rect !== null) {
+      const viewport = this.#viewport(target.rect);
+      return Object.freeze({
+        stamp,
+        attached: known(true, 'terminal-grid'),
+        displayed: known(true, 'terminal-grid'),
+        viewport: known(viewport, 'viewport-clip'),
+        offscreen: known(viewport.ratio === 0, 'viewport-clip'),
+      });
+    }
+    const node = this.#node(target);
+    if (node.geometry !== undefined) {
+      const intended = node.geometry.intendedRect;
+      const visible = node.geometry.visibleRect;
+      const displayed = node.geometry.displayed;
+      const notDisplayed = Object.freeze({ status: 'absent', reason: 'not-displayed' } as const);
+      const viewport: LocatorVisibility['viewport'] = displayed.status === 'known' && displayed.value === false
+        ? notDisplayed
+        : intended.status === 'known' && visible.status === 'known'
+        ? known({
+            rect: visible.value,
+            ratio: intended.value.width * intended.value.height === 0
+              ? 0
+              : (visible.value.width * visible.value.height) / (intended.value.width * intended.value.height),
+            fullyInside:
+              intended.value.row === visible.value.row &&
+              intended.value.column === visible.value.column &&
+              intended.value.width === visible.value.width &&
+              intended.value.height === visible.value.height,
+          }, 'viewport-clip')
+        : visible.status === 'unsupported' || visible.status === 'absent'
+          ? visible
+          : Object.freeze({ status: 'unknown', reason: visible.status === 'unknown' ? visible.reason : 'not-reported' } as const);
+      const offscreen: LocatorVisibility['offscreen'] = displayed.status === 'known' && displayed.value === false
+        ? notDisplayed
+        : intended.status === 'known' && visible.status === 'known'
+          ? known(intended.value.width * intended.value.height > 0 && visible.value.width * visible.value.height === 0, 'viewport-clip')
+          : visible.status === 'unsupported'
+            ? visible
+            : Object.freeze({ status: 'unknown', reason: visible.status === 'unknown' ? visible.reason : 'not-reported' } as const);
+      return Object.freeze({ stamp, attached: known(true, 'adapter'), displayed, viewport, offscreen });
+    }
+    const hidden = node.state?.hidden;
+    const offscreen = node.state?.offscreen;
+    const displayed: Observation<boolean> = offscreen === true
+      ? known(true, 'probe')
+      : hidden === true
+        ? known(false, 'probe')
+        : hidden === false
+          ? known(true, 'probe')
+        : Object.freeze({ status: 'unknown', reason: 'not-reported' } as const);
+    const viewport: LocatorVisibility['viewport'] = offscreen === true
+      ? known({ rect: target.rect ?? { row: 0, column: 0, width: 0, height: 0 }, ratio: 0, fullyInside: false }, 'viewport-clip')
+      : Object.freeze({ status: 'unknown', reason: target.rect === null ? 'not-reported' : 'legacy-unqualified' } as const);
+    return Object.freeze({
+      stamp,
+      attached: known(true, 'adapter'),
+      displayed,
+      viewport,
+      offscreen: offscreen === true
+        ? known(true, 'probe')
+        : offscreen === false
+          ? known(false, 'probe')
+        : Object.freeze({ status: 'unknown', reason: 'clip-unobservable' } as const),
+    });
+  }
+
+  async hitTest(opts?: { readonly position?: PointerOptions['position'] }): Promise<PointerHitTest> {
+    const target = await this.#readStrict();
+    const stamp = this.#stamp();
+    if (target === null) {
+      const absent = Object.freeze({ status: 'absent', reason: 'detached' } as const);
+      return Object.freeze({ stamp, point: absent, receivesEvents: absent, recipient: absent });
+    }
+    if (target.rect === null) {
+      const absent = Object.freeze({ status: 'absent', reason: 'not-laid-out' } as const);
+      return Object.freeze({ stamp, point: absent, receivesEvents: absent, recipient: absent });
+    }
+    const point = this.#center(target, opts?.position);
+    const snapshot = this.#ctx.semanticIndex()?.snapshot;
+    if (snapshot?.v === 2 && snapshot.hitGrid !== undefined) {
+      if (snapshot.hitGrid.status !== 'known') {
+        return Object.freeze({
+          stamp,
+          point: known(point, 'probe'),
+          receivesEvents: snapshot.hitGrid,
+          recipient: snapshot.hitGrid,
+        });
+      }
+      const owner = snapshot.hitGrid.value.regions.find(({ rect }) =>
+        point.row >= rect.row && point.row < rect.row + rect.height &&
+        point.column >= rect.column && point.column < rect.column + rect.width,
+      );
+      if (owner === undefined) {
+        const absent = Object.freeze({ status: 'absent', reason: 'not-laid-out' } as const);
+        return Object.freeze({ stamp, point: known(point, 'hit-grid'), receivesEvents: known(false, 'hit-grid'), recipient: absent });
+      }
+      const targetId = target.ref.split('@')[0] ?? '';
+      return Object.freeze({
+        stamp,
+        point: known(point, 'hit-grid'),
+        receivesEvents: known(owner.recipientId === targetId, 'hit-grid'),
+        recipient: known(owner.recipientId, 'hit-grid'),
+      });
+    }
+    // v1's occlusion flag says that paint order was observable. It does not
+    // identify the topmost recipient at this point, so it can never prove a
+    // click reaches the selected node.
+    const unknown = Object.freeze({ status: 'unknown', reason: 'legacy-unqualified' } as const);
+    return Object.freeze({ stamp, point: known(point, 'legacy-v1'), receivesEvents: unknown, recipient: unknown });
+  }
+
+  async cellSnapshot(opts: LocatorCellSnapshotOptions = {}): Promise<LocatorCellSnapshot> {
+    const geometry = await this.geometry();
+    const observation = opts.box === 'intended' ? geometry.intendedRect : geometry.visibleRect;
+    if (observation.status !== 'known') {
+      throw new UnsupportedActionError(
+        `cellSnapshot() needs known ${opts.box ?? 'visible'} bounds; received ${observation.status}`,
+        this.#ctx.errorDiagnostics({ suggestion: 'use a grid locator or a probe that publishes qualified viewport geometry' }),
+      );
+    }
+    const pad = typeof opts.padding === 'number'
+      ? { top: opts.padding, right: opts.padding, bottom: opts.padding, left: opts.padding }
+      : { top: opts.padding?.top ?? 0, right: opts.padding?.right ?? 0, bottom: opts.padding?.bottom ?? 0, left: opts.padding?.left ?? 0 };
+    if (Object.values(pad).some((value) => !Number.isSafeInteger(value) || value < 0)) {
+      throw new TypeError('cellSnapshot() padding must contain non-negative safe integers');
+    }
+    const requested = {
+      row: observation.value.row - pad.top,
+      column: observation.value.column - pad.left,
+      width: observation.value.width + pad.left + pad.right,
+      height: observation.value.height + pad.top + pad.bottom,
+    };
+    const rect = this.#clip(requested);
+    const before = this.#ctx.screenRevision();
+    const source = this.#ctx.rows();
+    const after = this.#ctx.screenRevision();
+    if (before !== after || before !== geometry.stamp.screenRevision) {
+      throw new StaleSnapshotError(
+        `cellSnapshot() crossed screen revisions ${geometry.stamp.screenRevision}, ${before} and ${after}`,
+        this.#ctx.errorDiagnostics({ suggestion: 'retry the snapshot after the screen settles' }),
+      );
+    }
+    const cells = Array.from({ length: rect.height }, (_, row) =>
+      Object.freeze((source[rect.row + row]?.cells.slice(rect.column, rect.column + rect.width) ?? []).slice()),
+    );
+    const lines = cells.map((row) => row.filter((cell) => cell.width !== 0).map((cell) => cell.char === '' ? ' ' : cell.char).join('').replace(/ +$/u, ''));
+    const empty: CellSnapshot = Object.freeze<CellSnapshot>({
+      char: '', width: 1, fg: { kind: 'default' }, bg: { kind: 'default' },
+      attributes: { bold: false, dim: false, italic: false, underline: false, inverse: false, strikethrough: false },
+    });
+    return Object.freeze({
+      stamp: geometry.stamp,
+      origin: Object.freeze({ row: rect.row, column: rect.column }),
+      columns: rect.width,
+      rows: rect.height,
+      text: () => lines.join('\n'),
+      line: (row: number) => lines[row] ?? '',
+      cell: (row: number, column: number) => cells[row]?.[column] ?? empty,
+    });
   }
 
   /** Evaluates without propagating a parent-scope timeout: no scope, no matches. */
@@ -228,6 +469,22 @@ export class LocatorImpl implements Locator {
     return this.#evaluate(scope);
   }
 
+  /** Immediate strict observation: zero is detached; ambiguity is an error. */
+  async #readStrict(): Promise<ResolvedTarget | null> {
+    this.#ctx.assertOpen();
+    await this.#ctx.negotiationSettled();
+    const matches = await this.#tryEvaluate(Date.now());
+    return this.#select(matches);
+  }
+
+  #stamp(): ObservationStamp {
+    return Object.freeze({
+      sessionId: this.#ctx.sessionId,
+      screenRevision: this.#ctx.screenRevision(),
+      semanticRevision: this.#ctx.semanticIndex()?.snapshot.revision ?? null,
+    });
+  }
+
   async textContent(): Promise<string> {
     const target = await this.resolve();
     if (target.semantic) {
@@ -240,15 +497,16 @@ export class LocatorImpl implements Locator {
     return target.rect === null ? '' : textInRect(this.#ctx.rows(), target.rect);
   }
 
-  async boundingBox(): Promise<Rect | null> {
-    const target = await this.resolve();
-    return target.rect;
-  }
-
   async semanticState(): Promise<SemanticState | null> {
     const target = await this.resolve();
     if (!target.semantic) return null;
     return this.#node(target).state ?? null;
+  }
+
+  async extendedState(): Promise<SemanticExtendedState | null> {
+    const target = await this.resolve();
+    if (!target.semantic) return null;
+    return this.#node(target).extended ?? null;
   }
 
   // -------------------------------------------------------------------------
@@ -277,8 +535,11 @@ export class LocatorImpl implements Locator {
     }
     const source = await this.#actionTarget('dragTo', opts);
     record(source);
+    this.#assertPointable(source);
     const from = this.#center(source);
-    const to = this.#center(await raw.#actionTarget('dragTo', opts));
+    const destination = await raw.#actionTarget('dragTo', opts);
+    raw.#assertPointable(destination);
+    const to = this.#center(destination);
     await this.#dragBetween(from, to);
   }
 
@@ -314,6 +575,7 @@ export class LocatorImpl implements Locator {
   ): Promise<void> {
     const target = await this.#actionTarget('wheel');
     record(target);
+    this.#assertPointable(target);
     const { row, column } = this.#center(target);
     const modes = this.#ctx.modes();
     const steps = Math.min(Math.abs(Math.trunc(opts.deltaY)), MAX_WHEEL_STEPS);
@@ -394,16 +656,17 @@ export class LocatorImpl implements Locator {
    * attach itself to the next one.
    */
   async #act<T>(api: string, run: (record: (target: ResolvedTarget) => void) => Promise<T>): Promise<T> {
+    const actionId = this.#ctx.beginAction(api, { selector: this.description });
     let ref: string | undefined;
     const record = (target: ResolvedTarget): void => {
       ref = target.ref;
     };
     try {
       const result = await run(record);
-      this.#ctx.emitAction(api, true, { selector: this.description, ...(ref !== undefined ? { ref } : {}) });
+      this.#ctx.endAction(actionId, api, true, { selector: this.description, ...(ref !== undefined ? { ref } : {}) });
       return result;
     } catch (error) {
-      this.#ctx.emitAction(api, false, {
+      this.#ctx.endAction(actionId, api, false, {
         selector: this.description,
         ...(ref !== undefined ? { ref } : {}),
         error: error instanceof TermwrightError ? error.code : error instanceof Error ? error.name : 'unknown',
@@ -422,30 +685,50 @@ export class LocatorImpl implements Locator {
     await this.#clickTarget(target, opts?.button ?? 'left', clicks, opts?.position);
   }
 
-  /**
-   * Refuses a pointer action aimed at geometry that may be covered.
-   *
-   * `bounds` is the best known *visible* geometry, but "best known" is not
-   * "known": where the producer cannot see paint order, the rectangle is an
-   * intention, and a modal or popup may own those cells. Clicking anyway sends
-   * real input to whatever is on top and attributes the result to this target
-   * — a test that passes while testing nothing. Refusing is the transitional
-   * state, and it lifts per framework as paint order becomes available.
-   *
-   * Only probes are held to it. A hand-written adapter never had an occlusion
-   * field to report and its contract predates the rule, so enforcing it there
-   * would disable clicking for every adapter shipped so far in exchange for no
-   * new information. The rule arrives with the model that can answer it.
-   */
-  #assertPointable(target: ResolvedTarget): void {
-    if (!target.semantic || target.occlusion === 'known') return;
-    if (!this.#ctx.producerIsProbe()) return;
+  /** Refuses pointer input unless the exact recipient is observable. */
+  #assertPointable(target: ResolvedTarget, position?: PointerOptions['position']): void {
+    if (!target.semantic) return;
+    if (!this.#ctx.semanticBoundsAreAbsolute()) {
+      throw new UnsupportedActionError(
+        `${this.description} cannot be targeted by pointer: the producer did not promise absolute bounds`,
+        this.#ctx.errorDiagnostics({
+          candidates: [target],
+          suggestion:
+            "drive the widget with press()/keyboard locators, or use an adapter that announces 'absolute-bounds'",
+        }),
+      );
+    }
+    const snapshot = this.#ctx.semanticIndex()?.snapshot;
+    if (snapshot?.v === 2) {
+      const point = this.#center(target, position);
+      if (snapshot.hitGrid?.status !== 'known') {
+        throw new UnsupportedActionError(
+          `${this.description} cannot be clicked safely: exact pointer ownership is ${snapshot.hitGrid?.status ?? 'not reported'}`,
+          this.#ctx.errorDiagnostics({
+            candidates: [target],
+            suggestion: 'use keyboard input or a producer that publishes an exact pointer hit grid',
+          }),
+        );
+      }
+      const owner = snapshot.hitGrid.value.regions.find(({ rect }) =>
+        point.row >= rect.row && point.row < rect.row + rect.height &&
+        point.column >= rect.column && point.column < rect.column + rect.width,
+      );
+      const targetId = target.ref.split('@')[0] ?? '';
+      if (owner?.recipientId !== targetId) {
+        throw new UnsupportedActionError(
+          `${this.description} cannot receive pointer input at (${point.row}, ${point.column}); actual recipient is ${owner?.recipientId ?? 'none'}`,
+          this.#ctx.errorDiagnostics({ candidates: [target] }),
+        );
+      }
+      return;
+    }
     throw new UnsupportedActionError(
-      `${this.description} cannot be clicked: this producer cannot say whether those cells are covered`,
+      `${this.description} cannot be clicked safely: termwright/1 does not identify which node receives input when cells are covered`,
       this.#ctx.errorDiagnostics({
         candidates: [target],
         suggestion:
-          'drive the widget with press()/keyboard locators, or use a framework whose probe reports paint order',
+          'drive the widget with press()/keyboard locators; paint-order knowledge alone cannot prove which node receives the click',
       }),
     );
   }
@@ -456,7 +739,8 @@ export class LocatorImpl implements Locator {
     clicks: number,
     position?: PointerOptions['position'],
   ): Promise<void> {
-    this.#assertPointable(target);
+    this.#assertFreshTarget(target);
+    this.#assertPointable(target, position);
     const modes = this.#ctx.modes();
     const { row, column } = this.#center(target, position);
     const events: MouseEvent[] = [];
@@ -465,6 +749,18 @@ export class LocatorImpl implements Locator {
       if (modes.mouseTracking !== 'x10') events.push({ kind: 'release', button, row, column });
     }
     await this.#ctx.sendInput(concatBytes(events.map((event) => encodeMouse(event, modes))), 'mouse');
+  }
+
+  #assertFreshTarget(target: ResolvedTarget): void {
+    const live = target.semantic ? this.#ctx.semanticRevision() : this.#ctx.screenRevision();
+    if (target.revision === live) return;
+    throw new StaleSnapshotError(
+      `${this.description} advanced from revision ${target.revision} to ${live} before pointer input could be sent`,
+      this.#ctx.errorDiagnostics({
+        candidates: [target],
+        suggestion: 'retry the action so it resolves geometry and pointer ownership from one current observation',
+      }),
+    );
   }
 
   /**
@@ -558,20 +854,49 @@ export class LocatorImpl implements Locator {
   }
 
   #inViewport(rect: Rect): boolean {
-    const rows = this.#ctx.rows();
-    const columns = rows[0]?.cells.length ?? 0;
-    return rect.row >= 0 && rect.column >= 0 && rect.row < rows.length && rect.column < Math.max(columns, 1);
+    return this.#viewport(rect).ratio > 0;
   }
 
-  #isVisibleTarget(target: ResolvedTarget): boolean {
+  #clip(rect: Rect): Rect {
+    return this.#viewport(rect).rect;
+  }
+
+  #viewport(rect: Rect): { readonly rect: Rect; readonly ratio: number; readonly fullyInside: boolean } {
+    const rows = this.#ctx.rows();
+    const columns = rows[0]?.cells.length ?? 0;
+    const row = Math.max(0, rect.row);
+    const column = Math.max(0, rect.column);
+    const bottom = Math.min(rows.length, rect.row + rect.height);
+    const right = Math.min(columns, rect.column + rect.width);
+    const clipped = Object.freeze({
+      row,
+      column,
+      width: Math.max(0, right - column),
+      height: Math.max(0, bottom - row),
+    });
+    const area = Math.max(0, rect.width) * Math.max(0, rect.height);
+    const visible = clipped.width * clipped.height;
+    return Object.freeze({ rect: clipped, ratio: area === 0 ? 0 : visible / area, fullyInside: area > 0 && visible === area });
+  }
+
+  #knownVisibleState(target: ResolvedTarget): boolean | null {
     if (!target.semantic) return target.rect !== null && this.#inViewport(target.rect);
     const node = this.#ctx.semanticIndex()?.node(target.ref.split('@')[0] ?? '');
     if (node === undefined) return false;
+    if (node.geometry !== undefined) {
+      if (node.geometry.displayed.status === 'known' && node.geometry.displayed.value === false) return false;
+      if (node.geometry.visibleRect.status === 'known') {
+        return node.geometry.visibleRect.value.width > 0 && node.geometry.visibleRect.value.height > 0;
+      }
+      return null;
+    }
     if (node.state?.hidden === true) return false;
-    return node.bounds === undefined || this.#inViewport(node.bounds);
+    // v1 bounds do not say whether they are intended or clipped, and absence
+    // does not mean on-screen. Both are unknown rather than a guessed true.
+    return null;
   }
 
-  /** Re-reads the node behind a ref; a vanished node is a stale-snapshot error. */
+  /** Re-reads the node behind a ref; a vanished stable identity is stale. */
   #node(target: ResolvedTarget): SemanticNode {
     const index = this.#ctx.semanticIndex();
     const id = target.ref.split('@')[0] ?? '';
@@ -580,7 +905,7 @@ export class LocatorImpl implements Locator {
       throw new StaleSnapshotError(
         `ref ${target.ref} no longer exists at semantic revision ${this.#ctx.semanticRevision()}`,
         this.#ctx.errorDiagnostics({
-          suggestion: 're-resolve the locator; refs are bound to the revision they were taken at',
+          suggestion: 're-resolve the locator; the node identity is no longer present',
         }),
       );
     }
@@ -600,11 +925,7 @@ export class LocatorImpl implements Locator {
     return this.#evaluateGeneric(this.#query, scope);
   }
 
-  /**
-   * Resolves a ref by identity. A ref is bound to the revision it was minted
-   * at, so a moved-on screen is a stale-snapshot error rather than a silent
-   * re-query that might land on a different node.
-   */
+  /** Resolves a grid ref in its frame, or a semantic ref by producer identity. */
   #evaluateRef(query: RefQuery): ResolvedTarget[] {
     const ref = query.ref;
     if (ref.kind === 'rect') {
@@ -633,7 +954,7 @@ export class LocatorImpl implements Locator {
       );
     }
     const live = index.snapshot.revision;
-    if (live !== ref.revision) {
+    if (live !== ref.revision && this.#ctx.identityKind() !== 'stable') {
       throw new StaleSnapshotError(
         `${query.description} was minted at semantic revision ${ref.revision}; the live revision is ${live}`,
         this.#ctx.errorDiagnostics({

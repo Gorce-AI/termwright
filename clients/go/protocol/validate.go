@@ -241,8 +241,92 @@ func checkState(value any, path []string) *issue {
 
 var nodeKeys = []string{
 	"id", "parentId", "role", "name", "description", "value", "bounds",
-	"state", "actions", "labelledBy", "describedBy", "textRanges", "testId",
+	"state", "extended", "actions", "labelledBy", "describedBy", "textRanges", "testId",
 	"frameworkType", "occlusion", "p", "px",
+}
+var nodeV2Keys = []string{
+	"id", "parentId", "role", "name", "description", "value", "geometry",
+	"state", "extended", "actions", "labelledBy", "describedBy", "textRanges", "testId",
+	"frameworkType", "p", "px",
+}
+
+func checkObservation(value any, path []string, limits Limits, known func(any, []string) *issue) *issue {
+	object, problem := checkObject(value, path)
+	if problem != nil {
+		return problem
+	}
+	status, _ := object["status"].(string)
+	switch status {
+	case "known":
+		if problem := checkStrict(object, []string{"status", "value", "evidence"}, path); problem != nil {
+			return problem
+		}
+		if _, ok := object["evidence"].(string); !ok {
+			return fail(at(path, "evidence"), "expected evidence")
+		}
+		return known(object["value"], at(path, "value"))
+	case "absent", "unknown":
+		if problem := checkStrict(object, []string{"status", "reason"}, path); problem != nil {
+			return problem
+		}
+		if _, ok := object["reason"].(string); !ok {
+			return fail(at(path, "reason"), "expected reason")
+		}
+		return nil
+	case "unsupported":
+		if problem := checkStrict(object, []string{"status", "capability", "reason"}, path); problem != nil {
+			return problem
+		}
+		if _, problem := checkText(object["capability"], at(path, "capability"), limits); problem != nil {
+			return problem
+		}
+		if _, ok := object["reason"].(string); !ok {
+			return fail(at(path, "reason"), "expected reason")
+		}
+		return nil
+	default:
+		return fail(at(path, "status"), "invalid observation status")
+	}
+}
+
+func checkExtended(value any, path []string, limits Limits) *issue {
+	switch typed := value.(type) {
+	case nil, bool:
+		return nil
+	case string:
+		_, problem := checkText(typed, path, limits)
+		return problem
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || math.Abs(typed) > maxSafeInteger {
+			return fail(path, "expected a finite JSON number in the safe range")
+		}
+		return nil
+	case []any:
+		if len(typed) > limits.MaxRelationTargets {
+			return failBig(path, fmt.Sprintf("expected at most %d items", limits.MaxRelationTargets))
+		}
+		for index, item := range typed {
+			if problem := checkExtended(item, at(path, fmt.Sprint(index)), limits); problem != nil {
+				return problem
+			}
+		}
+		return nil
+	case map[string]any:
+		if len(typed) > limits.MaxRelationTargets {
+			return failBig(path, fmt.Sprintf("expected at most %d properties", limits.MaxRelationTargets))
+		}
+		for key, item := range typed {
+			if _, problem := checkText(key, at(path, key), limits); problem != nil {
+				return problem
+			}
+			if problem := checkExtended(item, at(path, key), limits); problem != nil {
+				return problem
+			}
+		}
+		return nil
+	default:
+		return fail(path, "expected JSON scalar, array or object")
+	}
 }
 
 func oneOf(value string, allowed []string) bool {
@@ -270,12 +354,19 @@ func checkRelations(value any, path []string, limits Limits) *issue {
 	return nil
 }
 
-func checkNodeSchema(value any, path []string, limits Limits) *issue {
+func checkNodeSchema(value any, path []string, limits Limits, v2 bool) *issue {
 	object, problem := checkObject(value, path)
 	if problem != nil {
 		return problem
 	}
-	if problem := checkStrict(object, nodeKeys, path); problem != nil {
+	keys := nodeKeys
+	if v2 {
+		if _, present := object["bounds"]; present {
+			return fail(at(path, "bounds"), "legacy bounds are forbidden in v2")
+		}
+		keys = nodeV2Keys
+	}
+	if problem := checkStrict(object, keys, path); problem != nil {
 		return problem
 	}
 
@@ -347,6 +438,28 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 			return problem
 		}
 	}
+	if v2 {
+		geometry, problem := checkObject(object["geometry"], at(path, "geometry"))
+		if problem != nil {
+			return problem
+		}
+		if problem := checkStrict(geometry, []string{"displayed", "intendedRect", "visibleRect"}, at(path, "geometry")); problem != nil {
+			return problem
+		}
+		if problem := checkObservation(geometry["displayed"], at(path, "geometry", "displayed"), limits, func(v any, p []string) *issue {
+			if _, ok := v.(bool); !ok {
+				return fail(p, "expected boolean")
+			}
+			return nil
+		}); problem != nil {
+			return problem
+		}
+		for _, field := range []string{"intendedRect", "visibleRect"} {
+			if problem := checkObservation(geometry[field], at(path, "geometry", field), limits, func(v any, p []string) *issue { _, issue := checkRect(v, p); return issue }); problem != nil {
+				return problem
+			}
+		}
+	}
 	if state, ok := object["state"]; ok {
 		if problem := checkState(state, at(path, "state")); problem != nil {
 			return problem
@@ -362,6 +475,15 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 					"node %s: state.offscreen implies state.hidden — every cell is outside "+
 						"the visible area, so the node cannot also be visible", id))
 			}
+		}
+	}
+	if extended, ok := object["extended"]; ok {
+		fields, isObject := extended.(map[string]any)
+		if !isObject {
+			return fail(at(path, "extended"), "expected an object")
+		}
+		if problem := checkExtended(fields, at(path, "extended"), limits); problem != nil {
+			return problem
 		}
 	}
 	if actions, ok := object["actions"]; ok {
@@ -441,17 +563,24 @@ func checkCursor(value any, path []string) *issue {
 }
 
 var snapshotKeys = []string{"v", "sessionId", "revision", "columns", "rows", "cursor", "rootIds", "nodes"}
+var snapshotV2Keys = append(append([]string{}, snapshotKeys...), "coordinateSpace", "hitGrid")
 
 func checkSnapshotSchema(value any, limits Limits) *issue {
 	object, problem := checkObject(value, nil)
 	if problem != nil {
 		return problem
 	}
-	if problem := checkStrict(object, snapshotKeys, nil); problem != nil {
+	version, ok := object["v"].(float64)
+	v2 := ok && version == 2
+	keys := snapshotKeys
+	if v2 {
+		keys = snapshotV2Keys
+	}
+	if problem := checkStrict(object, keys, nil); problem != nil {
 		return problem
 	}
-	if version, ok := object["v"].(float64); !ok || version != 1 {
-		return fail([]string{"v"}, "expected the literal 1")
+	if !ok || (version != 1 && version != 2) {
+		return fail([]string{"v"}, "expected the literal 1 or 2")
 	}
 	sessionID, problem := checkText(object["sessionId"], []string{"sessionId"}, limits)
 	if problem != nil {
@@ -495,7 +624,60 @@ func checkSnapshotSchema(value any, limits Limits) *issue {
 		return failBig([]string{"nodes"}, fmt.Sprintf("expected at most %d items", limits.MaxNodes))
 	}
 	for index, node := range nodes {
-		if problem := checkNodeSchema(node, []string{"nodes", fmt.Sprint(index)}, limits); problem != nil {
+		if problem := checkNodeSchema(node, []string{"nodes", fmt.Sprint(index)}, limits, v2); problem != nil {
+			return problem
+		}
+	}
+	if v2 {
+		if problem := checkObservation(object["coordinateSpace"], []string{"coordinateSpace"}, limits, func(v any, p []string) *issue {
+			s, ok := v.(string)
+			if !ok || (s != "viewport-cells" && s != "framework-local-cells") {
+				return fail(p, "invalid coordinate space")
+			}
+			return nil
+		}); problem != nil {
+			return problem
+		}
+		if problem := checkObservation(object["hitGrid"], []string{"hitGrid"}, limits, func(v any, p []string) *issue {
+			grid, issue := checkObject(v, p)
+			if issue != nil {
+				return issue
+			}
+			if issue := checkStrict(grid, []string{"regions"}, p); issue != nil {
+				return issue
+			}
+			regions, ok := grid["regions"].([]any)
+			if !ok || len(regions) > limits.MaxNodes {
+				return fail(at(p, "regions"), "invalid hit regions")
+			}
+			var previous map[string]float64
+			for i, raw := range regions {
+				rp := at(p, "regions", fmt.Sprint(i))
+				region, issue := checkObject(raw, rp)
+				if issue != nil {
+					return issue
+				}
+				if issue := checkStrict(region, []string{"rect", "recipientId"}, rp); issue != nil {
+					return issue
+				}
+				rect, issue := checkRect(region["rect"], at(rp, "rect"))
+				if issue != nil {
+					return issue
+				}
+				if rect["width"] <= 0 || rect["height"] != 1 {
+					return fail(at(rp, "rect"), "hit regions must be non-empty row runs")
+				}
+				if previous != nil && (rect["row"] < previous["row"] ||
+					(rect["row"] == previous["row"] && rect["column"] < previous["column"]+previous["width"])) {
+					return fail(at(rp, "rect"), "hit regions must be non-overlapping row-major runs")
+				}
+				previous = rect
+				if _, issue := checkText(region["recipientId"], at(rp, "recipientId"), limits); issue != nil {
+					return issue
+				}
+			}
+			return nil
+		}); problem != nil {
 			return problem
 		}
 	}
@@ -717,7 +899,7 @@ func checkTreeDeltaSchema(value any, limits Limits) *issue {
 		return failBig([]string{"changed"}, fmt.Sprintf("expected at most %d items", limits.MaxNodes))
 	}
 	for index, node := range changed {
-		if problem := checkNodeSchema(node, []string{"changed", fmt.Sprint(index)}, limits); problem != nil {
+		if problem := checkNodeSchema(node, []string{"changed", fmt.Sprint(index)}, limits, false); problem != nil {
 			return problem
 		}
 	}
@@ -828,6 +1010,23 @@ func ValidateSnapshot(value any, limits Limits) error {
 	ids := make(map[string]struct{}, len(byID))
 	for id := range byID {
 		ids[id] = struct{}{}
+	}
+	if snapshot["v"].(float64) == 2 {
+		observation := snapshot["hitGrid"].(map[string]any)
+		if observation["status"] == "known" {
+			grid := observation["value"].(map[string]any)
+			for _, raw := range grid["regions"].([]any) {
+				region := raw.(map[string]any)
+				recipientID := stringOr(region["recipientId"])
+				if _, known := ids[recipientID]; !known {
+					return invalid("missing-parent", "hitGrid references unknown recipient %s", recipientID)
+				}
+				rect, _ := checkRect(region["rect"], nil)
+				if !rectIntersectsViewport(rect, columns, rows) {
+					return invalid("bad-rect", "hitGrid region for %s does not intersect the viewport", recipientID)
+				}
+			}
+		}
 	}
 
 	for _, node := range nodes {

@@ -1,78 +1,52 @@
 ---
-title: Packages
-description: What each package is for, what it may depend on, and which one you actually need.
+title: Packages and exports
+description: Supported imports from the Termwright umbrella package and specialist packages.
 ---
 
-## What to install
+Most projects install only the umbrella package:
 
-| You want to… | Install |
-|---|---|
-| write terminal tests with Vitest | `@termwright/test` |
-| drive a terminal from any runner or a plain script | `@termwright/driver` |
-| make an Ink app addressable by role and name | `@termwright/ink` |
-| test Ink components instead of processes | `@termwright/ink-testing` |
-| give an AI agent a terminal | `@termwright/mcp` |
-| open a live runner, inspector and time-travel UI | `@termwright/ui` |
-| turn a screen into an SVG or PNG without a browser | `@termwright/screenshot` |
-| certify your own adapter | `@termwright/conformance` |
+```sh
+npm install --save-dev termwright vitest
+```
 
-## The map
+## Public umbrella exports
 
-| Package | Purpose |
-|---|---|
-| `@termwright/protocol` | Schemas, limits, roles, framing, handshake, marker, validation, tree deltas, the AccessKit export. Zero framework dependencies. |
-| `@termwright/vt` | The shared VT core: one terminal factory, one set of [terminal profiles](../../guides/terminal-profiles/). |
-| `@termwright/logs` | [Application log](../../guides/app-logs/) capture: the `termwright:log` channel, redaction, pino/winston/consola/OTel bridges. |
-| `@termwright/driver` | PTY + VT emulator, sessions, screen model, locators, actions, waits, typed errors, recording hooks. |
-| `@termwright/test` | Vitest preset: fixtures, matchers, semantic and cell snapshots, trace reporter, flaky classification, config. |
-| `@termwright/ink` | Production adapter for Ink 7 (`aria-*` props + `useSemantic`). |
-| `@termwright/ink-testing` | `mountInk` (in-process) and `launchInkFixture` (real pty). |
-| `@termwright/opentui` | Adapter for OpenTUI. |
-| `@termwright/mcp` | MCP server over the public driver API. |
-| `@termwright/trace` | The `.twtrace` format: writer, streaming reader, HTML report generator. |
-| `@termwright/screenshot` | SVG with embedded glyph outlines, and PNG through resvg. No browser. |
-| `@termwright/ui` | Interactive runner: local server plus browser app. |
-| `@termwright/conformance` | Fixtures and the reusable adapter contract suite. |
-| `termwright` | Umbrella package and CLI. Subpaths: `termwright` (driver), `/test` (Vitest preset), `/ink` (component testing), `/reporter` and `/ui-reporter` (for `vitest.config.ts`), `/cli`. |
+| Import | Use |
+| --- | --- |
+| `termwright` | Driver sessions, terminal model, locators, actions, and errors. |
+| `termwright/test` | Vitest fixture, `expect`, matchers, snapshots, config, retries, and seeding. |
+| `termwright/ink` | Ink component-test helpers. |
+| `termwright/gherkin` | Gherkin plugin and step-definition API. |
+| `termwright/reporter` | Trace and CI report integration. |
+| `termwright/ui-reporter` | Live Runner reporter for manually managed hosts. |
+| `termwright/cli` | Programmatic CLI entry. |
 
-Other registries, same repository:
+Prefer these imports in application test suites. They keep setup consistent and
+avoid depending on transitive packages.
 
-| Package | Registry | Contents |
-|---|---|---|
-| `termwright` | PyPI | protocol client + Textual adapter |
-| `github.com/gorce-ai/termwright/clients/go` | Go modules | protocol client + tview adapter |
-| `termwright-protocol` | crates.io | protocol client (a Ratatui adapter is 1.x) |
+## Framework packages
 
-Each is versioned independently and bound to the **protocol** version.
+Framework probes and annotation SDKs are separate because they run inside or
+instrument the application:
 
-## Dependency rules
+| Framework | Probe | Optional annotations |
+| --- | --- | --- |
+| Ink | `@termwright/probe-ink` | `@termwright/ink` |
+| OpenTUI | `@termwright/probe-opentui` | `@termwright/opentui` |
+| Textual | Python `termwright` probe | `termwright.textual` |
+| tview | `@termwright/probe-tview` | Go `annotate` package |
+| Ratatui | `termwright-probe-ratatui` | `termwright-ratatui` |
+| Bubble Tea | `@termwright/probe-charm` | Go `annotate` package |
 
-These are enforced by review, and they are what keeps the driver installable in
-a project that has never heard of React:
+See [Framework integrations](../../adapters/) before adding one.
 
-- `protocol` depends on `zod` only — never on React, Ink, MCP, PTY or the driver;
-- `vt` depends on the xterm packages only, and **driver, trace, screenshot and
-  ui build terminals solely through its factory**. Private per-package
-  terminal factories are how the Unicode 6/11 width split happened, and are
-  banned;
-- `logs` depends on `protocol` only; the logger libraries are optional peers,
-  never runtime dependencies;
-- `driver` depends on `protocol` plus the PTY and VT libraries — never on Ink,
-  Vitest or MCP;
-- **adapters** depend on `protocol` and their framework — never on the driver;
-- `test` depends on `driver` (+ `trace`, + protocol types) and declares `vitest`
-  as a peer;
-- `ink-testing` depends on `driver`, `ink` and `protocol`;
-- `mcp` depends on `driver` and the MCP SDK behind a facade, and owns no session
-  logic of its own;
-- `trace` consumes driver types only, and may type-import from `protocol`;
-- `ui` depends on `trace` and `driver`, and talks to Vitest only through our own
-  event protocol;
-- `conformance` may depend on everything; nothing depends on it.
+## Specialist packages
 
-## Engineering baseline
+The monorepo also publishes focused packages for the driver, protocol, VT
+emulator, traces, screenshots, logs, UI server, MCP server, and conformance.
+Use them when building an integration or embedding one subsystem. Their package
+READMEs and exported TypeScript types are the reference for that specialist
+surface.
 
-ESM only, Node >= 22, TypeScript strict, built with tsup, tested with Vitest, no
-default exports, no `any` in public surfaces. Errors crossing a package boundary
-are `TermwrightError` subclasses. All I/O is bounded by the protocol's limit
-sets, and hostile-input suites must pass under `node --max-old-space-size=128`.
+Do not import internal `src/` or `dist/` paths. Only package `exports` entries
+are public.

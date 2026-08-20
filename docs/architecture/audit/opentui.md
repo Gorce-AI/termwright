@@ -1,5 +1,9 @@
 # Upstream audit — OpenTUI
 
+> **Historical Phase 0 evidence.** The pinned-source measurements below are
+> retained as design evidence. Any current support or setup guidance is
+> superseded by the website OpenTUI adapter guide and compatibility reference.
+
 **Pinned version: `@opentui/core@0.5.3`** (`pnpm-lock.yaml:1412`). Line
 references are to the installed package at
 `node_modules/.pnpm/@opentui+core@0.5.3_typescript@5.9.3_web-tree-sitter@0.25.10/node_modules/@opentui/core/`,

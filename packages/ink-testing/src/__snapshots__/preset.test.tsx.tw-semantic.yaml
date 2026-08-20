@@ -2,9 +2,10 @@
 # Update with `vitest -u` or TERMWRIGHT_UPDATE_SNAPSHOTS=changed.
 "stores and compares the whole tree 1": |
   - application:
-      - text "stored"
-      - button "Approve" [focused]:
-          - text "Approve"
-      - textbox "Message":
-          - text ">"
-      - text "pressed 0"
+      - generic:
+          - text "stored"
+          - button "Approve":
+              - text "Approve"
+          - textbox "Message":
+              - text ">"
+          - text "pressed 0"

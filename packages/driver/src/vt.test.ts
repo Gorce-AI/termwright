@@ -80,7 +80,7 @@ describe('VtScreen', () => {
   });
 
   it('sees a marker that follows a synchronized-output block', async () => {
-    // Byte order adapters actually emit (verified against @termwright/ink):
+    // Byte order framework probes actually emit (verified against the Ink probe):
     // BSU, the frame, ESU, and only then the render-commit marker.
     const screen = createVt();
     const seen: MarkerSighting[] = [];

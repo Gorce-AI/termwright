@@ -48,6 +48,16 @@ export interface CollectedTest extends ReportTestResult {
   readonly obsoleteSnapshots?: readonly string[];
   /** Programs that died unexpectedly during this test. */
   readonly crashes?: readonly ReportCrash[];
+  /** Ordered native Vitest attempts for this stable case. */
+  readonly attempts?: readonly CollectedTestAttempt[];
+}
+
+export interface CollectedTestAttempt {
+  readonly attempt: number;
+  readonly status: 'passed' | 'failed' | 'skipped';
+  readonly durationMs?: number;
+  readonly errors: readonly { readonly message: string; readonly stack?: string }[];
+  readonly tracePaths?: readonly string[];
 }
 
 /**
@@ -234,6 +244,7 @@ function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | und
   const traces = tracesOf(meta);
   const obsolete = obsoleteOf(meta);
   const crashes = crashesOf(meta);
+  const attempts = attemptsOf(meta, status, diagnostic?.retryCount ?? 0, diagnostic?.duration, result?.errors);
   return {
     id,
     title: testCase.fullName ?? testCase.name ?? id,
@@ -241,9 +252,10 @@ function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | und
     flaky: diagnostic?.flaky === true || (status === 'passed' && (diagnostic?.retryCount ?? 0) > 0),
     ...(testCase.module?.moduleId === undefined ? {} : { file: testCase.module.moduleId }),
     ...(diagnostic?.duration === undefined ? {} : { durationMs: diagnostic.duration }),
-    ...(error === undefined
+    ...(status !== 'failed' || error === undefined
       ? {}
       : { error: { message: error.message ?? 'test failed', ...(error.stack === undefined ? {} : { stack: error.stack }) } }),
+    ...(attempts.length <= 1 ? {} : { attempts }),
     ...(traces[0] === undefined ? {} : { tracePath: traces[0] }),
     ...(obsolete.length === 0 ? {} : { obsoleteSnapshots: obsolete }),
     ...(crashes.length === 0 ? {} : { crashes }),
@@ -262,6 +274,13 @@ function walk(tasks: readonly TaskLike[]): (CollectedTest & { id: string })[] {
       const traces = tracesOf(task.meta);
       const obsolete = obsoleteOf(task.meta);
       const crashes = crashesOf(task.meta);
+      const attempts = attemptsOf(
+        task.meta,
+        status,
+        task.result?.retryCount ?? 0,
+        task.result?.duration,
+        task.result?.errors,
+      );
       collected.push({
         id: task.id,
         title: names.join(' > '),
@@ -269,9 +288,10 @@ function walk(tasks: readonly TaskLike[]): (CollectedTest & { id: string })[] {
         flaky: status === 'passed' && (task.result?.retryCount ?? 0) > 0,
         ...(task.file?.filepath === undefined ? {} : { file: task.file.filepath }),
         ...(task.result?.duration === undefined ? {} : { durationMs: task.result.duration }),
-        ...(error === undefined
+        ...(status !== 'failed' || error === undefined
           ? {}
           : { error: { message: error.message ?? 'test failed', ...(error.stack === undefined ? {} : { stack: error.stack }) } }),
+        ...(attempts.length <= 1 ? {} : { attempts }),
         ...(traces[0] === undefined ? {} : { tracePath: traces[0] }),
         ...(obsolete.length === 0 ? {} : { obsoleteSnapshots: obsolete }),
         ...(crashes.length === 0 ? {} : { crashes }),
@@ -311,6 +331,65 @@ function crashesOf(meta: object | undefined): readonly ReportCrash[] {
   const carrier = meta as { termwright?: { crashes?: unknown } } | undefined;
   const crashes = carrier?.termwright?.crashes;
   return Array.isArray(crashes) ? (crashes.filter((entry) => typeof entry === 'object' && entry !== null) as ReportCrash[]) : [];
+}
+
+function attemptsOf(
+  meta: object | undefined,
+  finalStatus: 'passed' | 'failed' | 'skipped',
+  retryCount: number,
+  durationMs: number | undefined,
+  finalErrors: readonly ErrorLike[] | undefined,
+): readonly CollectedTestAttempt[] {
+  const carrier = meta as {
+    termwright?: {
+      attemptFailures?: readonly {
+        attempt?: unknown;
+        errors?: unknown;
+        traceRefs?: unknown;
+      }[];
+    };
+  } | undefined;
+  const attempts: CollectedTestAttempt[] = [];
+  for (const failure of carrier?.termwright?.attemptFailures ?? []) {
+    if (!Number.isInteger(failure.attempt) || (failure.attempt as number) < 1) continue;
+    const rawErrors = Array.isArray(failure.errors) ? failure.errors : [];
+    const errors = rawErrors.flatMap((entry) => {
+      if (typeof entry !== 'object' || entry === null) return [];
+      const value = entry as { message?: unknown; stack?: unknown };
+      if (typeof value.message !== 'string') return [];
+      return [{
+        message: value.message,
+        ...(typeof value.stack === 'string' ? { stack: value.stack } : {}),
+      }];
+    });
+    const tracePaths = Array.isArray(failure.traceRefs)
+      ? failure.traceRefs.filter((entry): entry is string => typeof entry === 'string' && entry !== '')
+      : [];
+    attempts.push({
+      attempt: failure.attempt as number,
+      status: 'failed',
+      errors: errors.length === 0 ? [{ message: 'test failed' }] : errors,
+      ...(tracePaths.length === 0 ? {} : { tracePaths }),
+    });
+  }
+  const finalAttempt = retryCount + 1;
+  const existing = attempts.findIndex((attempt) => attempt.attempt === finalAttempt);
+  const exactErrors = existing === -1 ? undefined : attempts[existing]?.errors;
+  const fallbackErrors = (finalErrors ?? []).map((error) => ({
+    message: error.message ?? 'test failed',
+    ...(error.stack === undefined ? {} : { stack: error.stack }),
+  }));
+  const final: CollectedTestAttempt = {
+    attempt: finalAttempt,
+    status: finalStatus,
+    errors: finalStatus === 'failed'
+      ? (exactErrors ?? (fallbackErrors.length === 0 ? [{ message: 'test failed' }] : fallbackErrors))
+      : [],
+    ...(durationMs === undefined ? {} : { durationMs }),
+  };
+  if (existing === -1) attempts.push(final);
+  else attempts[existing] = { ...attempts[existing] as CollectedTestAttempt, ...final };
+  return attempts.sort((left, right) => left.attempt - right.attempt);
 }
 
 function stringsOf(meta: object | undefined, key: 'traces' | 'obsoleteSnapshots'): readonly string[] {

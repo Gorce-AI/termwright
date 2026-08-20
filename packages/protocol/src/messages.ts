@@ -4,7 +4,7 @@ import type { LogRecord } from './logs.js';
 import type { TreeDelta } from './delta.js';
 import type { ProbeInfo } from './probe/ir.js';
 import type { ProtocolLimits } from './limits.js';
-import { PROTOCOL_ID } from './env.js';
+import { PROTOCOL_ID, PROTOCOL_V2_ID, type ProtocolId } from './env.js';
 import { ProtocolViolation } from './errors.js';
 import { projectDto } from './framing.js';
 import { validateSnapshot } from './validate.js';
@@ -28,13 +28,15 @@ export const ADAPTER_CAPABILITIES = [
   'render-revisions',
   'tree-diffs',
   'logs',
+  'qualified-observations',
+  'pointer-hit-grid',
 ] as const;
 export type AdapterCapability = (typeof ADAPTER_CAPABILITIES)[number];
 
 /** adapter → driver, exactly once, before any other message. */
 export interface HelloMessage {
   readonly type: 'hello';
-  readonly protocol: 'termwright/1';
+  readonly protocol: ProtocolId;
   readonly token: string;
   readonly adapter: { readonly name: string; readonly version: string };
   readonly capabilities: readonly AdapterCapability[];
@@ -51,7 +53,7 @@ export interface HelloMessage {
 /** driver → adapter, reply to hello. */
 export interface HelloAckMessage {
   readonly type: 'hello-ack';
-  readonly protocol: 'termwright/1';
+  readonly protocol: ProtocolId;
   readonly sessionId: string;
   readonly limits: ProtocolLimits;
   /**
@@ -63,7 +65,7 @@ export interface HelloAckMessage {
    * adapter opts in first.
    */
   readonly subscribe: 'snapshots' | 'revisions' | 'diffs';
-  /** Marker configuration: adapter must emit DCS marker with this nonce base. */
+  /** Marker configuration: producer must emit the signed OSC 8487 commit marker. */
   readonly marker: { readonly enabled: boolean };
   /**
    * Log-channel budget, sent only when the adapter announced the `logs`
@@ -249,7 +251,7 @@ const errorFromDriverSchema = z.object(errorFields);
 /** adapter → driver schemas. Snapshot bodies are validated separately. */
 const helloSchema = z.strictObject({
   type: z.literal('hello'),
-  protocol: z.literal(PROTOCOL_ID),
+  protocol: z.union([z.literal(PROTOCOL_ID), z.literal(PROTOCOL_V2_ID)]),
   token: nonEmptyIdentifier,
   adapter: z.strictObject({ name: nonEmptyIdentifier, version: nonEmptyIdentifier }),
   capabilities: z.array(z.enum(ADAPTER_CAPABILITIES)).max(ADAPTER_CAPABILITIES.length),
@@ -293,7 +295,7 @@ const getTreeResultSchema = z
 /** driver → adapter schemas. */
 const helloAckSchema = z.object({
   type: z.literal('hello-ack'),
-  protocol: z.literal(PROTOCOL_ID),
+  protocol: z.union([z.literal(PROTOCOL_ID), z.literal(PROTOCOL_V2_ID)]),
   sessionId: nonEmptyIdentifier,
   limits: limitsSchema,
   subscribe: z.enum(['snapshots', 'revisions', 'diffs']),
@@ -424,11 +426,23 @@ export function parseAdapterMessage(
   switch (messageType(dto)) {
     case 'hello': {
       const protocol: unknown = (dto as { protocol?: unknown }).protocol;
-      if (typeof protocol === 'string' && protocol !== PROTOCOL_ID) {
+      if (typeof protocol === 'string' && protocol !== PROTOCOL_ID && protocol !== PROTOCOL_V2_ID) {
         return { ok: false, code: 'bad-version', detail: `unsupported protocol ${protocol}` };
       }
       const issue = check(helloSchema, dto);
       if (issue !== null) return malformed(issue);
+      const candidate = dto as HelloMessage;
+      const qualified = candidate.capabilities.includes('qualified-observations');
+      if ((candidate.protocol === PROTOCOL_V2_ID) !== qualified) {
+        return malformed(
+          candidate.protocol === PROTOCOL_V2_ID
+            ? "termwright/2 requires the 'qualified-observations' capability"
+            : "'qualified-observations' requires termwright/2",
+        );
+      }
+      if (candidate.capabilities.includes('pointer-hit-grid') && !qualified) {
+        return malformed("'pointer-hit-grid' requires qualified observations");
+      }
       // The shape check cannot see the one incoherent pair: a probe declaring
       // frame-local identity while claiming it can be correlated across
       // frames. That rule has to hold on the wire, not only when a caller
@@ -523,7 +537,7 @@ export function parseDriverMessage(
   switch (messageType(dto)) {
     case 'hello-ack': {
       const protocol: unknown = (dto as { protocol?: unknown }).protocol;
-      if (typeof protocol === 'string' && protocol !== PROTOCOL_ID) {
+      if (typeof protocol === 'string' && protocol !== PROTOCOL_ID && protocol !== PROTOCOL_V2_ID) {
         return { ok: false, code: 'bad-version', detail: `unsupported protocol ${protocol}` };
       }
       const issue = check(helloAckSchema, dto);

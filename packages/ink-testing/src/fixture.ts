@@ -18,6 +18,7 @@ import {
   type TerminalHarness,
   type TimeoutClasses,
 } from '@termwright/driver';
+import { withProbe } from '@termwright/probe-ink';
 import { ControlChannel, ENV_CONTROL_ENDPOINT, ENV_CONTROL_TOKEN } from './control.js';
 import { ForwardingHarness } from './forwarding.js';
 import { encodeFixturePayload, type JsonProps } from './payload.js';
@@ -107,10 +108,9 @@ const RUNNER_ENTRY = new URL('../runner/runner-entry.mjs', import.meta.url);
 /**
  * Starts a fixture process in a real pty and returns a harness over it.
  *
- * The fixture renders `component`'s export with `props` through the same
- * `semanticRender` a production app uses, in the alternate screen, so the
- * semantic tree it publishes matches what `mountInk` produces for the same
- * element.
+ * The fixture renders `component`'s export with normal Ink under the same
+ * injected probe a production app uses, in the alternate screen, so its tree
+ * matches what `mountInk` produces for the same element.
  *
  * @example
  * ```ts
@@ -139,7 +139,12 @@ export async function launchInkFixture(options: LaunchInkFixtureOptions): Promis
   const control = await ControlChannel.listen();
 
   const harness = await launchTerminal({
-    command: [process.execPath, ...(options.nodeArgs ?? []), fileURLToPath(RUNNER_ENTRY), payload],
+    command: withProbe('node', [
+      process.execPath,
+      ...(options.nodeArgs ?? []),
+      fileURLToPath(RUNNER_ENTRY),
+      payload,
+    ]).command,
     columns: options.columns ?? 80,
     rows: options.rows ?? 24,
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),

@@ -64,20 +64,15 @@ describe('what the majors are called', () => {
 });
 
 describe('what each major can promise', () => {
-  it('claims bounds only where a channel survives the string', () => {
+  it('claims only what each shipped probe actually emits', () => {
     // Both majors flatten the frame to one styled string, and Lip Gloss
-    // destroys the fragment→region mapping on the way. v2 keeps two channels
-    // that survive it; v1 keeps none, and says so instead of guessing.
-    expect(capabilitiesFor('v2')).toContain('bounds');
-    expect(capabilitiesFor('v1')).not.toContain('bounds');
-    expect(reportsGeometry('v1')).toBe(false);
-    expect(reportsGeometry('v2')).toBe(true);
-  });
-
-  it('reports a tree in both majors, because component and fragment are known', () => {
+    // destroys the fragment→region mapping on the way. v2 has possible future
+    // attribution channels, but this patch set has not wired either one.
     for (const major of ['v1', 'v2'] as const) {
-      expect(capabilitiesFor(major)).toContain('tree');
-      expect(capabilitiesFor(major)).toContain('states');
+      expect(capabilitiesFor(major)).toEqual(['tree', 'states', 'actions', 'render-revisions']);
+      expect(capabilitiesFor(major)).not.toContain('bounds');
+      expect(capabilitiesFor(major)).not.toContain('absolute-bounds');
+      expect(reportsGeometry(major)).toBe(false);
     }
   });
 });

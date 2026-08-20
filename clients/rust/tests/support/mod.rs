@@ -1,3 +1,8 @@
+// Each integration-test crate imports this shared module independently and
+// uses a different subset of it. What looks dead in one crate is exercised by
+// another, so all-target clippy must judge the helpers as a shared fixture.
+#![allow(dead_code)]
+
 //! A stand-in driver for integration tests: completes the handshake, records
 //! what the adapter sent, and can grant a log budget.
 

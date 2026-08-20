@@ -1,51 +1,45 @@
 ---
 title: Accessibility
-description: ARIA in the runner, the AccessKit export, and an honest account of why there is no native bridge in 1.0.
+description: Keyboard and screen-reader behavior in Runner UI, plus the AccessKit tree export.
 ---
 
-termwright models a terminal application's meaning as an ARIA-aligned tree. That
-opens two accessibility questions, and they have different answers: the runner
-UI *is* accessible, and the semantic tree *can be exported* to a real
-accessibility API — but termwright makes no claim to be an assistive-technology
-bridge in 1.0, and this page explains exactly why.
+This page covers accessibility of the Termwright Runner and the optional export
+of a terminal application's semantic tree. Termwright does not make an
+application running inside a terminal directly available to platform screen
+readers.
 
-## The runner is accessible
+## Runner UI accessibility
 
-The roles in the protocol were chosen ARIA-aligned from the start, which is what
-makes the runner's mapping a lookup table rather than a heuristic. Three
-decisions shaped it:
+Runner uses native controls and ARIA composite patterns for its navigation,
+execution tree, tabs, dialogs, splitters, and inspector. Keyboard interaction
+includes:
 
-- **Attributes go only where ARIA defines them.** `aria-selected` means
-  something on `tab` and `row` and nothing on `listitem`, so a selected list
-  item gets `aria-current` instead. Emitting an ignored attribute would look
-  right in a DOM dump and say nothing to a screen reader.
-- **Attributes are removed when they stop applying.** A stale `aria-disabled` on
-  a button the application has since enabled is the expensive kind of lie, so
-  the pass that applies them also strips the ones that no longer hold.
-- **Decorative text is a hidden span, not CSS generated content.** `::before`
-  content *is* announced by screen readers, so the role-and-name caption each
-  row shows visually is a real `<span aria-hidden="true">`.
+- arrow, Home, and End navigation in composite lists and trees;
+- Enter and Space activation;
+- keyboard-operated splitters;
+- trapped focus and Escape dismissal in modal dialogs;
+- focus restoration when a dialog or popover closes.
 
-The inspector exposes a proper tree pattern — `tree → treeitem[level, expanded]
-→ group → treeitem`, with the children group *inside* its item, as the pattern
-requires — and arrow-key navigation moves focus and selection together.
+Status is communicated with text and icons as well as color. Reduced motion can
+follow the operating system or be enabled in Settings.
 
-### What was verified, and what was not
+Automated browser tests verify roles, names, focus order, keyboard interaction,
+and computed accessibility-tree structure. They do not replace testing with
+VoiceOver, NVDA, or another screen reader.
 
-Verified through Playwright's accessibility snapshot: the tree structure above,
-keyboard navigation, and the Semantic view exposing
-`dialog "Permission" → button "Approve"`.
+## Semantic inspector accessibility
 
-**A real screen reader was not run.** There is none in the environment this was
-built in. So what is proven is the accessibility tree Chromium computes — not
-the announcement a VoiceOver or NVDA user would actually hear. Those are related
-but not the same thing, and the difference is exactly where accessibility work
-usually goes wrong.
+The inspector maps protocol roles and state to ARIA only where the corresponding
+ARIA attribute is valid. Attributes are removed when state changes. Decorative
+role captions are hidden from assistive technology.
 
-## The AccessKit export
+The tree uses the `tree` / `treeitem` / `group` pattern. Selecting a node updates
+the readable property view without requiring pointer input.
 
-`toAccessKitTreeUpdate` converts a `SemanticSnapshot` into an
-[AccessKit](https://accesskit.dev) `TreeUpdate` in its serde JSON shape:
+## Export an AccessKit tree
+
+Adapter and emulator authors can convert a `SemanticSnapshot` to AccessKit's
+serde-compatible `TreeUpdate` shape:
 
 ```ts
 import {toAccessKitTreeUpdate} from '@termwright/protocol';
@@ -56,42 +50,28 @@ const {update, cellBounds} = toAccessKitTreeUpdate(snapshot, {
 });
 ```
 
-It is a pure transformation, and `@termwright/protocol` takes no dependency on
-AccessKit — the output is data a bridge could hand to a real platform adapter.
-Hence *bridge-ready* rather than *bridged*.
+`@termwright/protocol` does not depend on AccessKit. The function returns data
+for a platform bridge to consume.
 
-## Why there is no native bridge in 1.0
+Terminal geometry is measured in cells. AccessKit geometry is measured in
+pixels relative to a native window. Pass `cellSize` only when the caller owns
+the emulator window and knows its cell metrics:
 
-Two reasons, both structural rather than a matter of effort.
+```ts
+const result = toAccessKitTreeUpdate(snapshot, {
+  cellSize: {width: 8, height: 16},
+});
+```
 
-**There is no window to attach to.** AccessKit's platform adapters attach a tree
-to a native window: an `NSView` on macOS, an `HWND` on Windows, a toplevel on
-AT-SPI. A terminal application has none of those. The emulator owns the window;
-the application under test is a child process writing bytes to a pseudo-terminal.
-There is nothing for an adapter to attach to, and no path for an assistive
-technology to route a request back to us.
+Without `cellSize`, the export keeps cell rectangles in `cellBounds` and omits
+pixel bounds from AccessKit nodes.
 
-**The geometry does not convert.** Our `bounds` are terminal **cells** — row 3,
-column 12 — while AccessKit's `Rect` is pixels relative to the window origin.
-Converting needs the cell size and window position, which live in the emulator,
-not in the process being tested. Guessing a cell size would produce coordinates
-that look authoritative and point nowhere, which is worse than having none.
+## Current boundary
 
-So the export emits `bounds` **only** when the caller passes `cellSize`. That is
-the half of the problem solvable correctly without a window, and it refuses to
-fake the other half.
+The export is not a native accessibility bridge. A platform bridge must own a
+native window, pixel geometry, focus routing, and action dispatch. Terminal
+applications normally own none of those directly because the emulator owns the
+window.
 
-## What this means for you
-
-- If you want the runner UI to be usable with a keyboard and a screen reader:
-  it is designed for that, with the caveat above about what was verified.
-- If you are building a terminal emulator or a bridge and want a real
-  accessibility tree out of a TUI: the export is for you, and the missing piece
-  is on your side — you own the window and the cell metrics.
-- If you want termwright to make your TUI accessible to screen-reader users
-  today: it does not, and 1.0 does not claim to. What it does is keep that
-  bridge possible by never inventing a role and by staying ARIA-aligned.
-
-The role model was chosen with this in mind. Whether it becomes a real bridge
-depends on someone owning the window side of the problem, which is a different
-project from a test driver.
+Use the export when building an emulator or accessibility bridge. Use the
+Runner's semantic inspector when testing roles, names, state, and hierarchy.

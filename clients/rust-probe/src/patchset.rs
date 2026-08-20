@@ -18,10 +18,10 @@
 //! the resolved path in, which is what the Go probe's generated workspace does
 //! for its module.
 
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// One file the patch set edits in place.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +41,16 @@ pub struct PatchManifest {
     pub patched: Vec<PatchedFile>,
 }
 
+/// The fields the launcher needs from one `cargo metadata` package entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MetadataPackage {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub source: Option<String>,
+    pub manifest_path: PathBuf,
+}
+
 /// Failures a user can act on, each naming what is actually wrong.
 #[derive(Debug)]
 pub enum PatchError {
@@ -56,7 +66,7 @@ pub enum PatchError {
         expected: String,
         found: String,
     },
-    /// `patch` or `git apply` refused the diff.
+    /// The pinned unified diff did not match the pinned source bytes.
     ApplyFailed {
         path: String,
         detail: String,
@@ -114,6 +124,31 @@ pub fn digest_file(path: &Path) -> Result<String, PatchError> {
     Ok(format!("sha256:{}", sha256_hex(&fs::read(path)?)))
 }
 
+/// Stable digest of a complete patch set, including the manifest and every
+/// patch it names.
+///
+/// The manifest's before/after hashes catch a bad application, but they do not
+/// invalidate an already materialised cache entry when somebody edits a patch
+/// without regenerating the manifest. Hashing the actual patch bytes closes
+/// that gap.
+pub fn digest_patch_set(patch_set_dir: &Path) -> Result<String, PatchError> {
+    let manifest_path = patch_set_dir.join("manifest.json");
+    let manifest_bytes = fs::read(&manifest_path)?;
+    let manifest = read_manifest(&manifest_path)?;
+    let mut input = Vec::new();
+    append_digest_part(&mut input, &manifest_bytes);
+    for file in &manifest.patched {
+        append_digest_part(&mut input, file.patch.as_bytes());
+        append_digest_part(&mut input, &fs::read(patch_set_dir.join(&file.patch))?);
+    }
+    Ok(format!("sha256:{}", sha256_hex(&input)))
+}
+
+fn append_digest_part(output: &mut Vec<u8>, part: &[u8]) {
+    output.extend_from_slice(&(part.len() as u64).to_be_bytes());
+    output.extend_from_slice(part);
+}
+
 /// Read a manifest written by the generator.
 ///
 /// Parsed by hand for the same reason the hash is: a JSON crate here would
@@ -141,6 +176,108 @@ pub fn read_manifest(path: &Path) -> Result<PatchManifest, PatchError> {
     })
 }
 
+/// Parse only the top-level `packages` array from `cargo metadata`.
+///
+/// Searching the JSON text is incorrect because dependency summaries nested
+/// inside an earlier package can contain the same crate name before the real
+/// package entry. Keeping this beside the existing tiny JSON reader avoids a
+/// runtime serde dependency while still respecting the document structure.
+#[cfg(test)]
+pub(crate) fn read_metadata_packages(text: &str) -> Result<Vec<MetadataPackage>, PatchError> {
+    let value = json::parse(text).map_err(PatchError::ManifestInvalid)?;
+    read_packages(&value)
+}
+
+/// Restrict metadata to the dependency graph rooted at one package manifest.
+/// Cargo reports every member of a workspace even when invoked from one
+/// member, so filtering only by package name would let an unrelated sibling's
+/// Ratatui dependency select the patch set.
+pub(crate) fn read_reachable_metadata_packages(
+    text: &str,
+    root_manifest: &Path,
+    use_workspace_default_members: bool,
+) -> Result<Vec<MetadataPackage>, PatchError> {
+    let value = json::parse(text).map_err(PatchError::ManifestInvalid)?;
+    let packages = read_packages(&value)?;
+    // At a workspace root Cargo builds `workspace.default-members`, including
+    // when that root also has a `[package]`. From a member directory it builds
+    // only that package. The caller knows which of those two commands it is
+    // preparing; the metadata document by itself does not encode the cwd.
+    let roots = if use_workspace_default_members {
+        value
+            .array("workspace_default_members")?
+            .into_iter()
+            .map(|member| member.into_string("workspace default member id"))
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        vec![packages
+            .iter()
+            .find(|package| same_path(&package.manifest_path, root_manifest))
+            .map(|package| package.id.clone())
+            .ok_or_else(|| {
+                PatchError::ManifestInvalid(format!(
+                    "cargo metadata did not contain the selected package manifest {}",
+                    root_manifest.display()
+                ))
+            })?]
+    };
+    if roots.is_empty() {
+        return Err(PatchError::ManifestInvalid(format!(
+            "cargo metadata has no package or default workspace member for {}",
+            root_manifest.display()
+        )));
+    }
+
+    let resolve = value.object("resolve")?;
+    let mut edges = HashMap::<String, Vec<String>>::new();
+    for node in resolve.array("nodes")? {
+        let dependencies = node
+            .array("dependencies")?
+            .into_iter()
+            .map(|dependency| dependency.into_string("dependency package id"))
+            .collect::<Result<Vec<_>, _>>()?;
+        edges.insert(node.string("id")?, dependencies);
+    }
+
+    let mut reachable = HashSet::new();
+    let mut pending = roots;
+    while let Some(id) = pending.pop() {
+        if !reachable.insert(id.clone()) {
+            continue;
+        }
+        if let Some(dependencies) = edges.get(&id) {
+            pending.extend(dependencies.iter().cloned());
+        }
+    }
+    Ok(packages
+        .into_iter()
+        .filter(|package| reachable.contains(&package.id))
+        .collect())
+}
+
+fn read_packages(value: &json::Value) -> Result<Vec<MetadataPackage>, PatchError> {
+    value
+        .array("packages")?
+        .into_iter()
+        .map(|package| {
+            Ok(MetadataPackage {
+                id: package.string("id")?,
+                name: package.string("name")?,
+                version: package.string("version")?,
+                source: package.optional_string("source")?,
+                manifest_path: PathBuf::from(package.string("manifest_path")?),
+            })
+        })
+        .collect()
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
+    }
+}
+
 /// Apply the patch set to a writable copy of the framework.
 ///
 /// `probe_path` is written into the copy's `Cargo.toml` as the location of
@@ -164,19 +301,15 @@ pub fn apply(
     }
 
     for file in &manifest.patched {
-        let patch = patch_set_dir.join(&file.patch);
-        let output = Command::new("patch")
-            .arg("-p1")
-            .arg("--input")
-            .arg(&patch)
-            .current_dir(copy)
-            .output()?;
-        if !output.status.success() {
-            return Err(PatchError::ApplyFailed {
+        let target = copy.join(&file.path);
+        let source = fs::read_to_string(&target)?;
+        let patch = fs::read_to_string(patch_set_dir.join(&file.patch))?;
+        let patched =
+            apply_unified_diff(&source, &patch).map_err(|detail| PatchError::ApplyFailed {
                 path: file.path.clone(),
-                detail: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-            });
-        }
+                detail,
+            })?;
+        fs::write(target, patched)?;
     }
 
     for file in &manifest.patched {
@@ -194,6 +327,153 @@ pub fn apply(
     supply_probe_path(copy, probe_path)
 }
 
+/// Apply the deliberately small subset of unified diff emitted by the patch
+/// generator: text hunks with exact context, additions and removals.
+///
+/// Patch preparation must not assume Unix developer tools: neither `patch` nor
+/// `git.exe` is guaranteed by a Rust installation. Paths, renames, binary
+/// patches and fuzzy matching are intentionally not implemented: the manifest
+/// already selects the target file and pins its complete before/after digest.
+fn apply_unified_diff(source: &str, patch: &str) -> Result<String, String> {
+    let source_lines: Vec<&str> = source.split_inclusive('\n').collect();
+    let patch_lines: Vec<&str> = patch.split_inclusive('\n').collect();
+    let mut output = String::with_capacity(source.len() + patch.len() / 2);
+    let mut source_cursor = 0usize;
+    let mut patch_cursor = 0usize;
+    let mut saw_hunk = false;
+
+    while patch_cursor < patch_lines.len() {
+        let header = patch_lines[patch_cursor].trim_end_matches(['\r', '\n']);
+        if !header.starts_with("@@ ") {
+            patch_cursor += 1;
+            continue;
+        }
+        saw_hunk = true;
+        let (old_start, old_count, new_count) = parse_hunk_header(header)?;
+        let hunk_start = old_start.saturating_sub(1);
+        if hunk_start < source_cursor || hunk_start > source_lines.len() {
+            return Err(format!(
+                "hunk starts at source line {old_start}, after line {} was already consumed",
+                source_cursor + 1
+            ));
+        }
+        for line in &source_lines[source_cursor..hunk_start] {
+            output.push_str(line);
+        }
+        source_cursor = hunk_start;
+        patch_cursor += 1;
+        let mut old_seen = 0usize;
+        let mut new_seen = 0usize;
+
+        while patch_cursor < patch_lines.len() {
+            let line = patch_lines[patch_cursor];
+            if line.starts_with("@@ ") {
+                break;
+            }
+            let Some(marker) = line.as_bytes().first().copied() else {
+                return Err("an empty line in a hunk has no unified-diff marker".to_owned());
+            };
+            let body = &line[1..];
+            match marker {
+                b' ' => {
+                    match_source_line(&source_lines, source_cursor, body, old_start)?;
+                    output.push_str(body);
+                    source_cursor += 1;
+                    old_seen += 1;
+                    new_seen += 1;
+                }
+                b'-' => {
+                    match_source_line(&source_lines, source_cursor, body, old_start)?;
+                    source_cursor += 1;
+                    old_seen += 1;
+                }
+                b'+' => {
+                    output.push_str(body);
+                    new_seen += 1;
+                }
+                b'\\' => {
+                    return Err(
+                        "patches for files without a trailing newline are unsupported".to_owned(),
+                    );
+                }
+                _ => break,
+            }
+            patch_cursor += 1;
+        }
+        if old_seen != old_count || new_seen != new_count {
+            return Err(format!(
+                "hunk count mismatch: header says -{old_count}/+{new_count}, body has -{old_seen}/+{new_seen}"
+            ));
+        }
+    }
+
+    if !saw_hunk {
+        return Err("patch contains no unified-diff hunks".to_owned());
+    }
+    for line in &source_lines[source_cursor..] {
+        output.push_str(line);
+    }
+    Ok(output)
+}
+
+fn parse_hunk_header(header: &str) -> Result<(usize, usize, usize), String> {
+    let end = header[3..]
+        .find(" @@")
+        .map(|offset| offset + 3)
+        .ok_or_else(|| format!("invalid hunk header: {header}"))?;
+    let mut ranges = header[3..end].split_whitespace();
+    let old = ranges
+        .next()
+        .and_then(|range| range.strip_prefix('-'))
+        .ok_or_else(|| format!("invalid old range in hunk header: {header}"))?;
+    let new = ranges
+        .next()
+        .and_then(|range| range.strip_prefix('+'))
+        .ok_or_else(|| format!("invalid new range in hunk header: {header}"))?;
+    let (old_start, old_count) = parse_range(old)?;
+    let (_, new_count) = parse_range(new)?;
+    Ok((old_start, old_count, new_count))
+}
+
+fn parse_range(range: &str) -> Result<(usize, usize), String> {
+    let mut parts = range.split(',');
+    let start = parts
+        .next()
+        .ok_or_else(|| format!("missing hunk range: {range}"))?
+        .parse::<usize>()
+        .map_err(|_| format!("invalid hunk range: {range}"))?;
+    let count = parts
+        .next()
+        .map(str::parse::<usize>)
+        .transpose()
+        .map_err(|_| format!("invalid hunk range: {range}"))?
+        .unwrap_or(1);
+    if parts.next().is_some() {
+        return Err(format!("invalid hunk range: {range}"));
+    }
+    Ok((start, count))
+}
+
+fn match_source_line(
+    source: &[&str],
+    index: usize,
+    expected: &str,
+    hunk_start: usize,
+) -> Result<(), String> {
+    match source.get(index) {
+        Some(actual) if *actual == expected => Ok(()),
+        Some(actual) => Err(format!(
+            "hunk at line {hunk_start} expected {:?} at source line {}, found {:?}",
+            expected.trim_end(),
+            index + 1,
+            actual.trim_end()
+        )),
+        None => Err(format!(
+            "hunk at line {hunk_start} reads past the end of the source"
+        )),
+    }
+}
+
 /// Point the copy's dependency on this crate at where it actually is.
 ///
 /// Done after the checksums are verified, so the pinned "after" state is the
@@ -209,11 +489,36 @@ fn supply_probe_path(copy: &Path, probe_path: &Path) -> Result<(), PatchError> {
         )));
     }
     let replacement = format!(
-        "[dependencies.termwright-probe-ratatui]\npath = \"{}\"",
-        probe_path.display()
+        "[dependencies.termwright-probe-ratatui]\npath = {}",
+        toml_string(&probe_path.to_string_lossy())
     );
     fs::write(&manifest, text.replace(anchor, &replacement))?;
     Ok(())
+}
+
+/// A TOML basic string suitable for paths in generated Cargo configuration.
+///
+/// Windows separators and quotes in legal Unix paths both need escaping. A
+/// single-quoted TOML literal handles the former but cannot represent an
+/// apostrophe, so the launcher consistently emits basic strings instead.
+pub(crate) fn toml_string(value: &str) -> String {
+    let mut output = String::with_capacity(value.len() + 2);
+    output.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => output.push_str("\\\""),
+            '\\' => output.push_str("\\\\"),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            character if character <= '\u{001f}' || character == '\u{007f}' => {
+                output.push_str(&format!("\\u{:04X}", character as u32));
+            }
+            character => output.push(character),
+        }
+    }
+    output.push('"');
+    output
 }
 
 /// Copy a crate out of the registry into a writable directory.
@@ -246,7 +551,7 @@ fn copy_tree(source: &Path, destination: &Path) -> io::Result<()> {
 
 /// SHA-256, because the alternative is a dependency inside every instrumented
 /// user's build of the framework.
-fn sha256_hex(data: &[u8]) -> String {
+pub(crate) fn sha256_hex(data: &[u8]) -> String {
     const K: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
         0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
@@ -350,6 +655,34 @@ mod json {
                 Some(Value::Str(text)) => Ok(text.clone()),
                 _ => Err(PatchError::ManifestInvalid(format!(
                     "{key} is not a string"
+                ))),
+            }
+        }
+
+        pub fn optional_string(&self, key: &str) -> Result<Option<String>, PatchError> {
+            match self.get(key) {
+                Some(Value::Str(text)) => Ok(Some(text.clone())),
+                Some(Value::Null) | None => Ok(None),
+                _ => Err(PatchError::ManifestInvalid(format!(
+                    "{key} is neither a string nor null"
+                ))),
+            }
+        }
+
+        pub fn object(&self, key: &str) -> Result<Value, PatchError> {
+            match self.get(key) {
+                Some(value @ Value::Object(_)) => Ok(value.clone()),
+                _ => Err(PatchError::ManifestInvalid(format!(
+                    "{key} is not an object"
+                ))),
+            }
+        }
+
+        pub fn into_string(self, label: &str) -> Result<String, PatchError> {
+            match self {
+                Value::Str(text) => Ok(text),
+                _ => Err(PatchError::ManifestInvalid(format!(
+                    "{label} is not a string"
                 ))),
             }
         }
@@ -562,5 +895,177 @@ mod tests {
                 file.path
             );
         }
+    }
+
+    #[test]
+    fn the_patch_set_digest_includes_patch_bytes() {
+        let source = Path::new("upstream-patches/ratatui-core/0.1.2");
+        let copy = std::env::temp_dir().join(format!("tw-patch-digest-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&copy);
+        copy_tree(source, &copy).expect("copy patch set");
+
+        let before = digest_patch_set(&copy).expect("digest");
+        let patch = copy.join("patches/Cargo.toml.patch");
+        let mut bytes = fs::read(&patch).expect("patch");
+        bytes.extend_from_slice(b"\n# cache-buster\n");
+        fs::write(&patch, bytes).expect("mutate patch");
+        let after = digest_patch_set(&copy).expect("digest after mutation");
+
+        assert_ne!(before, after);
+        let _ = fs::remove_dir_all(copy);
+    }
+
+    #[test]
+    fn generated_toml_paths_escape_windows_and_unix_edge_cases() {
+        assert_eq!(
+            toml_string("C:\\Users\\O'Brien\\probe\"copy"),
+            "\"C:\\\\Users\\\\O'Brien\\\\probe\\\"copy\""
+        );
+    }
+
+    #[test]
+    fn metadata_reader_ignores_nested_dependency_summaries() {
+        let metadata = r#"{
+          "packages": [
+            {
+              "id": "registry+ratatui@0.30.0",
+              "name": "ratatui",
+              "version": "0.30.0",
+              "source": "registry+https://github.com/rust-lang/crates.io-index",
+              "manifest_path": "/registry/ratatui-0.30.0/Cargo.toml",
+              "dependencies": [
+                {"name": "ratatui-widgets", "version": "0.1.2"}
+              ]
+            },
+            {
+              "id": "registry+ratatui-widgets@0.3.2",
+              "name": "ratatui-widgets",
+              "version": "0.3.2",
+              "source": "registry+https://github.com/rust-lang/crates.io-index",
+              "manifest_path": "/registry/ratatui-widgets-0.3.2/Cargo.toml"
+            }
+          ]
+        }"#;
+        let packages = read_metadata_packages(metadata).expect("metadata parses");
+        let widgets = packages
+            .iter()
+            .find(|package| package.name == "ratatui-widgets")
+            .expect("widgets package");
+        assert_eq!(widgets.version, "0.3.2");
+    }
+
+    #[test]
+    fn metadata_graph_excludes_unrelated_workspace_siblings() {
+        let root = std::env::temp_dir().join(format!("tw-metadata-root-{}", std::process::id()));
+        let sibling = root.with_file_name(format!("tw-metadata-sibling-{}", std::process::id()));
+        fs::write(&root, "").expect("root manifest placeholder");
+        fs::write(&sibling, "").expect("sibling manifest placeholder");
+        let metadata = format!(
+            r#"{{"packages":[
+              {{"id":"app 0.1.0","name":"app","version":"0.1.0","source":null,
+                "manifest_path":{:?}}},
+              {{"id":"sibling 0.1.0","name":"sibling","version":"0.1.0","source":null,
+                "manifest_path":{:?}}},
+              {{"id":"ratatui-core 0.1.2","name":"ratatui-core","version":"0.1.2",
+                "source":"registry+https://github.com/rust-lang/crates.io-index",
+                "manifest_path":"/registry/core/Cargo.toml"}}
+            ],"resolve":{{"nodes":[
+              {{"id":"app 0.1.0","dependencies":[]}},
+              {{"id":"sibling 0.1.0","dependencies":["ratatui-core 0.1.2"]}},
+              {{"id":"ratatui-core 0.1.2","dependencies":[]}}
+            ]}}}}"#,
+            root.to_string_lossy(),
+            sibling.to_string_lossy()
+        );
+        let packages = read_reachable_metadata_packages(&metadata, &root, false).expect("graph");
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "app");
+        let _ = fs::remove_file(root);
+        let _ = fs::remove_file(sibling);
+    }
+
+    #[test]
+    fn metadata_graph_uses_virtual_workspace_default_members() {
+        let workspace =
+            std::env::temp_dir().join(format!("tw-virtual-workspace-{}", std::process::id()));
+        fs::write(&workspace, "[workspace]\n").expect("workspace manifest placeholder");
+        let metadata = r#"{"packages":[
+          {"id":"default","name":"default-app","version":"0.1.0","source":null,
+           "manifest_path":"/workspace/default/Cargo.toml"},
+          {"id":"other","name":"other-app","version":"0.1.0","source":null,
+           "manifest_path":"/workspace/other/Cargo.toml"},
+          {"id":"core","name":"ratatui-core","version":"0.1.2",
+           "source":"registry+https://github.com/rust-lang/crates.io-index",
+           "manifest_path":"/registry/core/Cargo.toml"}],
+          "workspace_default_members":["default"],
+          "resolve":{"nodes":[
+            {"id":"default","dependencies":["core"]},
+            {"id":"other","dependencies":[]},
+            {"id":"core","dependencies":[]}
+          ]}}"#;
+        let packages =
+            read_reachable_metadata_packages(metadata, &workspace, true).expect("virtual graph");
+        assert_eq!(
+            packages
+                .iter()
+                .map(|package| package.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["default", "core"]
+        );
+        let _ = fs::remove_file(workspace);
+    }
+
+    #[test]
+    fn metadata_graph_uses_defaults_at_a_non_virtual_workspace_root() {
+        let root =
+            std::env::temp_dir().join(format!("tw-package-workspace-root-{}", std::process::id()));
+        fs::write(
+            &root,
+            "[package]\nname='root'\nversion='0.1.0'\n[workspace]\n",
+        )
+        .expect("root manifest placeholder");
+        let metadata = format!(
+            r#"{{"packages":[
+              {{"id":"root","name":"root","version":"0.1.0","source":null,
+                "manifest_path":{:?}}},
+              {{"id":"default","name":"default-app","version":"0.1.0","source":null,
+                "manifest_path":"/workspace/default/Cargo.toml"}},
+              {{"id":"core","name":"ratatui-core","version":"0.1.2",
+                "source":"registry+https://github.com/rust-lang/crates.io-index",
+                "manifest_path":"/registry/core/Cargo.toml"}}
+            ],"workspace_default_members":["default"],"resolve":{{"nodes":[
+              {{"id":"root","dependencies":[]}},
+              {{"id":"default","dependencies":["core"]}},
+              {{"id":"core","dependencies":[]}}
+            ]}}}}"#,
+            root.to_string_lossy()
+        );
+        let packages =
+            read_reachable_metadata_packages(&metadata, &root, true).expect("default graph");
+        assert_eq!(
+            packages
+                .iter()
+                .map(|package| package.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["default", "core"]
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn built_in_diff_applier_handles_multiple_hunks() {
+        let source = "one\ntwo\nthree\nfour\nfive\n";
+        let patch = "--- a/example\n+++ b/example\n@@ -1,2 +1,3 @@\n one\n+inserted\n two\n@@ -4,2 +5,1 @@\n four\n-five\n";
+        assert_eq!(
+            apply_unified_diff(source, patch).expect("apply"),
+            "one\ninserted\ntwo\nthree\nfour\n"
+        );
+    }
+
+    #[test]
+    fn built_in_diff_applier_rejects_fuzzy_context() {
+        let patch = "--- a/example\n+++ b/example\n@@ -1 +1 @@\n-not this\n+replacement\n";
+        let error = apply_unified_diff("actual\n", patch).expect_err("context must be exact");
+        assert!(error.contains("expected"), "{error}");
     }
 }

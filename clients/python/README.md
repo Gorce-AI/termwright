@@ -1,34 +1,32 @@
 # termwright (Python)
 
-Semantic side-channel client for the [termwright](https://github.com/gorce-ai/termwright)
-terminal test driver, plus an adapter for [Textual](https://textual.textualize.io).
+Semantic side-channel client, automatic probe and optional annotation SDK for
+[Textual](https://textual.textualize.io).
 
 An instrumented app publishes its widget tree over a unix socket and commits
 each render with a signed OSC marker, so the driver can assert on *roles and
 names* instead of screen-scraping cells.
 
-**Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in the
-environment the adapter opens no socket, writes no marker, and renders exactly
-the bytes it would have rendered anyway. Shipping it in production costs you
-one import.
+**Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` the
+probe installs nothing, opens no socket, writes no marker, and renders exactly
+the bytes it would have rendered anyway.
 
 ## Install
 
 ```sh
-pip install termwright              # protocol client only
-pip install "termwright[textual]"   # + the Textual adapter
+pip install termwright              # protocol client + probe + annotation SDK
+pip install "termwright[textual]"   # + Textual itself
 ```
 
 Requires Python 3.9+. The protocol modules have no third-party dependencies.
 
-## Textual in 30 lines
+## Automatic Textual semantics
+
+The application is ordinary Textual code with no Termwright import:
 
 ```python
 from textual.app import App, ComposeResult
 from textual.widgets import Button, Input, Label
-
-from termwright import enable_semantics
-
 
 class PermissionApp(App):
     def compose(self) -> ComposeResult:
@@ -37,22 +35,15 @@ class PermissionApp(App):
         yield Button("Reject", id="reject")
         yield Input(placeholder="Reason", id="reason")
 
-    def on_mount(self) -> None:
-        # Returns None when no driver is attached — nothing is installed then.
-        enable_semantics(self)
-
-
 if __name__ == "__main__":
     PermissionApp().run()
 ```
 
-Or inherit the mixin, which does the same on mount:
+The Termwright launcher injects the probe at Python startup. The direct form,
+useful for a custom runner, is:
 
-```python
-from termwright import TermwrightApp
-
-class PermissionApp(TermwrightApp, App):
-    ...
+```sh
+python -m termwright_probe -- python app.py
 ```
 
 Under the driver this publishes, after every flushed frame:
@@ -83,17 +74,46 @@ they contain before they fall back to the id. That is what makes a Textual
 its own, the `Label` inside does. Containers are never named this way — a
 `region` would otherwise be named by everything on the screen.
 
-Override either per widget:
+### Custom widgets
+
+Automatic geometry, focus, visibility and framework state still come from
+Textual. A decorator supplies only application intent that the framework
+cannot know:
 
 ```python
-label = Label("87%")
-label.termwright_role = "progressbar"
-label.termwright_name = "Upload progress"
+from termwright.textual import semantic
+
+@semantic(
+    role="button",
+    name=lambda widget: f"Deploy {widget.environment}",
+    test_id="deploy-production",
+    extended=lambda widget: {"environment": widget.environment},
+    actions=("focus", "activate"),
+    key=lambda widget: f"deployment:{widget.environment}",
+)
+class DeployWidget(Widget):
+    ...
 ```
+
+`name`, `description`, `test_id`, `extended`, `labelled_by`, `described_by`,
+`actions` and `key` accept either constants or callables receiving the
+live widget. The declaration is inherited by subclasses. For a third-party
+instance use `annotate(widget, ...)`; the registry is weak and does not keep a
+discarded widget alive.
+
+`labelled_by` and `described_by` may return a widget or a sequence of widgets.
+`key` is the stable semantic identity for a domain component that Textual may
+recreate. `actions` uses the protocol's closed descriptive vocabulary; it never
+registers an out-of-band callback, and interaction still becomes real PTY
+input.
+
+The API intentionally has no bounds, focus, visibility, rendered-text or
+portable-state arguments. Those physical facts remain probe-owned, and merge
+tests enforce that the annotation cannot replace them.
 
 ### Coexisting with `Pilot`
 
-The adapter only reads the DOM from `post_display_hook`, so `run_test()` and
+The probe only reads the DOM from `post_display_hook`, so `run_test()` and
 `Pilot` keep working unchanged — semantic tests and pilot tests live in the same
 suite.
 
@@ -188,10 +208,7 @@ The line format is the driver's, so `TERMWRIGHT_DEBUG=1` on the driver and
 `TERMWRIGHT_DEBUG_FILE=…` on the app produce two halves of one story that a
 single reader can take.
 
-## Zero-config probe (Textual)
-
-The adapter above asks the application to call `enable_semantics()`. The probe
-asks it for nothing at all.
+## Injection details
 
 ```sh
 python -m termwright_probe -- python app.py
@@ -222,7 +239,7 @@ identical. A second test compares an instrumented run against the baseline
 after removing the render-commit markers, and those are identical too, which is
 the claim that the probe observes rather than redraws.
 
-**What it reports that the adapter could not.**
+**What it reports automatically.**
 
 | Fact | Where it comes from |
 |---|---|
@@ -245,7 +262,7 @@ the person running the interpreter opting out.
 
 ## Deviations
 
-Measured against the adapter conventions in the protocol README. Everything
+Measured against the probe conventions in the protocol README. Everything
 not listed here follows them.
 
 - **Windows support is written, not yet observed here.** A `\\.\pipe\…`
@@ -259,7 +276,7 @@ not listed here follows them.
   not, as a matter of what the classes are. The state is published from the
   type for that reason and for no other — no other state here is inferred.
 - **Widgets on an inactive screen are absent, not `hidden`** (rule 4). The
-  adapter walks `app.screen`, so a pushed-over screen's widgets are not in the
+  probe walks `app.screen`, so a pushed-over screen's widgets are not in the
   tree at all. A widget hidden on the *active* screen (`display = False`) does
   publish `hidden: true`. Textual owns the screen stack; reaching into it would
   mean publishing widgets that no longer receive events.

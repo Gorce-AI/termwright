@@ -26,7 +26,20 @@ import (
 	"runtime"
 	"sync"
 	"unsafe"
+
+	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
+
+// SemanticKey is an author-owned identity used to relate semantic nodes.
+//
+// It is deliberately framework-neutral. In particular, the annotation SDK
+// cannot mention tview.Primitive without making every Go application depend on
+// tview (and creating the wrong dependency direction for the injected probe).
+// Keys also avoid retaining related widgets merely because another widget
+// points at them. A probe resolves keys only among nodes present in the same
+// snapshot; missing or duplicate keys are ignored rather than producing a
+// dangling wire reference.
+type SemanticKey string
 
 // Semantics is what an author knows and a probe cannot see.
 //
@@ -34,6 +47,11 @@ import (
 // normal: the probe fills in everything it can observe, and this is merged on
 // top of it for the facts it cannot.
 type Semantics struct {
+	// Key gives this semantic element an author-owned identity. Immediate-mode
+	// frameworks may use a unique key to keep the node id stable across copied
+	// model values; retained frameworks use it as a relation target.
+	Key SemanticKey
+
 	// Role overrides the role a probe inferred from the widget type. Use it
 	// when the framework's type is not what the widget means — a Box used as a
 	// dialog, a TextView used as a status line.
@@ -51,28 +69,78 @@ type Semantics struct {
 	// than used for matching.
 	Description string
 
-	// Domain carries application-specific state a probe has no vocabulary for:
-	// "sync": "pending", "severity": "warning". Keys and values are free-form
-	// strings, reported verbatim and never interpreted.
-	Domain map[string]string
+	// Domain carries JSON application state a probe has no portable vocabulary
+	// for: "sync": "pending", "retryCount": 2, "overdue": true. It is
+	// reported under the semantic node's separate `extended` namespace and is
+	// never promoted to a framework state flag.
+	Domain map[string]any
+
+	// Actions are descriptive input capabilities from the protocol's closed
+	// set. They never install or invoke a callback; input still travels through
+	// the terminal like it does without instrumentation.
+	Actions []protocol.Action
+
+	// LabelledBy and DescribedBy refer to other annotated nodes by SemanticKey.
+	// Resolution happens after the complete tree is observed, so declaration
+	// order does not matter and a missing target cannot invalidate a snapshot.
+	LabelledBy  []SemanticKey
+	DescribedBy []SemanticKey
 }
 
-// clone returns a copy that later mutation of the caller's map cannot change.
+// clone returns a deep copy that later mutation of the caller's JSON
+// containers cannot change.
 func (s Semantics) clone() Semantics {
-	if s.Domain == nil {
-		return s
+	if s.Domain != nil {
+		domain := make(map[string]any, len(s.Domain))
+		for key, value := range s.Domain {
+			domain[key] = cloneDomainValue(value)
+		}
+		s.Domain = domain
 	}
-	domain := make(map[string]string, len(s.Domain))
-	for key, value := range s.Domain {
-		domain[key] = value
+	if s.Actions != nil {
+		s.Actions = append([]protocol.Action(nil), s.Actions...)
 	}
-	s.Domain = domain
+	if s.LabelledBy != nil {
+		s.LabelledBy = append([]SemanticKey(nil), s.LabelledBy...)
+	}
+	if s.DescribedBy != nil {
+		s.DescribedBy = append([]SemanticKey(nil), s.DescribedBy...)
+	}
 	return s
+}
+
+func cloneDomainValue(value any) any {
+	if value == nil {
+		return nil
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Map:
+		if reflected.Type().Key().Kind() != reflect.String {
+			return value
+		}
+		copy := make(map[string]any, reflected.Len())
+		iterator := reflected.MapRange()
+		for iterator.Next() {
+			copy[iterator.Key().String()] = cloneDomainValue(iterator.Value().Interface())
+		}
+		return copy
+	case reflect.Array, reflect.Slice:
+		copy := make([]any, reflected.Len())
+		for index := range reflected.Len() {
+			copy[index] = cloneDomainValue(reflected.Index(index).Interface())
+		}
+		return copy
+	default:
+		return value
+	}
 }
 
 // IsZero reports whether an annotation says anything at all.
 func (s Semantics) IsZero() bool {
-	return s.Role == "" && s.Name == "" && s.TestID == "" && s.Description == "" && len(s.Domain) == 0
+	return s.Key == "" && s.Role == "" && s.Name == "" && s.TestID == "" &&
+		s.Description == "" && len(s.Domain) == 0 && len(s.Actions) == 0 &&
+		len(s.LabelledBy) == 0 && len(s.DescribedBy) == 0
 }
 
 // Provider is the second way to annotate, and the idiomatic one for frameworks

@@ -13,10 +13,16 @@
  * extracted once a second TypeScript probe needs it.
  */
 
-import type { ProbeInfo, SemanticSnapshot } from '@termwright/protocol';
+import {
+  DEFAULT_LIMITS,
+  type ProbeInfo,
+  type ProtocolLimits,
+  type SemanticSnapshot,
+} from '@termwright/protocol';
 import { recognize } from '@termwright/recognizers';
 import { observeTree, type ObservableNode } from './observe.js';
 import type { MarkerSink } from './sink.js';
+import { PACKAGE_VERSION } from './version.js';
 
 /** The renderer surface the session uses. Structural, so tests need no framework. */
 export interface ObservableRenderer {
@@ -24,12 +30,14 @@ export interface ObservableRenderer {
   on(event: string, handler: () => void): void;
   readonly width?: number;
   readonly height?: number;
+  hitTest?(x: number, y: number): number;
 }
 
 /** Where a finished snapshot goes. */
 export interface Publisher {
+  readonly protocol?: 'termwright/1' | 'termwright/2';
   /** Send the tree for a revision. Returns the marker to write, if any. */
-  publish(snapshot: SemanticSnapshot): string | undefined;
+  publish(snapshot: SemanticSnapshot, metrics?: { readonly probeEvents: number }): string | undefined;
 }
 
 /** Settings for {@link startSession}. */
@@ -48,6 +56,8 @@ export interface SessionOptions {
   /** Terminal size, when the renderer does not report it. */
   readonly columns?: number;
   readonly rows?: number;
+  /** Negotiated limits, resolved lazily when the handshake finishes late. */
+  readonly limits?: ProtocolLimits | (() => ProtocolLimits);
 }
 
 /** A running session. */
@@ -66,7 +76,7 @@ export function probeInfo(frameworkVersion?: string): ProbeInfo {
   return {
     framework: 'opentui',
     ...(frameworkVersion === undefined ? {} : { frameworkVersion }),
-    probeVersion: '0.1.0',
+    probeVersion: PACKAGE_VERSION,
     // `num` is a readonly monotonic counter that survives re-render and even
     // removal from the tree, so correlating identities across frames is sound.
     identityKind: 'stable',
@@ -76,7 +86,9 @@ export function probeInfo(frameworkVersion?: string): ProbeInfo {
     // the probe can generally report it — and omits it per object on any tree
     // where the list turned out to be unreadable, rather than passing off
     // document order as paint order.
-    capabilities: ['stable-identity', 'annotations', 'paint-order'],
+    // The optional @termwright/opentui SDK publishes developer intent through
+    // a Symbol.for + WeakMap channel consumed by every observation.
+    capabilities: ['stable-identity', 'paint-order', 'annotations'],
   };
 }
 
@@ -92,6 +104,10 @@ export function startSession(options: SessionOptions): ProbeSession {
   const { renderer, publisher, sink } = options;
   const sessionIdOf = (): string =>
     typeof options.sessionId === 'function' ? options.sessionId() : options.sessionId;
+  const limitsOf = (): ProtocolLimits =>
+    typeof options.limits === 'function'
+      ? options.limits()
+      : options.limits ?? DEFAULT_LIMITS;
   let revision = 0;
   let frames = 0;
   let stopped = false;
@@ -103,7 +119,8 @@ export function startSession(options: SessionOptions): ProbeSession {
     let snapshot: SemanticSnapshot;
     let marker: string | undefined;
     try {
-      const observation = observeTree(renderer.root, { frame: frames });
+      const limits = limitsOf();
+      const observation = observeTree(renderer.root, { frame: frames, limits });
       revision += 1;
       snapshot = recognize(observation.frame, {
         sessionId: sessionIdOf(),
@@ -112,8 +129,14 @@ export function startSession(options: SessionOptions): ProbeSession {
         rows: options.rows ?? renderer.height ?? 24,
         framework: 'opentui',
         paintOrderKnown: observation.paintOrderKnown,
+        maxStringBytes: limits.maxStringBytes,
       });
-      marker = publisher.publish(snapshot);
+      if (publisher.protocol === 'termwright/2') {
+        snapshot = qualifySnapshot(snapshot, observation.frame, renderer);
+      }
+      marker = publisher.publish(snapshot, {
+        probeEvents: observation.frame.objects.length + (observation.frame.operations?.length ?? 0),
+      });
     } catch {
       // Observation must never take the application down. A failed frame is a
       // frame the driver does not hear about, which the protocol already
@@ -139,5 +162,67 @@ export function startSession(options: SessionOptions): ProbeSession {
     stop() {
       stopped = true;
     },
+  };
+}
+
+function qualifySnapshot(
+  legacy: SemanticSnapshot,
+  frame: import('@termwright/protocol').ProbeFrame,
+  renderer: ObservableRenderer,
+): SemanticSnapshot {
+  const byIdentity = new Map(frame.objects.map((object) => [object.identity.value, object]));
+  const nodes = legacy.nodes.map((node) => {
+    const identity = node.id.startsWith('n') ? node.id.slice(1) : '';
+    const object = byIdentity.get(identity);
+    const displayed = object?.state?.displayed;
+    const intended = object?.geometry?.intendedRect;
+    const { bounds: _bounds, occlusion: _occlusion, ...semantic } = node;
+    return {
+      ...semantic,
+      geometry: {
+        displayed: typeof displayed === 'boolean'
+          ? { status: 'known' as const, value: displayed, evidence: 'probe' as const }
+          : { status: 'unknown' as const, reason: 'not-reported' as const },
+        intendedRect: intended !== undefined
+          ? { status: 'known' as const, value: intended, evidence: 'probe' as const }
+          : { status: 'absent' as const, reason: 'not-laid-out' as const },
+        visibleRect: { status: 'unsupported' as const, capability: 'visible-rect', reason: 'framework-unobservable' as const },
+      },
+    };
+  });
+  const ids = new Set(nodes.map((node) => node.id));
+  let hitGrid: SemanticSnapshot['hitGrid'] = {
+    status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable',
+  };
+  if (typeof renderer.hitTest === 'function') {
+    const regions: { rect: { row: number; column: number; width: number; height: number }; recipientId: string }[] = [];
+    let complete = true;
+    try {
+      for (let row = 0; row < legacy.rows && complete; row += 1) {
+        let owner: string | null = null;
+        let start = 0;
+        for (let column = 0; column <= legacy.columns; column += 1) {
+          const hit = column < legacy.columns ? renderer.hitTest(column, row) : 0;
+          const next = hit === 0 ? null : `n${hit}`;
+          if (next !== null && !ids.has(next)) { complete = false; break; }
+          if (next === owner) continue;
+          if (owner !== null) regions.push({ rect: { row, column: start, width: column - start, height: 1 }, recipientId: owner });
+          owner = next;
+          start = column;
+        }
+      }
+      hitGrid = complete
+        ? { status: 'known', value: { regions }, evidence: 'hit-grid' }
+        : { status: 'unknown', reason: 'temporary' };
+    } catch {
+      hitGrid = { status: 'unknown', reason: 'temporary' };
+    }
+  }
+  return {
+    ...legacy,
+    v: 2,
+    nodes,
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+    hitGrid,
   };
 }

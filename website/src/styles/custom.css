@@ -1,13 +1,13 @@
 :root {
-	--sl-color-accent-low: #10233a;
-	--sl-color-accent: #2b7fd4;
-	--sl-color-accent-high: #b9d7f5;
+	--sl-color-accent-low: #102f2a;
+	--sl-color-accent: #58e6b0;
+	--sl-color-accent-high: #c5fbea;
 }
 
 :root[data-theme='light'] {
-	--sl-color-accent-low: #cfe2f7;
-	--sl-color-accent: #1a63ac;
-	--sl-color-accent-high: #10314f;
+	--sl-color-accent-low: #d8f6eb;
+	--sl-color-accent: #087a59;
+	--sl-color-accent-high: #063c2e;
 }
 
 /* Terminal transcripts in the docs: keep them monospaced and unwrapped so the

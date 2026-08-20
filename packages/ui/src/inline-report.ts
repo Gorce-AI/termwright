@@ -14,7 +14,7 @@
  * @packageDocumentation
  */
 
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openTrace } from '@termwright/trace';
@@ -22,7 +22,7 @@ import { INLINE_PAYLOAD_KEY, type InlinePayload, type ViewerState } from './data
 import { readTraceLogs } from './trace-logs.js';
 import { readCommandLog, readFrames } from './trace-playback.js';
 import { readProjectInfo } from './project.js';
-import { readTraceOverview } from './trace-source.js';
+import { readTraceOverview, traceStateAt } from './trace-source.js';
 
 /** Payload ceiling, in bytes of JSON, before frames and logs are cut. */
 const DEFAULT_BUDGET_BYTES = 8 * 1024 * 1024;
@@ -73,6 +73,7 @@ export async function buildInlinePayload(
   const reader = await openTrace(tracePath);
   try {
     const overview = await readTraceOverview(reader);
+    const traceState = await traceStateAt(reader, 0);
     const commands = await readCommandLog(reader);
     const frames = await readFrames(reader);
     const logs = await readTraceLogs(reader, { after: 0, limit: LOG_CEILING });
@@ -89,7 +90,7 @@ export async function buildInlinePayload(
       record: null,
     };
 
-    const fixed = size({ v: 1, state, commands, logs: { ...logs, records: [] }, frames: { ...frames, frames: [] } });
+    const fixed = size({ v: 1, state, commands, traceState, logs: { ...logs, records: [] }, frames: { ...frames, frames: [] } });
     const trimmedFrames = trimFrames(frames.frames, Math.max(budget - fixed, 0));
     const remaining = Math.max(budget - fixed - size(trimmedFrames.kept), 0);
     const trimmedLogs = trimLogs(logs.records, remaining);
@@ -99,6 +100,7 @@ export async function buildInlinePayload(
         v: 1,
         state,
         commands,
+        traceState,
         frames: {
           ...frames,
           frames: trimmedFrames.kept,
@@ -157,12 +159,30 @@ export async function renderInlineHtml(payload: InlinePayload, appDir?: string):
 
   const script = await inlineAsset(directory, shell, /<script[^>]*src="([^"]+)"[^>]*><\/script>/, 'script');
   const styled = await inlineAsset(directory, script, /<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*\/?>/, 'style');
+  const selfContained = await inlineReferencedSvgAssets(directory, styled);
 
   const data = `<script>globalThis.${INLINE_PAYLOAD_KEY}=${jsonForScript(payload)};</script>`;
   // Function form throughout this file: `$&`, `$'` and friends are replacement
   // patterns, and a JS bundle is full of them. Passing the text directly
   // rewrites it into garbage that parses as HTML but not as a program.
-  return styled.replace('</head>', () => `${data}</head>`);
+  return selfContained.replace('</head>', () => `${data}</head>`);
+}
+
+/** Embeds emitted SVGs only in the standalone artifact. Normal Vite output keeps real files. */
+async function inlineReferencedSvgAssets(directory: string, html: string): Promise<string> {
+  let result = html;
+  const assetDirectory = join(directory, 'assets');
+  const names = (await readdir(assetDirectory)).filter((name) => name.endsWith('.svg'));
+  for (const name of names) {
+    const content = await readFile(join(assetDirectory, name));
+    const dataUrl = `data:image/svg+xml;base64,${content.toString('base64')}`;
+    // Vite uses `./assets/name.svg` in HTML but a bare sibling name beside a
+    // JS chunk. Once the chunk is inlined, both must point at the same data URL.
+    for (const reference of [`./assets/${name}`, `/assets/${name}`, `assets/${name}`, name]) {
+      result = result.replaceAll(reference, dataUrl);
+    }
+  }
+  return result;
 }
 
 /** Replaces a `src`/`href` reference with the file's contents. */

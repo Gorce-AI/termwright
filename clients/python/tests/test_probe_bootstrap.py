@@ -352,13 +352,8 @@ def test_the_fixture_imports_nothing_of_ours():
     assert any(name.startswith("textual") for name in imported), "the fixture is not a Textual app"
 
 
-def test_the_probe_never_imports_the_legacy_adapter(tmp_path):
-    """The probe replaces the hand-written adapter; it must not inherit it.
-
-    An adapter import would drag in Textual at probe-install time — before the
-    application has chosen to import it — and would tempt the probe into
-    reusing decisions it is supposed to make from what Textual reports.
-    """
+def test_the_probe_does_not_import_textual_before_the_application(tmp_path):
+    """Startup injection waits for the application to choose its framework."""
     with write_bootstrap(package_root=SRC) as bootstrap:
         env = bootstrap.env(instrumented_env(tmp_path))
         result = run_child(
@@ -373,7 +368,6 @@ def test_the_probe_never_imports_the_legacy_adapter(tmp_path):
         )
     assert result.returncode == 0, result.stderr
     loaded = json.loads(result.stdout)
-    assert "termwright.textual_adapter" not in loaded, loaded
     assert not any(name.startswith("textual") for name in loaded), (
         f"the probe imported the framework before the application did: {loaded}"
     )

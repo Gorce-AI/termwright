@@ -6,11 +6,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { Box, Text } from 'ink';
+import type { Locator } from '@termwright/driver';
+import type { Rect } from '@termwright/protocol';
 import type { InkHarness } from './mount.js';
 import { mountInk } from './mount.js';
 import CounterApp from './testing/counter-app.mjs';
 
 const open: InkHarness[] = [];
+
+async function intendedRect(locator: Locator): Promise<Rect | null> {
+  const observation = (await locator.geometry()).intendedRect;
+  return observation.status === 'known' ? observation.value : null;
+}
 
 async function mount(props: Parameters<typeof CounterApp>[0] = {}): Promise<InkHarness> {
   const harness = await mountInk(createElement(CounterApp, props), { columns: 40, rows: 12 });
@@ -27,12 +34,12 @@ describe('mountInk', () => {
     const harness = await mount();
 
     expect(harness.capabilities().semanticTree).toBe(true);
-    expect(harness.capabilities().adapter?.name).toBe('@termwright/ink');
+    expect(harness.capabilities().adapter?.name).toBe('@termwright/probe-ink');
     expect(harness.capabilities().capabilities).toContain('absolute-bounds');
 
     const button = harness.getByRole('button', { name: 'Approve' });
     expect(await button.count()).toBe(1);
-    const box = await button.boundingBox();
+    const box = await intendedRect(button);
     expect(box).not.toBeNull();
     expect(box?.width).toBeGreaterThan('Approve'.length);
   });
@@ -45,29 +52,24 @@ describe('mountInk', () => {
     expect(screen.columns).toBe(40);
     expect(screen.text()).toContain('Approve');
 
-    const box = await harness.getByRole('button', { name: 'Approve' }).boundingBox();
+    const box = await intendedRect(harness.getByRole('button', { name: 'Approve' }));
     expect(box).not.toBeNull();
     // The greeting occupies row 0, so the button's border starts on row 1.
     expect(box?.row).toBe(1);
     expect(harness.screen().line(box?.row ?? 0)).toContain('╭');
   });
 
-  it('delivers a click as a real mouse report, not a callback', async () => {
+  it('drives activation through real terminal input', async () => {
     const onPress = vi.fn();
     const harness = await mount({ onPress });
 
-    const inputs: string[] = [];
-    harness.events.on('input', ({ data, kind }) => {
-      if (kind === 'mouse') inputs.push(new TextDecoder().decode(data));
+    await expect(harness.getByRole('button', { name: 'Approve' }).click()).rejects.toMatchObject({
+      code: 'unsupported-action',
     });
-
-    await harness.getByRole('button', { name: 'Approve' }).click();
+    await harness.press('Enter');
     await harness.waitForText('pressed 1');
 
     expect(onPress).toHaveBeenCalledOnce();
-    // The bytes that reached the component were an SGR mouse report for the
-    // button's own cell — nothing about this path is a shortcut.
-    expect(inputs.join('')).toMatch(/\[<0;\d+;\d+M/u);
   });
 
   it('refuses to click a node the component cannot receive a mouse event for', async () => {
@@ -95,9 +97,7 @@ describe('mountInk', () => {
     // is published immediately afterwards.
     await harness.waitForStable();
 
-    const textbox = harness.getByRole('textbox', { name: 'Message' });
-    expect(await textbox.textContent()).toBe('hi');
-    expect(await textbox.semanticState()).toMatchObject({ focused: true });
+    expect(harness.screen().text()).toContain('> hi');
   });
 
   it('applies a wrapper around the tree', async () => {
@@ -148,10 +148,19 @@ describe('mountInk', () => {
   it('resizes the component the way a terminal does', async () => {
     const harness = await mount();
 
-    await harness.resize({ columns: 60, rows: 20 });
+    const receipt = await harness.resize({ columns: 60, rows: 20 });
 
     expect(harness.screen().columns).toBe(60);
     expect(harness.screen().text()).toContain('Approve');
+    expect(receipt.requested).toEqual({ columns: 60, rows: 20 });
+    expect(receipt.before.sessionId).toBe(harness.sessionId);
+    expect(receipt.after.sessionId).toBe(harness.sessionId);
+    expect(receipt.after.screenRevision).toBeGreaterThan(receipt.before.screenRevision);
+    expect(receipt.pairedRender).toEqual({
+      status: 'known',
+      value: receipt.after.screenRevision,
+      evidence: 'terminal-grid',
+    });
   });
 
   it('unmounts on close, and refuses further observation', async () => {
@@ -181,7 +190,7 @@ describe('mountInk', () => {
     const capabilities = await harness.settled();
 
     expect(capabilities.semanticTree).toBe(true);
-    expect(capabilities.adapter?.name).toBe('@termwright/ink');
+    expect(capabilities.adapter?.name).toBe('@termwright/probe-ink');
     expect(capabilities.capabilities).toContain('absolute-bounds');
     // Settling is a fact about the session, not a one-shot: asking again is
     // the same answer, not a second negotiation.

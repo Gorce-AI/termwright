@@ -1,0 +1,114 @@
+{
+  "kind": "termwright-performance-report",
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-20T10:40:12.594Z",
+  "environment": {
+    "runtime": "node v24.1.0; go version go1.24.4 darwin/arm64",
+    "platform": "darwin",
+    "architecture": "arm64"
+  },
+  "scenarios": [
+    {
+      "id": "charm-v2-immediate-e2e",
+      "framework": "charm",
+      "renderingMode": "immediate",
+      "description": "real zero-config Bubble Tea v2 fixture, vanilla and instrumented builds, driven through PTYs",
+      "workload": {
+        "frames": 87,
+        "warmupFrames": 0,
+        "targetNodesPerFrame": 3
+      },
+      "metrics": {
+        "probeEventsPerFrame": {
+          "status": "unavailable",
+          "unit": "events/frame",
+          "value": null,
+          "reason": "Bubble Tea exposes accepted View calls but not the pre-render event burst coalesced by its renderer."
+        },
+        "bytesPerFrame": {
+          "status": "measured",
+          "unit": "bytes/frame",
+          "value": 472.67816091954023,
+          "note": "Actual canonical Go snapshot/delta envelope bytes including the four-byte frame header."
+        },
+        "fullSnapshots": {
+          "status": "measured",
+          "unit": "count",
+          "value": 87,
+          "note": "Adapter debug counters across instrumented runs."
+        },
+        "deltas": {
+          "status": "measured",
+          "unit": "count",
+          "value": 0,
+          "note": "Charm currently advertises no tree-diffs capability."
+        },
+        "droppedEvents": {
+          "status": "measured",
+          "unit": "count",
+          "value": 0,
+          "note": "Failed Go client publications; every failure emits its cumulative debug counter immediately."
+        },
+        "coalescedEvents": {
+          "status": "unavailable",
+          "unit": "count",
+          "value": null,
+          "reason": "Bubble Tea owns renderer coalescing before the probe hook and exposes no counter for discarded View requests."
+        },
+        "semanticNodesPerFrame": {
+          "status": "measured",
+          "unit": "nodes/frame",
+          "value": 3,
+          "note": "Actual probe snapshots."
+        },
+        "unknownFrameworkNodesPerFrame": {
+          "status": "measured",
+          "unit": "nodes/frame",
+          "value": 0,
+          "note": "Actual generic nodes in probe snapshots."
+        },
+        "renderCorrelationRate": {
+          "status": "measured",
+          "unit": "ratio",
+          "value": 1,
+          "note": "Latest driver-paired semantic revision divided by publications, summed per fresh session."
+        },
+        "probeSerializationTime": {
+          "status": "measured",
+          "unit": "microseconds/frame",
+          "value": 7.24813793103448,
+          "note": "Actual Go canonical snapshot plus wire-envelope encoding time."
+        },
+        "parentNormalizationTime": {
+          "status": "unavailable",
+          "unit": "microseconds/frame",
+          "value": null,
+          "reason": "Charm publishes a normalized semantic snapshot directly; no parent semantic normalization stage runs."
+        },
+        "parentProtocolValidationTime": {
+          "status": "unavailable",
+          "unit": "microseconds/frame",
+          "value": null,
+          "reason": "The live driver does not yet expose its decode/validation timer."
+        },
+        "probeHotPathTime": {
+          "status": "unavailable",
+          "unit": "microseconds/frame",
+          "value": null,
+          "reason": "The E2E wall-time difference includes observation, IPC, PTY and driver work and cannot isolate the probe hot path."
+        },
+        "applicationOverheadRatio": {
+          "status": "measured",
+          "unit": "ratio",
+          "value": 1.0273030881980876,
+          "note": "Median instrumented/vanilla wall-time ratio; 1.0 means equal."
+        }
+      }
+    }
+  ],
+  "caveats": [
+    "Wall-clock overhead includes the driver and PTY because that is the behaviour users experience in an instrumented test run.",
+    "Compare applicationOverheadRatio only on the same machine and with the same iteration count.",
+    "Unavailable values remain null with a reason; no zero is inferred from an unobservable framework counter."
+  ]
+}

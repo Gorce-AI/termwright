@@ -36,7 +36,7 @@ addon explicitly activated, plus the serialize addon.
 **Why.** Terminal emulation is a deep pit of edge cases — wide characters,
 combining marks, scroll regions, alternate buffers, mode handling. xterm.js is
 the emulator with the widest real-world exposure, and it is the *same engine*
-the [runner UI](../../guides/runner-ui/) renders with, so what a test asserts and
+the [runner UI](../../tools/runner-ui/) renders with, so what a test asserts and
 what a human sees cannot diverge.
 
 **Known costs, all handled in code.** Every write is wrapped in a promise on its
@@ -66,9 +66,11 @@ driver publishes a revision only when it holds both the tree and the grid state
 at that marker. This is Neovim's `flush` semantics, and it is what makes waits
 event-based rather than timing-based.
 
-**Why DCS and not APC.** APC is unsupported by xterm.js. A private DCS sequence
-is registrable, and a registered handler consumes it so it never reaches the
-visible grid. Verified, not assumed.
+**Why OSC 8487.** A permeability probe across the supported PTY paths found
+ConPTY drops DCS, APC and OSC 8 while forwarding private OSC and OSC 133. The
+marker therefore uses private OSC 8487 with a BEL terminator on every platform.
+A registered OSC handler consumes it before it reaches the visible grid. This
+replaced the original DCS choice; the encoding changed only after measurement.
 
 **Why a MAC.** So ordinary program output — including output a test's own
 fixture prints — cannot forge a commit. It is keyed with the per-session token
@@ -132,7 +134,7 @@ failure you care about is the one that happened once in CI at 3am, and a tool
 that only records when asked never has it. `Hide()` / `Show()` and idle trimming
 exist so the default stays cheap enough to leave on.
 
-## ADR-8 — Honest degradation over invented semantics
+## ADR-8 — Unsupported semantics remain explicit
 
 **Decision.** Where a framework cannot publish meaning, termwright reports
 `semanticTree: false` and offers grid-based locators. It never infers roles from
@@ -143,3 +145,28 @@ refuses: it turns a test suite into a source of false confidence. The same rule
 drives `unsupported-action` when mouse tracking is off, `stale-snapshot` when a
 ref outlives its revision, and the [Bubble Tea page](../../adapters/bubbletea/)
 saying plainly what it cannot do.
+
+## ADR-9 — Electron is a thin host, not another runner
+
+**Decision.** The desktop surface loads the same authenticated loopback URL and
+the same renderer as the browser in a sandboxed Electron `BrowserWindow`. The
+host owns only the native window. The CLI continues to own
+Vitest and coordinated shutdown; `@termwright/ui` continues to own the server,
+live/replay model and renderer bundle.
+
+**Surface contract.** Interactive `termwright ui` defaults to the Termwright
+desktop window. `--browser` chooses the system browser. `--no-open`, JSON, CI
+and non-TTY use no window. The server and React application are identical in all
+three modes.
+
+**Security boundary.** Electron does not bypass the per-launch token. The host
+accepts only the exact loopback origin, grants the renderer no Node integration,
+preload or IPC in version one, enables context isolation and sandboxing, and
+denies unexpected navigation, windows, permissions and network requests.
+External editor URLs cannot be forwarded blindly to the operating system.
+
+**Packaging boundary.** The umbrella package includes the separately built thin
+host. The launcher produces a platform-native `Termwright` bundle with the
+canonical icon and a fingerprinted cache. Closing the window shuts down the
+watcher and server. Packaged native smoke tests and the production
+`BrowserWindow` policy are release gates.

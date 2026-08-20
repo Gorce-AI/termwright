@@ -29,21 +29,21 @@ nothing in this repository does, automatically. The full runbook is
    approval on its own environment.
 
 `createGithubReleases` is set to `aggregate`: one GitHub Release describing the
-whole coordinated bump, rather than eleven. `tag.yml` creates it as a draft, and
+whole coordinated bump, rather than one release per package. `tag.yml` creates it as a draft, and
 `finalize-release.yml` publishes it once every registry confirms the version.
 
 ## The npm packages move together
 
 `config.json` puts every `@termwright/*` package and the `termwright` umbrella
 in one `fixed` group: they share a version and are released together. That is
-deliberate — the driver, the adapters, the preset and the MCP server are one
-product, and a matrix of independently drifting versions is a support burden
-nobody asked for.
+deliberate — the driver, framework probes, annotation SDKs, preset and MCP
+server are one product, and a matrix of independently drifting versions is a
+support burden nobody asked for.
 
-The language clients publish to different registries, and the three that
-implement the protocol — the PyPI package, the crate and the Go module — share
-the **protocol** version rather than the npm group's. `scripts/sync-protocol-version.mjs`
-propagates it and CI checks it; see [`RELEASING.md`](../RELEASING.md).
+The language clients publish to different registries. The PyPI package, all
+three Rust crates and the Go module share the **protocol** version rather than
+the npm group's. `scripts/sync-protocol-version.mjs` propagates it and CI checks
+it; see [`RELEASING.md`](../RELEASING.md).
 
 ## The 0.1.0 baseline
 

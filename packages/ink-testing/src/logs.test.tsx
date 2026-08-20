@@ -107,28 +107,12 @@ describe('logs passthrough', () => {
   });
 
   it('does not let a mount capture the runner console by default', async () => {
-    // The adapter captures `console.*` as log records whenever it is
-    // instrumented, which is right for a process of its own and wrong for a
-    // mount: this console belongs to Vitest and to every other test in the
-    // file, so capturing it would file the runner's output under the component.
+    // A mount must not patch the process-wide console: it belongs to Vitest and
+    // every other test in the file, not to this component session.
     const before = console.log;
 
     const harness = await mountInk(createElement(CounterApp, {}), SIZE);
     open.push(harness);
-
-    expect(console.log).toBe(before);
-  });
-
-  it('captures it when a mount explicitly asks, and restores on close', async () => {
-    const before = console.log;
-
-    const harness = await mountInk(createElement(CounterApp, {}), {
-      ...SIZE,
-      captureConsole: true,
-    });
-    expect(console.log).not.toBe(before);
-
-    await harness.close();
 
     expect(console.log).toBe(before);
   });

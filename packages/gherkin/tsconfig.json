@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@termwright/gherkin": ["./src/index.ts"],
+      "@termwright/gherkin/runtime": ["./src/runtime.ts"]
+    }
+  },
+  "include": ["src", "test-fixtures/**/*.ts"]
+}

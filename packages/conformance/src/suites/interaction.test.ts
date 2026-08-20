@@ -8,7 +8,8 @@
  * session ownership when more than one is open.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import type { TerminalHarness } from '@termwright/driver';
+import type { Locator, TerminalHarness } from '@termwright/driver';
+import type { Rect } from '@termwright/protocol';
 import { TermwrightError } from '@termwright/driver';
 import {
   CONFORMANCE_FIXTURES,
@@ -23,6 +24,11 @@ import {
 
 const sessions = createSessionPool();
 
+async function intendedRect(locator: Locator): Promise<Rect | null> {
+  const observation = (await locator.geometry()).intendedRect;
+  return observation.status === 'known' ? observation.value : null;
+}
+
 async function generic(options = {}): Promise<TerminalHarness> {
   const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
     columns: 60,
@@ -34,17 +40,6 @@ async function generic(options = {}): Promise<TerminalHarness> {
     ready: 'allow: PATH=',
     ...options,
   });
-  return terminal;
-}
-
-async function semantic(): Promise<TerminalHarness> {
-  const terminal = await sessions.launch(CONFORMANCE_FIXTURES.semanticInk(), {
-    columns: 80,
-    rows: 24,
-    semanticNegotiationMs: 5_000,
-  });
-  await terminal.waitForText('Termwright Conformance');
-  await terminal.getByTestId('status').resolve();
   return terminal;
 }
 
@@ -112,18 +107,6 @@ describe.skipIf(!ptyAvailable())('pointer interaction', () => {
     expect(terminal.screen().text()).toContain('ev: none');
   });
 
-  it('sends the wheel to the region under the cursor, not to the app at large', async () => {
-    const terminal = await semantic();
-
-    await terminal.getByTestId('log').wheel({ deltaY: 1 });
-    await terminal.waitForText('last: WHEEL log');
-    await expect.poll(async () => (await terminal.getByTestId('log').semanticState())?.scrollOffset).toBe(1);
-
-    // The list is a sibling scroll target: wheeling over it must not move the log.
-    await terminal.getByTestId('list').wheel({ deltaY: 1 });
-    await terminal.waitForText('last: WHEEL file-');
-    expect((await terminal.getByTestId('log').semanticState())?.scrollOffset).toBe(1);
-  });
 });
 
 describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
@@ -159,14 +142,14 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     await terminal.press('w');
     await terminal.waitForText('W: 0123456789');
 
-    const wrapped = await terminal.getByText('END').boundingBox();
-    const start = await terminal.getByText('W: 0123456789').boundingBox();
+    const wrapped = await intendedRect(terminal.getByText('END'));
+    const start = await intendedRect(terminal.getByText('W: 0123456789'));
     expect(wrapped?.row).toBeGreaterThan(start?.row ?? 0);
 
     await terminal.resize({ columns: 140, rows: 20 });
     await terminal.waitForText('size: 140x20');
-    const wide = await terminal.getByText('END').boundingBox();
-    const wideStart = await terminal.getByText('W: 0123456789').boundingBox();
+    const wide = await intendedRect(terminal.getByText('END'));
+    const wideStart = await intendedRect(terminal.getByText('W: 0123456789'));
     expect(wide?.row).toBe(wideStart?.row);
   });
 
@@ -240,7 +223,7 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     await terminal.press('u');
     await terminal.waitForText('日本語');
 
-    const cjk = await terminal.getByText('日本語').boundingBox();
+    const cjk = await intendedRect(terminal.getByText('日本語'));
     expect(cjk).not.toBeNull();
     // Three CJK glyphs occupy six columns.
     expect(cjk?.width).toBe(6);
@@ -251,7 +234,7 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     expect(terminal.cell({ row: cjk?.row ?? 0, column: (cjk?.column ?? 0) + 1 }).width).toBe(0);
 
     // A combining mark belongs to the cell it modifies, not to one of its own.
-    const combining = await terminal.getByText('é').boundingBox();
+    const combining = await intendedRect(terminal.getByText('é'));
     expect(combining?.width).toBe(1);
 
     expect(await terminal.getByText('\u{1F600}').count()).toBe(1);

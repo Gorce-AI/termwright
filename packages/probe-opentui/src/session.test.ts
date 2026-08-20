@@ -43,11 +43,12 @@ function fakeRenderer(root: ObservableNode): ObservableRenderer & { emit(): void
 }
 
 /** Captures what the session published, and what it was told to write back. */
-function recorder(marker: (revision: number) => string | undefined = (r) => `MARK:${r}`) {
+function recorder(marker: (revision: number) => string | undefined = (r) => `MARK:${r}`, protocol: 'termwright/1' | 'termwright/2' = 'termwright/1') {
   const snapshots: SemanticSnapshot[] = [];
   return {
     snapshots,
     publisher: {
+      protocol,
       publish(snapshot: SemanticSnapshot): string | undefined {
         snapshots.push(snapshot);
         return marker(snapshot.revision);
@@ -67,6 +68,10 @@ describe('what the probe says about itself', () => {
 
   it('claims paint-order, which is what makes occlusion answerable', () => {
     expect(probeInfo().capabilities).toContain('paint-order');
+  });
+
+  it('claims annotations because every observation reads the optional weak channel', () => {
+    expect(probeInfo().capabilities).toContain('annotations');
   });
 
   it('does not claim frame-begin, which OpenTUI cannot promise', () => {
@@ -201,6 +206,23 @@ describe('the application survives the probe', () => {
 });
 
 describe('what reaches the driver', () => {
+  it('publishes v2 intended geometry and an exact compressed hit grid', () => {
+    const child = renderable('InputRenderable', 2, { screenX: 2, screenY: 1, width: 4, height: 1 });
+    const root = renderable('RootRenderable', 1, { _childrenInZIndexOrder: [child] });
+    const renderer = fakeRenderer(root);
+    renderer.hitTest = (x, y) => y === 1 && x >= 2 && x < 6 ? 2 : 1;
+    const { publisher, snapshots } = recorder((r) => `MARK:${r}`, 'termwright/2');
+    startSession({ renderer, publisher, sessionId: 's1' });
+    renderer.emit();
+
+    const snapshot = snapshots[0]!;
+    expect(snapshot.v).toBe(2);
+    expect(snapshot.nodes[1]?.geometry?.intendedRect).toMatchObject({ status: 'known', value: { row: 1, column: 2, width: 4, height: 1 } });
+    expect(snapshot.nodes[1]?.geometry?.visibleRect).toMatchObject({ status: 'unsupported' });
+    expect(snapshot.hitGrid).toMatchObject({ status: 'known' });
+    expect(validateSnapshot(snapshot, DEFAULT_LIMITS)).toMatchObject({ ok: true });
+  });
+
   it('is a snapshot the protocol accepts', () => {
     const root = renderable('RootRenderable', 1, {
       _childrenInZIndexOrder: [

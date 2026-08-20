@@ -19,7 +19,7 @@ describe.skipIf(!runnable)('the tview menu', () => {
     const app = await terminal.launch();
     await app.waitForText('New file');
 
-    // The matcher polls, so it is what waits for the adapter's handshake — a
+    // The matcher polls, so it is what waits for the probe's handshake — a
     // plain read of the capability is only meaningful once a tree arrived.
     await expect(app).toMatchSemanticSnapshot();
     expect(app.capabilities().semanticTree).toBe(true);
@@ -66,7 +66,12 @@ describe.skipIf(!runnable)('the tview menu', () => {
       // Tab out of the field and onto the button row, then activate: the receipt
       // says which physical strategy was used.
       await app.press('Tab');
-      const receipt = await app.getByRole('button', { name: 'Save' }).activate();
+      const save = app.getByRole('button', { name: 'Save' });
+      // The tview probe cannot observe paint-order/occlusion, so a semantic
+      // pointer click would be an unjustified claim. Waiting for real focus
+      // selects the physical keyboard strategy instead.
+      await expect(save).toBeFocused();
+      const receipt = await save.activate();
       expect(['click', 'focus-enter', 'focus-space']).toContain(receipt.strategy);
     });
 

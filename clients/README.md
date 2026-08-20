@@ -5,9 +5,11 @@ the shared vectors that keep them honest.
 
 | Directory | Package | What it covers |
 |---|---|---|
-| [`python/`](python) | `termwright` 0.1.0 (PyPI) | protocol client + Textual adapter |
-| [`go/`](go) | `github.com/gorce-ai/termwright/clients/go` v0.1.0 | protocol client + tview adapter |
-| [`rust/`](rust) | `termwright-protocol` 0.1.0 (crates.io) | protocol client only |
+| [`python/`](python) | `termwright` 0.1.0 (PyPI) | protocol client + automatic Textual probe + annotation SDK |
+| [`go/`](go) | `github.com/gorce-ai/termwright/clients/go` v0.1.0 | protocol client + Go annotation SDK |
+| [`rust/`](rust) | `termwright-protocol` 0.1.0 (crates.io) | protocol client |
+| [`rust-probe/`](rust-probe) | `termwright-probe-ratatui` 0.1.0 | exact-version Ratatui build probe |
+| [`rust-ratatui/`](rust-ratatui) | `termwright-ratatui` 0.1.0 | author-intent SDK for custom Ratatui widgets |
 | [`test-vectors/`](test-vectors) | — | cross-language conformance fixtures |
 
 The normative implementation is the TypeScript package `@termwright/protocol`
@@ -19,11 +21,10 @@ from it, they are wrong.
 Every client obeys the same rule, and it is the one thing not to break:
 **without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in the environment, an
 instrumented app opens no socket, writes no marker, and renders exactly the
-bytes it would have rendered anyway.** Each client expresses it as a
+bytes it would have rendered anyway.** Each protocol client expresses it as a
 constructor that returns nothing — `client_from_env() -> None`,
-`protocol.FromEnv() == nil`, `Client::from_env() -> None`,
-`termwright.Attach() -> (nil, nil)` — so the calling app needs no feature flag
-and shipping the adapter in production costs one import.
+`protocol.FromEnv() == nil`, `Client::from_env() -> None`. Framework probes
+obey the same rule before installing any render hook.
 
 ## Application logs
 
@@ -74,12 +75,12 @@ call sites stay `logging.getLogger(...).error(...)`, `slog.Error(...)` and
 lives wherever semantics are enabled, which is a single place that is already
 dormant without the driver.
 
-That is the same property `@termwright/ink` gets from `node:diagnostics_channel`
-— an application feeding termwright without taking a production dependency on
-a test tool — reached through a different seam. The cost of each shows up
-elsewhere: an open channel admits several publishers and so needs the
-restamping above, while a logging framework as the seam means the record
-arrives already formatted by it.
+That has the same dormant-boundary goal as the framework probes: application
+call sites keep using their native API, while one integration seam connects to
+Termwright only when a driver supplies an endpoint. The trade-off here is that
+a logging framework hands the bridge an already formatted record; a semantic
+probe instead observes framework state and may consume optional annotations
+from a process-local registry.
 
 `ts` is Unix epoch milliseconds, not session-relative: an adapter cannot know
 when the driver considers the session to have started, so the wall clock is the
@@ -154,14 +155,14 @@ Cases marked `"optional": true` depend on a JSON parser that preserves lone
 surrogates. Python detects them; Go and Rust replace them with U+FFFD before
 the client sees anything, so those two skip the case and say so in their tests.
 
-## Adapter conformance
+## Probe conformance
 
-Vectors prove the protocol layer; the adapter contract is proven by
+Vectors prove the protocol layer; the producer contract is proven by
 `runAdapterConformance` from `@termwright/conformance`, which drives the app as
-a subprocess and observes only bytes and frames. Each adapter ships an example
-app built for it:
+a subprocess and observes only bytes and frames. Each probe uses an application
+that imports no Termwright integration:
 
-| Adapter | Example | Ready text | Interaction | Quit |
+| Probe | Example | Ready text | Interaction | Quit |
 |---|---|---|---|---|
 | Textual | `python/examples/permission_app.py` | `Permission required` | `\t` → `focus: reject` | `\x11` (Ctrl+Q), exit 0 |
 | tview | `go/examples/permission/` | `Permission required` | `\t` → `focus: reject` | `\x03` (Ctrl+C), exit 0 |
@@ -175,26 +176,28 @@ Both were measured under a PTY from every focus position.
 ```ts
 await runAdapterConformance({
   name: 'termwright (Textual)',
-  spawn: () => ({ command: ['python', 'clients/python/examples/permission_app.py'] }),
+  spawn: () => ({
+    command: ['python', '-m', 'termwright_probe', '--', 'python',
+      'clients/python/examples/permission_app.py'],
+  }),
   ready: 'Permission required',
   interaction: { input: '\t', expect: 'focus: reject' },
-  quit: { input: 'q', exitCode: 0 },
+  quit: { input: '\u0011', exitCode: 0 },
   expectAbsoluteBounds: true,
 });
 ```
 
-Both examples were verified end to end here against a stand-in driver: the
-handshake completes, every published snapshot validates, and each revision's
-marker verifies against the session token. Running them through the real
-`runAdapterConformance` suite belongs to whoever owns that package's test
-matrix.
+Both examples run in the real conformance suite. The tview arm builds both a
+plain binary and a binary through `prepareInstrumentedBuild`, compares their
+dormant output, then verifies the live handshake, snapshots, deltas and marker
+ordering.
 
 ## Running the suites
 
 ```sh
-cd clients/python && pip install -e ".[dev]" && pytest      # 132 tests
-cd clients/go     && go test ./...                          # 97 tests
-cd clients/rust   && cargo test                             # 19 tests + 1 doctest
+cd clients/python && pip install -e ".[dev]" && pytest
+cd clients/go     && go test ./...
+cd clients/rust   && cargo test
 ```
 
 ## What is not here
@@ -205,7 +208,9 @@ cd clients/rust   && cargo test                             # 19 tests + 1 docte
   Python through the proactor loop's `create_pipe_connection`. Both are
   compiled and reasoned about here but proven by CI, since this machine is not
   Windows.
-- A Rust framework adapter. The crate is protocol-only by design; ratatui and
-  cursive draw too differently for one adapter to serve both honestly.
-- `tview.Grid` children in Go, which tview exposes no accessor for — supply
-  them with `WithChildren`.
+- A generic Rust framework adapter. The protocol crate stays framework-neutral;
+  Ratatui has its own exact-version build probe in `rust-probe/`, while other
+  immediate-mode frameworks need their own audited hooks.
+- Arbitrary Go renderer integrations. The exact-version tview probe can read
+  private `Grid` items from inside the framework; another framework needs its
+  own audited hook rather than a generic application callback.

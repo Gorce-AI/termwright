@@ -1,7 +1,7 @@
 """A perfectly ordinary Textual application.
 
 The point of this file is what it does NOT contain: no import of termwright,
-no adapter, no call to enable_semantics, no configuration of any kind. If the
+no adapter call, no configuration of any kind. If the
 probe can get semantics out of this, it can get them out of an application
 that has never heard of us.
 

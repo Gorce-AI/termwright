@@ -14,9 +14,10 @@ pytest.importorskip("textual", reason="the probe needs Textual to observe")
 from textual.app import App, ComposeResult  # noqa: E402
 from textual.containers import Vertical, VerticalScroll  # noqa: E402
 from textual.widget import Widget  # noqa: E402
-from textual.widgets import Button, Input, Label  # noqa: E402
+from textual.widgets import Button, Input, Label, Static  # noqa: E402
 
 from termwright import DEFAULT_LIMITS, validate_snapshot  # noqa: E402
+from termwright.textual import semantic  # noqa: E402
 from termwright_probe.textual_tree import (  # noqa: E402
     Identities,
     build_snapshot,
@@ -51,6 +52,19 @@ class HiddenApp(App):
 
     def on_mount(self) -> None:
         self.query_one("#gone").display = False
+
+
+class OverlayApp(App):
+    CSS = """
+    Screen { layers: base cover; }
+    #target, #cover { width: 12; height: 3; }
+    #target { layer: base; }
+    #cover { layer: cover; }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Button("Target", id="target")
+        yield Static("Cover", id="cover")
 
 
 class WeatherGlyph(Widget):
@@ -205,11 +219,85 @@ async def test_paint_order_comes_from_textuals_own_compositor():
         assert keys == sorted(keys)
 
 
-async def test_every_node_claims_occlusion_when_paint_order_is_known():
-    """Which is what opens the driver's pointer gate for Textual."""
+async def test_v1_never_promotes_paint_order_to_pointer_ownership():
+    """Paint order is not an exact recipient-at-point observation."""
     snapshot = await snapshot_of(DemoApp())
     claims = {node.get("occlusion") for node in snapshot["nodes"]}
-    assert claims == {"known"}, claims
+    assert claims == {"unknown"}, claims
+
+
+async def test_v2_publishes_qualified_geometry_and_exact_hit_grid():
+    app = DemoApp()
+    async with app.run_test(size=(40, 10)) as pilot:
+        await pilot.pause()
+        snapshot = build_snapshot(
+            app, Identities(), session_id="s", revision=1, qualified=True
+        ).to_wire()
+    assert snapshot["v"] == 2
+    assert snapshot["coordinateSpace"]["value"] == "viewport-cells"
+    assert snapshot["hitGrid"]["status"] == "known"
+    approve = by_test_id(snapshot)["approve"]
+    assert "bounds" not in approve and "occlusion" not in approve
+    assert approve["geometry"]["displayed"]["value"] is True
+    assert approve["geometry"]["intendedRect"]["status"] == "known"
+    assert approve["geometry"]["visibleRect"]["status"] == "known"
+    assert any(region["recipientId"] == approve["id"] for region in snapshot["hitGrid"]["value"]["regions"])
+    result = validate_snapshot(snapshot, DEFAULT_LIMITS)
+    assert result.ok, f"{result.code}: {result.detail}"
+
+
+async def test_v2_distinguishes_hidden_from_fully_clipped():
+    hidden = HiddenApp()
+    async with hidden.run_test(size=(40, 10)) as pilot:
+        await pilot.pause()
+        hidden_snapshot = build_snapshot(
+            hidden, Identities(), session_id="s", revision=1, qualified=True
+        ).to_wire()
+    gone = by_test_id(hidden_snapshot)["gone"]["geometry"]
+    assert gone["displayed"] == {"status": "known", "value": False, "evidence": "probe"}
+    assert gone["visibleRect"] == {"status": "absent", "reason": "not-displayed"}
+
+    scrolling = ScrollingApp()
+    async with scrolling.run_test(size=(40, 10)) as pilot:
+        await pilot.pause()
+        clipped_snapshot = build_snapshot(
+            scrolling, Identities(), session_id="s", revision=1, qualified=True
+        ).to_wire()
+    clipped = [
+        node for node in clipped_snapshot["nodes"]
+        if node["geometry"]["displayed"].get("value") is True
+        and node["geometry"]["visibleRect"].get("status") == "known"
+        and node["geometry"]["visibleRect"]["value"]["height"] == 0
+        and node["geometry"]["intendedRect"].get("status") == "known"
+        and node["geometry"]["intendedRect"]["value"]["height"] > 0
+    ]
+    assert clipped, "no displayed-but-fully-clipped widget was qualified"
+
+
+async def test_v2_hit_grid_names_the_cover_not_the_covered_target():
+    app = OverlayApp()
+    async with app.run_test(size=(30, 8)) as pilot:
+        await pilot.pause()
+        snapshot = build_snapshot(
+            app, Identities(), session_id="s", revision=1, qualified=True
+        ).to_wire()
+
+    nodes = by_test_id(snapshot)
+    target = nodes["target"]
+    cover = nodes["cover"]
+    rect = target["geometry"]["intendedRect"]["value"]
+    point = {
+        "row": rect["row"] + rect["height"] // 2,
+        "column": rect["column"] + rect["width"] // 2,
+    }
+    owners = [
+        region["recipientId"]
+        for region in snapshot["hitGrid"]["value"]["regions"]
+        if region["rect"]["row"] <= point["row"] < region["rect"]["row"] + region["rect"]["height"]
+        and region["rect"]["column"] <= point["column"] < region["rect"]["column"] + region["rect"]["width"]
+    ]
+    assert owners == [cover["id"]]
+    assert target["id"] != cover["id"]
 
 
 # -- identity ---------------------------------------------------------------
@@ -236,11 +324,13 @@ async def test_provenance_says_the_framework_reported_it():
 
 
 async def test_an_annotation_is_marked_as_the_authors():
+    @semantic(name="Disk almost full")
+    class DiskLabel(Label):
+        pass
+
     class AnnotatedApp(App):
         def compose(self) -> ComposeResult:
-            label = Label("raw", id="thing")
-            label.termwright_name = "Disk almost full"
-            yield label
+            yield DiskLabel("raw", id="thing")
 
     snapshot = await snapshot_of(AnnotatedApp())
     annotated = by_test_id(snapshot)["thing"]

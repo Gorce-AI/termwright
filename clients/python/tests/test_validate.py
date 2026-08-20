@@ -87,10 +87,10 @@ def test_oversized_snapshots_are_rejected_by_bytes():
 def test_the_node_keys_are_exactly_the_protocols():
     """A field added to the protocol must fail here, not in production.
 
-    frameworkType, occlusion, p and px each reached the reference and stayed
-    unknown to this client until something tripped over a rejected snapshot.
-    The reference now exports its key list; this compares against it, so the
-    next one is a red test on the day it lands.
+    Fields have reached the reference and stayed unknown to clients until
+    something tripped over a rejected snapshot. The reference now exports its
+    key list; this compares against it, so the next one is a red test on the
+    day it lands.
     """
     from termwright.validate import _NODE_KEYS
 

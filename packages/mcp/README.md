@@ -141,17 +141,18 @@ window; lower `screenshotScale` or resize the terminal.
 
 A ref is `n8@42`: node id at semantic revision 42 (grid matches get
 `grid:1,2,9,1@7`). Refs go straight to `harness.locatorForRef()`, so they resolve
-by node *identity* — two buttons with the same name stay distinct — and a ref
-reused after its revision was superseded fails with `stale-snapshot`, the
-driver's own rule. The fix is always to snapshot again.
+by node *identity* — two buttons with the same name stay distinct. A producer
+which promises stable identity can resolve that node again in later revisions.
+Frame-local identities and grid refs remain revision-bound; take a fresh
+snapshot when either becomes stale.
 
 `terminal.snapshot` also returns a screen `revision`; pass it back as the
 `cursor` of `terminal.capture_since` to get only the rows and semantic subtrees
 that changed. Cursors the server never handed out fail with `history-truncated`
 (the last 16 captures per terminal are retained).
 
-Programs without a termwright adapter report `semanticTree: unavailable`. There
-are no invented roles: target them by text.
+Programs without a framework probe or custom semantic producer report
+`semanticTree: unavailable`. There are no invented roles: target them by text.
 
 ## Application logs
 
@@ -215,8 +216,8 @@ are the one thing never recorded: the driver keeps their size only.
 Failures come back as tool results with `isError` set. The text content reads
 
 ```
-error stale-snapshot: ref n8@42 was minted at semantic revision 42; the live revision is 43
-suggestion: call terminal.snapshot or terminal.capture_since and use the fresh refs
+error stale-snapshot: ref n8@42 no longer exists at semantic revision 43
+suggestion: re-resolve the locator; the node identity is no longer present
 semanticTree: true
 ```
 

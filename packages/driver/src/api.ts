@@ -5,13 +5,21 @@
  */
 import type {
   LogRecord,
+  ProbeInfo,
   ProtocolErrorMessage,
   ProvenanceSource,
   Rect,
   SemanticRole,
   SemanticSnapshot,
+  SemanticExtendedState,
   SemanticState,
   CursorInfo,
+  LocatorGeometry,
+  LocatorVisibility,
+  Observation,
+  ObservationStamp,
+  PointerHitTest,
+  SpatialRelation,
 } from '@termwright/protocol';
 
 // ---------------------------------------------------------------------------
@@ -88,6 +96,12 @@ export interface LaunchOptions {
    * session disagree and the delta path is a suspect.
    */
   readonly treeUpdates?: 'auto' | 'snapshots';
+  /**
+   * Semantic wire major. V2 is the default and requires evidence-qualified
+   * geometry, visibility and exact hit grids. V1 is an explicit compatibility
+   * mode for older producers; it never enables unqualified pointer actions.
+   */
+  readonly semanticProtocol?: 'termwright/1' | 'termwright/2';
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
   readonly semanticNegotiationMs?: number; // default 250
@@ -139,7 +153,7 @@ export interface TerminalHarness {
   type(text: string): Promise<void>;
   paste(text: string): Promise<void>;
   write(bytes: Uint8Array | string): Promise<void>; // raw, no newline
-  resize(size: { columns: number; rows: number }): Promise<void>;
+  resize(size: { columns: number; rows: number }): Promise<ResizeReceipt>;
   focus(): Promise<void>;
   blur(): Promise<void>;
   signal(sig: 'INT' | 'TERM' | 'KILL' | 'HUP'): Promise<void>;
@@ -190,6 +204,8 @@ export interface SessionCapabilities {
   /** Id of the terminal profile this session counts characters with. */
   readonly terminalProfile: string;
   readonly adapter?: { readonly name: string; readonly version: string };
+  /** Self-description supplied by an instrumented framework probe. */
+  readonly probe?: ProbeInfo;
   readonly capabilities: readonly string[];
   readonly platform: NodeJS.Platform;
 }
@@ -368,10 +384,53 @@ export interface Locator {
 
   // State reads
   waitFor(opts?: { state?: 'visible' | 'hidden' | 'attached' } & WaitOptions): Promise<void>;
-  isVisible(): Promise<boolean>;
+  /** Atomic, evidence-qualified geometry. Never invents a rectangle. */
+  geometry(): Promise<LocatorGeometry>;
+  /** Attached/displayed/viewport facts without collapsing unknown to false. */
+  visibility(): Promise<LocatorVisibility>;
+  /** Whether pointer input at the chosen cell reaches this exact target. */
+  hitTest(opts?: { readonly position?: PointerOptions['position'] }): Promise<PointerHitTest>;
+  /** Atomic cells inside this locator's qualified rectangle. */
+  cellSnapshot(opts?: LocatorCellSnapshotOptions): Promise<LocatorCellSnapshot>;
   textContent(): Promise<string>;
-  boundingBox(): Promise<Rect | null>;
   semanticState(): Promise<SemanticState | null>;
+  /** Application-defined state, separate from portable semantic flags. */
+  extendedState(): Promise<SemanticExtendedState | null>;
+}
+
+export interface LocatorCellSnapshotOptions {
+  readonly box?: 'visible' | 'intended';
+  readonly padding?: number | { readonly top?: number; readonly right?: number; readonly bottom?: number; readonly left?: number };
+}
+
+export interface LocatorCellSnapshot {
+  readonly stamp: ObservationStamp;
+  readonly origin: { readonly row: number; readonly column: number };
+  readonly columns: number;
+  readonly rows: number;
+  text(): string;
+  line(row: number): string;
+  cell(row: number, column: number): CellSnapshot;
+}
+
+export interface ResizeReceipt {
+  readonly requested: { readonly columns: number; readonly rows: number };
+  readonly before: ObservationStamp;
+  readonly after: ObservationStamp;
+  /** Revision that proves the child repainted at the new PTY size. */
+  readonly pairedRender: Observation<number>;
+}
+
+export interface BoundsExpectation {
+  readonly row?: number;
+  readonly column?: number;
+  readonly width?: number;
+  readonly height?: number;
+}
+
+export interface SpatialRelationExpectation {
+  readonly relation: SpatialRelation;
+  readonly target: Locator;
 }
 
 export interface PointerOptions extends WaitOptions {
@@ -384,6 +443,12 @@ export interface ResolvedTarget {
   readonly ref: string;
   readonly revision: number;
   readonly semantic: boolean;
+  /**
+   * Rectangle used by the resolution/action pipeline. For semantic v1 this is
+   * the explicit compatibility projection and is not evidence of visibility
+   * or pointer ownership. Use {@link Locator.geometry},
+   * {@link Locator.visibility}, or {@link Locator.hitTest} for assertions.
+   */
   readonly rect: Rect | null;
   readonly role?: SemanticRole;
   readonly name?: string;
@@ -572,6 +637,8 @@ export interface CrashReport {
  * whether it worked.
  */
 export interface ActionEvent {
+  /** Correlates this completion with the preceding {@link ActionStartedEvent}. */
+  readonly actionId: string;
   /** Method that ran, e.g. `'click'`, `'press'`, `'resize'`. */
   readonly api: string;
   /** The locator's description, for actions that had one. */
@@ -585,6 +652,24 @@ export interface ActionEvent {
    * message belongs to the thrown error, this field is for grouping.
    */
   readonly error?: string;
+  /** Atomic screen/tree identity at completion; trace consumers must not guess. */
+  readonly observation?: ObservationStamp;
+  readonly timeMs: number;
+}
+
+/**
+ * An action that has begun but has not settled yet.
+ *
+ * Consumers use this lifecycle edge for an honest live progress indicator.
+ * The eventual {@link ActionEvent} with the same `actionId` remains the
+ * authoritative outcome.
+ */
+export interface ActionStartedEvent {
+  readonly actionId: string;
+  /** Method that began, e.g. `'click'`, `'press'`, `'resize'`. */
+  readonly api: string;
+  /** Locator description when the action was initiated through a locator. */
+  readonly selector?: string;
   readonly timeMs: number;
 }
 
@@ -631,6 +716,8 @@ export interface SessionEventMap {
   'app-log': AppLogEvent;
   /** One harness or locator action, reported after it finished. */
   action: ActionEvent;
+  /** One harness or locator action, reported immediately before it begins. */
+  'action-start': ActionStartedEvent;
   /**
    * The child died unexpectedly. Emitted before `exit`, so a listener reacting
    * to the exit can already read {@link TerminalHarness.crashReport}.

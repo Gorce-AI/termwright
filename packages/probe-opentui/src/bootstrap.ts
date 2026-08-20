@@ -14,14 +14,14 @@
 import { onRendererConfig, onRendererCreated } from './attach.js';
 import { createMarkerSink, type MarkerSink } from './sink.js';
 import { probeInfo, startSession, type ObservableRenderer, type ProbeSession } from './session.js';
-import { connectProbe, type ProbeChannel } from './transport.js';
+import { connectProbe, type ProbeChannel } from '@termwright/probe-runtime';
 import { isInstrumented, type EnvSource } from './runtime.js';
 import type { AdapterCapability } from '@termwright/protocol';
-import { ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
+import { DEFAULT_LIMITS, ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN, PROTOCOL_V2_ID } from '@termwright/protocol';
+import { PACKAGE_VERSION } from './version.js';
 
 const ADAPTER_NAME = '@termwright/probe-opentui';
-/** Keep in sync with `package.json` and `probeInfo`. */
-const ADAPTER_VERSION = '0.1.0';
+const ADAPTER_VERSION = PACKAGE_VERSION;
 
 /**
  * Adapter capabilities: what kinds of traffic this sender produces.
@@ -35,6 +35,7 @@ const BASE_CAPABILITIES: readonly AdapterCapability[] = [
   'bounds',
   'absolute-bounds',
   'states',
+  'actions',
   'render-revisions',
 ];
 
@@ -83,11 +84,13 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
     state.session = startSession({
       renderer: renderer as ObservableRenderer,
       publisher: {
-        publish: (snapshot) => state.channel?.publish(snapshot),
+        protocol: env[ENV_PROTOCOL] === PROTOCOL_V2_ID ? PROTOCOL_V2_ID : 'termwright/1',
+        publish: (snapshot, metrics) => state.channel?.publish(snapshot, metrics),
       },
       ...(sink === undefined ? {} : { sink }),
       // Resolved per frame: the renderer can exist before the handshake does.
       sessionId: () => state.channel?.session.sessionId ?? 'pending',
+      limits: () => state.channel?.session.limits ?? DEFAULT_LIMITS,
     });
   });
 
@@ -95,7 +98,10 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
     endpoint: env[ENV_ENDPOINT] as string,
     token: env[ENV_TOKEN] as string,
     probe: probeInfo(),
-    capabilities: BASE_CAPABILITIES,
+    capabilities: env[ENV_PROTOCOL] === PROTOCOL_V2_ID
+      ? [...BASE_CAPABILITIES, 'qualified-observations', 'pointer-hit-grid']
+      : BASE_CAPABILITIES,
+    ...(env[ENV_PROTOCOL] === PROTOCOL_V2_ID ? { protocol: PROTOCOL_V2_ID } : {}),
     adapterName: ADAPTER_NAME,
     adapterVersion: ADAPTER_VERSION,
     ...(options.handshakeTimeoutMs === undefined

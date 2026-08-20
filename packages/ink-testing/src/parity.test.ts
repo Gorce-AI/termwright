@@ -10,8 +10,8 @@
 
 import { afterEach, expect, it } from 'vitest';
 import { createElement } from 'react';
-import type { SemanticNode, SemanticSnapshot } from '@termwright/protocol';
-import type { TerminalHarness } from '@termwright/driver';
+import type { Rect, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
+import type { Locator, TerminalHarness } from '@termwright/driver';
 import { launchInkFixture } from './fixture.js';
 import { mountInk } from './mount.js';
 import CounterApp from './testing/counter-app.mjs';
@@ -21,6 +21,11 @@ const SIZE = { columns: 44, rows: 14 } as const;
 const PROPS = { label: 'Approve', greeting: 'parity' } as const;
 
 const open: TerminalHarness[] = [];
+
+async function intendedRect(locator: Locator): Promise<Rect | null> {
+  const observation = (await locator.geometry()).intendedRect;
+  return observation.status === 'known' ? observation.value : null;
+}
 
 afterEach(async () => {
   for (const harness of open.splice(0)) await harness.close();
@@ -60,17 +65,17 @@ it('describes the same component identically in-process and in a pty', async () 
   expect(fixture.screen().text()).toBe(mounted.screen().text());
 });
 
-it('answers the same locator, and the same click, in both modes', async () => {
+it('answers the same locator, and the same terminal activation, in both modes', async () => {
   const mounted = await mountInk(createElement(CounterApp, PROPS), SIZE);
   open.push(mounted);
   const fixture = await launchInkFixture({ component: COMPONENT, props: PROPS, ...SIZE });
   open.push(fixture);
 
-  const box = await mounted.getByRole('button', { name: 'Approve' }).boundingBox();
-  expect(await fixture.getByRole('button', { name: 'Approve' }).boundingBox()).toEqual(box);
+  const box = await intendedRect(mounted.getByRole('button', { name: 'Approve' }));
+  expect(await intendedRect(fixture.getByRole('button', { name: 'Approve' }))).toEqual(box);
 
-  await mounted.getByRole('button', { name: 'Approve' }).click();
-  await fixture.getByRole('button', { name: 'Approve' }).click();
+  await mounted.press('Enter');
+  await fixture.press('Enter');
   await mounted.waitForText('pressed 1');
   await fixture.waitForText('pressed 1');
 

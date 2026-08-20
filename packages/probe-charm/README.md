@@ -29,12 +29,30 @@ import {detectCharmFlavour, capabilitiesFor} from '@termwright/probe-charm';
 const flavour = await detectCharmFlavour('path/to/app');
 // → {major: 'v2', module: 'charm.land/bubbletea/v2', version: 'v2.0.8', companions: {…}}
 
-capabilitiesFor(flavour.major); // v1 never claims `bounds`
+capabilitiesFor(flavour.major); // neither shipped patch set claims `bounds`
 ```
 
 Detection runs with `GOWORK=off` so it reports what the project requires rather
 than what some workspace currently redirects. An application that somehow
 requires both majors is refused by name instead of being guessed at.
+
+The normal launcher path is one call:
+
+```ts
+import {prepareInstrumentedBuild} from '@termwright/probe-charm';
+
+const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
+// Use build.env for `go build`; it contains the generated GOWORK.
+```
+
+It detects the major and exact versions, materialises independently cached
+Bubble Tea and (when supported) Bubbles copies, then writes a generated
+workspace outside the application. `build.built` tells whether this call had a
+cold cache; `build.builtModules` names the copies that were created. An exact
+Bubble Tea version without a shipped patch set is refused. An unknown optional
+Bubbles version is listed in `build.unpatchedCompanions` and left untouched,
+so the frame hook and public-getter semantics remain available without claiming
+the private state its accessor patch would have exposed.
 
 ## What it gives you
 
@@ -82,35 +100,58 @@ is wired, and [`NOTES.md`](NOTES.md) records what is measured about each,
 including the fact that our emulator keeps only the `id` parameter of an OSC 8
 sequence.
 
+The probe handshake also reports `identityKind: 'frame-local'`: Bubble Tea
+copies models through `Update`, so the structural field path used within a
+frame is not honest object identity across frames. A unique author
+`SemanticKey` stabilizes only that annotated node. Its probe capability is
+`annotations`; adapter capabilities are `tree`, `states`, `actions` and
+`render-revisions`. The exact Bubble Tea version comes from the verified patch
+set.
+
 ## Describing what the probe cannot see
 
 A Bubble Tea component is a value — `Update` returns a copy — so there is no
 address to register an annotation against. A component instead declares its own
-semantics, and the probe asks before it tries to recognise anything:
+semantics. The probe reads that declaration before recognition, then merges it
+with any native Bubbles component it finds:
 
 ```go
-import "github.com/gorce-ai/termwright/clients/go/annotate"
+import (
+	"github.com/gorce-ai/termwright/clients/go/annotate"
+	"github.com/gorce-ai/termwright/clients/go/protocol"
+)
 
 func (g gauge) TermwrightSemantics() annotate.Semantics {
-	return annotate.Semantics{Role: "meter", Name: "Disk usage"}
+	return annotate.Semantics{
+		Key: "disk-usage", Role: "progressbar", Name: "Disk usage",
+		Actions: []protocol.Action{protocol.ActionFocus},
+		LabelledBy: []annotate.SemanticKey{"disk-label"},
+	}
 }
 ```
 
-That order is the point: a custom type no recognizer knows would otherwise be
-walked past in silence. A component the probe *does* recognise gets both — the
-author's wording and the probe's observed facts. `Semantics` has no field for
-bounds, focus or rendered text, structurally, so a declaration cannot go stale
-against the screen.
+For a Bubbles type owned by another module, embed it in a local type and put
+`TermwrightSemantics` on that wrapper. A custom type no recognizer knows still
+reaches the tree, while a recognised embedded component gets both the author's
+wording and the probe's observed value/state. `Semantics` has no field for
+bounds, focus, visibility, value, rendered text or framework state,
+structurally, so a declaration cannot go stale against the screen. Actions are
+closed descriptive hints, never callbacks; terminal input remains the only
+execution path.
+
+Relationships are explicit `SemanticKey` strings. The probe evaluates each
+provider once, collects the whole component set, then resolves keys in a second
+pass. A unique key gives that annotated component a stable id even if its Go
+field path changes. Missing keys emit no relationship; duplicate keys keep
+distinct frame-local structural ids and cannot resolve. Nodes use
+`p: framework`, with recognised and annotated fields identified in `px`.
 
 ## Current surface
 
-This package exports detection (`detectCharmFlavour`, `capabilitiesFor`,
-`BUBBLETEA_MODULES`) and re-exports the shared Go machinery from
-`@termwright/probe-go` — workspace generation, the copy cache and the patch
-sets. Unlike `@termwright/probe-tview` there is **no single
-`prepareInstrumentedBuild` call yet**: the assembly of copy → patch → workspace
-lives in this package's tests, which is honest about where it is rather than a
-convenience that does not exist.
+This package exports the one-call launcher, detection (`detectCharmFlavour`,
+`capabilitiesFor`, `BUBBLETEA_MODULES`) and the shared Go machinery from
+`@termwright/probe-go` — workspace generation, the copy cache and patch-set
+utilities.
 
 ## When it refuses
 

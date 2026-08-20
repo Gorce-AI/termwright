@@ -174,10 +174,11 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
   it('still instruments the child in the secret-safe mode', async () => {
     // The allowlist must not cost the handshake: a semantic session has to work
     // without the caller forwarding anything.
-    const terminal = await sessions.launch(CONFORMANCE_FIXTURES.semanticInk(), {
+    const terminal = await sessions.launch(CONFORMANCE_FIXTURES.inkProbe(), {
       columns: 80,
       rows: 24,
       semanticNegotiationMs: 5_000,
+      probe: 'ink',
     });
     await terminal.waitForText('Termwright Conformance');
     await terminal.getByTestId('status').resolve();

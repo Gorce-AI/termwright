@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "termwright"
 version = "0.1.0"
-description = "Semantic side-channel client and Textual adapter for the termwright terminal test driver"
+description = "Semantic side-channel client, automatic Textual probe, and annotation SDK for Termwright"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }

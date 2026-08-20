@@ -39,6 +39,9 @@ function harness(
       mcpArgs.push([...argv]);
       return overrides.mcpExit ?? EXIT_CODES.ok;
     },
+    launchDesktop: async () => ({ closed: new Promise<void>(() => undefined), close: async () => undefined }),
+    openBrowser: async () => true,
+    processContext: { isTty: false, env: {} },
     ui: {
       startUi: async (options) => {
         if (overrides.startUiError !== undefined) throw overrides.startUiError;
@@ -62,7 +65,8 @@ function harness(
         return {
           exited: Promise.resolve(overrides.runnerExit ?? 0),
           run: async () => undefined,
-          stop: () => undefined,
+          stop: async () => undefined,
+          shutdown: async () => undefined,
         };
       },
       waitForInterrupt: async () => undefined,
@@ -202,6 +206,91 @@ describe('the ui command', () => {
     expect(h.closed()).toBe(1);
   });
 
+  it('opens Electron by default for an interactive terminal', async () => {
+    const h = harness();
+    const launchDesktop = vi.fn(async () => ({
+      closed: new Promise<void>(() => undefined),
+      close: async () => undefined,
+    }));
+    Object.assign(h.deps, {
+      launchDesktop,
+      processContext: { isTty: true, env: {} },
+    });
+
+    expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.ok);
+    expect(launchDesktop).toHaveBeenCalledWith('http://127.0.0.1:5000/?token=abc');
+  });
+
+  it('uses the browser only when selected explicitly', async () => {
+    const h = harness();
+    const launchDesktop = vi.fn(h.deps.launchDesktop);
+    const openBrowser = vi.fn(async () => true);
+    Object.assign(h.deps, {
+      launchDesktop,
+      openBrowser,
+      processContext: { isTty: true, env: {} },
+    });
+
+    await runCli(['ui', '--browser'], h.deps);
+    expect(openBrowser).toHaveBeenCalledWith('http://127.0.0.1:5000/?token=abc');
+    expect(launchDesktop).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['--no-open', ['ui', '--no-open'], { isTty: true, env: {} }],
+    ['JSON', ['ui', '--json'], { isTty: true, env: {} }],
+    ['non-TTY', ['ui'], { isTty: false, env: {} }],
+    ['CI', ['ui'], { isTty: true, env: { CI: 'true' } }],
+  ] as const)('opens no window for %s', async (_label, argv, processContext) => {
+    const h = harness();
+    const launchDesktop = vi.fn(h.deps.launchDesktop);
+    const openBrowser = vi.fn(h.deps.openBrowser);
+    Object.assign(h.deps, { launchDesktop, openBrowser, processContext });
+    await runCli(argv, h.deps);
+    expect(launchDesktop).not.toHaveBeenCalled();
+    expect(openBrowser).not.toHaveBeenCalled();
+  });
+
+  it('reports a desktop failure and falls back once to the browser', async () => {
+    const h = harness();
+    const openBrowser = vi.fn(async () => true);
+    Object.assign(h.deps, {
+      launchDesktop: async () => { throw new Error('host unavailable'); },
+      openBrowser,
+      processContext: { isTty: true, env: {} },
+    });
+    await runCli(['ui'], h.deps);
+    expect(h.err.join('\n')).toContain('falling back to the browser');
+    expect(openBrowser).toHaveBeenCalledOnce();
+  });
+
+  it('closing the desktop window shuts down the watcher and server', async () => {
+    const h = harness();
+    let closeWindow: (() => void) | undefined;
+    const closed = new Promise<void>((resolve) => { closeWindow = resolve; });
+    const shutdown = vi.fn(async () => undefined);
+    const closeHost = vi.fn(async () => undefined);
+    const ui = h.deps.ui as { startVitest: CliDeps['ui']['startVitest'] };
+    ui.startVitest = () => ({
+      exited: new Promise<number>(() => undefined),
+      run: async () => undefined,
+      stop: async () => undefined,
+      shutdown,
+    });
+    Object.assign(h.deps, {
+      launchDesktop: async () => ({ closed, close: closeHost }),
+      processContext: { isTty: true, env: {} },
+    });
+
+    const running = runCli(['ui'], h.deps);
+    await vi.waitFor(() => expect(closeWindow).toBeTypeOf('function'));
+    closeWindow?.();
+    expect(await running).toBe(EXIT_CODES.ok);
+    expect(shutdown).toHaveBeenCalledOnce();
+    expect(closeHost).toHaveBeenCalledOnce();
+    expect(h.closed()).toBe(1);
+  });
+
   it('reports a failing run as an assertion failure', async () => {
     const h = harness({ runnerExit: 1 });
     expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.assertion);
@@ -228,8 +317,12 @@ describe('the ui command', () => {
     // Without this the panel stays empty until tests start reporting, which is
     // the opposite of what discovery is for.
     const h = harness();
-    await runCli(['ui'], h.deps);
-    expect(h.uiOptions[0]?.discovery).toMatchObject({ cwd: '/workspace', watch: true });
+    await runCli(['ui', '--', 'src/login.test.ts'], h.deps);
+    expect(h.uiOptions[0]?.discovery).toMatchObject({
+      cwd: '/workspace',
+      watch: true,
+      args: ['src/login.test.ts'],
+    });
   });
 
   it('does not list a project’s tests for a replay or a recording', async () => {
@@ -317,13 +410,15 @@ describe('the ui command', () => {
     const h = harness();
     await runCli(['ui', '--no-watch'], h.deps);
     expect(h.runs).toHaveLength(0);
+    expect(h.uiOptions[0]?.onRerun).toBeUndefined();
+    expect(h.uiOptions[0]?.onStop).toBeUndefined();
     expect(h.closed()).toBe(1);
   });
 
   it('wires the browser controls to the runner', async () => {
     const h = harness();
     const run = vi.fn(async () => undefined);
-    const stop = vi.fn();
+    const stop = vi.fn(async () => undefined);
     const ui = h.deps.ui as { startVitest: CliDeps['ui']['startVitest'] };
     let released: (() => void) | undefined;
     ui.startVitest = () => ({
@@ -332,6 +427,7 @@ describe('the ui command', () => {
       }),
       run,
       stop,
+      shutdown: async () => undefined,
     });
 
     const running = runCli(['ui'], h.deps);
@@ -339,7 +435,7 @@ describe('the ui command', () => {
     await vi.waitFor(() => expect(released).toBeTypeOf('function'));
 
     await h.uiOptions[0]?.onRerun?.(['tests/a.test.ts']);
-    h.uiOptions[0]?.onStop?.();
+    await h.uiOptions[0]?.onStop?.();
     // The panel names the files it wants run; the watcher's `r` never could.
     expect(run).toHaveBeenCalledWith(['tests/a.test.ts']);
     expect(stop).toHaveBeenCalledOnce();

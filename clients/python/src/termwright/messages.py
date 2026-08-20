@@ -19,6 +19,7 @@ from .roles import CAPABILITY_SET
 from .validate import validate_snapshot, validate_tree_delta
 
 PROTOCOL_ID = "termwright/1"
+PROTOCOL_V2_ID = "termwright/2"
 PROTOCOL_VERSION = 1
 
 ERROR_CODES = ("bad-token", "bad-version", "malformed", "limit-exceeded", "internal")
@@ -53,6 +54,7 @@ def hello(
     adapter_version: str,
     capabilities: Sequence[str],
     probe: Optional[Mapping[str, Any]] = None,
+    protocol: str = PROTOCOL_ID,
 ) -> Dict[str, Any]:
     """Build the handshake message. Unknown capabilities are refused locally.
 
@@ -66,7 +68,7 @@ def hello(
         raise ProtocolViolation("marker-argument", f"unknown capabilities: {', '.join(unknown)}")
     message: Dict[str, Any] = {
         "type": "hello",
-        "protocol": PROTOCOL_ID,
+        "protocol": protocol,
         "token": token,
         "adapter": {"name": adapter_name, "version": adapter_version},
         "capabilities": list(capabilities),
@@ -249,13 +251,13 @@ def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -
     kind = message["type"]
     if kind == "hello":
         protocol = message.get("protocol")
-        if isinstance(protocol, str) and protocol != PROTOCOL_ID:
+        if isinstance(protocol, str) and protocol not in (PROTOCOL_ID, PROTOCOL_V2_ID):
             return ParseResult(ok=False, code="bad-version", detail=f"unsupported protocol {protocol}")
         issue = _exact_keys(message, ("type", "protocol", "token", "adapter", "capabilities"))
         if issue:
             return _malformed(issue)
-        if message["protocol"] != PROTOCOL_ID:
-            return _malformed("protocol: expected termwright/1")
+        if message["protocol"] not in (PROTOCOL_ID, PROTOCOL_V2_ID):
+            return _malformed("protocol: expected termwright/1 or termwright/2")
         issue = _identifier(message["token"], "token")
         if issue:
             return _malformed(issue)
@@ -275,6 +277,11 @@ def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -
         for item in capabilities:
             if item not in CAPABILITY_SET:
                 return _malformed(f"capabilities: unknown capability {item!r}")
+        qualified = "qualified-observations" in capabilities
+        if (message["protocol"] == PROTOCOL_V2_ID) != qualified:
+            return _malformed("termwright/2 and qualified-observations must be negotiated together")
+        if "pointer-hit-grid" in capabilities and not qualified:
+            return _malformed("pointer-hit-grid requires qualified-observations")
         return ParseResult(ok=True, message=message)
 
     if kind == "revision-commit":
@@ -348,15 +355,15 @@ def parse_driver_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) ->
     kind = message["type"]
     if kind == "hello-ack":
         protocol = message.get("protocol")
-        if isinstance(protocol, str) and protocol != PROTOCOL_ID:
+        if isinstance(protocol, str) and protocol not in (PROTOCOL_ID, PROTOCOL_V2_ID):
             return ParseResult(ok=False, code="bad-version", detail=f"unsupported protocol {protocol}")
         issue = _required_keys(
             message, ("type", "protocol", "sessionId", "limits", "subscribe", "marker")
         )
         if issue:
             return _malformed(issue)
-        if message["protocol"] != PROTOCOL_ID:
-            return _malformed("protocol: expected termwright/1")
+        if message["protocol"] not in (PROTOCOL_ID, PROTOCOL_V2_ID):
+            return _malformed("protocol: expected termwright/1 or termwright/2")
         issue = _identifier(message["sessionId"], "sessionId")
         if issue:
             return _malformed(issue)

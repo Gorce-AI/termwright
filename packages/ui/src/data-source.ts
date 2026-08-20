@@ -30,6 +30,8 @@ import type { SpecFacts } from './spec-tree.js';
  */
 export interface ViewerState {
   readonly mode: 'live' | 'post-mortem' | 'record';
+  /** Whether this server has a test runner behind its Run controls. */
+  readonly canRun?: boolean;
   /**
    * Which project, which branch, which version — the frame around every view.
    * A report carries the values as they were when it was written.
@@ -89,6 +91,8 @@ export interface InlinePayload {
   readonly state: ViewerState;
   readonly frames: TraceFrames;
   readonly commands: TraceCommands;
+  /** First semantic/terminal state, retained for an immediately useful inspector. */
+  readonly traceState: TraceStatePayload;
   /** Every log record that fitted in the budget, oldest first. */
   readonly logs: TraceLogs;
 }
@@ -138,7 +142,7 @@ export class InlineDataSource implements DataSource {
    * server-derived state, and a silent empty screen would be worse than this.
    */
   async traceState(): Promise<TraceStatePayload> {
-    throw new Error('a self-contained report replays from its frames; it has no server to ask');
+    return this.#payload.traceState;
   }
 
   async traceLogs(query: LogWindowQuery = {}): Promise<TraceLogs> {
@@ -155,8 +159,9 @@ export class InlineDataSource implements DataSource {
       const from = all.findIndex((record) => record.t >= after);
       start = from === -1 ? all.length : from;
     } else {
-      // No bounds means the oldest window, as the server's route defines it.
-      start = 0;
+      // Match the server reader: opening Logs starts at the outcome, while an
+      // explicit `after` cursor is how callers request the beginning.
+      start = Math.max(all.length - limit, 0);
     }
     const records = all.slice(start, start + limit);
 

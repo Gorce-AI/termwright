@@ -34,10 +34,19 @@ adapter and the duplication with it.
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from weakref import WeakKeyDictionary
 
-from termwright.tree import Rect, SemanticNode, SemanticSnapshot, SemanticState
+from termwright.textual import ResolvedAnnotation, resolve_annotation
+from termwright.tree import (
+    NodeGeometryObservations,
+    Observation as WireObservation,
+    Rect,
+    SemanticNode,
+    SemanticSnapshot,
+    SemanticState,
+)
 
 #: Widget class name → semantic role, walked along the MRO so a subclass of a
 #: mapped widget inherits its role with no registration at all: `SaveButton`
@@ -118,7 +127,9 @@ class Identities:
         self._ids: "WeakKeyDictionary[Any, str]" = WeakKeyDictionary()
         self._next = 0
 
-    def of(self, widget: Any) -> str:
+    def of(self, widget: Any, semantic_key: Optional[str] = None) -> str:
+        if semantic_key is not None:
+            return f"k:{semantic_key}"
         existing = self._ids.get(widget)
         if existing is not None:
             return existing
@@ -128,11 +139,11 @@ class Identities:
         return assigned
 
 
-def role_for(widget: Any) -> str:
-    """Semantic role: the author's annotation, then the class ancestry."""
-    override = getattr(widget, "termwright_role", None)
-    if isinstance(override, str) and override:
-        return override
+def role_for(widget: Any, annotation: Optional[ResolvedAnnotation] = None) -> str:
+    """Semantic role: the SDK annotation, then the class ancestry."""
+    resolved = annotation if annotation is not None else resolve_annotation(widget)
+    if resolved.role is not None:
+        return resolved.role
     for klass in type(widget).__mro__:
         role = ROLE_BY_CLASS.get(klass.__name__)
         if role is not None:
@@ -172,11 +183,15 @@ def name_from_content(widget: Any) -> str:
     return " ".join(parts)[:MAX_CONTENT_NAME].strip()
 
 
-def name_for(widget: Any, role: Optional[str] = None) -> str:
+def name_for(
+    widget: Any,
+    role: Optional[str] = None,
+    annotation: Optional[ResolvedAnnotation] = None,
+) -> str:
     """Accessible name: annotation, then own text, then contents, then id."""
-    override = getattr(widget, "termwright_name", None)
-    if isinstance(override, str):
-        return override
+    resolved = annotation if annotation is not None else resolve_annotation(widget)
+    if resolved.name is not None:
+        return resolved.name
 
     own = _first_text(
         getattr(widget, "label", None),
@@ -193,11 +208,11 @@ def name_for(widget: Any, role: Optional[str] = None) -> str:
     return _first_text(getattr(widget, "name", None), getattr(widget, "id", None))
 
 
-def test_id_for(widget: Any) -> Optional[str]:
+def test_id_for(widget: Any, annotation: Optional[ResolvedAnnotation] = None) -> Optional[str]:
     """Test id: the author's annotation, then Textual's own DOM id."""
-    annotated = getattr(widget, "termwright_test_id", None)
-    if isinstance(annotated, str) and annotated:
-        return annotated
+    resolved = annotation if annotation is not None else resolve_annotation(widget)
+    if resolved.test_id is not None:
+        return resolved.test_id
     native = getattr(widget, "id", None)
     return native if isinstance(native, str) and native else None
 
@@ -245,7 +260,7 @@ def _rect(region: Any) -> Optional[Rect]:
         return None
 
 
-class Observation:
+class WidgetObservation:
     """One widget as the probe found it, before it becomes a node."""
 
     __slots__ = ("widget", "geometry", "displayed", "paint_order")
@@ -257,7 +272,7 @@ class Observation:
         self.paint_order: Optional[int] = None
 
 
-def observe(app: Any) -> List[Observation]:
+def observe(app: Any) -> List[WidgetObservation]:
     """Read the active screen: every widget, its geometry and its display flag.
 
     Called from `post_display_hook`, where the compositor has finished, so the
@@ -270,11 +285,15 @@ def observe(app: Any) -> List[Observation]:
     except Exception:
         pass
 
-    observations: List[Observation] = []
+    observations: List[WidgetObservation] = []
     for widget in widgets:
-        displayed = bool(getattr(widget, "display", True)) and bool(
-            getattr(widget, "visible", True)
-        )
+        displayed = True
+        ancestor = widget
+        while ancestor is not None:
+            displayed = displayed and bool(getattr(ancestor, "display", True)) and bool(
+                getattr(ancestor, "visible", True)
+            )
+            ancestor = getattr(ancestor, "parent", None)
         geometry = None
         try:
             geometry = screen.find_widget(widget)
@@ -283,13 +302,13 @@ def observe(app: Any) -> List[Observation]:
             # screen that is no longer active. It has no geometry this frame,
             # which is a fact rather than an error.
             geometry = None
-        observations.append(Observation(widget, geometry, displayed))
+        observations.append(WidgetObservation(widget, geometry, displayed))
 
     _rank_paint_order(observations)
     return observations
 
 
-def _rank_paint_order(observations: List[Observation]) -> None:
+def _rank_paint_order(observations: List[WidgetObservation]) -> None:
     """Rank by Textual's own compositing key, so later means on top.
 
     `MapGeometry.order` is a tuple of per-ancestor triples and compares
@@ -318,10 +337,25 @@ def build_snapshot(
     *,
     session_id: str,
     revision: int,
+    qualified: bool = False,
 ) -> SemanticSnapshot:
     """The semantic tree for the frame that just landed."""
     observations = observe(app)
     included = {id(item.widget) for item in observations}
+    annotations = {id(item.widget): _probe_annotation(item.widget) for item in observations}
+    key_counts = Counter(
+        annotation.key for annotation in annotations.values() if annotation.key is not None
+    )
+    # Duplicate author keys are not identities. Degrade every colliding node to
+    # Textual's retained object identity for this frame; keeping one by
+    # traversal order would be unstable, while duplicate ids reject the whole
+    # snapshot.
+    semantic_keys = {
+        widget_id: annotation.key
+        if annotation.key is not None and key_counts[annotation.key] == 1
+        else None
+        for widget_id, annotation in annotations.items()
+    }
     screen = app.screen
     focused = getattr(app, "focused", None)
 
@@ -329,37 +363,84 @@ def build_snapshot(
     root_ids: List[str] = []
     for item in observations:
         widget = item.widget
-        role = role_for(widget)
-        node_id = identities.of(widget)
+        annotation = annotations[id(widget)]
+        role = role_for(widget, annotation)
+        semantic_key = semantic_keys[id(widget)]
+        node_id = identities.of(widget, semantic_key)
 
         parent_id: Optional[str] = None
         parent = getattr(widget, "parent", None)
         while parent is not None and id(parent) not in included:
             parent = getattr(parent, "parent", None)
         if parent is not None and parent is not widget:
-            parent_id = identities.of(parent)
+            parent_id = identities.of(parent, semantic_keys[id(parent)])
         if parent_id is None:
             root_ids.append(node_id)
 
         bounds, hidden, offscreen = _geometry_of(item)
-        annotated = _annotated_fields(widget)
+        intended = _rect(getattr(item.geometry, "region", None)) if item.geometry is not None else None
+        visible = _rect(getattr(item.geometry, "visible_region", None)) if item.geometry is not None else None
+        geometry = None
+        if qualified:
+            if not item.displayed:
+                absent = WireObservation(status="absent", reason="not-displayed")
+                geometry = NodeGeometryObservations(
+                    displayed=WireObservation(status="known", value=False, evidence="probe"),
+                    intendedRect=absent,
+                    visibleRect=absent,
+                )
+            elif item.geometry is None:
+                unknown = WireObservation(status="unknown", reason="temporary")
+                geometry = NodeGeometryObservations(
+                    displayed=WireObservation(status="known", value=True, evidence="probe"),
+                    intendedRect=unknown,
+                    visibleRect=unknown,
+                )
+            else:
+                geometry = NodeGeometryObservations(
+                    displayed=WireObservation(status="known", value=True, evidence="probe"),
+                    intendedRect=(WireObservation(status="known", value=intended, evidence="probe") if intended is not None else WireObservation(status="unknown", reason="not-reported")),
+                    visibleRect=(WireObservation(status="known", value=visible, evidence="viewport-clip") if visible is not None else WireObservation(status="unsupported", capability="visible-rect", reason="framework-unobservable")),
+                )
+        annotated = _annotated_fields(annotation, semantic_key is not None)
         nodes.append(
             SemanticNode(
                 id=node_id,
                 parentId=parent_id,
                 role=role,
-                name=_app_name(app) if widget is screen else name_for(widget, role),
-                testId=test_id_for(widget),
+                name=(
+                    annotation.name
+                    if widget is screen and annotation.name is not None
+                    else _app_name(app)
+                    if widget is screen
+                    else name_for(widget, role, annotation)
+                ),
+                description=annotation.description,
+                testId=test_id_for(widget, annotation),
                 value=value_for(widget, role),
-                bounds=bounds,
-                state=_state_of(item, widget, focused, hidden, offscreen),
-                actions=actions_for(role),
+                bounds=None if qualified else bounds,
+                state=_state_of(item, widget, role, focused, hidden, offscreen),
+                extended=annotation.extended,
+                actions=(
+                    annotation.actions
+                    if annotation.actions is not None
+                    else actions_for(role)
+                ),
+                labelledBy=_relationship_ids(
+                    annotation.labelled_by, included, identities, semantic_keys
+                ),
+                describedBy=_relationship_ids(
+                    annotation.described_by, included, identities, semantic_keys
+                ),
                 frameworkType=type(widget).__name__ if role == "generic" else None,
-                occlusion="known" if item.paint_order is not None else "unknown",
+                occlusion=None if qualified else "unknown",
                 p="framework",
                 px=annotated or None,
+                geometry=geometry,
             )
         )
+
+    hit_regions = _hit_regions(screen, observations, identities, semantic_keys) if qualified else None
 
     return SemanticSnapshot(
         sessionId=session_id,
@@ -368,7 +449,56 @@ def build_snapshot(
         rows=int(getattr(app, "size", _Size()).height),
         rootIds=root_ids,
         nodes=nodes,
+        v=2 if qualified else 1,
+        coordinateSpace=(WireObservation(status="known", value="viewport-cells", evidence="probe") if qualified else None),
+        hitGrid=(
+            WireObservation(status="known", value={"regions": hit_regions}, evidence="hit-grid")
+            if qualified and hit_regions is not None
+            else WireObservation(status="unsupported", capability="pointer-hit-grid", reason="framework-unobservable")
+            if qualified
+            else None
+        ),
     )
+
+
+def _hit_regions(
+    screen: Any,
+    observations: Sequence[WidgetObservation],
+    identities: Identities,
+    semantic_keys: Dict[int, Optional[str]],
+) -> Optional[List[Dict[str, Any]]]:
+    """Compress Textual's exact fresh-pointer recipient map into row runs."""
+    by_object = {id(item.widget): identities.of(item.widget, semantic_keys[id(item.widget)]) for item in observations}
+    width = max(0, int(getattr(getattr(screen, "size", None), "width", 0)))
+    height = max(0, int(getattr(getattr(screen, "size", None), "height", 0)))
+    regions: List[Dict[str, Any]] = []
+    lookup = getattr(screen, "get_widget_at", None)
+    if not callable(lookup):
+        return None
+    for row in range(height):
+        run_owner: Optional[str] = None
+        run_start = 0
+        for column in range(width + 1):
+            owner: Optional[str] = None
+            if column < width:
+                try:
+                    widget, _region = lookup(column, row)
+                    if not bool(getattr(widget, "loading", False)):
+                        owner = by_object.get(id(widget))
+                        if owner is None:
+                            # A known framework recipient without a semantic id
+                            # is not "no recipient". Refuse the entire complete
+                            # map rather than manufacture a false empty cell.
+                            return None
+                except Exception:
+                    owner = None
+            if owner == run_owner:
+                continue
+            if run_owner is not None:
+                regions.append({"rect": {"row": row, "column": run_start, "width": column - run_start, "height": 1}, "recipientId": run_owner})
+            run_owner = owner
+            run_start = column
+    return regions
 
 
 class _Size:
@@ -385,7 +515,7 @@ def _app_name(app: Any) -> str:
     return type(app).__name__
 
 
-def _geometry_of(item: Observation) -> Tuple[Optional[Rect], bool, bool]:
+def _geometry_of(item: WidgetObservation) -> Tuple[Optional[Rect], bool, bool]:
     """Bounds to publish, whether the node is hidden, and whether it is offscreen.
 
     Three cases, and the tree distinguishes all of them:
@@ -412,15 +542,16 @@ def _geometry_of(item: Observation) -> Tuple[Optional[Rect], bool, bool]:
 
 
 def _state_of(
-    item: Observation,
+    item: WidgetObservation,
     widget: Any,
+    role: str,
     focused: Any,
     hidden: bool,
     offscreen: bool,
 ) -> Optional[SemanticState]:
     is_focused = focused is widget
     checked: Optional[bool] = None
-    if role_for(widget) in ("checkbox", "radio"):
+    if role in ("checkbox", "radio"):
         value = getattr(widget, "value", None)
         if isinstance(value, bool):
             checked = value
@@ -443,7 +574,38 @@ def _state_of(
     return state if state.to_wire() else None
 
 
-def _annotated_fields(widget: Any) -> Dict[str, str]:
+def _relationship_ids(
+    targets: Sequence[Any],
+    included: set,
+    identities: Identities,
+    semantic_keys: Dict[int, Optional[str]],
+) -> Optional[Sequence[str]]:
+    resolved: List[str] = []
+    for target in targets:
+        target_id = id(target)
+        if target_id not in included:
+            continue
+        resolved.append(identities.of(target, semantic_keys[target_id]))
+    return tuple(resolved) if resolved else None
+
+
+def _probe_annotation(widget: Any) -> ResolvedAnnotation:
+    """A broken optional annotation must not remove the framework's facts.
+
+    Static invalid roles are rejected when the decorator is created. Dynamic
+    getters can still throw or return a value of the wrong type later; the
+    side-channel then ignores that annotation for this frame instead of
+    failing the entire snapshot or reaching into the application's render.
+    """
+    try:
+        return resolve_annotation(widget)
+    except Exception:
+        return ResolvedAnnotation()
+
+
+def _annotated_fields(
+    annotation: ResolvedAnnotation, semantic_key_applied: bool = True
+) -> Dict[str, str]:
     """Per-field provenance for whatever the author annotated by hand.
 
     The node as a whole is `framework` — we read it from Textual — but a name
@@ -451,10 +613,22 @@ def _annotated_fields(widget: Any) -> Dict[str, str]:
     conflict needs to know which is which.
     """
     annotated: Dict[str, str] = {}
-    if isinstance(getattr(widget, "termwright_name", None), str):
+    if annotation.name is not None:
         annotated["name"] = "annotation"
-    if isinstance(getattr(widget, "termwright_role", None), str):
+    if annotation.role is not None:
         annotated["role"] = "annotation"
-    if isinstance(getattr(widget, "termwright_test_id", None), str):
+    if annotation.description is not None:
+        annotated["description"] = "annotation"
+    if annotation.test_id is not None:
         annotated["testId"] = "annotation"
+    if annotation.extended is not None:
+        annotated["extended"] = "annotation"
+    if annotation.labelled_by:
+        annotated["labelledBy"] = "annotation"
+    if annotation.described_by:
+        annotated["describedBy"] = "annotation"
+    if annotation.actions is not None:
+        annotated["actions"] = "annotation"
+    if semantic_key_applied and annotation.key is not None:
+        annotated["id"] = "annotation"
     return annotated

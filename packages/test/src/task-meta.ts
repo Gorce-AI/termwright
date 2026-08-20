@@ -20,8 +20,29 @@
  * module, so the augmentation stays an augmentation.
  */
 export interface TermwrightTaskMeta {
+  /** Provider which declared this case, present before execution starts. */
+  readonly provider?: import('@termwright/ui/provider').TermwrightProviderMarker;
+  /** Original mode before Vitest applies file-global `.only` and name filters. */
+  readonly declaration?: import('@termwright/ui/provider').TermwrightProviderDeclaration;
+  /** Physical authoring location for a transformed provider-owned case. */
+  readonly source?: {
+    readonly file: string;
+    readonly line: number;
+    readonly column: number;
+  };
+  /** Provider-authored catalogue kind; consumers must not infer it from the title. */
+  readonly kind?: 'test' | 'gherkin-scenario' | 'gherkin-outline-example';
+  /** Provider-authored hierarchy above this case. */
+  readonly ancestors?: readonly {
+    readonly kind: 'feature' | 'rule';
+    readonly title: string;
+  }[];
+  /** Provider-authored tags attached to this case. */
+  readonly tags?: readonly string[];
   /** Trace archives written for this test, in launch order. */
   readonly traces?: readonly string[];
+  /** Failed native-Vitest attempts, ordered and captured before each retry. */
+  readonly attemptFailures?: readonly TermwrightAttemptFailure[];
   /**
    * Snapshot keys in this test's file that no declared test claims any more.
    * Carried by whichever test of the file ran first.
@@ -41,17 +62,32 @@ export interface TermwrightTaskMeta {
   readonly lostLogRecords?: number;
 }
 
+export interface TermwrightAttemptFailure {
+  /** One-based attempt number. */
+  readonly attempt: number;
+  readonly errors: readonly { readonly message: string; readonly stack?: string }[];
+  readonly traceRefs?: readonly string[];
+}
+
 import type { ReportCrash } from './crash.js';
 
 /** Builds the metadata for a test, omitting everything it has nothing to say about. */
 export function buildTaskMeta(parts: {
   readonly traces?: readonly string[];
+  readonly attemptFailures?: readonly TermwrightAttemptFailure[];
   readonly obsoleteSnapshots?: readonly string[];
   readonly crashes?: readonly ReportCrash[];
   readonly lostLogRecords?: number;
 }): TermwrightTaskMeta | undefined {
   const meta: Record<string, unknown> = {};
   if (parts.traces !== undefined && parts.traces.length > 0) meta['traces'] = [...parts.traces];
+  if (parts.attemptFailures !== undefined && parts.attemptFailures.length > 0) {
+    meta['attemptFailures'] = parts.attemptFailures.map((failure) => ({
+      ...failure,
+      errors: failure.errors.map((error) => ({ ...error })),
+      ...(failure.traceRefs === undefined ? {} : { traceRefs: [...failure.traceRefs] }),
+    }));
+  }
   if (parts.obsoleteSnapshots !== undefined && parts.obsoleteSnapshots.length > 0) {
     meta['obsoleteSnapshots'] = [...parts.obsoleteSnapshots];
   }

@@ -15,6 +15,16 @@ env:
   PNPM_VERSION: '9.4.0'
 
 jobs:
+  package-metadata:
+    name: package metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/check-package-metadata.mjs
+
   build:
     name: build ${{ matrix.os }} / node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
@@ -45,6 +55,12 @@ jobs:
       - run: pnpm -r --filter './packages/*' run typecheck
       - run: pnpm -r --filter './packages/*' run test
 
+      # The Getting Started source is a real workspace package. This catches
+      # stale imports, launch assumptions and expected output in the primary
+      # documentation path on every supported Node/OS build row.
+      - name: Run the Getting Started example
+        run: pnpm --filter @termwright-examples/getting-started test
+
   hostile:
     name: hostile input (128 MiB heap)
     runs-on: ubuntu-latest
@@ -57,6 +73,7 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
@@ -101,7 +118,7 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
           cache-dependency-path: clients/go/go.sum
 
       - run: pnpm install --frozen-lockfile
@@ -222,6 +239,7 @@ jobs:
       # runner without Bun the Bun arms drop out (and the suite says so with an
       # explicit test), so this lane is the only place they execute at all.
       - run: pnpm --filter @termwright/probe-opentui run test
+      - run: pnpm --filter @termwright/probe-ink run test
 
   clients:
     name: clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})
@@ -249,7 +267,7 @@ jobs:
       - uses: actions/setup-go@v5
         if: matrix.client == 'go'
         with:
-          go-version: '1.23'
+          go-version: '1.24'
           cache-dependency-path: clients/go/go.sum
 
       # clippy is not in the default profile, and the probe's lint step needs it.
@@ -290,6 +308,16 @@ jobs:
       - name: Rust probe — build, test, lint
         if: matrix.client == 'rust'
         working-directory: clients/rust-probe
+        env:
+          TERMWRIGHT_REQUIRE_RATATUI: '1'
+        run: |
+          cargo build --locked
+          cargo test --locked
+          cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Ratatui annotation SDK — build, test, lint
+        if: matrix.client == 'rust'
+        working-directory: clients/rust-ratatui
         run: |
           cargo build --locked
           cargo test --locked
@@ -310,14 +338,28 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
 
-      # The protocol version is carried by four manifests in three languages.
-      # They drift silently otherwise, and the first symptom is a release where
-      # the crate and the npm package disagree about the wire format.
+      # The protocol version is carried by the language clients plus the two
+      # publishable Ratatui crates and their lockfiles. They drift silently
+      # otherwise, and the first symptom is a release whose registry artifacts
+      # disagree about the wire format.
       - name: Protocol lockstep
         run: node scripts/sync-protocol-version.mjs --check
 
       - run: pnpm install --frozen-lockfile
+
+      - name: ESLint 9 source gate
+        run: pnpm lint
+
+      - name: GitHub Actions syntax and shell safety
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/*.yml
+
+      - name: Compatibility registry matches probe declarations
+        run: pnpm run test:compatibility
 
       # A change to a published package without a changeset is a change that
       # ships with no changelog entry and no version bump. Release-only PRs are
@@ -407,6 +449,31 @@ jobs:
         working-directory: clients/rust-probe
         run: cargo build --locked
 
+  rust-ratatui-msrv:
+    name: Ratatui SDK (Rust MSRV 1.88)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+
+      - name: Declared floor and framework pin match this lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          declared=$(grep -m1 '^rust-version' clients/rust-ratatui/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          actual=$(rustc --version | cut -d' ' -f2 | cut -d. -f1,2)
+          framework=$(sed -n 's/^ratatui = { version = "=\([^"]*\)".*/\1/p' clients/rust-ratatui/Cargo.toml)
+          test "$declared" = "$actual"
+          test "$declared" = "1.88"
+          test "$framework" = "0.30.2"
+
+      - name: Build and test on the SDK floor
+        working-directory: clients/rust-ratatui
+        run: |
+          cargo build --locked
+          cargo test --locked
+
   vectors:
     name: cross-language vectors are current
     runs-on: ubuntu-latest
@@ -445,7 +512,7 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
           cache-dependency-path: examples/tview-menu/go.sum
 
       - run: pnpm install --frozen-lockfile

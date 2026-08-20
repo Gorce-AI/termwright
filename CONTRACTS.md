@@ -22,15 +22,15 @@ Changing a normative file requires: update it first, note the change in
 
 - `protocol` depends on `zod` only. Never on React, Ink, MCP, PTY, driver.
 - `driver` depends on `protocol` + PTY/VT libs. Never on Ink, Vitest, MCP.
-- `ink`, `opentui` (adapters) depend on `protocol` + their framework. Never
-  on driver — from the ROOT entry. An adapter MAY ship a `/testing` subpath
-  whose deps (driver, ink-testing) are OPTIONAL peers, provided a test proves
-  the built root entry references neither (opentui does this; ink uses the
-  separate `ink-testing` package — both satisfy the same goal: a production
-  install never resolves the pty binary).
-- `test` depends on `driver` (+ `trace`, + `protocol` constants/types) and
-  declares `vitest` as peer.
-- `ink-testing` depends on `driver`, `ink` (adapter), `protocol`.
+- `ink`, `opentui` are annotation-only SDKs. They depend on `protocol` and
+  declare their framework as a peer; they never depend on driver or own a
+  semantic transport. Process-local weak registries are the boundary probes
+  read when the SDK is present.
+- `test` depends on `driver`, `trace`, `protocol` constants/types and UI's
+  Node-only `live-client`; it declares `vitest` as a peer. The live client is
+  fail-open and dormant unless `TERMWRIGHT_UI_URL` is set.
+- `ink-testing` depends on `driver`, the Ink annotation SDK, `probe-ink` and
+  `protocol`; its in-process testing entry is not a public manual adapter.
 - `mcp` depends on `driver` + MCP SDK behind `src/sdk-facade.ts` (may also import constants/types from `protocol`). No session logic of its own.
 - `trace` depends on `driver` types only (consumes `SessionEvents`) and may
   type-import from `protocol` (it stores `SemanticSnapshot` verbatim).
@@ -43,14 +43,17 @@ Changing a normative file requires: update it first, note the change in
   the U6/U11 width split happened and are banned.
 - `logs` depends on `protocol` only; logger libraries (pino, winston,
   consola, OpenTelemetry) are OPTIONAL peers, never runtime dependencies.
-  Nothing depends on `logs` except adapters and the test layer.
-- `ui` depends on `trace` + `driver`. Talks to Vitest only via our own event protocol.
-- `probe-*` (framework probes, campaign #34) depend on `protocol` ONLY; the
-  instrumented framework is a devDependency, never a peer — a probe patches
-  by path and never imports the framework. Launchers return a command
-  (`withProbe(runtime, argv)`); the driver never depends on a probe.
-- `recognizers` — pure functions IR → semantic tree, depends on `protocol`
-  only, testable without a process.
+- `ui` depends on `trace` + `driver` and `ws` for its Node transports, and may
+  type-import protocol DTOs. It talks to Vitest only via our own event
+  protocol; `test` may consume its isolated `live-client` subpath without
+  importing the browser/server entry.
+- `probe-runtime` depends on `protocol`; `recognizers` depends on `protocol`;
+  `probe-go` has no runtime dependencies. Framework probes may compose those
+  shared layers instead of duplicating transport, normalization or build-copy
+  machinery. A runtime-interception probe may declare the observed framework
+  as a peer; an exact-version build probe redirects a dependency by path and
+  does not import the framework from its Node launcher. The driver never
+  depends on a framework probe.
 - `conformance` may depend on everything; nothing depends on it.
 
 ## Engineering baseline (all packages)
@@ -138,24 +141,47 @@ WebSocket, JSON messages `{ v: 1, type, ... }`:
   stable across runs, reconcilable with a started test by file+title; a
   discovered row is ADOPTED by the run that touches it, never duplicated;
   discovery never blocks and a failed listing yields an empty list),
-  `run-start`,
-  `session {sessionId, terminalProfile, columns, rows}` (sent when a live
-  session attaches; the browser MUST build its terminal via the session's
-  profile or state the widths it renders with),
+  `run-start {mode, startedAt}` (`mode` is `live | post-mortem | record`),
+  `session {sessionId, terminalProfile, columns, rows, testId?, adapter?,
+  probe?, capabilities?, adapterStatus?}` (sent when a live session attaches;
+  the browser MUST build its terminal via the session's profile or state the
+  widths it renders with; `testId` binds a worker-owned terminal to its Vitest
+  attempt; `adapter` is `{name, version}`; `probe` is the semantic protocol's
+  `ProbeInfo`; `capabilities` is the negotiated adapter capability list;
+  `adapterStatus` is `attached | disconnected | error` and requires `adapter`;
+  `probe` requires `adapter`; a later `session` for the same id replaces its
+  lifecycle facts in the replay backlog),
   `test-start {id, title, file, startedAt, sessionId?}`,
-  `step {testId, title, phase}`, `output {sessionId, dataB64, t}`,
+  `step {testId, title, phase, stepId?, t?, status?}`,
+  `output {sessionId, dataB64, t}`,
   `semantic {sessionId, revision, snapshot}`,
   `app-log {sessionId, t, source, level, message, label?, logger?, seq?,
   revision?, attrs?}`,
-  `action {kind, api, t, ok, testId?, sessionId?, selector?, ref?, error?,
-  stepId?}`,
+  `action-start {actionId, api, t, testId?, sessionId?, selector?, stepId?}`,
+  `action {kind, api, t, ok, actionId?, testId?, sessionId?, selector?, ref?,
+  error?, stepId?}` (`actionId` correlates a driver completion with its live
+  start edge and is scoped to `sessionId`; assertions and older producers may
+  publish only the completion),
   `test-end {id, status, durationMs, flaky, lostLogRecords, traceRef?,
-  error?}` (`lostLogRecords` is REQUIRED — 0 is representable, and "nothing
+  error?, attempt?, priorFailures?}` (`attempt` is the one-based final native
+  Vitest attempt; `priorFailures` is its ordered `{attempt, errors[]}` history;
+  both are absent for pre-retry producers. `lostLogRecords` is REQUIRED — 0 is representable, and "nothing
   was lost" and "nobody counted" are different facts),
-  `run-end {summary: {total, passed, failed, skipped, flaky, durationMs}}`.
-  All fields are REQUIRED except: `sessionId` (a Vitest reporter genuinely
-  cannot know worker sessions; producers that do know send it), `traceRef`
-  (absent when no archive was retained) and `error` (absent on pass).
+  `run-end {summary: {total, passed, failed, skipped, flaky, durationMs}}`,
+  `run-cancelled {stoppedAt}` (emitted after the stopped test process exits;
+  unfinished rows become cancelled, never silently skipped),
+  `run-cancel-failed {error}` (the process could not be stopped; the run stays
+  active).
+  Optional fields are exactly those marked `?` above. In particular,
+  `test-start.sessionId` may be absent because a Vitest reporter genuinely
+  cannot know a worker's sessions; a worker-side live bridge sends the binding
+  on `session.testId` instead. `traceRef` is absent when no archive was
+  retained, and `test-end.error` is absent on pass.
+  A discovery id is the stable browser/rerun id. `test-start.id`,
+  `test-end.id`, `step.testId`, `action-start.testId`, `action.testId` and
+  `session.testId` carry the current Vitest execution id; the browser reconciles
+  that id with exactly one discovered row by `file + title` and never replaces
+  the row's stable id.
   There are no receiver-side fallbacks — this protocol has exactly one
   producer generation. `summary.flaky` is counted separately from `passed` —
   hiding flaky inside passes is how flaky stays forever.
@@ -170,8 +196,11 @@ level-less entries produce no markers but are always listed.
 `action` carries one driver call (`kind: 'action'`) or one assertion
 (`kind: 'assert'`), exactly as `events.jsonl` records them: `api` is the
 API/matcher name, `t` is session-clock ms, `ok` is the outcome, `ref` is the
-resolved target as `n8@42`. Receivers build a command log identical to what
-replay reads from the archive.
+resolved target: either semantic `n8@42` or revision-bound grid
+`grid:r,c,w,h@rev`. Stable semantic refs may re-resolve across revisions;
+frame-local semantic refs are refused and grid refs expire with their screen
+revision. Receivers build a command log identical to what replay reads from the
+archive.
 - client→server: `rerun {testIds?}`, `stop`, `pick {sessionId}` (inspector
   pick-mode), `input {sessionId, dataB64}` (recorder mode only).
 The Vitest bridge is a reporter translating Vitest lifecycle into these
@@ -179,7 +208,9 @@ messages; the browser app never imports Vitest.
 
 Run history: the reporter (single producer) writes
 `.termwright/runs/<timestamp>/manifest.json` — `{ v: 1, counts, tests,
-trace PATHS (never copies), lostRecords per test }`. The UI's Runs view is
+trace PATHS (never copies), lostRecords per test, attempts? per test }`.
+`attempts` is additive and ordered; older v1 manifests without it remain valid.
+The UI's Runs view is
 the only consumer; opening an archived test goes through the same
 `openArchive` path as `--trace`. A test without a retained archive says so
 instead of offering a replay.

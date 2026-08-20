@@ -13,17 +13,24 @@ import { z } from 'zod';
 import type { ProtocolLimits } from '../limits.js';
 import type { ValidationErrorCode } from '../validate.js';
 import { ProtocolViolation } from '../errors.js';
-import { projectDto } from '../framing.js';
+import { encodeFrame, projectDto } from '../framing.js';
 import {
   PROBE_CAPABILITIES,
   PROBE_UNOBSERVABLE_FIELDS,
+  type ProbeAnnotations,
   type ProbeFrame,
   type ProbeInfo,
 } from './ir.js';
+import { SEMANTIC_ACTIONS } from '../roles.js';
 
 /** Structured result: never throws hostile data onward. */
 export type ProbeValidationResult =
   | { readonly ok: true; readonly frame: ProbeFrame }
+  | { readonly ok: false; readonly code: ValidationErrorCode; readonly detail: string };
+
+/** Result of validating one optional-SDK annotation at the probe boundary. */
+export type ProbeAnnotationValidationResult =
+  | { readonly ok: true; readonly annotations: ProbeAnnotations }
   | { readonly ok: false; readonly code: ValidationErrorCode; readonly detail: string };
 
 function fail(code: ValidationErrorCode, detail: string): ProbeValidationResult {
@@ -60,12 +67,37 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
     value: text.min(1),
   });
 
+  const extendedValue: z.ZodType = z.lazy(() =>
+    z.union([
+      z.null(),
+      z.boolean(),
+      z.number().finite().refine(
+        (value) => Math.abs(value) <= Number.MAX_SAFE_INTEGER,
+        'expected a finite JSON number in the safe range',
+      ),
+      text,
+      z.array(extendedValue).max(limits.maxRelationTargets),
+      z.record(text, extendedValue).refine(
+        (value) => Object.keys(value).length <= limits.maxRelationTargets,
+        `expected at most ${limits.maxRelationTargets} properties`,
+      ),
+    ]),
+  );
+  const extended = z.record(text, extendedValue).refine(
+    (value) => Object.keys(value).length <= limits.maxRelationTargets,
+    `expected at most ${limits.maxRelationTargets} properties`,
+  );
+  const relations = z.array(text.min(1)).max(limits.maxRelationTargets);
+
   const state = z.strictObject({
     focused: z.boolean().optional(),
     disabled: z.boolean().optional(),
     checked: z.union([z.boolean(), z.literal('mixed')]).optional(),
     expanded: z.boolean().optional(),
     readonly: z.boolean().optional(),
+    selected: z.boolean().optional(),
+    busy: z.boolean().optional(),
+    multiline: z.boolean().optional(),
     displayed: z.boolean().optional(),
     value: text.optional(),
     selectedIndex: nonNegative.optional(),
@@ -83,12 +115,19 @@ function buildFrameSchema(limits: ProtocolLimits): z.ZodType {
       .optional(),
     state: state.optional(),
     text: text.optional(),
+    accessibility: z
+      .strictObject({ role: text.optional(), name: text.optional(), description: text.optional() })
+      .optional(),
     annotations: z
       .strictObject({
         role: text.optional(),
         name: text.optional(),
         testId: text.optional(),
         description: text.optional(),
+        extended: extended.optional(),
+        actions: z.array(z.enum(SEMANTIC_ACTIONS)).max(SEMANTIC_ACTIONS.length).optional(),
+        labelledBy: relations.optional(),
+        describedBy: relations.optional(),
       })
       .optional(),
     paintOrder: safeInt.optional(),
@@ -263,4 +302,60 @@ export function validateProbeFrame(
   }
 
   return { ok: true, frame };
+}
+
+/**
+ * Validate one developer annotation before adding it to an otherwise trusted
+ * framework observation.
+ *
+ * Annotation registries intentionally use `Symbol.for` so an optional SDK and
+ * an injected probe can meet without importing one another. That also makes
+ * the registry a hostile boundary: application code can forge an entry with a
+ * getter, cycle, oversized value or unknown action. Reusing the complete frame
+ * validator here keeps both boundaries byte-for-byte consistent. Callers can
+ * then omit only the bad annotation instead of losing the framework frame or
+ * closing the probe channel.
+ */
+export function validateProbeAnnotations(
+  value: unknown,
+  limits: ProtocolLimits,
+): ProbeAnnotationValidationResult {
+  const result = validateProbeFrame(
+    {
+      frame: 1,
+      objects: [
+        {
+          identity: { kind: 'stable', value: 'a' },
+          frameworkType: 'A',
+          annotations: value,
+        },
+      ],
+    },
+    limits,
+  );
+  if (!result.ok) return { ok: false, code: result.code, detail: result.detail };
+  const annotations = result.frame.objects[0]?.annotations;
+  if (annotations === undefined) {
+    return {
+      ok: false,
+      code: 'schema',
+      detail: 'annotations: expected an annotation object',
+    };
+  }
+  try {
+    // A valid snapshot can still be impossible to put on the negotiated wire
+    // when maxFrameBytes is tighter than maxSnapshotBytes. Bound the optional
+    // payload at its own boundary so one forged SDK entry cannot poison the
+    // whole probe channel later.
+    encodeFrame({ annotations }, limits.maxFrameBytes);
+  } catch (error) {
+    return {
+      ok: false,
+      code: error instanceof ProtocolViolation && error.code === 'frame-oversized'
+        ? 'bytes'
+        : 'schema',
+      detail: error instanceof Error ? error.message : 'annotations could not be framed',
+    };
+  }
+  return { ok: true, annotations };
 }

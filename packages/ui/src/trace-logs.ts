@@ -111,8 +111,9 @@ export async function readTraceLogs(
   const dropped = Number.isFinite(summary?.dropped) ? (summary?.dropped ?? 0) : 0;
   const counted = Number.isFinite(summary?.count) ? (summary?.count ?? 0) : 0;
 
-  // `before` keeps the last `limit` entries under the cursor; `after` (and the
-  // default) keeps the first `limit` at or past it.
+  // `before` keeps the last `limit` entries under the cursor; `after` keeps the
+  // first `limit` at or past it. With no cursor, return the newest records: a
+  // bounded log reader is normally opened to explain the outcome of a run.
   const window: AppLogView[] = [];
   let skippedBefore = 0;
   let skippedAfter = 0;
@@ -125,8 +126,8 @@ export async function readTraceLogs(
       const record = parseAppLog({ ...entry, t: entry.castOffset });
       if (record === null) continue; // a line we cannot read is a line we skip
 
-      if (query.before !== undefined) {
-        if (record.t >= query.before) {
+      if (query.before !== undefined || query.after === undefined) {
+        if (query.before !== undefined && record.t >= query.before) {
           skippedAfter += 1;
           continue;
         }

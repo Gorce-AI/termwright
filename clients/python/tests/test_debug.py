@@ -144,11 +144,11 @@ def test_a_protocol_mismatch_says_so(tmp_path):
             "TERMWRIGHT_DEBUG_FILE": str(target),
             "TERMWRIGHT_ENDPOINT": "/tmp/x.sock",
             "TERMWRIGHT_TOKEN": "s3cret",
-            "TERMWRIGHT_PROTOCOL": "termwright/2",
+            "TERMWRIGHT_PROTOCOL": "termwright/99",
         },
     )
     assert client is None
-    assert "dormant: TERMWRIGHT_PROTOCOL='termwright/2'" in target.read_text()
+    assert "dormant: TERMWRIGHT_PROTOCOL='termwright/99'" in target.read_text()
 
 
 async def test_the_token_never_appears(tmp_path):

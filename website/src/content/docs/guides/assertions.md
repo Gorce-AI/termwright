@@ -1,188 +1,114 @@
 ---
-title: Assertions and snapshots
-description: Matchers that poll, the semantic YAML snapshot format, cell snapshots, and how updating them works.
+title: Assertions
+description: Assert terminal text, semantic state, visibility, geometry, logs, and process behavior with retrying matchers.
 ---
 
-Every matcher is asynchronous — `await expect(...)` — and the locator ones poll
-until the `expect` timeout class runs out. That retrying is not a convenience;
-it is what makes an assertion safe immediately after physical input.
-
-## The matchers
-
-| Matcher | Subject |
-|---|---|
-| `toBeVisible()` | locator |
-| `toBeFocused()` | locator |
-| `toHaveState({disabled: true})` | locator; asserts only the keys you list |
-| `toHaveText('Save' \| /Sav/)` | locator (exact, whitespace-normalized) or terminal (substring of the grid) |
-| `toMatchSemanticSnapshot(expected?, {within})` | terminal or a `SemanticSnapshot` |
-| `toMatchCellSnapshot(expected?)` | terminal or a `ScreenSnapshot` |
-| `toHaveLogged({level, message, …})` | terminal — [application logs](../app-logs/) |
+Import `expect` from `termwright/test`. Termwright registers matchers that poll
+terminal and semantic revisions until the expectation passes or reaches the
+configured expect timeout.
 
 ```ts
-await expect(app.getByRole('button', {name: 'Approve'})).toBeVisible();
-await expect(app.getByRole('textbox', {name: 'Message'})).toBeFocused();
-await expect(app.getByRole('button', {name: 'Submit'})).toHaveState({disabled: true});
-await expect(app).toHaveText('running: ls -la');
+import {expect, test} from 'termwright/test';
+
+test('saves a profile', async ({terminal}) => {
+  const app = await terminal.launch({command: ['node', 'profile.js']});
+  await app.press('Enter');
+  await expect(app).toHaveText('Saved');
+});
 ```
 
-## An assertion is a wait
-
-`waitForText()` returns when the *grid* shows the text, but the semantic tree
-describing that frame only becomes observable once its render-commit marker has
-been paired — including the very first tree after the handshake, where
-`semanticTree()` is still `null` while `capabilities().semanticTree` is already
-`true`.
-
-Every tree-reading matcher polls through that gap, which is why the idiomatic
-way to sequence physical input is to put an assertion between the steps:
+## Assert terminal text
 
 ```ts
-await app.press('Tab');
-await expect(app.getByRole('textbox', {name: 'Message'})).toBeFocused();
-await app.type('hello');
+await expect(app).toHaveText('Ready');
+await expect(app).toHaveText(/items: \d+/);
+await expect(app).not.toHaveText('Error');
 ```
 
-Reading the tree yourself is the case that needs an explicit wait:
+Use this for text a user can see on the terminal grid. On a locator,
+`toHaveText()` checks the semantic element's text or value.
+
+## Assert presence and semantic state
 
 ```ts
-await app.waitForText('Saved');
-await app.waitForStable();          // now the tree describes that frame
-const state = await locator.semanticState();
+const save = app.getByRole('button', {name: 'Save'});
+
+await expect(save).toBeAttached();
+await expect(save).toBeFocused();
+await expect(save).toHaveState({disabled: false});
+await expect(save).toHaveExtendedState({value: 'release'});
 ```
 
-## Semantic YAML snapshots
+`toBeAttached()` asks whether the node is present in the semantic tree. It does
+not claim that the element is painted or inside the viewport.
 
-The headline feature: the accessibility tree of a terminal app in a form a
-reviewer can read and a diff can show.
+## Assert display and viewport visibility
 
-```yaml
-- dialog "Permission" [modal]:
-    - text "Allow bash to run?"
-    - button "Approve" [focused]
-    - button /Rej.*/
-```
+Geometry and visibility are capability-dependent:
 
 ```ts
-await expect(app).toMatchSemanticSnapshot(`
-  - dialog "Permission" [modal]:
-      - button "Approve" [focused]
-      - button /^Rej/
-`);
+await expect(panel).toBeDisplayed();
+await expect(panel).toBeVisible();
+await expect(panel).toBeInViewport({fully: true});
+await expect(panel).toBeOffscreen();
 ```
 
-The rules, normative in [`CONTRACTS.md`](https://github.com/gorce-ai/termwright/blob/main/CONTRACTS.md)
-§YAML snapshots:
+An unknown or unsupported observation does not satisfy either the positive or
+negated matcher. This prevents `not.toBeVisible()` from passing merely because
+the framework cannot observe visibility.
 
-- **Names** are compared after whitespace normalization, may be written as
-  `/regex/`, and may be omitted entirely to match any name.
-- **`[flags]`** assert only what they list. `!focused` asserts the opposite,
-  `checked=mixed` and `level=2` compare a value. Volatile states
-  (`scrollOffset`, `positionInSet`, …) are left out of written snapshots unless
-  you ask for `{states: 'all'}`.
-- `'* "Save"'` matches any role — and it has to be quoted, because a bare `*`
-  opens a YAML alias.
-- A name containing `#` is written quoted, so the file stays valid YAML.
+Use `toBeHidden()` when either a hidden state or detachment is acceptable. See
+[Geometry and visibility](../../reference/geometry-visibility/) for the complete
+contract and framework matrix.
 
-### The two comparison modes
-
-This is the part to internalise, because the same YAML means different things
-depending on where it lives:
-
-| Source | Mode |
-|---|---|
-| **Inline** — the pattern you pass to the matcher | **partial**: omitted children are don't-care, unlisted siblings are allowed, and `[flags]` assert only what they list |
-| **Stored** — the file generated in `__snapshots__` | **strict**: the full tree with exact flags. Any difference fails, including a node or a state that is merely *new* |
-
-Both modes are useful, and the choice is the interesting decision in a test.
-An inline pattern says "this much must be true" and survives the app growing
-around it. A stored snapshot says "nothing changed at all" and is the one that
-catches the state you did not think to assert on — at the cost of failing every
-time the screen legitimately gains a node.
-
-Because the stored form is strict, update mode `changed` rewrites it on any
-textual difference. Review those diffs like source; that file *is* the
-assertion.
-
-### Scoping a snapshot
-
-A strict snapshot of a whole screen breaks whenever anything on it changes,
-which is often not what you want. Scope it to the part under test:
+## Assert bounds and spatial relationships
 
 ```ts
-await expect(app).toMatchSemanticSnapshot(
-  `
-    - button "Approve" [focused]
-    - button /^Rej/
-  `,
-  {within: app.getByRole('dialog')},
-);
+await expect(card).toHaveBounds({width: 40, height: 8});
+await expect(label).toHaveSpatialRelation({
+  relation: 'left-of',
+  target: input,
+});
 ```
 
-`within` takes a locator, excludes the node itself from the pattern, and is
-re-resolved on every attempt — so a re-render that mints new node ids does not
-invalidate the scope. Use `{rootId}` instead when you want the node itself to be
-the top level of the snapshot.
+Use geometry assertions for behavior that depends on layout: responsive panes,
+scrolling, clipping, or a bordered region's size. Do not use exact dimensions
+for unrelated decoration.
 
-## Cell snapshots, and why both
+Both elements in a spatial assertion must come from the same session, revision,
+and coordinate space.
 
-`toMatchCellSnapshot()` captures what was actually painted:
+## Assert application logs
 
-```
-┌─ 60×3 ─────────────────────────────────────────────────────┐
-│Permission required                                         │
-│   Approve    [Reject]                                      │
-│last: ACTIVATED reject                                      │
-└────────────────────────────────────────────────────────────┘
-```
-
-Semantic and cell snapshots are separate oracles on purpose: **a semantic
-snapshot can pass on a blank screen**, because the adapter publishes a tree
-nobody painted. An important end-to-end test asserts both.
-
-## Where snapshots live, and how they update
-
-Called without an argument, both matchers store the value in
-`__snapshots__/<test file>.tw-semantic.yaml` (or `.tw-cells.yaml`), one literal
-block per assertion, keyed by test name.
-
-Vitest's `--update` has two states; the contract asks for three, so the mode is
-resolved like this:
-
-| Source | Mode |
-|---|---|
-| `TERMWRIGHT_UPDATE_SNAPSHOTS=all` | rewrite every snapshot, even matching ones |
-| `TERMWRIGHT_UPDATE_SNAPSHOTS=changed`, or `vitest -u` | write missing, overwrite mismatching |
-| `TERMWRIGHT_UPDATE_SNAPSHOTS=missing`, or a plain run | write missing; a mismatch fails |
-| `TERMWRIGHT_UPDATE_SNAPSHOTS=none`, or `--update=none` | never write; a missing snapshot fails |
-
-`config.updateSnapshots` overrides all of it.
-
-:::caution[Updating a semantic snapshot rewrites your patterns]
-Updating replaces the stored pattern with the full serialized tree — any regex
-or partial matching you hand-wrote is gone. Review the diff before committing.
-:::
-
-A snapshot being written for the first time waits for a tree rather than storing
-the absence of one, so a first run cannot silently record `null` semantics.
-
-## Reading a failure
-
-```
-expect(getByRole('button', { name: 'Approve' })).toBeVisible()
-
-Expected: visible
-Received: hidden
-Timeout:  5000ms
-
-suggestion: narrow the locator with within(), a name option, or select one with first()/nth()
-candidates:
-  - button "Reject" ref=n4@7
-screen:
-  Permission required
-     Approve    [Reject]
+```ts
+await expect(terminal).toHaveLogged({
+  minLevel: 'warn',
+  message: /retrying connection/,
+});
 ```
 
-The same failure, with the reporter configured, also lands in the HTML report
-with a visual diff, a semantic diff and the recording — see
-[Traces and reports](../traces/).
+By default, an application `error` log can fail an otherwise passing test. See
+[Application logs](../app-logs/).
+
+## Configure the assertion timeout
+
+```ts
+configureTermwright({
+  timeouts: {expect: 10_000},
+});
+```
+
+Override an individual matcher only when the operation has a known different
+budget:
+
+```ts
+await expect(app).toHaveText('Imported 10,000 rows', {timeout: 30_000});
+```
+
+Do not put a fixed sleep before an assertion. The matcher already waits for the
+condition and completes immediately when it becomes true.
+
+## Snapshot assertions
+
+Cell and semantic snapshots have different purposes. See [Snapshots](../snapshots/)
+before choosing one.

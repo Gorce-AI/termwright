@@ -28,7 +28,6 @@ package tea
 import (
 	"os"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,8 +38,9 @@ import (
 )
 
 const (
-	probeName    = "termwright-probe-charm"
-	probeVersion = "0.1.0"
+	probeName        = "termwright-probe-charm"
+	probeVersion     = "0.1.0"
+	frameworkVersion = "v1.3.10"
 )
 
 type termwrightProbeState struct {
@@ -59,6 +59,26 @@ func newTermwrightProbe() *termwrightProbeState {
 	client := protocol.FromEnv(protocol.Options{
 		AdapterName:    probeName,
 		AdapterVersion: probeVersion,
+		Probe: &protocol.ProbeInfo{
+			Framework:        "charm",
+			FrameworkVersion: frameworkVersion,
+			ProbeVersion:     probeVersion,
+			// Bubble Tea copies application models through Update; a synthetic
+			// field path is useful inside one frame but is not object identity.
+			IdentityKind: protocol.ProbeIdentityFrameLocal,
+			Capabilities: []protocol.ProbeCapability{
+				protocol.ProbeCapAnnotations,
+			},
+		},
+		// Charm publishes a tree, observable component state, descriptive action
+		// hints and a marker for each accepted revision. Actions still execute
+		// through terminal input; annotations never install callbacks.
+		Capabilities: []protocol.Capability{
+			protocol.CapTree,
+			protocol.CapStates,
+			protocol.CapActions,
+			protocol.CapRenderRevisions,
+		},
 		// The publish happens on the event-loop goroutine, between Update and
 		// the renderer. An unbounded write would stall the loop whenever the
 		// driver stops reading.
@@ -95,7 +115,7 @@ func termwrightAfterView(program *Program, model Model, view string) {
 		return
 	}
 
-	snapshot := p.snapshot(model, view, columns, rows)
+	snapshot := p.snapshot(model, view, columns, rows, p.client.QualifiedObservations())
 	marker, err := p.client.Publish(snapshot)
 	if err != nil || marker == "" {
 		p.dropped.Add(1)
@@ -109,20 +129,162 @@ func termwrightAfterView(program *Program, model Model, view string) {
 }
 
 // snapshot reflects over the user's model and reports what it recognises.
-func (p *termwrightProbeState) snapshot(model Model, view string, columns, rows int) *protocol.Snapshot {
-	snapshot := &protocol.Snapshot{Columns: columns, Rows: rows}
+func (p *termwrightProbeState) snapshot(model Model, view string, columns, rows int, qualified bool) *protocol.Snapshot {
+	snapshot := termwrightNewSnapshot(columns, rows, qualified)
 
 	rootID := p.identity("root")
 	snapshot.RootIDs = append(snapshot.RootIDs, rootID)
-	snapshot.Nodes = append(snapshot.Nodes, protocol.Node{
+	root := protocol.Node{
 		ID:            rootID,
 		Role:          protocol.RoleApplication,
 		Name:          termwrightTypeName(model),
 		FrameworkType: termwrightTypeName(model),
-	})
+		P:             protocol.ProvenanceFramework,
+		PX: map[string]string{
+			"role": protocol.ProvenanceRecognizer,
+		},
+	}
+	termwrightCharmGeometry(&root, qualified, true)
+	snapshot.Nodes = append(snapshot.Nodes, root)
 
-	p.walk(reflect.ValueOf(model), rootID, "", snapshot, 0)
+	candidates := make([]termwrightCandidate, 0)
+	p.walk(reflect.ValueOf(model), rootID, "", &candidates, 0)
+	p.appendCandidates(snapshot, rootID, candidates)
 	return snapshot
+}
+
+type termwrightCandidate struct {
+	identityKey string
+	node        protocol.Node
+	meta        annotate.Semantics
+	annotated   bool
+}
+
+type termwrightRelations struct {
+	nodeIndex   int
+	labelledBy  []annotate.SemanticKey
+	describedBy []annotate.SemanticKey
+}
+
+// appendCandidates is the second pass. Provider methods are evaluated only
+// once in walk; after the complete set is known, unique author keys can safely
+// become stable ids and relationships can resolve in either field order.
+func (p *termwrightProbeState) appendCandidates(
+	snapshot *protocol.Snapshot,
+	rootID string,
+	candidates []termwrightCandidate,
+) {
+	counts := make(map[annotate.SemanticKey]int)
+	for _, candidate := range candidates {
+		if candidate.annotated && candidate.meta.Key != "" {
+			counts[candidate.meta.Key]++
+		}
+	}
+
+	keys := make(map[annotate.SemanticKey]string)
+	pending := make([]termwrightRelations, 0)
+	for _, candidate := range candidates {
+		identityKey := candidate.identityKey
+		keyApplied := candidate.annotated && candidate.meta.Key != "" && counts[candidate.meta.Key] == 1
+		if keyApplied {
+			identityKey = "semantic/" + string(candidate.meta.Key)
+		}
+		candidate.node.ID = p.identity(identityKey)
+		candidate.node.ParentID = rootID
+		if candidate.annotated {
+			termwrightApplyAnnotation(candidate.meta, &candidate.node)
+		}
+		termwrightCharmGeometry(&candidate.node, snapshot.V == 2, false)
+		if keyApplied {
+			keys[candidate.meta.Key] = candidate.node.ID
+			termwrightProvenance(&candidate.node, "id", protocol.ProvenanceAnnotation)
+		}
+		snapshot.Nodes = append(snapshot.Nodes, candidate.node)
+		if candidate.annotated && (len(candidate.meta.LabelledBy) > 0 || len(candidate.meta.DescribedBy) > 0) {
+			pending = append(pending, termwrightRelations{
+				nodeIndex:   len(snapshot.Nodes) - 1,
+				labelledBy:  candidate.meta.LabelledBy,
+				describedBy: candidate.meta.DescribedBy,
+			})
+		}
+	}
+	maxRelations := protocol.DefaultLimits.MaxRelationTargets
+	if p.client != nil {
+		maxRelations = p.client.Limits().MaxRelationTargets
+	}
+	termwrightResolveRelations(snapshot, keys, pending, maxRelations)
+}
+
+// Bubble Tea exposes the completed View but not a component-to-cell mapping.
+// The root is known to have produced this frame; reflected model membership
+// alone does not prove that any particular component contributed to View.
+func termwrightCharmGeometry(node *protocol.Node, qualified, root bool) {
+	if !qualified {
+		return
+	}
+	if root {
+		displayed := true
+		node.Geometry = &protocol.NodeGeometryObservations{
+			Displayed:    protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: "probe"},
+			IntendedRect: protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: "geometry", Reason: "framework-unobservable"},
+			VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: "geometry", Reason: "framework-unobservable"},
+		}
+		return
+	}
+	node.Geometry = &protocol.NodeGeometryObservations{
+		Displayed:    protocol.Observation[bool]{Status: "unknown", Reason: "not-reported"},
+		IntendedRect: protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: "geometry", Reason: "framework-unobservable"},
+		VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: "geometry", Reason: "framework-unobservable"},
+	}
+}
+
+func termwrightNewSnapshot(columns, rows int, qualified bool) *protocol.Snapshot {
+	if !qualified {
+		return protocol.NewSnapshot("", 0, columns, rows)
+	}
+	snapshot := protocol.NewSnapshotV2("", 0, columns, rows)
+	snapshot.HitGrid = &protocol.Observation[protocol.PointerHitGrid]{
+		Status: "unsupported", Capability: "pointer-hit-grid", Reason: "framework-unobservable",
+	}
+	return snapshot
+}
+
+func termwrightResolveRelations(
+	snapshot *protocol.Snapshot,
+	keys map[annotate.SemanticKey]string,
+	pending []termwrightRelations,
+	maxRelations int,
+) {
+	resolve := func(references []annotate.SemanticKey) []string {
+		resolved := make([]string, 0, len(references))
+		seen := make(map[string]struct{}, len(references))
+		for _, key := range references {
+			if len(resolved) >= maxRelations {
+				break
+			}
+			id, found := keys[key]
+			if !found {
+				continue
+			}
+			if _, duplicate := seen[id]; duplicate {
+				continue
+			}
+			seen[id] = struct{}{}
+			resolved = append(resolved, id)
+		}
+		return resolved
+	}
+	for _, relation := range pending {
+		node := &snapshot.Nodes[relation.nodeIndex]
+		if ids := resolve(relation.labelledBy); len(ids) > 0 {
+			node.LabelledBy = ids
+			termwrightProvenance(node, "labelledBy", protocol.ProvenanceAnnotation)
+		}
+		if ids := resolve(relation.describedBy); len(ids) > 0 {
+			node.DescribedBy = ids
+			termwrightProvenance(node, "describedBy", protocol.ProvenanceAnnotation)
+		}
+	}
 }
 
 // walk descends the user's model looking for components it knows.
@@ -133,7 +295,7 @@ func (p *termwrightProbeState) walk(
 	value reflect.Value,
 	parentID string,
 	fieldName string,
-	snapshot *protocol.Snapshot,
+	candidates *[]termwrightCandidate,
 	depth int,
 ) {
 	if depth > 8 || !value.IsValid() {
@@ -149,37 +311,43 @@ func (p *termwrightProbeState) walk(
 		return
 	}
 
-	// An author's own semantics come first, because Charm has no widget
-	// registry to key on: a component is a value copied on every update, so
-	// the only stable place for intent is the component itself. Asked before
-	// recognition so an annotated custom type is reported as what its author
-	// says it is, rather than being skipped for not being a Bubbles type.
-	if declared, ok := termwrightDeclaredSemantics(value); ok {
-		id := p.identity(parentID + "/" + fieldName + "/declared")
-		node := protocol.Node{
-			ID:            id,
-			ParentID:      parentID,
-			Role:          protocol.RoleGeneric,
-			Name:          fieldName,
-			FrameworkType: value.Type().Name(),
-		}
-		termwrightApplyAnnotation(declared, &node)
-		snapshot.Nodes = append(snapshot.Nodes, node)
+	// Read intent before recognition, but do not publish it yet. An idiomatic
+	// annotated Bubbles component is a local type embedding the native value;
+	// returning here would throw away the embedded component's value and state.
+	declared, hasDeclared := termwrightDeclaredSemantics(value)
+
+	if component := termwrightRecognise(value, fieldName); component != nil {
+		component.node.P = protocol.ProvenanceFramework
+		component.node.PX = map[string]string{"role": protocol.ProvenanceRecognizer}
+		*candidates = append(*candidates, termwrightCandidate{
+			identityKey: parentID + "/" + fieldName + "/" + component.frameworkType,
+			node:        component.node,
+			meta:        declared,
+			annotated:   hasDeclared,
+		})
+		// A recognised component's own fields are its business; descending
+		// into it would report its internals as siblings of the application's.
 		return
 	}
 
-	if component := termwrightRecognise(value, fieldName); component != nil {
-		id := p.identity(parentID + "/" + fieldName + "/" + component.frameworkType)
-		component.node.ID = id
-		component.node.ParentID = parentID
-		// A recognised component may also declare semantics; the author's
-		// wording wins for what it *is*, the probe keeps what it observed.
-		if declared, ok := termwrightDeclaredSemantics(value); ok {
-			termwrightApplyAnnotation(declared, &component.node)
+	// A declared custom component that contains no recognised Bubbles value
+	// still reaches the tree as what its author says it is.
+	if hasDeclared {
+		node := protocol.Node{
+			Role:          protocol.RoleGeneric,
+			Name:          fieldName,
+			FrameworkType: value.Type().Name(),
+			P:             protocol.ProvenanceFramework,
+			PX: map[string]string{
+				"role": protocol.ProvenanceRecognizer,
+			},
 		}
-		snapshot.Nodes = append(snapshot.Nodes, component.node)
-		// A recognised component's own fields are its business; descending
-		// into it would report its internals as siblings of the application's.
+		*candidates = append(*candidates, termwrightCandidate{
+			identityKey: parentID + "/" + fieldName + "/declared",
+			node:        node,
+			meta:        declared,
+			annotated:   true,
+		})
 		return
 	}
 
@@ -192,7 +360,7 @@ func (p *termwrightProbeState) walk(
 		if !field.IsExported() {
 			continue
 		}
-		p.walk(value.Field(index), parentID, field.Name, snapshot, depth+1)
+		p.walk(value.Field(index), parentID, field.Name, candidates, depth+1)
 	}
 }
 
@@ -207,6 +375,38 @@ type recognised struct {
 // Keyed on package path plus type name, because every Bubbles component is
 // called `Model` and the name alone says nothing.
 func termwrightRecognise(value reflect.Value, fieldName string) *recognised {
+	if component := termwrightRecogniseBubbles(value, fieldName); component != nil {
+		return component
+	}
+
+	// Applications cannot add methods to a type from another module. The
+	// idiomatic way to give a Bubbles value TermwrightSemantics is therefore a
+	// local wrapper with an anonymous embedded component. Recognise that native
+	// value while applying the wrapper's annotation in walk().
+	kind := value.Type()
+	for index := 0; index < value.NumField(); index++ {
+		field := kind.Field(index)
+		if !field.Anonymous || !field.IsExported() {
+			continue
+		}
+		embedded := value.Field(index)
+		for embedded.Kind() == reflect.Pointer || embedded.Kind() == reflect.Interface {
+			if embedded.IsNil() {
+				break
+			}
+			embedded = embedded.Elem()
+		}
+		if embedded.IsValid() && embedded.Kind() == reflect.Struct {
+			if component := termwrightRecogniseBubbles(embedded, fieldName); component != nil {
+				return component
+			}
+		}
+	}
+	return nil
+}
+
+// termwrightRecogniseBubbles recognises one native Bubbles value.
+func termwrightRecogniseBubbles(value reflect.Value, fieldName string) *recognised {
 	kind := value.Type()
 	path := kind.PkgPath()
 	if !strings.Contains(path, "bubbles") {
@@ -284,35 +484,49 @@ func termwrightApplyAnnotation(meta annotate.Semantics, node *protocol.Node) {
 		// set staying closed.
 		if role := protocol.Role(meta.Role); protocol.ValidRole(role) {
 			node.Role = role
+			termwrightProvenance(node, "role", protocol.ProvenanceAnnotation)
 		}
 	}
 	if meta.Name != "" {
 		node.Name = meta.Name
+		termwrightProvenance(node, "name", protocol.ProvenanceAnnotation)
 	}
 	if meta.TestID != "" {
 		node.TestID = meta.TestID
+		termwrightProvenance(node, "testId", protocol.ProvenanceAnnotation)
 	}
 	if meta.Description != "" {
 		node.Description = meta.Description
+		termwrightProvenance(node, "description", protocol.ProvenanceAnnotation)
 	}
 	if len(meta.Domain) > 0 {
-		keys := make([]string, 0, len(meta.Domain))
-		for key := range meta.Domain {
-			keys = append(keys, key)
+		node.Extended = make(map[string]any, len(meta.Domain))
+		for key, value := range meta.Domain {
+			node.Extended[key] = value
 		}
-		sort.Strings(keys)
-		var builder strings.Builder
-		builder.WriteString(node.Description)
-		for _, key := range keys {
-			if builder.Len() > 0 {
-				builder.WriteString(" ")
-			}
-			builder.WriteString(key)
-			builder.WriteString("=")
-			builder.WriteString(meta.Domain[key])
-		}
-		node.Description = builder.String()
+		termwrightProvenance(node, "extended", protocol.ProvenanceAnnotation)
 	}
+	seenActions := make(map[protocol.Action]struct{}, len(meta.Actions))
+	for _, action := range meta.Actions {
+		if !protocol.ValidAction(action) {
+			continue
+		}
+		if _, duplicate := seenActions[action]; duplicate {
+			continue
+		}
+		seenActions[action] = struct{}{}
+		node.Actions = append(node.Actions, action)
+	}
+	if len(node.Actions) > 0 {
+		termwrightProvenance(node, "actions", protocol.ProvenanceAnnotation)
+	}
+}
+
+func termwrightProvenance(node *protocol.Node, field, source string) {
+	if node.PX == nil {
+		node.PX = make(map[string]string)
+	}
+	node.PX[field] = source
 }
 
 // termwrightLibraryState reads the accessors the Bubbles patch set adds.
@@ -402,7 +616,6 @@ func termwrightCallFloat(value reflect.Value, name string) (float64, bool) {
 	}
 	return method.Call(nil)[0].Float(), true
 }
-
 
 // termwrightCallString invokes a no-argument getter returning a string.
 //

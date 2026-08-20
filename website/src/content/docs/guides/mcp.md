@@ -3,16 +3,15 @@ title: MCP for agents
 description: An MCP server over the same driver — compact ref snapshots, incremental capture, generated agent-context, and an exit-code taxonomy.
 ---
 
-`@termwright/mcp` lets an agent drive terminal programs the way a person would:
+`@termwright/mcp` lets an agent drive terminal programs through the public
+driver API:
 launch a real pseudo-terminal, read a compact accessibility-style snapshot, click
 a button by its ref, wait on a condition, and ask what changed.
 
-It is deliberately thin. Every tool validates its arguments with zod, calls the
-public driver API, and renders the result. There is no locator engine, no wait
-loop and no matching heuristic in it — a behaviour that differed between this
-server and the test preset would be a bug in this package.
+Every tool validates its arguments, calls the public driver API, and returns a
+structured result.
 
-## Registering it
+## Register the MCP server
 
 ```jsonc
 {
@@ -33,7 +32,7 @@ transport objects: each session owns its terminals, `DELETE` disposes them, and
 the ceiling (16 sessions, 16 terminals each) is enforced before a transport
 exists.
 
-## The loop
+## Drive a terminal
 
 ```jsonc
 // terminal.launch  -> { terminal: "t1", semanticTree: "available", compact: … }
@@ -71,12 +70,13 @@ and reading the one line that moved.
 Cursors the server never handed out fail with `history-truncated`; the last 16
 captures per terminal are retained.
 
-## Refs
+## Target by reference
 
 A ref is `n8@42`: node id at semantic revision 42 (grid matches get
 `grid:1,2,9,1@7`). Refs resolve by node *identity*, so two buttons with the same
-name stay distinct, and a ref reused after its revision was superseded fails with
-`stale-snapshot`. The fix is always to snapshot again.
+name stay distinct. Stable semantic identities can be resolved again after a
+later revision. Frame-local identities and grid refs cannot; take a fresh
+snapshot when they become stale.
 
 Targeting, in precedence order: `ref`, `selector` (the CSS dialect
 `dialog button#approve:focused`), `testId`, `role` (+ `name`), `label`, `text`.
@@ -86,7 +86,7 @@ than one match fails with `ambiguous-locator` unless you pass `nth`.
 Programs without an adapter report `semanticTree: unavailable`. There are no
 invented roles — target them by text.
 
-## Tools
+## Tool reference
 
 `terminal.launch`, `capabilities`, `snapshot`, `capture_since`, `query`, `click`,
 `double_click`, `press`, `type`, `paste`, `write_raw`, `drag`, `wheel`, `resize`,
@@ -95,11 +95,11 @@ invented roles — target them by text.
 Every one carries an `inputSchema` and an `outputSchema` and returns
 `structuredContent`.
 
-## Errors an agent can act on
+## Handle tool errors
 
 ```
-error stale-snapshot: ref n8@42 was minted at semantic revision 42; the live revision is 43
-suggestion: call terminal.snapshot or terminal.capture_since and use the fresh refs
+error stale-snapshot: ref n8@42 no longer exists at semantic revision 43
+suggestion: re-resolve the locator; the node identity is no longer present
 semanticTree: true
 ```
 
@@ -108,7 +108,7 @@ The same payload — `kind`, `message`, `suggestion`, bounded `candidates`,
 traces never leave the server, and neither the child's environment nor the
 session token appears in any result or log.
 
-## Self-describing surface
+## Generate agent context
 
 ```sh
 termwright-mcp agent-context   # versioned JSON: every tool, param, enum, exit code
@@ -136,7 +136,7 @@ Exit codes are a closed taxonomy an agent can branch on:
 ## Replaying a trace
 
 An agent does not only drive live terminals: the most useful thing to hand it
-after a CI failure is the [recording](../traces/). Four read-only tools open a
+after a CI failure is the [recording](../../tools/traces-reports/). Four read-only tools open a
 `.twtrace` archive and read it the same way a live session is read.
 
 ```jsonc
@@ -167,7 +167,7 @@ loop works on a recording from a machine it has never seen.
 ## Screenshots
 
 `terminal.snapshot` and `trace.frame_at` take `screenshot: true` and attach a
-PNG as `ImageContent`, rendered by [`@termwright/screenshot`](../traces/) — a
+PNG as `ImageContent`, rendered by [`@termwright/screenshot`](../../tools/traces-reports/) — a
 cell grid becomes an SVG with embedded glyph outlines, rasterised through resvg.
 No browser is involved.
 

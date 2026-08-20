@@ -1,7 +1,7 @@
 # @termwright/conformance — implementation notes
 
 Deliberate deviations, findings about other packages, and the traps that cost
-time here. Verified against the driver (f78174f), protocol and Ink adapter as of
+time here. Verified against the driver (f78174f), protocol and Ink probe as of
 2026-08-16.
 
 ## Findings reported and fixed
@@ -138,8 +138,9 @@ has to delete an assertion that explains itself.
    the old numbers in the frame that already reflects the new layout — measured
    at 2 of 6 resizes, while the republished bounds were correct 6 of 6. A
    component's self-reported size is therefore not a usable signal that a resize
-   landed; the layout is. Relevant to `@termwright/ink` and to anyone writing a
-   resize assertion.
+   landed; the layout is. Relevant to `@termwright/probe-ink` and to anyone
+   writing a resize assertion.
+
 ## Deliberate choices
 
 - **The probe emulates a terminal, and matches text on the rendered grid.** It

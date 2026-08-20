@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - 'website/**'
+      - 'docs/DOCUMENTATION_GUIDE.md'
+      - 'examples/getting-started/**'
+      - 'packages/ui/scripts/capture-docs-screenshots.mjs'
+      - 'packages/ui/src/app/docs-screenshots.e2e.ts'
+      - 'package.json'
+      - 'assets/brand/**'
+      - 'packages/ui/src/app/termwright-icon.svg'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 

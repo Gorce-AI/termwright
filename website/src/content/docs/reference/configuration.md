@@ -1,185 +1,130 @@
 ---
 title: Configuration
-description: termwright.config.ts, launch options, timeout classes, profiles and the environment variables that override them.
+description: Termwright test defaults, launch overrides, retries, traces, timeouts, and environment variables.
 ---
 
-## `termwright.config.ts`
+Most projects need no Termwright configuration. Import a config explicitly from
+`vitest.config.ts` when you want to change defaults; Termwright does not search
+for `termwright.config.ts` automatically.
 
 ```ts
-import {defineTermwrightConfig, XTERM_PALETTE} from '@termwright/test';
+// termwright.config.ts
+import {defineTermwrightConfig} from 'termwright/test';
 
 export default defineTermwrightConfig({
   columns: 100,
   rows: 30,
-  command: ['node', 'app.js'],
-  trace: 'retain-on-failure',            // 'on' | 'retain-on-failure' | 'off'
-  outputDir: 'termwright-report',
-  timeouts: {expect: 5_000, action: 5_000},
-  failOnLogLevel: 'error',               // 'warn' | 'error' | 'fatal' | false
-  profiles: {
-    ci: {trace: 'on', palette: XTERM_PALETTE},
-  },
+  trace: 'retain-on-failure',
 });
-```
-
-`failOnLogLevel` is what makes a test fail when the program logged an error
-nobody asserted on. Turn it off per test with `terminal.failOnLogLevel(false)`;
-see [Application logs](../../guides/app-logs/).
-
-```ts
-// vitest.setup.ts
-import {configureTermwright} from '@termwright/test';
-import config from './termwright.config.js';
-
-configureTermwright(config);
 ```
 
 ```ts
 // vitest.config.ts
 import {defineConfig} from 'vitest/config';
-import TermwrightReporter from 'termwright/reporter';
-import TermwrightUiReporter from 'termwright/ui-reporter';
+import {configureTermwright} from 'termwright/test';
+import termwright from './termwright.config.js';
 
-export default defineConfig({
-  test: {
-    setupFiles: ['./vitest.setup.ts'],
-    retry: 2,
-    reporters: ['default', new TermwrightReporter(), new TermwrightUiReporter()],
+configureTermwright(termwright);
+
+export default defineConfig({test: {}});
+```
+
+## Configuration precedence
+
+Values are resolved in this order, with later values winning:
+
+1. configured project defaults;
+2. scoped test options;
+3. `terminal.launch()` options.
+
+## Project options
+
+| Option | Purpose |
+| --- | --- |
+| `columns`, `rows` | Initial PTY dimensions. Defaults: 100 × 30. |
+| `command` | Default command for `terminal.launch()`. |
+| `env` | Environment additions for launched applications. |
+| `timeouts` | Action, text, idle, ready, exit, and assertion budgets. |
+| `trace` | Trace retention policy. |
+| `outputDir` | Trace and HTML report directory. Default: `termwright-report`. |
+| `snapshotDir` | Snapshot directory relative to the test file. Default: `__snapshots__`. |
+| `palette` | Deterministic 16-color terminal palette. |
+| `failOnLogLevel` | Lowest application log level that fails a passing test. Default: `error`. |
+| `profiles` | Named overrides selected by `TERMWRIGHT_PROFILE`. |
+
+Each fixture uses a private temporary working directory and a controlled
+environment. Set `cwd`, `terminalProfile`, `envMode`, or semantic probe options
+on an individual `terminal.launch()` call because they are session-specific.
+
+## Assertion and wait timeouts
+
+Termwright separates action, text, idle, ready, exit, and assertion timeout
+classes.
+Set the narrowest relevant timeout rather than adding sleeps to tests.
+
+```ts
+export default defineTermwrightConfig({
+  timeouts: {
+    action: 5_000,
+    text: 5_000,
+    idle: 2_000,
+    ready: 10_000,
+    exit: 10_000,
+    expect: 5_000,
   },
 });
 ```
 
-The two reporters are independent and compose: one writes `.twtrace` archives,
-the other streams a live run to [`termwright ui`](../../guides/runner-ui/) and
-does nothing when `TERMWRIGHT_UI_URL` is unset.
+## Traces
 
-Import them from their own subpaths, never from a package root:
-`vitest.config.ts` is loaded before the test runner exists, and the root modules
-register matchers on `expect` as a side effect. Using the individual packages
-rather than the umbrella, the same imports are `@termwright/test/reporter` and
-`@termwright/ui/reporter`.
+| Value | Behavior |
+| --- | --- |
+| `off` | Do not retain traces. |
+| `on` | Retain every trace. |
+| `retain-on-failure` | Retain failed and flaky evidence. |
 
-## Three levels, merged key by key
+See [Traces and reports](../../tools/traces-reports/) for reporter and artifact
+configuration.
 
-Options come from three places, in increasing specificity:
+## Test retries
 
-```
-defineTermwrightConfig()  <  test.scoped({termwrightOptions})  <  terminal.launch({…})
-```
-
-`test.scoped` sets options for a file or a `describe` — Playwright's `test.use()`
-on Vitest's own mechanism. Scopeable: `command`, `columns`, `rows`, `env`,
-`timeouts`, `trace`, `failOnLogLevel`.
-
-The merge is **key by key**. `env` and `timeouts` merge entry by entry, so
-scoping one variable or one timeout class keeps the rest; `command` is replaced
-wholly, because two argument lists do not merge. See
-[Test data and fixtures](../../guides/test-data/) for why that matters — scoping
-a single key would otherwise drop everything else the project configured.
-
-## Profiles and deterministic colour
-
-`TERMWRIGHT_PROFILE=ci` selects a profile. A profile's palette pins the 16 ANSI
-colours and the `TERM` / `COLORTERM` a launched program sees, which is what makes
-colour assertions and cell snapshots stable between a laptop and CI. If a cell
-snapshot passes locally and fails in CI, this is the first thing to set.
-
-## Launch options
+Vitest owns scheduling. Configure retries with the public helper:
 
 ```ts
-const app = await terminal.launch({
-  command: ['node', 'app.js'],
-  cwd: '/tmp/fixture',
-  env: {NO_COLOR: '1'},
-  envMode: 'replace',          // default
-  columns: 100,                // default
-  rows: 30,                    // default
-  semanticNegotiationMs: 250,  // default
-  scrollbackLines: 2_000,      // default
-  timeouts: {action: 15_000},
-  recording: {enabled: true, idleTimeLimit: 2},
+import {termwrightRetry} from 'termwright/test';
 
-  terminalProfile: 'default',  // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
-  logs: [{path: 'var/app.log', label: 'app'}],
-  template: 'test/fixtures/project',
-  files: {'config.json': '{}'},
-  treeUpdates: 'auto',         // 'snapshots' declines deltas
-  debug: false,                // same as TERMWRIGHT_DEBUG=1, for one session
+export default defineConfig({
+  test: {retry: termwrightRetry({ci: 2, local: 0})},
 });
 ```
 
-| Option | What it is for |
-|---|---|
-| `terminalProfile` | how this session counts characters — [Terminal profiles](../../guides/terminal-profiles/) |
-| `logs` | files to follow, so their lines become assertable — [Application logs](../../guides/app-logs/) |
-| `template`, `files` | the files the program starts with, seeded into the test's private directory — [Test data and fixtures](../../guides/test-data/) |
-| `treeUpdates` | `'snapshots'` declines tree deltas from an adapter that offers them, which is the switch to reach for when a replay and a live session disagree |
-| `debug` | streams the [debug log](../../guides/debugging/) to stderr for this session |
+`TERMWRIGHT_RETRIES` overrides the number of additional attempts and accepts an
+integer from 0 through 100. Reports retain each earlier failure reason and the
+attempt on which the test passed or finally failed.
 
-### `envMode`
+## Snapshot updates
 
-`'replace'` is the default and it is a real isolation guarantee: the child gets
-`PATH`, `HOME`, `LANG`, `LC_ALL`, `SHELL`, `TMPDIR`, `USER`, `TERM`, whatever you
-pass in `env`, and the termwright handshake variables — nothing else. The tokens
-and cloud credentials in a test runner's environment are not the application
-under test's business.
-
-`'inherit'` gives the child the parent's full environment plus `env`. Reach for
-it when the program genuinely needs more, and know what you are handing it.
-
-Two consequences that surprise people:
-
-- **`NODE_OPTIONS` does not reach the child.** If a TypeScript loader was
-  configured that way, pass it explicitly — for Ink fixtures that is
-  `nodeArgs: ['--import', 'tsx']`.
-- **`envMode` cannot isolate an in-process mount**, which reads the runner's own
-  `process.env`. See [Component testing](../../guides/component-testing/).
-
-## Timeout classes
-
-| Class | Default | Covers | Environment override |
-|---|---|---|---|
-| `action` | 5 s | resolving a locator and acting on it | `TERMWRIGHT_TIMEOUT_ACTION` |
-| `text` | 5 s | `waitForText`, `toHaveText` | `TERMWRIGHT_TIMEOUT_TEXT` |
-| `idle` | 2 s | `waitForIdle`, `waitForStable` | `TERMWRIGHT_TIMEOUT_IDLE` |
-| `ready` | 10 s | `waitForReady` | `TERMWRIGHT_TIMEOUT_READY` |
-| `exit` | 10 s | `waitForExit` | `TERMWRIGHT_TIMEOUT_EXIT` |
-
-Each is overridable per call, per launch and per environment variable, in that
-order of specificity.
+Use Vitest's snapshot update flag for normal updates. Termwright's resolved
+configuration also controls semantic and cell snapshot update behavior where a
+project needs a fixed policy.
 
 ## Environment variables
 
-| Variable | Effect |
-|---|---|
-| `TERMWRIGHT_PROFILE` | selects a config profile |
-| `TERMWRIGHT_UPDATE_SNAPSHOTS` | `all` / `changed` / `missing` / `none` — see [snapshots](../../guides/assertions/) |
-| `TERMWRIGHT_TIMEOUT_*` | the five timeout classes above |
-| `TERMWRIGHT_SKIP_PTY` | skip suites that need a pseudo-terminal |
-| `TERMWRIGHT_DEBUG` | `1` for the debug log, `all` to include raw PTY traffic — see [Debugging](../../guides/debugging/) |
-| `TERMWRIGHT_UI_URL` | where the UI reporter publishes; unset means it does nothing |
-| `TERMWRIGHT_ENDPOINT`, `TERMWRIGHT_TOKEN`, `TERMWRIGHT_PROTOCOL` | injected by the driver into the child; never set these yourself |
+| Variable | Meaning |
+| --- | --- |
+| `TERMWRIGHT_RETRIES` | Additional Vitest attempts. |
+| `TERMWRIGHT_DEBUG` | `1` for debug logs; `all` also includes raw PTY traffic. |
+| `TERMWRIGHT_PROFILE` | Name of a configured profile to apply. |
+| `TERMWRIGHT_UPDATE_SNAPSHOTS` | Snapshot update policy when set by tooling. |
+| `TERMWRIGHT_UI_URL` | Internal live Runner reporter destination. |
+| `TERMWRIGHT_ENDPOINT` | Internal semantic probe transport endpoint. |
+| `TERMWRIGHT_TOKEN` | Internal session authentication token. |
 
-## Waiting for a shell prompt
+Applications and normal test configuration should not set the internal
+transport variables. The fixture and Runner own them.
 
-`waitForReady()` prefers OSC 133 shell-integration marks (`A` prompt start,
-`B` input start, `C` command start, `D` finished) — the same marks VS Code,
-iTerm2, WezTerm and fish already emit. When a program emits none it falls back
-to "the screen settled", which is a heuristic and is reported as one **by code,
-not by prose**: a diagnostic of `ready-shell-integration` means the program said
-it was at a prompt, `ready-settled-screen` means the driver guessed from silence.
+## Runner preferences
 
-:::caution[The race worth knowing]
-Between `press('Enter')` and the shell's `OSC 133 C`, the last mark still says
-"prompt waiting", so a `waitForReady()` issued immediately after a keystroke
-resolves against the *previous* prompt. Wait for the command to be observably
-running first.
-:::
-
-## Diagnostics
-
-`terminal.diagnostics()` returns the bounded, oldest-first log of what the
-session decided on its own — negotiation timeouts, superseded or expired
-revisions, unverified markers, protocol violations, which readiness strategy was
-used. The same entries arrive live as `diagnostic` session events, so a test can
-assert on a failure mode directly instead of inferring it from prose.
+Runner layout, density, replay speed, source editor, reduced motion, and panel
+state are local UI preferences, not test configuration. Change them in Runner
+Settings. They do not change test behavior or CI output.

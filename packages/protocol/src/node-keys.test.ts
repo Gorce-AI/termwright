@@ -12,7 +12,7 @@ import type { SemanticNode, SemanticState } from './tree.js';
  * cannot catch — it rejects a schema field missing from the interface, not an
  * interface field missing from the schema.
  */
-const everyNodeField: Record<keyof SemanticNode, true> = {
+const everyNodeField: Record<Exclude<keyof SemanticNode, 'geometry'>, true> = {
   id: true,
   parentId: true,
   role: true,
@@ -22,6 +22,7 @@ const everyNodeField: Record<keyof SemanticNode, true> = {
   bounds: true,
   occlusion: true,
   state: true,
+  extended: true,
   actions: true,
   labelledBy: true,
   describedBy: true,

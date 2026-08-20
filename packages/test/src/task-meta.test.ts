@@ -26,12 +26,22 @@ describe('buildTaskMeta', () => {
     expect(
       buildTaskMeta({
         traces: ['out/a.twtrace'],
+        attemptFailures: [{
+          attempt: 1,
+          errors: [{ message: 'not ready', stack: 'at retry' }],
+          traceRefs: ['out/retry-1.twtrace'],
+        }],
         obsoleteSnapshots: ['renamed 1'],
         crashes: [crash],
         lostLogRecords: 3,
       }),
     ).toEqual({
       traces: ['out/a.twtrace'],
+      attemptFailures: [{
+        attempt: 1,
+        errors: [{ message: 'not ready', stack: 'at retry' }],
+        traceRefs: ['out/retry-1.twtrace'],
+      }],
       obsoleteSnapshots: ['renamed 1'],
       crashes: [crash],
       lostLogRecords: 3,

@@ -23,6 +23,10 @@ import { test as base } from 'vitest';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
 import type { LogLevel } from '@termwright/protocol';
 import { createTraceWriter, type TraceWriter } from '@termwright/trace';
+import {
+  connectLiveSession,
+  type LiveSessionConnection,
+} from '@termwright/ui/live-client';
 import { getTermwrightConfig, type ResolvedTermwrightConfig, type TraceMode } from './config.js';
 import { appendCrashSection, collectCrashes, toReportCrash, type ReportCrash } from './crash.js';
 import { collectTestNames } from './declared-tests.js';
@@ -36,8 +40,9 @@ import {
   snapshotFilePath,
   type SnapshotKind,
 } from './snapshot-store.js';
-import { currentScope, enterScope, openStep, scopeKey, type TermwrightScope } from './trace-context.js';
-import { buildTaskMeta } from './task-meta.js';
+import { attachWriter, beginStep, currentScope, currentStepId, enterScope, scopeKey, type TermwrightScope } from './trace-context.js';
+import { buildTaskMeta, type TermwrightAttemptFailure } from './task-meta.js';
+import { markTermwrightTestApi } from './provider.js';
 
 /** What a test may override when launching a program. */
 export interface LaunchFixtureOptions extends Omit<LaunchOptions, 'command'> {
@@ -65,7 +70,11 @@ export interface LaunchFixtureOptions extends Omit<LaunchOptions, 'command'> {
 }
 
 /** Runs a titled step; it becomes a marker in the recording and a trace event. */
-export type StepRunner = <T>(title: string, body: () => T | Promise<T>) => Promise<T>;
+export interface StepOptions {
+  /** Authored identity for a physical Gherkin step. */
+  readonly gherkin?: import('@termwright/trace').GherkinStepMetadata;
+}
+export type StepRunner = <T>(title: string, body: () => T | Promise<T>, options?: StepOptions) => Promise<T>;
 
 /** Test-scoped services that do not depend on a running terminal. */
 export interface TermwrightScopeFixture {
@@ -119,10 +128,9 @@ const INHERITED_ENV: readonly string[] = [
   'SystemRoot', 'ComSpec', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP',
 ];
 
-const attempts = new Map<string, number>();
-
 interface Session {
   readonly harness: TerminalHarness;
+  readonly live: LiveSessionConnection;
   readonly writer: TraceWriter | undefined;
   readonly dir: string | undefined;
   /** Effective policy for this session, which a `launch()` may have overridden. */
@@ -133,13 +141,17 @@ interface Session {
  * `test` with termwright's fixtures. Use it exactly like Vitest's `test`;
  * `test.step()` is available inside any of its tests.
  */
-export const test = base.extend<TermwrightFixtures>({
+export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
   termwrightOptions: {},
 
   termwright: [
-    async ({ task, expect }, use) => {
+    async ({ task, expect, annotate, onTestFailed }, use) => {
       const config = getTermwrightConfig();
       const testName = fullName(task);
+      // Vitest owns retry scheduling and increments retryCount between native
+      // attempts. Deriving the number from it also resets cleanly for watch
+      // reruns, unlike a process-global counter keyed by task id.
+      const attempt = (task.result?.retryCount ?? 0) + 1;
       const scope: TermwrightScope = {
         testId: task.id,
         testName,
@@ -148,6 +160,23 @@ export const test = base.extend<TermwrightFixtures>({
         writers: [],
         traces: [],
       };
+      onTestFailed(() => {
+        const previous = task.meta.termwright?.attemptFailures ?? [];
+        const errors = (task.result?.errors ?? []).map((error) => ({
+          message: error.message ?? 'test failed',
+          ...(error.stack === undefined ? {} : { stack: error.stack }),
+        }));
+        const failure: TermwrightAttemptFailure = {
+          attempt,
+          errors: errors.length === 0 ? [{ message: 'test failed' }] : errors,
+          ...(scope.traces.length === 0 ? {} : { traceRefs: [...scope.traces] }),
+        };
+        task.meta.termwright = {
+          ...(task.meta.termwright ?? {}),
+          attemptFailures: [...previous.filter((entry) => entry.attempt < attempt), failure]
+            .sort((left, right) => left.attempt - right.attempt),
+        };
+      });
       beginSnapshotScope();
       const obsolete = sweepObsoleteSnapshots(task.file, config, updateFlagOf(expect));
       let directory: string | undefined;
@@ -160,7 +189,7 @@ export const test = base.extend<TermwrightFixtures>({
         get traces(): readonly string[] {
           return scope.traces;
         },
-        step: (title, body) => runStep(title, body, scope),
+        step: (title, body, options) => runStep(title, body, scope, annotate, options),
       };
       const exit = enterScope(scope);
       try {
@@ -191,8 +220,7 @@ export const test = base.extend<TermwrightFixtures>({
     let threshold: LogLevel | false =
       mergeOptions(config, termwrightOptions, {}).failOnLogLevel;
     const crashed: ReportCrash[] = [];
-    const attempt = (attempts.get(task.id) ?? 0) + 1;
-    attempts.set(task.id, attempt);
+    const attempt = (task.result?.retryCount ?? 0) + 1;
     let failed = false;
     onTestFailed(() => {
       failed = true;
@@ -256,9 +284,17 @@ export const test = base.extend<TermwrightFixtures>({
                 columns: merged.columns,
                 rows: merged.rows,
               });
+        // `termwright ui` runs the fixture in a Vitest worker, outside the
+        // server process. This bridge carries the same session event stream a
+        // direct `server.attach()` would consume. With no UI URL it is a true
+        // no-op; an unavailable UI is observability loss, never a test failure.
+        const live = connectLiveSession(harness, {
+          testId: task.id,
+          currentStepId: () => currentStepId(scope),
+        });
         detachers.push(collectLogs(harness, logs).dispose);
-        if (writer !== undefined) scope?.writers.push(writer);
-        sessions.push({ harness, writer, dir, trace: merged.trace });
+        if (writer !== undefined) attachWriter(scope, writer);
+        sessions.push({ harness, live, writer, dir, trace: merged.trace });
         harnesses.push(harness);
         return harness;
       },
@@ -281,6 +317,10 @@ export const test = base.extend<TermwrightFixtures>({
     for (const session of sessions.reverse()) {
       const keep = session.trace === 'on' || (failed && session.trace === 'retain-on-failure');
       try {
+        // Detach first so terminal shutdown cannot publish late output into a
+        // run which Vitest is already finishing. Socket teardown is bounded
+        // and fail-open inside the client.
+        await session.live.close();
         await session.harness.close();
       } finally {
         if (session.writer !== undefined) {
@@ -296,21 +336,40 @@ export const test = base.extend<TermwrightFixtures>({
 
     if (logFailure !== undefined) throw new Error(logFailure);
   },
-});
+}));
 
 async function runStep<T>(
   title: string,
   body: () => T | Promise<T>,
   scope?: TermwrightScope,
+  annotate?: (message: string, type?: string, attachment?: { body: string; contentType: string }) => Promise<unknown>,
+  options?: StepOptions,
 ): Promise<T> {
-  const handles = openStep(title, scope ?? currentScope());
+  const active = beginStep(title, options, scope ?? currentScope());
+  const publish = async (phase: 'start' | 'end', status?: 'passed' | 'failed', error?: string): Promise<void> => {
+    if (annotate === undefined) return;
+    await annotate('', 'termwright:step', {
+      body: JSON.stringify({
+        title,
+        phase,
+        ...(active.stepId === undefined ? {} : { stepId: active.stepId }),
+        ...(status === undefined ? {} : { status }),
+        ...(error === undefined ? {} : { error }),
+        ...(options?.gherkin === undefined ? {} : { gherkin: options.gherkin }),
+      }),
+      contentType: 'application/json',
+    });
+  };
+  await publish('start');
   try {
     const result = await body();
-    for (const handle of handles) handle.end('passed');
+    active.end('passed');
+    await publish('end', 'passed');
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    for (const handle of handles) handle.end('failed', message);
+    active.end('failed', message);
+    await publish('end', 'failed', message);
     throw error;
   }
 }

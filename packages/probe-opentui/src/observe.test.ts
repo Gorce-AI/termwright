@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { validateProbeFrame, DEFAULT_LIMITS } from '@termwright/protocol';
+import { describeRenderable } from '@termwright/opentui';
 import { observeTree, type ObservableNode } from './observe.js';
 
 /** Minimal stand-in for a Renderable; only what the observer reads. */
@@ -40,6 +41,79 @@ describe('identity and structure', () => {
     // `id` defaults to `renderable-<num>`, is mutable at runtime and updates no
     // index, so it is a label rather than a handle.
     expect(JSON.stringify(frame.objects)).not.toContain('renamed-at-runtime');
+  });
+
+  it('reads optional developer intent registered before observation', () => {
+    const label = node('TextRenderable', 2, { chunks: [{ text: 'Destination' }] });
+    const custom = node('DeploymentRenderable', 3, { focused: true, value: 'physical' });
+    describeRenderable(custom, {
+      role: 'textbox',
+      name: 'Deploy target',
+      description: 'Production environment',
+      testId: 'deploy-target',
+      extended: { environment: 'production' },
+      actions: ['setValue'],
+      labelledBy: [label],
+    });
+    const root = node('RootRenderable', 1, {
+      _childrenInZIndexOrder: [label, custom],
+      getChildren: () => [label, custom],
+    });
+
+    const { frame } = observeTree(root, { frame: 1 });
+    expect(frame.objects[2]).toMatchObject({
+      state: { focused: true, value: 'physical' },
+      annotations: {
+        role: 'textbox',
+        name: 'Deploy target',
+        description: 'Production environment',
+        testId: 'deploy-target',
+        extended: { environment: 'production' },
+        actions: ['setValue'],
+        labelledBy: ['2'],
+      },
+    });
+  });
+
+  it('drops a forged invalid annotation without dropping the framework node', () => {
+    const target = node('InputRenderable', 9, { value: 'physical' });
+    const registryKey = Symbol.for('termwright.annotation.opentui.v1');
+    const scope = globalThis as Record<PropertyKey, unknown>;
+    const previous = scope[registryKey];
+    const entries = new WeakMap<object, object>();
+    const cyclic: Record<string, unknown> = {};
+    cyclic['self'] = cyclic;
+    let invoked = 0;
+    const hostileRelations = Array.from({ length: 5 });
+    for (let index = 0; index < hostileRelations.length; index += 1) {
+      Object.defineProperty(hostileRelations, index, {
+        get() {
+          invoked += 1;
+          return new WeakRef(target);
+        },
+      });
+    }
+    entries.set(target, {
+      role: 'textbox',
+      actions: ['shell'],
+      extended: cyclic,
+      labelledBy: hostileRelations,
+    });
+    Object.defineProperty(scope, registryKey, { configurable: true, value: entries });
+
+    try {
+      const limits = { ...DEFAULT_LIMITS, maxRelationTargets: 1 };
+      const { frame } = observeTree(target, { frame: 1, limits });
+      expect(frame.objects[0]).toMatchObject({
+        frameworkType: 'InputRenderable',
+        state: { value: 'physical' },
+      });
+      expect(frame.objects[0]?.annotations).toBeUndefined();
+      expect(invoked).toBe(0);
+      expect(validateProbeFrame(frame, limits).ok).toBe(true);
+    } finally {
+      Object.defineProperty(scope, registryKey, { configurable: true, value: previous });
+    }
   });
 
   it('names the framework type from the class', () => {
@@ -105,6 +179,20 @@ describe('geometry', () => {
 });
 
 describe('state', () => {
+  it('publishes effective display state through hidden ancestors', () => {
+    const child = node('TextRenderable', 3, { visible: true });
+    const hiddenParent = node('BoxRenderable', 2, {
+      visible: false,
+      getChildren: () => [child],
+    });
+    const root = node('RootRenderable', 1, { getChildren: () => [hiddenParent] });
+
+    const { frame } = observeTree(root, { frame: 1 });
+
+    expect(frame.objects[1]?.state?.displayed).toBe(false);
+    expect(frame.objects[2]?.state?.displayed).toBe(false);
+  });
+
   it('reads focus, value and item selection from their own accessors', () => {
     const input = node('InputRenderable', 2, { focused: true, value: 'hello' });
     const select = node('SelectRenderable', 3, { getSelectedIndex: () => 2 });

@@ -3,14 +3,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Locator, ScreenSnapshot, TerminalHarness } from '@termwright/driver';
-import type { SemanticSnapshot, SemanticState } from '@termwright/protocol';
+import type {
+  LocatorGeometry,
+  LocatorVisibility,
+  PointerHitTest,
+  SemanticExtendedState,
+  SemanticSnapshot,
+  SemanticState,
+} from '@termwright/protocol';
 import { fakeScreen } from './__fixtures__/screen.js';
 import { node, permissionDialog, snapshot } from './__fixtures__/tree.js';
 import { configureTermwright, resetTermwrightConfig } from './config.js';
 import { registerTermwrightMatchers } from './matchers.js';
 import { beginSnapshotScope, resetSnapshotCache } from './snapshot-store.js';
 import { createLogCollection, type CapturedLog } from './logs.js';
-import { enterScope, scopeKey, type TermwrightScope } from './trace-context.js';
+import { enterScope, type TermwrightScope } from './trace-context.js';
 import { resolveTermwrightConfig } from './config.js';
 import type { TraceWriter } from '@termwright/trace';
 
@@ -19,22 +26,64 @@ registerTermwrightMatchers();
 interface FakeLocatorState {
   visible?: boolean;
   state?: SemanticState | null;
+  extended?: SemanticExtendedState | null;
   text?: string;
   ref?: string;
   resolveError?: unknown;
+  visibility?: LocatorVisibility;
+  geometry?: LocatorGeometry;
+  hitTest?: PointerHitTest;
 }
 
 /** A locator with just the surface the matchers touch. */
 function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("button")'): Locator {
   const locator = {
     description,
-    async isVisible() {
-      return read().visible ?? false;
+    async visibility() {
+      const supplied = read().visibility;
+      if (supplied !== undefined) return supplied;
+      const visible = read().visible ?? false;
+      const stamp = { sessionId: 'fake', screenRevision: 1, semanticRevision: 1 };
+      return {
+        stamp,
+        attached: { status: 'known', value: true, evidence: 'adapter' },
+        displayed: { status: 'known', value: visible, evidence: 'adapter' },
+        viewport: { status: 'known', value: { rect: { row: 0, column: 0, width: visible ? 1 : 0, height: visible ? 1 : 0 }, ratio: visible ? 1 : 0, fullyInside: visible }, evidence: 'viewport-clip' },
+        offscreen: { status: 'known', value: !visible, evidence: 'viewport-clip' },
+      };
+    },
+    async geometry() {
+      const supplied = read().geometry;
+      if (supplied !== undefined) return supplied;
+      const stamp = { sessionId: 'fake', screenRevision: 1, semanticRevision: 1 };
+      const rect = { row: 0, column: 0, width: 1, height: 1 };
+      return {
+        stamp,
+        coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+        intendedRect: { status: 'known', value: rect, evidence: 'probe' },
+        visibleRect: { status: 'known', value: rect, evidence: 'viewport-clip' },
+      };
+    },
+    async hitTest() {
+      const supplied = read().hitTest;
+      if (supplied !== undefined) return supplied;
+      const stamp = { sessionId: 'fake', screenRevision: 1, semanticRevision: 1 };
+      return {
+        stamp,
+        point: { status: 'known', value: { row: 0, column: 0 }, evidence: 'hit-grid' },
+        receivesEvents: { status: 'known', value: true, evidence: 'hit-grid' },
+        recipient: { status: 'known', value: 'n1', evidence: 'hit-grid' },
+      };
     },
     async semanticState() {
       const error = read().resolveError;
       if (error !== undefined) throw error;
       return read().state ?? null;
+    },
+    async extendedState() {
+      const error = read().resolveError;
+      if (error !== undefined) throw error;
+      return read().extended ?? null;
     },
     async textContent() {
       return read().text ?? '';
@@ -120,6 +169,16 @@ describe('toBeVisible', () => {
     }).rejects.toThrow(/toBeVisible expects a locator, received number/u);
   });
 
+  it('rejects the removed boolean-only visibility surface instead of falling back to it', async () => {
+    const legacy = {
+      description: 'legacy locator',
+      async resolve() { return { ref: 'n1@1', revision: 1, semantic: true, rect: null }; },
+      async isVisible() { return true; },
+    };
+    await expect(expect(legacy).toBeVisible({ timeout: 0 })).rejects.toThrow(/expects a locator/u);
+    await expect(expect(legacy).not.toBeVisible({ timeout: 0 })).rejects.toThrow(/expects a locator/u);
+  });
+
   it('fails fast on an error that waiting cannot fix', async () => {
     const fatal = Object.assign(new Error('no semantic tree'), {
       code: 'unsupported-action',
@@ -130,6 +189,144 @@ describe('toBeVisible', () => {
       await expect(fakeLocator(() => ({ resolveError: fatal, visible: false }))).toBeFocused({ timeout: 5_000 });
     }).rejects.toThrow(/no semantic tree/u);
     expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it('never lets unknown evidence pass either the positive or negated assertion', async () => {
+    const stamp = { sessionId: 'fake', screenRevision: 1, semanticRevision: 1 };
+    const unknown = { status: 'unknown', reason: 'clip-unobservable' } as const;
+    const locator = fakeLocator(() => ({
+      visibility: {
+        stamp,
+        attached: { status: 'known', value: true, evidence: 'probe' },
+        displayed: { status: 'known', value: true, evidence: 'probe' },
+        viewport: unknown,
+        offscreen: unknown,
+      },
+    }));
+    await expect(expect(locator).toBeVisible({ timeout: 0 })).rejects.toThrow(/unknown/u);
+    await expect(expect(locator).not.toBeVisible({ timeout: 0 })).rejects.toThrow(/unknown/u);
+  });
+
+  it('never lets unsupported evidence pass either the positive or negated assertion', async () => {
+    const stamp = { sessionId: 'fake', screenRevision: 1, semanticRevision: 1 };
+    const unsupported = {
+      status: 'unsupported', capability: 'visible-rect', reason: 'framework-unobservable',
+    } as const;
+    const locator = fakeLocator(() => ({
+      visibility: {
+        stamp,
+        attached: { status: 'known', value: true, evidence: 'probe' },
+        displayed: { status: 'known', value: true, evidence: 'probe' },
+        viewport: unsupported,
+        offscreen: unsupported,
+      },
+    }));
+    await expect(expect(locator).toBeVisible({ timeout: 0 })).rejects.toThrow(/unsupported/u);
+    await expect(expect(locator).not.toBeVisible({ timeout: 0 })).rejects.toThrow(/unsupported/u);
+  });
+});
+
+describe('qualified geometry matchers', () => {
+  const stamp = { sessionId: 'fake', screenRevision: 4, semanticRevision: 7 } as const;
+  const geometry = (rect: { row: number; column: number; width: number; height: number }): LocatorGeometry => ({
+    stamp,
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+    intendedRect: { status: 'known', value: rect, evidence: 'probe' },
+    visibleRect: { status: 'known', value: rect, evidence: 'viewport-clip' },
+  });
+
+  it('distinguishes attachment and display state from viewport clipping', async () => {
+    const detached: LocatorVisibility = {
+      stamp,
+      attached: { status: 'known', value: false, evidence: 'adapter' },
+      displayed: { status: 'absent', reason: 'detached' },
+      viewport: { status: 'absent', reason: 'detached' },
+      offscreen: { status: 'absent', reason: 'detached' },
+    };
+    const hidden: LocatorVisibility = {
+      stamp,
+      attached: { status: 'known', value: true, evidence: 'adapter' },
+      displayed: { status: 'known', value: false, evidence: 'probe' },
+      viewport: { status: 'absent', reason: 'not-displayed' },
+      offscreen: { status: 'absent', reason: 'not-displayed' },
+    };
+    const offscreen: LocatorVisibility = {
+      stamp,
+      attached: { status: 'known', value: true, evidence: 'adapter' },
+      displayed: { status: 'known', value: true, evidence: 'probe' },
+      viewport: {
+        status: 'known',
+        value: { rect: { row: 20, column: 0, width: 1, height: 0 }, ratio: 0, fullyInside: false },
+        evidence: 'viewport-clip',
+      },
+      offscreen: { status: 'known', value: true, evidence: 'viewport-clip' },
+    };
+    await expect(fakeLocator(() => ({ visibility: detached }))).toBeDetached();
+    await expect(fakeLocator(() => ({ visibility: detached }))).toBeHidden();
+    await expect(fakeLocator(() => ({ visibility: hidden }))).toBeAttached();
+    await expect(fakeLocator(() => ({ visibility: hidden }))).toBeHidden();
+    await expect(fakeLocator(() => ({ visibility: offscreen }))).toBeDisplayed();
+    await expect(fakeLocator(() => ({ visibility: offscreen }))).not.toBeHidden();
+    await expect(fakeLocator(() => ({ visibility: offscreen }))).toBeOffscreen();
+  });
+
+  it('treats an explicit viewport ratio as an inclusive minimum and the default as non-zero', async () => {
+    const visibility: LocatorVisibility = {
+      stamp,
+      attached: { status: 'known', value: true, evidence: 'probe' },
+      displayed: { status: 'known', value: true, evidence: 'probe' },
+      viewport: {
+        status: 'known',
+        value: { rect: { row: 0, column: 0, width: 1, height: 1 }, ratio: 0.5, fullyInside: false },
+        evidence: 'viewport-clip',
+      },
+      offscreen: { status: 'known', value: false, evidence: 'viewport-clip' },
+    };
+    const locator = fakeLocator(() => ({ visibility }));
+    await expect(locator).toBeInViewport({ ratio: 0.5 });
+    await expect(locator).not.toBeInViewport({ ratio: 0.75 });
+    await expect(locator).toBeInViewport();
+    await expect(expect(locator).toBeInViewport({ ratio: 1.1 })).rejects.toThrow(/ratio must be/u);
+  });
+
+  it('matches exact bounds and half-open spatial relations', async () => {
+    const left = fakeLocator(() => ({ geometry: geometry({ row: 2, column: 1, width: 3, height: 2 }) }), 'left');
+    const right = fakeLocator(() => ({ geometry: geometry({ row: 2, column: 4, width: 2, height: 2 }) }), 'right');
+    await expect(left).toHaveBounds({ row: 2, width: 3 });
+    await expect(left).toHaveSpatialRelation({ relation: 'left-of', target: right });
+    await expect(left).toHaveSpatialRelation({ relation: 'adjacent-horizontal', target: right });
+    await expect(left).not.toHaveSpatialRelation({ relation: 'overlaps', target: right });
+  });
+
+  it('never compares geometry from different sessions or observation revisions', async () => {
+    const source = fakeLocator(() => ({ geometry: geometry({ row: 0, column: 0, width: 1, height: 1 }) }), 'source');
+    const otherSession = fakeLocator(() => ({ geometry: {
+      ...geometry({ row: 0, column: 2, width: 1, height: 1 }),
+      stamp: { ...stamp, sessionId: 'other' },
+    } }), 'other-session');
+    const otherRevision = fakeLocator(() => ({ geometry: {
+      ...geometry({ row: 0, column: 2, width: 1, height: 1 }),
+      stamp: { ...stamp, screenRevision: stamp.screenRevision + 1 },
+    } }), 'other-revision');
+    await expect(expect(source).toHaveSpatialRelation({ relation: 'left-of', target: otherSession }, { timeout: 0 })).rejects.toThrow(/different terminal sessions/u);
+    await expect(expect(source).not.toHaveSpatialRelation({ relation: 'left-of', target: otherSession }, { timeout: 0 })).rejects.toThrow(/different terminal sessions/u);
+    await expect(expect(source).toHaveSpatialRelation({ relation: 'left-of', target: otherRevision }, { timeout: 0 })).rejects.toThrow(/different revisions/u);
+  });
+
+  it('uses exact point ownership and keeps unsupported hit tests fail-closed', async () => {
+    const locator = fakeLocator(() => ({}));
+    await expect(locator).toReceivePointerEvents();
+    const unsupported = {
+      status: 'unsupported', capability: 'pointer-hit-test', reason: 'framework-unobservable',
+    } as const;
+    const unobservable = fakeLocator(() => ({ hitTest: {
+      stamp,
+      point: { status: 'known', value: { row: 0, column: 0 }, evidence: 'probe' },
+      receivesEvents: unsupported,
+      recipient: unsupported,
+    } }));
+    await expect(expect(unobservable).toReceivePointerEvents({ timeout: 0 })).rejects.toThrow(/unsupported/u);
+    await expect(expect(unobservable).not.toReceivePointerEvents({ timeout: 0 })).rejects.toThrow(/unsupported/u);
   });
 });
 
@@ -152,6 +349,33 @@ describe('toBeFocused and toHaveState', () => {
     await expect(async () => {
       await expect(fakeLocator(() => ({ state: null }))).toBeFocused({ timeout: 50 });
     }).rejects.toThrow(/not a semantic node/u);
+  });
+});
+
+describe('toHaveExtendedState', () => {
+  it('deep-matches listed domain keys without constraining the rest', async () => {
+    const locator = fakeLocator(() => ({
+      extended: {
+        deploymentStatus: 'rolling-out',
+        retryCount: 2,
+        rollout: { regions: ['eu', 'us'], percent: 0.5 },
+        ignored: true,
+      },
+    }));
+    await expect(locator).toHaveExtendedState({
+      deploymentStatus: 'rolling-out',
+      rollout: { regions: ['eu', 'us'], percent: 0.5 },
+    });
+    await expect(async () => {
+      await expect(locator).toHaveExtendedState({ retryCount: 3 }, { timeout: 50 });
+    }).rejects.toThrow(/Expected: \{"retryCount":3\}[\s\S]*Received: \{"retryCount":2\}/u);
+  });
+
+  it('distinguishes a missing namespace from an empty one', async () => {
+    await expect(async () => {
+      await expect(fakeLocator(() => ({ extended: null }))).toHaveExtendedState({}, { timeout: 50 });
+    }).rejects.toThrow(/no extended state/u);
+    await expect(fakeLocator(() => ({ extended: {} }))).toHaveExtendedState({});
   });
 });
 

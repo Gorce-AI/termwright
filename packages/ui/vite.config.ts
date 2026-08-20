@@ -1,4 +1,6 @@
 import { fileURLToPath } from 'node:url';
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 /**
@@ -9,9 +11,14 @@ import { defineConfig } from 'vite';
  * from a CDN.
  */
 export default defineConfig({
+  plugins: [react(), tailwindcss()],
   root: fileURLToPath(new URL('./src/app', import.meta.url)),
   base: './',
   build: {
+    // The normal server build keeps branding as a real reusable SVG asset.
+    // `inline-report.ts` alone turns emitted assets into data URLs when it
+    // packages the same application as one self-contained HTML document.
+    assetsInlineLimit: 0,
     outDir: fileURLToPath(new URL('./dist/app', import.meta.url)),
     emptyOutDir: true,
     target: 'es2022',

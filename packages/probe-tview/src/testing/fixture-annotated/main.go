@@ -13,6 +13,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/gorce-ai/termwright/clients/go/annotate"
+	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
 // badge is a primitive termwright has never heard of, which is the case the
@@ -50,6 +51,8 @@ func main() {
 
 	save := tview.NewButton("Save")
 	quit := tview.NewButton("Quit")
+	saveLabel := tview.NewTextView().SetText("Save changes")
+	saveHelp := tview.NewTextView().SetText("Writes the current file")
 
 	unread := newBadge(3)
 	// What the probe cannot know: that this box is a status badge, what to
@@ -60,12 +63,20 @@ func main() {
 		Role:   "status",
 		Name:   "Unread messages",
 		TestID: "unread-badge",
-		Domain: map[string]string{"mailbox": "inbox", "unread": "3"},
+		Domain: map[string]any{"mailbox": "inbox", "unread": 3},
 	})
 
 	// An annotation on a widget the probe does understand: the role stays
 	// button, only the name is sharpened.
-	annotate.Tag(save, annotate.Semantics{Name: "Save changes", TestID: "save"})
+	annotate.Tag(save, annotate.Semantics{
+		Name:        "Save changes",
+		TestID:      "save",
+		Actions:     []protocol.Action{protocol.ActionFocus, protocol.ActionActivate},
+		LabelledBy:  []annotate.SemanticKey{"save-label"},
+		DescribedBy: []annotate.SemanticKey{"save-help"},
+	})
+	annotate.Tag(saveLabel, annotate.Semantics{Key: "save-label"})
+	annotate.Tag(saveHelp, annotate.Semantics{Key: "save-help"})
 
 	pages := tview.NewPages()
 	form := tview.NewForm().AddInputField("Name", "", 20, nil, nil)
@@ -75,6 +86,10 @@ func main() {
 		AddItem(list, 7, 0, true).
 		AddItem(save, 1, 0, false).
 		AddItem(quit, 1, 0, false).
+		// Targets come after the source to prove relationship resolution does
+		// not depend on retained-tree walk order.
+		AddItem(saveLabel, 1, 0, false).
+		AddItem(saveHelp, 1, 0, false).
 		AddItem(unread, 1, 0, false).
 		AddItem(status, 1, 0, false)
 

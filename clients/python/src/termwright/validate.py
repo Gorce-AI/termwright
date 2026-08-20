@@ -8,6 +8,7 @@ versa. Never raises on hostile input — failures come back as a result object.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .errors import ProtocolViolation
@@ -188,6 +189,7 @@ _NODE_KEYS = (
     "value",
     "bounds",
     "state",
+    "extended",
     "actions",
     "labelledBy",
     "describedBy",
@@ -198,6 +200,34 @@ _NODE_KEYS = (
     "p",
     "px",
 )
+_NODE_V2_KEYS = tuple(key for key in _NODE_KEYS if key not in ("bounds", "occlusion")) + ("geometry",)
+
+_OBSERVATION_EVIDENCE = ("adapter", "probe", "terminal-grid", "viewport-clip", "paint-order", "hit-grid", "legacy-v1")
+
+
+def _observation(value: Any, path: Sequence[str], known, limits: ProtocolLimits) -> None:
+    item = _obj(value, path)
+    status = item.get("status")
+    if status == "known":
+        _strict(item, ("status", "value", "evidence"), path)
+        if "value" not in item or item.get("evidence") not in _OBSERVATION_EVIDENCE:
+            raise _Issue(path, "known observation requires value and evidence")
+        known(item["value"], tuple(path) + ("value",))
+    elif status == "absent":
+        _strict(item, ("status", "reason"), path)
+        if item.get("reason") not in ("detached", "not-displayed", "not-laid-out"):
+            raise _Issue(tuple(path) + ("reason",), "invalid absent reason")
+    elif status == "unknown":
+        _strict(item, ("status", "reason"), path)
+        if item.get("reason") not in ("not-reported", "temporary", "clip-unobservable", "legacy-unqualified"):
+            raise _Issue(tuple(path) + ("reason",), "invalid unknown reason")
+    elif status == "unsupported":
+        _strict(item, ("status", "capability", "reason"), path)
+        _text(item.get("capability"), tuple(path) + ("capability",), limits)
+        if item.get("reason") not in ("capability", "framework-unobservable", "not-negotiated"):
+            raise _Issue(tuple(path) + ("reason",), "invalid unsupported reason")
+    else:
+        raise _Issue(tuple(path) + ("status",), "invalid observation status")
 
 #: Where a semantic fact came from. Closed set, so an unknown source is a
 #: rejection rather than a silently ignored annotation.
@@ -214,6 +244,32 @@ PROVENANCE_SOURCES = (
 OCCLUSION_VALUES = ("known", "unknown")
 
 
+def _extended(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
+    if value is None or isinstance(value, bool):
+        return
+    if isinstance(value, str):
+        _text(value, path, limits)
+        return
+    if isinstance(value, (int, float)):
+        if not math.isfinite(value) or abs(value) > _MAX_SAFE_INTEGER:
+            raise _Issue(path, "expected a finite JSON number in the safe range")
+        return
+    if isinstance(value, list):
+        if len(value) > limits.maxRelationTargets:
+            raise _Issue(path, f"expected at most {limits.maxRelationTargets} items", too_big=True)
+        for index, item in enumerate(value):
+            _extended(item, tuple(path) + (str(index),), limits)
+        return
+    if isinstance(value, dict):
+        if len(value) > limits.maxRelationTargets:
+            raise _Issue(path, f"expected at most {limits.maxRelationTargets} properties", too_big=True)
+        for key, item in value.items():
+            _text(key, tuple(path) + (str(key),), limits)
+            _extended(item, tuple(path) + (str(key),), limits)
+        return
+    raise _Issue(path, "expected JSON scalar, array or object")
+
+
 def _relations(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
     if not isinstance(value, list):
         raise _Issue(path, "expected an array")
@@ -223,9 +279,11 @@ def _relations(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
         _text(item, tuple(path) + (str(index),), limits)
 
 
-def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
+def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits, v: int = 1) -> None:
     node = _obj(value, path)
-    _strict(node, _NODE_KEYS, path)
+    if v == 2 and "bounds" in node:
+        raise _Issue(tuple(path) + ("bounds",), "legacy bounds are forbidden in v2")
+    _strict(node, _NODE_V2_KEYS if v == 2 else _NODE_KEYS, path)
 
     if "id" not in node:
         raise _Issue(tuple(path) + ("id",), "expected a string")
@@ -266,6 +324,12 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
         )
     if "bounds" in node:
         _rect(node["bounds"], tuple(path) + ("bounds",))
+    if v == 2:
+        geometry = _obj(node.get("geometry"), tuple(path) + ("geometry",))
+        _strict(geometry, ("displayed", "intendedRect", "visibleRect"), tuple(path) + ("geometry",))
+        _observation(geometry.get("displayed"), tuple(path) + ("geometry", "displayed"), _bool, limits)
+        _observation(geometry.get("intendedRect"), tuple(path) + ("geometry", "intendedRect"), _rect, limits)
+        _observation(geometry.get("visibleRect"), tuple(path) + ("geometry", "visibleRect"), _rect, limits)
     if "state" in node:
         _state(node["state"], tuple(path) + ("state",))
         state = node["state"]
@@ -278,6 +342,10 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
                 f"node {node.get('id')}: state.offscreen implies state.hidden — every cell is "
                 "outside the visible area, so the node cannot also be visible",
             )
+    if "extended" in node:
+        if not isinstance(node["extended"], dict):
+            raise _Issue(tuple(path) + ("extended",), "expected an object")
+        _extended(node["extended"], tuple(path) + ("extended",), limits)
     if "actions" in node:
         actions = node["actions"]
         if not isinstance(actions, list):
@@ -326,14 +394,16 @@ def _cursor(value: Any, path: Sequence[str]) -> None:
 
 
 _SNAPSHOT_KEYS = ("v", "sessionId", "revision", "columns", "rows", "cursor", "rootIds", "nodes")
+_SNAPSHOT_V2_KEYS = _SNAPSHOT_KEYS + ("coordinateSpace", "hitGrid")
 
 
 def _snapshot_schema(value: Any, limits: ProtocolLimits) -> None:
     snapshot = _obj(value, ())
-    _strict(snapshot, _SNAPSHOT_KEYS, ())
+    version = snapshot.get("v")
+    _strict(snapshot, _SNAPSHOT_V2_KEYS if version == 2 else _SNAPSHOT_KEYS, ())
 
-    if snapshot.get("v") != 1:
-        raise _Issue(("v",), "expected the literal 1")
+    if version not in (1, 2):
+        raise _Issue(("v",), "expected the literal 1 or 2")
     if "sessionId" not in snapshot:
         raise _Issue(("sessionId",), "expected a string")
     if _text(snapshot["sessionId"], ("sessionId",), limits) == "":
@@ -362,7 +432,39 @@ def _snapshot_schema(value: Any, limits: ProtocolLimits) -> None:
     if len(nodes) > limits.maxNodes:
         raise _Issue(("nodes",), f"expected at most {limits.maxNodes} items", too_big=True)
     for index, node in enumerate(nodes):
-        _node_schema(node, ("nodes", str(index)), limits)
+        _node_schema(node, ("nodes", str(index)), limits, version)
+    if version == 2:
+        _observation(snapshot.get("coordinateSpace"), ("coordinateSpace",), lambda value, path: value in ("viewport-cells", "framework-local-cells") or (_ for _ in ()).throw(_Issue(path, "invalid coordinate space")), limits)
+        def _grid(value: Any, path: Sequence[str]) -> None:
+            grid = _obj(value, path)
+            _strict(grid, ("regions",), path)
+            regions = grid.get("regions")
+            if not isinstance(regions, list) or len(regions) > limits.maxNodes:
+                raise _Issue(tuple(path) + ("regions",), "invalid hit regions")
+            previous = None
+            for index, region_value in enumerate(regions):
+                region_path = tuple(path) + ("regions", str(index))
+                region = _obj(region_value, region_path)
+                _strict(region, ("rect", "recipientId"), region_path)
+                rect = _rect(region.get("rect"), region_path + ("rect",))
+                if rect["width"] <= 0 or rect["height"] != 1:
+                    raise _Issue(
+                        region_path + ("rect",), "hit regions must be non-empty row runs"
+                    )
+                if previous is not None and (
+                    rect["row"] < previous["row"]
+                    or (
+                        rect["row"] == previous["row"]
+                        and rect["column"] < previous["column"] + previous["width"]
+                    )
+                ):
+                    raise _Issue(
+                        region_path + ("rect",),
+                        "hit regions must be non-overlapping row-major runs",
+                    )
+                previous = rect
+                _text(region.get("recipientId"), region_path + ("recipientId",), limits)
+        _observation(snapshot.get("hitGrid"), ("hitGrid",), _grid, limits)
 
 
 # --------------------------------------------------------------------------
@@ -612,6 +714,21 @@ def validate_snapshot(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> Va
             return _fail("schema", f"root node {node_id} declares a parent")
 
     ids = set(by_id)
+
+    if snapshot["v"] == 2 and snapshot["hitGrid"]["status"] == "known":
+        for region in snapshot["hitGrid"]["value"]["regions"]:
+            recipient_id = region["recipientId"]
+            if recipient_id not in ids:
+                return _fail(
+                    "missing-parent", f"hitGrid references unknown recipient {recipient_id}"
+                )
+            if not _rect_intersects_viewport(
+                region["rect"], snapshot["columns"], snapshot["rows"]
+            ):
+                return _fail(
+                    "bad-rect",
+                    f"hitGrid region for {recipient_id} does not intersect the viewport",
+                )
 
     for node in nodes:
         parent_id = node.get("parentId")

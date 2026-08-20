@@ -247,7 +247,11 @@ describe('RevisionPairing', () => {
   });
 
   it('publishes on arrival when the adapter has no marker capability', () => {
-    const { pairing, published } = createPairing(false);
+    const { pairing, published, diagnostics } = createPairing(false);
+    pairing.offerMarker(1, 9);
+    expect(pairing.hasPendingRender).toBe(false);
+    expect(diagnostics.join('\n')).toContain('did not negotiate render-revisions');
+
     pairing.offerSnapshot(snapshot(1));
     expect(published).toHaveLength(1);
     expect(published[0]?.screenRevision).toBeNull();

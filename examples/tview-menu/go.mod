@@ -2,13 +2,8 @@ module github.com/gorce-ai/termwright/examples/tview-menu
 
 go 1.22
 
-// The published module is github.com/gorce-ai/termwright/clients/go; this
-// example builds against the copy in this repository.
-replace github.com/gorce-ai/termwright/clients/go => ../../clients/go
-
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
-	github.com/gorce-ai/termwright/clients/go v0.1.0
 	github.com/rivo/tview v0.42.0
 )
 

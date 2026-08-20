@@ -6,10 +6,26 @@ import {
   getTermwrightConfig,
   resetTermwrightConfig,
   resolveTermwrightConfig,
+  termwrightRetry,
 } from './config.js';
 
 afterEach(() => {
   resetTermwrightConfig();
+});
+
+describe('termwrightRetry', () => {
+  it('uses native Vitest additional-attempt counts for CI, local and env override', () => {
+    expect(termwrightRetry({ env: {} })).toBe(0);
+    expect(termwrightRetry({ ci: 3, env: { CI: 'true' } })).toBe(3);
+    expect(termwrightRetry({ ci: 3, env: { CI: 'true', TERMWRIGHT_RETRIES: '1' } })).toBe(1);
+    expect(termwrightRetry({ local: 2, env: { CI: 'false' } })).toBe(2);
+  });
+
+  it('rejects negative, fractional and unbounded retry counts', () => {
+    for (const value of ['-1', '1.5', '101', 'nope']) {
+      expect(() => termwrightRetry({ env: { TERMWRIGHT_RETRIES: value } })).toThrow(/integer from 0 to 100/u);
+    }
+  });
 });
 
 describe('defineTermwrightConfig', () => {

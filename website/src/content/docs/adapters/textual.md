@@ -1,155 +1,52 @@
 ---
-title: Textual (Python)
-description: The termwright PyPI package — enable_semantics, role and name derivation, and coexisting with Pilot.
+title: Textual
+description: Run a Python Textual application with semantic locators, geometry, and exact hit testing.
 ---
 
+The Python probe observes an ordinary Textual application. Use it when tests
+need widgets, roles, names, state, geometry, or pointer targeting.
+
+## Install and launch
+
 ```sh
-pip install termwright              # protocol client only
-pip install "termwright[textual]"   # + the Textual adapter
+pip install termwright
+# Or install Textual with the SDK:
+pip install "termwright[textual]"
 ```
 
-Python 3.9+. The protocol modules have no third-party dependencies.
+```sh
+python -m termwright_probe -- python app.py
+```
 
-## Instrumenting an app
+```ts
+const app = await terminal.launch({
+  command: ['python', '-m', 'termwright_probe', '--', 'python', appPath],
+});
+await app.getByRole('button', {name: 'Approve'}).click();
+await expect(app.getByRole('status')).toHaveText('Approved');
+```
+
+Python 3.9 and newer are supported. Injection is dormant without a Termwright
+endpoint and token.
+
+## Annotate a custom widget
 
 ```python
-from textual.app import App, ComposeResult
-from textual.widgets import Button, Input, Label
+from termwright.textual import semantic
 
-from termwright import enable_semantics
-
-
-class PermissionApp(App):
-    def compose(self) -> ComposeResult:
-        yield Label("Allow bash to run?", id="prompt")
-        yield Button("Approve", id="approve")
-        yield Button("Reject", id="reject")
-        yield Input(placeholder="Reason", id="reason")
-
-    def on_mount(self) -> None:
-        # Returns None when no driver is attached — nothing is installed then.
-        enable_semantics(self)
-
-
-if __name__ == "__main__":
-    PermissionApp().run()
+@semantic(role="button", name="Deploy", test_id="deploy")
+class DeployWidget(Widget):
+    pass
 ```
 
-Or inherit the mixin, which does the same on mount:
+Annotations add application intent. They do not replace observed text, focus,
+geometry, or visibility.
 
-```python
-from termwright import TermwrightApp
+## Supported behavior
 
-class PermissionApp(TermwrightApp, App):
-    ...
-```
+Textual 8.2 is verified. The probe observes stable widget identity, intended
+and clipped geometry, ancestor display, focus, native widget state, and exact
+fresh-pointer ownership through `Screen.get_widget_at()`. Active mouse capture
+is outside that contract.
 
-Under a driver, this publishes after every flushed frame:
-
-```
-application "PermissionApp"
-  region                          bounds=(0,0,80,24)
-    text "Allow bash to run?"     bounds=(0,0,80,1)  testId=prompt
-    button "Approve"              bounds=(1,0,80,3)  testId=approve  [focused]
-    button "Reject"               bounds=(4,0,80,3)  testId=reject
-    textbox "Reason"              bounds=(7,0,80,3)  testId=reason
-```
-
-## Roles and names
-
-Roles come from the widget class, matched along the MRO, so your own
-`class SaveButton(Button)` is a `button` with no configuration. `Input` and
-`TextArea` map to `textbox`, `DataTable` to `table`, `ListView` / `OptionList`
-to `list`, `Label` / `Static` to `text`, containers to `region`, `ModalScreen`
-to `dialog`.
-
-Names come from the widget's label, placeholder, content, `name`, or DOM `id`,
-in that order; the DOM `id` is also published as `testId`.
-
-Roles that ARIA names from content — `listitem`, `menuitem`, `tab`, `button`,
-`checkbox`, `radio`, `cell`, `row`, `heading` — fall back to the text of what
-they *contain* before they fall back to the id. That is what makes
-`ListItem(Label("Open settings"))` addressable as
-`getByRole('listitem', {name: 'Open settings'})`: the item holds no text of its
-own, the `Label` inside does. Containers are never named this way — a `region`
-would otherwise be named by everything on the screen.
-
-Override either per widget:
-
-```python
-label = Label("87%")
-label.termwright_role = "progressbar"
-label.termwright_name = "Upload progress"
-```
-
-## Coexisting with Pilot
-
-The adapter only reads the DOM from `post_display_hook`, so `run_test()` and
-`Pilot` keep working unchanged — semantic tests and pilot tests live in the same
-suite. termwright is not positioned as a Pilot replacement; see
-[Migrating](../../guides/migrating/) for where each one fits.
-
-## Driving any Python TUI
-
-Textual is a convenience, not a requirement. Any renderer can drive the client
-directly: you own the render, the client owns revision numbers and hands you the
-marker to write after the render's last byte.
-
-```python
-from termwright import SemanticNode, SemanticSnapshot, Rect, client_from_env
-
-client = client_from_env(adapter_name="my-tui", adapter_version="1.0.0")
-if client is not None and await client.start():
-    marker = await client.publish(
-        SemanticSnapshot(
-            sessionId="", revision=0, columns=80, rows=24,   # both are overwritten
-            rootIds=["root"],
-            nodes=[
-                SemanticNode(id="root", role="dialog", name="Permission"),
-                SemanticNode(id="ok", parentId="root", role="button", name="Approve",
-                             bounds=Rect(row=1, column=2, width=9, height=1)),
-            ],
-        )
-    )
-    sys.stdout.write(marker)   # only after the render is fully written
-    sys.stdout.flush()
-```
-
-`publish_nowait` is the same thing for synchronous render callbacks: it returns
-the marker immediately and sends the frames on a background task, in order.
-
-## The dormant rule, in Python
-
-`client_from_env()` returns `None` when `TERMWRIGHT_ENDPOINT` and
-`TERMWRIGHT_TOKEN` are absent, and `enable_semantics()` installs nothing. That
-is deliberately expressed as a constructor returning nothing, so the calling app
-needs no feature flag and shipping the adapter in production costs one import.
-
-## Application logs
-
-The client can forward Python's `logging` to the driver, so `log.error(...)`
-becomes assertable test state:
-
-```python
-from termwright.client import CAPABILITIES_WITH_LOGS
-from termwright.logging_bridge import install_log_handler
-
-client = client_from_env(adapter_name="my-tui", adapter_version="1.0.0",
-                         capabilities=CAPABILITIES_WITH_LOGS)
-if client is not None and await client.start():
-    install_log_handler(client)
-```
-
-`install_log_handler(None)` is a no-op, so an app can call it unconditionally.
-Levels map onto the wire's closed ladder (anything below `DEBUG` is `trace`,
-`CRITICAL` is `fatal`), `extra=` fields become flat dotted attributes, and a
-record the budget refuses leaves a gap in `seq` so the driver can report the
-loss. See [Application logs](../../guides/app-logs/).
-
-## Limitations
-
-- **Windows named pipes are not supported.** On a `\\.\pipe\…` endpoint the
-  client stays dormant rather than half-working.
-- The reference implementation is the TypeScript `@termwright/protocol`; where
-  this client differs from it, this client is wrong. Cross-language test vectors
-  keep them aligned.
+See [Framework compatibility](../../reference/compatibility/) for current versions.

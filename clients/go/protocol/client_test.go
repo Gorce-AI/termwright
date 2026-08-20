@@ -204,6 +204,10 @@ func TestNoClientWithoutACompleteEnvironment(t *testing.T) {
 	if client := fromEnvValues("/tmp/tw.sock", testToken, ProtocolID, Options{}); client == nil {
 		t.Error("a fully instrumented environment produced no client")
 	}
+	qualified := fromEnvValues("/tmp/tw.sock", testToken, ProtocolV2ID, Options{})
+	if qualified == nil || !qualified.QualifiedObservations() || !containsCapability(qualified.options.Capabilities, CapQualifiedObservations) {
+		t.Errorf("termwright/2 did not select qualified production: %+v", qualified)
+	}
 
 	// A Windows pipe path is a real endpoint, not a reason to stay dormant:
 	// the driver hands one out on win32, and which transport can open it is
@@ -228,7 +232,11 @@ func TestAnUnreachableEndpointFailsSoft(t *testing.T) {
 
 func TestHandshakeAndPublish(t *testing.T) {
 	driver := startFakeDriver(t)
-	client := New(driver.endpoint(), testToken, Options{AdapterName: "go-test", AdapterVersion: "0.1.0"})
+	client := New(driver.endpoint(), testToken, Options{
+		AdapterName:    "go-test",
+		AdapterVersion: "0.1.0",
+		Probe:          testProbeInfo(),
+	})
 	if err := client.Start(2 * time.Second); err != nil {
 		t.Fatalf("handshake failed: %v", err)
 	}
@@ -248,6 +256,20 @@ func TestHandshakeAndPublish(t *testing.T) {
 	if hello["token"] != testToken {
 		t.Errorf("hello carried token %v", hello["token"])
 	}
+	probe, ok := hello["probe"].(map[string]any)
+	if !ok {
+		t.Fatalf("raw hello carried no probe block: %#v", hello)
+	}
+	if probe["framework"] != "tview" || probe["frameworkVersion"] != "v0.42.0" {
+		t.Errorf("raw hello carried the wrong framework identity: %#v", probe)
+	}
+	if probe["identityKind"] != "stable" {
+		t.Errorf("raw hello carried identityKind %v", probe["identityKind"])
+	}
+	probeCapabilities, ok := probe["capabilities"].([]any)
+	if !ok || len(probeCapabilities) != 2 || probeCapabilities[0] != "stable-identity" || probeCapabilities[1] != "annotations" {
+		t.Errorf("raw hello carried dishonest probe capabilities: %#v", probe["capabilities"])
+	}
 	snapshotFrame := frames[1]
 	if snapshotFrame["type"] != "snapshot" {
 		t.Fatalf("second frame is %v, want a snapshot", snapshotFrame["type"])
@@ -263,6 +285,56 @@ func TestHandshakeAndPublish(t *testing.T) {
 	verified, ok := VerifyMarkerPayload(payloadOf(t, marker), testToken, testSession)
 	if !ok || verified.Revision != 1 {
 		t.Errorf("marker %q did not verify against the session", marker)
+	}
+}
+
+func TestDebugPerformanceMetricsDescribeOnlyObservedFacts(t *testing.T) {
+	driver := startFakeDriver(t)
+	client := New(driver.endpoint(), testToken, Options{
+		AdapterName:    "go-test",
+		AdapterVersion: "0.1.0",
+		// A non-nil debug log enables metrics; this nil-file instance keeps the
+		// test from writing outside its fake semantic connection.
+		Debug: &DebugLog{},
+	})
+	if err := client.Start(2 * time.Second); err != nil {
+		t.Fatalf("handshake failed: %v", err)
+	}
+	defer client.Close()
+
+	snapshot := sampleSnapshot()
+	snapshot.Nodes = append(snapshot.Nodes, Node{
+		ID: "custom", ParentID: "root", Role: RoleGeneric, Name: "",
+		FrameworkType: "ApplicationWidget",
+	})
+	if _, err := client.Publish(snapshot); err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+	driver.waitFor(t, 3)
+
+	metrics := client.PerformanceMetrics()
+	if !metrics.Enabled || metrics.FullSnapshots != 1 || metrics.Deltas != 0 {
+		t.Fatalf("wrong publication counters: %+v", metrics)
+	}
+	if metrics.SemanticBytes <= FrameHeaderBytes || metrics.SemanticNodes != 3 || metrics.UnknownFrameworkNodes != 1 {
+		t.Fatalf("wrong semantic totals: %+v", metrics)
+	}
+	if metrics.AverageBytesPerFrame == nil || *metrics.AverageBytesPerFrame <= FrameHeaderBytes {
+		t.Fatalf("missing byte average: %+v", metrics)
+	}
+	if metrics.AverageSerializationPerFrame == nil || *metrics.AverageSerializationPerFrame < 0 {
+		t.Fatalf("missing serialization average: %+v", metrics)
+	}
+	if metrics.ProbeEventsPerFrame != nil || metrics.RenderCorrelationRate != nil || metrics.ParentNormalizationPerFrame != nil {
+		t.Fatalf("the client invented unavailable measurements: %+v", metrics)
+	}
+}
+
+func TestPerformanceMetricsStayDormantWithoutDebug(t *testing.T) {
+	client := New("unused", testToken, Options{})
+	metrics := client.PerformanceMetrics()
+	if metrics.Enabled || metrics.AverageBytesPerFrame != nil || metrics.AverageSerializationPerFrame != nil {
+		t.Fatalf("dormant metrics reported observations: %+v", metrics)
 	}
 }
 

@@ -5,18 +5,19 @@ local server and a browser app with a live terminal, a semantic inspector and a
 timeline you can scrub — DevTools for a terminal program, and a recorder that
 turns what you do in it into a test.
 
-Three panes, two data sources:
+One app, four views and three data sources:
 
-| Pane | What it shows |
+| View | What it shows |
 |---|---|
-| Terminal | xterm.js fed by `output` messages, with semantic bounds drawn on top |
-| Inspector | the accessibility tree, hover to highlight, click to generate a selector |
-| Timeline | tests and steps live; a scrubber with marker jumps in post-mortem |
+| Specs | the project tree, history dots, duration, filtering and Run/Stop controls |
+| Runner | one execution rail on the left; terminal, inspector, semantic view, logs and timeline on the right |
+| Runs | retained run manifests and per-test trace replay |
+| Settings | local workspace, replay, motion and source-editor preferences plus sanitized diagnostics |
 
-**Live** mode watches a Vitest run through a reporter. **Post-mortem** mode opens
-a `.twtrace` archive from CI and lets you move through it in time. **Record**
-mode owns the PTY itself: you type in the browser, and the server writes the
-test.
+**Live** mode combines Vitest lifecycle from a reporter with terminal events
+from the worker-side live bridge. **Post-mortem** mode opens a `.twtrace`
+archive from CI and lets you move through it in time. **Record** mode owns the
+PTY itself: you type in the browser, and the server writes the test.
 
 ## Install
 
@@ -57,8 +58,10 @@ import { writeInlineReport } from '@termwright/ui';
 const { bytes, cut } = await writeInlineReport('out/login.twtrace', 'report.html');
 ```
 
-The result is one HTML file — the same viewer, the same panes, the archive
-inlined — that opens over `file://` with nothing to fetch. It replays, scrubs,
+The result is one HTML file — the same viewer, the same panes, the archive and
+imported assets such as the SVG Termwright mark inlined — that opens over
+`file://` with nothing to fetch. The SVG stays a reusable source asset; Vite
+only converts it to inline data in the built viewer. The report replays, scrubs,
 shows the command log and the application log, and hides what it cannot do: no
 run history, no rerun, no live terminal. A fixture recording emits at roughly
 400 KiB.
@@ -72,7 +75,7 @@ in both cases, and `cut` tells the caller how much went.
 ```ts
 import { startUiServer } from '@termwright/ui';
 
-// Watch a run. Point the reporter at the printed URL.
+// Watch a run. Point a producer at the tokenised URL printed below.
 const server = await startUiServer();
 console.log(server.url); // http://127.0.0.1:53219/?token=…
 
@@ -85,7 +88,10 @@ const recorder = await startUiServer({
 });
 ```
 
-The live mode needs the reporter in the test process:
+`termwright ui` injects the UI reporter into the Vitest process it starts, so
+the CLI path needs no `vitest.config.ts` change. A server started directly as a
+library has no process launcher; pass `server.url` to the test process as
+`TERMWRIGHT_UI_URL` and point a reporter at it yourself:
 
 ```ts
 // vitest.config.ts
@@ -98,7 +104,30 @@ export default defineConfig({
 
 It publishes to `process.env.TERMWRIGHT_UI_URL`, which `termwright ui` sets, and
 does nothing at all when that variable is unset — safe to leave configured in a
-repository whose runs are mostly headless.
+repository whose runs are mostly headless. Vitest's `--reporter` option replaces
+configured reporters, so the CLI supplies both `default` and the UI reporter;
+pass any additional reporter explicitly after `--` when the UI-driven run also
+needs it.
+
+`@termwright/test` automatically opens the second producer connection for each
+fixture session. It streams the real PTY output, semantic revisions, actions and
+application logs, then closes the bridge before fixture teardown. A custom
+session owner can use that public Node-only boundary directly:
+
+```ts
+import {connectLiveSession} from '@termwright/ui/live-client';
+
+const live = connectLiveSession(harness, {testId});
+try {
+  // Drive the TerminalHarness normally.
+} finally {
+  await live.close();
+}
+```
+
+No URL means no socket and no listeners. Invalid URLs, connection failure and
+teardown failure are fail-open: losing an observer never changes the test
+result. Events held during the handshake use a bounded queue.
 
 The protocol has exactly one producer generation: every field `§UI events`
 lists is required unless the contract marks it optional, and a message missing
@@ -108,8 +137,10 @@ send complete messages.
 ## The protocol
 
 The socket speaks `§UI events` from [`/CONTRACTS.md`](../../CONTRACTS.md), and
-only that: `run-start`, `test-start`, `step`, `output`, `semantic`, `test-end`,
-`run-end` from the server; `rerun`, `stop`, `pick`, `input` from the browser.
+only that: `tests-discovered`, `run-start`, `session`, `test-start`, `step`,
+`output`, `semantic`, `app-log`, `action-start`, `action`, `test-end`, `run-end`,
+`run-cancelled`, `run-cancel-failed` from the server; `rerun`, `stop`, `pick`,
+`input` from the browser.
 Everything that is state rather than an event — the session list, a moment on a
 trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it
@@ -145,6 +176,12 @@ counters, its tests, and the path of the archive each test left behind. The
 a test replays its archive in place, with the same terminal, command log,
 inspector and timeline as `--trace` gives you.
 
+That replay is pinned to the run and test you chose. A watcher can begin another
+run while you inspect it; the live catalogue keeps updating in the background,
+but the historical title, result, scrubber and terminal stay on that archive
+until you navigate back to live work. Replays are contextual to a browser tab,
+so two tabs can inspect different archives without retargeting each other.
+
 Manifests hold paths, not archives: the traces are already where the fixtures
 wrote them, and copying them would double the size of a CI artifact for nothing.
 A test whose archive was not retained says so rather than offering a replay that
@@ -159,33 +196,67 @@ as it actually waited — minus the idle the writer trimmed at record time. The
 terminal, the command log, the inspector and the log panel all follow the clock;
 the scrubber is still there for jumping.
 
-The **Commands** tab is the command log: every step, driver action and assertion
-the test made, nested under its step, with the selector it used and whether it
-passed. The row currently playing is highlighted and scrolled into view;
-clicking a row moves the replay to that moment, and — when the recorded action
-carried a resolved `ref` — lights up the node it targeted. The arrow keys walk
-action by action.
+The **Commands** tab is the command log. A foldable **Test body** root keeps the
+shape explicit: authored steps nest underneath it and can be folded in turn;
+driver actions and assertions remain in execution order, under their step when
+one owns them. The row currently playing is highlighted and scrolled into view
+until you use the wheel to inspect another part of the evidence. Clicking a row
+moves the replay to that moment and — when the recorded action carried a
+resolved `ref` — lights up the node it targeted. The command pane scrolls on
+both axes, so a long selector or failure is available in full instead of being
+clipped. The arrow keys walk action by action.
+
+During a live run, a driver action appears when it starts, with an active
+progress line, rather than only after its timeout or result. Its correlated
+completion settles that same row with the resolved target or error; it never
+creates a second command that merely looks like a duplicate.
 
 ## The test list
 
-Opening the runner shows **every test the project has**, not only the ones a run
-has reached: the server asks Vitest (`vitest list --json`) at startup and again
-when files change, and the tests it finds appear as *not run yet*. Clicking one
-runs it. When a run reaches a discovered test, the row becomes that test rather
-than a second copy of it — discovery names tests by file and title, the run by
-its own id, and the two are reconciled on the first.
+The **Specs** view shows every test the project has, not only the ones a run has
+reached, provided it belongs to a Termwright test provider. The CLI collects
+Vitest's public test model at startup and again when files change, then keeps
+only cases carrying the versioned declaration marker written by
+`@termwright/test`. The UI-owned runner independently skips unmarked cases, so
+a plain Vitest sibling in the same physical file is neither catalogued nor
+executed by Run all, directory, file or case actions. Ordinary Vitest commands
+remain unchanged. Even a foreign `test.only` cannot suppress marked cases in
+the UI-owned process; outside the UI, Vitest keeps its normal `.only` behavior.
+The marker is an extension point for future providers; it is not a claim that
+another provider ships today. Directories nest, search filters titles and
+paths, and a row that has not run yet says so. Directories and files
+start collapsed; result updates never unfold or refold a branch the user chose.
+Every directory and file shows the same compact passed, failed, running and
+not-run breakdown. Run all and Stop live in the same toolbar.
 
+The **Runner** view uses one execution rail on the left. Its fixed toolbar stays
+above the current run's cases, and the selected case expands its **Test body**,
+steps and commands inline in the same scroll. Status, elapsed time, failures and
+per-test rerun stay with the case; a context bar below keeps the selected source
+and session controls available. The right side holds the terminal and its
+fixed-size cell grid, a `Fit · N%` badge for the uniform visual scale, playback,
+tree, semantic view and logs. Dragging the horizontal split changes how much
+room the terminal gets; it scales the whole grid rather than resizing the
+application.
 
-The bottom pane is the run: every reported test, grouped by file, with its
-status, how long it took, and a `flaky` badge for the ones that only passed on a
-retry. A running test shows the time it has been running — the number you watch
-when a suite hangs. The toolbar carries a substring filter over titles and
-paths, the pass/fail/flaky/skipped counters, and Rerun all / Stop.
+The primary navigation and this execution rail are the first greenfield React
+slices, styled with Tailwind and using Lucide icons. That migration is in
+progress, not a completed renderer rewrite: terminal, playback, inspection and
+the remaining views continue through the established renderer while the new
+slices are validated against the same browser fixtures.
 
-Clicking a test focuses it: its steps and its failure message open underneath,
-and — when the producer reported which session the test drives — the terminal
-switches to that session. Each row has its own rerun button, which sends
-`rerun { testIds: [id] }` and leaves the rest of the suite alone.
+Clicking a test focuses the session it owns. If one current attempt launched
+more than one terminal, a **Screen** selector appears in the command header with
+descriptive framework and grid-size labels. A single session has no redundant
+selector. Starting the next run drops old test-bound sessions and selects the
+new attempt's session automatically; generic/manual sessions remain attached.
+
+While the selected case is running, the playback strip says **LIVE** and shows
+the current screen. If that case finishes with a retained recording while it is
+still selected in Runner, the same panel immediately becomes the replay player
+— title, test row and context stay put; the scrubber replaces the dead live
+surface without waiting for the rest of the suite. A completed case that was
+not selected still offers **Open recording** when you choose it.
 
 ## What the program said
 
@@ -267,10 +338,13 @@ test('approves the command', async ({ terminal }) => {
 
 ## Getting around
 
-The panel is two panes over a terminal, with draggable splits that stay where
-you left them — drag them, or focus one and use the arrow keys. `?` lists the
-keyboard shortcuts: space plays and pauses a replay, the arrows walk actions or
-the semantic tree, and `Enter` hands focus from the tree back to the terminal.
+Runner has two resizable columns and a horizontal split between the terminal
+surface and inspector. Compact viewports stack the columns and let the whole
+terminal/inspector pane scroll instead of hiding its lower controls. Both
+splitters work with a pointer or, while focused, the arrow keys, and remember
+where you left them. `?` lists the keyboard shortcuts: space plays and pauses a
+replay, the arrows walk actions or the semantic tree, and `Enter` hands focus
+from the tree back to the terminal.
 
 The theme button cycles system → dark → light; the terminal itself stays on the
 colours the recorded program used, because those are the program's, not the

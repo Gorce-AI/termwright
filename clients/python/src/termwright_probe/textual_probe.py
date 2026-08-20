@@ -23,8 +23,9 @@ tree assembled from guesses.
 
 from __future__ import annotations
 
+from functools import wraps
 from typing import Any, Callable, List, Optional
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, WeakSet
 
 #: Everything the probe touches on Textual's public surface. Checked once, at
 #: attach time, so a version that moved one of them produces a diagnostic
@@ -40,6 +41,38 @@ _attached_modules: List[int] = []
 #: Frames seen since attach. Only the first is worth a log line — after that
 #: the count is a number the producer reports when the session closes.
 _frames = 0
+
+# A subclass hook commonly calls ``super()``. Both methods are wrapped, but a
+# rendered frame must produce exactly one observation — at the outermost hook,
+# before application code is allowed to mutate state again.
+_hooks_in_progress: "WeakSet[Any]" = WeakSet()
+
+
+def _wrap_hook(owner: Any) -> None:
+    """Wrap an own ``post_display_hook`` once, preserving its exceptions."""
+
+    original = owner.__dict__.get("post_display_hook")
+    if original is None or getattr(original, "__termwright_observed__", False):
+        return
+
+    @wraps(original)
+    def observed(self: Any) -> None:
+        outermost = self not in _hooks_in_progress
+        if outermost:
+            _hooks_in_progress.add(self)
+            # Read the compositor immediately after Textual flushed it. The
+            # application's hook runs afterwards and may legitimately mutate
+            # state for a future frame; observing after it would pair that
+            # future state with the bytes of the previous frame.
+            _notify(self)
+        try:
+            original(self)
+        finally:
+            if outermost:
+                _hooks_in_progress.discard(self)
+
+    observed.__termwright_observed__ = True  # type: ignore[attr-defined]
+    setattr(owner, "post_display_hook", observed)
 
 
 def on_frame(observer: FrameObserver) -> None:
@@ -83,20 +116,30 @@ def attach_to_app_module(module: Any) -> bool:
         )
         return False
 
-    original = app_class.post_display_hook
+    _wrap_hook(app_class)
 
-    def post_display_hook(self: Any) -> None:
-        # The application's own override runs first and unconditionally: the
-        # probe is a guest here, and swallowing the app's hook would be a
-        # behaviour change under instrumentation only.
-        try:
-            original(self)
-        finally:
-            _notify(self)
+    # A normal Textual application overrides the hook on its App subclass. A
+    # base-class monkey patch alone is bypassed by Python's method resolution.
+    # Wrap already-created subclasses and every future subclass, too. This is
+    # installed at import time, but covering both sides removes import-order as
+    # a hidden reliability condition.
+    def descendants(owner: Any):
+        for child in owner.__subclasses__():
+            yield child
+            yield from descendants(child)
 
-    post_display_hook.__doc__ = original.__doc__
-    post_display_hook.__name__ = original.__name__
-    setattr(app_class, "post_display_hook", post_display_hook)
+    for child in descendants(app_class):
+        _wrap_hook(child)
+
+    init_descriptor = app_class.__dict__.get("__init_subclass__")
+    if isinstance(init_descriptor, classmethod):
+        original_init_subclass = init_descriptor.__func__
+
+        def init_subclass(cls: Any, *args: Any, **kwargs: Any) -> None:
+            original_init_subclass(cls, *args, **kwargs)
+            _wrap_hook(cls)
+
+        setattr(app_class, "__init_subclass__", classmethod(init_subclass))
     _attached_modules.append(id(module))
     _log("sem", f"attached to Textual {_textual_version()}")
     _publish_frames()

@@ -1,0 +1,31 @@
+{
+  "name": "@termwright/performance",
+  "version": "0.1.0",
+  "description": "reproducible semantic pipeline benchmarks and machine-readable performance reports",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "benchmark": "node dist/cli.js --pretty",
+    "benchmark:charm": "node dist/charm-e2e.js --pretty",
+    "benchmark:opentui": "node dist/opentui-marker-e2e.js --pretty",
+    "build": "tsup src/index.ts src/cli.ts src/charm-e2e.ts src/opentui-marker-e2e.ts --format esm --dts --sourcemap --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@termwright/driver": "workspace:*",
+    "@termwright/probe-charm": "workspace:*",
+    "@termwright/protocol": "workspace:*",
+    "@termwright/recognizers": "workspace:*"
+  }
+}

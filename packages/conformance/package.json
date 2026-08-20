@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "generic/semantic/adversarial fixtures + adapter contract tests",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/conformance"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -34,6 +39,8 @@
     "@termwright/ink": "workspace:*",
     "@termwright/logs": "workspace:*",
     "@termwright/mcp": "workspace:*",
+    "@termwright/probe-ink": "workspace:*",
+    "@termwright/probe-tview": "workspace:*",
     "@types/react": "^19.2.18",
     "ink": "^7.1.1",
     "react": "^19.2.8"

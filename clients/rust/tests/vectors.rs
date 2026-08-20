@@ -40,6 +40,56 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+#[test]
+fn observation_vectors_preserve_unknown_and_half_open_geometry() {
+    let vectors = vectors("observations");
+    assert_eq!(
+        vectors["statuses"],
+        serde_json::json!(["known", "absent", "unknown", "unsupported"])
+    );
+    assert_eq!(vectors["examples"][2]["status"], "unknown");
+    assert_eq!(vectors["examples"][2]["reason"], "legacy-unqualified");
+    assert_eq!(vectors["halfOpenTouch"]["width"], 0);
+    let ratios: std::collections::HashMap<_, _> = vectors["geometryCases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            (
+                item["name"].as_str().unwrap(),
+                item["expect"]["ratio"].as_f64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(ratios["fully-inside"], 1.0);
+    assert_eq!(ratios["partially-clipped"], 0.25);
+    assert_eq!(ratios["touching-outside-edge"], 0.0);
+    assert!(vectors["frameworks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|row| row["reason"]
+            .as_str()
+            .is_some_and(|reason| !reason.is_empty())));
+    let qualified: termwright_protocol::Snapshot =
+        serde_json::from_value(vectors["qualifiedSnapshot"].clone())
+            .expect("Rust wire types decode the qualified v2 vector");
+    assert_eq!(qualified.v, 2);
+    assert!(qualified.nodes.iter().all(|node| node.geometry.is_some()));
+    assert!(matches!(
+        qualified.hit_grid,
+        Some(termwright_protocol::Observation::Known { .. })
+    ));
+    validate_snapshot(&vectors["qualifiedSnapshot"], &DEFAULT_LIMITS)
+        .expect("qualified v2 vector validates structurally");
+
+    let mut unmapped = vectors["qualifiedSnapshot"].clone();
+    unmapped["hitGrid"]["value"]["regions"][0]["recipientId"] = Value::String("missing".into());
+    let error = validate_snapshot(&unmapped, &DEFAULT_LIMITS)
+        .expect_err("unmapped hit recipient must fail closed");
+    assert_eq!(error.code, "missing-parent");
+}
+
 // -- constants -------------------------------------------------------------
 
 #[test]
@@ -504,10 +554,10 @@ fn the_optional_log_budget_is_understood() {
 
 /// A field added to the protocol must fail here, not in production.
 ///
-/// `frameworkType`, `occlusion`, `p` and `px` each reached the reference and
-/// stayed unknown to this client until something tripped over a rejected
-/// snapshot. The reference now exports its key list; this compares against it,
-/// so the next one is a red test on the day it lands.
+/// Fields have reached the reference and stayed unknown to clients until
+/// something tripped over a rejected snapshot. The reference now exports its
+/// key list; this compares against it, so the next one is a red test on the day
+/// it lands.
 #[test]
 fn node_and_state_keys_are_exactly_the_protocols() {
     use std::collections::BTreeSet;
@@ -558,6 +608,10 @@ fn the_node_struct_can_carry_every_field() {
         height: 1,
     });
     node.state = Some(State::default());
+    node.extended = Some(BTreeMap::from([(
+        "domain".to_owned(),
+        serde_json::json!({ "status": "ready" }),
+    )]));
     node.actions = Some(vec![]);
     node.labelled_by = Some(vec!["a".into()]);
     node.described_by = Some(vec!["b".into()]);
@@ -622,7 +676,7 @@ fn the_state_struct_can_carry_every_field() {
         scroll_offset: Some(0),
         scroll_extent: Some(1),
     };
-    let wire = serde_json::to_value(&state).expect("a state serialises");
+    let wire = serde_json::to_value(state).expect("a state serialises");
     let carried: BTreeSet<&str> = wire
         .as_object()
         .expect("an object")

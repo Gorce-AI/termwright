@@ -15,7 +15,17 @@ import { afterAll, describe, expect } from 'vitest';
 import { collectCrashes, configureTermwright, formatCrashSection, ptyAvailable, test } from './index.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'driver', 'test-fixtures');
-const OUTPUT = mkdtempSync(join(tmpdir(), 'tw-preset-'));
+const RUNNING_IN_UI = process.env['TERMWRIGHT_UI_URL'] !== undefined;
+// A normal test run is disposable. The same suite is also the repository's
+// real `termwright ui` demo, where deleting its traces in `afterAll` leaves a
+// convincing Runs list whose replay buttons all point at nothing. Keep that
+// mode under the already ignored `.termwright/` tree so recordings remain
+// available for playback without ever becoming source-control noise.
+const OUTPUT = RUNNING_IN_UI
+  ? join(process.cwd(), '.termwright', 'demo-preset')
+  : mkdtempSync(join(tmpdir(), 'tw-preset-'));
+const pauseForLiveDemo = (): Promise<void> =>
+  RUNNING_IN_UI ? new Promise((resolve) => setTimeout(resolve, 3_000)) : Promise.resolve();
 
 configureTermwright({
   columns: 60,
@@ -30,7 +40,7 @@ configureTermwright({
 const available = await ptyAvailable();
 
 afterAll(() => {
-  rmSync(OUTPUT, { recursive: true, force: true });
+  if (!RUNNING_IN_UI) rmSync(OUTPUT, { recursive: true, force: true });
 });
 
 describe.skipIf(!available)('the preset against a real PTY', () => {
@@ -50,20 +60,26 @@ describe.skipIf(!available)('the preset against a real PTY', () => {
           - button "Approve" [focused]
           - button "Reject" [!focused]
     `);
-    await expect(app.getByRole('button', { name: 'Approve' })).toBeVisible();
+    // v1 adapter bounds are unqualified, so attachment is the strongest fact
+    // this fixture can honestly assert. `toBeVisible` requires a qualified
+    // viewport observation and must not turn missing clipping into true.
+    await expect(app.getByRole('button', { name: 'Approve' })).toBeAttached();
     await expect(app.getByRole('button', { name: 'Approve' })).toBeFocused();
     await expect(app.getByTestId('reject')).toHaveState({ focused: false });
     await expect(app.getByTestId('approve')).toHaveText('Approve');
+    await pauseForLiveDemo();
 
     await step('move the focus', async () => {
       await app.press('Tab');
       // No wait: the matcher polls until the adapter publishes the new tree.
       await expect(app.getByRole('button', { name: 'Reject' })).toBeFocused();
+      await pauseForLiveDemo();
     });
 
     await step('activate the focused button', async () => {
       await app.getByRole('button', { name: 'Reject' }).activate();
       await expect(app).toHaveText('ACTIVATED reject');
+      await pauseForLiveDemo();
     });
 
     await expect(app).toMatchCellSnapshot();

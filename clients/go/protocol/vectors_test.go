@@ -36,22 +36,71 @@ func decodeJSON(t *testing.T, body []byte) any {
 	return value
 }
 
+func TestObservationVectorsPreserveUnknownAndHalfOpenGeometry(t *testing.T) {
+	var vectors struct {
+		Statuses      []string         `json:"statuses"`
+		Examples      []map[string]any `json:"examples"`
+		HalfOpenTouch struct {
+			Width int `json:"width"`
+		} `json:"halfOpenTouch"`
+		GeometryCases []struct {
+			Name   string `json:"name"`
+			Expect struct {
+				Ratio float64 `json:"ratio"`
+			} `json:"expect"`
+		} `json:"geometryCases"`
+		Frameworks        []struct{ Framework, Reason string } `json:"frameworks"`
+		QualifiedSnapshot json.RawMessage                      `json:"qualifiedSnapshot"`
+	}
+	loadVectors(t, "observations", &vectors)
+	if !reflect.DeepEqual(vectors.Statuses, []string{"known", "absent", "unknown", "unsupported"}) {
+		t.Fatal("observation status drift")
+	}
+	if vectors.Examples[2]["status"] != "unknown" || vectors.Examples[2]["reason"] != "legacy-unqualified" {
+		t.Fatal("unknown was collapsed")
+	}
+	if vectors.HalfOpenTouch.Width != 0 {
+		t.Fatal("touching half-open boxes overlap")
+	}
+	want := map[string]float64{"fully-inside": 1, "partially-clipped": .25, "touching-outside-edge": 0}
+	for _, item := range vectors.GeometryCases {
+		if item.Expect.Ratio != want[item.Name] {
+			t.Fatalf("%s ratio", item.Name)
+		}
+	}
+	for _, row := range vectors.Frameworks {
+		if row.Reason == "" {
+			t.Fatalf("%s has no capability reason", row.Framework)
+		}
+	}
+	if err := ValidateSnapshot(decodeJSON(t, vectors.QualifiedSnapshot), DefaultLimits); err != nil {
+		t.Fatalf("qualified v2 snapshot: %v", err)
+	}
+	qualified := decodeJSON(t, vectors.QualifiedSnapshot).(map[string]any)
+	regions := qualified["hitGrid"].(map[string]any)["value"].(map[string]any)["regions"].([]any)
+	regions[0].(map[string]any)["recipientId"] = "missing"
+	if err := ValidateSnapshot(qualified, DefaultLimits); ValidationCode(err) != "missing-parent" {
+		t.Fatalf("unmapped hit recipient must fail closed: %v", err)
+	}
+}
+
 // -- constants -------------------------------------------------------------
 
 func TestConstantsMatchTheReference(t *testing.T) {
 	var vectors struct {
-		ProtocolID       string   `json:"protocolId"`
-		ProtocolVersion  int      `json:"protocolVersion"`
-		FrameHeaderBytes int      `json:"frameHeaderBytes"`
-		MarkerOSCCode    int      `json:"markerOscCode"`
-		MarkerOSCPrefix  string   `json:"markerOscPrefix"`
-		MarkerMACBytes   int      `json:"markerMacBytes"`
-		Roles            []string `json:"roles"`
-		Actions          []string `json:"actions"`
-		Capabilities     []string `json:"capabilities"`
-		DefaultLimits    Limits   `json:"defaultLimits"`
-		AbsoluteLimits   Limits   `json:"absoluteLimits"`
-		Env              struct {
+		ProtocolID        string   `json:"protocolId"`
+		ProtocolVersion   int      `json:"protocolVersion"`
+		FrameHeaderBytes  int      `json:"frameHeaderBytes"`
+		MarkerOSCCode     int      `json:"markerOscCode"`
+		MarkerOSCPrefix   string   `json:"markerOscPrefix"`
+		MarkerMACBytes    int      `json:"markerMacBytes"`
+		Roles             []string `json:"roles"`
+		Actions           []string `json:"actions"`
+		Capabilities      []string `json:"capabilities"`
+		ProbeCapabilities []string `json:"probeCapabilities"`
+		DefaultLimits     Limits   `json:"defaultLimits"`
+		AbsoluteLimits    Limits   `json:"absoluteLimits"`
+		Env               struct {
 			Endpoint string `json:"endpoint"`
 			Token    string `json:"token"`
 			Protocol string `json:"protocol"`
@@ -90,6 +139,18 @@ func TestConstantsMatchTheReference(t *testing.T) {
 	for _, capability := range vectors.Capabilities {
 		if !ValidCapability(Capability(capability)) {
 			t.Errorf("capability %q is missing from the Go capability set", capability)
+		}
+	}
+	if len(vectors.ProbeCapabilities) != len(probeCapabilitySet) {
+		t.Errorf(
+			"probe capability set has %d entries, vectors have %d",
+			len(probeCapabilitySet),
+			len(vectors.ProbeCapabilities),
+		)
+	}
+	for _, capability := range vectors.ProbeCapabilities {
+		if !ValidProbeCapability(ProbeCapability(capability)) {
+			t.Errorf("probe capability %q is missing from the Go capability set", capability)
 		}
 	}
 }
@@ -584,10 +645,10 @@ func TestClosedSetsStayClosedInBothDirections(t *testing.T) {
 
 // A field added to the protocol must fail here, not in production.
 //
-// frameworkType, occlusion, p and px each reached the reference and stayed
-// unknown to this client until something tripped over a rejected snapshot. The
-// reference now exports its key list; this compares against it, so the next
-// one is a red test on the day it lands.
+// Fields have reached the reference and stayed unknown to clients until
+// something tripped over a rejected snapshot. The reference now exports its
+// key list; this compares against it, so the next one is a red test on the day
+// it lands.
 func TestNodeKeysAreExactlyTheProtocols(t *testing.T) {
 	var vectors struct {
 		NodeKeys  []string `json:"nodeKeys"`

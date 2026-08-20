@@ -62,14 +62,11 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
   useSemantic(filterRef, {
     role: 'textbox',
     name: 'Filter',
-    value: filter,
-    state: { focused: focus === 'filter' },
     testId: 'filter',
   });
   useSemantic(listRef, {
     role: 'list',
     name: 'Todos',
-    state: { focused: focus === 'list', orientation: 'vertical', setSize: visible.length },
     testId: 'todos',
   });
   useSemantic(addRef, {
@@ -77,13 +74,11 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
     name: 'Add',
     // The filter box doubles as the new-todo field, so with nothing typed
     // there is nothing to add and the button says so.
-    state: { focused: focus === 'add', disabled: filter.length === 0 },
     testId: 'add',
   });
   useSemantic(removeRef, {
     role: 'button',
     name: 'Remove',
-    state: { focused: focus === 'remove', disabled: current === undefined },
     testId: 'remove',
   });
 
@@ -221,7 +216,7 @@ function TodoRow({
   useSemantic(ref, {
     role: 'listitem',
     name: todo.text,
-    state: { selected, checked: todo.done, positionInSet: index + 1, setSize: total },
+    extended: { todoId: todo.id },
     testId: `todo-${todo.id}`,
   });
 

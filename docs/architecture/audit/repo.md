@@ -1,5 +1,10 @@
 # Repo audit for the zero-config instrumentation campaign (Phase 0)
 
+> **Historical Phase 0 evidence.** This snapshot intentionally retains the
+> repository layout and APIs that existed before the injected probes shipped.
+> Current setup and support status live in the website adapter guides and
+> compatibility reference; do not use this file as migration guidance.
+
 Scope: what exists today, what it costs, and which constraints Phase 1 has to
 design against. No proposals for the final Probe IR — facts, verdicts and
 limits only.
@@ -70,36 +75,29 @@ as a fact known to be false.
 
 ### 1.3 Adapters — what zero-config has to displace
 
-Today **every** adapter requires source changes. Two levels of them:
+At the start of the audit every adapter required source changes. The Ink and
+OpenTUI rows below now show the zero-config replacement:
 
 | Adapter | Mount-level change | Per-widget change | Tree source |
 |---|---|---|---|
-| Ink | `render` → `semanticRender` (`packages/ink/src/render.tsx:78`) | `useSemantic` / `<Semantic>` / Ink `aria-*` | Ink reconciler DOM via a hidden probe element (`provider.tsx:38`) |
-| OpenTUI | `instrumentRenderer(renderer)` (`opentui/src/instrument.ts:126`) | `describeRenderable` or convention props | Renderer scene graph |
+| Ink | none; launcher injects `@termwright/probe-ink` around ordinary `ink.render` | optional annotation-only `useSemantic` / `<Semantic>`; Ink `aria-*` remains framework-native | retained Ink host tree observed by the injected probe |
+| OpenTUI | none; launcher injects `@termwright/probe-opentui` around ordinary renderer creation | optional annotation-only `describeRenderable` | retained Renderer scene graph observed by the injected probe |
 | Textual (py) | `enable_semantics(app)` (`clients/python/.../textual_adapter.py:405`) | `termwright_role/name/test_id` attrs | Textual DOM via `screen.query("*")` |
 | tview (go) | `Attach(app, root, …)` (`clients/go/termwright/attach.go:178`) | `WithDescriber` / `SetTestID` / `WithChildren` | tview primitive walk |
 
 Three findings that matter for the campaign:
 
-1. **The framework walk is already framework-native and already fact-like.**
-   Each collector derives role/name/bounds/state from the framework's own
-   structures, and each one has the *same* precedence: explicit annotation →
-   framework/convention property → widget-class map → `generic`. That ordering
-   is a hand-rolled, per-adapter version of the provenance ranking the spec
-   asks for. The recognizers exist; what is missing is a shared vocabulary for
-   *where a fact came from* and a merge rule that is not re-implemented four
-   times.
-2. **The publication filter is where information is destroyed.** Ink publishes
-   a node only if it is annotated, carries `internal_accessibility`, or is a
-   non-empty `ink-text` (`collect.ts:134`); OpenTUI only if annotated,
-   class-mapped, focusable, or carrying text (`collect.ts:143`). Unannotated
-   widgets do not become `generic` nodes — **they vanish, and their children
-   reparent to the nearest published ancestor**. This is the concrete thing
-   spec (c) forbids, and it is four separate implementations of the same
-   mistake.
+1. **The framework walk is framework-native and fact-like.** Probes derive
+   physical facts from framework structures and shared recognizers now apply
+   the ordered provenance merge. Developer intent and framework-native
+   accessibility are separate Probe IR fields.
+2. **The publication filter was where information was destroyed.** The
+   zero-config Ink and OpenTUI probes now retain every observed host/Renderable,
+   including unannotated layout objects as `generic` nodes. Regression tests
+   assert that the vanilla fixtures keep the full subtree.
 3. **Marker placement is already correct and already subtle.** Every adapter
-   writes the marker *after* the frame bytes and *after* a drain: Ink waits a
-   macrotask because `onRender` fires before the write (`publisher.ts:156`),
+   writes the marker *after* the frame bytes and *after* a drain: the Ink probe
+   waits a macrotask because `onRender` fires before the write,
    OpenTUI collects synchronously inside the `frame` event because that event
    fires after the write, tview stashes the marker and writes it after
    `Screen.Show()` (`attach.go:294`). Any probe that replaces these adapters

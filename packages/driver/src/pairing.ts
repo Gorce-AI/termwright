@@ -189,6 +189,14 @@ export class RevisionPairing {
   /** Accepts a verified render-commit marker observed at `screenRevision`. */
   offerMarker(revision: number, screenRevision: number): void {
     if (this.#disposed) return;
+    if (!this.#markerEnabled) {
+      this.#options.onDiagnostic(
+        'adapter-capability',
+        `ignoring render marker ${revision}: the adapter did not negotiate render-revisions`,
+        revision,
+      );
+      return;
+    }
     if (revision <= this.revision) {
       this.#options.onDiagnostic(
         'revision-dropped',

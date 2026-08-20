@@ -1,5 +1,10 @@
 # Upstream audit — Bubble Tea, Bubbles, Lip Gloss
 
+> **Historical Phase 0 evidence.** The pinned-source measurements below are
+> retained as design evidence. Any current support or setup guidance is
+> superseded by the website Bubble Tea adapter guide and compatibility
+> reference.
+
 Phase 0 of the zero-config campaign. Where a frame is submitted, what state the
 components hold before that frame flattens them into one string, and whether
 provenance from component to screen region can survive the trip.

@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"runtime"
 	"testing"
+
+	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
 type widget struct{ label string }
@@ -11,7 +13,7 @@ type widget struct{ label string }
 type annotatedModel struct{ state string }
 
 func (m annotatedModel) TermwrightSemantics() Semantics {
-	return Semantics{Role: "dialog", Name: "Confirm", Domain: map[string]string{"state": m.state}}
+	return Semantics{Role: "dialog", Name: "Confirm", Domain: map[string]any{"state": m.state}}
 }
 
 func TestAnAnnotationIsFoundByTheObjectItDescribes(t *testing.T) {
@@ -52,22 +54,74 @@ func TestTheDomainMapIsCopied(t *testing.T) {
 	t.Cleanup(Reset)
 
 	button := &widget{}
-	domain := map[string]string{"sync": "pending"}
+	domain := map[string]any{
+		"sync":    "pending",
+		"rollout": map[string]any{"regions": []string{"eu", "us"}},
+	}
 	Tag(button, Semantics{Name: "row", Domain: domain})
 
 	// The caller keeps using its own map; the annotation must not change.
 	domain["sync"] = "done"
+	domain["rollout"].(map[string]any)["regions"].([]string)[0] = "changed"
 
 	found, _ := Lookup(button)
 	if found.Domain["sync"] != "pending" {
 		t.Fatalf("the stored annotation followed the caller's map: %v", found.Domain)
 	}
+	regions := found.Domain["rollout"].(map[string]any)["regions"].([]any)
+	if regions[0] != "eu" {
+		t.Fatalf("the stored annotation followed a nested container: %v", found.Domain)
+	}
 
 	// And mutating what Lookup returned must not corrupt the registry either.
 	found.Domain["sync"] = "corrupted"
+	found.Domain["rollout"].(map[string]any)["regions"].([]any)[0] = "corrupted"
 	again, _ := Lookup(button)
 	if again.Domain["sync"] != "pending" {
 		t.Fatalf("mutating a lookup result changed the registry: %v", again.Domain)
+	}
+	againRegions := again.Domain["rollout"].(map[string]any)["regions"].([]any)
+	if againRegions[0] != "eu" {
+		t.Fatalf("mutating a nested lookup result changed the registry: %v", again.Domain)
+	}
+}
+
+func TestSemanticCollectionsAreCopied(t *testing.T) {
+	t.Cleanup(Reset)
+
+	button := &widget{}
+	actions := []protocol.Action{protocol.ActionFocus, protocol.ActionActivate}
+	labels := []SemanticKey{"primary-label"}
+	descriptions := []SemanticKey{"help"}
+	Tag(button, Semantics{
+		Key:         "submit",
+		Actions:     actions,
+		LabelledBy:  labels,
+		DescribedBy: descriptions,
+	})
+
+	actions[0] = protocol.ActionScroll
+	labels[0] = "changed"
+	descriptions[0] = "changed"
+
+	found, ok := Lookup(button)
+	if !ok {
+		t.Fatal("the annotation was not found")
+	}
+	if found.Key != "submit" || !reflect.DeepEqual(found.Actions, []protocol.Action{
+		protocol.ActionFocus, protocol.ActionActivate,
+	}) || !reflect.DeepEqual(found.LabelledBy, []SemanticKey{"primary-label"}) ||
+		!reflect.DeepEqual(found.DescribedBy, []SemanticKey{"help"}) {
+		t.Fatalf("stored semantic collections followed their callers: %+v", found)
+	}
+
+	found.Actions[0] = protocol.ActionToggle
+	found.LabelledBy[0] = "corrupted"
+	found.DescribedBy[0] = "corrupted"
+	again, _ := Lookup(button)
+	if again.Actions[0] != protocol.ActionFocus || again.LabelledBy[0] != "primary-label" ||
+		again.DescribedBy[0] != "help" {
+		t.Fatalf("mutating Lookup result changed the registry: %+v", again)
 	}
 }
 
@@ -167,7 +221,9 @@ func TestSemanticsCannotStatePhysicalFacts(t *testing.T) {
 	// exist. If someone adds Bounds or Focused, this fails and they have to
 	// argue for it.
 	fields := map[string]bool{}
-	for _, name := range []string{"Role", "Name", "TestID", "Description", "Domain"} {
+	for _, name := range []string{
+		"Key", "Role", "Name", "TestID", "Description", "Domain", "Actions", "LabelledBy", "DescribedBy",
+	} {
 		fields[name] = true
 	}
 

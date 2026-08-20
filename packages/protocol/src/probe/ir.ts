@@ -94,9 +94,10 @@ export interface ProbeExtent {
  * {@link ProbeObject.unobservable} instead, so a consumer can tell "off" from
  * "unknowable".
  *
- * The two kinds of selection have separate names on purpose. Frameworks use
- * one word for both, and conflating a text range with a highlighted row is the
- * single easiest way to make a matcher assert the wrong thing.
+ * The three selection facts have separate names on purpose. An accessibility
+ * `selected` flag, a highlighted collection index and a selected text range
+ * are not interchangeable, even though frameworks often call all three
+ * "selection".
  */
 export interface ProbeObservedState {
   readonly focused?: boolean;
@@ -104,6 +105,9 @@ export interface ProbeObservedState {
   readonly checked?: boolean | 'mixed';
   readonly expanded?: boolean;
   readonly readonly?: boolean;
+  readonly selected?: boolean;
+  readonly busy?: boolean;
+  readonly multiline?: boolean;
   /**
    * Whether the framework's own display flag is on. Distinct from being
    * scrolled out of view, which shows up as an empty `visibleRect`.
@@ -126,6 +130,9 @@ export const PROBE_UNOBSERVABLE_FIELDS = [
   'checked',
   'expanded',
   'readonly',
+  'selected',
+  'busy',
+  'multiline',
   'displayed',
   'value',
   'selectedIndex',
@@ -150,11 +157,26 @@ export type ProbeUnobservableField = (typeof PROBE_UNOBSERVABLE_FIELDS)[number];
  * recognizer's job, which can then report a bad annotation instead of silently
  * dropping it.
  */
+export interface ProbeAccessibilityHints {
+  /** Framework-native accessibility role, in the framework's vocabulary. */
+  readonly role?: string;
+  readonly name?: string;
+  readonly description?: string;
+}
+
 export interface ProbeAnnotations {
   readonly role?: string;
   readonly name?: string;
   readonly testId?: string;
   readonly description?: string;
+  /** Application-domain JSON state, kept outside the portable state flags. */
+  readonly extended?: import('../tree.js').SemanticExtendedState;
+  /** Descriptive action intent; never callbacks or a second input channel. */
+  readonly actions?: readonly import('../roles.js').SemanticAction[];
+  /** Probe identity values of author-declared labelling relationships. */
+  readonly labelledBy?: readonly string[];
+  /** Probe identity values of author-declared description relationships. */
+  readonly describedBy?: readonly string[];
 }
 
 /**
@@ -176,6 +198,8 @@ export interface ProbeObject {
   readonly state?: ProbeObservedState;
   /** Text the object itself carries, not its descendants'. */
   readonly text?: string;
+  /** Accessibility metadata retained by the framework itself, not author SDK data. */
+  readonly accessibility?: ProbeAccessibilityHints;
   readonly annotations?: ProbeAnnotations;
   /**
    * Where this object sits in paint order: higher was painted later, and

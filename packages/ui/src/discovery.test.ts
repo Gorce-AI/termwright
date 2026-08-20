@@ -1,8 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { discoverTests, discoveredId, parseDiscoveredId, parseListing } from './discovery.js';
+import {
+  defaultDiscoveryCommand,
+  discoverTests,
+  discoveredId,
+  parseDiscoveredId,
+  parseListing,
+} from './discovery.js';
 
 const listing = JSON.stringify([
-  { name: 'the todo app > starts on the list it was seeded with', file: '/repo/tests/app.test.ts' },
+  {
+    name: 'the todo app > starts on the list it was seeded with',
+    file: '/repo/tests/app.feature',
+    provider: { id: '@termwright/test', version: 1 },
+    kind: 'gherkin-outline-example',
+    ancestors: [
+      { kind: 'feature', title: 'the todo app' },
+      { kind: 'rule', title: 'filtering' },
+    ],
+    tags: ['@smoke'],
+    source: { file: '/repo/tests/app.feature', line: 7, column: 3 },
+  },
   { name: 'the todo app > filters the list', file: '/repo/tests/app.test.ts' },
   { name: 'renders the menu', file: '/repo/tests/menu.test.ts' },
 ]);
@@ -10,7 +27,7 @@ const listing = JSON.stringify([
 describe('parseListing', () => {
   it('reads what vitest list prints', () => {
     expect(parseListing(listing).map((test) => [test.title, test.file])).toEqual([
-      ['the todo app > starts on the list it was seeded with', '/repo/tests/app.test.ts'],
+      ['the todo app > starts on the list it was seeded with', '/repo/tests/app.feature'],
       ['the todo app > filters the list', '/repo/tests/app.test.ts'],
       ['renders the menu', '/repo/tests/menu.test.ts'],
     ]);
@@ -18,10 +35,23 @@ describe('parseListing', () => {
 
   it('gives every test an id a runner can act on', () => {
     const [first] = parseListing(listing);
-    expect(first?.id).toBe('/repo/tests/app.test.ts::the todo app > starts on the list it was seeded with');
+    expect(first?.id).toBe('/repo/tests/app.feature::the todo app > starts on the list it was seeded with');
     expect(parseDiscoveredId(first?.id ?? '')).toEqual({
-      file: '/repo/tests/app.test.ts',
+      file: '/repo/tests/app.feature',
       title: 'the todo app > starts on the list it was seeded with',
+    });
+  });
+
+  it('preserves provider-authored hierarchy and physical source without splitting the title', () => {
+    expect(parseListing(listing)[0]).toMatchObject({
+      provider: { id: '@termwright/test', version: 1 },
+      kind: 'gherkin-outline-example',
+      ancestors: [
+        { kind: 'feature', title: 'the todo app' },
+        { kind: 'rule', title: 'filtering' },
+      ],
+      tags: ['@smoke'],
+      source: { file: '/repo/tests/app.feature', line: 7, column: 3 },
     });
   });
 
@@ -65,6 +95,16 @@ describe('parseListing', () => {
 });
 
 describe('discoverTests', () => {
+  it('puts a scoped file before --json so Vitest cannot overwrite the source', () => {
+    expect(defaultDiscoveryCommand(['src/app.test.ts'])).toEqual([
+      'npx',
+      'vitest',
+      'list',
+      'src/app.test.ts',
+      '--json',
+    ]);
+  });
+
   it('lists what the command printed', async () => {
     const tests = await discoverTests({ cwd: '/repo', run: async () => listing });
     expect(tests).toHaveLength(3);

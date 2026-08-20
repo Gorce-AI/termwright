@@ -40,7 +40,13 @@ export {
 
 export { UiHub, type UiClient, type UiHubOptions } from './hub.js';
 
-export { attachSession, type UiSessionSource } from './live.js';
+export {
+  attachSession,
+  streamSession,
+  type UiSessionMessageSink,
+  type UiSessionSource,
+  type UiSessionStreamOptions,
+} from './live.js';
 
 export {
   startUiServer,
@@ -80,8 +86,22 @@ export {
   parseDiscoveredId,
   parseListing,
   type DiscoveredTest,
+  type DiscoveredTestAncestor,
+  type DiscoveredTestKind,
+  type DiscoveredTestSource,
   type DiscoveryOptions,
 } from './discovery.js';
+
+export {
+  hasTermwrightProvider,
+  termwrightProvider,
+  termwrightProviderDeclaration,
+  TERMWRIGHT_PROVIDER_VERSION,
+  type TermwrightProviderMarker,
+  type TermwrightProviderDeclaration,
+  type TermwrightProviderDeclaredMode,
+  type TermwrightProviderTaskMeta,
+} from './provider.js';
 
 export {
   buildCommandLog,
@@ -195,7 +215,9 @@ export {
 
 export {
   TermwrightUiReporter,
+  UI_SELECTION_ENV,
   UI_URL_ENV,
   type UiMessageSink,
   type UiReporterOptions,
+  type UiReporterSelection,
 } from './reporter.js';

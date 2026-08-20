@@ -1,0 +1,40 @@
+/**
+ * `@termwright/gherkin` — physical `.feature` files as native Termwright/Vitest tests.
+ *
+ * The package is deliberately a Vite transform plus inert definition values. It
+ * does not install a second scheduler, create generated test files or change how
+ * ordinary `.test.ts` files are discovered.
+ *
+ * @packageDocumentation
+ */
+
+export {
+  Given,
+  Step,
+  Then,
+  When,
+  defineParameterType,
+  defineSteps,
+  type GherkinContext,
+  type GherkinDefinition,
+  type GherkinDefinitions,
+  type GherkinScenario,
+  type GherkinStepArgument,
+  type GherkinWorld,
+  type ParameterTypeDefinition,
+  type ParameterTypeOptions,
+  type StepDefinition,
+  type StepDefinitionBody,
+  type StepKeyword,
+} from './definitions.js';
+
+export {
+  gherkinPlugin,
+  resolvePairing,
+  transformFeature,
+  type GherkinPluginOptions,
+  type PairedGlue,
+  type PairingInput,
+  type TransformFeatureInput,
+  type TransformFeatureResult,
+} from './plugin.js';

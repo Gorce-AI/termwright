@@ -2,11 +2,13 @@
 /**
  * Protocol lockstep.
  *
- * Four packages implement the same wire protocol and MUST share a version:
+ * Six packages implement or ship the same wire protocol and MUST share a version:
  *
  *   @termwright/protocol     packages/protocol/package.json   (source of truth)
  *   termwright (PyPI)        clients/python/pyproject.toml
  *   termwright-protocol      clients/rust/Cargo.toml (+ Cargo.lock)
+ *   termwright-probe-ratatui clients/rust-probe/Cargo.toml (+ Cargo.lock)
+ *   termwright-ratatui       clients/rust-ratatui/Cargo.toml (+ Cargo.lock)
  *   clients/go               no manifest — the git tag IS the version
  *
  * The npm package is the source of truth because changesets already owns it:
@@ -16,6 +18,12 @@
  *
  * Everything else on npm versions independently. Lockstep is a promise about
  * the protocol, not a release train for the whole monorepo.
+ *
+ * The Changesets fixed group currently moves every `@termwright/*` manifest
+ * with the protocol. The two injected JS probes cannot read package.json after
+ * bundling, so their handshake constants are generated here as part of the
+ * same release-PR step. A stale runtime version therefore fails CI rather than
+ * reaching a published package.
  *
  *   node scripts/sync-protocol-version.mjs           # write
  *   node scripts/sync-protocol-version.mjs --check   # verify, exit 1 on drift
@@ -29,14 +37,28 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const check = process.argv.includes('--check');
 
 const SOURCE = 'packages/protocol/package.json';
+const COMPATIBILITY_REGISTRY = 'compatibility/registry.json';
+const COMPATIBILITY_VERSION_ENTRIES = 12;
 
 /**
- * Each target names the one line it owns. The patterns are anchored to the
- * manifest's first `version =`, which in both TOML files is inside the leading
- * `[package]` / `[project]` table — a dependency's version is never the first
- * match, and `--check` would catch it if that ever stopped being true.
+ * Each target names the one line it owns. Manifest package versions are
+ * anchored to the first `version =`, which is inside the leading `[package]`
+ * or `[project]` table. Dependency and lockfile patterns include their package
+ * name so an unrelated version can never be rewritten by position alone.
  */
 const targets = [
+	{
+		file: 'packages/probe-ink/src/version.ts',
+		pattern: /(?<=export const PACKAGE_VERSION = ')([^']+)(?=';)/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'packages/probe-opentui/src/version.ts',
+		pattern: /(?<=export const PACKAGE_VERSION = ')([^']+)(?=';)/,
+		render: (version) => version,
+		whole: true,
+	},
 	{
 		file: 'clients/python/pyproject.toml',
 		pattern: /^version = "(.+)"$/m,
@@ -51,6 +73,58 @@ const targets = [
 		// Cargo.lock records the workspace member's own version; leaving it
 		// behind makes `cargo publish` fail on a dirty lockfile.
 		file: 'clients/rust/Cargo.lock',
+		pattern: /(?<=name = "termwright-protocol"\nversion = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/rust-probe/Cargo.toml',
+		pattern: /^version = "(.+)"$/m,
+		render: (version) => `version = "${version}"`,
+	},
+	{
+		file: 'clients/rust-probe/Cargo.toml',
+		pattern: /(?<=termwright-protocol = \{ path = "\.\.\/rust", version = ")([^"]+)(?=" \})/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/rust-probe/Cargo.lock',
+		pattern: /(?<=name = "termwright-probe-ratatui"\nversion = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/rust-probe/Cargo.lock',
+		pattern: /(?<=name = "termwright-protocol"\nversion = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/rust-ratatui/Cargo.toml',
+		pattern: /^version = "(.+)"$/m,
+		render: (version) => `version = "${version}"`,
+	},
+	{
+		file: 'clients/rust-ratatui/Cargo.toml',
+		pattern: /(?<=termwright-probe-ratatui = \{ path = "\.\.\/rust-probe", version = ")([^"]+)(?=" \})/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/rust-ratatui/Cargo.lock',
+		pattern: /(?<=name = "termwright-ratatui"\nversion = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/rust-ratatui/Cargo.lock',
+		pattern: /(?<=name = "termwright-probe-ratatui"\nversion = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/rust-ratatui/Cargo.lock',
 		pattern: /(?<=name = "termwright-protocol"\nversion = ")([^"]+)(?=")/,
 		render: (version) => version,
 		whole: true,
@@ -83,6 +157,39 @@ async function main() {
 		const after = before.replace(target.pattern, target.render(version));
 		await writeFile(file, after);
 		console.log(`updated ${target.file}: ${current} -> ${version}`);
+	}
+
+	// The compatibility registry is executable release metadata: its drift
+	// test compares these package versions with npm, Python, Go and Rust
+	// manifests. Changesets cannot update a JSON document outside package.json,
+	// so leaving this out would make every generated Version PR fail its own
+	// release-hygiene gate. Go module versions retain their leading `v`.
+	const registryFile = path.join(root, COMPATIBILITY_REGISTRY);
+	const registryBefore = await readFile(registryFile, 'utf8');
+	const packageVersionPattern = /"packageVersion": "(v?)([^"]+)"/g;
+	const registryVersions = [...registryBefore.matchAll(packageVersionPattern)];
+	if (registryVersions.length !== COMPATIBILITY_VERSION_ENTRIES) {
+		fail(
+			`${COMPATIBILITY_REGISTRY}: expected ${COMPATIBILITY_VERSION_ENTRIES} `
+			+ `Termwright packageVersion entries, found ${registryVersions.length}`,
+		);
+	}
+	const registryDrift = registryVersions.filter((match) => match[2] !== version);
+	for (const match of registryDrift) {
+		drift.push({
+			file: COMPATIBILITY_REGISTRY,
+			current: `${match[1]}${match[2]}`,
+		});
+	}
+	if (!check && registryDrift.length > 0) {
+		const after = registryBefore.replace(
+			packageVersionPattern,
+			(_whole, prefix) => `"packageVersion": "${prefix}${version}"`,
+		);
+		await writeFile(registryFile, after);
+		console.log(
+			`updated ${COMPATIBILITY_REGISTRY}: ${registryDrift.length} package version entries -> ${version}`,
+		);
 	}
 
 	if (drift.length === 0) {

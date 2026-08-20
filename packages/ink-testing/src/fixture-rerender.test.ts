@@ -42,7 +42,7 @@ describe('fixture rerender', () => {
   it('keeps component state across a prop update', async () => {
     const harness = await launch({ label: 'Approve' });
 
-    await harness.getByRole('button', { name: 'Approve' }).click();
+    await harness.press('Enter');
     await harness.waitForText('pressed 1');
 
     await harness.rerender({ label: 'Renamed' });

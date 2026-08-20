@@ -1,86 +1,45 @@
 ---
-title: Why not tmux?
-description: The honest comparison with tmux + capture-pane, expect scripts, and grid-only test tools.
+title: Why test through a real terminal?
+description: Choose between Termwright, tmux scripts, expect, and grid-only terminal testing.
 ---
 
-The everyday competitor to termwright is not another testing framework. It is
-`tmux send-keys` plus `capture-pane`, glued together with `sleep`, and it is
-genuinely the right tool for a one-off script. Here is where it stops being one.
+Use Termwright when a repeatable test needs to own a process, send terminal
+input, wait for rendered state, and retain failure evidence. A small tmux or
+expect script can be a better fit for one-off automation.
 
-## What tmux gives you, and what it costs
+## Compare the approaches
 
-`capture-pane` hands you the visible text of a pane. That is a real capability,
-and four things are missing from it.
+| Need | tmux | expect / pexpect | Grid-only test tool | Termwright |
+| --- | --- | --- | --- | --- |
+| Control an already running session | Yes | No | No | No |
+| Launch an isolated PTY | No | Yes | Yes | Yes |
+| Model a full VT screen | Partial | No | Yes | Yes |
+| Retry assertions against screen state | Manual | Pattern-based | Varies | Yes |
+| Locate by role and name | No | No | No | With an integration |
+| Retain terminal, actions, semantics, and logs | No | No | Varies | Yes |
 
-**There is no event to wait for.** tmux cannot tell you that the program
-finished rendering, so a script waits by sleeping. Sleeps are either too short
-(flaky) or too long (a suite that takes twenty minutes). termwright waits on
-screen revisions, semantic revisions and process events — the render-commit
-marker means "this frame is done" is a fact, not a guess.
+## Use tmux when
 
-**Text is not meaning.** `capture-pane | grep Approve` breaks when the button
-moves, when a border style changes, when the label is padded differently, or
-when the word appears twice. `getByRole('button', {name: 'Approve'})` breaks
-when the button stops being a button. The
-[semantic YAML snapshot](../assertions/) makes that difference reviewable: a
-whitespace change produces no diff at all.
+- the process already runs inside a human session;
+- a short shell script and a fixed delay are sufficient;
+- the goal is interactive session control rather than a repeatable assertion.
 
-**Attributes are lost.** Colours, bold, underline, cursor shape, the alternate
-screen buffer, mouse-encoding modes, bracketed paste — `capture-pane` flattens
-or drops them. termwright models the grid cell by cell, which is what lets a
-test assert "the word ERROR is red" instead of "the word ERROR exists".
+tmux `send-keys` and `capture-pane` do not own application startup, environment,
+terminal profile, or render completion.
 
-**Input is one-directional.** `send-keys` writes bytes; nothing reads back
-whether the application was in a state to receive them. termwright pre-flights
-an action (visible, enabled, in-viewport, mouse tracking actually enabled) and
-refuses with `unsupported-action` rather than sending bytes nobody reads.
+## Use expect when
 
-And when a tmux-driven test fails in CI, what you have is the last screen. What
-termwright leaves you is a [`.twtrace`](../traces/): the whole session as a
-recording with step markers, every input, and a semantic tree per revision —
-plus an HTML report with a visual and semantic diff of the failing step.
+The application is a line-oriented prompt and response program. Expect matches
+the byte stream well, but it does not model a full-screen application that
+repaints existing rows.
 
-## What about expect / pexpect?
+## Use Termwright generic mode when
 
-`expect` is thirty years of well-earned muscle memory and it solves a different
-problem well: line-oriented dialogue with a program that prints prompts. It has
-no concept of a screen, so a full-screen TUI — where the program repaints the
-same rows — is exactly where it stops helping.
+You need a real PTY, terminal cells, keyboard and mouse input, retries, process
+isolation, traces, or reports, but do not need framework semantics.
 
-termwright reads the same stream through a VT emulator, so "what is on row 12
-right now" is answerable. A thin `send` / `expect(pattern)` compatibility shim
-over the driver is planned as a migration path, not as the recommended API.
+## Add a framework integration when
 
-## What about grid-only test tools?
-
-Tools like microsoft/tui-test are real test frameworks with a real pty and a
-real emulator, and everything above about waiting and attributes applies to
-them too. The line that separates them is the semantic tree: they observe the
-grid, which is all a terminal *shows*. termwright additionally lets the
-application publish what it *means*, and no other tool does that today.
-
-That difference is opt-in. Without an adapter, termwright is a grid-only tool
-with good waits and good forensics; with one, locators stop being coordinates.
-
-## When tmux is still the right answer
-
-- You need to observe a program you cannot launch yourself — something already
-  running in someone's session.
-- You are writing a five-line shell script and a `sleep 2` is genuinely fine.
-- You need to *interact* with a live session for a human, not assert on it.
-
-termwright launches the program itself, on purpose: owning the pty is what makes
-input, sizing, environment and recording deterministic. If you cannot own the
-process, this is not the tool.
-
-## The honest summary
-
-| | tmux + capture-pane | expect / pexpect | grid-only test tools | termwright |
-|---|---|---|---|---|
-| Real pty | yes | yes | yes | yes |
-| Full VT model (colors, modes, alt screen) | partial | no | yes | yes |
-| Waits on render events | no | on patterns | yes | yes |
-| Locators by role and name | no | no | no | with an adapter |
-| Snapshots that survive reflow | no | no | no | yes |
-| Recording + failure report | no | no | partial | yes |
-| Works on an already-running session | yes | no | no | no |
+A test should locate widgets by role and accessible name, inspect component
+state, or assert qualified geometry. Integration capabilities differ by
+framework; see the [compatibility matrix](../../reference/compatibility/).

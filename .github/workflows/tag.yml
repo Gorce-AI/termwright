@@ -1,14 +1,14 @@
 name: Tag release
 
-# Step 2 of a release, run after the Version PR is merged. Creates the tags the
-# publish workflows check out, and a DRAFT GitHub Release. Publishes nothing to
-# any registry.
+# Step 2 of a release, run after the Version PR is merged. The unprivileged
+# job verifies the source. Only the approved job receives write credentials,
+# and it runs no project lifecycle/build code with them in scope.
 
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Commit or branch to tag (the merged Version PR commit)'
+        description: 'Commit or protected branch containing the merged Version PR'
         required: true
         default: main
         type: string
@@ -21,15 +21,50 @@ permissions:
   contents: read
 
 jobs:
-  tag:
+  verify:
+    name: verify release source
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # create tags and the draft release
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      version: ${{ steps.source.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require a commit reachable from an allowed release line
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          head_commit=$(git rev-parse HEAD)
+          git fetch --force origin \
+            '+refs/heads/main:refs/remotes/origin/main' \
+            '+refs/heads/release/*:refs/remotes/origin/release/*'
+
+          allowed=false
+          if git merge-base --is-ancestor "$head_commit" refs/remotes/origin/main; then
+            allowed=true
+          fi
+          while IFS= read -r branch; do
+            short=${branch#refs/remotes/origin/}
+            [[ "$short" =~ ^release/[0-9]+\.x$ ]] || continue
+            if git merge-base --is-ancestor "$head_commit" "$branch"; then
+              allowed=true
+              break
+            fi
+          done < <(git for-each-ref --format='%(refname)' refs/remotes/origin/release/)
+
+          if [ "$allowed" != "true" ]; then
+            echo "::error::$head_commit is not reachable from main or an allowlisted release/N.x branch"
+            exit 1
+          fi
+
+          version=$(node -p "JSON.parse(require('node:fs').readFileSync('packages/protocol/package.json', 'utf8')).version")
+          echo "commit=$head_commit" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v4
         with:
@@ -42,7 +77,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Refuse to tag a commit that still has pending changesets
+      - name: Refuse a source that still has pending changesets
         shell: bash
         run: |
           pending=$(find .changeset -name '*.md' ! -name README.md | wc -l | tr -d ' ')
@@ -54,48 +89,79 @@ jobs:
       - name: Verify the protocol lockstep
         run: node scripts/sync-protocol-version.mjs --check
 
-      - name: Configure git
+  tag:
+    name: create coordinated tags
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release-tag
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Create and push the coordinated tag set atomically
+        shell: bash
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          VERIFIED_COMMIT: ${{ needs.verify.outputs.commit }}
         run: |
+          set -euo pipefail
+          head_commit=$(git rev-parse HEAD)
+          if [ "$head_commit" != "$VERIFIED_COMMIT" ]; then
+            echo "::error::approved checkout $head_commit differs from verified $VERIFIED_COMMIT"
+            exit 1
+          fi
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
 
-      # Per-package tags, e.g. @termwright/driver@0.2.0. These are what
-      # `changeset publish` would have created; we create them up front so a
-      # publish workflow can check out an immutable ref.
-      - name: Tag every package
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm changeset tag
+          mapfile -t tags < <(node <<'NODE'
+          const fs = require('node:fs');
+          for (const directory of fs.readdirSync('packages').sort()) {
+            const path = `packages/${directory}/package.json`;
+            if (!fs.existsSync(path)) continue;
+            const manifest = JSON.parse(fs.readFileSync(path, 'utf8'));
+            if (manifest.private !== true) console.log(`${manifest.name}@${manifest.version}`);
+          }
+          NODE
+          )
+          tags+=("protocol/v$VERSION" "clients/go/v$VERSION")
 
-      - name: Tag the protocol and the Go module
-        id: anchors
-        shell: bash
-        run: |
-          version=$(node -p "require('./packages/protocol/package.json').version")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-          # protocol/vX.Y.Z is the anchor every publish workflow is dispatched
-          # against: one ref that names the whole coordinated release.
-          # clients/go/vX.Y.Z is how a Go module in a subdirectory is published
-          # — the path prefix is required, and tagging is the entire release.
-          for tag in "protocol/v$version" "clients/go/v$version"; do
+          for tag in "${tags[@]}"; do
             if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-              echo "::notice::$tag already exists, leaving it alone"
+              tagged_commit=$(git rev-parse "refs/tags/$tag^{commit}")
+              if [ "$tagged_commit" != "$head_commit" ]; then
+                echo "::error::existing tag $tag points to $tagged_commit, expected $head_commit"
+                exit 1
+              fi
             else
               git tag -a "$tag" -m "$tag"
               echo "created $tag"
             fi
           done
 
-      - name: Push the tags
-        run: git push --follow-tags origin --tags
+          refs=()
+          for tag in "${tags[@]}"; do
+            tagged_commit=$(git rev-parse "refs/tags/$tag^{commit}")
+            if [ "$tagged_commit" != "$head_commit" ]; then
+              echo "::error::tag $tag points to $tagged_commit after creation, expected $head_commit"
+              exit 1
+            fi
+            refs+=("refs/tags/$tag:refs/tags/$tag")
+          done
 
-      # Draft, not published: the release notes go live only once every
-      # registry actually has the artifacts (finalize-release.yml).
+          # Either the complete coordinated set moves, or none of it does.
+          # A concurrent conflicting tag makes the atomic push fail closed.
+          git push --atomic origin "${refs[@]}"
+
+      # Draft, not published: release notes go live only after all registry
+      # artifacts have been independently confirmed by finalize-release.yml.
       - name: Create the draft GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.anchors.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         shell: bash
         run: |
           tag="protocol/v$VERSION"
@@ -111,7 +177,7 @@ jobs:
       - name: Summary
         shell: bash
         env:
-          VERSION: ${{ steps.anchors.outputs.version }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           # shellcheck disable=SC2016  # backticks and $ inside single quotes are literal markdown
           {

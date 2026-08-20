@@ -24,6 +24,7 @@ import {
   type TraceLogSummary,
   type TraceExit,
   type TraceMeta,
+  type GherkinStepMetadata,
 } from './types.js';
 
 /**
@@ -76,7 +77,7 @@ export interface TraceWriterOptions {
    * is the part worth keeping. Default 10 000.
    */
   readonly maxLogEntries?: number;
-  /** Injectable clock (milliseconds). Default `Date.now`. */
+  /** Injectable monotonic clock (milliseconds). Default `performance.now`. */
   readonly now?: () => number;
 }
 
@@ -111,7 +112,11 @@ export interface TraceArchive {
 /** Records a live session into a `.twtrace` archive. */
 export interface TraceWriter {
   /** Opens a step; writes a cast marker labelled with `title`. */
-  addStep(title: string): StepHandle;
+  addStep(title: string, metadata?: {
+    /** Stable test-scoped id supplied by an external lifecycle producer. */
+    readonly stepId?: string;
+    readonly gherkin?: GherkinStepMetadata;
+  }): StepHandle;
   /** Closes the innermost open step (or `stepId` when given). */
   endStep(stepId?: string, status?: StepStatus, error?: string): void;
   /** Excludes subsequent output from the recording until {@link show}. */
@@ -180,11 +185,15 @@ export function createTraceWriter(
   session: TraceSource,
   options: TraceWriterOptions,
 ): TraceWriter {
-  const now = options.now ?? (() => Date.now());
+  // Timeline offsets must not jump when NTP or a user adjusts the wall clock.
+  // `startedAt` below remains a real ISO wall time; only elapsed positions use
+  // the monotonic clock, matching the driver's own event timestamps.
+  const now = options.now ?? (() => performance.now());
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
   const maxLogEntries = options.maxLogEntries ?? DEFAULT_MAX_LOG_ENTRIES;
-  const startWall = now();
-  const startedAt = new Date().toISOString();
+  const startClock = now();
+  const wallStartedAt = Date.now();
+  const startedAt = new Date(wallStartedAt).toISOString();
 
   const castEvents: PendingCastEvent[] = [];
   const traceEvents: PendingTraceEvent[] = [];
@@ -216,7 +225,7 @@ export function createTraceWriter(
   let driverBase: { driver: number; local: number } | null = null;
 
   function localTime(): number {
-    return Math.max(0, now() - startWall);
+    return Math.max(0, now() - startClock);
   }
 
   function driverTime(timeMs: number): number {
@@ -353,6 +362,7 @@ export function createTraceWriter(
         ...(event.ref === undefined ? {} : { ref: event.ref }),
         ok: event.ok,
         ...(event.error === undefined ? {} : { error: event.error }),
+        ...(event.observation === undefined ? {} : { observation: event.observation }),
         ...(stepId === undefined ? {} : { stepId }),
       });
     }),
@@ -426,9 +436,10 @@ export function createTraceWriter(
   }
 
   const writer: TraceWriter = {
-    addStep(title: string): StepHandle {
+    addStep(title: string, metadata?: { readonly stepId?: string; readonly gherkin?: GherkinStepMetadata }): StepHandle {
       assertLive();
-      const stepId = `s${++stepCounter}`;
+      const stepId = metadata?.stepId ?? `s${++stepCounter}`;
+      if (stepTitles.has(stepId)) throw new TraceError('protocol-violation', `duplicate trace step id ${stepId}`);
       const parentStepId = openSteps[openSteps.length - 1];
       stepTitles.set(stepId, title);
       openSteps.push(stepId);
@@ -439,6 +450,7 @@ export function createTraceWriter(
         stepId,
         title,
         ...(parentStepId === undefined ? {} : { parentStepId }),
+        ...(metadata?.gherkin === undefined ? {} : { gherkin: metadata.gherkin }),
       });
       pushCast(wall, 'm', title);
       return {
@@ -581,7 +593,7 @@ export function createTraceWriter(
     return {
       version: 3,
       term: { cols: initialColumns, rows: initialRows },
-      timestamp: Math.floor(startWall / 1000),
+      timestamp: Math.floor(wallStartedAt / 1000),
       ...(options.command === undefined ? {} : { command: options.command.join(' ') }),
       ...(options.title === undefined ? {} : { title: options.title }),
       ...(options.env === undefined ? {} : { env: options.env }),

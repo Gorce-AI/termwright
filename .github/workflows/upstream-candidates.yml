@@ -1,0 +1,79 @@
+name: Upstream patch candidates
+
+on:
+  schedule:
+    # A candidate artifact only. This workflow never tags or publishes.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      ecosystem:
+        description: 'Patch-set ecosystem to certify'
+        type: choice
+        options: [all, go, rust]
+        default: all
+
+concurrency:
+  group: upstream-candidates-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    name: deterministic candidate (${{ inputs.ecosystem || 'all' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # Leave uploadable, explicitly non-certified evidence even if a later
+      # setup, install or build step fails before the certifier can start.
+      - name: Initialize failure report
+        run: |
+          node scripts/certify-upstream-patches.mjs \
+            --initialize-only \
+            --ecosystem "${{ inputs.ecosystem || 'all' }}" \
+            --source-revision "$GITHUB_SHA" \
+            --output upstream-candidate
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.4.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: |
+            clients/go/go.sum
+            packages/probe-charm/src/testing/**/go.sum
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+
+      # Fetch the exact crates.io sources before the certifier closes over the
+      # Cargo metadata and lockfile checksums.
+      - name: Resolve the pinned Ratatui crates
+        if: inputs.ecosystem != 'go'
+        run: cargo fetch --locked --manifest-path clients/rust-ratatui/Cargo.toml
+
+      - name: Certify committed patch sets twice and run their existing suites
+        shell: bash
+        run: |
+          node scripts/certify-upstream-patches.mjs \
+            --ecosystem "${{ inputs.ecosystem || 'all' }}" \
+            --source-revision "$GITHUB_SHA" \
+            --output upstream-candidate
+
+      - name: Upload candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-patch-candidate-${{ github.sha }}
+          path: upstream-candidate
+          if-no-files-found: error
+          retention-days: 30

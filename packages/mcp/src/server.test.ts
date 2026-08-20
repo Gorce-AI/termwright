@@ -112,8 +112,9 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(snapshot.data['semanticTree']).toBe('available');
     expect(snapshot.text).toMatch(/^Terminal t1 60x10 revision \d+$/mu);
     expect(snapshot.text).toContain('semanticTree: available');
-    expect(snapshot.text).toMatch(/dialog "Permission" ref=n1@\d+ bounds=\(0,0,40,2\) modal/u);
-    expect(snapshot.text).toMatch(/ {2}button "Approve" ref=n2@\d+ bounds=\(1,2,9,1\) focused/u);
+    expect(snapshot.text).toMatch(/dialog "Permission" ref=n1@\d+ modal/u);
+    expect(snapshot.text).toMatch(/ {2}button "Approve" ref=n2@\d+ focused/u);
+    expect(snapshot.text).not.toContain('bounds=');
     expect(snapshot.text).toContain('visible text:');
 
     const refs = snapshot.data['refs'] as { ref: string; name: string }[];
@@ -176,7 +177,7 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(ambiguous.text).toContain('candidates:');
   });
 
-  it('refuses a ref from a superseded revision with stale-snapshot', async () => {
+  it('re-resolves a stable ref after its original revision was superseded', async () => {
     const { call } = await connectSession();
     const terminal = await launchSemantic(call);
     await call('terminal.wait_for', { terminal, wait: 'text', text: 'Permission required' });
@@ -203,13 +204,9 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
       { timeout: 15_000, interval: 50 },
     );
 
-    const stale = await call('terminal.click', { terminal, ref: approve?.ref });
-    expect(stale.isError).toBe(true);
-    expect(stale.error?.kind).toBe('stale-snapshot');
-    // The driver's own suggestion passes through verbatim; per-kind advice for
-    // agents lives in the server instructions and in SKILL.md.
-    expect(stale.error?.suggestion).toBeDefined();
-    expect(stale.text.startsWith('error stale-snapshot:')).toBe(true);
+    const clicked = await call('terminal.click', { terminal, ref: approve?.ref });
+    expect(clicked.isError, clicked.text).toBe(false);
+    expect(clicked.data['ok']).toBe(true);
   });
 
   it('writes the full dump to disk and returns only refs plus the path', async () => {

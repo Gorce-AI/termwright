@@ -1,31 +1,55 @@
-/**
- * Registry of author annotations, keyed by the renderable they describe.
- *
- * Entries are held weakly: a destroyed renderable is collectable even if the
- * application forgot to unregister it. The registry is created per semantic
- * session, so a dormant process never allocates one.
- */
+import type {
+  OpenTuiRenderable,
+  OpenTuiSemanticAnnotation,
+  StoredOpenTuiAnnotation,
+} from './types.js';
 
-import type { RenderableLike, SemanticMeta } from './types.js';
+/** Duplicated by the injected probe so this SDK remains optional. */
+const REGISTRY = Symbol.for('termwright.annotation.opentui.v1');
+type Scope = typeof globalThis & { [REGISTRY]?: WeakMap<object, StoredOpenTuiAnnotation> };
 
-/** Weak, per-session store of {@link describeRenderable} annotations. */
-export class SemanticRegistry {
-  readonly #entries = new WeakMap<object, SemanticMeta>();
+function registry(): WeakMap<object, StoredOpenTuiAnnotation> {
+  const scope = globalThis as Scope;
+  let current = scope[REGISTRY];
+  if (current !== undefined) return current;
+  current = new WeakMap<object, StoredOpenTuiAnnotation>();
+  Object.defineProperty(scope, REGISTRY, { configurable: true, value: current });
+  return current;
+}
 
-  /**
-   * Record (or replace) the annotation for a renderable.
-   *
-   * @returns a disposer that removes the annotation again.
-   */
-  register(node: RenderableLike, meta: SemanticMeta): () => void {
-    this.#entries.set(node, meta);
+function weakTargets(targets: readonly OpenTuiRenderable[] | undefined): readonly WeakRef<object>[] | undefined {
+  if (targets === undefined || targets.length === 0) return undefined;
+  return Object.freeze(targets.map((target) => new WeakRef<object>(target)));
+}
+
+function freezeAnnotation(meta: OpenTuiSemanticAnnotation): StoredOpenTuiAnnotation {
+  const labelledBy = weakTargets(meta.labelledBy);
+  const describedBy = weakTargets(meta.describedBy);
+  return Object.freeze({
+    ...(meta.role === undefined ? {} : { role: meta.role }),
+    ...(meta.name === undefined ? {} : { name: meta.name }),
+    ...(meta.description === undefined ? {} : { description: meta.description }),
+    ...(meta.testId === undefined ? {} : { testId: meta.testId }),
+    ...(meta.extended === undefined ? {} : { extended: meta.extended }),
+    ...(meta.actions === undefined ? {} : { actions: Object.freeze([...meta.actions]) }),
+    ...(labelledBy === undefined ? {} : { labelledBy }),
+    ...(describedBy === undefined ? {} : { describedBy }),
+  });
+}
+
+/** Store developer intent without taking ownership of the renderer. */
+export function describeRenderable(
+  renderable: OpenTuiRenderable,
+  annotation: OpenTuiSemanticAnnotation,
+): () => void {
+  try {
+    const entries = registry();
+    const stored = freezeAnnotation(annotation);
+    entries.set(renderable, stored);
     return () => {
-      if (this.#entries.get(node) === meta) this.#entries.delete(node);
+      if (entries.get(renderable) === stored) entries.delete(renderable);
     };
-  }
-
-  /** Look up the annotation for a renderable, if any. */
-  get(node: RenderableLike): SemanticMeta | undefined {
-    return this.#entries.get(node);
+  } catch {
+    return () => undefined;
   }
 }

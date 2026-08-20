@@ -1,0 +1,17 @@
+{
+  "name": "@termwright-examples/getting-started",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Executable source for the Getting Started documentation",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node --check app.js",
+    "typecheck": "node --check app.js",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "termwright": "workspace:*",
+    "vitest": "^3.2.0"
+  }
+}

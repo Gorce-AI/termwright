@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RUN_MANIFEST_VERSION, writeRunManifest } from './runs.js';
@@ -10,9 +10,13 @@ import { encodeMessage, parseServerMessage, toBase64, type ClientMessage, type S
 import { startUiServer, type UiServer } from './server.js';
 
 const servers: UiServer[] = [];
+const tempDirectories: string[] = [];
 
 afterEach(async () => {
   for (const server of servers.splice(0)) await server.close();
+  for (const directory of tempDirectories.splice(0)) {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 async function start(options: Parameters<typeof startUiServer>[0] = {}): Promise<UiServer> {
@@ -78,10 +82,33 @@ async function api(server: UiServer, path: string, init?: RequestInit): Promise<
   return fetch(url, init);
 }
 
+async function waitUntil(predicate: () => boolean, label: string): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
 describe('authentication', () => {
   it('rejects HTTP without the token', async () => {
     const server = await start();
     const response = await fetch(new URL('/api/state', server.url));
+    expect(response.status).toBe(401);
+  });
+
+  it('does not accept the static-asset cookie for API control', async () => {
+    const server = await start();
+    const root = await fetch(server.url);
+    const cookie = root.headers.get('set-cookie');
+    expect(cookie).toContain('termwright_token=');
+
+    const response = await fetch(new URL('/api/record/start', server.url), {
+      method: 'POST',
+      headers: { cookie: cookie ?? '' },
+      body: JSON.stringify({ command: ['node', '-e', 'process.stdin.resume()'] }),
+    });
     expect(response.status).toBe(401);
   });
 
@@ -92,6 +119,23 @@ describe('authentication', () => {
     url.pathname = '/ws';
     url.searchParams.delete('token');
     const socket = new WebSocket(url);
+    await expect(
+      new Promise((done, fail) => {
+        socket.once('open', () => done('opened'));
+        socket.once('error', fail);
+      }),
+    ).rejects.toThrow(/401/);
+  });
+
+  it('does not accept the static-asset cookie for a WebSocket upgrade', async () => {
+    const server = await start();
+    const root = await fetch(server.url);
+    const cookie = root.headers.get('set-cookie') ?? '';
+    const url = new URL(server.url);
+    url.protocol = 'ws:';
+    url.pathname = '/ws';
+    url.searchParams.delete('token');
+    const socket = new WebSocket(url, { headers: { cookie } });
     await expect(
       new Promise((done, fail) => {
         socket.once('open', () => done('opened'));
@@ -123,15 +167,14 @@ describe('live mode', () => {
     await viewer.until((messages) => messages.some((m) => m.type === 'semantic'), 'the tree');
     // `session` comes first: the browser sizes its terminal from it.
     expect(viewer.received.map((message) => message.type)).toEqual([
-      'run-start',
       'session',
       'output',
       'semantic',
     ]);
-    const announced = viewer.received[1];
+    const announced = viewer.received[0];
     expect(announced?.type === 'session' && announced.terminalProfile).toBe('default');
     expect(announced?.type === 'session' && announced.columns).toBe(80);
-    const output = viewer.received[2];
+    const output = viewer.received[1];
     expect(output?.type === 'output' && output.dataB64).toBe(
       toBase64(new TextEncoder().encode('Permission required')),
     );
@@ -143,6 +186,7 @@ describe('live mode', () => {
     const producer = await Viewer.connect(server, 'producer');
     const viewer = await Viewer.connect(server);
 
+    producer.send({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
     producer.send({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
     producer.send({
       v: 1,
@@ -184,6 +228,72 @@ describe('live mode', () => {
     viewer.close();
   });
 
+  it('announces cancellation only after the stopped process exits', async () => {
+    let release: (() => void) | undefined;
+    const stopped = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const server = await start({ onStop: () => stopped });
+    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() - 20 });
+    server.hub.publish({
+      v: 1,
+      type: 'test-start',
+      id: 'running',
+      title: 'long test',
+      file: 'long.test.ts',
+      startedAt: Date.now() - 10,
+    });
+    const viewer = await Viewer.connect(server);
+    viewer.send({ v: 1, type: 'stop' });
+    await new Promise((done) => setTimeout(done, 20));
+    expect(viewer.received.some((message) => message.type === 'run-cancelled')).toBe(false);
+    release?.();
+    await viewer.until(
+      (messages) => messages.some((message) => message.type === 'run-cancelled'),
+      'run cancellation',
+    );
+    expect(viewer.received.at(-1)).toMatchObject({ type: 'run-cancelled' });
+    viewer.close();
+  });
+
+  it('reports a failed stop without rejecting the socket handler', async () => {
+    const server = await start({
+      onStop: async () => {
+        throw new Error('child refused to exit');
+      },
+    });
+    const viewer = await Viewer.connect(server);
+    viewer.send({ v: 1, type: 'stop' });
+    await viewer.until(
+      (messages) => messages.some((message) => message.type === 'run-cancel-failed'),
+      'stop failure',
+    );
+    expect(viewer.received.at(-1)).toEqual({
+      v: 1,
+      type: 'run-cancel-failed',
+      error: 'child refused to exit',
+    });
+    viewer.close();
+  });
+
+  it('keeps a long failed-stop error valid on the UI wire', async () => {
+    const server = await start({
+      onStop: async () => {
+        throw new Error('x'.repeat(300));
+      },
+    });
+    const viewer = await Viewer.connect(server);
+    viewer.send({ v: 1, type: 'stop' });
+    await viewer.until(
+      (messages) => messages.some((message) => message.type === 'run-cancel-failed'),
+      'bounded stop failure',
+    );
+    const failure = viewer.received.at(-1);
+    expect(failure).toMatchObject({ v: 1, type: 'run-cancel-failed' });
+    expect(failure?.type === 'run-cancel-failed' ? failure.error : '').toHaveLength(256);
+    viewer.close();
+  });
+
   it('survives a malformed frame without dropping the connection', async () => {
     const server = await start();
     const viewer = await Viewer.connect(server);
@@ -216,7 +326,15 @@ describe('live mode', () => {
 
   it('publishes the project\u2019s tests before anything runs', async () => {
     const listing = JSON.stringify([
-      { name: 'logs in', file: '/repo/tests/auth.test.ts' },
+      {
+        name: 'authentication > logs in',
+        file: '/repo/tests/auth.feature',
+        provider: { id: '@termwright/test', version: 1 },
+        kind: 'gherkin-scenario',
+        ancestors: [{ kind: 'feature', title: 'authentication' }],
+        tags: ['@smoke'],
+        source: { file: '/repo/tests/auth.feature', line: 3, column: 3 },
+      },
       { name: 'renders the menu', file: '/repo/tests/menu.test.ts' },
     ]);
     const server = await start({ discovery: { cwd: '/repo', run: async () => listing } });
@@ -225,12 +343,17 @@ describe('live mode', () => {
     await viewer.until((messages) => messages.some((m) => m.type === 'tests-discovered'), 'the listing');
     const discovered = viewer.received.find((message) => message.type === 'tests-discovered');
     expect(discovered?.type === 'tests-discovered' && discovered.tests.map((test) => test.title)).toEqual([
-      'logs in',
+      'authentication > logs in',
       'renders the menu',
     ]);
-    expect(discovered?.type === 'tests-discovered' && discovered.tests[0]?.id).toBe(
-      '/repo/tests/auth.test.ts::logs in',
-    );
+    expect(discovered?.type === 'tests-discovered' && discovered.tests[0]).toMatchObject({
+      id: '/repo/tests/auth.feature::authentication > logs in',
+      provider: { id: '@termwright/test', version: 1 },
+      kind: 'gherkin-scenario',
+      ancestors: [{ kind: 'feature', title: 'authentication' }],
+      tags: ['@smoke'],
+      source: { file: '/repo/tests/auth.feature', line: 3, column: 3 },
+    });
     viewer.close();
   });
 
@@ -244,8 +367,73 @@ describe('live mode', () => {
       },
     });
     const viewer = await Viewer.connect(server);
-    await viewer.until((messages) => messages.some((m) => m.type === 'run-start'), 'a usable server');
-    expect(viewer.received.some((message) => message.type === 'tests-discovered')).toBe(false);
+    await viewer.until(
+      (messages) => messages.some((message) => message.type === 'tests-discovered'),
+      'the empty listing',
+    );
+    expect(viewer.received.findLast((message) => message.type === 'tests-discovered')).toMatchObject({
+      tests: [],
+    });
+    viewer.close();
+  });
+
+  it('re-lists .feature changes and publishes an empty catalogue after the last case is deleted', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-discovery-feature-'));
+    tempDirectories.push(directory);
+    const feature = join(directory, 'case.feature');
+    await writeFile(feature, 'Feature: initial\n', 'utf8');
+    let listing = JSON.stringify([{ name: 'scenario', file: feature }]);
+    const server = await start({
+      discovery: { cwd: directory, watch: true, run: async () => listing },
+    });
+    const viewer = await Viewer.connect(server);
+    await viewer.until(
+      (messages) => messages.some((message) => message.type === 'tests-discovered'),
+      'the initial feature listing',
+    );
+
+    listing = '[]';
+    await rm(feature);
+    await viewer.until(
+      (messages) => messages.filter((message) => message.type === 'tests-discovered').length >= 2,
+      'the empty feature listing',
+    );
+    expect(viewer.received.findLast((message) => message.type === 'tests-discovered')).toMatchObject({
+      tests: [],
+    });
+    viewer.close();
+  });
+
+  it('does not let a slower stale discovery overwrite a newer feature listing', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-discovery-race-'));
+    tempDirectories.push(directory);
+    let finishFirst: ((listing: string) => void) | undefined;
+    let calls = 0;
+    const first = new Promise<string>((resolve) => {
+      finishFirst = resolve;
+    });
+    const current = JSON.stringify([{ name: 'new', file: join(directory, 'race.feature') }]);
+    const stale = JSON.stringify([{ name: 'stale', file: join(directory, 'race.feature') }]);
+    const server = await start({
+      discovery: {
+        cwd: directory,
+        watch: true,
+        run: async () => (++calls === 1 ? first : current),
+      },
+    });
+    const viewer = await Viewer.connect(server);
+    await waitUntil(() => calls === 1, 'the initial listing to start');
+
+    await writeFile(join(directory, 'race.feature'), 'Feature: current\n', 'utf8');
+    await viewer.until(
+      (messages) => messages.some((message) =>
+        message.type === 'tests-discovered' && message.tests[0]?.title === 'new'),
+      'the newer listing',
+    );
+    finishFirst?.(stale);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(viewer.received.some((message) =>
+      message.type === 'tests-discovered' && message.tests[0]?.title === 'stale')).toBe(false);
     viewer.close();
   });
 
@@ -271,6 +459,16 @@ describe('live mode', () => {
     detach();
     const after = (await (await api(server, '/api/state')).json()) as { sessions: unknown[] };
     expect(after.sessions).toHaveLength(0);
+  });
+
+  it('starts an ordinary live server idle without inventing a run lifecycle', async () => {
+    const server = await start({ onRerun: () => undefined });
+    const viewer = await Viewer.connect(server);
+    expect(server.hub.backlog.some((message) => message.type === 'run-start')).toBe(false);
+    expect(viewer.received.some((message) => message.type === 'run-start')).toBe(false);
+    const state = (await (await api(server, '/api/state')).json()) as { mode: string; canRun: boolean };
+    expect(state).toMatchObject({ mode: 'live', canRun: true });
+    viewer.close();
   });
 });
 
@@ -322,7 +520,7 @@ describe('run history', () => {
     expect((await api(server, '/api/run')).status).toBe(404);
   });
 
-  it('opens an archive on demand, replacing the one being replayed', async () => {
+  it('opens an archive for one client without replacing the server replay', async () => {
     const first = await buildFixtureTrace();
     const second = await buildCrashedFixtureTrace();
     const server = await start({ trace: first });
@@ -336,13 +534,18 @@ describe('run history', () => {
     });
     expect(opened.status).toBe(200);
 
+    const openedBody = (await opened.json()) as { trace: { path: string; crash: unknown } };
+    expect(openedBody.trace.path).toBe(second);
+    expect(openedBody.trace.crash).not.toBeNull();
+
     const after = (await (await api(server, '/api/state')).json()) as {
       trace: { path: string; crash: unknown };
     };
-    expect(after.trace.path).toBe(second);
-    // Everything derived from the archive followed it.
-    expect(after.trace.crash).not.toBeNull();
-    const commands = (await (await api(server, '/api/trace/commands')).json()) as { commands: unknown[] };
+    // The initial --trace remains the server-wide default for another tab.
+    expect(after.trace.path).toBe(first);
+    const commands = (await (
+      await api(server, `/api/trace/commands?archive=${encodeURIComponent(second)}`)
+    ).json()) as { commands: unknown[] };
     expect(Array.isArray(commands.commands)).toBe(true);
   });
 
@@ -434,8 +637,9 @@ describe('post-mortem mode', () => {
       hasMoreBefore: boolean;
       hasMoreAfter: boolean;
     };
-    expect(first.records.map((entry) => entry.message)).toEqual(['listening on 3000']);
-    expect(first.hasMoreAfter).toBe(true);
+    expect(first.records.map((entry) => entry.message)).toEqual(['pool exhausted']);
+    expect(first.hasMoreBefore).toBe(true);
+    expect(first.hasMoreAfter).toBe(false);
 
     const older = (await (await api(server, `/api/trace/logs?before=1050&limit=5`)).json()) as {
       records: { message: string }[];
@@ -462,7 +666,10 @@ describe('post-mortem mode', () => {
       commands: { kind: string; label: string; t: number }[];
       incomplete: boolean;
     };
-    expect(commands.commands.map((row) => [row.kind, row.label])).toEqual([['step', 'approve']]);
+    expect(commands.commands.map((row) => [row.kind, row.label])).toEqual([
+      ['action', 'locator.click'],
+      ['step', 'approve'],
+    ]);
     expect(commands.incomplete).toBe(false);
 
     const frames = (await (await api(server, '/api/trace/frames')).json()) as {
@@ -534,6 +741,205 @@ describe('starting a run from the panel', () => {
       body: JSON.stringify({}),
     });
     expect(response.status).toBe(409);
+  });
+
+  it('atomically refuses a second tab and permits a later run after the first finishes', async () => {
+    let releaseFirst: (() => void) | undefined;
+    const asked: (readonly string[] | undefined)[] = [];
+    const server = await start({
+      onRerun: async (testIds) => {
+        asked.push(testIds);
+        if (asked.length === 1) {
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          });
+        }
+      },
+    });
+
+    const first = api(server, '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['tests/first.test.ts'] }),
+    });
+    await waitUntil(() => releaseFirst !== undefined, 'the first run callback');
+
+    const overlapping = await api(server, '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['tests/second.test.ts'] }),
+    });
+    expect(overlapping.status).toBe(409);
+    expect(asked).toEqual([['tests/first.test.ts']]);
+    const legacy = await Viewer.connect(server);
+    legacy.send({ v: 1, type: 'rerun', testIds: ['tests/socket.test.ts'] });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(asked).toEqual([['tests/first.test.ts']]);
+    legacy.close();
+
+    releaseFirst?.();
+    expect((await first).status).toBe(200);
+    expect(
+      (
+        await api(server, '/api/run', {
+          method: 'POST',
+          body: JSON.stringify({ files: ['tests/later.test.ts'] }),
+        })
+      ).status,
+    ).toBe(200);
+    expect(asked).toEqual([['tests/first.test.ts'], ['tests/later.test.ts']]);
+  });
+
+  it('accepts only exact cases and files from the scoped provider catalogue', async () => {
+    const asked: (readonly string[] | undefined)[] = [];
+    const listing = JSON.stringify([
+      { name: 'suite > allowed', file: '/repo/a.test.ts', provider: { id: '@termwright/test', version: 1 } },
+      { name: 'foreign', file: '/repo/foreign.test.ts' },
+    ]);
+    const server = await start({
+      discovery: { cwd: '/repo', run: async () => listing },
+      onRerun: (testIds) => void asked.push(testIds),
+    });
+    await waitUntil(
+      () => server.hub.backlog.some((message) => message.type === 'tests-discovered'),
+      'the scoped provider catalogue',
+    );
+
+    expect((await api(server, '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['/repo/a.test.ts::suite > allowed'] }),
+    })).status).toBe(200);
+    expect((await api(server, '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['/repo/a.test.ts'] }),
+    })).status).toBe(200);
+    expect((await api(server, '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['/repo/a.test.ts::suite > invented'] }),
+    })).status).toBe(400);
+    expect((await api(server, '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['/repo/foreign.test.ts'] }),
+    })).status).toBe(400);
+    expect((await api(server, '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['/tmp/arbitrary.test.ts'] }),
+    })).status).toBe(400);
+    expect(asked).toEqual([
+      ['/repo/a.test.ts::suite > allowed'],
+      ['/repo/a.test.ts'],
+    ]);
+  });
+
+  it('does not accept targeted runs before scoped discovery has completed', async () => {
+    let releaseDiscovery: ((listing: string) => void) | undefined;
+    const discovery = new Promise<string>((resolve) => { releaseDiscovery = resolve; });
+    const asked: (readonly string[] | undefined)[] = [];
+    const server = await start({
+      discovery: { cwd: '/repo', run: async () => discovery },
+      onRerun: (testIds) => void asked.push(testIds),
+    });
+
+    expect((await api(server, '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['/repo/a.test.ts'] }),
+    })).status).toBe(409);
+    expect(asked).toEqual([]);
+    releaseDiscovery?.(JSON.stringify([
+      { name: 'allowed', file: '/repo/a.test.ts', provider: { id: '@termwright/test', version: 1 } },
+    ]));
+    await waitUntil(
+      () => server.hub.backlog.some((message) => message.type === 'tests-discovered'),
+      'discovery completion',
+    );
+    expect((await api(server, '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({ files: ['/repo/a.test.ts'] }),
+    })).status).toBe(200);
+  });
+
+  it('refuses browser runs while the initial watcher run is live', async () => {
+    const asked: (readonly string[] | undefined)[] = [];
+    const server = await start({ onRerun: (testIds) => void asked.push(testIds) });
+    const producer = await Viewer.connect(server, 'producer');
+    producer.send({ v: 1, type: 'run-start', mode: 'live', startedAt: 123 });
+    await waitUntil(
+      () => {
+        const message = server.hub.backlog.at(0);
+        return message?.type === 'run-start' && message.startedAt === 123;
+      },
+      'the watcher run start',
+    );
+
+    expect((await api(server, '/api/run', { method: 'POST', body: '{}' })).status).toBe(409);
+    expect(asked).toEqual([]);
+
+    producer.send({
+      v: 1,
+      type: 'run-end',
+      summary: { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, durationMs: 1 },
+    });
+    await waitUntil(() => server.hub.backlog.at(-1)?.type === 'run-end', 'the watcher run end');
+    expect((await api(server, '/api/run', { method: 'POST', body: '{}' })).status).toBe(200);
+    expect(asked).toEqual([undefined]);
+    producer.close();
+  });
+
+  it('keeps another producer generation busy when an older producer ends', async () => {
+    const asked: (readonly string[] | undefined)[] = [];
+    const server = await start({ onRerun: (testIds) => void asked.push(testIds) });
+    const older = await Viewer.connect(server, 'producer');
+    const newer = await Viewer.connect(server, 'producer');
+    older.send({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    newer.send({ v: 1, type: 'run-start', mode: 'live', startedAt: 2 });
+    await waitUntil(
+      () => {
+        const message = server.hub.backlog.at(0);
+        return message?.type === 'run-start' && message.startedAt === 2;
+      },
+      'both producer starts',
+    );
+
+    older.send({
+      v: 1,
+      type: 'run-end',
+      summary: { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, durationMs: 1 },
+    });
+    await waitUntil(() => server.hub.backlog.at(-1)?.type === 'run-end', 'the older producer end');
+    expect((await api(server, '/api/run', { method: 'POST', body: '{}' })).status).toBe(409);
+    expect(asked).toEqual([]);
+
+    newer.send({ v: 1, type: 'run-cancelled', stoppedAt: 3 });
+    await waitUntil(
+      () => server.hub.backlog.at(-1)?.type === 'run-cancelled',
+      'the newer producer cancellation',
+    );
+    expect((await api(server, '/api/run', { method: 'POST', body: '{}' })).status).toBe(200);
+    older.close();
+    newer.close();
+  });
+
+  it('refuses a run while Stop is still settling', async () => {
+    let releaseStop: (() => void) | undefined;
+    const asked: (readonly string[] | undefined)[] = [];
+    const server = await start({
+      onRerun: (testIds) => void asked.push(testIds),
+      onStop: () =>
+        new Promise<void>((resolve) => {
+          releaseStop = resolve;
+        }),
+    });
+    const viewer = await Viewer.connect(server);
+    viewer.send({ v: 1, type: 'stop' });
+    await waitUntil(() => releaseStop !== undefined, 'the stop callback');
+
+    expect((await api(server, '/api/run', { method: 'POST', body: '{}' })).status).toBe(409);
+    expect(asked).toEqual([]);
+    releaseStop?.();
+    await viewer.until(
+      (messages) => messages.some((message) => message.type === 'run-cancelled'),
+      'run cancellation',
+    );
+    expect((await api(server, '/api/run', { method: 'POST', body: '{}' })).status).toBe(200);
+    viewer.close();
   });
 });
 

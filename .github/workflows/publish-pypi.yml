@@ -33,7 +33,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: refs/tags/${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Bind the checkout to the exact anchor tag
+        shell: bash
+        env:
+          REF: ${{ inputs.ref }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$REF" in protocol/v*) ;; *) echo "::error::invalid release anchor $REF"; exit 1 ;; esac
+          tag_commit=$(git rev-parse "refs/tags/$REF^{commit}")
+          head_commit=$(git rev-parse HEAD)
+          if [ "$head_commit" != "$tag_commit" ]; then
+            echo "::error::checkout HEAD $head_commit is not tag $REF ($tag_commit)"
+            exit 1
+          fi
+          if [ "$WORKFLOW_REF" != "refs/tags/$REF" ] || [ "$WORKFLOW_SHA" != "$tag_commit" ]; then
+            echo "::error::dispatch this workflow itself on tag $REF so PyPI attestations name the verified source"
+            exit 1
+          fi
 
       - uses: actions/setup-python@v5
         with:
@@ -46,27 +67,22 @@ jobs:
       - name: The tag must agree with the manifests
         id: version
         shell: bash
+        env:
+          REF: ${{ inputs.ref }}
         run: |
+          set -euo pipefail
           version=$(python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('clients/python/pyproject.toml').read_text())['project']['version'])")
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
-          ref='${{ inputs.ref }}'
-          case "$ref" in
-            protocol/v*)
-              tagged="${ref#protocol/v}"
-              if [ "$tagged" != "$version" ]; then
-                echo "::error::tag says $tagged, clients/python/pyproject.toml says $version"
-                exit 1
-              fi
-              ;;
-            *)
-              echo "::warning::$ref is not a protocol/vX.Y.Z anchor; skipping the tag-vs-manifest check"
-              ;;
-          esac
+          expected_ref="protocol/v$version"
+          if [ "$REF" != "$expected_ref" ]; then
+            echo "::error::expected immutable release anchor $expected_ref, got $REF"
+            exit 1
+          fi
 
       # The Python client shares the protocol's version with the npm package,
-      # the crate and the Go module. A drift here means the tag is lying about
-      # what it contains.
+      # all three Rust crates and the Go module. A drift here means the tag is
+      # lying about what it contains.
       - run: node scripts/sync-protocol-version.mjs --check
 
       - name: Is this version already on PyPI?
@@ -92,9 +108,16 @@ jobs:
 
       - name: Test the built package
         working-directory: clients/python
+        shell: bash
         run: |
-          pip install -e ".[dev]"
-          pytest
+          set -euo pipefail
+          test_env="$RUNNER_TEMP/termwright-wheel-test"
+          python -m venv "$test_env"
+          wheel=$(find dist -maxdepth 1 -name 'termwright-*.whl' -print -quit)
+          test -n "$wheel"
+          "$test_env/bin/pip" install "$wheel" pytest pytest-asyncio 'textual>=0.60'
+          "$test_env/bin/python" -c "import termwright; assert '/site-packages/' in termwright.__file__.replace('\\\\', '/')"
+          "$test_env/bin/python" -m pytest
 
       - uses: actions/upload-artifact@v4
         with:
@@ -135,9 +158,15 @@ jobs:
       - name: Summary
         if: always()
         shell: bash
+        env:
+          REF: ${{ inputs.ref }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
+          summary_ref=$(printf '%s' "$REF" | tr '\r\n' '  ')
+          # shellcheck disable=SC2016 # backticks are literal Markdown
           {
-            echo "## PyPI — ${{ inputs.ref }}"
+            echo "## PyPI — $summary_ref"
             echo
-            echo "version: \`${{ needs.verify.outputs.version }}\`  ·  dry run: \`${{ inputs.dry_run }}\`"
+            printf 'version: `%s`  ·  dry run: `%s`\n' "$VERSION" "$DRY_RUN"
           } >> "$GITHUB_STEP_SUMMARY"

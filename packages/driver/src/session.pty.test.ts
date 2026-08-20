@@ -6,7 +6,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ActionEvent, TerminalHarness } from './api.js';
+import type { ActionEvent, ActionStartedEvent, TerminalHarness } from './api.js';
 import { AmbiguousLocatorError, TermwrightError } from './errors.js';
 import { createNodePtyBackend } from './pty.js';
 import { launchTerminal } from './session.js';
@@ -150,10 +150,24 @@ describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout:
     const terminal = await launch('echo-app.mjs');
     await terminal.waitForText('READY');
 
-    await terminal.resize({ columns: 40, rows: 8 });
+    const receipt = await terminal.resize({ columns: 40, rows: 8 });
     const screen = terminal.screen();
     expect(screen.columns).toBe(40);
     expect(screen.rows).toBe(8);
+    expect(receipt.requested).toEqual({ columns: 40, rows: 8 });
+    expect(receipt.after.screenRevision).toBeGreaterThan(receipt.before.screenRevision);
+    expect(receipt.pairedRender).toMatchObject({ status: 'known', value: receipt.after.screenRevision });
+  });
+
+  it('captures locator-scoped cells with an atomic origin and revision', async () => {
+    const terminal = await launch('echo-app.mjs');
+    await terminal.waitForText('READY');
+    const ready = terminal.getByText('READY', { exact: true });
+    const region = await ready.cellSnapshot({ padding: 1 });
+    expect(region.text()).toContain('READY');
+    expect(region.stamp.screenRevision).toBe(terminal.screen().revision);
+    expect(region.origin.row).toBeGreaterThanOrEqual(0);
+    expect(region.origin.column).toBeGreaterThanOrEqual(0);
   });
 
   it('reports a typed timeout with a screen excerpt', async () => {
@@ -374,6 +388,8 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
     await terminal.getByTestId('approve').resolve();
 
     const actions: ActionEvent[] = [];
+    const starts: ActionStartedEvent[] = [];
+    terminal.events.on('action-start', (event) => starts.push(event));
     terminal.events.on('action', (event) => actions.push(event));
 
     await terminal.press('Tab');
@@ -381,11 +397,14 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
     await terminal.resize({ columns: 50, rows: 12 });
 
     expect(actions.map((event) => event.api)).toEqual(['press', 'click', 'resize']);
+    expect(starts.map((event) => event.api)).toEqual(['press', 'click', 'resize']);
+    expect(starts.map((event) => event.actionId)).toEqual(actions.map((event) => event.actionId));
     expect(actions.every((event) => event.ok)).toBe(true);
 
     // A locator action names what it aimed at; a harness action has no target.
     const click = actions[1];
     expect(click?.selector).toContain('getByRole');
+    expect(starts[1]?.selector).toContain('getByRole');
     expect(click?.ref).toMatch(/^n\d+@\d+$/u);
     expect(actions[0]?.selector).toBeUndefined();
     expect(actions[0]?.ref).toBeUndefined();
@@ -419,12 +438,36 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
     await terminal.getByTestId('approve').resolve();
 
     const order: string[] = [];
+    terminal.events.on('action-start', (event) => order.push(`start:${event.api}`));
     terminal.events.on('action', (event) => order.push(`action:${event.api}`));
     terminal.events.on('input', () => order.push('input'));
 
     await terminal.press('Tab');
     // The bytes reach the program first; the event describes what happened.
-    expect(order).toEqual(['input', 'action:press']);
+    expect(order).toEqual(['start:press', 'input', 'action:press']);
+  });
+
+  it('settles an announced action when the session closes concurrently', async () => {
+    const terminal = await launch('echo-app.mjs');
+    await terminal.waitForText('READY');
+
+    const starts: ActionStartedEvent[] = [];
+    const actions: ActionEvent[] = [];
+    terminal.events.on('action-start', (event) => starts.push(event));
+    terminal.events.on('action', (event) => actions.push(event));
+
+    const pending = terminal.getByText('NEVER-ON-THIS-SCREEN').click({ timeout: 5_000 }).catch(() => undefined);
+    expect(starts).toHaveLength(1);
+    await terminal.close();
+    await pending;
+
+    expect(actions).toHaveLength(1);
+    expect(actions[0]).toMatchObject({
+      actionId: starts[0]?.actionId,
+      api: 'click',
+      ok: false,
+      error: 'session-closed',
+    });
   });
 });
 
@@ -587,6 +630,16 @@ describe.skipIf(!ptyAvailable())('the child environment', { timeout: 20_000 }, (
     expect(text).toContain('ENV COLORTERM=truecolor');
   });
 
+  it('uses qualified protocol v2 by default and v1 only when explicitly requested', async () => {
+    const qualified = await launch('env-app.mjs');
+    await qualified.waitForText('ENV DONE');
+    expect(qualified.screen().text()).toContain('ENV TERMWRIGHT_PROTOCOL=termwright/2');
+
+    const compatibility = await launch('env-app.mjs', { semanticProtocol: 'termwright/1' });
+    await compatibility.waitForText('ENV DONE');
+    expect(compatibility.screen().text()).toContain('ENV TERMWRIGHT_PROTOCOL=termwright/1');
+  });
+
   it('always passes explicit env entries, in either mode', async () => {
     const terminal = await launch('env-app.mjs', { env: { TERMWRIGHT_FIXTURE_EXPLICIT: 'yes' } });
     await terminal.waitForText('ENV DONE');
@@ -711,7 +764,7 @@ describe.skipIf(!ptyAvailable())('locatorForRef', { timeout: 20_000 }, () => {
     expect(await locator.textContent()).toBe('Approve');
   });
 
-  it('raises stale-snapshot once the revision it was minted at is gone', async () => {
+  it('re-resolves a stable semantic identity after the revision moves on', async () => {
     const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
     const reject = await terminal.getByTestId('reject').resolve();
 
@@ -720,12 +773,11 @@ describe.skipIf(!ptyAvailable())('locatorForRef', { timeout: 20_000 }, () => {
       .poll(() => terminal.semanticTree()?.revision ?? 0)
       .toBeGreaterThan(reject.revision);
 
-    const error = await terminal
-      .locatorForRef(reject.ref)
-      .resolve()
-      .catch((cause: unknown) => cause as TermwrightError);
-    expect((error as TermwrightError).code).toBe('stale-snapshot');
-    expect((error as TermwrightError).diagnostics.suggestion).toContain('fresh refs');
+    const again = await terminal.locatorForRef(reject.ref).resolve();
+    expect(again.identity).toBe('stable');
+    expect(again.name).toBe('Reject');
+    expect(again.revision).toBeGreaterThan(reject.revision);
+    expect(again.ref).toBe(`${reject.ref.split('@')[0]}@${again.revision}`);
   });
 
   it('round-trips a grid ref and rejects nonsense', async () => {
@@ -878,9 +930,24 @@ describe.skipIf(!ptyAvailable())('a probe-backed session', { timeout: 20_000 }, 
     });
     const approve = await terminal.getByRole('button', { name: 'Approve' }).resolve();
     expect(approve.identity).toBe('stable');
+    expect(terminal.capabilities().probe).toEqual({
+      framework: 'fixture-fw',
+      frameworkVersion: '1.0.0',
+      probeVersion: '0.1.0',
+      identityKind: 'stable',
+      capabilities: ['stable-identity'],
+    });
 
     const again = await terminal.locatorForRef(approve.ref).resolve();
     expect(again.ref).toBe(approve.ref);
+
+    await terminal.press('Tab');
+    await expect
+      .poll(() => terminal.semanticTree()?.revision ?? 0)
+      .toBeGreaterThan(approve.revision);
+    const afterFrame = await terminal.locatorForRef(approve.ref).resolve();
+    expect(afterFrame.name).toBe('Approve');
+    expect(afterFrame.revision).toBeGreaterThan(approve.revision);
   });
 
   it('refuses to re-resolve a ref the framework cannot keep', async () => {
@@ -905,25 +972,50 @@ describe.skipIf(!ptyAvailable())('a probe-backed session', { timeout: 20_000 }, 
   });
 
   it('refuses to click geometry the probe cannot vouch for', async () => {
-    // bounds is the best known *visible* geometry, but "best known" is not
-    // "known": without paint order the rectangle is an intention, and a modal
-    // may own those cells. Clicking anyway lands real input somewhere real and
-    // credits it to this target — a green test that tested nothing.
+    // Geometry can be exact while pointer ownership is still unobservable.
+    // Clicking anyway lands real input somewhere real and credits it to this
+    // target — a green test that tested nothing.
     const terminal = await launch('semantic-app.mjs', {
       semanticNegotiationMs: 5_000,
       env: { ...environment(), TERMWRIGHT_FIXTURE_PROBE: 'stable' },
     });
     const approve = terminal.getByRole('button', { name: 'Approve' });
     expect((await approve.resolve()).occlusion).toBeUndefined();
+    const geometry = await approve.geometry();
+    expect(geometry.coordinateSpace).toMatchObject({ status: 'known', value: 'viewport-cells' });
+    expect(geometry.visibleRect).toMatchObject({ status: 'known' });
+    const hit = await approve.hitTest();
+    expect(hit.point.status).toBe('known');
+    expect(hit.receivesEvents).toMatchObject({ status: 'unsupported', capability: 'pointer-hit-grid' });
+    expect(hit.recipient).toMatchObject({ status: 'unsupported', capability: 'pointer-hit-grid' });
 
     const error = await approve.click().catch((cause: unknown) => cause as TermwrightError);
     expect((error as TermwrightError).code).toBe('unsupported-action');
-    expect((error as TermwrightError).message).toContain('covered');
+    expect((error as TermwrightError).message).toContain('exact pointer ownership');
 
     // The keyboard path is untouched: refusing the pointer is not refusing the
     // widget, and the suggestion says so.
-    expect((error as TermwrightError).diagnostics.suggestion).toContain('press()');
+    expect((error as TermwrightError).diagnostics.suggestion).toContain('keyboard input');
     await terminal.press('Tab');
+  });
+
+  it('never turns relative semantic bounds into physical pointer input', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: {
+        ...environment(),
+        TERMWRIGHT_FIXTURE_PROBE: 'stable',
+        TERMWRIGHT_FIXTURE_RELATIVE_BOUNDS: '1',
+      },
+    });
+    const approve = terminal.getByRole('button', { name: 'Approve' });
+    expect((await approve.geometry()).visibleRect.status).not.toBe('known');
+    expect(terminal.capabilities().capabilities).toContain('bounds');
+    expect(terminal.capabilities().capabilities).not.toContain('absolute-bounds');
+
+    const error = await approve.click().catch((cause: unknown) => cause as TermwrightError);
+    expect((error as TermwrightError).code).toBe('unsupported-action');
+    expect((error as TermwrightError).message).toContain('absolute bounds');
   });
 
   it('keeps an unrecognised widget selectable by its framework type', async () => {
@@ -957,6 +1049,7 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     const capabilities = terminal.capabilities();
     expect(capabilities.semanticTree).toBe(true);
     expect(capabilities.adapter?.name).toBe('fixture');
+    expect(capabilities.probe).toBeUndefined();
     expect(capabilities.capabilities).toContain('render-revisions');
 
     // Resolving waits for the first paired revision, so the tree is published
@@ -1043,6 +1136,22 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     expect(await terminal.getByTestId('reject').semanticState()).toMatchObject({ focused: true });
   });
 
+  it('never treats explicit v1 bounds as proof of pointer ownership', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      semanticProtocol: 'termwright/1',
+    });
+    await terminal.getByTestId('approve').resolve();
+
+    const error = await terminal.getByTestId('approve').click()
+      .then(() => undefined)
+      .catch((cause: unknown) => cause as TermwrightError);
+    expect(error).toBeInstanceOf(TermwrightError);
+    if (error === undefined) throw new Error('v1 pointer action unexpectedly succeeded');
+    expect(error.code).toBe('unsupported-action');
+    expect(error.message).toContain('termwright/1 does not identify which node receives input');
+  });
+
   it('waits for an adapter that misses the negotiation window', async () => {
     // The canonical example shape: wait for text, then act on a role. Under
     // load a child routinely needs longer to boot than the negotiation window,
@@ -1121,7 +1230,11 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     expect(await approve.count()).toBe(1);
     expect(await approve.textContent()).toBe('Approve');
     expect(await approve.semanticState()).toMatchObject({ focused: true });
-    expect(await approve.boundingBox()).toBeNull();
+    const visibility = await approve.visibility();
+    expect(visibility.attached).toMatchObject({ status: 'known', value: true });
+    expect(visibility.viewport).toEqual({ status: 'unknown', reason: 'not-reported' });
+    const geometry = await approve.geometry();
+    expect(geometry.visibleRect).toEqual({ status: 'unknown', reason: 'not-reported' });
 
     const error = await approve.click().catch((cause: unknown) => cause as TermwrightError);
     expect((error as TermwrightError).code).toBe('unsupported-action');

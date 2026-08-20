@@ -108,7 +108,6 @@ async def test_it_publishes_a_valid_tree_for_a_real_app(endpoint):
         session = ProbeSession(app, client)
         session.on_frame()
         await wait_for(lambda: client.connected)
-        session.on_frame()
         await wait_for(
             lambda: any(m.get("type") == "snapshot" for m in driver.received)
         )
@@ -123,14 +122,14 @@ async def test_it_publishes_a_valid_tree_for_a_real_app(endpoint):
 
     roles = {node["role"] for node in snapshot["nodes"]}
     assert {"button", "textbox", "text"} <= roles, roles
-    assert all(node.get("occlusion") == "known" for node in snapshot["nodes"])
+    assert all(node.get("occlusion") == "unknown" for node in snapshot["nodes"])
 
 
-async def test_frames_before_the_handshake_are_counted_not_queued(endpoint):
-    """A dropped frame is a fact worth having; a stale queued one is not.
+async def test_frames_before_the_handshake_are_counted_and_coalesced(endpoint):
+    """A dropped frame is a fact worth having; an event queue is not.
 
-    The next publish carries the current tree, which is newer than anything a
-    queue could have held — so the drop costs nothing but is still counted.
+    Exactly the newest completed frame is retained, so a stationary app gets a
+    tree as soon as the handshake finishes without replaying stale frames.
     """
     driver = FakeDriver(endpoint)
     await driver.start()
@@ -145,6 +144,7 @@ async def test_frames_before_the_handshake_are_counted_not_queued(endpoint):
         session.on_frame()
         assert session.frames_dropped >= 2
         await wait_for(lambda: client.connected)
+        await wait_for(lambda: client.snapshots_sent == 1)
         await pilot.pause()
         await client.close()
 
@@ -303,13 +303,10 @@ async def test_a_dropped_frame_obliges_the_next_tree_to_be_whole(endpoint):
         session = ProbeSession(app, client)
         session.on_frame()
         await wait_for(lambda: client.connected)
-        # The handshake frame itself was a drop, so the obligation is already
-        # outstanding — which is correct, and worth stating.
-        assert client.full_snapshot_required
-
-        session.on_frame()
         await wait_for(lambda: any(m.get("type") == "snapshot" for m in driver.received))
-        assert not client.full_snapshot_required, "the obligation was not honoured"
+        # The coalesced handshake frame was published whole, satisfying the
+        # obligation without waiting for a second render.
+        assert not client.full_snapshot_required, "the handshake obligation was not honoured"
 
         client.closed = True
         session.on_frame()

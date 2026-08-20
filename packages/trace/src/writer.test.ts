@@ -33,6 +33,24 @@ async function readEvents(dir: string): Promise<TraceEvent[]> {
 }
 
 describe('createTraceWriter', () => {
+  it('writes a real Unix start timestamp while elapsed time uses a monotonic clock', async () => {
+    const root = await workspace();
+    const dir = join(root, 'wall-time.twtrace');
+    const session = new FakeSession();
+    const before = Math.floor(Date.now() / 1000);
+    const writer = createTraceWriter(session, { dir, now: session.now });
+
+    session.tick(25);
+    session.output('ready');
+    await writer.finalize();
+
+    const after = Math.floor(Date.now() / 1000);
+    const { header, events } = await readCast(dir);
+    expect(header.timestamp).toBeGreaterThanOrEqual(before);
+    expect(header.timestamp).toBeLessThanOrEqual(after);
+    expect(events[0]?.timeMs).toBe(25);
+  });
+
   it('round-trips a session through the reader', async () => {
     const root = await workspace();
     const dir = join(root, 'login.twtrace');
@@ -123,6 +141,30 @@ describe('createTraceWriter', () => {
     );
     expect(start?.castOffset).toBe(200);
     expect(start).toMatchObject({ parentStepId: 's1' });
+  });
+
+  it('retains a stable authored Gherkin id and physical source', async () => {
+    const root = await workspace();
+    const dir = join(root, 'gherkin-step.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    writer.addStep('Given a terminal is running', {
+      stepId: 'tw-step-1',
+      gherkin: {
+        keyword: 'Given', text: 'a terminal is running',
+        source: { file: '/repo/demo.feature', line: 4, column: 5 },
+      },
+    }).end();
+    await writer.finalize();
+    const trace = await openTrace(dir);
+    try {
+      expect(await trace.steps()).toMatchObject([{
+        stepId: 'tw-step-1',
+        gherkin: { keyword: 'Given', text: 'a terminal is running', source: { line: 4, column: 5 } },
+      }]);
+    } finally {
+      await trace.close();
+    }
   });
 
   it('excludes output produced between hide() and show()', async () => {

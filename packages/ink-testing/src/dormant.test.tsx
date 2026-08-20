@@ -68,7 +68,7 @@ describe('process hygiene', () => {
     expect(first.screen().text()).toContain('First');
     expect(first.screen().text()).not.toContain('Second');
 
-    await second.getByRole('button', { name: 'Second' }).click();
+    await second.press('Enter');
     await second.waitForText('pressed 1');
     expect(first.screen().text()).toContain('pressed 0');
   });

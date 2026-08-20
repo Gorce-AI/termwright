@@ -26,6 +26,12 @@ interface CaseOptions {
   readonly obsolete?: readonly string[];
   readonly crashes?: readonly ReportCrash[];
   readonly error?: string;
+  readonly errors?: readonly string[];
+  readonly attemptFailures?: readonly {
+    readonly attempt: number;
+    readonly errors: readonly { readonly message: string; readonly stack?: string }[];
+    readonly traceRefs?: readonly string[];
+  }[];
 }
 
 function testCase(id: string, fullName: string, options: CaseOptions = {}): Parameters<TermwrightReporter['onTestCaseResult']>[0] {
@@ -35,7 +41,9 @@ function testCase(id: string, fullName: string, options: CaseOptions = {}): Para
     module: { moduleId: '/repo/src/login.test.ts' },
     result: () => ({
       state: options.state ?? 'passed',
-      ...(options.error === undefined ? {} : { errors: [{ message: options.error, stack: 'at x' }] }),
+      ...(options.errors !== undefined
+        ? { errors: options.errors.map((message) => ({ message })) }
+        : options.error === undefined ? {} : { errors: [{ message: options.error, stack: 'at x' }] }),
     }),
     diagnostic: () => ({
       duration: 12,
@@ -43,13 +51,14 @@ function testCase(id: string, fullName: string, options: CaseOptions = {}): Para
       ...(options.flaky === undefined ? {} : { flaky: options.flaky }),
     }),
     meta: () =>
-      options.traces === undefined && options.obsolete === undefined && options.crashes === undefined
+      options.traces === undefined && options.obsolete === undefined && options.crashes === undefined && options.attemptFailures === undefined
         ? {}
         : {
             termwright: {
               ...(options.traces === undefined ? {} : { traces: options.traces }),
               ...(options.obsolete === undefined ? {} : { obsoleteSnapshots: options.obsolete }),
               ...(options.crashes === undefined ? {} : { crashes: options.crashes }),
+              ...(options.attemptFailures === undefined ? {} : { attemptFailures: options.attemptFailures }),
             },
           },
   };
@@ -103,6 +112,35 @@ describe('TermwrightReporter', () => {
       'retried',
       'declared flaky',
     ]);
+  });
+
+  it('keeps ordered native attempt failures and reports the final attempt', async () => {
+    const dir = workspace();
+    const reporter = new TermwrightReporter({ silent: true, outFile: join(dir, 'retry.html') });
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(testCase('1', 'eventually works', {
+      retryCount: 2,
+      // Vitest aggregates prior errors on the final result. They belong to
+      // their captured attempt, not to the passing final attempt.
+      errors: ['aggregated first', 'aggregated second'],
+      attemptFailures: [
+        { attempt: 1, errors: [{ message: 'socket not ready', stack: 'first stack' }], traceRefs: ['retry-1.twtrace'] },
+        { attempt: 2, errors: [{ message: 'prompt missing' }] },
+      ],
+    }));
+
+    expect(reporter.tests[0]?.attempts).toEqual([
+      { attempt: 1, status: 'failed', errors: [{ message: 'socket not ready', stack: 'first stack' }], tracePaths: ['retry-1.twtrace'] },
+      { attempt: 2, status: 'failed', errors: [{ message: 'prompt missing' }] },
+      { attempt: 3, status: 'passed', durationMs: 12, errors: [] },
+    ]);
+    expect(reporter.tests[0]).not.toHaveProperty('error');
+    await reporter.report();
+    const html = readFileSync(join(dir, 'retry.html'), 'utf8');
+    expect(html).toContain('Attempts · 3');
+    expect(html).toContain('Attempt 1');
+    expect(html).toContain('socket not ready');
+    expect(html).toContain('Attempt 3');
   });
 
   it('writes a report for failures and flakes, and nothing when all is well', async () => {

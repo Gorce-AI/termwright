@@ -1,6 +1,6 @@
 ---
-title: Test data and your own fixtures
-description: Declaring the files a program starts with, composing fixtures on top of the preset, and what that looks like coming from Cypress.
+title: Test data and fixtures
+description: Seed files in an isolated working directory and compose reusable Vitest fixtures.
 ---
 
 ## Files the program starts with
@@ -32,10 +32,7 @@ await terminal.launch({
 });
 ```
 
-### There is no shared fixtures directory, on purpose
-
-This is the part worth internalising, because most testing tools work the other
-way and the absence looks like a gap until you see why.
+### Keep test data local to the test
 
 Files are declared by the test that needs them, into a directory only that test
 can see. So no test can depend on what another one left behind, and reading a
@@ -68,13 +65,13 @@ test('saves on ctrl-s', async ({app}) => {
 });
 ```
 
-Three guarantees hold, and the preset pins all three with its own tests:
+Fixture composition preserves these behaviors:
 
 - **The types flow through.** Your fixture's type is visible in the test
   callback, alongside the preset's.
 - **The preset's fixtures stay injectable next to yours** — `{app, terminal,
   step}` all work in the same test.
-- **Teardown runs inside-out**, which is the one that matters in practice: when
+- **Teardown runs inside-out**: when
   your fixture cleans up, the session it built on is still alive. A fixture that
   logs out, snapshots a final state or asserts on a log can still do it.
 
@@ -99,17 +96,14 @@ describe('the wide layout', () => {
 Scopeable: `command`, `columns`, `rows`, `env`, `timeouts`, `trace`,
 `failOnLogLevel`.
 
-### How the three levels merge
+### Configuration precedence
 
 ```
 defineTermwrightConfig()  <  test.scoped({termwrightOptions})  <  terminal.launch({…})
 ```
 
-The merge is **key by key**, and that is the part worth knowing rather than an
-implementation detail. `test.scoped` replaces a fixture's whole value, so if the
-scoped value were taken as-is, scoping only `trace` would silently drop the
-project's viewport, environment and command — and the suite would fail for a
-reason nothing in the test file mentions. So `launch()` does the merging.
+Values merge key by key. Scoping only `trace` keeps the configured viewport,
+environment, and command.
 
 `env` and `timeouts` merge entry by entry too: scoping one variable, or one
 timeout class, keeps the others. `command` is the exception — an argv is
@@ -121,7 +115,7 @@ It is resolved when a session launches. A test that runs two sessions with
 different trace modes keeps the archive of the one that asked for it.
 :::
 
-## Coming from Cypress
+## Migrate Cypress fixtures and commands
 
 | Cypress | Here |
 |---|---|
@@ -129,6 +123,5 @@ different trace modes keeps the archive of the one that asked for it.
 | custom commands (`Cypress.Commands.add`) | a fixture composed with `test.extend` |
 | `beforeEach` that logs in | the same, but as a fixture — it also tears down, and only the tests that ask for it pay for it |
 
-The shape of the change is that setup stops being ambient. A custom command is
-available everywhere and costs every test that loads it; a fixture is requested
-by name, so a test's dependencies are its parameter list.
+Setup is requested by fixture name, so a test's dependencies remain visible in
+its callback parameters.

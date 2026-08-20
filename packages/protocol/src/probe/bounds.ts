@@ -106,7 +106,11 @@ export function resolveNodeBounds(
 
   if (options.clip !== undefined) {
     const { rect, empty } = intersect(geometry.intendedRect, options.clip);
-    return { rect, occlusion, source: 'clipped', clippedAway: empty };
+    // A widget whose intended rectangle was already empty was not made
+    // offscreen by this clip. Conflating the two would claim that scrolling
+    // can reveal a node that never occupied a cell in the first place.
+    const occupiedCells = geometry.intendedRect.width > 0 && geometry.intendedRect.height > 0;
+    return { rect, occlusion, source: 'clipped', clippedAway: empty && occupiedCells };
   }
 
   return {

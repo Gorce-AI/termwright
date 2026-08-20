@@ -81,19 +81,23 @@ export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
  *
  * @returns the archive directory.
  */
-export async function buildFixtureTrace(): Promise<string> {
+export async function buildFixtureTrace(options: { readonly columns?: number; readonly rows?: number } = {}): Promise<string> {
   const dir = join(await mkdtemp(join(tmpdir(), 'termwright-ui-')), 'session.twtrace');
   const session = new Recorded();
+  const columns = options.columns ?? 80;
+  const rows = options.rows ?? 24;
   const writer = createTraceWriter(session, {
     dir,
     command: ['node', 'agent.js'],
-    columns: 80,
-    rows: 24,
+    columns,
+    rows,
     now: session.now,
   });
 
   session.emit('output', { data: new TextEncoder().encode('Permission required\r\n'), timeMs: 0 });
-  session.publish(FIXTURE_TREES[0] as SemanticSnapshot);
+  session.publish({ ...(FIXTURE_TREES[0] as SemanticSnapshot), columns, rows });
+  session.clock = 100;
+  writer.recordAction({ api: 'locator.click', selector: 'button', ref: 'b1@1', ok: true });
 
   session.emit('app-log', {
     source: 'file',
@@ -119,7 +123,7 @@ export async function buildFixtureTrace(): Promise<string> {
   });
 
   session.clock = 1_500;
-  session.publish(FIXTURE_TREES[1] as SemanticSnapshot);
+  session.publish({ ...(FIXTURE_TREES[1] as SemanticSnapshot), columns, rows });
   step.end('passed');
 
   session.clock = 2_000;

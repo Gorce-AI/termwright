@@ -12,6 +12,22 @@ Everything here **fails closed**: untrusted input is rejected with a typed
 `ProtocolViolation` or a structured `{ ok: false, code, detail }` result, never
 partially accepted.
 
+## Versioned geometry contract
+
+`termwright/1` remains a strict compatibility protocol: `bounds` and
+`occlusion` keep their historical meaning and are never silently upgraded.
+`termwright/2` requires `qualified-observations` and snapshot `v: 2`. Each node
+then reports independent `displayed`, `intendedRect` and `visibleRect`
+observations; the snapshot reports its coordinate space and an explicit
+pointer hit-grid observation. A known grid is accepted only after negotiating
+`pointer-hit-grid`. Its regions are canonical, non-overlapping row-major runs
+with positive width and `height: 1`, permitting unambiguous lookup and linear
+validation.
+
+The driver accepts either major and echoes it in `hello-ack`; snapshot majors
+must match the handshake. V2 is full-snapshot-only, so v1 delta semantics are
+never projected onto qualified facts.
+
 ## Install
 
 ```sh
@@ -62,7 +78,10 @@ const marker = verifyMarkerPayload(payload, token, sessionId);
 | `env` | Env var names, `PROTOCOL_VERSION`, `PROTOCOL_ID` |
 | `roles` | Closed `SEMANTIC_ROLES` / `SEMANTIC_ACTIONS` sets |
 | `limits` | `DEFAULT_LIMITS`, `ABSOLUTE_LIMITS`, `ProtocolLimits` |
-| `tree` | `SemanticSnapshot`, `SemanticNode`, `Rect`, `SemanticState` |
+| `tree` | `SemanticSnapshot`, `SemanticNode`, `Rect`, portable `SemanticState`, application `SemanticExtendedState` |
+| `node-keys` | closed semantic-node key set shared by cross-language validators |
+| `probe` | Probe IR, `ProbeInfo`, identity/capability/provenance vocabularies, bounds resolution and validation |
+| `logs` | bounded structured application-log records and validation |
 | `messages` | Message interfaces plus `parseAdapterMessage` / `parseDriverMessage` |
 | `framing` | `createFrameDecoder`, `encodeFrame`, `projectDto` |
 | `marker` | `encodeMarker`, `verifyMarkerPayload` |
@@ -70,6 +89,11 @@ const marker = verifyMarkerPayload(payload, token, sessionId);
 | `delta` | `TreeDelta`, `validateTreeDelta`, `applyTreeDelta` |
 | `accesskit` | `toAccessKitTreeUpdate`, `accessKitNodeId`, role table |
 | `errors` | `ProtocolViolation`, `ProtocolViolationCode` |
+
+`SemanticNode.state` is a closed, cross-framework vocabulary. Application
+facts that are meaningful but not portable belong under `SemanticNode.extended`
+as bounded JSON data; keeping the namespaces separate prevents a framework or
+annotation from silently inventing a portable state flag.
 
 ## Integrating the marker with a VT parser
 
@@ -453,16 +477,15 @@ of these did you mean" onto every consumer of the tree instead of answering it
 once. `resolveNodeBounds` implements the rule, so the five client
 implementations share one collapse rather than five.
 
-What `bounds` cannot say is whether something was painted on top of it. That is
-`occlusion`, and it is `'known'` only when the probe reports paint order —
-three of the six frameworks do. **Absent means `'unknown'`**: the conservative
-value is the default, so knowledge must be claimed rather than assumed.
+What `bounds` cannot say is whether something was painted on top of it. Legacy
+v1 `occlusion: 'known'` says only that the probe reported paint order — it does
+not name the topmost input recipient. **Absent means `'unknown'`**.
 
-A consumer performing pointer actions should refuse on `'unknown'` rather than
-click and hope. The input lands somewhere real, and if it lands on another
-widget the result is attributed to the intended target — a silent false green,
-which is worse than a refusal. This is a transitional state, not a permanent
-one: it lifts per framework as paint order becomes available.
+A consumer performing pointer actions must require a qualified hit test naming
+the recipient, rather than click and hope. The input lands somewhere real, and
+if it lands on another widget the result is attributed to the intended target
+— a silent false green, which is worse than a refusal. Paint order alone never
+lifts that requirement.
 
 ### Scrolled away is not the same as never displayed
 
@@ -532,11 +555,11 @@ snapshot is deleted rather than left to rot: a stale list in a normative
 document is worse than no list, because it is read as current. That applies to
 counts and claims here too — this paragraph deliberately names no totals.
 
-The live source of truth is each tree-publishing adapter's own `## Deviations`
-section: `@termwright/ink`, `@termwright/opentui`, and the Python and Go
-clients. Conformance reads those sections rather than a registration in the
-suite, because two copies of the same fact drift and the README is the copy a
-user reads. `pnpm conformance --deviations` prints the current listing.
+The live source of truth is the compatibility registry plus each
+tree-publishing probe/client's limitations. `@termwright/ink` and
+`@termwright/opentui` contribute optional author intent but do not publish a
+tree themselves. Keeping one generated registry prevents two copies of a fact
+from drifting.
 
 ## Protocol evolution
 

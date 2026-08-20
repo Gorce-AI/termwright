@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "description": "shared machinery for Go probes: ephemeral workspaces, copy cache, checksummed patch sets",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/probe-go"
+  },
   "type": "module",
   "engines": { "node": ">=22" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   }

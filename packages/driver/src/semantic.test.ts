@@ -34,7 +34,7 @@ afterEach(async () => {
   }
 });
 
-async function createChannel(accepting = true): Promise<Harness> {
+async function createChannel(accepting = true, acceptDeltas = true): Promise<Harness> {
   const snapshots: SemanticSnapshot[] = [];
   const records: LogRecord[] = [];
   const attachments: SemanticAttachment[] = [];
@@ -49,7 +49,7 @@ async function createChannel(accepting = true): Promise<Harness> {
     limits: DEFAULT_LIMITS,
     acceptHello: () => accepting,
     logBudget: { maxRecordsPerSecond: 200, burst: 500 },
-    acceptDeltas: true,
+    acceptDeltas,
     hooks: {
       onSnapshot: (snapshot) => snapshots.push(snapshot),
       onLogRecord: (record) => records.push(record),
@@ -214,6 +214,35 @@ describe('the probe lifecycle', () => {
 });
 
 describe('SemanticChannel', () => {
+  it('negotiates termwright/2 and accepts only qualified v2 snapshots', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+    client.send(hello({
+      protocol: 'termwright/2',
+      capabilities: ['tree', 'states', 'render-revisions', 'qualified-observations'],
+    }));
+    expect(await client.next()).toMatchObject({ type: 'hello-ack', protocol: 'termwright/2', subscribe: 'snapshots' });
+    expect(harness.attachments[0]?.protocol).toBe('termwright/2');
+    client.send({
+      type: 'snapshot',
+      snapshot: snapshot({
+        v: 2,
+        nodes: [{
+          id: 'n1', role: 'application', name: 'app',
+          geometry: {
+            displayed: { status: 'known', value: true, evidence: 'probe' },
+            intendedRect: { status: 'known', value: { row: 0, column: 0, width: 80, height: 24 }, evidence: 'probe' },
+            visibleRect: { status: 'known', value: { row: 0, column: 0, width: 80, height: 24 }, evidence: 'viewport-clip' },
+          },
+        }],
+        coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+        hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+      }),
+    });
+    await expect.poll(() => harness.snapshots.length).toBe(1);
+    expect(harness.snapshots[0]?.v).toBe(2);
+  });
+
   it('completes the handshake and accepts snapshots', async () => {
     const harness = await createChannel();
     const client = await connectClient(harness.channel);
@@ -230,6 +259,140 @@ describe('SemanticChannel', () => {
     await expect.poll(() => harness.snapshots.length).toBe(1);
     expect(harness.snapshots[0]?.revision).toBe(1);
     expect(Object.isFrozen(harness.snapshots[0])).toBe(true);
+  });
+
+  it.each([
+    {
+      fact: 'tree',
+      capabilities: ['states'],
+      node: { id: 'n1', role: 'application', name: 'app' },
+    },
+    {
+      fact: 'bounds',
+      capabilities: ['tree', 'absolute-bounds'],
+      node: {
+        id: 'n1',
+        role: 'application',
+        name: 'app',
+        bounds: { row: 0, column: 0, width: 1, height: 1 },
+      },
+    },
+    {
+      fact: 'states',
+      capabilities: ['tree'],
+      node: { id: 'n1', role: 'application', name: 'app', state: { focused: true } },
+    },
+    {
+      fact: 'extended state',
+      capabilities: ['tree'],
+      node: { id: 'n1', role: 'application', name: 'app', extended: { page: 2 } },
+    },
+    {
+      fact: 'actions',
+      capabilities: ['tree'],
+      node: { id: 'n1', role: 'application', name: 'app', actions: ['activate'] },
+    },
+    {
+      fact: 'text-ranges',
+      capabilities: ['tree'],
+      node: {
+        id: 'n1',
+        role: 'application',
+        name: 'app',
+        textRanges: [
+          { startOffset: 0, endOffset: 1, rect: { row: 0, column: 0, width: 1, height: 1 } },
+        ],
+      },
+    },
+  ])('rejects $fact fields that Hello did not authorize', async ({ capabilities, node }) => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+    client.send(hello({ capabilities }));
+    await client.next();
+
+    client.send({ type: 'snapshot', snapshot: snapshot({ nodes: [node] }) });
+    const error = await client.next();
+    expect(error['code']).toBe('malformed');
+    await client.closed;
+    expect(harness.snapshots).toHaveLength(0);
+  });
+
+  it('rejects tree deltas when the driver negotiated full snapshots', async () => {
+    const harness = await createChannel(true, false);
+    const client = await connectClient(harness.channel);
+    client.send(hello({ capabilities: ['tree', 'tree-diffs'] }));
+    const ack = await client.next();
+    expect(ack['subscribe']).toBe('snapshots');
+
+    client.send({ type: 'snapshot', snapshot: snapshot() });
+    await expect.poll(() => harness.snapshots.length).toBe(1);
+    client.send({
+      type: 'tree-delta',
+      baseRevision: 1,
+      revision: 2,
+      changed: [],
+      removed: [],
+    });
+
+    const error = await client.next();
+    expect(error['code']).toBe('malformed');
+    await client.closed;
+    expect(harness.snapshots).toHaveLength(1);
+  });
+
+  it('applies the same capability gate to changed delta nodes', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+    client.send(hello({ capabilities: ['tree', 'tree-diffs'] }));
+    expect((await client.next())['subscribe']).toBe('diffs');
+    client.send({ type: 'snapshot', snapshot: snapshot() });
+    await expect.poll(() => harness.snapshots.length).toBe(1);
+
+    client.send({
+      type: 'tree-delta',
+      baseRevision: 1,
+      revision: 2,
+      changed: [
+        { id: 'n1', role: 'application', name: 'app', state: { focused: true } },
+      ],
+      removed: [],
+    });
+    expect((await client.next())['code']).toBe('malformed');
+    await client.closed;
+    expect(harness.snapshots).toHaveLength(1);
+  });
+
+  it('applies the same capability gate to a get-tree resync response', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+    client.send(hello({ capabilities: ['tree', 'tree-diffs'] }));
+    await client.next();
+    client.send({ type: 'snapshot', snapshot: snapshot() });
+    await expect.poll(() => harness.snapshots.length).toBe(1);
+
+    client.send({
+      type: 'tree-delta',
+      baseRevision: 99,
+      revision: 100,
+      changed: [],
+      removed: [],
+    });
+    const request = await client.next();
+    expect(request['type']).toBe('get-tree');
+    client.send({
+      type: 'get-tree-result',
+      requestId: request['requestId'],
+      snapshot: snapshot({
+        revision: 2,
+        nodes: [
+          { id: 'n1', role: 'application', name: 'app', actions: ['activate'] },
+        ],
+      }),
+    });
+
+    expect((await client.next())['code']).toBe('malformed');
+    await client.closed;
+    expect(harness.snapshots).toHaveLength(1);
   });
 
   it('disables markers when the adapter cannot commit renders', async () => {

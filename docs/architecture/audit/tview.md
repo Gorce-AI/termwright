@@ -1,5 +1,9 @@
 # Upstream audit — tview
 
+> **Historical Phase 0 evidence.** The pinned-source measurements below are
+> retained as design evidence. Any current support or setup guidance is
+> superseded by the website tview adapter guide and compatibility reference.
+
 Phase 0 of the zero-config campaign. What tview offers as a place to hook, what
 state it holds where, and how a build-time replacement reaches it.
 

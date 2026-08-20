@@ -104,6 +104,7 @@ fn start_fake_driver(path: &str) -> (Receiver<Value>, Sender<Value>) {
 fn start_fake_driver_with_subscribe(
     path: &str,
     subscribe: &str,
+    limits: termwright_protocol::Limits,
 ) -> (Receiver<Value>, Sender<Value>) {
     let listener = UnixListener::bind(path).expect("binding the driver socket");
     let (sender, receiver) = channel();
@@ -147,7 +148,7 @@ fn start_fake_driver_with_subscribe(
                                     "type": "hello-ack",
                                     "protocol": "termwright/1",
                                     "sessionId": SESSION,
-                                    "limits": DEFAULT_LIMITS,
+                                    "limits": limits,
                                     "subscribe": subscribe,
                                     "marker": { "enabled": true },
                                 }),
@@ -218,6 +219,16 @@ fn no_client_without_a_complete_environment() {
         Some("termwright/1"),
         Options::new("rust-test", "0.1.0"),
     );
+    assert!(!client.as_ref().expect("v1 client").qualified_observations());
+
+    let qualified = Client::from_values(
+        Some("/tmp/tw.sock"),
+        Some(TOKEN),
+        Some("termwright/2"),
+        Options::new("rust-test", "0.1.0"),
+    )
+    .expect("v2 client");
+    assert!(qualified.qualified_observations());
     assert!(
         client.is_some(),
         "a fully instrumented environment produced no client"
@@ -393,9 +404,6 @@ fn wait_for(
 /// kernel's socket buffer absorbs a few frames; after that a write blocks,
 /// which is the state a probe publishing from a render thread must survive.
 fn start_stalled_driver(path: &str) -> std::sync::mpsc::Sender<()> {
-    use std::io::{Read, Write};
-    use std::os::unix::net::UnixListener;
-
     let listener = UnixListener::bind(path).expect("binding the driver socket");
     let (release, released) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -503,12 +511,60 @@ fn an_invalid_snapshot_is_not_a_write_timeout() {
     assert!(matches!(error, Error::Validation(_)), "{error:?}");
 }
 
+#[test]
+fn a_locally_oversized_frame_keeps_the_revision_and_recovers_with_a_full_tree() {
+    let path = socket_path();
+    let mut limits = DEFAULT_LIMITS;
+    limits.max_frame_bytes = 600;
+    let (frames, _driver) = start_fake_driver_with_subscribe(&path, "diffs", limits);
+    let mut client = Client::new(&path, TOKEN, Options::new("test", "0.1.0"));
+    client.connect(Duration::from_secs(2)).expect("handshake");
+    assert_eq!(next_frame(&frames)["type"], "hello");
+
+    let first_marker = client
+        .publish(&mut sample_snapshot())
+        .expect("first snapshot")
+        .expect("first marker");
+    assert_eq!(next_frame(&frames)["type"], "snapshot");
+    assert_eq!(next_frame(&frames)["type"], "revision-commit");
+    assert_eq!(client.revision(), 1);
+
+    let mut oversized = Snapshot::new(80, 24);
+    oversized.push(Node::new("root", Role::Text, "x".repeat(1_000)));
+    let error = client
+        .publish(&mut oversized)
+        .expect_err("the local frame ceiling should refuse this tree");
+    assert!(
+        matches!(&error, Error::Protocol(violation) if violation.code == "frame-oversized"),
+        "unexpected error: {error:?}"
+    );
+    assert!(
+        client.connected(),
+        "a local refusal closed a healthy socket"
+    );
+    assert_eq!(client.revision(), 1, "a rejected frame consumed a revision");
+    assert!(client.full_snapshot_required());
+    assert!(frames.recv_timeout(Duration::from_millis(100)).is_err());
+
+    let recovery_marker = client
+        .publish(&mut sample_snapshot())
+        .expect("recovery snapshot")
+        .expect("recovery marker");
+    let recovery = next_frame(&frames);
+    assert_eq!(recovery["type"], "snapshot", "recovery was an unsafe delta");
+    assert_eq!(recovery["snapshot"]["revision"], 2);
+    assert_eq!(next_frame(&frames)["revision"], 2);
+    assert_eq!(client.revision(), 2);
+    assert!(!client.full_snapshot_required());
+    assert_ne!(first_marker, recovery_marker);
+}
+
 // -- the producer's obligation after a gap ---------------------------------
 
 #[test]
 fn require_full_snapshot_forces_a_whole_tree() {
     let path = socket_path();
-    let driver = start_fake_driver_with_subscribe(&path, "diffs");
+    let driver = start_fake_driver_with_subscribe(&path, "diffs", DEFAULT_LIMITS);
     let mut client = Client::new(&path, TOKEN, Options::new("test", "0.1.0"));
     client.connect(Duration::from_secs(2)).expect("handshake");
 

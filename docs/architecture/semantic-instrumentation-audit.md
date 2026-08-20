@@ -1,8 +1,18 @@
 # Semantic instrumentation — Phase 0 audit (index + decisions)
 
+> **Historical decision record.** This file preserves the Phase 0 evidence and
+> decisions that led to the injected probe architecture. Its package paths,
+> support status, and application-facing APIs are superseded by the current
+> website guides and compatibility reference; do not use it as setup guidance.
+
 Campaign #34: zero-config semantic instrumentation. This document indexes the
 per-area audits and records the coordinator's Phase 1 decision series. The
 per-area files are the evidence; this file is the verdict.
+
+The operational policy for admitting later framework releases is documented in
+[`upstream-certification.md`](upstream-certification.md). It distinguishes the
+checks implemented today from the proposed deterministic candidate, promotion
+and revocation pipeline.
 
 ## Audits (evidence, with file:line citations against pinned versions)
 

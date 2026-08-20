@@ -97,6 +97,65 @@ describe('role resolution, in the normative order', () => {
     // The annotation is outside the closed set, so the framework map decides.
     expect(snapshot.nodes[0]?.role).toBe('textbox');
   });
+
+  it('attributes Ink aria metadata to the framework, not to an author annotation', () => {
+    const snapshot = recognize(
+      frameOf(object({
+        num: 1,
+        frameworkType: 'ink-box',
+        accessibility: { role: 'button' },
+      })),
+      { ...context, framework: 'ink' },
+    );
+
+    expect(snapshot.nodes[0]).toMatchObject({ role: 'button', p: 'framework' });
+  });
+});
+
+describe('developer intent merge', () => {
+  it('merges extended state, actions and relationships without replacing physical facts', () => {
+    const snapshot = recognize(
+      frameOf(
+        object({ num: 1, frameworkType: 'TextRenderable', text: 'Label' }),
+        object({
+          num: 2,
+          frameworkType: 'InputRenderable',
+          geometry: { intendedRect: { row: 3, column: 4, width: 12, height: 1 } },
+          state: { focused: true, value: 'physical' },
+          annotations: {
+            name: 'Domain input',
+            description: 'Provided by the application',
+            testId: 'domain-input',
+            extended: { environment: 'production' },
+            actions: ['setValue'],
+            labelledBy: ['1'],
+          },
+        }),
+      ),
+      context,
+    );
+
+    expect(snapshot.nodes[1]).toMatchObject({
+      role: 'textbox',
+      name: 'Domain input',
+      description: 'Provided by the application',
+      value: 'physical',
+      bounds: { row: 3, column: 4, width: 12, height: 1 },
+      state: { focused: true },
+      extended: { environment: 'production' },
+      actions: ['setValue'],
+      labelledBy: ['n1'],
+      testId: 'domain-input',
+      p: 'recognizer',
+      px: expect.objectContaining({
+        name: 'annotation',
+        bounds: 'framework',
+        state: 'framework',
+        extended: 'annotation',
+      }),
+    });
+    expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
+  });
 });
 
 describe('naming', () => {
@@ -169,6 +228,69 @@ describe('naming', () => {
     expect(snapshot.nodes[0]?.p).toBe('recognizer');
     expect(snapshot.nodes[0]?.px?.['name']).toBe('annotation');
   });
+
+  it('infers an Ink control name from descendants without crossing a nested control', () => {
+    const snapshot = recognize(
+      frameOf(
+        object({
+          num: 1,
+          frameworkType: 'ink-box',
+          annotations: { role: 'button' },
+        }),
+        object({ num: 2, parent: '1', frameworkType: 'ink-text', text: 'Outer' }),
+        object({
+          num: 3,
+          parent: '1',
+          frameworkType: 'ink-box',
+          annotations: { role: 'button' },
+        }),
+        object({ num: 4, parent: '3', frameworkType: 'ink-text', text: 'Inner' }),
+      ),
+      { ...context, framework: 'ink' },
+    );
+
+    expect(snapshot.nodes[0]).toMatchObject({
+      role: 'button',
+      name: 'Outer',
+      p: 'annotation',
+      px: { name: 'recognizer' },
+    });
+    expect(snapshot.nodes[2]).toMatchObject({
+      role: 'button',
+      name: 'Inner',
+      p: 'annotation',
+      px: { name: 'recognizer' },
+    });
+  });
+
+  it('does not apply Ink host correlation to another framework', () => {
+    const snapshot = recognize(
+      frameOf(
+        object({ num: 1, annotations: { role: 'button' } }),
+        object({ num: 2, parent: '1', frameworkType: 'TextRenderable', text: 'Approve' }),
+      ),
+      context,
+    );
+
+    expect(snapshot.nodes[0]?.name).toBe('');
+  });
+
+  it('separates text carried by sibling Ink hosts', () => {
+    const snapshot = recognize(
+      frameOf(
+        object({
+          num: 1,
+          frameworkType: 'ink-box',
+          annotations: { role: 'button' },
+        }),
+        object({ num: 2, parent: '1', frameworkType: 'ink-text', text: 'Save' }),
+        object({ num: 3, parent: '1', frameworkType: 'ink-text', text: 'now' }),
+      ),
+      { ...context, framework: 'ink' },
+    );
+
+    expect(snapshot.nodes[0]?.name).toBe('Save now');
+  });
 });
 
 describe('physical facts stay the framework\'s', () => {
@@ -203,6 +325,38 @@ describe('physical facts stay the framework\'s', () => {
     );
 
     expect(snapshot.nodes[0]?.state?.hidden).toBe(true);
+    expect(snapshot.nodes[0]?.state?.offscreen).toBe(true);
+  });
+
+  it('clips intended bounds to the known terminal viewport', () => {
+    const snapshot = recognize(
+      frameOf(
+        object({
+          num: 1,
+          geometry: { intendedRect: { row: 30, column: 3, width: 10, height: 4 } },
+        }),
+      ),
+      context,
+    );
+
+    expect(snapshot.nodes[0]?.bounds).toEqual({ row: 30, column: 3, width: 10, height: 0 });
+    expect(snapshot.nodes[0]?.state).toMatchObject({ hidden: true, offscreen: true });
+    expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
+  });
+
+  it('marks an intrinsically empty out-of-viewport node hidden, but not offscreen', () => {
+    const snapshot = recognize(
+      frameOf(
+        object({
+          num: 1,
+          geometry: { intendedRect: { row: 30, column: 3, width: 0, height: 1 } },
+        }),
+      ),
+      context,
+    );
+
+    expect(snapshot.nodes[0]?.state).toEqual({ hidden: true });
+    expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
   });
 
   it('carries an observed value, including an empty one', () => {
@@ -225,6 +379,30 @@ describe('physical facts stay the framework\'s', () => {
 
     expect(snapshot.nodes[0]?.state?.focused).toBe(true);
     expect(snapshot.nodes[1]?.state?.hidden).toBe(true);
+  });
+
+  it('carries observed accessibility states into the semantic wire', () => {
+    const snapshot = recognize(
+      frameOf(
+        object({ num: 1, state: { selected: true, busy: false, multiline: true } }),
+      ),
+      context,
+    );
+
+    expect(snapshot.nodes[0]?.state).toMatchObject({
+      selected: true,
+      busy: false,
+      multiline: true,
+    });
+  });
+
+  it('maps the selected item index to a one-based position', () => {
+    const snapshot = recognize(
+      frameOf(object({ num: 1, frameworkType: 'SelectRenderable', state: { selectedIndex: 2 } })),
+      context,
+    );
+
+    expect(snapshot.nodes[0]?.state?.positionInSet).toBe(3);
   });
 });
 
@@ -259,6 +437,31 @@ describe('structure', () => {
 });
 
 describe('the protocol accepts what this produces', () => {
+  it('emits qualified facts without turning intended geometry into visibility', () => {
+    const snapshot = recognize(
+      frameOf(object({
+        num: 1,
+        frameworkType: 'ink-box',
+        geometry: { intendedRect: { row: 1, column: 2, width: 10, height: 2 } },
+        state: { displayed: true },
+        unobservable: ['visibleRect', 'paintOrder'],
+      })),
+      { ...context, framework: 'ink', qualified: true },
+    );
+
+    expect(snapshot).toMatchObject({
+      v: 2,
+      coordinateSpace: { status: 'known', value: 'viewport-cells' },
+      hitGrid: { status: 'unsupported' },
+      nodes: [{ geometry: {
+        displayed: { status: 'known', value: true },
+        intendedRect: { status: 'known', value: { row: 1, column: 2, width: 10, height: 2 } },
+        visibleRect: { status: 'unsupported' },
+      } }],
+    });
+    expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
+  });
+
   it('validates a realistic tree end to end', () => {
     const snapshot = recognize(
       frameOf(

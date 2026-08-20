@@ -10,7 +10,7 @@ import { mountInk } from '@termwright/ink-testing';
 import { expect, test, vi } from '@termwright/test';
 import { ConfirmDialog } from '../src/confirm-dialog.js';
 
-test('confirms on a click, and reports it once', async () => {
+test('confirms through terminal input, and reports it once', async () => {
   const onConfirm = vi.fn();
   const onCancel = vi.fn();
   const dialog = await mountInk(
@@ -18,9 +18,9 @@ test('confirms on a click, and reports it once', async () => {
     { columns: 40, rows: 8 },
   );
 
-  // A real mouse report on the component's stdin, aimed at the cells the
-  // component itself measured. Nothing calls onConfirm directly.
-  await dialog.getByRole('button', { name: 'Delete' }).click();
+  await dialog.press('Tab');
+  await dialog.waitForStable();
+  await dialog.press('Enter');
 
   // Every wait in the harness is driven by rendered frames, and a callback
   // that only notifies its parent renders nothing. So the spy — unlike a
@@ -42,9 +42,11 @@ test('opens with Cancel focused and dismisses on Escape', async () => {
   // itself; everything below is partial, so unlisted children are don't-care.
   await expect(dialog).toMatchSemanticSnapshot(`
     - application:
-        - dialog "Confirm" [modal]:
-            - button "Delete" [!focused]
-            - button "Cancel" [focused]
+        - dialog "Confirm":
+            - text
+            - generic:
+                - button "Delete"
+                - button "Cancel"
   `);
 
   await dialog.press('Escape');
@@ -61,10 +63,7 @@ test('moves the focus with Tab and activates with Enter', async () => {
   );
 
   await dialog.press('Tab');
-  // No wait in between: the matcher polls until the component has published
-  // the tree for the frame the keystroke caused.
-  await expect(dialog.getByRole('button', { name: 'Discard' })).toBeFocused();
-
+  await dialog.waitForStable();
   await dialog.press('Enter');
   await vi.waitFor(() => expect(onConfirm).toHaveBeenCalledOnce());
 

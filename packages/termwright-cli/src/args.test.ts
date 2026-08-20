@@ -8,6 +8,14 @@ describe('parseArgs', () => {
     expect(parseArgs(['-v']).command).toBe('version');
   });
 
+  it('prints global help or version instead of executing a subcommand', () => {
+    for (const command of ['ui', 'report', 'screenshot', 'codegen']) {
+      expect(parseArgs([command, '--help']).command).toBe('help');
+      expect(parseArgs(['--help', command]).command).toBe('help');
+      expect(parseArgs([command, '--version']).command).toBe('version');
+    }
+  });
+
   it('reads the agent-facing commands', () => {
     expect(parseArgs(['agent-context']).command).toBe('agent-context');
     expect(parseArgs(['usage']).command).toBe('usage');
@@ -22,7 +30,7 @@ describe('parseArgs', () => {
   it('reads the ui flags', () => {
     const args = parseArgs(['ui', '--port', '4000', '--host', '127.0.0.1', '--no-watch']);
     expect(args).toMatchObject({ command: 'ui', port: 4000, host: '127.0.0.1', watch: false });
-    expect(args.open).toBe(true);
+    expect(args.surface).toBe('desktop');
   });
 
   it('reads the report command and where it writes', () => {
@@ -52,8 +60,11 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['screenshot', '--trace', 'a', '--at', 'soon'])).toThrow(/needs a number/);
   });
 
-  it('reads --no-open', () => {
-    expect(parseArgs(['ui', '--no-open']).open).toBe(false);
+  it('selects desktop by default, or an explicit browser/no-open surface', () => {
+    expect(parseArgs(['ui']).surface).toBe('desktop');
+    expect(parseArgs(['ui', '--browser']).surface).toBe('browser');
+    expect(parseArgs(['ui', '--no-open']).surface).toBe('none');
+    expect(() => parseArgs(['ui', '--browser', '--no-open'])).toThrow(/cannot be used together/);
   });
 
   it('passes arguments after -- to the test runner', () => {

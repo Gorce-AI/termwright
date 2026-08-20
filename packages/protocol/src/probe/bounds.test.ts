@@ -61,6 +61,15 @@ describe('resolveNodeBounds — clipped away', () => {
     expect(resolveNodeBounds({ intendedRect: intended })?.clippedAway).toBe(false);
   });
 
+  it('does not call an intrinsically empty rectangle offscreen', () => {
+    const resolved = resolveNodeBounds(
+      { intendedRect: { row: 5, column: 10, width: 0, height: 1 } },
+      { clip: { row: 0, column: 0, width: 80, height: 24 } },
+    );
+    expect(resolved?.clippedAway).toBe(false);
+    expect(resolved?.rect).toEqual({ row: 5, column: 10, width: 0, height: 1 });
+  });
+
   it('keeps a partially clipped node visible', () => {
     const resolved = resolveNodeBounds(
       { intendedRect: intended },

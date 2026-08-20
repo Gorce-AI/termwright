@@ -18,7 +18,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/*.e2e.ts'],
+    include: ['src/app/**/*.e2e.ts'],
     environment: 'node',
     testTimeout: 60_000,
     hookTimeout: 120_000,

@@ -64,7 +64,6 @@ describe('parseSemanticSnapshot', () => {
 
   it('round-trips a name that needed quoting', () => {
     const text = serializeSemanticSnapshot(
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- built inline below
       { ...permissionDialog(), nodes: [{ id: 'n1', role: 'heading', name: 'Issue #12' }], rootIds: ['n1'] },
     );
     const [pattern] = parseSemanticSnapshot(text);

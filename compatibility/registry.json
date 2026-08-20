@@ -1,0 +1,321 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "frameworks": [
+    {
+      "id": "ink",
+      "name": "Ink",
+      "frameworkPackage": "ink",
+      "versions": {
+        "policy": "range",
+        "declared": ">=7.1.0 <8",
+        "verified": ["7.1.1"]
+      },
+      "runtimes": [
+        { "name": "Node.js", "version": ">=22", "notes": "Node 22 and 24 are CI lanes; early Node 22 uses module.register instead of registerHooks." },
+        { "name": "Bun", "version": ">=1.2.15", "notes": "Bun 1.2.15 was audited; CI exercises the current Bun release." }
+      ],
+      "probe": {
+        "package": "@termwright/probe-ink",
+        "packageVersion": "0.1.0",
+        "launch": "withProbe('node' | 'bun', argv) preload",
+        "identityKind": "stable",
+        "capabilities": ["stable-identity", "annotations"],
+        "adapterCapabilityVariants": [
+          {
+            "when": "interactive alternate-screen render without Static content",
+            "capabilities": ["tree", "bounds", "absolute-bounds", "states", "actions", "render-revisions"]
+          },
+          {
+            "when": "all other renders",
+            "capabilities": ["tree", "states", "actions", "render-revisions"]
+          }
+        ]
+      },
+      "instrumentation": {
+        "strategy": "module preload intercepts the ordinary ink render export",
+        "variants": []
+      },
+      "annotations": {
+        "kind": "termwright-sdk",
+        "package": "@termwright/ink",
+        "packageVersion": "0.1.0",
+        "apis": ["useSemantic", "Semantic"],
+        "notes": "Optional developer intent is consumed by the zero-config probe. Ink-retained aria-role and aria-state remain separate framework-native accessibility hints with framework provenance. The SDK cannot override physical facts."
+      },
+      "limitations": [
+        "Application component names disappear before the retained Ink host tree is created.",
+        "Focus cannot be attributed to a host node; text selection and third-party input values are unobservable.",
+        "Bounds are omitted outside an interactive alternate screen or when Static content shifts the live region.",
+        "Occlusion is unknown, so semantic click is refused even when qualified bounds are present.",
+        "Ink does not retain aria-label; name-from-content roles use rendered text and containers remain unnamed."
+      ],
+      "documentation": "/reference/compatibility/#ink"
+    },
+    {
+      "id": "opentui",
+      "name": "OpenTUI",
+      "frameworkPackage": "@opentui/core",
+      "versions": {
+        "policy": "range",
+        "declared": ">=0.5.0",
+        "verified": ["0.5.3"]
+      },
+      "runtimes": [
+        { "name": "Bun", "version": ">=1.2.15", "notes": "Bun 1.2.15 was audited; the current Bun release is the CI conformance lane because OpenTUI uses bun:ffi." },
+        { "name": "Node.js", "version": ">=22", "notes": "The injection path is tested; OpenTUI applications that need bun:ffi still run under Bun." }
+      ],
+      "probe": {
+        "package": "@termwright/probe-opentui",
+        "packageVersion": "0.1.0",
+        "launch": "withProbe('node' | 'bun', argv) preload",
+        "identityKind": "stable",
+        "capabilities": ["stable-identity", "paint-order", "annotations"],
+        "adapterCapabilityVariants": [
+          {
+            "when": "every attached renderer",
+            "capabilities": ["tree", "bounds", "absolute-bounds", "states", "actions", "render-revisions"]
+          }
+        ]
+      },
+      "instrumentation": {
+        "strategy": "module preload wraps createCliRenderer and installs a JavaScript stdout sink",
+        "variants": []
+      },
+      "annotations": {
+        "kind": "termwright-sdk",
+        "package": "@termwright/opentui",
+        "packageVersion": "0.1.0",
+        "apis": ["describeRenderable"],
+        "notes": "Optional developer intent on existing Renderables is consumed by the zero-config probe. The SDK does not own the renderer and cannot override physical or framework state."
+      },
+      "limitations": [
+        "frameworkType comes from constructor.name and may be mangled by bundling or minification.",
+        "Ancestor scissor rectangles are not exposed, so visibleRect is unavailable; only terminal-viewport clipping is applied.",
+        "OpenTUI has no native role or state annotation channel; framework semantics come from types and observable state, with optional developer intent from @termwright/opentui.",
+        "The renderer's native output thread must be redirected through the probe sink for marker ordering."
+      ],
+      "documentation": "/reference/compatibility/#opentui"
+    },
+    {
+      "id": "textual",
+      "name": "Textual",
+      "frameworkPackage": "textual",
+      "versions": {
+        "policy": "range",
+        "declared": ">=0.60",
+        "verified": ["8.2.8"]
+      },
+      "runtimes": [
+        { "name": "CPython", "version": ">=3.9", "notes": "Python 3.9 and 3.12 are CI lanes; zero-config injection was measured on CPython 3.12." }
+      ],
+      "probe": {
+        "package": "termwright",
+        "packageVersion": "0.1.0",
+        "launch": "python -m termwright_probe -- python app.py, or termwright_probe.with_probe(argv)",
+        "identityKind": "stable",
+        "capabilities": ["stable-identity", "visible-rect", "annotations", "paint-order"],
+        "adapterCapabilityVariants": [
+          {
+            "when": "every attached application",
+            "capabilities": ["tree", "bounds", "absolute-bounds", "states", "actions", "render-revisions"]
+          }
+        ]
+      },
+      "instrumentation": {
+        "strategy": "ephemeral sitecustomize on PYTHONPATH attaches to App.post_display_hook",
+        "variants": []
+      },
+      "annotations": {
+        "kind": "termwright-sdk",
+        "package": "termwright",
+        "packageVersion": "0.1.0",
+        "apis": ["termwright.textual.semantic", "termwright.textual.annotate"],
+        "notes": "The class decorator and weak instance registry support dynamic intent, descriptive actions, relationships, extended state and stable semantic keys. Duplicate keys degrade to retained object identity. Physical geometry, focus, visibility and rendered text remain probe-owned."
+      },
+      "limitations": [
+        "python -S and python -E bypass the sitecustomize/PYTHONPATH injection mechanism.",
+        "Poetry launch is unverified; plain scripts, -m, -c, console scripts and uv run were measured.",
+        "PYTHONPATH is inherited, so child processes are instrumented unless the application scrubs it.",
+        "Inactive screens are absent rather than represented as hidden nodes.",
+        "No frame-begin capability exists because post_display_hook runs after the frame flush.",
+        "A Static subclass with custom render() is named from stored content, not the final rendered segments."
+      ],
+      "documentation": "/reference/compatibility/#textual"
+    },
+    {
+      "id": "tview",
+      "name": "tview",
+      "frameworkPackage": "github.com/rivo/tview",
+      "versions": {
+        "policy": "exact",
+        "declared": "v0.42.0",
+        "verified": ["v0.42.0"]
+      },
+      "runtimes": [
+        { "name": "Go", "version": ">=1.24", "notes": "The shared Go module uses runtime.AddCleanup in the annotation SDK." },
+        { "name": "Node.js", "version": ">=22", "notes": "Required by the @termwright/probe-tview build launcher." }
+      ],
+      "probe": {
+        "package": "@termwright/probe-tview",
+        "packageVersion": "0.1.0",
+        "launch": "prepareInstrumentedBuild({moduleDir}) and build with the returned GOWORK",
+        "identityKind": "stable",
+        "capabilities": ["stable-identity", "annotations"],
+        "adapterCapabilityVariants": [
+          {
+            "when": "every instrumented build",
+            "capabilities": ["tree", "bounds", "absolute-bounds", "states", "actions", "render-revisions"]
+          }
+        ]
+      },
+      "instrumentation": {
+        "strategy": "ephemeral Go workspace redirects the exact framework module to a checksummed patched copy",
+        "variants": [
+          {
+            "id": "tview-v0.42.0",
+            "frameworkVersion": "v0.42.0",
+            "modules": [
+              { "name": "github.com/rivo/tview", "version": "v0.42.0", "patchSetVersion": 8 }
+            ]
+          }
+        ]
+      },
+      "annotations": {
+        "kind": "termwright-sdk",
+        "package": "github.com/gorce-ai/termwright/clients/go/annotate",
+        "packageVersion": "v0.1.0",
+        "apis": ["annotate.Tag", "annotate.Untag", "annotate.Semantics", "annotate.SemanticKey"],
+        "notes": "Annotations add intent, closed descriptive actions and SemanticKey relationships to stable widget objects. Relationships resolve in a bounded second pass; missing or duplicate keys are omitted. Nodes keep framework provenance with annotation/recognizer exceptions in px. The SDK has no bounds, focus, visibility, value, rendered-text or framework-state fields."
+      },
+      "limitations": [
+        "Only exact versions with shipped patch manifests are instrumented.",
+        "GOFLAGS=-mod=vendor is refused because an ephemeral workspace and vendor mode are incompatible.",
+        "Grid hierarchy is available only because the exact-version patch reads tview's private item list; unsupported versions are refused.",
+        "Publication occurs under tview's application write lock, so the probe drops instead of blocking when the driver is slow."
+      ],
+      "documentation": "/reference/compatibility/#tview"
+    },
+    {
+      "id": "ratatui",
+      "name": "Ratatui",
+      "frameworkPackage": "ratatui",
+      "versions": {
+        "policy": "exact",
+        "declared": "0.30.2",
+        "verified": ["0.30.2"]
+      },
+      "runtimes": [
+        { "name": "Rust", "version": ">=1.88", "notes": "Ratatui 0.30.2 and the termwright-ratatui SDK require Rust 1.88. The transport-only protocol and probe crates remain independently CI-checked on Rust 1.74." },
+        { "name": "Cargo", "version": "stable", "notes": "The launcher uses cargo metadata and per-command --config patch overrides." }
+      ],
+      "probe": {
+        "package": "termwright-probe-ratatui",
+        "packageVersion": "0.1.0",
+        "launch": "prepare_instrumented_build(&PrepareOptions) and pass returned Cargo --config/env values",
+        "identityKind": "frame-local",
+        "capabilities": ["operations", "annotations"],
+        "adapterCapabilityVariants": [
+          {
+            "when": "every instrumented build",
+            "capabilities": ["tree", "bounds", "absolute-bounds", "states", "actions", "render-revisions"]
+          }
+        ]
+      },
+      "instrumentation": {
+        "strategy": "Cargo redirects exact crates.io dependencies to checksummed patched copies",
+        "variants": [
+          {
+            "id": "ratatui-0.30.2",
+            "frameworkVersion": "0.30.2",
+            "modules": [
+              { "name": "ratatui-core", "version": "0.1.2", "patchSetVersion": 3 },
+              { "name": "ratatui-widgets", "version": "0.3.2", "patchSetVersion": 1 }
+            ]
+          }
+        ]
+      },
+      "annotations": {
+        "kind": "termwright-sdk",
+        "package": "termwright-ratatui",
+        "packageVersion": "0.1.0",
+        "apis": ["Annotated", "Annotate", "Semantics", "Action"],
+        "notes": "The wrapper adds role, name, description, testId, explicit domain JSON, descriptive actions, relationships and an optional stable semantic key to the exact intercepted render call. Bounds, occlusion and collection state remain probe-owned."
+      },
+      "limitations": [
+        "Identity is frame-local by default and the reported tree is flat because Ratatui is immediate mode; a unique author semantic_key stabilizes only its annotated render call.",
+        "Paint order is unavailable, every node has unknown occlusion, and pointer actions are refused.",
+        "The launcher supports the exact crates.io versions above; Git, path, alternate-registry and multiple-version graphs are refused.",
+        "Instrumented builds cannot use --locked and must not race another Cargo command in the same workspace while Cargo.lock is temporarily rewritten.",
+        "The semantic transport is Unix-only until the Rust client gains Windows named-pipe support.",
+        "Annotations require the wrapper itself to pass through Frame::render_widget or Frame::render_stateful_widget; direct nested Buffer rendering is not interceptable.",
+        "testId is a locator and explicit correlation hint; semantic_key is the separate opt-in identity and duplicate keys degrade to frame-local ids."
+      ],
+      "documentation": "/reference/compatibility/#ratatui"
+    },
+    {
+      "id": "charm",
+      "name": "Bubble Tea / Bubbles",
+      "frameworkPackage": "Bubble Tea",
+      "versions": {
+        "policy": "exact",
+        "declared": "v1.3.10 or v2.0.8",
+        "verified": ["v1.3.10", "v2.0.8"]
+      },
+      "runtimes": [
+        { "name": "Go", "version": ">=1.24", "notes": "The shared Go module uses runtime.AddCleanup in the annotation SDK." },
+        { "name": "Node.js", "version": ">=22", "notes": "Required by the @termwright/probe-charm build launcher." }
+      ],
+      "probe": {
+        "package": "@termwright/probe-charm",
+        "packageVersion": "0.1.0",
+        "launch": "prepareInstrumentedBuild({moduleDir}) and build with the returned GOWORK",
+        "identityKind": "frame-local",
+        "capabilities": ["annotations"],
+        "adapterCapabilityVariants": [
+          {
+            "when": "Bubble Tea v1 or v2",
+            "capabilities": ["tree", "states", "actions", "render-revisions"]
+          }
+        ]
+      },
+      "instrumentation": {
+        "strategy": "ephemeral Go workspace redirects Bubble Tea and supported Bubbles modules to checksummed patched copies",
+        "variants": [
+          {
+            "id": "bubbletea-v1",
+            "frameworkVersion": "v1.3.10",
+            "modules": [
+              { "name": "github.com/charmbracelet/bubbletea", "version": "v1.3.10", "patchSetVersion": 10 },
+              { "name": "github.com/charmbracelet/bubbles", "version": "v1.0.0", "patchSetVersion": 1, "optional": true }
+            ]
+          },
+          {
+            "id": "bubbletea-v2",
+            "frameworkVersion": "v2.0.8",
+            "modules": [
+              { "name": "charm.land/bubbletea/v2", "version": "v2.0.8", "patchSetVersion": 10 },
+              { "name": "charm.land/bubbles/v2", "version": "v2.1.1", "patchSetVersion": 1, "optional": true }
+            ]
+          }
+        ]
+      },
+      "annotations": {
+        "kind": "termwright-sdk",
+        "package": "github.com/gorce-ai/termwright/clients/go/annotate",
+        "packageVersion": "v0.1.0",
+        "apis": ["annotate.Provider.TermwrightSemantics", "annotate.Semantics", "annotate.SemanticKey"],
+        "notes": "Value-type models declare intent, closed descriptive actions and string-key relationships through Provider. A unique SemanticKey stabilizes that annotated node across copied model values; duplicate keys degrade to frame-local structural identity and cannot resolve relationships. Native value/state remain framework-owned, and p/px records every merge."
+      },
+      "limitations": [
+        "Bubble Tea produces a styled string, so component geometry and pointer actions are unavailable.",
+        "Identity is frame-local by default because Update copies model values; a unique author SemanticKey stabilizes only its annotated node.",
+        "Only the exact Bubble Tea versions above have frame-hook patch sets.",
+        "Unknown optional Bubbles versions remain unpatched and expose only public-getter semantics.",
+        "Masked text input values are intentionally withheld from trees, traces and reports.",
+        "A project requiring both Bubble Tea majors is refused because frames cannot be attributed safely."
+      ],
+      "documentation": "/reference/compatibility/#charm"
+    }
+  ]
+}

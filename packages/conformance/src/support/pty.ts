@@ -12,6 +12,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchTerminal, createNodePtyBackend, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
+import { withProbe } from '@termwright/probe-ink';
 
 /**
  * Absolute path of a fixture that ships with this package.
@@ -58,14 +59,10 @@ export const CONFORMANCE_FIXTURES = Object.freeze({
   generic: () => fixturePath('generic-app.mjs'),
   /** Shell-shaped app emitting OSC 133 marks; `--marks=off` suppresses them. */
   prompt: () => fixturePath('prompt-app.mjs'),
-  /** Instrumented Ink app covering the semantic matrix (§20.2). */
-  semanticInk: () => fixturePath('semantic-ink-app.mjs'),
+  /** Normal-render Ink app used to exercise launch-time probe attachment. */
+  inkProbe: () => fixturePath('ink-probe-app.mjs'),
   /** Hostile wire peer; takes a scenario name as its first argument (§20.3). */
   adversarialPeer: () => fixturePath('adversarial-peer.mjs'),
-  /** Process-mode half of the component harness matrix (§20.2a). */
-  component: () => fixturePath('component-app.mjs'),
-  /** The component itself, importable by an in-process harness (§20.2a). */
-  componentModule: () => fixturePath('component.mjs'),
 });
 
 let cachedPty: boolean | null = null;
@@ -132,6 +129,8 @@ export function pythonWith(modules: readonly string[]): string | null {
 export interface FixtureLaunchOptions extends Partial<Omit<LaunchOptions, 'command'>> {
   /** Extra arguments appended to `node <fixture>`. */
   readonly args?: readonly string[];
+  /** Attach the zero-config framework probe to the otherwise normal command. */
+  readonly probe?: 'ink';
   /**
    * Text that proves the fixture started drawing. Waiting for it here rather
    * than in each suite is what lets the failure be diagnosed: a fixture that
@@ -161,9 +160,10 @@ export function createSessionPool(): SessionPool {
   const open: TerminalHarness[] = [];
   return {
     async launch(fixture, options = {}) {
-      const { args = [], ready: _ready, ...launchOptions } = options;
+      const { args = [], probe, ready: _ready, ...launchOptions } = options;
+      const base = [process.execPath, fixture, ...args];
       const terminal = await launchTerminal({
-        command: [process.execPath, fixture, ...args],
+        command: probe === 'ink' ? withProbe('node', base).command : base,
         columns: 80,
         rows: 24,
         // No `env` and no `envMode`: the suites run against the secret-safe

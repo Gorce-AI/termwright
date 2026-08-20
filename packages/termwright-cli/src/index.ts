@@ -13,6 +13,7 @@
  * | `termwright` | `launchTerminal`, locators, actions, waits, errors |
  * | `termwright/test` | the Vitest preset: `test`, `expect`, matchers, snapshots |
  * | `termwright/ink` | `mountInk`, `launchInkFixture` for Ink components |
+ * | `termwright/gherkin` | physical features, step definitions and the Vitest plugin |
  *
  * `termwright/test` imports Vitest and registers matchers on import, which is
  * exactly what a test file wants and exactly what a production script does not.

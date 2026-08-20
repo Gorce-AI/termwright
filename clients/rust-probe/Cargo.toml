@@ -6,14 +6,14 @@ rust-version = "1.74"
 description = "Zero-config semantic probe for Ratatui applications: the std-side half that a patched ratatui-core calls into"
 license = "MIT"
 repository = "https://github.com/gorce-ai/termwright"
-publish = false
+documentation = "https://docs.rs/termwright-probe-ratatui"
+readme = "README.md"
+keywords = ["terminal", "tui", "testing", "accessibility"]
+categories = ["development-tools::testing", "command-line-interface"]
 
 [dependencies]
 termwright-protocol = { path = "../rust", version = "0.1.0" }
-
-# Test-only. A dev-dependency is not built when the patched framework depends
-# on this crate, so nothing here follows Ratatui into an instrumented user's
-# build — which is the reason the crate itself has no runtime dependencies
-# beyond the protocol client.
-[dev-dependencies]
 serde_json = "1"
+
+# Keep runtime dependencies small: the protocol client owns transport and
+# serde_json is shared with the optional author-intent SDK.

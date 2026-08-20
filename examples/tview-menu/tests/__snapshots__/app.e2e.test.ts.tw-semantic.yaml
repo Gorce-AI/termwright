@@ -2,13 +2,13 @@
 # Update with `vitest -u` or TERMWRIGHT_UPDATE_SNAPSHOTS=changed.
 "the tview menu > publishes the menu as a semantic tree 1": |
   - region:
-      - region "Settings" [hidden]:
-          - textbox "Name" [hidden]
-          - button "Save" [hidden]
-          - button "Cancel" [hidden]
       - region:
           - list "Menu" [focused]:
               - listitem "New file" [selected]
               - listitem "Settings"
               - listitem "Quit"
           - text "Status"
+      - region "Settings" [hidden]:
+          - textbox "Name" [hidden]
+          - button "Save" [hidden]
+          - button "Cancel" [hidden]

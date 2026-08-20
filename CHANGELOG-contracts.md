@@ -1,5 +1,12 @@
 # Contract changes
 
+- 2026-08-20: retry remains owned by Vitest's native scheduler.
+  `termwrightRetry({ci, local, env?})` resolves a bounded native `test.retry`
+  value with `TERMWRIGHT_RETRIES` as an additional-attempt override. Task meta,
+  reports and run manifests may carry ordered attempt failures; UI `test-end`
+  additively carries `attempt?` and `priorFailures?`. Existing v1 manifests and
+  older producers remain readable.
+
 - 2026-08-15: `ProtocolViolation` lives in `@termwright/protocol` (own class);
   the driver wraps it into `TermwrightError('protocol-violation')` at the
   semantic-channel boundary. Other packages may mirror the `TermwrightError`
@@ -259,6 +266,12 @@
   the suite. Adapters in general remain bound by the rule as written; if a second
   consumer needs these at the adapter's root, split out
   `@termwright/opentui-testing` and mirror Ink.
+- 2026-08-20 (zero-config probes): supersedes the 2026-08-16 OpenTUI testing
+  exception. The public manual adapter and its `./testing` mount were removed;
+  `@termwright/opentui` is now annotation-only, while zero-config observation
+  and test integration live in `@termwright/probe-opentui` and the normal
+  `@termwright/test` fixture path. The historical entry above is retained to
+  document why the temporary dependency exception existed.
 - 2026-08-16 (ui e6e4403): §UI events gains `action` (driver call/assertion
   mirror of events.jsonl); live producer is the reporter via Vitest 3.2
   onTestAnnotate.

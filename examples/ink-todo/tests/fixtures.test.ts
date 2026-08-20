@@ -41,7 +41,7 @@ const test = base.extend<{ app: TerminalHarness }>({
 describe.skipIf(!pty)('a suite with its own fixture', () => {
   test('starts from the state the fixture declared', async ({ app }) => {
     await expect(app.getByRole('listitem', { name: 'restore the backup' })).toBeVisible();
-    await expect(app.getByRole('listitem', { name: 'rotate the keys' })).toHaveState({ checked: true });
+    await expect(app).toHaveText('[x] rotate the keys');
     // The seed the app falls back to on a first run is not what it read.
     await expect(app.getByRole('listitem', { name: 'ship 1.0' })).not.toBeVisible();
   });
@@ -53,15 +53,12 @@ describe.skipIf(!pty)('a suite with its own fixture', () => {
       // Tab moves the focus onto the list without moving the selection, which
       // an arrow key would.
       await app.press('Tab');
-      // The assertion between the two keys is doing real work. `press('Tab
-      // Space')` writes both at once, the application handles them in one
-      // batch, and the space lands in the field Tab was leaving. Waiting for
-      // the focus to actually be where the next key expects it is the fix, and
-      // it costs nothing: the matcher polls.
-      await expect(app.getByRole('list', { name: 'Todos' })).toHaveState({ focused: true });
+      // Ink does not retain a host-level focus fact. Waiting for the painted
+      // focus transition keeps the next byte in a separate render commit.
+      await app.waitForStable();
 
       await app.press('Space');
-      await expect(app.getByRole('listitem', { name: 'restore the backup' })).toHaveState({ checked: true });
+      await expect(app).toHaveText('[x] restore the backup');
     });
 
     // The app writes its state out, so the change survives the process — which

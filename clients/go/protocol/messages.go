@@ -7,6 +7,7 @@ import (
 
 // ProtocolID is the wire protocol identifier both sides must agree on.
 const ProtocolID = "termwright/1"
+const ProtocolV2ID = "termwright/2"
 
 // ProtocolVersion is the current major version.
 const ProtocolVersion = 1
@@ -21,6 +22,7 @@ type Hello struct {
 	Token        string       `json:"token"`
 	Adapter      AdapterInfo  `json:"adapter"`
 	Capabilities []Capability `json:"capabilities"`
+	Probe        *ProbeInfo   `json:"probe,omitempty"`
 }
 
 // AdapterInfo identifies the adapter implementation to the driver.
@@ -93,10 +95,41 @@ type ProtocolErrorMessage struct {
 
 // NewHello builds a handshake message, refusing unknown capabilities locally.
 func NewHello(token, name, version string, capabilities []Capability) (*Hello, error) {
+	return newHello(token, name, version, capabilities, nil)
+}
+
+// NewHelloV2 builds a qualified-observation handshake.
+func NewHelloV2(token, name, version string, capabilities []Capability) (*Hello, error) {
+	capabilities = append([]Capability{}, capabilities...)
+	if !containsCapability(capabilities, CapQualifiedObservations) {
+		capabilities = append(capabilities, CapQualifiedObservations)
+	}
+	hello, err := newHello(token, name, version, capabilities, nil)
+	if err != nil {
+		return nil, err
+	}
+	hello.Protocol = ProtocolV2ID
+	return hello, nil
+}
+
+func containsCapability(values []Capability, wanted Capability) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+func newHello(token, name, version string, capabilities []Capability, probe *ProbeInfo) (*Hello, error) {
 	for _, capability := range capabilities {
 		if !ValidCapability(capability) {
 			return nil, violation("marker-argument", "unknown capability %q", capability)
 		}
+	}
+	checkedProbe, err := checkedProbeInfo(probe)
+	if err != nil {
+		return nil, violation("marker-argument", "invalid probe info: %v", err)
 	}
 	return &Hello{
 		Type:         "hello",
@@ -104,6 +137,7 @@ func NewHello(token, name, version string, capabilities []Capability) (*Hello, e
 		Token:        token,
 		Adapter:      AdapterInfo{Name: name, Version: version},
 		Capabilities: capabilities,
+		Probe:        checkedProbe,
 	}, nil
 }
 
@@ -263,7 +297,7 @@ func messageObject(value any) (map[string]any, string, *ParseError) {
 }
 
 func checkProtocolField(object map[string]any) *ParseError {
-	if protocol, ok := object["protocol"].(string); ok && protocol != ProtocolID {
+	if protocol, ok := object["protocol"].(string); ok && protocol != ProtocolID && protocol != ProtocolV2ID {
 		return &ParseError{Code: "bad-version", Detail: "unsupported protocol " + protocol}
 	}
 	return nil
@@ -289,7 +323,7 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 		if problem := checkProtocolField(object); problem != nil {
 			return nil, problem
 		}
-		if problem := requireKeys(object, []string{"type", "protocol", "token", "adapter", "capabilities"}, nil); problem != nil {
+		if problem := requireKeys(object, []string{"type", "protocol", "token", "adapter", "capabilities"}, []string{"probe"}); problem != nil {
 			return nil, problem
 		}
 		if problem := identifier(object, "token", false); problem != nil {
@@ -315,6 +349,24 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 			name, isString := item.(string)
 			if !isString || !ValidCapability(Capability(name)) {
 				return nil, malformed("capabilities: unknown capability")
+			}
+		}
+		protocol, _ := object["protocol"].(string)
+		qualified := false
+		pointerGrid := false
+		for _, item := range capabilities {
+			qualified = qualified || item == string(CapQualifiedObservations)
+			pointerGrid = pointerGrid || item == string(CapPointerHitGrid)
+		}
+		if (protocol == ProtocolV2ID) != qualified {
+			return nil, malformed("termwright/2 and qualified-observations must be negotiated together")
+		}
+		if pointerGrid && !qualified {
+			return nil, malformed("pointer-hit-grid requires qualified-observations")
+		}
+		if probe, present := object["probe"]; present {
+			if problem := checkProbeInfo(probe); problem != nil {
+				return nil, problem
 			}
 		}
 		return object, nil

@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "zero-config Bubble Tea probe: an ephemeral Go workspace redirects the build to an instrumented copy, for both majors",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/probe-charm"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -18,7 +23,7 @@
     "upstream-patches"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

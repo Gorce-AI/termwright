@@ -3,7 +3,7 @@
  * Not exported from `src/index.ts` — it never ships.
  */
 
-import type { LogRecord, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
+import type { LogRecord, ObservationStamp, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type {
   CrashReport,
   ExitStatus,
@@ -19,6 +19,7 @@ export class FakeSession implements TraceSource {
   readonly sessionId: string;
   #listeners = new Map<keyof SessionEventMap, Set<Listener>>();
   #tree: SemanticSnapshot | null = null;
+  #actionCounter = 0;
   /** Milliseconds since session start; advance it with {@link tick}. */
   clock = 0;
 
@@ -94,14 +95,16 @@ export class FakeSession implements TraceSource {
    */
   action(
     api: string,
-    outcome: { ok?: boolean; selector?: string; ref?: string; error?: string } = {},
+    outcome: { ok?: boolean; selector?: string; ref?: string; error?: string; observation?: ObservationStamp } = {},
   ): void {
     this.#emit('action', {
+      actionId: `a${++this.#actionCounter}`,
       api,
       ok: outcome.ok ?? true,
       ...(outcome.selector === undefined ? {} : { selector: outcome.selector }),
       ...(outcome.ref === undefined ? {} : { ref: outcome.ref }),
       ...(outcome.error === undefined ? {} : { error: outcome.error }),
+      ...(outcome.observation === undefined ? {} : { observation: outcome.observation }),
       timeMs: this.clock,
     });
   }

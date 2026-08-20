@@ -39,6 +39,7 @@ import {
   PROBE_UNOBSERVABLE_FIELDS,
   PROVENANCE_SOURCES,
   PROTOCOL_ID,
+  PROTOCOL_V2_ID,
   PROTOCOL_VERSION,
   SEMANTIC_ACTIONS,
   SEMANTIC_NODE_KEYS,
@@ -53,6 +54,9 @@ import {
   validateSnapshot,
   validateTreeDelta,
   verifyMarkerPayload,
+  FRAMEWORK_OBSERVATION_CAPABILITIES,
+  intersectRects,
+  viewportIntersection,
 } from '../../packages/protocol/dist/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -171,6 +175,70 @@ write('constants.json', {
   stateKeys: [...SEMANTIC_STATE_KEYS],
   defaultLimits: { ...DEFAULT_LIMITS },
   absoluteLimits: { ...ABSOLUTE_LIMITS },
+});
+
+// --------------------------------------------------------------------------
+// observations.json — epistemic tags and half-open geometry across clients.
+// --------------------------------------------------------------------------
+
+const geometryCases = [
+  { name: 'fully-inside', rect: { row: 1, column: 2, width: 4, height: 2 }, columns: 10, rows: 5 },
+  { name: 'partially-clipped', rect: { row: 4, column: 8, width: 4, height: 2 }, columns: 10, rows: 5 },
+  { name: 'touching-outside-edge', rect: { row: 5, column: 10, width: 4, height: 2 }, columns: 10, rows: 5 },
+].map((entry) => ({ ...entry, expect: viewportIntersection(entry.rect, entry.columns, entry.rows) }));
+
+const qualifiedSnapshot = {
+  v: 2,
+  sessionId: 'observation-vector',
+  revision: 7,
+  columns: 12,
+  rows: 6,
+  rootIds: ['approve', 'cover'],
+  nodes: [
+    {
+      id: 'approve', role: 'button', name: 'Approve',
+      geometry: {
+        displayed: { status: 'known', value: true, evidence: 'probe' },
+        intendedRect: { status: 'known', value: { row: 2, column: 2, width: 6, height: 2 }, evidence: 'probe' },
+        visibleRect: { status: 'known', value: { row: 2, column: 2, width: 6, height: 2 }, evidence: 'viewport-clip' },
+      },
+    },
+    {
+      id: 'cover', role: 'dialog', name: 'Blocking dialog',
+      geometry: {
+        displayed: { status: 'known', value: true, evidence: 'probe' },
+        intendedRect: { status: 'known', value: { row: 2, column: 5, width: 4, height: 2 }, evidence: 'probe' },
+        visibleRect: { status: 'known', value: { row: 2, column: 5, width: 4, height: 2 }, evidence: 'viewport-clip' },
+      },
+    },
+  ],
+  coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+  hitGrid: {
+    status: 'known', evidence: 'hit-grid', value: { regions: [
+      { rect: { row: 2, column: 2, width: 3, height: 1 }, recipientId: 'approve' },
+      { rect: { row: 2, column: 5, width: 4, height: 1 }, recipientId: 'cover' },
+      { rect: { row: 3, column: 2, width: 3, height: 1 }, recipientId: 'approve' },
+      { rect: { row: 3, column: 5, width: 4, height: 1 }, recipientId: 'cover' },
+    ] },
+  },
+};
+if (!validateSnapshot(qualifiedSnapshot, DEFAULT_LIMITS).ok) throw new Error('qualified observation vector must validate');
+
+write('observations.json', {
+  statuses: ['known', 'absent', 'unknown', 'unsupported'],
+  examples: [
+    { status: 'known', value: true, evidence: 'probe' },
+    { status: 'absent', reason: 'detached' },
+    { status: 'unknown', reason: 'legacy-unqualified' },
+    { status: 'unsupported', capability: 'hit-test', reason: 'framework-unobservable' },
+  ],
+  halfOpenTouch: intersectRects(
+    { row: 1, column: 1, width: 3, height: 2 },
+    { row: 1, column: 4, width: 2, height: 2 },
+  ),
+  geometryCases,
+  frameworks: FRAMEWORK_OBSERVATION_CAPABILITIES,
+  qualifiedSnapshot,
 });
 
 // --------------------------------------------------------------------------
@@ -485,6 +553,17 @@ const snapshotAccept = [
     }),
   },
   {
+    name: 'extended-domain-state',
+    snapshot: mutate((s) => {
+      s.nodes[1].extended = {
+        deploymentStatus: 'rolling-out',
+        retryCount: 2,
+        overdue: false,
+        rollout: { regions: ['eu', 'us'], progress: 0.5 },
+      };
+    }),
+  },
+  {
     name: 'two-roots',
     snapshot: mutate((s) => {
       s.rootIds = ['n1', 'n4'];
@@ -494,6 +573,16 @@ const snapshotAccept = [
 ];
 
 const snapshotReject = [
+  {
+    name: 'extended-must-be-an-object',
+    snapshot: mutate((s) => { s.nodes[1].extended = ['not', 'a', 'namespace']; }),
+  },
+  {
+    name: 'extended-container-over-ceiling',
+    snapshot: mutate((s) => {
+      s.nodes[1].extended = { values: Array.from({ length: DEFAULT_LIMITS.maxRelationTargets + 1 }, () => 1) };
+    }),
+  },
   { name: 'duplicate-node-id', snapshot: mutate((s) => { s.nodes[2].id = 'n2'; }) },
   { name: 'unknown-parent', snapshot: mutate((s) => { s.nodes[2].parentId = 'nope'; }) },
   { name: 'self-parent', snapshot: mutate((s) => { s.nodes[2].parentId = 'n3'; }) },
@@ -549,7 +638,7 @@ const snapshotReject = [
   { name: 'duplicate-rootid', snapshot: mutate((s) => { s.rootIds = ['n1', 'n1']; }) },
   { name: 'revision-zero', snapshot: mutate((s) => { s.revision = 0; }) },
   { name: 'revision-not-integer', snapshot: mutate((s) => { s.revision = 1.5; }) },
-  { name: 'wrong-version', snapshot: mutate((s) => { s.v = 2; }) },
+  { name: 'v2-with-legacy-node-shape', snapshot: mutate((s) => { s.v = 2; }) },
   { name: 'empty-session-id', snapshot: mutate((s) => { s.sessionId = ''; }) },
   { name: 'zero-columns', snapshot: mutate((s) => { s.columns = 0; }) },
   {
@@ -612,6 +701,12 @@ const helloAckMessage = {
   subscribe: 'snapshots',
   marker: { enabled: true },
 };
+const helloV2Message = {
+  ...helloMessage,
+  protocol: PROTOCOL_V2_ID,
+  capabilities: ['tree', 'states', 'render-revisions', 'qualified-observations', 'pointer-hit-grid'],
+};
+const helloAckV2Message = { ...helloAckMessage, protocol: PROTOCOL_V2_ID };
 
 /** A node as it appears inside a delta's `changed` list. */
 const deltaNode = (id, parentId, extra = {}) => ({
@@ -639,6 +734,7 @@ const treeDelta = (over = {}) => ({
 
 const adapterAccept = [
   { name: 'hello', message: helloMessage },
+  { name: 'hello-v2-qualified', message: helloV2Message },
   { name: 'revision-commit', message: { type: 'revision-commit', revision: 3 } },
   { name: 'snapshot', message: { type: 'snapshot', snapshot: baseSnapshot } },
   { name: 'get-tree-result-ok', message: { type: 'get-tree-result', requestId: 0, snapshot: baseSnapshot } },
@@ -698,9 +794,12 @@ const logRecord = (overrides) => ({
 const adapterReject = [
   { name: 'unknown-type', message: { type: 'nope' } },
   { name: 'missing-type', message: { revision: 1 } },
-  { name: 'hello-wrong-protocol', message: { ...helloMessage, protocol: 'termwright/2' } },
+  { name: 'hello-wrong-protocol', message: { ...helloMessage, protocol: 'termwright/99' } },
   { name: 'hello-empty-token', message: { ...helloMessage, token: '' } },
   { name: 'hello-unknown-capability', message: { ...helloMessage, capabilities: ['telepathy'] } },
+  { name: 'hello-v2-without-qualified-capability', message: { ...helloV2Message, capabilities: ['tree'] } },
+  { name: 'hello-v1-with-qualified-capability', message: { ...helloMessage, capabilities: ['tree', 'qualified-observations'] } },
+  { name: 'hello-pointer-grid-without-qualified-capability', message: { ...helloMessage, capabilities: ['tree', 'pointer-hit-grid'] } },
   { name: 'hello-extra-field', message: { ...helloMessage, extra: 1 } },
   { name: 'revision-commit-zero', message: { type: 'revision-commit', revision: 0 } },
   { name: 'revision-commit-float', message: { type: 'revision-commit', revision: 2.5 } },
@@ -790,6 +889,7 @@ const adapterReject = [
 
 const driverAccept = [
   { name: 'hello-ack', message: helloAckMessage },
+  { name: 'hello-ack-v2', message: helloAckV2Message },
   {
     // Driver traffic is read tolerantly throughout: `limits` is the object
     // that grows most often, but the rule is the same everywhere — a receiver

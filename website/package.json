@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "pnpm run check:brand && pnpm run check:geometry && pnpm run check:runner-assets && astro build",
     "preview": "astro preview",
     "check": "astro check",
+    "check:brand": "node scripts/check-brand.mjs",
+    "check:geometry": "node scripts/check-geometry-matrix.mjs",
+    "check:runner-assets": "node scripts/check-runner-assets.mjs",
     "check:links": "node scripts/check-links.mjs dist"
   },
   "dependencies": {

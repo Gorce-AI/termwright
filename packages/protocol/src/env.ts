@@ -8,6 +8,10 @@ export const ENV_PROTOCOL = 'TERMWRIGHT_PROTOCOL';
 /** Current protocol major version. */
 export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOL_ID = 'termwright/1' as const;
+/** Qualified observation protocol. V1 remains exported for existing adapters. */
+export const PROTOCOL_V2_ID = 'termwright/2' as const;
+export type ProtocolId = typeof PROTOCOL_ID | typeof PROTOCOL_V2_ID;
+export const SUPPORTED_PROTOCOL_IDS: readonly ProtocolId[] = [PROTOCOL_V2_ID, PROTOCOL_ID];
 
 /** Entropy behind a session token, in bytes (256 bits). */
 export const TOKEN_BYTES = 32;

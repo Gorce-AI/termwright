@@ -48,6 +48,8 @@ ADAPTER_CAPABILITIES = (
     "render-revisions",
     "tree-diffs",
     "logs",
+    "qualified-observations",
+    "pointer-hit-grid",
 )
 
 ROLE_SET = frozenset(SEMANTIC_ROLES)

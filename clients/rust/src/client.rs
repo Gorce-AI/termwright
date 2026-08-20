@@ -167,6 +167,7 @@ pub struct Client {
     endpoint: String,
     token: String,
     options: Options,
+    protocol: String,
 
     stream: Option<UnixStream>,
     decoder: FrameDecoder,
@@ -194,6 +195,7 @@ impl Client {
             endpoint: endpoint.into(),
             token: token.into(),
             options,
+            protocol: crate::messages::PROTOCOL_ID.into(),
             stream: None,
             decoder: FrameDecoder::new(limits.max_frame_bytes, limits.max_depth),
             limits,
@@ -211,6 +213,15 @@ impl Client {
             history: VecDeque::new(),
             force_full: false,
         }
+    }
+
+    /// Whether this client negotiated evidence-qualified protocol v2.
+    ///
+    /// Snapshot producers must know this before observing a frame because v1
+    /// forbids qualified geometry while v2 requires it on every node.
+    #[must_use]
+    pub fn qualified_observations(&self) -> bool {
+        self.protocol == crate::messages::PROTOCOL_V2_ID
     }
 
     /// Build a client from `TERMWRIGHT_*`, or `None` when not instrumented.
@@ -260,7 +271,11 @@ impl Client {
             return None;
         };
         if let Some(protocol) = protocol.filter(|value| !value.is_empty()) {
-            if protocol != crate::messages::PROTOCOL_ID && protocol != "1" {
+            if protocol != crate::messages::PROTOCOL_ID
+                && protocol != crate::messages::PROTOCOL_V2_ID
+                && protocol != "1"
+                && protocol != "2"
+            {
                 if let Some(log) = options.debug.as_ref() {
                     log.line(
                         Category::Diag,
@@ -287,7 +302,22 @@ impl Client {
             }
             return None;
         }
-        Some(Self::new(endpoint, token, options))
+        let v2 = matches!(protocol, Some(crate::messages::PROTOCOL_V2_ID) | Some("2"));
+        let mut client = Self::new(endpoint, token, options);
+        if v2 {
+            client.protocol = crate::messages::PROTOCOL_V2_ID.into();
+            if !client
+                .options
+                .capabilities
+                .contains(&Capability::QualifiedObservations)
+            {
+                client
+                    .options
+                    .capabilities
+                    .push(Capability::QualifiedObservations);
+            }
+        }
+        Some(client)
     }
 
     /// Connect, send `hello`, and wait for `hello-ack`.
@@ -326,6 +356,7 @@ impl Client {
             &self.options.adapter_version,
             self.options.capabilities.clone(),
         );
+        hello.protocol = self.protocol.clone();
         if let Some(probe) = self.options.probe.clone() {
             hello = hello.with_probe(probe);
         }
@@ -442,6 +473,17 @@ impl Client {
     /// adapter bug, so it is loud rather than silent — or [`Error::Io`] if the
     /// channel broke.
     pub fn publish(&mut self, snapshot: &mut Snapshot) -> Result<Option<String>, Error> {
+        let result = self.publish_inner(snapshot);
+        if matches!(result, Err(Error::Protocol(_) | Error::Validation(_))) {
+            // Nothing reached the wire for a local encode/validation refusal.
+            // Keep the link usable, but make recovery explicit and independent
+            // of whether a framework wrapper remembers to report the gap.
+            self.require_full_snapshot();
+        }
+        result
+    }
+
+    fn publish_inner(&mut self, snapshot: &mut Snapshot) -> Result<Option<String>, Error> {
         let Some(session_id) = self.session_id.clone() else {
             return Ok(None);
         };
@@ -450,7 +492,11 @@ impl Client {
         }
 
         let revision = self.revision + 1;
-        snapshot.v = 1;
+        snapshot.v = if self.protocol == crate::messages::PROTOCOL_V2_ID {
+            2
+        } else {
+            1
+        };
         snapshot.session_id = session_id.clone();
         snapshot.revision = revision;
 
@@ -463,10 +509,17 @@ impl Client {
         let parsed: Value = serde_json::from_str(&body).expect("just serialised");
         validate_snapshot(&parsed, &self.limits)?;
 
-        self.revision = revision;
-        self.remember(revision, RawValue::from_string(body).expect("valid JSON"));
+        let marker = if self.marker_enabled {
+            Some(encode_marker(&self.token, &session_id, revision)?)
+        } else {
+            None
+        };
 
-        if self.subscribe != "revisions" {
+        // Encode every frame before writing the first byte. A local ceiling
+        // failure is recoverable; sending the tree and only then discovering
+        // that its commit cannot be encoded would leave the wire half-applied.
+        let mut sent_delta = false;
+        let tree_frame = if self.subscribe != "revisions" {
             // A delta when the driver asked for one and it is worth sending;
             // a whole tree on the first publish, under a snapshots
             // subscription, or past roughly half the tree. The base advances
@@ -474,7 +527,7 @@ impl Client {
             // publish cannot leave the driver patching a tree it never got.
             // An outstanding obligation overrides the choice: a gap in the
             // producer's own facts means the next tree must be whole.
-            let forced = std::mem::take(&mut self.force_full);
+            let forced = self.force_full;
             if forced {
                 self.debug_line(
                     Category::Io,
@@ -488,24 +541,43 @@ impl Client {
             } else {
                 None
             };
-            self.published = Some(parsed.clone());
             match delta {
                 Some(delta) => {
-                    self.deltas_sent += 1;
-                    self.send(&delta)?;
+                    sent_delta = true;
+                    Some(encode_frame(&delta, self.limits.max_frame_bytes)?)
                 }
-                None => {
-                    self.snapshots_sent += 1;
-                    self.send(&SnapshotMessage::new(snapshot))?;
-                }
+                None => Some(encode_frame(
+                    &SnapshotMessage::new(snapshot),
+                    self.limits.max_frame_bytes,
+                )?),
+            }
+        } else {
+            None
+        };
+        let commit_frame =
+            encode_frame(&RevisionCommit::new(revision), self.limits.max_frame_bytes)?;
+
+        if let Some(frame) = &tree_frame {
+            self.write_frame(frame)?;
+        }
+        self.write_frame(&commit_frame)?;
+
+        // Only bytes that are fully on the wire become a revision/base. This
+        // keeps a locally rejected frame from making the next delta refer to a
+        // tree the driver never received.
+        self.revision = revision;
+        self.remember(revision, RawValue::from_string(body).expect("valid JSON"));
+        if tree_frame.is_some() {
+            self.published = Some(parsed);
+            self.force_full = false;
+            if sent_delta {
+                self.deltas_sent += 1;
+            } else {
+                self.snapshots_sent += 1;
             }
         }
-        self.send(&RevisionCommit::new(revision))?;
 
-        if !self.marker_enabled {
-            return Ok(None);
-        }
-        Ok(Some(encode_marker(&self.token, &session_id, revision)?))
+        Ok(marker)
     }
 
     /// Patches this client has published.
@@ -711,10 +783,14 @@ impl Client {
 
     fn send<T: serde::Serialize>(&mut self, message: &T) -> Result<(), Error> {
         let frame = encode_frame(message, self.limits.max_frame_bytes)?;
+        self.write_frame(&frame)
+    }
+
+    fn write_frame(&mut self, frame: &[u8]) -> Result<(), Error> {
         let Some(stream) = self.stream.as_mut() else {
             return Ok(());
         };
-        match stream.write_all(&frame).and_then(|()| stream.flush()) {
+        match stream.write_all(frame).and_then(|()| stream.flush()) {
             Ok(()) => Ok(()),
             Err(error) => {
                 let timed_out = matches!(

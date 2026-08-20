@@ -19,6 +19,7 @@ import type {
   CrashReport,
   ExitStatus,
   Locator,
+  ResizeReceipt,
   RoleLocatorOptions,
   ScreenSnapshot,
   ScrollbackApi,
@@ -117,7 +118,7 @@ export abstract class ForwardingHarness implements TerminalHarness {
     return this.session.write(bytes);
   }
 
-  resize(size: { columns: number; rows: number }): Promise<void> {
+  resize(size: { columns: number; rows: number }): Promise<ResizeReceipt> {
     return this.session.resize(size);
   }
 

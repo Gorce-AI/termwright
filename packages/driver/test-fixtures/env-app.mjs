@@ -10,6 +10,7 @@ const report = (name) => {
 
 report('TERM');
 report('COLORTERM');
+report('TERMWRIGHT_PROTOCOL');
 report('TERMWRIGHT_FIXTURE_SECRET');
 report('TERMWRIGHT_FIXTURE_EXPLICIT');
 process.stdout.write(`ENV PATH=${process.env['PATH'] === undefined ? '<unset>' : '<set>'}\r\n`);

@@ -1,0 +1,57 @@
+{
+  "name": "@termwright/probe-ink",
+  "version": "0.1.0",
+  "description": "zero-config Ink 7 probe: render interception and host-tree observation",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/probe-ink"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./node-hook": {
+      "types": "./dist/node-hook.d.ts",
+      "import": "./dist/node-hook.js"
+    },
+    "./bun-preload": {
+      "types": "./dist/bun-preload.d.ts",
+      "import": "./dist/bun-preload.js"
+    },
+    "./internal/testing": {
+      "types": "./dist/instrument.d.ts",
+      "import": "./dist/instrument.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/node-hook.ts src/bun-preload.ts src/instrument.ts --format esm --dts --sourcemap --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@termwright/probe-runtime": "workspace:*",
+    "@termwright/protocol": "workspace:*",
+    "@termwright/recognizers": "workspace:^",
+    "is-in-ci": "^2.0.0"
+  },
+  "peerDependencies": {
+    "ink": ">=7.1.0 <8",
+    "react": ">=19.2.0"
+  },
+  "devDependencies": {
+    "@termwright/ink": "workspace:*",
+    "@types/react": "^19.2.18",
+    "ink": "^7.1.1",
+    "react": "^19.2.8"
+  }
+}

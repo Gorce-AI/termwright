@@ -19,6 +19,8 @@ use crate::validate::{validate_snapshot, validate_tree_delta};
 
 /// The wire protocol identifier both sides must agree on.
 pub const PROTOCOL_ID: &str = "termwright/1";
+/// Qualified observation protocol identifier.
+pub const PROTOCOL_V2_ID: &str = "termwright/2";
 
 /// The current major version.
 pub const PROTOCOL_VERSION: u8 = 1;
@@ -125,6 +127,21 @@ impl Hello {
             capabilities,
             probe: None,
         }
+    }
+
+    /// Build a protocol v2 handshake, adding its required capability.
+    pub fn new_v2(
+        token: &str,
+        name: &str,
+        version: &str,
+        mut capabilities: Vec<Capability>,
+    ) -> Self {
+        if !capabilities.contains(&Capability::QualifiedObservations) {
+            capabilities.push(Capability::QualifiedObservations);
+        }
+        let mut hello = Self::new(token, name, version, capabilities);
+        hello.protocol = PROTOCOL_V2_ID.into();
+        hello
     }
 
     /// Attach a probe's declaration to this handshake.
@@ -338,7 +355,7 @@ fn project(value: &Value, limits: &Limits) -> Result<(), ParseError> {
     })
 }
 
-fn as_message<'a>(value: &'a Value) -> Result<(&'a Map<String, Value>, &'a str), ParseError> {
+fn as_message(value: &Value) -> Result<(&Map<String, Value>, &str), ParseError> {
     let object = value
         .as_object()
         .ok_or_else(|| ParseError::malformed("unknown or missing message type"))?;
@@ -455,10 +472,9 @@ fn check_error_message(object: &Map<String, Value>, strict: bool) -> Result<(), 
 
 fn check_protocol_field(object: &Map<String, Value>) -> Result<(), ParseError> {
     match object.get("protocol").and_then(Value::as_str) {
-        Some(protocol) if protocol != PROTOCOL_ID => Err(ParseError::new(
-            "bad-version",
-            format!("unsupported protocol {protocol}"),
-        )),
+        Some(protocol) if protocol != PROTOCOL_ID && protocol != PROTOCOL_V2_ID => Err(
+            ParseError::new("bad-version", format!("unsupported protocol {protocol}")),
+        ),
         _ => Ok(()),
     }
 }
@@ -503,6 +519,26 @@ pub fn parse_adapter_message(value: &Value, limits: &Limits) -> Result<(), Parse
                     Some(name) if valid_capability(name) => {}
                     _ => return Err(ParseError::malformed("capabilities: unknown capability")),
                 }
+            }
+            let protocol = object
+                .get("protocol")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let qualified = capabilities
+                .iter()
+                .any(|item| item.as_str() == Some("qualified-observations"));
+            let pointer_grid = capabilities
+                .iter()
+                .any(|item| item.as_str() == Some("pointer-hit-grid"));
+            if (protocol == PROTOCOL_V2_ID) != qualified {
+                return Err(ParseError::malformed(
+                    "termwright/2 and qualified-observations must be negotiated together",
+                ));
+            }
+            if pointer_grid && !qualified {
+                return Err(ParseError::malformed(
+                    "pointer-hit-grid requires qualified-observations",
+                ));
             }
             Ok(())
         }

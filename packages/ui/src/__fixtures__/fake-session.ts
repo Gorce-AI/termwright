@@ -3,8 +3,13 @@
  * exported from `src/index.ts`; nothing here ships.
  */
 
-import type { SessionEventMap, SessionEvents, TerminalHarness } from '@termwright/driver';
-import type { SemanticNode, SemanticSnapshot } from '@termwright/protocol';
+import type {
+  DiagnosticCode,
+  SessionEventMap,
+  SessionEvents,
+  TerminalHarness,
+} from '@termwright/driver';
+import type { ProbeInfo, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type { UiSessionSource } from '../live.js';
 
 type Listener = (payload: never) => void;
@@ -13,6 +18,7 @@ type Listener = (payload: never) => void;
 export class FakeSession implements UiSessionSource {
   readonly sessionId: string;
   readonly #listeners = new Map<keyof SessionEventMap, Set<Listener>>();
+  #actionCounter = 0;
   #tree: SemanticSnapshot | null = null;
   clock = 0;
 
@@ -36,9 +42,24 @@ export class FakeSession implements UiSessionSource {
 
   /** Profile the fake reports; tests override it to check the wiring. */
   terminalProfile = 'default';
+  adapter: { readonly name: string; readonly version: string } | undefined;
+  probe: ProbeInfo | undefined;
+  adapterCapabilities: readonly string[] | undefined;
 
-  capabilities(): { terminalProfile: string } {
-    return { terminalProfile: this.terminalProfile };
+  capabilities(): {
+    terminalProfile: string;
+    adapter?: { readonly name: string; readonly version: string };
+    probe?: ProbeInfo;
+    capabilities?: readonly string[];
+  } {
+    return {
+      terminalProfile: this.terminalProfile,
+      ...(this.adapter === undefined ? {} : { adapter: this.adapter }),
+      ...(this.probe === undefined ? {} : { probe: this.probe }),
+      ...(this.adapterCapabilities === undefined
+        ? {}
+        : { capabilities: this.adapterCapabilities }),
+    };
   }
 
   screen(): { columns: number; rows: number } {
@@ -67,7 +88,21 @@ export class FakeSession implements UiSessionSource {
     ref?: string;
     error?: string;
   }): void {
-    this.#emit('action', { ...event, timeMs: this.clock });
+    this.#emit('action', { actionId: `a${++this.#actionCounter}`, ...event, timeMs: this.clock });
+  }
+
+  /** Emits a correlated action lifecycle, returning the id used by both edges. */
+  startAction(event: { api: string; selector?: string }): string {
+    const actionId = `a${++this.#actionCounter}`;
+    this.#emit('action-start', { actionId, ...event, timeMs: this.clock });
+    return actionId;
+  }
+
+  finishAction(
+    actionId: string,
+    event: { api: string; ok: boolean; selector?: string; ref?: string; error?: string },
+  ): void {
+    this.#emit('action', { actionId, ...event, timeMs: this.clock });
   }
 
   /** Emits a followed-file log line. */
@@ -93,6 +128,11 @@ export class FakeSession implements UiSessionSource {
   /** Announces a revision the session has not caught up to yet. */
   announceRevision(revision: number): void {
     this.#emit('semantic-revision', { revision, timeMs: this.clock });
+  }
+
+  /** Emits one adapter/session lifecycle diagnostic. */
+  diagnostic(code: DiagnosticCode, detail = code): void {
+    this.#emit('diagnostic', { code, detail, timeMs: this.clock });
   }
 
   #emit<E extends keyof SessionEventMap>(event: E, payload: SessionEventMap[E]): void {

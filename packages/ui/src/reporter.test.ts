@@ -1,12 +1,13 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readRunHistory, readRunManifest } from './runs.js';
 import { buildFixtureTrace } from './__fixtures__/build-trace.js';
 import type { ServerMessage } from './events.js';
-import { TermwrightUiReporter, type UiMessageSink } from './reporter.js';
+import { TermwrightUiReporter, UI_SELECTION_ENV, type UiMessageSink } from './reporter.js';
 import { startUiServer, type UiServer } from './server.js';
+import { termwrightProvider } from './provider.js';
 
 class Collected implements UiMessageSink {
   readonly messages: ServerMessage[] = [];
@@ -23,9 +24,11 @@ function testCase(options: {
   file?: string;
   traces?: readonly string[];
   error?: string;
+  errors?: readonly string[];
   duration?: number;
   retryCount?: number;
   lostLogRecords?: number;
+  attemptFailures?: readonly { readonly attempt: number; readonly errors: readonly { readonly message: string }[] }[];
 }): Parameters<TermwrightUiReporter['onTestCaseResult']>[0] {
   return {
     id: options.id,
@@ -33,14 +36,18 @@ function testCase(options: {
     ...(options.file === undefined ? {} : { module: { moduleId: options.file } }),
     result: () => ({
       state: options.state,
-      ...(options.error === undefined ? {} : { errors: [{ message: options.error }] }),
+      ...(options.errors !== undefined
+        ? { errors: options.errors.map((message) => ({ message })) }
+        : options.error === undefined ? {} : { errors: [{ message: options.error }] }),
     }),
     diagnostic: () => ({ duration: options.duration ?? 12, retryCount: options.retryCount ?? 0 }),
     meta: () => ({
       termwright: {
+        provider: termwrightProvider('@termwright/test'),
         traces: options.traces ?? [],
         // `@termwright/test` omits the field entirely when nothing was lost.
         ...(options.lostLogRecords === undefined ? {} : { lostLogRecords: options.lostLogRecords }),
+        ...(options.attemptFailures === undefined ? {} : { attemptFailures: options.attemptFailures }),
       },
     }),
   };
@@ -48,10 +55,67 @@ function testCase(options: {
 
 const servers: UiServer[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const server of servers.splice(0)) await server.close();
 });
 
 describe('TermwrightUiReporter', () => {
+  it('publishes and retains an actionless Gherkin step without inventing a terminal session', async () => {
+    const sink = new Collected();
+    const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false, runsDir: null });
+    const scenario = testCase({ id: 'scenario-1', title: 'Feature > Scenario', state: 'run', file: '/repo/demo.feature' });
+    reporter.onTestRunStart();
+    reporter.onTestCaseReady(scenario);
+    reporter.onTestCaseAnnotate(scenario, {
+      type: 'termwright:step',
+      attachment: { body: JSON.stringify({
+        title: 'When I press Tab', phase: 'start', stepId: 'tw-step-2',
+        gherkin: { keyword: 'When', text: 'I press Tab', source: { file: '/repo/demo.feature', line: 5, column: 5 } },
+      }) },
+    });
+    expect(sink.messages.at(-1)).toMatchObject({
+      type: 'step', testId: 'scenario-1', stepId: 'tw-step-2', phase: 'start',
+      gherkin: { keyword: 'When', text: 'I press Tab', source: { line: 5, column: 5 } },
+    });
+    reporter.onTestCaseAnnotate(scenario, {
+      type: 'termwright:step',
+      attachment: { body: JSON.stringify({
+        title: 'When I press Tab', phase: 'end', status: 'passed', stepId: 'tw-step-2',
+        gherkin: { keyword: 'When', text: 'I press Tab', source: { file: '/repo/demo.feature', line: 5, column: 5 } },
+      }) },
+    });
+    reporter.onTestCaseResult(testCase({ id: 'scenario-1', title: 'Feature > Scenario', state: 'passed', file: '/repo/demo.feature' }));
+    await reporter.onTestRunEnd();
+    expect(sink.messages.filter((message) => message.type === 'step')).toHaveLength(2);
+    expect(sink.messages.some((message) => message.type === 'session')).toBe(false);
+    expect(sink.messages.find((message) => message.type === 'test-end')).toMatchObject({ type: 'test-end', status: 'passed' });
+  });
+
+  it('does not publish a foreign Vitest case even without a browser selection', async () => {
+    const sink = new Collected();
+    const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false, runsDir: null });
+    const foreign = {
+      id: 'foreign',
+      fullName: 'an unrelated unit test',
+      module: { moduleId: '/repo/unit.test.ts' },
+      result: () => ({ state: 'passed' }),
+      meta: () => ({}),
+    };
+
+    reporter.onTestRunStart();
+    reporter.onTestCaseReady(foreign);
+    reporter.onTestCaseResult(foreign);
+    reporter.onTestCaseAnnotate(foreign, {
+      type: 'termwright:action',
+      attachment: { body: JSON.stringify({ api: 'press', t: 1 }) },
+    });
+    await reporter.onTestRunEnd();
+
+    expect(sink.messages.map((message) => message.type)).toEqual(['run-start', 'run-end']);
+    const end = sink.messages.at(-1);
+    expect(end?.type === 'run-end' && end.summary.total).toBe(0);
+  });
+
   it('translates a run into the UI event protocol', async () => {
     const sink = new Collected();
     const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false, runsDir: null });
@@ -104,6 +168,116 @@ describe('TermwrightUiReporter', () => {
 
     const end = sink.messages.at(-1);
     expect(end?.type === 'run-end' && end.summary.flaky).toBe(1);
+  });
+
+  it('reports the final attempt number and ordered prior failure reasons', async () => {
+    const sink = new Collected();
+    const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false, runsDir: null });
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(testCase({
+      id: 'retry',
+      title: 'eventually passes',
+      state: 'passed',
+      retryCount: 2,
+      errors: ['first failure', 'second failure'],
+      attemptFailures: [
+        { attempt: 1, errors: [{ message: 'first failure' }] },
+        { attempt: 2, errors: [{ message: 'second failure' }] },
+      ],
+    }));
+    await reporter.onTestRunEnd();
+
+    expect(sink.messages.find((message) => message.type === 'test-end')).toMatchObject({
+      type: 'test-end',
+      status: 'passed',
+      attempt: 3,
+      priorFailures: [
+        { attempt: 1, errors: ['first failure'] },
+        { attempt: 2, errors: ['second failure'] },
+      ],
+    });
+  });
+
+  it('does not turn siblings excluded by a UI selection into skipped results', async () => {
+    const sink = new Collected();
+    const reporter = new TermwrightUiReporter({
+      sink,
+      stepsFromTraces: false,
+      runsDir: null,
+      selection: ['/repo/a.test.ts::suite > selected'],
+    });
+
+    reporter.onTestRunStart();
+    reporter.onTestCaseReady(
+      testCase({ id: 'selected-runtime', title: 'suite > selected', state: 'run', file: '/repo/a.test.ts' }),
+    );
+    reporter.onTestCaseReady(
+      testCase({ id: 'filtered-runtime', title: 'suite > filtered', state: 'run', file: '/repo/a.test.ts' }),
+    );
+    reporter.onTestCaseResult(
+      testCase({ id: 'selected-runtime', title: 'suite > selected', state: 'passed', file: '/repo/a.test.ts' }),
+    );
+    reporter.onTestCaseResult(
+      testCase({ id: 'filtered-runtime', title: 'suite > filtered', state: 'skipped', file: '/repo/a.test.ts' }),
+    );
+    await reporter.onTestRunEnd();
+
+    expect(sink.messages.filter((message) => message.type === 'test-end')).toHaveLength(1);
+    expect(sink.messages.filter((message) => message.type === 'test-start')).toHaveLength(1);
+    const end = sink.messages.at(-1);
+    expect(end?.type === 'run-end' && end.summary).toMatchObject({ total: 1, passed: 1, skipped: 0 });
+  });
+
+  it('keeps a genuinely skipped case when that case was selected', async () => {
+    const sink = new Collected();
+    const reporter = new TermwrightUiReporter({
+      sink,
+      stepsFromTraces: false,
+      runsDir: null,
+      selection: ['/repo/a.test.ts::suite > selected skip'],
+    });
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(
+      testCase({ id: 'skip-runtime', title: 'suite > selected skip', state: 'skipped', file: '/repo/a.test.ts' }),
+    );
+    await reporter.onTestRunEnd();
+
+    expect(sink.messages.filter((message) => message.type === 'test-end')).toHaveLength(1);
+    const end = sink.messages.at(-1);
+    expect(end?.type === 'run-end' && end.summary.skipped).toBe(1);
+  });
+
+  it('does not publish siblings excluded by the initial watcher name pattern', async () => {
+    const sink = new Collected();
+    vi.stubEnv(UI_SELECTION_ENV, JSON.stringify({ testNamePattern: '^suite selected$' }));
+    const reporter = new TermwrightUiReporter({
+      sink,
+      stepsFromTraces: false,
+      runsDir: null,
+    });
+
+    reporter.onTestRunStart();
+    reporter.onTestCaseReady(
+      testCase({ id: 'selected-runtime', title: 'suite > selected', state: 'run', file: '/repo/a.test.ts' }),
+    );
+    reporter.onTestCaseReady(
+      testCase({ id: 'filtered-runtime', title: 'suite > sibling', state: 'run', file: '/repo/a.test.ts' }),
+    );
+    reporter.onTestCaseResult(
+      testCase({ id: 'selected-runtime', title: 'suite > selected', state: 'passed', file: '/repo/a.test.ts' }),
+    );
+    reporter.onTestCaseResult(
+      testCase({ id: 'filtered-runtime', title: 'suite > sibling', state: 'skipped', file: '/repo/a.test.ts' }),
+    );
+    await reporter.onTestRunEnd();
+
+    const starts = sink.messages.filter((message) => message.type === 'test-start');
+    const ends = sink.messages.filter((message) => message.type === 'test-end');
+    expect(starts).toHaveLength(1);
+    expect(starts[0]?.type === 'test-start' && starts[0].id).toBe('selected-runtime');
+    expect(ends).toHaveLength(1);
+    const end = sink.messages.at(-1);
+    expect(end?.type === 'run-end' && end.summary).toMatchObject({ total: 1, passed: 1, skipped: 0 });
   });
 
   it('passes on the count of log records the harness lost, and zero when it lost none', async () => {
@@ -185,20 +359,29 @@ describe('run history', () => {
 
     reporter.onTestRunStart();
     reporter.onTestCaseResult(
-      testCase({ id: 't1', title: 'login', state: 'failed', file: '/repo/a.test.ts', error: 'nope', duration: 42 }),
+      testCase({
+        id: 't1', title: 'login', state: 'passed', file: '/repo/a.test.ts', duration: 42,
+        retryCount: 1,
+        errors: ['aggregated old failure'],
+        attemptFailures: [{ attempt: 1, errors: [{ message: 'nope' }] }],
+      }),
     );
     await reporter.onTestRunEnd();
 
     const [run] = await readRunHistory(runsDir);
-    expect(run?.summary.failed).toBe(1);
+    expect(run?.summary.flaky).toBe(1);
     const manifest = await readRunManifest(runsDir, run?.id ?? '');
     expect(manifest?.tests[0]).toMatchObject({
       title: 'login',
       file: '/repo/a.test.ts',
-      status: 'failed',
+      status: 'passed',
       durationMs: 42,
-      error: 'nope',
+      attempts: [
+        { attempt: 1, status: 'failed', errors: ['nope'] },
+        { attempt: 2, status: 'passed', durationMs: 42, errors: [] },
+      ],
     });
+    expect(manifest?.tests[0]).not.toHaveProperty('error');
   });
 
   it('does not write one when history is turned off', async () => {

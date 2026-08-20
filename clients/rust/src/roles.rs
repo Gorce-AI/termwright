@@ -131,10 +131,14 @@ pub enum Capability {
     TreeDiffs,
     /// Can forward application log records over the channel.
     Logs,
+    /// Publishes protocol v2 evidence-qualified observations.
+    QualifiedObservations,
+    /// Publishes a complete exact fresh-pointer ownership grid.
+    PointerHitGrid,
 }
 
 /// Every v1 capability.
-pub const ADAPTER_CAPABILITIES: [&str; 9] = [
+pub const ADAPTER_CAPABILITIES: [&str; 11] = [
     "tree",
     "bounds",
     "absolute-bounds",
@@ -144,6 +148,8 @@ pub const ADAPTER_CAPABILITIES: [&str; 9] = [
     "render-revisions",
     "tree-diffs",
     "logs",
+    "qualified-observations",
+    "pointer-hit-grid",
 ];
 
 /// Whether `role` is one of the v1 roles.

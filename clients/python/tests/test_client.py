@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -234,6 +235,92 @@ async def test_revisions_increase_by_one_per_publish(endpoint):
 
     await client.close()
     await driver.close()
+
+
+async def test_nowait_oversize_has_no_marker_or_phantom_delta_and_recovers():
+    """A locally unframeable tree never becomes a marker or delta base."""
+
+    class RecordingWriter:
+        def __init__(self) -> None:
+            self.frames: List[bytes] = []
+
+        def write(self, frame: bytes) -> None:
+            self.frames.append(bytes(frame))
+
+        async def drain(self) -> None:
+            pass
+
+    limits = replace(DEFAULT_LIMITS, maxFrameBytes=600)
+    client = SemanticClient(
+        "unused",
+        TOKEN,
+        adapter_name="pytest",
+        adapter_version="0.1.0",
+        limits=limits,
+    )
+    writer = RecordingWriter()
+    client._writer = writer
+    client.session_id = SESSION
+    client.marker_enabled = True
+    client.subscribe = "diffs"
+
+    many_nodes = [
+        SemanticNode(id="n0", role="text", name="x" * 1000, p="framework")
+    ] + [
+        SemanticNode(id=f"n{index}", role="text", name=str(index), p="framework")
+        for index in range(1, 21)
+    ]
+    oversized = SemanticSnapshot(
+        sessionId="ignored",
+        revision=0,
+        columns=80,
+        rows=24,
+        rootIds=[node.id for node in many_nodes],
+        nodes=many_nodes,
+    )
+
+    assert client.publish_nowait(oversized) is None
+    assert writer.frames == []
+    assert client.connected
+    assert client.revision == 0
+    assert client.full_snapshot_required
+
+    # Without the recovery obligation this fits as a delta against the phantom
+    # r1 base, while its required full tree still exceeds 600 bytes.
+    many_nodes[0] = SemanticNode(id="n0", role="text", name="x", p="framework")
+    would_be_delta = SemanticSnapshot(
+        sessionId="ignored",
+        revision=0,
+        columns=80,
+        rows=24,
+        rootIds=[node.id for node in many_nodes],
+        nodes=many_nodes,
+    )
+    assert client.publish_nowait(would_be_delta) is None
+    assert writer.frames == []
+    assert client.revision == 0
+    assert client.full_snapshot_required
+
+    recovered = SemanticSnapshot(
+        sessionId="ignored",
+        revision=0,
+        columns=80,
+        rows=24,
+        rootIds=["n0"],
+        nodes=[SemanticNode(id="n0", role="text", name="x", p="framework")],
+    )
+    marker = client.publish_nowait(recovered)
+    assert marker is not None
+    verified = verify_marker_payload(payload_of(marker), TOKEN, SESSION)
+    assert verified is not None and verified.revision == 1
+
+    decoder = FrameDecoder(limits.maxFrameBytes, limits.maxDepth)
+    messages = [message for frame in writer.frames for message in decoder.push(frame)]
+    assert [message["type"] for message in messages] == ["snapshot", "revision-commit"]
+    assert messages[0]["snapshot"]["revision"] == 1
+    assert messages[1]["revision"] == 1
+    assert client.connected
+    assert not client.full_snapshot_required
 
 
 async def test_a_driver_asking_for_diffs_still_gets_a_tree(endpoint):

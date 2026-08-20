@@ -517,7 +517,10 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     // Composed, not merely counted: the node the deltas rewrote holds the last
     // value, and the locator finds it through the composed tree.
     expect(await terminal.getByRole('button').textContent()).toBe('Fourth');
-    expect(await terminal.getByTestId('peer-button').boundingBox()).toEqual({
+    // This hostile fixture explicitly exercises v1 delta compatibility. Its
+    // unqualified rectangle is retained only on the resolved compatibility
+    // target; qualified geometry correctly remains unknown.
+    expect((await terminal.getByTestId('peer-button').resolve()).rect).toEqual({
       row: 1,
       column: 0,
       width: 10,

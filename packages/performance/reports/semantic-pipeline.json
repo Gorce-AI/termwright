@@ -1,0 +1,120 @@
+{
+  "kind": "termwright-performance-report",
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-20T10:34:46.858Z",
+  "environment": {
+    "runtime": "node v24.1.0",
+    "platform": "darwin",
+    "architecture": "arm64"
+  },
+  "scenarios": [
+    {
+      "id": "opentui-retained-tree",
+      "framework": "opentui",
+      "renderingMode": "retained",
+      "description": "stable retained objects with focus/value churn and explicit paint order",
+      "workload": {
+        "frames": 1000,
+        "warmupFrames": 100,
+        "targetNodesPerFrame": 96
+      },
+      "metrics": {
+        "probeEventsPerFrame": {
+          "status": "measured",
+          "unit": "events/frame",
+          "value": 96,
+          "p95": 96,
+          "note": "Probe IR objects plus render/layout operations observed for one frame."
+        },
+        "bytesPerFrame": {
+          "status": "measured",
+          "unit": "bytes/frame",
+          "value": 20751.893,
+          "p95": 20752,
+          "note": "Length-prefixed snapshot frame, including the four-byte wire header."
+        },
+        "fullSnapshots": {
+          "status": "measured",
+          "unit": "count",
+          "value": 1000,
+          "note": "The current TypeScript probe transport sends one full snapshot per benchmark frame."
+        },
+        "deltas": {
+          "status": "measured",
+          "unit": "count",
+          "value": 0,
+          "note": "The current TypeScript probe transport does not advertise or emit tree-diffs."
+        },
+        "droppedEvents": {
+          "status": "unavailable",
+          "unit": "count",
+          "value": null,
+          "reason": "The synchronous semantic pipeline has no bounded producer queue; only a live transport can observe backpressure drops."
+        },
+        "coalescedEvents": {
+          "status": "unavailable",
+          "unit": "count",
+          "value": null,
+          "reason": "The synchronous semantic pipeline does not coalesce frames; framework sessions must report this from their live render hook."
+        },
+        "semanticNodesPerFrame": {
+          "status": "measured",
+          "unit": "nodes/frame",
+          "value": 96,
+          "p95": 96
+        },
+        "unknownFrameworkNodesPerFrame": {
+          "status": "measured",
+          "unit": "nodes/frame",
+          "value": 8,
+          "p95": 8,
+          "note": "Semantic nodes normalized to generic because no stronger portable role was proven."
+        },
+        "renderCorrelationRate": {
+          "status": "unavailable",
+          "unit": "ratio",
+          "value": null,
+          "reason": "This benchmark has no PTY or render-marker consumer; correlation belongs to end-to-end session telemetry."
+        },
+        "probeSerializationTime": {
+          "status": "measured",
+          "unit": "microseconds/frame",
+          "value": 61.753786000002464,
+          "p95": 66.00000000003092,
+          "note": "Production encodeFrame JSON serialization, UTF-8 encoding and length prefix."
+        },
+        "parentNormalizationTime": {
+          "status": "unavailable",
+          "unit": "microseconds/frame",
+          "value": null,
+          "reason": "The current JavaScript probes normalize Probe IR before publication; the parent receives an already normalized semantic snapshot."
+        },
+        "parentProtocolValidationTime": {
+          "status": "measured",
+          "unit": "microseconds/frame",
+          "value": 836.425332,
+          "p95": 998.0000000000473,
+          "note": "Production parent frame decode, immutable DTO projection, schema checks and semantic validation; this is validation, not semantic normalization."
+        },
+        "probeHotPathTime": {
+          "status": "measured",
+          "unit": "microseconds/frame",
+          "value": 120.52823800000174,
+          "p95": 131.87500000003638,
+          "note": "Recognizer normalization plus serialization on the current JavaScript probe path; excludes framework observation and socket I/O."
+        },
+        "applicationOverheadRatio": {
+          "status": "unavailable",
+          "unit": "ratio",
+          "value": null,
+          "reason": "A pure semantic-pipeline benchmark has no uninstrumented framework process to compare against."
+        }
+      }
+    }
+  ],
+  "caveats": [
+    "CPU timings describe the semantic pipeline, not whole-application wall-clock slowdown.",
+    "Framework observation and socket/PTY scheduling require framework-specific end-to-end measurements.",
+    "Unavailable metrics remain null with a reason; the report never substitutes an inferred zero."
+  ]
+}

@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::roles::{Action, Role};
 
@@ -33,6 +34,66 @@ impl Rect {
             height,
         }
     }
+}
+
+/// Evidence-qualified fact. Unknown and unsupported are never coerced to false.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum Observation<T> {
+    /// The producer knows the value and names the evidence behind it.
+    Known {
+        /// Observed value.
+        value: T,
+        /// Provenance of the observation.
+        evidence: String,
+    },
+    /// The fact has no value for the named lifecycle/layout reason.
+    Absent {
+        /// Why no value exists.
+        reason: String,
+    },
+    /// The fact may become observable on a later revision.
+    Unknown {
+        /// Why evidence is not currently available.
+        reason: String,
+    },
+    /// The negotiated producer cannot provide this capability.
+    Unsupported {
+        /// Missing wire or framework capability.
+        capability: String,
+        /// Why the capability is unavailable.
+        reason: String,
+    },
+}
+
+/// Display and layout facts for one protocol-v2 semantic node.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NodeGeometryObservations {
+    /// Effective display state through the complete ancestor chain.
+    pub displayed: Observation<bool>,
+    /// Layout rectangle before viewport clipping.
+    pub intended_rect: Observation<Rect>,
+    /// Rectangle remaining after framework clipping.
+    pub visible_rect: Observation<Rect>,
+}
+
+/// One non-overlapping rectangle owned by an exact pointer recipient.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PointerHitRegion {
+    /// Half-open viewport-cell rectangle.
+    pub rect: Rect,
+    /// Semantic node id receiving a fresh pointer event in this rectangle.
+    pub recipient_id: String,
+}
+
+/// Compressed exact fresh-pointer routing grid for a completed frame.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PointerHitGrid {
+    /// Non-overlapping recipient rectangles.
+    pub regions: Vec<PointerHitRegion>,
 }
 
 /// Whether a tri-state control is on, off, or partially selected.
@@ -178,6 +239,9 @@ pub struct Node {
     /// Asserted state flags; unset members are not claims.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<State>,
+    /// Application-defined JSON state, separate from portable state flags.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extended: Option<BTreeMap<String, Value>>,
     /// Capability hints, never callback endpoints.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub actions: Option<Vec<Action>>,
@@ -209,6 +273,9 @@ pub struct Node {
     /// Where individual fields came from, when they differ from `p`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub px: Option<BTreeMap<String, Provenance>>,
+    /// Protocol v2 qualified layout facts; omitted by strict v1 snapshots.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<NodeGeometryObservations>,
 }
 
 /// Whether covered cells are answerable for a node.
@@ -249,6 +316,7 @@ impl Node {
             value: None,
             bounds: None,
             state: None,
+            extended: None,
             actions: None,
             labelled_by: None,
             described_by: None,
@@ -258,6 +326,7 @@ impl Node {
             occlusion: None,
             p: None,
             px: None,
+            geometry: None,
         }
     }
 
@@ -283,6 +352,12 @@ impl Node {
     /// Set the state flags, dropping them when nothing is asserted.
     pub fn with_state(mut self, state: State) -> Self {
         self.state = if state.is_empty() { None } else { Some(state) };
+        self
+    }
+
+    /// Attach application-defined JSON state.
+    pub fn with_extended(mut self, extended: BTreeMap<String, Value>) -> Self {
+        self.extended = Some(extended);
         self
     }
 
@@ -335,6 +410,12 @@ pub struct Snapshot {
     pub root_ids: Vec<String>,
     /// Every node in the tree.
     pub nodes: Vec<Node>,
+    /// Qualified coordinate space for all known geometry in protocol v2.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coordinate_space: Option<Observation<String>>,
+    /// Exact fresh-pointer ownership map for protocol v2, when supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hit_grid: Option<Observation<PointerHitGrid>>,
 }
 
 impl Snapshot {
@@ -350,6 +431,24 @@ impl Snapshot {
             cursor: None,
             root_ids: Vec::new(),
             nodes: Vec::new(),
+            coordinate_space: None,
+            hit_grid: None,
+        }
+    }
+
+    /// Empty qualified v2 snapshot. Every appended node still needs Geometry.
+    pub fn new_v2(columns: i64, rows: i64) -> Self {
+        Self {
+            v: 2,
+            coordinate_space: Some(Observation::Known {
+                value: "viewport-cells".into(),
+                evidence: "adapter".into(),
+            }),
+            hit_grid: Some(Observation::Unsupported {
+                capability: "pointer-hit-grid".into(),
+                reason: "framework-unobservable".into(),
+            }),
+            ..Self::new(columns, rows)
         }
     }
 

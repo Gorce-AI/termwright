@@ -40,6 +40,7 @@ export {
   getTermwrightConfig,
   resetTermwrightConfig,
   resolveTermwrightConfig,
+  termwrightRetry,
   ANSI_COLOR_NAMES,
   XTERM_PALETTE,
   type ColorPalette,
@@ -47,6 +48,7 @@ export {
   type TermwrightConfig,
   type TestTimeoutClasses,
   type TraceMode,
+  type TermwrightRetryOptions,
   type UpdateSnapshotsMode,
 } from './config.js';
 

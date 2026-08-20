@@ -19,6 +19,8 @@ export type CommandKind = 'step' | 'action' | 'assert' | 'input';
 export interface CommandRow {
   /** Stable id, unique within a log. */
   readonly id: string;
+  /** Correlates a live start row with its eventual completion. */
+  readonly actionId?: string;
   readonly kind: CommandKind;
   /** Position on the cast timeline, in milliseconds. */
   readonly t: number;
@@ -32,6 +34,8 @@ export interface CommandRow {
   readonly error?: string;
   /** The step this row belongs to, when the producer reported one. */
   readonly stepId?: string;
+  /** Test that produced a live row. Archive rows already belong to one trace. */
+  readonly testId?: string;
   /** Steps only: when the step ended, on the cast timeline. */
   readonly endT?: number;
   /** Nesting depth: actions inside a step are one level in. */
@@ -53,6 +57,7 @@ const MAX_TEXT = 2_048;
  */
 export function buildCommandLog(events: Iterable<unknown>): readonly CommandRow[] {
   const rows: CommandRow[] = [];
+  const rawInputs = new Map<string, { readonly dataB64?: string; readonly inputKind: string }>();
   const open: { stepId: string; index: number }[] = [];
   let index = 0;
 
@@ -71,7 +76,7 @@ export function buildCommandLog(events: Iterable<unknown>): readonly CommandRow[
         rows.push({
           id: `r${index}`,
           kind: 'step',
-          t,
+          t: orderedTime(rows, t),
           label: text(event['title']) ?? 'step',
           stepId,
           depth,
@@ -101,30 +106,41 @@ export function buildCommandLog(events: Iterable<unknown>): readonly CommandRow[
       case 'assert': {
         const api = text(event['api']);
         if (api === undefined) break;
+        const stepId = text(event['stepId']) ?? open.at(-1)?.stepId;
+        // A driver action is reported after it has written to the PTY. The raw
+        // input therefore immediately precedes `press`/`type`/`activate` in an
+        // archive. Showing both as siblings makes one logical interaction look
+        // like two unrelated commands (and puts the low-level implementation
+        // detail first). Fold only the adjacent inputs into their high-level
+        // action; truly raw writes with no following action stay visible.
+        const consumed =
+          kind === 'action' ? consumeTrailingInputs(rows, rawInputs, depth, stepId) : undefined;
         rows.push({
           id: `r${index}`,
           kind: kind === 'assert' ? 'assert' : 'action',
-          t,
-          label: api,
+          t: orderedTime(rows, consumed?.t ?? t),
+          label: kind === 'action' ? describeAction(api, consumed?.inputs ?? []) : api,
           depth,
           ...optional('selector', text(event['selector'])),
           ...optional('ref', text(event['ref'])),
           ...(typeof event['ok'] === 'boolean' ? { ok: event['ok'] } : {}),
           ...optional('error', text(event['error'])),
-          ...optional('stepId', text(event['stepId']) ?? open.at(-1)?.stepId),
+          ...optional('stepId', stepId),
         });
         break;
       }
       case 'input': {
         const inputKind = text(event['inputKind']) ?? 'raw';
+        const id = `r${index}`;
         rows.push({
-          id: `r${index}`,
+          id,
           kind: 'input',
-          t,
+          t: orderedTime(rows, t),
           label: `input (${inputKind})`,
           depth,
           ...optional('stepId', open.at(-1)?.stepId),
         });
+        rawInputs.set(id, { inputKind, ...optional('dataB64', text(event['dataB64'])) });
         break;
       }
       default:
@@ -133,8 +149,103 @@ export function buildCommandLog(events: Iterable<unknown>): readonly CommandRow[
     index += 1;
   }
 
-  rows.sort((left, right) => left.t - right.t);
   return rows;
+}
+
+/** Preserve semantic event order even when two producer clocks differ by a
+ * few milliseconds. A child cannot appear before the step that contains it. */
+function orderedTime(rows: readonly CommandRow[], timeMs: number): number {
+  return Math.max(timeMs, rows.at(-1)?.t ?? 0);
+}
+
+interface ConsumedInputs {
+  readonly t: number;
+  readonly inputs: readonly { readonly dataB64?: string; readonly inputKind: string }[];
+}
+
+function consumeTrailingInputs(
+  rows: CommandRow[],
+  rawInputs: ReadonlyMap<string, { readonly dataB64?: string; readonly inputKind: string }>,
+  depth: number,
+  stepId: string | undefined,
+): ConsumedInputs | undefined {
+  const inputs: { readonly dataB64?: string; readonly inputKind: string }[] = [];
+  let firstT: number | undefined;
+  while (rows.length > 0) {
+    const row = rows.at(-1);
+    if (row?.kind !== 'input' || row.depth !== depth || row.stepId !== stepId) break;
+    rows.pop();
+    firstT = row.t;
+    const input = rawInputs.get(row.id);
+    if (input !== undefined) inputs.unshift(input);
+  }
+  return firstT === undefined ? undefined : { t: firstT, inputs };
+}
+
+function describeAction(
+  api: string,
+  inputs: readonly { readonly dataB64?: string; readonly inputKind: string }[],
+): string {
+  if (inputs.length === 0) return api;
+  const bytes = decodeInputs(inputs);
+  if (bytes === null) return api;
+  if (api === 'press') return `${api} ${describeKeys(bytes)}`;
+  if (api === 'type') return `${api} · ${characterCount(bytes)} chars`;
+  if (api === 'paste') return `${api} · ${characterCount(bytes)} chars`;
+  if (api === 'write') return `${api} · ${bytes.length} bytes`;
+  // `activate`, pointer actions and similar calls may send terminal bytes as
+  // an implementation strategy. That is not a second user-facing command.
+  return api;
+}
+
+function decodeInputs(
+  inputs: readonly { readonly dataB64?: string; readonly inputKind: string }[],
+): Uint8Array | null {
+  try {
+    const chunks = inputs.map((input) => {
+      if (input.dataB64 === undefined) return new Uint8Array();
+      const binary = globalThis.atob(input.dataB64);
+      return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    });
+    const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const joined = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+      joined.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return joined;
+  } catch {
+    return null;
+  }
+}
+
+function describeKeys(bytes: Uint8Array): string {
+  const encoded = [...bytes].map((byte) => String.fromCharCode(byte)).join('');
+  const known = new Map<string, string>([
+    ['\t', 'Tab'],
+    ['\r', 'Enter'],
+    ['\n', 'Enter'],
+    ['\u001b', 'Escape'],
+    ['\u001b[A', 'ArrowUp'],
+    ['\u001b[B', 'ArrowDown'],
+    ['\u001b[C', 'ArrowRight'],
+    ['\u001b[D', 'ArrowLeft'],
+    ['\u001b[Z', 'Shift+Tab'],
+    ['\u007f', 'Backspace'],
+  ]);
+  const name = known.get(encoded);
+  if (name !== undefined) return name;
+  if (bytes.length === 1 && bytes[0] !== undefined && bytes[0] >= 1 && bytes[0] <= 26) {
+    return `Control+${String.fromCharCode(64 + bytes[0])}`;
+  }
+  const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  if (/^[^\p{Cc}]{1,24}$/u.test(decoded)) return JSON.stringify(decoded);
+  return `· ${bytes.length} bytes`;
+}
+
+function characterCount(bytes: Uint8Array): number {
+  return [...new TextDecoder('utf-8', { fatal: false }).decode(bytes)].length;
 }
 
 /**

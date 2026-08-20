@@ -27,7 +27,7 @@ describe('launchInkFixture', () => {
     const harness = await launch({ label: 'Approve' });
 
     expect(harness.capabilities().semanticTree).toBe(true);
-    expect(harness.capabilities().adapter?.name).toBe('@termwright/ink');
+    expect(harness.capabilities().adapter?.name).toBe('@termwright/probe-ink');
     expect(harness.screen().buffer).toBe('alternate');
     expect(await harness.getByRole('button', { name: 'Approve' }).count()).toBe(1);
   });
@@ -49,7 +49,7 @@ describe('launchInkFixture', () => {
     const capabilities = await harness.settled();
 
     expect(capabilities.semanticTree).toBe(true);
-    expect(capabilities.adapter?.name).toBe('@termwright/ink');
+    expect(capabilities.adapter?.name).toBe('@termwright/probe-ink');
     expect(capabilities.capabilities).toContain('absolute-bounds');
   });
 
@@ -60,10 +60,10 @@ describe('launchInkFixture', () => {
     expect(await harness.getByRole('button', { name: 'Reject' }).count()).toBe(1);
   });
 
-  it('reacts to a click delivered through the pty', async () => {
+  it('reacts to activation input delivered through the pty', async () => {
     const harness = await launch();
 
-    await harness.getByRole('button', { name: 'Approve' }).click();
+    await harness.press('Enter');
     await harness.waitForText('pressed 1');
 
     expect(harness.screen().text()).toContain('pressed 1');
@@ -78,6 +78,23 @@ describe('launchInkFixture', () => {
     await harness.waitForText('> ok');
 
     expect(harness.screen().text()).toContain('> ok');
+  });
+
+  it('returns the driver resize receipt after the child repaints', async () => {
+    const harness = await launch();
+
+    const receipt = await harness.resize({ columns: 60, rows: 20 });
+
+    expect(harness.screen().columns).toBe(60);
+    expect(receipt.requested).toEqual({ columns: 60, rows: 20 });
+    expect(receipt.before.sessionId).toBe(harness.sessionId);
+    expect(receipt.after.sessionId).toBe(harness.sessionId);
+    expect(receipt.after.screenRevision).toBeGreaterThan(receipt.before.screenRevision);
+    expect(receipt.pairedRender).toEqual({
+      status: 'known',
+      value: receipt.after.screenRevision,
+      evidence: 'terminal-grid',
+    });
   });
 
   it('exits on a real signal', async () => {

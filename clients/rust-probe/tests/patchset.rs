@@ -13,6 +13,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use termwright_probe_ratatui::launch::{prepare_instrumented_build, PrepareOptions};
 use termwright_probe_ratatui::patchset::{apply, copy_out, digest_file, read_manifest};
 
 const VERSION: &str = "0.1.2";
@@ -324,6 +325,13 @@ fn a_vanilla_ratatui_app_reaches_the_probe() {
 
 /// A driver end that completes the handshake and records what arrives.
 fn start_driver(path: &str) -> std::sync::mpsc::Receiver<serde_json::Value> {
+    start_driver_for_protocol(path, "termwright/1")
+}
+
+fn start_driver_for_protocol(
+    path: &str,
+    protocol: &'static str,
+) -> std::sync::mpsc::Receiver<serde_json::Value> {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixListener;
 
@@ -352,7 +360,7 @@ fn start_driver(path: &str) -> std::sync::mpsc::Receiver<serde_json::Value> {
                 if frame.value.get("type").and_then(serde_json::Value::as_str) == Some("hello") {
                     let ack = serde_json::json!({
                         "type": "hello-ack",
-                        "protocol": "termwright/1",
+                        "protocol": protocol,
                         "sessionId": "s-e2e",
                         "limits": DEFAULT_LIMITS,
                         "subscribe": "snapshots",
@@ -414,6 +422,7 @@ fn main() {
         .expect("draw");
     println!("drew a frame");
 }
+
 "#,
     )
     .expect("source");
@@ -423,7 +432,7 @@ fn main() {
     // accepted.
     let socket = format!("/tmp/tw-ratatui-{}.sock", std::process::id());
     let _ = std::fs::remove_file(&socket);
-    let received = start_driver(&socket);
+    let received = start_driver_for_protocol(&socket, "termwright/2");
 
     let patch = format!("patch.crates-io.ratatui-core.path='{}'", copy.display());
     let run = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
@@ -431,6 +440,7 @@ fn main() {
         .current_dir(&app)
         .env("TERMWRIGHT_ENDPOINT", &socket)
         .env("TERMWRIGHT_TOKEN", "test-token")
+        .env("TERMWRIGHT_PROTOCOL", "termwright/2")
         .env("TERMWRIGHT_RATATUI_VERSION", "0.30.2")
         .output()
         .expect("cargo runs");
@@ -464,6 +474,12 @@ fn main() {
         "the probe claimed an identity Ratatui cannot support"
     );
     assert_eq!(declared["frameworkVersion"], "0.30.2");
+    assert_eq!(hello["protocol"], "termwright/2");
+    assert!(hello["capabilities"]
+        .as_array()
+        .expect("capabilities")
+        .iter()
+        .any(|capability| capability == "qualified-observations"));
 
     let snapshot = snapshot.expect("no tree reached the driver");
     let tree = &snapshot["snapshot"];
@@ -472,10 +488,11 @@ fn main() {
 
     let nodes = tree["nodes"].as_array().expect("nodes");
     assert!(!nodes.is_empty(), "the tree is empty: {tree}");
-    assert!(
-        nodes.iter().all(|node| node["occlusion"] == "unknown"),
-        "a node claimed to know about occlusion: {tree}"
-    );
+    assert_eq!(tree["v"], 2);
+    assert_eq!(tree["hitGrid"]["status"], "unsupported");
+    assert!(nodes.iter().all(|node| node.get("bounds").is_none()));
+    assert!(nodes.iter().all(|node| node.get("occlusion").is_none()));
+    assert!(nodes.iter().all(|node| node.get("geometry").is_some()));
     let roles: Vec<&str> = nodes
         .iter()
         .filter_map(|node| node["role"].as_str())
@@ -500,6 +517,149 @@ fn main() {
     let _ = std::fs::remove_file(&socket);
     let _ = std::fs::remove_dir_all(&copy);
     let _ = std::fs::remove_dir_all(&app);
+}
+
+/// Phase 8, end to end: the public annotation SDK adds author intent to a
+/// custom widget while the patched framework remains the source of geometry,
+/// collection state and occlusion. An explicit semantic key is the one
+/// deliberate exception to frame-local identity.
+#[test]
+fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
+    use std::time::{Duration, Instant};
+
+    if registry_source().is_none() || widgets_source().is_none() {
+        assert_ne!(
+            std::env::var("TERMWRIGHT_REQUIRE_RATATUI").as_deref(),
+            Ok("1"),
+            "CI requires both Ratatui patch sources for the annotation fixture"
+        );
+        eprintln!("skipped: the Ratatui crates are not unpacked in this registry");
+        return;
+    }
+
+    let app = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/annotated-app");
+    let workspace = scratch("annotated-sdk-cache");
+    let target = scratch("annotated-sdk-target");
+    let prepared = prepare_instrumented_build(&PrepareOptions {
+        project: app.clone(),
+        workspace: Some(workspace.clone()),
+        probe: Some(probe_dir()),
+    })
+    .expect("prepare annotated instrumented build");
+
+    let socket = format!("/tmp/tw-ratatui-sdk-{}.sock", std::process::id());
+    let _ = std::fs::remove_file(&socket);
+    let received = start_driver(&socket);
+
+    let mut command = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
+    command.args(["run", "--quiet"]).current_dir(&app);
+    for config in &prepared.config_args {
+        command.arg("--config").arg(config);
+    }
+    for (key, value) in &prepared.env {
+        command.env(key, value);
+    }
+    let run = command
+        .env("CARGO_TARGET_DIR", &target)
+        .env("TERMWRIGHT_ENDPOINT", &socket)
+        .env("TERMWRIGHT_TOKEN", "test-token")
+        .output()
+        .expect("annotated cargo run");
+    prepared.finish().expect("restore annotated fixture lock");
+    assert!(
+        run.status.success(),
+        "the annotated app failed:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut hello = None;
+    let mut snapshot = None;
+    while Instant::now() < deadline && (hello.is_none() || snapshot.is_none()) {
+        match received.recv_timeout(Duration::from_millis(200)) {
+            Ok(message) => match message.get("type").and_then(serde_json::Value::as_str) {
+                Some("hello") => hello = Some(message),
+                Some("snapshot") => snapshot = Some(message),
+                _ => {}
+            },
+            Err(_) => break,
+        }
+    }
+
+    let hello = hello.expect("the annotated app never completed a handshake");
+    assert_eq!(hello["probe"]["identityKind"], "frame-local");
+    assert_eq!(
+        hello["probe"]["capabilities"],
+        serde_json::json!(["operations", "annotations"])
+    );
+    let adapter_capabilities = hello["capabilities"]
+        .as_array()
+        .expect("hello adapter capabilities");
+    assert!(adapter_capabilities.contains(&serde_json::json!("states")));
+    assert!(adapter_capabilities.contains(&serde_json::json!("actions")));
+
+    let snapshot = snapshot.expect("the annotated app published no snapshot");
+    let tree = &snapshot["snapshot"];
+    let validated =
+        termwright_protocol::validate_snapshot(tree, &termwright_protocol::DEFAULT_LIMITS);
+    assert!(validated.is_ok(), "invalid annotated tree: {validated:?}");
+    let node = tree["nodes"]
+        .as_array()
+        .and_then(|nodes| nodes.iter().find(|node| node["testId"] == "deploy-release"))
+        .expect("annotated custom widget node");
+
+    assert_eq!(node["role"], "button");
+    assert_eq!(node["name"], "Deploy");
+    assert_eq!(node["description"], "Deploy the current release");
+    assert_eq!(
+        node["bounds"],
+        serde_json::json!({
+            "row": 2,
+            "column": 3,
+            "width": 20,
+            "height": 2,
+        })
+    );
+    assert_eq!(node["occlusion"], "unknown");
+    assert_eq!(node["p"], "framework");
+    for field in [
+        "id",
+        "role",
+        "name",
+        "description",
+        "testId",
+        "extended",
+        "actions",
+        "labelledBy",
+        "describedBy",
+    ] {
+        assert_eq!(node["px"][field], "annotation", "{field}: {node}");
+    }
+    assert_eq!(node["extended"]["deployment"]["status"], "ready");
+    assert_eq!(node["extended"]["deployment"]["attempt"], 3);
+    assert_eq!(node["extended"]["actions"], serde_json::json!(["click"]));
+    assert_eq!(node["actions"], serde_json::json!(["activate"]));
+    assert_eq!(
+        node["labelledBy"],
+        serde_json::json!(["k:deployment-label"])
+    );
+    assert_eq!(node["describedBy"], node["labelledBy"]);
+    assert!(
+        node["frameworkType"]
+            .as_str()
+            .is_some_and(|name| name.ends_with("DeployWidget")),
+        "the wrapper hid the application's widget type: {node}"
+    );
+    assert_eq!(node["id"], "k:deployment-control");
+
+    assert!(
+        String::from_utf8_lossy(&run.stdout).contains("\u{1b}]8487;"),
+        "the annotated frame had no commit marker"
+    );
+
+    let _ = std::fs::remove_file(&socket);
+    let _ = std::fs::remove_dir_all(&workspace);
+    let _ = std::fs::remove_dir_all(&target);
 }
 
 /// The core of Ratatui's semantics: a selected row in a real list.

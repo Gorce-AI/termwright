@@ -1,0 +1,297 @@
+{
+  "statuses": [
+    "known",
+    "absent",
+    "unknown",
+    "unsupported"
+  ],
+  "examples": [
+    {
+      "status": "known",
+      "value": true,
+      "evidence": "probe"
+    },
+    {
+      "status": "absent",
+      "reason": "detached"
+    },
+    {
+      "status": "unknown",
+      "reason": "legacy-unqualified"
+    },
+    {
+      "status": "unsupported",
+      "capability": "hit-test",
+      "reason": "framework-unobservable"
+    }
+  ],
+  "halfOpenTouch": {
+    "row": 1,
+    "column": 4,
+    "width": 0,
+    "height": 2
+  },
+  "geometryCases": [
+    {
+      "name": "fully-inside",
+      "rect": {
+        "row": 1,
+        "column": 2,
+        "width": 4,
+        "height": 2
+      },
+      "columns": 10,
+      "rows": 5,
+      "expect": {
+        "rect": {
+          "row": 1,
+          "column": 2,
+          "width": 4,
+          "height": 2
+        },
+        "ratio": 1,
+        "fullyInside": true
+      }
+    },
+    {
+      "name": "partially-clipped",
+      "rect": {
+        "row": 4,
+        "column": 8,
+        "width": 4,
+        "height": 2
+      },
+      "columns": 10,
+      "rows": 5,
+      "expect": {
+        "rect": {
+          "row": 4,
+          "column": 8,
+          "width": 2,
+          "height": 1
+        },
+        "ratio": 0.25,
+        "fullyInside": false
+      }
+    },
+    {
+      "name": "touching-outside-edge",
+      "rect": {
+        "row": 5,
+        "column": 10,
+        "width": 4,
+        "height": 2
+      },
+      "columns": 10,
+      "rows": 5,
+      "expect": {
+        "rect": {
+          "row": 5,
+          "column": 10,
+          "width": 0,
+          "height": 0
+        },
+        "ratio": 0,
+        "fullyInside": false
+      }
+    }
+  ],
+  "frameworks": [
+    {
+      "framework": "generic",
+      "identity": "none",
+      "attached": "supported",
+      "displayed": "supported",
+      "intendedRect": "supported",
+      "visibleRect": "supported",
+      "hitTest": "conditional",
+      "reason": "Grid matches are physical cells; pointer delivery still requires terminal mouse mode."
+    },
+    {
+      "framework": "textual",
+      "identity": "stable",
+      "attached": "supported",
+      "displayed": "supported",
+      "intendedRect": "supported",
+      "visibleRect": "supported",
+      "hitTest": "supported",
+      "reason": "The compositor exposes intended/clipped regions and Screen.get_widget_at(), the same fresh-pointer routing lookup."
+    },
+    {
+      "framework": "opentui",
+      "identity": "stable",
+      "attached": "supported",
+      "displayed": "supported",
+      "intendedRect": "supported",
+      "visibleRect": "unsupported",
+      "hitTest": "supported",
+      "reason": "The committed native hit grid proves fresh-pointer ownership; the renderer exposes no per-node visual clip rectangle."
+    },
+    {
+      "framework": "ink",
+      "identity": "stable",
+      "attached": "supported",
+      "displayed": "supported",
+      "intendedRect": "conditional",
+      "visibleRect": "conditional",
+      "hitTest": "unsupported",
+      "reason": "Bounds are valid only while Ink owns a viewport-stable interactive region."
+    },
+    {
+      "framework": "tview",
+      "identity": "stable",
+      "attached": "supported",
+      "displayed": "supported",
+      "intendedRect": "supported",
+      "visibleRect": "conditional",
+      "hitTest": "unsupported",
+      "reason": "Primitive rectangles do not identify the recipient after overlap."
+    },
+    {
+      "framework": "ratatui",
+      "identity": "frame-local",
+      "attached": "supported",
+      "displayed": "conditional",
+      "intendedRect": "supported",
+      "visibleRect": "conditional",
+      "hitTest": "unsupported",
+      "reason": "Render areas are frame-local and buffer writes do not preserve widget ownership."
+    },
+    {
+      "framework": "charm",
+      "identity": "stable",
+      "attached": "supported",
+      "displayed": "conditional",
+      "intendedRect": "unsupported",
+      "visibleRect": "unsupported",
+      "hitTest": "unsupported",
+      "reason": "Bubble Tea hands over a rendered string without attributable widget geometry."
+    }
+  ],
+  "qualifiedSnapshot": {
+    "v": 2,
+    "sessionId": "observation-vector",
+    "revision": 7,
+    "columns": 12,
+    "rows": 6,
+    "rootIds": [
+      "approve",
+      "cover"
+    ],
+    "nodes": [
+      {
+        "id": "approve",
+        "role": "button",
+        "name": "Approve",
+        "geometry": {
+          "displayed": {
+            "status": "known",
+            "value": true,
+            "evidence": "probe"
+          },
+          "intendedRect": {
+            "status": "known",
+            "value": {
+              "row": 2,
+              "column": 2,
+              "width": 6,
+              "height": 2
+            },
+            "evidence": "probe"
+          },
+          "visibleRect": {
+            "status": "known",
+            "value": {
+              "row": 2,
+              "column": 2,
+              "width": 6,
+              "height": 2
+            },
+            "evidence": "viewport-clip"
+          }
+        }
+      },
+      {
+        "id": "cover",
+        "role": "dialog",
+        "name": "Blocking dialog",
+        "geometry": {
+          "displayed": {
+            "status": "known",
+            "value": true,
+            "evidence": "probe"
+          },
+          "intendedRect": {
+            "status": "known",
+            "value": {
+              "row": 2,
+              "column": 5,
+              "width": 4,
+              "height": 2
+            },
+            "evidence": "probe"
+          },
+          "visibleRect": {
+            "status": "known",
+            "value": {
+              "row": 2,
+              "column": 5,
+              "width": 4,
+              "height": 2
+            },
+            "evidence": "viewport-clip"
+          }
+        }
+      }
+    ],
+    "coordinateSpace": {
+      "status": "known",
+      "value": "viewport-cells",
+      "evidence": "probe"
+    },
+    "hitGrid": {
+      "status": "known",
+      "evidence": "hit-grid",
+      "value": {
+        "regions": [
+          {
+            "rect": {
+              "row": 2,
+              "column": 2,
+              "width": 3,
+              "height": 1
+            },
+            "recipientId": "approve"
+          },
+          {
+            "rect": {
+              "row": 2,
+              "column": 5,
+              "width": 4,
+              "height": 1
+            },
+            "recipientId": "cover"
+          },
+          {
+            "rect": {
+              "row": 3,
+              "column": 2,
+              "width": 3,
+              "height": 1
+            },
+            "recipientId": "approve"
+          },
+          {
+            "rect": {
+              "row": 3,
+              "column": 5,
+              "width": 4,
+              "height": 1
+            },
+            "recipientId": "cover"
+          }
+        ]
+      }
+    }
+  }
+}

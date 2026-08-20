@@ -70,7 +70,9 @@
     "text-ranges",
     "render-revisions",
     "tree-diffs",
-    "logs"
+    "logs",
+    "qualified-observations",
+    "pointer-hit-grid"
   ],
   "provenanceSources": [
     "annotation",
@@ -93,6 +95,9 @@
     "checked",
     "expanded",
     "readonly",
+    "selected",
+    "busy",
+    "multiline",
     "displayed",
     "value",
     "selectedIndex",
@@ -122,6 +127,7 @@
     "value",
     "bounds",
     "state",
+    "extended",
     "actions",
     "labelledBy",
     "describedBy",

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LIMITS, type ProtocolLimits } from '../limits.js';
 import { PROBE_CAPABILITIES, PROVENANCE_SOURCES, type ProbeFrame } from './ir.js';
-import { validateProbeFrame, validateProbeInfo } from './validate.js';
+import {
+  validateProbeAnnotations,
+  validateProbeFrame,
+  validateProbeInfo,
+} from './validate.js';
 
 function object(id: string, over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -218,7 +222,7 @@ describe('validateProbeFrame — internal consistency', () => {
   });
 });
 
-describe('validateProbeFrame — the two selections stay apart', () => {
+describe('validateProbeFrame — selection facts stay apart', () => {
   it('accepts an item index and a text range on the same object', () => {
     expect(
       codeOf(
@@ -229,6 +233,42 @@ describe('validateProbeFrame — the two selections stay apart', () => {
         }),
       ),
     ).toBe('ok');
+  });
+
+  it('accepts directly observed accessibility states', () => {
+    expect(
+      codeOf(
+        frame({
+          objects: [object('a', { state: { selected: true, busy: false, multiline: true } })],
+        }),
+      ),
+    ).toBe('ok');
+  });
+
+  it('keeps framework accessibility and developer intent in separate channels', () => {
+    expect(
+      codeOf(frame({
+        objects: [object('a', {
+          accessibility: { role: 'button' },
+          annotations: {
+            role: 'dialog',
+            name: 'Deploy',
+            description: 'Production deployment',
+            testId: 'deploy',
+            extended: { environment: 'production', retries: 2, flags: [true, null] },
+            actions: ['activate'],
+            labelledBy: ['label'],
+            describedBy: ['help'],
+          },
+        })],
+      })),
+    ).toBe('ok');
+  });
+
+  it('rejects physical facts smuggled through an annotation', () => {
+    expect(codeOf(frame({ objects: [object('a', { annotations: { focused: true } })] }))).toBe('schema');
+    expect(codeOf(frame({ objects: [object('a', { annotations: { value: 'forged' } })] }))).toBe('schema');
+    expect(codeOf(frame({ objects: [object('a', { annotations: { bounds: { row: 0, column: 0, width: 1, height: 1 } } })] }))).toBe('schema');
   });
 
   it('will not take an index where a text range belongs', () => {
@@ -266,6 +306,64 @@ describe('validateProbeFrame — hostile input', () => {
       expect(() => validateProbeFrame(value, DEFAULT_LIMITS)).not.toThrow();
       expect(codeOf(value)).not.toBe('ok');
     }
+  });
+});
+
+describe('validateProbeAnnotations', () => {
+  it('returns a deeply frozen annotation under the negotiated limits', () => {
+    const result = validateProbeAnnotations(
+      { name: 'Deploy', actions: ['activate'], extended: { target: 'production' } },
+      DEFAULT_LIMITS,
+    );
+    if (!result.ok) throw new Error(result.detail);
+    expect(result.annotations).toEqual({
+      name: 'Deploy',
+      actions: ['activate'],
+      extended: { target: 'production' },
+    });
+    expect(Object.isFrozen(result.annotations)).toBe(true);
+    expect(Object.isFrozen(result.annotations.extended)).toBe(true);
+  });
+
+  it('rejects a forged annotation without throwing or weakening limits', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic['self'] = cyclic;
+    for (const value of [
+      { actions: ['execute-arbitrary-code'] },
+      { extended: cyclic },
+      { name: 'x'.repeat(DEFAULT_LIMITS.maxStringBytes + 1) },
+      { focused: true },
+    ]) {
+      expect(() => validateProbeAnnotations(value, DEFAULT_LIMITS)).not.toThrow();
+      expect(validateProbeAnnotations(value, DEFAULT_LIMITS).ok).toBe(false);
+    }
+  });
+
+  it('does not invoke annotation getters', () => {
+    let invoked = false;
+    const hostile = {
+      get name(): string {
+        invoked = true;
+        return 'not safe';
+      },
+    };
+    expect(validateProbeAnnotations(hostile, DEFAULT_LIMITS).ok).toBe(false);
+    expect(invoked).toBe(false);
+  });
+
+  it('uses short validator constants and enforces the negotiated frame ceiling', () => {
+    expect(
+      validateProbeAnnotations(
+        { name: 'x' },
+        { ...DEFAULT_LIMITS, maxStringBytes: 1 },
+      ).ok,
+    ).toBe(true);
+    const result = validateProbeAnnotations(
+      { extended: { payload: 'x'.repeat(8_192) } },
+      { ...DEFAULT_LIMITS, maxFrameBytes: 4_096 },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('bytes');
   });
 });
 

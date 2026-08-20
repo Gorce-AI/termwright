@@ -143,19 +143,17 @@ async function moduleVersion(
  * spaces indistinguishable from content, and truncation discards the tail with
  * no record it existed.
  *
- * v2 has two channels that survive that — the layer compositor, which already
- * keeps absolute bounds per identified layer, and per-cell OSC 8 parameters,
- * which travel with the character through wrapping and truncation. v1 has
- * neither, so a v1 probe reports **component known, fragment known, final
- * position unknown** and says so through the capability set rather than by
- * guessing coordinates.
+ * v2 has two channels that could survive that — the layer compositor and
+ * per-cell OSC 8 parameters — but this probe wires neither one yet. Therefore
+ * both majors report **component known, final position unknown**. Capabilities
+ * describe what this build emits, not what its framework could support after
+ * future instrumentation work.
  */
-export function capabilitiesFor(major: CharmMajor): readonly string[] {
-  const shared = ['tree', 'states', 'actions', 'render-revisions'];
-  return major === 'v2' ? [...shared, 'bounds'] : shared;
+export function capabilitiesFor(_major: CharmMajor): readonly string[] {
+  return ['tree', 'states', 'actions', 'render-revisions'];
 }
 
 /** Whether geometry can be reported at all for this major. */
-export function reportsGeometry(major: CharmMajor): boolean {
-  return major === 'v2';
+export function reportsGeometry(_major: CharmMajor): boolean {
+  return false;
 }

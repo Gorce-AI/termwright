@@ -1,5 +1,9 @@
 # Upstream audit — Ink
 
+> **Historical Phase 0 evidence.** The pinned-source measurements below are
+> retained as design evidence. Any current support or setup guidance is
+> superseded by the website Ink adapter guide and compatibility reference.
+
 **Pinned version: `ink@7.1.1`** (`pnpm-lock.yaml:2727`), React 19.2.8, Yoga via
 `yoga-layout`. Every line reference below is to the installed build at
 `node_modules/.pnpm/ink@7.1.1_@types+react@19.2.18_react@19.2.8/node_modules/ink/build/`,

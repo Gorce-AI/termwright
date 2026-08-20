@@ -8,6 +8,16 @@ accessibility tree of a terminal app, in a form a reviewer can read.
 The driver works fine from `node:test` or Jest. This package is the thin layer
 that makes Vitest feel like Playwright.
 
+Cases declared through this package's `test` or `it` carry a small, versioned
+provider marker in Vitest task metadata. `termwright ui` uses it for exact
+per-case discovery and for a fail-closed UI-only runner: unrelated Vitest cases
+are not shown or executed by UI controls, even in a mixed file. Chained APIs,
+`each`, `for`, conditional modifiers and a project's own `test.extend()` retain
+the marker. The declaration also preserves `skip`, `todo` and provider-owned
+`only`, so a foreign `test.only` cannot globally suppress Termwright cases in
+the UI process. Normal Vitest runs do not install the UI runner and behave
+exactly as Vitest configured them.
+
 ## Install
 
 ```sh
@@ -153,6 +163,7 @@ until the `expect` timeout class runs out.
 | `toBeVisible()` | locator |
 | `toBeFocused()` | locator |
 | `toHaveState({ disabled: true })` | locator; asserts only the keys you list |
+| `toHaveExtendedState({ deploymentStatus: 'ready' })` | locator; recursively compares only the top-level domain keys you list |
 | `toHaveText('Save' \| /Sav/)` | locator (exact, whitespace-normalized) or terminal (substring of the grid) |
 | `toMatchSemanticSnapshot(expected?, { within })` | terminal or `SemanticSnapshot` |
 | `toMatchCellSnapshot(expected?)` | terminal or `ScreenSnapshot` |
@@ -177,6 +188,16 @@ between:
 await app.press('Tab');
 await expect(app.getByRole('list', { name: 'Todos' })).toHaveState({ focused: true });
 await app.press('Space');
+```
+
+Portable widget state and application state are deliberately different
+assertions:
+
+```ts
+await expect(app.getByTestId('deploy-row')).toHaveExtendedState({
+  deploymentStatus: 'rolling-out',
+  rollout: { regions: ['eu', 'us'], progress: 0.5 },
+});
 ```
 
 The assertion is not decoration here: it is the wait that lets the program
@@ -414,9 +435,8 @@ await expect(app).toHaveLogged({ source: 'file', message: 'saved' });
 **A mount does not capture `console.*` by default**, and that default is right:
 a mounted component shares the runner's process, so its `console` is literally
 Vitest's — capturing it would file the runner's output, and other tests' output,
-as the component's log. Follow a file instead, pass
-`mountInk(el, { captureConsole: true })` when you accept that attribution, or
-use `launchInkFixture`, where the console genuinely belongs to the application.
+as the component's log. Follow a file instead, or use `launchInkFixture` when
+process-owned console behavior is genuinely part of the application under test.
 
 ## When the program dies
 
@@ -522,22 +542,30 @@ three in `composition.test.ts`.
 ```ts
 // vitest.config.ts
 import { defineConfig } from 'vitest/config';
+import { termwrightRetry } from '@termwright/test/config';
 import TermwrightReporter from '@termwright/test/reporter';
 
 export default defineConfig({
   test: {
     setupFiles: ['./vitest.setup.ts'],
-    retry: 2,
+    retry: termwrightRetry({ ci: 2, local: 0 }),
     reporters: ['default', new TermwrightReporter()],
   },
 });
 ```
+
+`termwrightRetry` returns Vitest's native `retry` value; it does not rerun the
+whole suite. `TERMWRIGHT_RETRIES` overrides it for CI jobs and means additional
+attempts (`2` means at most three total attempts). Direct CLI use stays native:
+`vitest run --retry=2`.
 
 After the run it writes `<outputDir>/index.html` — the self-contained report
 from `@termwright/trace`, with the visual diff, the semantic diff and the
 embedded recording of every failure. Tests that only passed after a retry are
 listed separately as **flaky**: a flaky test is a different problem from a
 broken one, and hiding it in the pass count is how it stays broken.
+The report also lists the ordered attempt numbers and the failure reason (and
+retained trace, when available) from every failed attempt.
 
 A test appears in the report when it failed, when it was flaky, or when it kept
 a trace — so under `trace: 'on'` every test is there, with its recording, its

@@ -15,22 +15,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
-import {
-  applyPatchSet,
-  ensureUpstreamModule,
-  materializeUpstream,
-  writeWorkspace,
-} from '@termwright/probe-go';
 import { afterAll, describe, expect, it } from 'vitest';
+import { prepareInstrumentedBuild } from './launch.js';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, 'testing', 'fixture-v2');
 const FIXTURE_BUBBLES = join(here, 'testing', 'fixture-bubbles');
 const FIXTURE_ANNOTATED = join(here, 'testing', 'fixture-annotated');
-const BUBBLES_PATCH_SET = join(here, '..', 'upstream-patches', 'bubbles', 'v2.1.1');
-const PATCH_SET = join(here, '..', 'upstream-patches', 'bubbletea', 'v2.0.8');
-const CLIENT = join(here, '..', '..', '..', 'clients', 'go');
 
 async function goAvailable(): Promise<boolean> {
   if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;
@@ -82,42 +74,15 @@ async function buildBubblesFixture(): Promise<string> {
   await mkdir(app, { recursive: true });
   await cp(FIXTURE_BUBBLES, app, { recursive: true });
 
-  const tea = join(dir, 'bubbletea');
-  await materializeUpstream(
-    await ensureUpstreamModule({
-      module: 'charm.land/bubbletea/v2',
-      version: 'v2.0.8',
-      cachePath: ['charm.land', 'bubbletea', 'v2@v2.0.8'],
-    }),
-    tea,
-  );
-  await applyPatchSet(tea, PATCH_SET);
-
-  const bubbles = join(dir, 'bubbles');
-  await materializeUpstream(
-    await ensureUpstreamModule({
-      module: 'charm.land/bubbles/v2',
-      version: 'v2.1.1',
-      cachePath: ['charm.land', 'bubbles', 'v2@v2.1.1'],
-    }),
-    bubbles,
-  );
-  await applyPatchSet(bubbles, BUBBLES_PATCH_SET);
-
-  const workspace = await writeWorkspace(join(dir, 'generated.work'), {
+  const prepared = await prepareInstrumentedBuild({
     moduleDir: app,
-    inherited: { uses: [], replaces: [] },
-    replaces: [
-      { from: 'charm.land/bubbletea/v2', to: tea },
-      { from: 'charm.land/bubbles/v2', to: bubbles },
-      { from: 'github.com/gorce-ai/termwright/clients/go', to: await realpath(CLIENT) },
-    ],
+    env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') },
   });
 
   const binary = join(dir, 'app-binary');
   await run('go', ['build', '-o', binary, '.'], {
     cwd: app,
-    env: { ...process.env, GOWORK: workspace },
+    env: prepared.env,
   });
   return binary;
 }
@@ -130,35 +95,46 @@ async function buildFixture(): Promise<string> {
   await mkdir(app, { recursive: true });
   await cp(FIXTURE, app, { recursive: true });
 
-  const copy = join(dir, 'bubbletea');
-  await materializeUpstream(
-    await ensureUpstreamModule({
-      module: 'charm.land/bubbletea/v2',
-      version: 'v2.0.8',
-      cachePath: ['charm.land', 'bubbletea', 'v2@v2.0.8'],
-    }),
-    copy,
-  );
-  await applyPatchSet(copy, PATCH_SET);
-
-  const workspace = await writeWorkspace(join(dir, 'generated.work'), {
+  const prepared = await prepareInstrumentedBuild({
     moduleDir: app,
-    inherited: { uses: [], replaces: [] },
-    replaces: [
-      { from: 'charm.land/bubbletea/v2', to: copy },
-      { from: 'github.com/gorce-ai/termwright/clients/go', to: await realpath(CLIENT) },
-    ],
+    env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') },
   });
 
   const binary = join(dir, 'app-binary');
   await run('go', ['build', '-o', binary, '.'], {
     cwd: app,
-    env: { ...process.env, GOWORK: workspace },
+    env: prepared.env,
   });
   return binary;
 }
 
 describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () => {
+	it('qualifies unobservable component layout instead of inventing it', async () => {
+		const binary = await buildFixture();
+		const app = await launchTerminal({
+			command: [binary],
+			columns: 80,
+			rows: 12,
+		});
+		sessions.push(app);
+		await app.waitForText('Sign in');
+		await expect.poll(() => app.semanticTree()?.v).toBe(2);
+
+		const tree = app.semanticTree();
+		expect(tree?.hitGrid).toEqual({
+			status: 'unsupported',
+			capability: 'pointer-hit-grid',
+			reason: 'framework-unobservable',
+		});
+		const textbox = tree?.nodes.find((node) => node.role === 'textbox' && node.name === 'Name');
+		expect(textbox?.geometry).toEqual({
+			displayed: { status: 'unknown', reason: 'not-reported' },
+			intendedRect: { status: 'unsupported', capability: 'geometry', reason: 'framework-unobservable' },
+			visibleRect: { status: 'unsupported', capability: 'geometry', reason: 'framework-unobservable' },
+		});
+		expect(textbox?.bounds).toBeUndefined();
+	}, 900_000);
+
   it('names the components the screen only shows as text', async () => {
     const binary = await buildFixture();
     const app = await launchTerminal({ command: [binary], columns: 80, rows: 12 });
@@ -167,6 +143,23 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
 
     expect(app.capabilities().semanticTree).toBe(true);
     expect(app.capabilities().adapter?.name).toBe('termwright-probe-charm');
+    expect(app.capabilities().capabilities).toEqual([
+      'tree',
+      'states',
+      'actions',
+      'render-revisions',
+      'qualified-observations',
+    ]);
+    // Probe capabilities describe what Bubble Tea lets the instrumentation
+    // observe; they are intentionally not the adapter traffic negotiated
+    // immediately above.
+    expect(app.capabilities().probe).toEqual({
+      framework: 'charm',
+      frameworkVersion: 'v2.0.8',
+      probeVersion: '0.1.0',
+      identityKind: 'frame-local',
+      capabilities: ['annotations'],
+    });
 
     // The claim: a grid scrape sees two rows of similar-looking text. The tree
     // says which component each is, and which one is focused — neither of
@@ -174,7 +167,7 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     await expect
       .poll(async () => (await app.getByRole('textbox', { name: 'Name' }).semanticState())?.focused)
       .toBe(true);
-    await expect.poll(() => app.getByRole('textbox', { name: 'Password' }).isVisible()).toBe(true);
+    await expect.poll(() => app.getByRole('textbox', { name: 'Password' }).count()).toBe(1);
 
     await app.type('ada');
     await expect.poll(() => app.getByRole('textbox', { name: 'Name' }).textContent()).toContain('ada');
@@ -221,30 +214,15 @@ describe.skipIf(!runnable)('developer annotations', () => {
     await mkdir(app, { recursive: true });
     await cp(FIXTURE_ANNOTATED, app, { recursive: true });
 
-    const tea = join(dir, 'bubbletea');
-    await materializeUpstream(
-      await ensureUpstreamModule({
-        module: 'charm.land/bubbletea/v2',
-        version: 'v2.0.8',
-        cachePath: ['charm.land', 'bubbletea', 'v2@v2.0.8'],
-      }),
-      tea,
-    );
-    await applyPatchSet(tea, PATCH_SET);
-
-    const workspace = await writeWorkspace(join(dir, 'generated.work'), {
+    const prepared = await prepareInstrumentedBuild({
       moduleDir: app,
-      inherited: { uses: [], replaces: [] },
-      replaces: [
-        { from: 'charm.land/bubbletea/v2', to: tea },
-        { from: 'github.com/gorce-ai/termwright/clients/go', to: await realpath(CLIENT) },
-      ],
+      env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') },
     });
 
     const binary = join(dir, 'app-binary');
     await run('go', ['build', '-o', binary, '.'], {
       cwd: app,
-      env: { ...process.env, GOWORK: workspace },
+      env: prepared.env,
     });
 
     const session = await launchTerminal({ command: [binary], columns: 60, rows: 10 });
@@ -254,21 +232,61 @@ describe.skipIf(!runnable)('developer annotations', () => {
     // A component the probe knows nothing about, reported as what its author
     // says it is — through an interface rather than a registry, because a
     // Bubble Tea component is copied on every update.
-    await expect.poll(() => session.getByTestId('disk-gauge').isVisible()).toBe(true);
+    await expect.poll(() => session.getByTestId('disk-gauge').count()).toBe(1);
     await expect
-      .poll(() => session.getByRole('progressbar', { name: 'Disk usage' }).isVisible())
-      .toBe(true);
+      .poll(() => session.getByRole('progressbar', { name: 'Disk usage' }).count())
+      .toBe(1);
 
     // The declaration is recomputed per frame, so domain state follows the
     // component instead of going stale the way a registered copy would.
     await session.press('+');
     await session.waitForText('disk 82%');
-    await expect.poll(() => session.getByTestId('disk-gauge').isVisible()).toBe(true);
-
-    // And the recognised component beside it keeps the probe's own facts.
     await expect
-      .poll(async () => (await session.getByRole('textbox').semanticState())?.focused)
+      .poll(() => session.getByTestId('disk-gauge').extendedState())
+      .toEqual({ level: 82, status: 'warning' });
+
+    // The annotated wrapper around a native Bubbles textinput keeps all three
+    // layers: the author's name/test id, plus the recognizer's role, focus and
+    // live value. Before the regression fix the early annotation return made
+    // this a generic node with neither state nor value.
+    await expect.poll(() => session.getByTestId('server-host').count()).toBe(1);
+    const annotatedNode = () =>
+      session.semanticTree()?.nodes.find((node) => node.testId === 'server-host');
+    const firstID = annotatedNode()?.id;
+    expect(firstID).toBeDefined();
+    expect(annotatedNode()?.actions).toEqual(['focus', 'setValue']);
+    expect(annotatedNode()?.p).toBe('framework');
+    expect(annotatedNode()?.px).toEqual(
+      expect.objectContaining({
+        id: 'annotation',
+        name: 'annotation',
+        actions: 'annotation',
+        labelledBy: 'annotation',
+        describedBy: 'annotation',
+        role: 'recognizer',
+      }),
+    );
+    const label = session
+      .semanticTree()
+      ?.nodes.find((node) => node.name === 'Server host' && node.role === 'text');
+    const help = session.semanticTree()?.nodes.find((node) => node.name === 'DNS host name');
+    expect(annotatedNode()?.labelledBy).toEqual([label?.id]);
+    expect(annotatedNode()?.describedBy).toEqual([help?.id]);
+    await expect
+      .poll(
+        async () =>
+          (
+            await session
+              .getByRole('textbox', { name: 'Server host' })
+              .semanticState()
+          )?.focused,
+      )
       .toBe(true);
+    await session.type('prod-01');
+    await expect
+      .poll(() => session.getByTestId('server-host').textContent())
+      .toContain('prod-01');
+    expect(annotatedNode()?.id).toBe(firstID);
   }, 900_000);
 });
 

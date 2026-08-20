@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "umbrella package + CLI: ui, codegen, mcp, agent-context, usage, skill",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/termwright-cli"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -19,6 +24,10 @@
     "./ink": {
       "types": "./dist/ink.d.ts",
       "import": "./dist/ink.js"
+    },
+    "./gherkin": {
+      "types": "./dist/gherkin.d.ts",
+      "import": "./dist/gherkin.js"
     },
     "./reporter": {
       "types": "./dist/reporter.d.ts",
@@ -40,12 +49,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/test.ts src/ink.ts src/reporter.ts src/ui-reporter.ts src/cli.ts src/bin.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/test.ts src/ink.ts src/gherkin.ts src/reporter.ts src/ui-reporter.ts src/cli.ts src/bin.ts src/vitest-ui-host.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@termwright/desktop-host": "workspace:*",
     "@termwright/driver": "workspace:*",
+    "@termwright/gherkin": "workspace:*",
     "@termwright/ink-testing": "workspace:*",
     "@termwright/mcp": "workspace:*",
     "@termwright/test": "workspace:*",

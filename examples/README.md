@@ -50,8 +50,8 @@ pnpm build && pnpm start     # play with it
 pnpm test
 ```
 
-- `src/todo-app.tsx` — the application. `useSemantic` annotations are the whole
-  instrumentation; there are no test hooks in it.
+- `src/todo-app.tsx` — the application. `useSemantic` carries optional author
+  intent; the launcher-injected Ink probe owns observation and transport.
 - `src/mouse.ts` — the application side of clicking: enabling mouse reporting
   and hit-testing its own measured layout.
 - `tests/app.e2e.test.ts` — `launchTerminal` through the Vitest preset: role
@@ -74,7 +74,9 @@ python3 app/notes_app.py     # play with it
 pnpm test
 ```
 
-`enable_semantics(self)` in `on_mount` is the entire adapter integration.
+The application imports only Textual. The test command prefixes it with
+`python -m termwright_probe`, so semantics are injected at startup without an
+application source change.
 
 ## tview-menu
 
@@ -86,8 +88,9 @@ go run ./app                 # play with it
 pnpm test                    # builds the binary first
 ```
 
-`termwright.Attach(app, root)` next to `Run()` is the entire adapter
-integration.
+The application imports only tview/tcell. The test build uses
+`prepareInstrumentedBuild()` to redirect tview to an ephemeral patched copy;
+the project module files remain byte-identical.
 
 ## What to copy
 
@@ -106,7 +109,7 @@ integration.
   `{ within: locator }` instead of spelling out the path. A snapshot stored in
   `__snapshots__` is compared strictly, so it tells you about any change at all.
 - **Assert both oracles for anything important.** A semantic snapshot is
-  published by the adapter, so it can pass on a screen nobody painted. The cell
+  published by the probe, so it can pass on a screen nobody painted. The cell
   snapshot is the second opinion.
 - **Declare the files a test needs, per test.** `launch({ files })` writes them
   into the test's private directory — the program's `cwd` — before it starts, so

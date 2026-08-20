@@ -1,118 +1,55 @@
 ---
 title: OpenTUI
-description: instrumentRenderer and describeRenderable, the three annotation levels, and why bounds need alternate-screen mode.
+description: Observe OpenTUI Renderables and use exact semantic pointer targeting.
 ---
 
-[OpenTUI](https://github.com/anomalyco/opentui) is a class-A framework in the
-[feasibility classes](../): it retains a `Renderable` tree, each node caches its
-`screenX` / `screenY`, and it exposes a parent chain, children, lifecycle hooks
-and a frame event. That is everything an adapter needs.
+The OpenTUI probe observes the existing Renderable tree. It does not replace the
+renderer or require application source changes.
+
+## Install and launch
 
 ```sh
-npm install --save-dev @termwright/opentui
+npm install --save-dev @termwright/probe-opentui
 ```
-
-Node >= 22, ESM only. `@opentui/core` >= 0.5 is a peer dependency — and note
-that OpenTUI itself currently needs **Bun** to load its native library.
-
-Without a driver in the environment the adapter is **completely inert**: no
-socket, no listener, no tree, no marker, byte-identical output. That is
-asserted, not claimed: the conformance suite runs the fixture with and without
-the adapter compiled in and compares the two streams byte for byte.
-
-## Usage
 
 ```ts
-import {BoxRenderable, TextRenderable, createCliRenderer} from '@opentui/core';
-import {describeRenderable, instrumentRenderer} from '@termwright/opentui';
+import {withProbe} from '@termwright/probe-opentui';
+import {test, expect} from 'termwright/test';
 
-const renderer = await createCliRenderer({screenMode: 'alternate-screen'});
-instrumentRenderer(renderer);
-
-const approve = new BoxRenderable(renderer, {id: 'approve', width: 11, height: 1});
-approve.add(new TextRenderable(renderer, {content: '[ Approve ]'}));
-renderer.root.add(approve);
-
-describeRenderable(approve, {role: 'button', name: 'Approve'});
+test('deploys a release', async ({terminal}) => {
+  const instrumented = withProbe('bun', ['bun', 'app.ts']);
+  const app = await terminal.launch({command: instrumented.command});
+  const deploy = app.getByRole('button', {name: 'Deploy'});
+  await expect(deploy).toBeAttached();
+  await deploy.click();
+});
 ```
 
-Call `instrumentRenderer` right after creating the renderer and before building
-the tree. Ship both calls unconditionally — in an uninstrumented run
-`describeRenderable` is a no-op that registers nothing and retains nothing.
+Bun is the normal OpenTUI runtime. Node works when the application itself runs
+on Node.
 
-## Annotating
-
-Three levels, in precedence order:
-
-1. **`describeRenderable(node, meta)`** — role, name, description, value, state,
-   actions, testId. All optional; anything you leave out is derived.
-2. **Convention properties on the renderable** — `role`, `semanticName`,
-   `ariaLabel`, `testId`. Assign them *after* construction: OpenTUI's
-   `Renderable` constructor drops options it does not recognise, so they cannot
-   be passed as props (verified against 0.5.3).
-3. **The widget class**, mapped conservatively: `TextRenderable` → `text`,
-   `InputRenderable` / `TextareaRenderable` → `textbox`, `SelectRenderable` →
-   `list`, `TextTableRenderable` → `table`, `ScrollBoxRenderable` → `region`.
-   A `BoxRenderable` stays unmapped — a box is a layout primitive, and a border
-   is styling, not semantics.
-
-The adapter derives the rest on its own: `bounds` from
-`screenX` / `screenY` / `width` / `height`, `focused` from OpenTUI's own flag,
-`focus` as an action for anything focusable, `name` from `plainText` or a box
-title, `value` from a widget's value, and `testId` from an author-chosen `id`
-(never from a generated `renderable-<n>`).
-
-Only interesting nodes are published: annotated ones, ones whose class maps to a
-role, focusable ones, and ones carrying text. Layout boxes are skipped and their
-children reparent to the nearest published ancestor, so the tree stays connected
-however much of it is dropped.
-
-## Coordinates need alternate-screen mode
-
-`bounds` are published only under `screenMode: 'alternate-screen'`, and that is
-also the only configuration in which the adapter claims the `absolute-bounds`
-capability.
-
-In `main-screen` and `split-footer` mode the renderer draws into a region whose
-origin the process cannot observe, so coordinates would be plausible and wrong.
-The protocol makes [`bounds` optional](../../reference/protocol/) precisely for
-this case, and locators fall back to text.
-
-## How a frame gets marked
-
-OpenTUI's render loop writes the frame and *then* emits `frame`. The adapter
-collects the tree in that handler — while `screenX` / `screenY` still describe
-the frame that was just drawn — pushes the snapshot, waits for the output stream
-to drain, and writes the DCS render-commit marker. The driver pairs tree and
-pixels on that marker, and a frame superseded before its snapshot goes out is
-dropped rather than mispaired.
-
-## Component testing
-
-`mountOpenTui` runs a renderer in-process, the way `mountInk` does for Ink:
+## Annotate a custom Renderable
 
 ```ts
-import {mountOpenTui} from '@termwright/opentui/testing';
+import {describeRenderable} from '@termwright/opentui';
 
-const harness = await mountOpenTui((renderer) => {
-  const approve = new BoxRenderable(renderer, {id: 'approve', width: 13, height: 1});
-  approve.add(new TextRenderable(renderer, {content: '[ Approve ]'}));
-  renderer.root.add(approve);
-  describeRenderable(approve, {role: 'button', name: 'Approve'});
-}, {columns: 40, rows: 10});
-
-await harness.getByRole('button', {name: 'Approve'}).click();
-await harness.commit(() => { status.content = 'Approved'; });
-await harness.close();
+const dispose = describeRenderable(deployment, {
+  role: 'status',
+  name: 'Deployment',
+  testId: 'deployment',
+  extended: {environment: 'staging'},
+});
 ```
 
-`commit()` is the settlement primitive: it applies a mutation and resolves once
-the resulting frame has been published, so an assertion after it reads the new
-tree rather than the old one.
+Annotations add intent. Text, focus, value, geometry, display, and hit testing
+remain observed framework facts.
 
-## Also exported
+## Supported behavior
 
-`readAdapterEnv`, `asSemanticRole`, `defaultActionsFor`, `mapRenderableClass`
-and `canPublishAbsoluteBounds` are public for anyone building on the same
-machinery — a different OpenTUI host, or a renderer that wants the role map
-without the instrumentation.
+OpenTUI 0.5 is verified. The probe observes stable identity, effective display,
+focus, values, intended geometry, and the committed native hit grid. Exact
+pointer actions are supported. OpenTUI does not expose ancestor clipping, so
+visible rectangles are unsupported. The hit result describes a fresh pointer,
+not active drag capture.
+
+See [Framework compatibility](../../reference/compatibility/) for current versions.

@@ -32,7 +32,7 @@ their environment.
 |---|---|---|---|
 | 1 | `release-pr.yml` | Applies the changesets on a branch, opens the Version PR | no |
 | 2 | `tag.yml` | Tags the merged commit, creates a **draft** GitHub Release | no |
-| 3a | `publish-crate.yml` | crates.io | **yes** |
+| 3a | `publish-crate.yml` | crates.io, in dependency order: protocol → Ratatui probe → Ratatui SDK | **yes** |
 | 3b | `publish-pypi.yml` | PyPI | **yes** |
 | 3c | `publish-npm.yml` | npm | **yes** |
 | 4 | `finalize-release.yml` | Publishes the release notes once all three registries confirm | no |
@@ -74,8 +74,25 @@ can only be yanked, never replaced, so it goes first — if it fails, nothing el
 has shipped yet. npm goes last because it is the one registry with a staging
 buffer.
 
-For each: dispatch with `ref` = `protocol/vX.Y.Z`, **`dry_run: true` first**,
-read the summary, then dispatch again with `dry_run: false` and approve.
+For each: select `protocol/vX.Y.Z` as the workflow's own **Run workflow from**
+ref and also pass that same tag as the `ref` input. This makes GitHub/npm/PyPI
+provenance name the commit that was actually packed. Run **`dry_run: true`
+first**, read the summary, then dispatch again with `dry_run: false` and approve.
+
+GitHub's web form only offers branches in its **Run workflow from** dropdown,
+so stable publishes must be dispatched through `gh` (or the REST API), which
+can bind the workflow itself to a tag:
+
+```sh
+tag=protocol/vX.Y.Z
+gh workflow run publish-crate.yml --ref "$tag" -f ref="$tag" -f dry_run=true
+gh workflow run publish-pypi.yml  --ref "$tag" -f ref="$tag" -f dry_run=true
+gh workflow run publish-npm.yml   --ref "$tag" -f mode=release -f ref="$tag" \
+  -f dry_run=true -f dist_tag=latest
+# After approving and reviewing the dry runs, repeat each with dry_run=false.
+gh workflow run finalize-release.yml --ref "$tag" -f ref="$tag" \
+  -f allow_partial=false -f mark_latest=true
+```
 
 Every publish workflow has a `verify` job that runs before the environment gate:
 it builds and tests, checks the tag against the manifests, checks the protocol
@@ -92,7 +109,8 @@ Dispatch **Finalize release** with the anchor tag. It queries all three
 registries for the version and publishes the draft notes only if every one of
 them has it. `allow_partial: true` publishes anyway and appends what is missing
 to the release body — for the case where a registry is down and the notes matter
-more than the wait.
+more than the wait. Set `mark_latest: false` for a backport so an older release
+line cannot replace the current GitHub Release badge.
 
 ## When one registry fails
 
@@ -121,13 +139,15 @@ Two specifics worth knowing:
 
 ## Protocol lockstep
 
-Four packages implement the same wire protocol and **share one version**:
+Six packages implement or ship the same wire protocol and **share one version**:
 
 | Package | Registry | Version lives in |
 |---|---|---|
 | `@termwright/protocol` | npm | `packages/protocol/package.json` (source of truth) |
 | `termwright` | PyPI | `clients/python/pyproject.toml` |
 | `termwright-protocol` | crates.io | `clients/rust/Cargo.toml` + `Cargo.lock` |
+| `termwright-probe-ratatui` | crates.io | `clients/rust-probe/Cargo.toml` + `Cargo.lock` |
+| `termwright-ratatui` | crates.io | `clients/rust-ratatui/Cargo.toml` + `Cargo.lock` |
 | `clients/go` | Go modules | nothing — the tag `clients/go/vX.Y.Z` *is* the version |
 
 ```sh
@@ -154,7 +174,9 @@ through OIDC, which has consequences worth knowing before the first release:
   version rather than assuming it, because an older npm silently falls back to
   token auth and fails with a much worse message. Classic npm tokens were
   revoked in December 2025.
-- **Provenance is automatic** with OIDC; there is no separate flag to remember.
+- **Stable-release provenance is automatic** with OIDC; there is no separate
+  flag to remember. Canary mode disables it because its source ref can differ
+  from the workflow ref.
 - **crates.io refuses OIDC from `pull_request_target` and `workflow_run`.**
   Another reason every publish workflow is dispatch-only.
 
@@ -171,11 +193,13 @@ is manual, and everything after it is the pipeline.
 - [ ] **PyPI** — create the `termwright` project, then add a trusted publisher:
       owner `gorce-ai`, repository `termwright`, workflow `publish-pypi.yml`,
       environment `pypi-publish`.
-- [ ] **crates.io** — publish `termwright-protocol` once by hand, then add the
-      trusted publisher for `publish-crate.yml`.
-- [ ] **GitHub Environments** — create `npm-publish`, `pypi-publish` and
-      `crates-publish`, each with required reviewers. This is the approval gate;
-      without it the workflows are merely manual, not controlled.
+- [ ] **crates.io** — publish `termwright-protocol`,
+      `termwright-probe-ratatui`, then `termwright-ratatui` once by hand, and
+      add the trusted publisher for `publish-crate.yml` to each crate.
+- [ ] **GitHub Environments** — create `release-tag`, `npm-publish`,
+      `pypi-publish` and `crates-publish`, each with required reviewers. This is
+      the approval gate; without protection an environment name alone does not
+      make a workflow controlled.
 
 Note also that npm's **staged publishing does not apply to a package's first
 release**. From `0.1.1` onward the staging buffer is available; for `0.1.0` it
@@ -191,10 +215,24 @@ the PR directly. Nothing reaches npm and no version is consumed. Opt-in per PR
 on purpose: a preview of everything is noise, and an install command built from
 an unreviewed fork is not something to hand out by default.
 
-**Canary snapshots** — dispatch `publish-canary.yml`. This is a *real* npm
-publish of `0.0.0-canary-<timestamp>-<sha>` under the `canary` dist-tag, from
-any branch, without consuming the pending changesets. `latest` is never moved,
-so nobody picks one up by accident.
+**Canary snapshots** — dispatch the trusted `publish-npm.yml` definition from
+`main`, with `mode: canary`, `ref` set to the source branch/commit, and
+`canary_tag` left as `canary` (or a `canary-*`/`canary.*` label). This is a real npm publish
+of `0.0.0-canary-<timestamp>` under that canary dist-tag, without consuming the
+pending changesets. `latest` is never moved, so nobody picks one up by accident.
+
+Canary shares `publish-npm.yml` deliberately: npm permits only one trusted
+publisher workflow per package. Its source build and package lifecycle run in
+an unprivileged job; only a fixed allowlist of immutable tarballs crosses into
+the approved OIDC job. Canary artifacts are unsigned because GitHub's automatic
+npm provenance would describe the workflow dispatch ref, which can differ from
+the separate canary source ref.
+
+```sh
+gh workflow run publish-npm.yml --ref main -f mode=canary -f ref=my-branch \
+  -f canary_tag=canary -f dry_run=true
+# Review and approve the dry run, then repeat with dry_run=false.
+```
 
 **Pre mode** (`changeset pre enter`) — for a sustained prerelease line, e.g. a
 long-running `2.0.0-next.N`. Not in use, and if we start, it belongs on a `next`
@@ -210,6 +248,8 @@ releases for as long as it is on.
    against that branch.
 4. Publish with **`dist_tag: N.x-lts`**, so `latest` keeps pointing at the
    current line.
+5. Finalize with **`mark_latest: false`**, so GitHub also keeps the current line
+   marked as latest.
 
 ## Quick reference
 
@@ -217,10 +257,11 @@ releases for as long as it is on.
 release-pr.yml     target=main                                  -> Version PR
   (merge)
 tag.yml            ref=main                                     -> protocol/vX.Y.Z + draft release
-publish-crate.yml  ref=protocol/vX.Y.Z  dry_run=true, then false
-publish-pypi.yml   ref=protocol/vX.Y.Z  dry_run=true, then false
-publish-npm.yml    ref=protocol/vX.Y.Z  dry_run=true, then false, dist_tag=latest
-finalize-release.yml ref=protocol/vX.Y.Z                        -> notes go live
+publish-crate.yml  run-from+ref=protocol/vX.Y.Z  dry_run=true, then false
+publish-pypi.yml   run-from+ref=protocol/vX.Y.Z  dry_run=true, then false
+publish-npm.yml    mode=release, run-from+ref=protocol/vX.Y.Z, dist_tag=latest
+publish-npm.yml    mode=canary, ref=<branch/sha>, canary_tag=canary
+finalize-release.yml run-from+ref=protocol/vX.Y.Z  mark_latest=true -> notes go live
 ```
 
 Contributor-facing guidance (when a changeset is required, how to write one)

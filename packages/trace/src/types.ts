@@ -16,7 +16,7 @@
  */
 
 import type { CrashInput, SessionDiagnostic } from '@termwright/driver';
-import type { LogAttrValue, LogLevel, SemanticSnapshot } from '@termwright/protocol';
+import type { LogAttrValue, LogLevel, ObservationStamp, SemanticSnapshot } from '@termwright/protocol';
 
 /** Current archive version. Readers reject anything else. */
 export const TRACE_VERSION = 1 as const;
@@ -252,6 +252,16 @@ export interface StepStartEvent extends TraceEventBase {
   readonly title: string;
   /** Enclosing step, when steps are nested. */
   readonly parentStepId?: string;
+  /** Authored Gherkin identity, when this step came from a physical feature. */
+  readonly gherkin?: GherkinStepMetadata;
+}
+
+/** Physical authoring metadata retained without parsing a display title. */
+export interface GherkinStepMetadata {
+  readonly keyword: string;
+  readonly text: string;
+  readonly source: { readonly file: string; readonly line: number; readonly column: number };
+  readonly background?: boolean;
 }
 
 /** Closing of a `test.step()`. */
@@ -289,6 +299,8 @@ export interface ActionEvent extends TraceEventBase {
    * and filtering.
    */
   readonly error?: string;
+  /** Exact screen/tree pair observed when the driver completed the action. */
+  readonly observation?: ObservationStamp;
   readonly stepId?: string;
 }
 
@@ -300,6 +312,8 @@ export interface AssertEvent extends TraceEventBase {
   readonly ref?: string;
   readonly ok: boolean;
   readonly error?: string;
+  /** Exact screen/tree pair used to diagnose this assertion, when available. */
+  readonly observation?: ObservationStamp;
   readonly stepId?: string;
 }
 
@@ -349,6 +363,7 @@ export interface StepSummary {
   readonly stepId: string;
   readonly title: string;
   readonly parentStepId?: string;
+  readonly gherkin?: GherkinStepMetadata;
   /** Wall-clock start, in milliseconds. */
   readonly startedAt: number;
   /** Wall-clock end, in milliseconds; `null` when the step never closed. */

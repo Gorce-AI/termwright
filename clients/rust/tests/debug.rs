@@ -168,7 +168,7 @@ fn a_protocol_mismatch_says_so() {
     assert!(Client::from_values(
         Some("/tmp/x.sock"),
         Some("token"),
-        Some("termwright/2"),
+        Some("termwright/99"),
         options
     )
     .is_none());
@@ -176,7 +176,7 @@ fn a_protocol_mismatch_says_so() {
 
     let text = fs::read_to_string(&path).expect("readable");
     assert!(
-        text.contains(r#"dormant: TERMWRIGHT_PROTOCOL="termwright/2""#),
+        text.contains(r#"dormant: TERMWRIGHT_PROTOCOL="termwright/99""#),
         "{text}"
     );
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
+	"github.com/gorce-ai/termwright/clients/go/annotate"
 	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
@@ -237,6 +238,132 @@ func TestTheProbeRecognisesARejectedSnapshotSeparately(t *testing.T) {
 	}
 	if protocol.ValidationCode(protocol.ErrWriteTimeout) != "" {
 		t.Fatal("a write timeout was reported as a validation failure")
+	}
+}
+
+func TestAnnotationsResolveKeysAfterTheWholeRetainedTreeIsKnown(t *testing.T) {
+	annotate.Reset()
+	t.Cleanup(annotate.Reset)
+
+	control := NewButton("Save")
+	label := NewTextView().SetText("Release name")
+	help := NewTextView().SetText("Use a unique name")
+	annotate.Tag(control, annotate.Semantics{
+		Name:        "Save release",
+		Actions:     []protocol.Action{protocol.ActionActivate, protocol.ActionActivate, protocol.Action("invalid")},
+		LabelledBy:  []annotate.SemanticKey{"release-label"},
+		DescribedBy: []annotate.SemanticKey{"release-help", "missing"},
+	})
+	annotate.Tag(label, annotate.Semantics{Key: "release-label"})
+	annotate.Tag(help, annotate.Semantics{Key: "release-help"})
+
+	// The control deliberately comes first. A one-pass resolver would miss
+	// both targets because neither has been walked yet.
+	root := NewFlex().SetDirection(FlexRow).
+		AddItem(control, 1, 0, false).
+		AddItem(label, 1, 0, false).
+		AddItem(help, 1, 0, false)
+	app := NewApplication()
+	app.root = root
+	root.SetRect(0, 0, 40, 3)
+
+	probe := &termwrightProbeState{ids: make(map[Primitive]string)}
+	snapshot := probe.snapshot(app, 40, 3, false)
+	controlID := probe.identity(control)
+	labelID := probe.identity(label)
+	helpID := probe.identity(help)
+
+	var node *protocol.Node
+	for index := range snapshot.Nodes {
+		if snapshot.Nodes[index].ID == controlID {
+			node = &snapshot.Nodes[index]
+			break
+		}
+	}
+	if node == nil {
+		t.Fatal("annotated control was not published")
+	}
+	if strings.Join(node.LabelledBy, ",") != labelID || strings.Join(node.DescribedBy, ",") != helpID {
+		t.Fatalf("relations were not resolved by key: labelledBy=%v describedBy=%v", node.LabelledBy, node.DescribedBy)
+	}
+	if len(node.Actions) != 1 || node.Actions[0] != protocol.ActionActivate {
+		t.Fatalf("actions were not closed and deduplicated: %v", node.Actions)
+	}
+	if node.P != protocol.ProvenanceFramework {
+		t.Fatalf("node-wide provenance = %q, want framework", node.P)
+	}
+	for _, field := range []string{"name", "actions", "labelledBy", "describedBy"} {
+		if node.PX[field] != protocol.ProvenanceAnnotation {
+			t.Fatalf("%s provenance = %q, want annotation (all px=%v)", field, node.PX[field], node.PX)
+		}
+	}
+	if node.Bounds == nil || node.Role != protocol.RoleButton || node.PX["role"] != protocol.ProvenanceRecognizer {
+		t.Fatalf("annotation replaced framework/recognizer facts: %+v", node)
+	}
+}
+
+func TestDuplicateSemanticKeysCannotBecomeAmbiguousRelations(t *testing.T) {
+	annotate.Reset()
+	t.Cleanup(annotate.Reset)
+
+	control := NewButton("Save")
+	first := NewTextView().SetText("First")
+	second := NewTextView().SetText("Second")
+	annotate.Tag(control, annotate.Semantics{LabelledBy: []annotate.SemanticKey{"duplicate"}})
+	annotate.Tag(first, annotate.Semantics{Key: "duplicate"})
+	annotate.Tag(second, annotate.Semantics{Key: "duplicate"})
+
+	root := NewFlex().
+		AddItem(control, 1, 0, false).
+		AddItem(first, 1, 0, false).
+		AddItem(second, 1, 0, false)
+	app := NewApplication()
+	app.root = root
+	root.SetRect(0, 0, 30, 1)
+	probe := &termwrightProbeState{ids: make(map[Primitive]string)}
+	snapshot := probe.snapshot(app, 30, 1, false)
+	controlID := probe.identity(control)
+	for _, node := range snapshot.Nodes {
+		if node.ID == controlID && len(node.LabelledBy) != 0 {
+			t.Fatalf("duplicate key resolved arbitrarily to %v", node.LabelledBy)
+		}
+	}
+}
+
+func TestQualifiedSnapshotReportsOnlyObservableTviewGeometry(t *testing.T) {
+	root := NewFlex()
+	button := NewButton("Approve")
+	hidden := NewButton("Hidden")
+	root.AddItem(button, 1, 0, false).AddItem(hidden, 1, 0, false)
+	root.SetRect(75, 23, 10, 2)
+	button.SetRect(75, 23, 10, 1)
+	hidden.SetRect(75, 24, 10, 1)
+
+	app := NewApplication()
+	app.root = root
+	probe := &termwrightProbeState{ids: make(map[Primitive]string)}
+	snapshot := probe.snapshot(app, 80, 24, true)
+
+	if snapshot.V != 2 || snapshot.CoordinateSpace == nil || snapshot.HitGrid == nil || snapshot.HitGrid.Status != "unsupported" {
+		t.Fatalf("snapshot is not honestly qualified: %+v", snapshot)
+	}
+	for index, node := range snapshot.Nodes {
+		if node.Geometry == nil {
+			t.Fatalf("node %d has no qualified geometry: %+v", index, node)
+		}
+		if node.Bounds != nil || node.Occlusion != "" {
+			t.Fatalf("v2 node retained legacy geometry fields: %+v", node)
+		}
+	}
+	geometry := snapshot.Nodes[1].Geometry
+	if geometry.Displayed.Status != "known" || geometry.Displayed.Value == nil || !*geometry.Displayed.Value {
+		t.Fatalf("displayed observation = %+v", geometry.Displayed)
+	}
+	if geometry.IntendedRect.Value == nil || *geometry.IntendedRect.Value != (protocol.Rect{Row: 23, Column: 75, Width: 10, Height: 1}) {
+		t.Fatalf("intended rect = %+v", geometry.IntendedRect)
+	}
+	if geometry.VisibleRect.Value == nil || *geometry.VisibleRect.Value != (protocol.Rect{Row: 23, Column: 75, Width: 5, Height: 1}) {
+		t.Fatalf("visible rect = %+v", geometry.VisibleRect)
 	}
 }
 

@@ -3,16 +3,26 @@
   "version": "0.1.0",
   "description": "Vitest preset: fixtures, matchers, semantic YAML snapshots, trace reporter",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/test"
+  },
   "type": "module",
   "engines": { "node": ">=22" },
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./reporter": { "types": "./dist/reporter.d.ts", "import": "./dist/reporter.js" },
-    "./config": { "types": "./dist/config.d.ts", "import": "./dist/config.js" }
+    "./config": { "types": "./dist/config.d.ts", "import": "./dist/config.js" },
+    "./ui-runner": {
+      "types": "./dist/ui-runner.d.ts",
+      "import": "./dist/ui-runner.js",
+      "default": "./dist/ui-runner.js"
+    }
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts src/reporter.ts src/config.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/reporter.ts src/config.ts src/ui-runner.ts --format esm --dts --sourcemap",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -20,6 +30,7 @@
     "@termwright/driver": "workspace:*",
     "@termwright/protocol": "workspace:*",
     "@termwright/trace": "workspace:*",
+    "@termwright/ui": "workspace:*",
     "yaml": "^2.5.0"
   },
   "peerDependencies": {

@@ -25,6 +25,39 @@ class Rect:
 
 
 @dataclass(frozen=True)
+class Observation:
+    """Evidence-qualified wire fact; value is present only for ``known``."""
+
+    status: str
+    value: Any = None
+    evidence: Optional[str] = None
+    reason: Optional[str] = None
+    capability: Optional[str] = None
+
+    def to_wire(self) -> Dict[str, Any]:
+        wire: Dict[str, Any] = {"status": self.status}
+        if self.status == "known":
+            wire["value"] = self.value.to_wire() if hasattr(self.value, "to_wire") else self.value
+            wire["evidence"] = self.evidence
+        elif self.status == "unsupported":
+            wire["capability"] = self.capability
+            wire["reason"] = self.reason
+        else:
+            wire["reason"] = self.reason
+        return wire
+
+
+@dataclass(frozen=True)
+class NodeGeometryObservations:
+    displayed: Observation
+    intendedRect: Observation
+    visibleRect: Observation
+
+    def to_wire(self) -> Dict[str, Any]:
+        return {"displayed": self.displayed.to_wire(), "intendedRect": self.intendedRect.to_wire(), "visibleRect": self.visibleRect.to_wire()}
+
+
+@dataclass(frozen=True)
 class SemanticState:
     """Closed state set; unset members are omitted from the wire form."""
 
@@ -84,6 +117,8 @@ class SemanticNode:
     value: Optional[str] = None
     bounds: Optional[Rect] = None
     state: Optional[SemanticState] = None
+    #: Application-defined JSON state. Portable flags stay in ``state``.
+    extended: Optional[Mapping[str, Any]] = None
     actions: Optional[Sequence[str]] = None
     labelledBy: Optional[Sequence[str]] = None
     describedBy: Optional[Sequence[str]] = None
@@ -101,6 +136,7 @@ class SemanticNode:
     p: Optional[str] = None
     #: Where individual fields came from, when they differ from ``p``.
     px: Optional[Mapping[str, str]] = None
+    geometry: Optional[NodeGeometryObservations] = None
 
     def to_wire(self) -> Dict[str, Any]:
         wire: Dict[str, Any] = {"id": self.id, "role": self.role, "name": self.name}
@@ -116,6 +152,8 @@ class SemanticNode:
             state = self.state.to_wire()
             if state:
                 wire["state"] = state
+        if self.extended is not None:
+            wire["extended"] = _canonical_extended(self.extended)
         if self.actions is not None:
             wire["actions"] = list(self.actions)
         if self.labelledBy is not None:
@@ -134,7 +172,18 @@ class SemanticNode:
             wire["p"] = self.p
         if self.px:
             wire["px"] = dict(self.px)
+        if self.geometry is not None:
+            wire["geometry"] = self.geometry.to_wire()
         return wire
+
+
+def _canonical_extended(value: Any) -> Any:
+    """Copy JSON-like domain state with stable object-key ordering."""
+    if isinstance(value, Mapping):
+        return {key: _canonical_extended(value[key]) for key in sorted(value)}
+    if isinstance(value, (list, tuple)):
+        return [_canonical_extended(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True)
@@ -165,6 +214,8 @@ class SemanticSnapshot:
     nodes: Sequence[SemanticNode] = field(default_factory=list)
     cursor: Optional[CursorInfo] = None
     v: int = 1
+    coordinateSpace: Optional[Observation] = None
+    hitGrid: Optional[Observation] = None
 
     def to_wire(self) -> Dict[str, Any]:
         wire: Dict[str, Any] = {
@@ -178,6 +229,10 @@ class SemanticSnapshot:
             wire["cursor"] = self.cursor.to_wire()
         wire["rootIds"] = list(self.rootIds)
         wire["nodes"] = [node.to_wire() for node in self.nodes]
+        if self.coordinateSpace is not None:
+            wire["coordinateSpace"] = self.coordinateSpace.to_wire()
+        if self.hitGrid is not None:
+            wire["hitGrid"] = self.hitGrid.to_wire()
         return wire
 
 

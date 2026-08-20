@@ -187,7 +187,7 @@ const SCENARIOS = {
     socket.write(frame(hello({ token: 'not-the-token' })));
   },
   'bad-version': () => {
-    socket.write(frame(hello({ protocol: 'termwright/2' })));
+    socket.write(frame(hello({ protocol: 'termwright/99' })));
   },
   'no-hello': () => {
     socket.write(frame({ type: 'snapshot', snapshot: tree(1, validNodes('Peer')) }));

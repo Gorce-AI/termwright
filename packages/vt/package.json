@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "termwright VT core: one terminal factory and one terminal profile, shared by driver, trace, screenshot and ui",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/vt"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"

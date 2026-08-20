@@ -78,8 +78,8 @@ export function buildLocator(harness: TerminalHarness, input: TargetInput): Loca
   let locator: Locator;
   if (input.ref !== undefined) {
     // The driver resolves a ref by node identity and owns its staleness rule,
-    // so two nodes with the same name stay distinct and a superseded ref fails
-    // as `stale-snapshot` without this layer guessing at either.
+    // so two nodes with the same name stay distinct. The driver alone decides
+    // whether that producer promised stable identity or requires a fresh ref.
     locator = harness.locatorForRef(input.ref);
   } else if (input.selector !== undefined) {
     locator = harness.locator(input.selector);

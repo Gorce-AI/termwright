@@ -1,269 +1,145 @@
 ---
-title: Writing an adapter
-description: The five wire obligations, the six semantics conventions, the traps that cost an afternoon each, and how to certify an adapter in any language.
+title: Write a framework integration
+description: Build and certify a semantic probe for a TUI framework that Termwright does not yet support.
 ---
 
-An adapter is small. It connects to a socket the driver already created,
-completes a handshake, publishes a tree after each frame, and writes one escape
-sequence. Everything hard about the protocol — the byte ceilings, the hostile
-input handling, the validation — lives in the client library for your language.
+Write an integration when a framework has useful component state that cannot be
+recovered from terminal cells. A probe observes that state inside the
+application process and publishes a semantic snapshot after each rendered
+frame.
 
-Start from the [protocol reference](../../reference/protocol/) for the wire
-format. This page is the adapter author's checklist.
+This is an adapter-author guide. Application tests should start with
+[generic terminal mode](../../adapters/) or an existing integration.
 
-## The five wire obligations
+## Choose an integration strategy
 
-The [conformance suite](#certifying-it) asserts exactly these, so an adapter
-that satisfies them is done by definition.
+| Framework design | Normal strategy |
+| --- | --- |
+| Retained widget tree with public hooks | Runtime preload or lifecycle hook |
+| Retained tree with private layout state | Exact-version build instrumentation |
+| Immediate-mode rendering | Observe frame render calls in an instrumented build |
+| Rendered string with a structured model | Observe the model and publish frame-local nodes |
 
-### 1. The dormant rule
+Do not infer component geometry from paint order or rendered text. Publish a
+fact only when the framework exposes evidence for it.
 
-Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in the environment, the
-adapter **opens nothing, allocates nothing, emits nothing**, and the
-application's output is byte-for-byte what it would have been. Every client
-expresses this as a constructor that returns nothing —
-`client_from_env() -> None`, `protocol.FromEnv() == nil`,
-`Client::from_env() -> None`, `termwright.Attach() -> (nil, nil)` — so the
-calling app needs no feature flag and shipping the adapter in production costs
-one import.
+## Use the protocol client
 
-### 2. The handshake
+Termwright ships protocol clients for TypeScript, Python, Go, and Rust. Start
+from the client for the framework's language rather than implementing framing,
+limits, marker authentication, or hostile-input validation again.
 
-Send `hello` first and exactly once, carrying the token from the environment,
-the protocol id, a non-empty adapter name and version, and a capability list
-drawn from the closed set. The driver replies with the selected version, the
-session limits and the marker configuration.
+A probe must remain dormant unless both `TERMWRIGHT_ENDPOINT` and
+`TERMWRIGHT_TOKEN` are present. Outside a test it must open no connection and
+must not change terminal output.
 
-No valid hello within the negotiation window (250 ms by default) means the
-session continues generically with `semanticTree: false`. A late or malformed
-hello never flips an already-selected mode.
+## Negotiate the protocol
 
-### 3. Valid snapshots
+Send one `hello` with:
 
-Every snapshot must pass validation: unique ids, parents that exist, acyclic
-parent chains, depth / count / byte ceilings, a positive strictly increasing
-revision, roles and actions from the closed sets. Unknown properties are
-rejected, not ignored.
+- protocol `termwright/2`;
+- a non-empty adapter name and version;
+- the capabilities the probe can actually provide;
+- `qualified-observations` for evidence-qualified geometry and visibility;
+- `pointer-hit-grid` only when the framework exposes exact fresh-pointer routing.
 
-Two invariants are stricter than the prose and catch most first attempts:
+Wait for the selected protocol and session limits before publishing snapshots.
+A malformed or late handshake does not upgrade an already generic session.
 
-- every node without a `parentId` must appear in `rootIds`;
-- `labelledBy` / `describedBy` must reference nodes present in the same
-  snapshot.
+## Build semantic nodes
 
-If you truncate a large tree, never emit a child after its parent was dropped —
-point `parentId` at the nearest *published* ancestor and push ancestors first.
+Use the shared vocabulary and precedence:
 
-**`bounds` is optional.** Publish it only where it is trustworthy. A snapshot
-with no bounds at all is valid, and consumers treat it as a normal state.
-
-#### Validate the tree you built, not the one that came back
-
-:::caution[TypeScript adapters only]
-This trap comes from sharing a heap with the consumer. The Python, Go and Rust
-clients serialize on the way out, so an alias cannot survive to reach
-validation — nothing below applies to them.
-:::
-
-At least one test must call `validateSnapshot` on a snapshot your collector
-returned **in memory**, with no serialization anywhere between the two. That is
-the whole obligation, and it is a property of the *path*, not of the fixture:
-elaborate trees prove nothing if the value being validated has been through
-JSON. One of the shipped adapters had trees with fifty `button` nodes and a
-green suite for exactly that reason.
-
-The bug it catches is aliasing. `validateSnapshot` rejects a snapshot in which
-any value is reachable twice, and there are two easy ways to produce one: a role
-table that hands the same frozen `actions` array to every node of that role, and
-an application author who reuses one array across two annotations. Framing is
-`JSON.stringify`, which has no concept of reference identity — so the wire looks
-perfectly clean while the in-process consumers (`mountInk`, a `getTree`
-response) get an object the validator throws out.
-
-```ts
-import {DEFAULT_LIMITS, validateSnapshot} from '@termwright/protocol';
-
-it('gives each node its own actions array, whatever the source', () => {
-  // Straight from the collector, validated as-is. An encodeFrame anywhere in
-  // between copies away the very thing this test exists to catch.
-  const snapshot = collect(root, registry);
-
-  expect(validateSnapshot(snapshot, DEFAULT_LIMITS)).toMatchObject({ok: true});
-
-  // Optional, but it names the failure when it happens.
-  const [first, second] = snapshot.nodes.filter((node) => node.role === 'button');
-  expect(first?.actions).toEqual(second?.actions);
-  expect(first?.actions).not.toBe(second?.actions);  // equal, never the same array
-});
-```
-
-Copy at the node-construction site, so neither source of aliasing can reach a
-snapshot in the first place.
-
-### 4. Ordering: snapshot, commit, marker
-
-Per revision, in this order: the snapshot frame, the `revision-commit`, then the
-marker on stdout — **after the last byte of that frame has been flushed**. The
-marker commits the bytes that precede it. Emitting it earlier lets the driver
-act on a paint that has not landed, which is the single most common adapter bug.
-
-Markers must strictly increase.
-
-### 5. Surviving channel loss
-
-Cutting the socket leaves the application rendering and alive, and the adapter
-does not reconnect. An adapter never throws across its own boundary: a refused
-connection, a rejected token, a malformed frame or a driver that vanished all
-disable semantics silently.
-
-## The semantics conventions
-
-The vocabulary was always shared — roles, states and actions are closed sets the
-protocol enforces. The **conventions** were not, and that was the gap: two
-conformant adapters could describe the same UI differently, so a test written
-against one failed against another for no reason its author could see.
-
-These six rules are normative for every adapter in every language.
-
-### 1. Role — three levels, in order
-
-1. an explicit author annotation;
-2. the framework's widget-type map;
+1. an explicit application annotation;
+2. a framework widget or component mapping;
 3. `generic`.
 
-Stop at the first that produces a role in the closed set. An adapter may resolve
-level 2 from whatever its framework offers — a class map, an accessibility
-property, a convention prop — and may consult several sources there. What it
-must not do is invent a fourth *precedence* level above the author's annotation:
-an explicit annotation always wins.
+Names follow this order:
 
-### 2. Name — ordered sources
+1. explicit annotation, including an intentional empty string;
+2. native label, title, or placeholder;
+3. descendant text for name-from-content roles;
+4. stable native identifier.
 
-1. an explicit author annotation, **including a deliberate empty string**;
-2. the widget's own label, title or placeholder property;
-3. for name-from-content roles only: the concatenated text of descendants;
-4. the widget's identifier.
+Keep `name` and `value` separate. Empty string is a known empty value; an
+omitted value means the widget does not expose one. Publish state only from a
+native flag or explicit application annotation.
 
-Step 3 diverged the most, so the set is spelled out. The name-from-content roles
-are exactly `button`, `listitem`, `menuitem`, `tab`, `checkbox`, `radio`,
-`cell`, `row`, `heading`. That is what makes a list item holding only a label
-addressable by that label's text — and why a container is never named this way,
-since a `region` would otherwise be named by everything on the screen.
+Every snapshot needs unique ids, valid parents, acyclic ancestry, complete
+roots, valid relationships, a strictly increasing revision, and values within
+the negotiated size limits. TypeScript collectors must also avoid shared array
+or object references between nodes.
 
-### 3. `testId` — the native identifier *and* an annotation
+## Publish qualified observations
 
-An adapter must accept both: the framework's native identifier where one exists
-(a Textual DOM `id`, an OpenTUI `id`), and an explicit author annotation, which
-wins over it.
+Geometry, visibility, and pointer ownership use `Observation<T>`:
 
-Framework-*generated* identifiers that the author did not choose — OpenTUI's
-`renderable-<n>` — must be filtered out. A test id that changes when an
-unrelated widget is added is worse than no test id, because it fails later and
-looks flaky rather than wrong.
+- `known` includes the value and evidence;
+- `absent` means the node has no such fact in this state;
+- `unknown` means the probe could not establish the fact for this revision;
+- `unsupported` means the framework cannot provide the capability.
 
-### 4. States — mapped, never guessed
+Do not turn unknown into `false`, copy an intended rectangle into a visible
+rectangle, or derive pointer ownership from z-order. Exact pointer support
+requires the same hit-routing result the framework uses for a fresh pointer at
+each terminal cell.
 
-`disabled`, `focused`, `selected`, `checked`, `expanded`, `modal`, `hidden` and
-`readonly` are published **only** when read from a native framework flag or
-supplied by the author. Never inferred from appearance, position or role.
+## Commit a rendered revision
 
-Omitting a state means "this framework does not report it", which a test can
-handle. Guessing means the tree asserts something the application never said,
-and a test that passes against a guess proves nothing.
+For each rendered frame, publish in this order:
 
-An adapter that drops hidden nodes entirely, rather than publishing them with
-`hidden: true`, must declare that under rule 6. Both are defensible; they are
-not the same tree.
+1. the full semantic snapshot;
+2. `revision-commit`;
+3. the authenticated terminal marker, after all bytes for the frame are flushed.
 
-### 5. `value` versus `name`
+Markers must increase strictly. Publishing the marker before the terminal frame
+allows an action to target state that is not on screen yet.
 
-`value` is what the widget *contains*; `name` is what it is *called*. Publish
-`value` whenever the widget has one — **including the empty string**.
+If the semantic channel closes, keep the application running and rendering.
+The probe disables semantics and does not reconnect inside that process.
 
-That distinction is load-bearing. `''` means "the field is empty"; absent means
-"this is not a value-bearing widget". Collapsing them makes `toHaveValue('')`
-unassertable, and a wire format that drops empty strings (Go's `omitempty` and
-its equivalents) silently converts the first into the second.
+## Add application annotations
 
-Automatic derivation is gated to `textbox` and `progressbar`. An author
-annotation bypasses the gate on any role, but an adapter must not go hunting for
-a `.value` property outside that set. `scrollbar` is deliberately excluded: its
-position is `state.scrollOffset` and `state.scrollExtent`, numbers with defined
-meaning, where a stringified scroll position in `value` would be a second
-encoding no matcher knows how to read.
+Keep an annotation SDK separate from the probe. Annotations may add stable
+identity, role, name, description, test id, relationships, supported actions,
+and JSON domain state. They must not override physical facts such as rendered
+text, focus, geometry, clipping, or pointer routing.
 
-**A boolean is never a value.** A widget whose `.value` is `true` or `false` is
-reporting a *state*: it maps to `state.checked`, and `value` stays absent. This
-was a real divergence found while converging two adapters — publishing
-`value: "true"` makes a checkbox look, to every role-blind matcher, like a
-textbox containing the word "true".
+Document every framework limitation in the integration page and capability
+registry. An undeclared difference is a bug.
 
-### 6. Deviations must be declared
+## Certify the integration
 
-A per-adapter difference is permitted **only** where the framework does not
-expose the data, and each one must be listed in that adapter's README under a
-`## Deviations` heading: what the rule is, what the adapter does instead, and
-why the framework forces it.
-
-An undeclared deviation is a bug, not a difference. Conformance reads that
-section, so a declared difference passes and a silent one fails.
-
-Rules 1–5 bind whatever publishes a semantic tree, so a package that publishes
-none — a protocol client with no adapter — has nothing to declare and needs no
-such heading. The requirement follows the adapter, not the package. Entry
-formatting is deliberately unconstrained: prose, bullets and tables are all
-parsed, because the rule governs adapters, not markdown.
-
-Roles stay ARIA-aligned throughout, which is what keeps an
-[AccessKit bridge](../../reference/accessibility/) possible.
-
-## Two traps
-
-**Prepend the DCS final byte before verifying a marker.** VT parsers dispatch on
-the final byte and consume it, so a handler registered on `{final: 't'}` receives
-only `wm;{rev};{mac}` while `verifyMarkerPayload` expects the payload
-*including* that byte. Forwarding the parser's data verbatim fails silently:
-every marker simply returns `null`.
-
-**The token is opaque.** Whatever lands in `TERMWRIGHT_TOKEN` is what both sides
-pass to the HMAC as the key — never decode it to bytes first.
-
-## Certifying it
-
-The contract suite drives your app as a subprocess and observes only bytes and
-frames, so a Python, Go or Rust adapter certifies exactly like the TypeScript
-one:
+The conformance suite drives a real subprocess and compares observable bytes,
+snapshots, actions, and teardown:
 
 ```ts
 import {runAdapterConformance} from '@termwright/conformance';
 
 await runAdapterConformance({
-  name: 'termwright-py',
-  spawn: () => ({command: ['python', 'examples/demo_app.py']}),
-  // Optional: the same UI with the adapter compiled out. When given, the
-  // dormant run is compared against it byte for byte.
-  baseline: () => ({command: ['python', 'examples/demo_app.py'], env: {PLAIN: '1'}}),
+  name: 'my-framework',
+  spawn: () => ({command: ['my-app']}),
+  baseline: () => ({command: ['my-app'], env: {DISABLE_PROBE: '1'}}),
   ready: 'Ready',
   interaction: {input: '\t', expect: '[Save]'},
   quit: {input: '', exitCode: 0},
   columns: 80,
   rows: 24,
-  expectAbsoluteBounds: true,
 });
 ```
 
-`await` it at the top level: `vitest` is imported dynamically, so the package
-also works from a plain script.
+The integration also needs:
 
-For the protocol layer itself, run the shared **cross-language test vectors** in
-`clients/test-vectors/`: exact frame bytes, marker MACs including a non-ASCII
-token, ten forgeries that must not verify, and 24 invalid trees with their
-validation codes. They are generated from the reference TypeScript
-implementation, and the generator re-runs every expectation through it before
-writing, so a stale or hand-edited vector fails at generation time.
+- dormant byte-parity coverage;
+- handshake and hostile-input tests;
+- full snapshot validation before serialization;
+- render/commit/marker ordering tests;
+- disconnect and teardown tests;
+- real framework process tests for each claimed observation;
+- cross-language observation vectors where applicable;
+- a row in the machine-readable compatibility registry;
+- a task-oriented framework page in these docs.
 
-## Publish it
-
-Adapters live outside this repository perfectly well. If yours certifies, open
-an issue — the [adapter overview](../) is the list users read before they choose
-a framework, and being on it is the point of certifying.
+Use the [semantic protocol reference](../../reference/protocol/) for exact frames
+and limits, and [geometry and visibility](../../reference/geometry-visibility/)
+for observation and hit-grid rules.

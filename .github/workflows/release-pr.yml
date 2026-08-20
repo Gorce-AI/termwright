@@ -54,9 +54,10 @@ jobs:
       - name: Apply the changesets
         run: pnpm changeset version
 
-      # The protocol version lives in four manifests. `changeset version` moves
-      # one of them; this moves the rest, so the Version PR is reviewable as a
-      # single coherent bump rather than something a later job repairs.
+      # The protocol version spans npm, Python and three Rust manifests.
+      # `changeset version` moves the npm source of truth; this moves the rest,
+      # so the Version PR is reviewable as one coherent bump rather than
+      # something a later job repairs.
       - name: Propagate the protocol version
         run: |
           node scripts/sync-protocol-version.mjs

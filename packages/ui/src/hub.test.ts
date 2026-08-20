@@ -94,6 +94,61 @@ describe('UiHub', () => {
       .reduce((total, message) => total + (message.type === 'output' ? message.dataB64.length : 0), 0);
     expect(bytes).toBeLessThanOrEqual(16);
   });
+
+  it('coalesces and retains the newest session state under backlog pressure', () => {
+    const hub = new UiHub({ maxMessages: 2 });
+    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 's1',
+      terminalProfile: 'default',
+      columns: 80,
+      rows: 24,
+    });
+    hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 's1',
+      terminalProfile: 'default',
+      adapter: { name: 'probe-fixture', version: '1.0.0' },
+      adapterStatus: 'attached',
+      columns: 80,
+      rows: 24,
+    });
+    hub.publish(output('evict me'));
+
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session']);
+    expect(hub.backlog[1]).toMatchObject({
+      type: 'session',
+      adapterStatus: 'attached',
+    });
+  });
+
+  it('updates a session in place so late clients see metadata before its output', () => {
+    const hub = new UiHub();
+    hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 's1',
+      terminalProfile: 'default',
+      columns: 80,
+      rows: 24,
+    });
+    hub.publish(output('already rendered'));
+    hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 's1',
+      terminalProfile: 'default',
+      adapter: { name: 'probe', version: '1.0.0' },
+      columns: 80,
+      rows: 24,
+    });
+
+    expect(hub.backlog.map((message) => message.type)).toEqual(['session', 'output']);
+    expect(hub.backlog[0]).toMatchObject({ adapter: { name: 'probe' } });
+  });
 });
 
 describe('attachSession', () => {
@@ -110,6 +165,68 @@ describe('attachSession', () => {
       columns: 80,
       rows: 24,
     });
+  });
+
+  it('announces probe identity and both capability layers', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    session.adapter = { name: '@termwright/probe-fixture', version: '0.1.0' };
+    session.probe = {
+      framework: 'fixture',
+      frameworkVersion: '2.0.0',
+      probeVersion: '0.1.0',
+      identityKind: 'stable',
+      capabilities: ['stable-identity'],
+    };
+    session.adapterCapabilities = ['tree', 'states'];
+    attachSession(hub, session);
+    expect(hub.backlog[0]).toMatchObject({
+      adapter: session.adapter,
+      probe: session.probe,
+      capabilities: ['tree', 'states'],
+      adapterStatus: 'attached',
+    });
+  });
+
+  it('refreshes ProbeInfo after a late adapter handshake', () => {
+    const hub = new UiHub();
+    const client = new RecordingClient();
+    hub.addClient(client);
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+
+    session.adapter = { name: '@termwright/probe-fixture', version: '0.1.0' };
+    session.probe = {
+      framework: 'fixture',
+      probeVersion: '0.1.0',
+      identityKind: 'stable',
+      capabilities: ['stable-identity'],
+    };
+    session.adapterCapabilities = ['tree', 'states'];
+    session.diagnostic('adapter-attached');
+
+    expect(client.received).toHaveLength(2);
+    expect(client.received[1]).toMatchObject({
+      type: 'session',
+      adapter: session.adapter,
+      probe: session.probe,
+      capabilities: ['tree', 'states'],
+      adapterStatus: 'attached',
+    });
+    expect(hub.backlog).toHaveLength(1);
+  });
+
+  it('reports disconnects and does not downgrade a protocol failure', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    session.adapter = { name: 'fixture', version: '1.0.0' };
+    attachSession(hub, session);
+
+    session.diagnostic('protocol-violation');
+    session.diagnostic('adapter-disconnected');
+
+    expect(hub.backlog).toHaveLength(1);
+    expect(hub.backlog[0]).toMatchObject({ type: 'session', adapterStatus: 'error' });
   });
 
   it('publishes output as base64 with the session clock', () => {
@@ -212,9 +329,49 @@ describe('driver actions', () => {
       {
         v: 1,
         type: 'action',
+        actionId: 'a1',
         kind: 'action',
         api: 'click',
         t: 120,
+        ok: true,
+        sessionId: 's1',
+        selector: 'getByRole("button")',
+        ref: 'n8@42',
+      },
+    ]);
+  });
+
+  it('publishes a correlated start before the completed action', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+    session.clock = 40;
+    const actionId = session.startAction({ api: 'click', selector: 'getByRole("button")' });
+    session.clock = 90;
+    session.finishAction(actionId, {
+      api: 'click',
+      ok: true,
+      selector: 'getByRole("button")',
+      ref: 'n8@42',
+    });
+
+    expect(afterAnnouncement(hub)).toEqual([
+      {
+        v: 1,
+        type: 'action-start',
+        actionId: 'a1',
+        api: 'click',
+        t: 40,
+        sessionId: 's1',
+        selector: 'getByRole("button")',
+      },
+      {
+        v: 1,
+        type: 'action',
+        actionId: 'a1',
+        kind: 'action',
+        api: 'click',
+        t: 90,
         ok: true,
         sessionId: 's1',
         selector: 'getByRole("button")',
@@ -256,7 +413,7 @@ describe('what survives a new run', () => {
 
     hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 2 });
 
-    expect(hub.backlog.map((message) => message.type)).toEqual(['tests-discovered', 'run-start']);
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'tests-discovered']);
   });
 
   it('keeps only the newest listing', () => {
@@ -273,5 +430,82 @@ describe('what survives a new run', () => {
     const kept = hub.backlog.filter((message) => message.type === 'tests-discovered');
     expect(kept).toHaveLength(1);
     expect(kept[0]?.type === 'tests-discovered' && kept[0].tests[0]?.title).toBe('new');
+  });
+
+  it('keeps current session state when run-start resets event history', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    session.adapter = { name: 'fixture', version: '1.0.0' };
+    attachSession(hub, session);
+
+    hub.publish({ v: 1, type: 'run-start', mode: 'record', startedAt: 1 });
+
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session']);
+  });
+
+  it('re-announces retained sessions after run-start to an existing viewer', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+    const client = new RecordingClient();
+    hub.addClient(client);
+    client.received.length = 0;
+
+    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+
+    expect(client.received.map((message) => message.type)).toEqual(['run-start', 'session']);
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session']);
+  });
+
+  it('drops test-bound sessions while retaining a generic/manual session for the next run', () => {
+    const hub = new UiHub();
+    hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 'manual',
+      terminalProfile: 'default',
+      columns: 80,
+      rows: 24,
+    });
+    hub.publish({
+      v: 1,
+      type: 'session',
+      sessionId: 'old-attempt',
+      testId: 'same-runtime-test-id',
+      terminalProfile: 'default',
+      columns: 80,
+      rows: 24,
+    });
+    const client = new RecordingClient();
+    hub.addClient(client);
+    client.received.length = 0;
+
+    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 2 });
+
+    expect(client.received.map((message) => message.type)).toEqual(['run-start', 'session']);
+    expect(client.received.at(-1)).toMatchObject({ type: 'session', sessionId: 'manual' });
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session']);
+    expect(hub.backlog.at(-1)).toMatchObject({ type: 'session', sessionId: 'manual' });
+  });
+
+  it('bounds retained generic/manual sessions across many watch-mode runs', () => {
+    const hub = new UiHub({ maxMessages: 3 });
+    for (let index = 0; index < 10; index += 1) {
+      hub.publish({
+        v: 1,
+        type: 'session',
+        sessionId: `s${index}`,
+        terminalProfile: 'default',
+        columns: 80,
+        rows: 24,
+      });
+      hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: index });
+    }
+    expect(hub.backlog).toHaveLength(3);
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session', 'session']);
+    expect(hub.backlog.filter((message) => message.type === 'session').map((message) => message.sessionId)).toEqual([
+      's8',
+      's9',
+    ]);
   });
 });

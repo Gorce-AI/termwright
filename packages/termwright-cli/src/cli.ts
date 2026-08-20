@@ -23,6 +23,7 @@ import {
   EXIT_CODES,
   type CliIo,
 } from '@termwright/mcp';
+import { launchDesktopHost, type DesktopHostHandle } from '@termwright/desktop-host';
 import { stat } from 'node:fs/promises';
 import { openInBrowser, shouldOpenBrowser, startUiServer, writeInlineReport } from '@termwright/ui';
 import { captureScreenshot } from './screenshot-command.js';
@@ -50,6 +51,14 @@ export interface CliDeps {
   /** The MCP CLI, imported rather than spawned. */
   readonly runMcp: (argv: readonly string[], io: CliIo) => Promise<number>;
   readonly cwd: string;
+  /** Desktop companion launcher, injectable so CLI tests require no display. */
+  readonly launchDesktop: (url: string) => Promise<DesktopHostHandle>;
+  /** System browser opener, injectable so CLI tests open nothing. */
+  readonly openBrowser: (url: string) => Promise<boolean>;
+  readonly processContext: {
+    readonly isTty: boolean;
+    readonly env: Readonly<Record<string, string | undefined>>;
+  };
 }
 
 /** The real collaborators. */
@@ -59,6 +68,9 @@ export function defaultDeps(io: CliIo = defaultIo): CliDeps {
     ui: { startUi: startUiServer, startVitest, waitForInterrupt },
     runMcp: runMcpCli,
     cwd: process.cwd(),
+    launchDesktop: (url) => launchDesktopHost({ url }),
+    openBrowser: openInBrowser,
+    processContext: { isTty: process.stdout.isTTY === true, env: process.env },
   };
 }
 
@@ -289,25 +301,40 @@ async function emitReport(args: ParsedArgs, deps: CliDeps, json: boolean): Promi
 }
 
 async function launchUi(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
-  const announce = (ready: Omit<UiResult, 'runnerExitCode'>): void => {
+  const announce = async (ready: Omit<UiResult, 'runnerExitCode'>): Promise<DesktopHostHandle | undefined> => {
     if (json) {
       deps.io.out(JSON.stringify({ url: ready.url, port: ready.port, mode: ready.mode }));
-      return;
+      return undefined;
     }
     deps.io.out(`termwright ui (${ready.mode}) — ${ready.url}`);
-    // Opening is an extra on top of the printed URL, never a substitute: the
-    // line above stays whatever happens, because it is the only way in when a
-    // machine has no browser to open.
-    const wanted = shouldOpenBrowser({
-      requested: args.open,
+    const interactive = shouldOpenBrowser({
+      requested: args.surface !== 'none',
       json,
-      isTty: process.stdout.isTTY === true,
-      env: process.env,
+      isTty: deps.processContext.isTty,
+      env: deps.processContext.env,
     });
-    if (!wanted) return;
-    void openInBrowser(ready.url).then((opened) => {
+    if (!interactive) return undefined;
+
+    if (args.surface === 'browser') {
+      const opened = await deps.openBrowser(ready.url);
       if (!opened) deps.io.err('could not open a browser; the URL above is the way in');
-    });
+      return undefined;
+    }
+
+    const hostname = new URL(ready.url).hostname;
+    if (hostname !== '127.0.0.1' && hostname !== '[::1]') {
+      deps.io.err('the desktop runner only accepts loopback URLs; use --browser or open the URL above');
+      return undefined;
+    }
+    try {
+      return await deps.launchDesktop(ready.url);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      deps.io.err(`could not open the desktop runner (${detail}); falling back to the browser`);
+      const opened = await deps.openBrowser(ready.url);
+      if (!opened) deps.io.err('could not open a browser; the URL above is the way in');
+      return undefined;
+    }
   };
 
   const result = await launch(args, deps, announce);
@@ -327,7 +354,7 @@ async function launchUi(args: ParsedArgs, deps: CliDeps, json: boolean): Promise
 async function launch(
   args: ParsedArgs,
   deps: CliDeps,
-  announce: (ready: Omit<UiResult, 'runnerExitCode'>) => void,
+  announce: (ready: Omit<UiResult, 'runnerExitCode'>) => void | DesktopHostHandle | Promise<void | DesktopHostHandle>,
 ): Promise<UiResult> {
   const request = {
     trace: args.trace,

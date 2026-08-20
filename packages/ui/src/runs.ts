@@ -27,6 +27,18 @@ export const DEFAULT_RUNS_DIR = '.termwright/runs';
 const MAX_RUNS = 100;
 /** Maximum tests kept in one manifest. */
 const MAX_TESTS = 10_000;
+const MAX_ATTEMPTS = 101;
+
+/** One native Vitest attempt of a stable test case. */
+export interface RunTestAttempt {
+  /** One-based, ordered within this case. */
+  readonly attempt: number;
+  readonly status: UiTestStatus;
+  readonly durationMs?: number;
+  /** All failure reasons Vitest reported for this attempt. */
+  readonly errors: readonly string[];
+  readonly traceRefs?: readonly string[];
+}
 
 /** One test, as a run recorded it. */
 export interface RunTest {
@@ -44,7 +56,11 @@ export interface RunTest {
   readonly lostLogRecords: number;
   /** Path to the `.twtrace` this test left, when one was retained. */
   readonly traceRef?: string;
+  /** Runtime check from the UI server; absent in the persisted manifest. */
+  readonly traceAvailable?: boolean;
   readonly error?: string;
+  /** Ordered retry history. Absent in manifests written before retry history. */
+  readonly attempts?: readonly RunTestAttempt[];
 }
 
 /**
@@ -243,6 +259,7 @@ function parseTests(value: unknown): readonly RunTest[] {
     if (status !== 'passed' && status !== 'failed' && status !== 'skipped') continue;
     const traceRef = text(record['traceRef']);
     const error = text(record['error']);
+    const attempts = parseAttempts(record['attempts']);
     // A v2 entry always carries the count; one without it was written by a
     // build that did not know about it, and guessing zero would claim nothing
     // was lost on a run nobody measured.
@@ -258,9 +275,38 @@ function parseTests(value: unknown): readonly RunTest[] {
       flaky: record['flaky'] === true,
       ...(traceRef === null ? {} : { traceRef }),
       ...(error === null ? {} : { error }),
+      ...(attempts.length === 0 ? {} : { attempts }),
     });
   }
   return tests;
+}
+
+function parseAttempts(value: unknown): readonly RunTestAttempt[] {
+  if (!Array.isArray(value)) return [];
+  const attempts: RunTestAttempt[] = [];
+  let previous = 0;
+  for (const entry of value.slice(0, MAX_ATTEMPTS)) {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const record = entry as Record<string, unknown>;
+    const attempt = finite(record['attempt']);
+    const status = record['status'];
+    if (attempt === null || !Number.isInteger(attempt) || attempt <= previous) return [];
+    if (status !== 'passed' && status !== 'failed' && status !== 'skipped') return [];
+    const errors = record['errors'];
+    if (!Array.isArray(errors) || !errors.every((error) => typeof error === 'string' && error !== '')) return [];
+    const traceRefs = record['traceRefs'];
+    if (traceRefs !== undefined && (!Array.isArray(traceRefs) || !traceRefs.every((ref) => typeof ref === 'string' && ref !== ''))) return [];
+    const durationMs = finite(record['durationMs']);
+    attempts.push({
+      attempt,
+      status,
+      errors,
+      ...(durationMs === null ? {} : { durationMs }),
+      ...(traceRefs === undefined ? {} : { traceRefs: traceRefs as string[] }),
+    });
+    previous = attempt;
+  }
+  return attempts;
 }
 
 function text(value: unknown): string | null {

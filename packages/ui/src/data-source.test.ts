@@ -15,6 +15,7 @@ const payload = (count: number): InlinePayload => ({
   state: { mode: 'post-mortem', project, sessions: [], trace: null, record: null },
   frames: { frames: [], truncated: false, durationMs: 1_000, revisions: [] },
   commands: { commands: [], incomplete: false },
+  traceState: { timeMs: 0, castPrefixB64: '', columns: 80, rows: 24, revision: null, snapshot: null, step: null },
   logs: {
     records: Array.from({ length: count }, (_, index) => record(index * 10)),
     hasMoreBefore: false,
@@ -51,20 +52,20 @@ describe('an inline source', () => {
     expect(source.features).toEqual({ live: false, history: false, openTrace: false });
   });
 
-  it('refuses the operations that need a server, rather than answering emptily', async () => {
+  it('refuses operations that need a server while answering retained trace state', async () => {
     const source = new InlineDataSource(payload(1));
     await expect(source.runs()).rejects.toThrow(/no run history/);
     await expect(source.openTrace()).rejects.toThrow(/cannot open another archive/);
-    await expect(source.traceState()).rejects.toThrow(/replays from its frames/);
+    expect((await source.traceState()).columns).toBe(80);
   });
 
   it('windows the log exactly as the server route does', async () => {
     const source = new InlineDataSource(payload(500));
 
-    const oldest = await source.traceLogs({ limit: 10 });
-    expect(oldest.records.map((entry) => entry.t)).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80, 90]);
-    expect(oldest.hasMoreBefore).toBe(false);
-    expect(oldest.hasMoreAfter).toBe(true);
+    const latest = await source.traceLogs({ limit: 10 });
+    expect(latest.records.map((entry) => entry.t)).toEqual([4900, 4910, 4920, 4930, 4940, 4950, 4960, 4970, 4980, 4990]);
+    expect(latest.hasMoreBefore).toBe(true);
+    expect(latest.hasMoreAfter).toBe(false);
 
     const later = await source.traceLogs({ after: 100, limit: 3 });
     expect(later.records.map((entry) => entry.t)).toEqual([100, 110, 120]);

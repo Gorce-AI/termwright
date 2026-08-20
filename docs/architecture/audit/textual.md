@@ -1,5 +1,9 @@
 # Upstream audit — Textual
 
+> **Historical Phase 0 evidence.** The pinned-source measurements below are
+> retained as design evidence. Any current support or setup guidance is
+> superseded by the website Textual adapter guide and compatibility reference.
+
 Phase 0 of the zero-config instrumentation campaign. This is a survey of what
 Textual already knows about its own UI and how a probe could reach it without
 the application changing a line. It proposes no design; where a fact rules an

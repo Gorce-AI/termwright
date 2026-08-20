@@ -30,10 +30,10 @@ export default defineConfig({ test: { testTimeout: 20_000 } });
 
 That runs `agent.js` in a **real pseudo-terminal**, waits on facts rather than
 sleeps, and clicks by sending the mouse report a terminal would have sent. If the
-program uses one of termwright's adapters (`@termwright/ink`,
-`@termwright/opentui`, `termwright-py`, `termwright-go`) the roles come from a
-published accessibility tree; if it does not, everything still works against
-text and cells.
+program runs through a framework probe, roles come from its published semantic
+tree. `@termwright/ink` and `@termwright/opentui` are optional annotation SDKs
+consumed by their probes; without a probe everything still works against text
+and cells.
 
 ## What you get from where
 
@@ -42,8 +42,9 @@ text and cells.
 | `termwright` | `launchTerminal`, locators, actions, waits, the error taxonomy |
 | `termwright/test` | the Vitest preset: `test`, `expect`, matchers, YAML snapshots |
 | `termwright/ink` | `mountInk`, `launchInkFixture` for Ink component tests |
+| `termwright/gherkin` | physical `.feature` support, step definitions and the explicit Vitest plugin |
 | `termwright/reporter` | the trace reporter, for `vitest.config.ts` |
-| `termwright/ui-reporter` | the runner's live bridge, for `vitest.config.ts` |
+| `termwright/ui-reporter` | the runner's lifecycle reporter, for a manually started UI server/test process |
 
 Everything a project needs is reachable from this one package, config included —
 so `termwright` in `devDependencies` is the whole install:
@@ -62,7 +63,9 @@ export default defineConfig({
 The two reporters are independent and compose: one writes `.twtrace` archives,
 the other streams a live run to `termwright ui`. The UI one does nothing when
 `TERMWRIGHT_UI_URL` is unset, so it is safe to leave configured in a repository
-whose runs are mostly headless.
+whose runs are mostly headless. `termwright ui` injects that reporter
+automatically; configure it yourself only when your own script starts the UI
+server and Vitest separately.
 
 `termwright` on its own has no test-runner dependency, so a script or a
 `node:test` file can use it:
@@ -79,7 +82,8 @@ await app.close();
 ## The CLI
 
 ```sh
-termwright ui                            # runner + Vitest in watch mode, opens a browser
+termwright ui                            # runner + Vitest in watch mode, opens Termwright desktop
+termwright ui --browser                  # use the same runner in the system browser
 termwright ui --no-open                  # …or just print the URL
 termwright ui --trace out/login.twtrace  # open a recording from CI and scrub it
 termwright report --trace out/login.twtrace  # …or write it as one shareable HTML file
@@ -90,12 +94,61 @@ termwright usage                         # one-screen cheat sheet
 termwright skill --out .claude/skills/tw # an agent-skill package
 ```
 
-`termwright ui` opens a local page with three panes — a live terminal, a
-semantic inspector you can point at nodes to get a selector, and a timeline you
-can scrub. It starts your project's own Vitest in watch mode and points it at
-the runner through `TERMWRIGHT_UI_URL`; the browser's rerun and stop buttons
-press the same keys watch mode already understands, and your terminal keeps its
-hotkeys.
+`termwright ui` opens a local runner with Specs, Runner, Runs and Settings
+views. Runner keeps a single execution rail — cases with the selected case's
+Test body, steps and commands expanded inline — beside the live terminal,
+semantic inspector, logs and timeline. It starts your project's own Vitest in
+watch mode, injects the UI reporter, and points both reporter and worker-side
+terminal bridge at the runner through `TERMWRIGHT_UI_URL`.
+Vitest options remain native and are forwarded to watcher and targeted browser
+runs; for example, `termwright ui -- --retry=2` allows two additional attempts.
+This is per-test retry, not a second whole-run rerun.
+
+The watch process keeps its native terminal and hotkeys. A browser rerun starts
+a separate, precisely targeted Vitest child; Stop terminates that child
+without taking down the watcher or the UI server. The row becomes cancelled
+only after the child exits, and a failed cancellation is shown as such.
+
+The UI catalogues and executes only cases declared by `test`/`it` from
+`@termwright/test` (or `termwright/test`). The preset attaches a versioned
+provider marker at declaration time; discovery reads that metadata and the
+UI-owned Vitest runner skips every unmarked case, including a plain Vitest
+sibling in the same file. This applies to Run all, directory, file and case
+buttons; a foreign `test.only` cannot suppress the marked Termwright cases.
+A normal `vitest run` does not use that UI runner and retains Vitest's usual
+`.only` behavior.
+The marker is also the extension point for future test providers; no additional
+provider is implied to exist today.
+
+Physical Gherkin features join that same catalogue automatically. Put paired
+step definitions beside the feature (for example `tests/login.feature` and
+`tests/login.ts`) and import the authoring API from the umbrella package:
+
+```ts
+import { Given, defineSteps } from 'termwright/gherkin';
+
+export default defineSteps(
+  Given('the login screen is open', async ({ terminal }) => {
+    await terminal.launch({ command: ['node', 'app.js'] });
+  }),
+);
+```
+
+`termwright ui` transforms `.feature` files in memory in the same owned Vitest
+host used for discovery, Run all and browser reruns. Scenario locations remain
+the physical `.feature` path and line, and generated test files are never
+written. Gherkin and TypeScript cases share this one UI; no Cucumber scheduler
+or second runner is started. Feature/Rule ancestry, tags and Scenario kind are
+provider-authored catalogue metadata, not guesses made by splitting titles.
+During execution, Given/When/Then are streamed as native Termwright step
+boundaries with their physical source. A terminal launched by a step, its live
+output, actions, assertions and retained replay all remain attached to that
+step. Actionless scenarios keep their prose and outcome without a fabricated
+terminal panel.
+Ordinary `vitest run` and IDE runs remain unchanged; opt them in by adding
+`gherkinPlugin()` and a `.feature` include to their Vitest config as documented
+by `@termwright/gherkin`. Hooks, tag filters and editor configuration are not
+included in the current Gherkin slice.
 
 The page opens in your browser by itself. If it does not — `--no-open`, no
 browser on the machine, or an opener that failed — the printed line is the way
@@ -110,19 +163,23 @@ not a terminal, and whenever `CI` is set to anything at all: a window is for a
 person at a terminal, not for a build agent. The URL is printed in every one of
 those cases, and a failed opener degrades to exactly the same thing.
 
-Add `--no-watch` to open the runner without starting a suite, and put runner
+Add `--no-watch` to open the runner without starting a suite, and put Vitest
 arguments after `--`:
 
 ```sh
 termwright ui -- src/login.test.ts --reporter=dot
 ```
 
-For the live panes to fill in, configure `termwright/ui-reporter` as shown
-above.
+The command supplies `default` and `termwright/ui-reporter` automatically. An
+additional `--reporter` after `--` composes with them. An initial `-t` or
+`--testNamePattern` scopes the watcher; selecting a different test in the
+browser replaces that name filter for the targeted one-shot run so two filters
+cannot combine into an empty selection.
 
 `termwright report` writes the same viewer as `ui --trace`, but as one HTML file
-with the bundle and the recording inlined — no server, no network requests, so
-it travels as a CI artifact or an attachment. `--json` prints
+with the bundle, recording and imported assets (including the SVG Termwright
+mark) inlined — no server, no network requests, so it travels as a CI artifact
+or an attachment. `--json` prints
 `{path, bytes, cut}`; when an archive exceeds the budget (8 MiB by default) both
 the CLI and the page say exactly how many frames and log records were left out,
 because a truncated artifact that looks complete is worse than a large one.

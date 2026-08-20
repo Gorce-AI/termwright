@@ -3,6 +3,8 @@ import type { TraceWriter } from '@termwright/trace';
 import { resolveTermwrightConfig } from './config.js';
 import {
   currentScope,
+  attachWriter,
+  beginStep,
   enterScope,
   openStep,
   recordAssert,
@@ -116,5 +118,21 @@ describe('recording', () => {
     expect(handles).toHaveLength(2);
     for (const handle of handles) handle.end('failed', 'boom');
     expect(a.recorded.steps).toEqual([{ title: 'log in', status: 'failed' }]);
+  });
+
+  it('re-opens an active authored step on a trace writer launched inside it', () => {
+    const only = scope('gherkin');
+    enter(only);
+    const active = beginStep('Given a terminal is running', {
+      gherkin: {
+        keyword: 'Given', text: 'a terminal is running',
+        source: { file: '/repo/demo.feature', line: 4, column: 5 },
+      },
+    }, only);
+    const late = fakeWriter();
+    attachWriter(only, late.writer);
+    active.end('passed');
+    expect(active.stepId).toBe('tw-step-1');
+    expect(late.recorded.steps).toEqual([{ title: 'Given a terminal is running', status: 'passed' }]);
   });
 });

@@ -7,7 +7,8 @@
  * and exact exit/close semantics.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { TermwrightError, UnsupportedActionError } from '@termwright/driver';
+import { TermwrightError, UnsupportedActionError, type Locator } from '@termwright/driver';
+import type { Rect } from '@termwright/protocol';
 import {
   CONFORMANCE_FIXTURES,
   createSessionPool,
@@ -20,6 +21,11 @@ import {
 } from '../support/pty.js';
 
 const sessions = createSessionPool();
+
+async function intendedRect(locator: Locator): Promise<Rect | null> {
+  const observation = (await locator.geometry()).intendedRect;
+  return observation.status === 'known' ? observation.value : null;
+}
 const launch = async (options = {}) => {
   const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), {
     columns: 60,
@@ -80,7 +86,7 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
   it('resolves text, regex, occurrence, style and cell locators', async () => {
     const terminal = await launch();
 
-    expect(await terminal.getByText('Alpha').boundingBox()).toEqual({
+    expect(await intendedRect(terminal.getByText('Alpha'))).toEqual({
       row: 1,
       column: 2,
       width: 5,
@@ -88,7 +94,7 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     });
     expect(await terminal.getByText(/G[a-z]+ma/u).textContent()).toBe('Gamma');
     expect(await terminal.getByText(/ev: /u).count()).toBe(4);
-    expect(await terminal.getByText(/ev: /u, { occurrence: 1 }).boundingBox()).toMatchObject({ row: 8 });
+    expect(await intendedRect(terminal.getByText(/ev: /u, { occurrence: 1 }))).toMatchObject({ row: 8 });
 
     // The selected row is the only bold green one, so a style predicate is what
     // separates it from the two plain rows.

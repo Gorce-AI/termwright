@@ -418,6 +418,91 @@
       }
     },
     {
+      "name": "extended-domain-state",
+      "snapshot": {
+        "v": 1,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "bounds": {
+              "row": 0,
+              "column": 0,
+              "width": 40,
+              "height": 2
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "bounds": {
+              "row": 1,
+              "column": 2,
+              "width": 9,
+              "height": 1
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "extended": {
+              "deploymentStatus": "rolling-out",
+              "retryCount": 2,
+              "overdue": false,
+              "rollout": {
+                "regions": [
+                  "eu",
+                  "us"
+                ],
+                "progress": 0.5
+              }
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "bounds": {
+              "row": 1,
+              "column": 14,
+              "width": 8,
+              "height": 1
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ]
+      }
+    },
+    {
       "name": "two-roots",
       "snapshot": {
         "v": 1,
@@ -504,6 +589,230 @@
     }
   ],
   "reject": [
+    {
+      "name": "extended-must-be-an-object",
+      "snapshot": {
+        "v": 1,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "bounds": {
+              "row": 0,
+              "column": 0,
+              "width": 40,
+              "height": 2
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "bounds": {
+              "row": 1,
+              "column": 2,
+              "width": 9,
+              "height": 1
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "extended": [
+              "not",
+              "a",
+              "namespace"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "bounds": {
+              "row": 1,
+              "column": 14,
+              "width": 8,
+              "height": 1
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ]
+      },
+      "code": "schema",
+      "detail": "nodes.1.extended: Invalid input: expected record, received array"
+    },
+    {
+      "name": "extended-container-over-ceiling",
+      "snapshot": {
+        "v": 1,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "bounds": {
+              "row": 0,
+              "column": 0,
+              "width": 40,
+              "height": 2
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "bounds": {
+              "row": 1,
+              "column": 2,
+              "width": 9,
+              "height": 1
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "extended": {
+              "values": [
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1
+              ]
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "bounds": {
+              "row": 1,
+              "column": 14,
+              "width": 8,
+              "height": 1
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ]
+      },
+      "code": "count",
+      "detail": "nodes.1.extended.values: Too big: expected array to have <=64 items"
+    },
     {
       "name": "duplicate-node-id",
       "snapshot": {
@@ -1746,7 +2055,7 @@
       "detail": "revision: expected a positive safe integer"
     },
     {
-      "name": "wrong-version",
+      "name": "v2-with-legacy-node-shape",
       "snapshot": {
         "v": 2,
         "sessionId": "s-0001",
@@ -1817,8 +2126,8 @@
           }
         ]
       },
-      "code": "schema",
-      "detail": "v: Invalid input: expected 1"
+      "code": "bad-rect",
+      "detail": "nodes.0.bounds: Invalid input: expected never, received object"
     },
     {
       "name": "empty-session-id",

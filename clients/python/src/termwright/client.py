@@ -13,7 +13,7 @@ import asyncio
 import os
 import time
 from collections import OrderedDict
-from typing import Any, Dict, Mapping, MutableMapping, Optional, Sequence
+from typing import Any, Dict, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 from .debug import DebugLog, describe_endpoint
 from .errors import ProtocolViolation, TermwrightError
@@ -24,6 +24,7 @@ from .diffing import build_delta
 from .logs import LogRecord, flatten_attrs, validate_log_record
 from .messages import (
     PROTOCOL_ID,
+    PROTOCOL_V2_ID,
     get_tree_result,
     hello,
     log_message,
@@ -153,6 +154,7 @@ class SemanticClient:
         debug: Optional[DebugLog] = None,
         probe: Optional[Mapping[str, Any]] = None,
         write_timeout: float = DEFAULT_WRITE_TIMEOUT,
+        protocol: str = PROTOCOL_ID,
     ) -> None:
         self._endpoint = endpoint
         self._token = token
@@ -169,6 +171,7 @@ class SemanticClient:
         #: Seconds one frame write may wait. Non-positive disables the bound,
         #: which is only sane for a caller that publishes off the render path.
         self._write_timeout = write_timeout
+        self.protocol = protocol
         #: Set when the producer lost something and owes a whole tree.
         self._force_full = False
 
@@ -235,6 +238,7 @@ class SemanticClient:
                     self._adapter_version,
                     self._capabilities,
                     self._probe,
+                    protocol=self.protocol,
                 )
             )
             self._log(
@@ -299,19 +303,26 @@ class SemanticClient:
             self.revision -= 1
             raise ProtocolViolation("snapshot-invalid", f"{result.code}: {result.detail}")
 
-        self._remember(self.revision, wire)
         return wire
 
     async def publish(self, snapshot: SemanticSnapshot) -> Optional[str]:
         """Send a snapshot for the next revision and return its marker sequence.
 
-        :returns: The DCS marker to write to stdout after the render, or
+        :returns: The OSC marker to write to stdout after the render, or
             ``None`` when the session is not (or no longer) live.
         """
         wire = self.prepare(snapshot)
         if wire is None:
             return None
-        await self._send_snapshot(wire)
+        try:
+            frames, tree_kind, forced = self._encode_snapshot(wire)
+        except ProtocolViolation:
+            self._reject_snapshot(wire)
+            raise
+        if not await self._send_snapshot(frames):
+            self._reject_snapshot(wire)
+            return None
+        self._accept_snapshot(wire, tree_kind, forced)
         return self.marker(wire["revision"])
 
     def publish_nowait(self, snapshot: SemanticSnapshot) -> Optional[str]:
@@ -324,15 +335,91 @@ class SemanticClient:
         wire = self.prepare(snapshot)
         if wire is None:
             return None
-        asyncio.ensure_future(self._send_snapshot(wire))
+        try:
+            frames, tree_kind, forced = self._encode_snapshot(wire)
+        except ProtocolViolation:
+            self._reject_snapshot(wire)
+            return None
+
+        writer = self._writer
+        if writer is None:
+            self._reject_snapshot(wire)
+            return None
+        try:
+            for frame in frames:
+                writer.write(frame)
+        except (OSError, ConnectionResetError):
+            self._reject_snapshot(wire)
+            asyncio.ensure_future(self.close())
+            return None
+
+        self._accept_snapshot(wire, tree_kind, forced)
+        asyncio.ensure_future(self._drain(writer))
         return self.marker(wire["revision"])
 
-    async def _send_snapshot(self, wire: Dict[str, Any]) -> None:
-        if self.subscribe != "revisions":
-            await self._send(self._tree_message(wire))
-        await self._send(revision_commit(wire["revision"]))
+    def _encode_snapshot(
+        self, wire: Dict[str, Any]
+    ) -> Tuple[Tuple[bytes, ...], Optional[str], bool]:
+        """Build and encode a whole publication before writing any of it.
 
-    def _tree_message(self, wire: Dict[str, Any]) -> Dict[str, Any]:
+        ``maxFrameBytes`` may be tighter than ``maxSnapshotBytes``. Encoding
+        every message first keeps that local refusal atomic: no tree, commit or
+        marker escapes, and the last tree the driver actually received remains
+        the only legal delta base.
+        """
+
+        forced = self._force_full
+        messages = []
+        tree_kind: Optional[str] = None
+        if self.subscribe != "revisions":
+            tree, tree_kind = self._tree_message(wire, forced)
+            messages.append(tree)
+        messages.append(revision_commit(wire["revision"]))
+        return (
+            tuple(encode_frame(message, self._limits.maxFrameBytes) for message in messages),
+            tree_kind,
+            forced,
+        )
+
+    async def _send_snapshot(self, frames: Sequence[bytes]) -> bool:
+        writer = self._writer
+        if writer is None:
+            return False
+        try:
+            for frame in frames:
+                writer.write(frame)
+        except (OSError, ConnectionResetError):
+            await self.close()
+            return False
+        return await self._drain(writer)
+
+    def _accept_snapshot(
+        self, wire: Dict[str, Any], tree_kind: Optional[str], forced: bool
+    ) -> None:
+        """Commit bookkeeping only after every frame was accepted for writing."""
+
+        self._remember(wire["revision"], wire)
+        if tree_kind is not None:
+            self._published = wire
+        if tree_kind == "snapshot":
+            self.snapshots_sent += 1
+        elif tree_kind == "delta":
+            self.deltas_sent += 1
+        if forced:
+            self._force_full = False
+
+    def _reject_snapshot(self, wire: Dict[str, Any]) -> None:
+        """Undo a locally refused revision and require a full recovery tree."""
+
+        revision = wire["revision"]
+        if self.revision == revision:
+            self.revision -= 1
+        self._history.pop(revision, None)
+        self._force_full = True
+
+    def _tree_message(
+        self, wire: Dict[str, Any], forced: bool
+    ) -> Tuple[Dict[str, Any], str]:
         """A delta when the driver asked for one and it is worth sending.
 
         Falls back to the whole tree on the first publish, when the driver
@@ -342,25 +429,21 @@ class SemanticClient:
         so a skipped publish cannot leave the driver applying a delta onto a
         tree it never received.
         """
-        forced, self._force_full = self._force_full, False
         delta = None
         if self.subscribe == "diffs" and self._published is not None and not forced:
             delta = build_delta(self._published, wire)
         if forced:
             self._log("io", f"r{wire['revision']} full snapshot: the producer reported a gap")
 
-        self._published = wire
         if delta is None:
-            self.snapshots_sent += 1
             self._log("io", f"r{wire['revision']} snapshot nodes={len(wire.get('nodes', ()))}")
-            return snapshot_message(wire)
-        self.deltas_sent += 1
+            return snapshot_message(wire), "snapshot"
         self._log(
             "io",
             f"r{wire['revision']} delta changed={len(delta.get('changed', ()))} "
             f"removed={len(delta.get('removed', ()))}",
         )
-        return delta
+        return delta, "delta"
 
     def log(
         self,
@@ -446,7 +529,17 @@ class SemanticClient:
         writer = self._writer
         if writer is None:
             return
-        writer.write(encode_frame(message, self._limits.maxFrameBytes))
+        frame = encode_frame(message, self._limits.maxFrameBytes)
+        try:
+            writer.write(frame)
+        except (OSError, ConnectionResetError):
+            await self.close()
+            return
+        await self._drain(writer)
+
+    async def _drain(self, writer: Any) -> bool:
+        """Drain already-written frames and make background failures quiet."""
+
         try:
             if self._write_timeout > 0:
                 await asyncio.wait_for(writer.drain(), self._write_timeout)
@@ -462,8 +555,11 @@ class SemanticClient:
                 "session is unrecoverable",
             )
             await self.close()
+            return False
         except (OSError, ConnectionResetError):
             await self.close()
+            return False
+        return True
 
     # -- receiving ---------------------------------------------------------
 
@@ -496,6 +592,10 @@ class SemanticClient:
         assert message is not None
 
         if message["type"] == "hello-ack":
+            if message["protocol"] != self.protocol:
+                self._log("diag", f"driver acknowledged {message['protocol']} after requesting {self.protocol}")
+                await self.close()
+                return
             self.session_id = message["sessionId"]
             self.marker_enabled = bool(message["marker"]["enabled"])
             self.log_budget = message.get("logs")
@@ -540,6 +640,7 @@ def client_from_env(
     limits: ProtocolLimits = DEFAULT_LIMITS,
     debug: Optional[DebugLog] = None,
     probe: Optional[Mapping[str, Any]] = None,
+    qualified_capabilities: Sequence[str] = (),
 ) -> Optional[SemanticClient]:
     """Build a client from ``TERMWRIGHT_*``, or ``None`` when not instrumented.
 
@@ -565,22 +666,31 @@ def client_from_env(
             log.line("diag", f"dormant: {' and '.join(missing)} not set")
         return None
     protocol = source.get(ENV_PROTOCOL)
-    if protocol is not None and protocol not in ("", PROTOCOL_ID, "1"):
+    if protocol is not None and protocol not in ("", PROTOCOL_ID, PROTOCOL_V2_ID, "1", "2"):
         if log is not None:
             log.line(
                 "diag",
                 f"dormant: {ENV_PROTOCOL}={protocol!r} is not {PROTOCOL_ID!r}",
             )
         return None
+    selected_protocol = PROTOCOL_V2_ID if protocol in (PROTOCOL_V2_ID, "2") else PROTOCOL_ID
+    selected_capabilities = tuple(capabilities)
+    if selected_protocol == PROTOCOL_V2_ID and "qualified-observations" not in selected_capabilities:
+        selected_capabilities += ("qualified-observations",)
+    if selected_protocol == PROTOCOL_V2_ID:
+        selected_capabilities += tuple(
+            item for item in qualified_capabilities if item not in selected_capabilities
+        )
     return SemanticClient(
         endpoint,
         token,
         adapter_name=adapter_name,
         adapter_version=adapter_version,
-        capabilities=capabilities,
+        capabilities=selected_capabilities,
         limits=limits,
         debug=log,
         probe=probe,
+        protocol=selected_protocol,
     )
 
 

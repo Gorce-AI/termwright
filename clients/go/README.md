@@ -1,15 +1,15 @@
 # termwright (Go)
 
-Semantic side-channel client for the [termwright](https://github.com/gorce-ai/termwright)
-terminal test driver, plus an adapter for [tview](https://github.com/rivo/tview).
+Semantic side-channel client and developer annotation SDK for Termwright's
+automatic [tview](https://github.com/rivo/tview) and Charm probes.
 
 An instrumented app publishes its primitive tree over a unix socket and commits
 each frame with a signed OSC marker, so tests assert on *roles and names*
 instead of screen-scraping cells.
 
-**Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in the
-environment `Attach` returns `(nil, nil)`: no socket, no marker, no change to
-what the app renders. A `nil` `*Session` is safe to use and to `Close`.
+**Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN`, an
+instrumented framework copy opens no socket, writes no marker and produces the
+same terminal bytes as upstream.
 
 ## Install
 
@@ -17,25 +17,20 @@ what the app renders. A `nil` `*Session` is safe to use and to `Close`.
 go get github.com/gorce-ai/termwright/clients/go
 ```
 
-Three packages:
+Two packages:
 
 - `.../clients/go/protocol` — framing, marker, message and snapshot validation,
   socket client. Depends on the standard library only.
-- `.../clients/go/termwright` — the tview adapter. Depends on tview and tcell.
 - `.../clients/go/annotate` — describe your widgets to the zero-config probes.
   Standard library only, and dormant when no driver is attached. Needs Go 1.24
   (`runtime.AddCleanup`).
 
-## tview in 30 lines
+## Automatic tview semantics
 
 ```go
 package main
 
-import (
-	"github.com/rivo/tview"
-
-	"github.com/gorce-ai/termwright/clients/go/termwright"
-)
+import "github.com/rivo/tview"
 
 func main() {
 	app := tview.NewApplication()
@@ -46,20 +41,31 @@ func main() {
 		AddItem(reject, 1, 0, false)
 	root.SetTitle("Permission")
 
-	// Returns (nil, nil) when no driver is attached; nothing is installed then.
-	session, err := termwright.Attach(app, root)
-	if err != nil {
-		panic(err)
-	}
-	defer session.Close()
-
 	if err := app.SetRoot(root, true).Run(); err != nil {
 		panic(err)
 	}
 }
 ```
 
-Under the driver this publishes, after every committed frame:
+The application imports no Termwright package. Build it through
+`@termwright/probe-tview`:
+
+```ts
+import {prepareInstrumentedBuild} from '@termwright/probe-tview';
+
+const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
+await execFile('go', ['build', '-o', 'app-binary', '.'], {
+  cwd: 'path/to/app',
+  env: build.env,
+});
+await launchTerminal({command: ['./app-binary']});
+```
+
+The generated `go.work` redirects only tview and the probe client to cached,
+verified copies. The project's `go.mod`, `go.sum`, source tree and existing
+workspace remain byte-identical.
+
+Under the driver the ordinary application publishes, after every committed frame:
 
 ```
 region "Permission"   bounds=(0,0,80,24)
@@ -69,14 +75,12 @@ region "Permission"   bounds=(0,0,80,24)
 
 ### Where the marker is emitted
 
-`Attach` wraps the `tcell.Screen`. The tree is built in tview's after-draw
-hook, but the marker — a private `OSC 8487` sequence terminated by BEL — is
-written immediately after `Show()` has flushed the frame — the marker commits the bytes that precede it, so emitting it any
-earlier would let the driver act on a paint that has not landed. Use
-`WithMarkerWriter` to send it somewhere other than `os.Stdout`, and
-`WithScreen` to supply your own screen (a `tcell.SimulationScreen` in tests).
+The pinned tview patch observes its draw traversal and wraps the internal
+`tcell.Screen`. The tree is built from the just-drawn primitives, while the
+private `OSC 8487` marker is emitted only after `Show()` flushes the frame. A
+marker can therefore commit only the terminal bytes that precede it.
 
-`Attach` also forces one redraw as soon as the handshake completes. tview has
+The probe also forces one redraw as soon as the handshake completes. tview has
 usually drawn its first frame by then and an idle application never draws
 again, so without that nudge the first tree would only appear once the user
 pressed a key — and a test that starts with `waitForText` plus a semantic
@@ -92,31 +96,10 @@ Roles come from the tview type: `Button` → `button`, `InputField`/`TextArea` �
 `positionInSet`/`setSize`, so they are addressable even though they are not
 primitives.
 
-Children are enumerated through the accessors tview exposes: `Flex`, `Pages`,
-`Form` and `Frame`. `Pages` is the one container that keeps children it is not
-showing, so everything under an unshown page is published with `hidden` set
-(and inherits it downwards, and never claims focus) — a `toBeVisible()`
-assertion must not go green for a screen that has not opened yet.
-
-**`Grid` has no item accessor**, so its children are invisible unless you
-supply them:
-
-```go
-session, _ := termwright.Attach(app, root,
-	termwright.WithChildren(func(p tview.Primitive) []tview.Primitive {
-		if p == myGrid {
-			return []tview.Primitive{header, body, footer}
-		}
-		return nil // fall back to the built-in enumeration
-	}),
-	termwright.WithDescriber(func(p tview.Primitive) (protocol.Role, string, bool) {
-		if p == myGauge {
-			return protocol.RoleProgressBar, "Upload progress", true
-		}
-		return "", "", false
-	}),
-)
-```
+Because observation runs inside tview, it reads container fields that the
+public API does not expose. This includes `Grid` children and the visibility of
+`Pages` entries, so hidden pages remain in the tree as hidden and no custom
+enumeration callback is required.
 
 ## Without tview
 
@@ -137,6 +120,12 @@ if client != nil && client.Start(protocol.DialTimeout) == nil {
 	os.Stdout.WriteString(marker) // only after the render is fully written
 }
 ```
+
+A framework probe also sets `Options.Probe`. This block is separate from the
+adapter capability list: it reports which framework is actually instrumented,
+whether object identities survive a frame, and only the optional observations
+the probe can support. Leave `FrameworkVersion` empty when it was not detected;
+the wire omits it rather than guessing from the Go runtime.
 
 ## Annotations
 
@@ -160,7 +149,7 @@ annotate.Tag(unreadBadge, annotate.Semantics{
 	Role:   "status",
 	Name:   "Unread messages",
 	TestID: "unread-badge",
-	Domain: map[string]string{"sync": "pending"},
+	Domain: map[string]any{"sync": "pending", "retryCount": 2},
 })
 ```
 
@@ -193,28 +182,27 @@ rather than a failure. Physical facts stay with the probe, wording comes from
 here, and where both speak the merge order is the one in the protocol README:
 annotation above recognizer, but never above an observed fact.
 
+`Domain` is published as the node's `extended` namespace, not folded into its
+description or promoted to portable state. JavaScript tests can read it with
+`locator.extendedState()` or assert selected keys with
+`toHaveExtendedState(...)`.
+
 A role outside the vocabulary is dropped rather than guessed, so a typo costs
 you the override and not the node.
 
 ## Application logs
 
-```go
-session, _ := termwright.Attach(app, root, termwright.WithLogs())
-slog.SetDefault(slog.New(protocol.NewSlogHandler(session.Client(), nil)))
-
-slog.Error("policy missing", "path", "/etc/app/policy.json")  // never painted
-```
-
-`NewSlogHandler(nil, nil)` is never enabled, so the dormant path costs nothing.
-Groups and attributes flatten to dotted keys, `slog` levels map onto the wire's
-closed ladder, and the client drops what the budget does not allow — leaving a
-gap in `seq` so the driver can report the loss.
+The framework probe owns its private client; a zero-change tview application
+does not receive that client as an application API. A custom Go semantic
+producer may opt into `protocol.NewSlogHandler(client, nil)`. Groups and
+attributes flatten to dotted keys, `slog` levels map onto the wire's closed
+ladder, and a record the budget refuses leaves a gap in `seq`.
 
 ## Diagnostics
 
-When the adapter does not attach, nothing anywhere says why: the dormant rule
+When the probe does not attach, nothing anywhere says why: the dormant rule
 means a process with no endpoint behaves exactly like a process that never
-heard of termwright. Point `TERMWRIGHT_DEBUG_FILE` at a file and the adapter
+heard of termwright. Point `TERMWRIGHT_DEBUG_FILE` at a file and the probe
 writes down what it decided.
 
 ```
@@ -233,7 +221,19 @@ or, on a session that came up:
   tw:sem  [p41207]   0.003s hello sent adapter=tview/1.0.0 caps=tree,bounds,…
   tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=diffs logs=off
   tw:io   [3f9c1a04]  0.048s r1 snapshot nodes=17
+  tw:io   [3f9c1a04]  0.049s performance r1 bytes=3481 nodes=17 unknown=2 serialization_us=44.125
 ```
+
+With the debug log enabled, `Client.PerformanceMetrics()` also returns a
+machine-readable value snapshot: full snapshots, deltas, semantic bytes,
+nodes, generic/unknown nodes, failed publications, requested markers and
+serialization time, including per-frame averages. Collection is tied to the
+non-nil debug log so normal render paths do not pay for timers or a second node
+scan. Facts the protocol client cannot observe remain JSON `null`: raw probe
+events, parent normalization and whether the caller actually drained the
+returned marker to the PTY. The client owns no coalescing queue, so its own
+coalescing count is a measured zero; a framework probe with a queue reports its
+counter separately.
 
 Three properties are worth knowing before you rely on it:
 
@@ -248,7 +248,7 @@ Three properties are worth knowing before you rely on it:
 `TERMWRIGHT_DEBUG=<path>` works too, for symmetry with the driver's own
 switch. `TERMWRIGHT_DEBUG=1` does **not**: that value means "log to stderr" to
 the driver, it reaches this process as well, and stderr is the one destination
-an adapter cannot use. Set the value to a path or the adapter stays silent.
+the probe cannot use. Set the value to a path or the probe stays silent.
 
 The line format is the driver's, so `TERMWRIGHT_DEBUG=1` on the driver and
 `TERMWRIGHT_DEBUG_FILE=…` on the app produce two halves of one story that a
@@ -256,7 +256,7 @@ single reader can take.
 
 ## Deviations
 
-Measured against the adapter conventions in the protocol README. Everything
+Measured against the probe conventions in the protocol README. Everything
 not listed here follows them.
 
 - **Windows support is compiled, not yet observed here.** The named-pipe
@@ -265,17 +265,18 @@ not listed here follows them.
   pipe comes from CI rather than from a local run.
 
 - **`testId` has no native source** (rule 3). tview exposes no identifier — a
-  Box title is display text, not an id — so the only source is the annotation,
-  via `WithTestIDs` or `Session.SetTestID`. A widget with neither publishes no
+  Box title is display text, not an id — so the only source is
+  `annotate.Tag`. A widget with no annotation publishes no
   `testId` at all rather than a synthesised one, because an id that shifts when
   an unrelated widget is added fails later and looks flaky rather than wrong.
 - **`modal` is derived from the widget type, not a flag** (rule 4). A
   `tview.Modal` is modal by construction and the type carries no property to
   read. No other state here is inferred: `disabled`, `checked` and `focused`
   all come from `IsDisabled`, `IsChecked` and `HasFocus`.
-- **`Grid` children are invisible without help** (rules 1–5, transitively).
-  tview offers no item accessor for `Grid`, so its children reach the tree only
-  through `WithChildren`. Everything under an unsupplied Grid is simply absent.
+- **The probe is exact-version build instrumentation.** It sees private `Grid`
+  children precisely because the verified patch runs inside tview; an
+  unsupported tview version is refused rather than approximated from the
+  public API.
 - **List and DropDown entries are synthesised, not primitives** (rule 3). They
   are published as `listitem` nodes with generated ids (`p4:item0`), because
   tview keeps them as text rather than as widgets. They carry no `testId`, and

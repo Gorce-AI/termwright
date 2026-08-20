@@ -70,7 +70,12 @@ describe('parseAdapterMessage', () => {
   });
 
   it('flags a foreign protocol version distinctly from malformed input', () => {
-    expect(adapterCode({ ...hello(), protocol: 'termwright/2' })).toBe('bad-version');
+    expect(adapterCode({ ...hello(), protocol: 'termwright/2' })).toBe('malformed');
+    expect(adapterCode({
+      ...hello(),
+      protocol: 'termwright/2',
+      capabilities: ['tree', 'qualified-observations'],
+    })).toBe('ok');
     expect(driverCode({ ...helloAck(), protocol: 'termwright/99' })).toBe('bad-version');
   });
 

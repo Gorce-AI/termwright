@@ -75,6 +75,42 @@ async function instrumentedCopy(major: CharmMajor): Promise<{ copy: string; work
   return { copy, workspace };
 }
 
+describe('the runtime capability declarations', () => {
+  it.each(['v1', 'v2'] as const)(
+    'declares the exact honest capabilities in %s',
+    async (major) => {
+      const source = await readFile(
+        join(patchSetFor(major), 'add', 'termwright_probe.go'),
+        'utf8',
+      );
+      const literal = /Capabilities:\s*\[\]protocol\.Capability\{(?<body>[\s\S]*?)\n\s*\}/u.exec(
+        source,
+      )?.groups?.['body'];
+      expect(literal).toBeDefined();
+
+      const capabilities = [
+        ...(literal?.matchAll(/protocol\.(Cap[A-Za-z]+)/gu) ?? []),
+      ].map((match) => match[1]);
+      expect(capabilities).toEqual(['CapTree', 'CapStates', 'CapActions', 'CapRenderRevisions']);
+
+      // This is a different capability vocabulary: it describes facts the
+      // framework exposes, not message kinds the adapter can send.
+      expect(source).toContain(`frameworkVersion = "${UPSTREAM[major].version}"`);
+      expect(source).toContain('Framework:        "charm"');
+      expect(source).toMatch(/IdentityKind:\s+protocol\.ProbeIdentityFrameLocal/u);
+      const probeLiteral =
+        /Capabilities:\s*\[\]protocol\.ProbeCapability\{(?<body>[\s\S]*?)\n\s*\}/u.exec(
+          source,
+        )?.groups?.['body'];
+      expect(
+        [...(probeLiteral?.matchAll(/protocol\.(ProbeCap[A-Za-z]+)/gu) ?? [])].map(
+          (match) => match[1],
+        ),
+      ).toEqual(['ProbeCapAnnotations']);
+    },
+  );
+});
+
 describe.skipIf(!hasGo)('the patch sets', () => {
   it('instruments v2 with a single anchor and compiles', async () => {
     const { copy, workspace } = await instrumentedCopy('v2');
@@ -87,6 +123,11 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     await expect(
       run('go', ['build', './...'], { cwd: copy, env: { ...process.env, GOWORK: workspace } }),
     ).resolves.toBeDefined();
+    const { stdout } = await run('go', ['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
+      cwd: copy,
+      env: { ...process.env, GOWORK: workspace },
+    });
+    expect(stdout).toContain('PASS: TestTermwrightSemanticKeysStabiliseIDsAndResolveRelations');
   }, 900_000);
 
   it('instruments v1 at all three call sites and compiles', async () => {
@@ -103,6 +144,11 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     await expect(
       run('go', ['build', './...'], { cwd: copy, env: { ...process.env, GOWORK: workspace } }),
     ).resolves.toBeDefined();
+    const { stdout } = await run('go', ['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
+      cwd: copy,
+      env: { ...process.env, GOWORK: workspace },
+    });
+    expect(stdout).toContain('PASS: TestTermwrightSemanticKeysStabiliseIDsAndResolveRelations');
   }, 900_000);
 
   it('keeps the majors on separate patch sets, keyed by their own module path', async () => {

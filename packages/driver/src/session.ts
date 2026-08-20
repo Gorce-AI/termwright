@@ -40,7 +40,8 @@ import {
   ENV_ENDPOINT,
   ENV_PROTOCOL,
   ENV_TOKEN,
-  PROTOCOL_VERSION,
+  PROTOCOL_ID,
+  PROTOCOL_V2_ID,
   generateToken,
   verifyMarkerPayload,
 } from '@termwright/protocol';
@@ -270,6 +271,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #genericDefiniteAt: number | null = null;
   #graceTimer: NodeJS.Timeout | null = null;
   #selectionRange: { start: { row: number; column: number }; end: { row: number; column: number } } | null = null;
+  #actionCounter = 0;
+  readonly #pendingActions = new Map<string, { api: string; selector?: string }>();
 
   constructor(options: LaunchTerminalOptions) {
     this.#options = options;
@@ -367,7 +370,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     const env = buildChildEnv(this.#options.envMode ?? 'replace', this.#options.env);
     env[ENV_ENDPOINT] = this.#channel.endpoint;
     env[ENV_TOKEN] = this.#token;
-    env[ENV_PROTOCOL] = String(PROTOCOL_VERSION);
+    env[ENV_PROTOCOL] = this.#options.semanticProtocol === 'termwright/1'
+      ? PROTOCOL_ID
+      : PROTOCOL_V2_ID;
 
     this.#pty = this.#backend.spawn({
       command: this.#options.command,
@@ -421,6 +426,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       semanticTree: this.#attachment !== null,
       terminalProfile: this.#vt.profile.id,
       ...(this.#attachment !== null ? { adapter: this.#attachment.adapter } : {}),
+      ...(this.#attachment?.probe !== null && this.#attachment?.probe !== undefined
+        ? { probe: this.#attachment.probe }
+        : {}),
       capabilities: this.#attachment?.capabilities ?? Object.freeze([]),
       platform: process.platform,
     });
@@ -496,8 +504,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#attachment?.probe?.identityKind ?? 'stable';
   }
 
-  producerIsProbe(): boolean {
-    return this.#attachment?.probe != null;
+  semanticBoundsAreAbsolute(): boolean {
+    return this.#attachment?.capabilities.includes('absolute-bounds') === true;
   }
 
   locatorForRef(ref: string): Locator {
@@ -561,27 +569,46 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   async signal(sig: 'INT' | 'TERM' | 'KILL' | 'HUP'): Promise<void> {
-    this.emitAction('signal', true);
-    this.assertOpen();
-    // A death the caller asked for is not a crash, whatever the exit status.
-    this.#teardownRequested = true;
-    this.#pty?.signal(sig);
-    await Promise.resolve();
+    await this.#act('signal', async () => {
+      this.assertOpen();
+      // A death the caller asked for is not a crash, whatever the exit status.
+      this.#teardownRequested = true;
+      this.#pty?.signal(sig);
+      await Promise.resolve();
+    });
   }
 
-  async resize(size: { columns: number; rows: number }): Promise<void> {
-    this.assertOpen();
-    if (size.columns <= 0 || size.rows <= 0) {
-      throw new UnsupportedActionError(`resize() needs positive dimensions, received ${size.columns}x${size.rows}`, {
-        semanticTree: this.#attachment !== null,
+  async resize(size: { columns: number; rows: number }): Promise<import('./api.js').ResizeReceipt> {
+    return this.#act('resize', async () => {
+      this.assertOpen();
+      if (size.columns <= 0 || size.rows <= 0) {
+        throw new UnsupportedActionError(`resize() needs positive dimensions, received ${size.columns}x${size.rows}`, {
+          semanticTree: this.#attachment !== null,
+        });
+      }
+      const before = Object.freeze({
+        sessionId: this.sessionId,
+        screenRevision: this.screenRevision(),
+        semanticRevision: this.semanticRevision() > 0 ? this.semanticRevision() : null,
       });
-    }
-    this.#pty?.resize(size.columns, size.rows);
-    this.#vt.resize(size.columns, size.rows);
-    this.#emitter.emit('resize', { columns: size.columns, rows: size.rows, timeMs: this.#now() });
-    this.emitAction('resize', true);
-    // A resize is only observable once the child has repainted.
-    await this.waitForStable({ frames: 2, timeout: this.timeouts.action }).catch(() => {});
+      this.#pty?.resize(size.columns, size.rows);
+      this.#vt.resize(size.columns, size.rows);
+      this.#emitter.emit('resize', { columns: size.columns, rows: size.rows, timeMs: this.#now() });
+      // A resize is only observable once the child has repainted.
+      await this.waitForRender({ after: before.screenRevision, timeout: this.timeouts.action });
+      await this.waitForStable({ frames: 2, timeout: this.timeouts.action });
+      const after = Object.freeze({
+        sessionId: this.sessionId,
+        screenRevision: this.screenRevision(),
+        semanticRevision: this.semanticRevision() > 0 ? this.semanticRevision() : null,
+      });
+      return Object.freeze({
+        requested: Object.freeze({ columns: size.columns, rows: size.rows }),
+        before,
+        after,
+        pairedRender: Object.freeze({ status: 'known', value: after.screenRevision, evidence: 'terminal-grid' } as const),
+      });
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -912,35 +939,61 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#crash;
   }
 
-  /** Public, bounded diagnostics log (oldest first). */
-  /**
-   * Publishes one action event. Called after the action settles, so `ok`
-   * reports what happened rather than what was attempted.
-   */
-  emitAction(api: string, ok: boolean, about?: Omit<ActionEvent, 'api' | 'ok' | 'timeMs'>): void {
-    if (this.#closed) return;
+  /** Starts an observable action lifecycle on this session's monotonic clock. */
+  beginAction(api: string, about?: { selector?: string }): string {
+    const actionId = `a${++this.#actionCounter}`;
+    if (!this.#closed) {
+      this.#pendingActions.set(actionId, {
+        api,
+        ...(about?.selector === undefined ? {} : { selector: about.selector }),
+      });
+      this.#emitter.emit('action-start', {
+        actionId,
+        api,
+        ...(about?.selector === undefined ? {} : { selector: about.selector }),
+        timeMs: this.#now(),
+      });
+    }
+    return actionId;
+  }
+
+  endAction(
+    actionId: string,
+    api: string,
+    ok: boolean,
+    about?: Omit<ActionEvent, 'actionId' | 'api' | 'ok' | 'timeMs' | 'observation'>,
+  ): void {
+    if (this.#closed || !this.#pendingActions.delete(actionId)) return;
     this.#emitter.emit('action', {
+      actionId,
       api,
       ...(about?.selector !== undefined ? { selector: about.selector } : {}),
       ...(about?.ref !== undefined ? { ref: about.ref } : {}),
       ok,
       ...(about?.error !== undefined ? { error: about.error } : {}),
+      observation: Object.freeze({
+        sessionId: this.sessionId,
+        screenRevision: this.screenRevision(),
+        semanticRevision: this.semanticRevision() > 0 ? this.semanticRevision() : null,
+      }),
       timeMs: this.#now(),
     });
   }
 
   /** Runs a harness-level action and reports it, whichever way it ends. */
   async #act<T>(api: string, run: () => Promise<T>): Promise<T> {
+    const actionId = this.beginAction(api);
     try {
       const result = await run();
-      this.emitAction(api, true);
+      this.endAction(actionId, api, true);
       return result;
     } catch (error) {
-      this.emitAction(api, false, { error: actionErrorCode(error) });
+      this.endAction(actionId, api, false, { error: actionErrorCode(error) });
       throw error;
     }
   }
 
+  /** Public, bounded diagnostics log (oldest first). */
   diagnostics(): readonly SessionDiagnostic[] {
     return Object.freeze([...this.#diagnosticsLog]);
   }
@@ -964,8 +1017,18 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   async close(): Promise<void> {
     if (this.#closed) return;
-    this.#closed = true;
     this.#teardownRequested = true;
+    // Publish one terminal outcome for every announced action before the
+    // emitter is closed. A later promise settlement becomes a no-op because
+    // the action has already been removed from this registry.
+    for (const [actionId, pending] of [...this.#pendingActions]) {
+      this.endAction(actionId, pending.api, false, {
+        ...(pending.selector === undefined ? {} : { selector: pending.selector }),
+        error: 'session-closed',
+      });
+    }
+    this.#closed = true;
+    this.#notifyChange();
     if (this.#negotiationTimer !== null) clearTimeout(this.#negotiationTimer);
     if (this.#graceTimer !== null) clearTimeout(this.#graceTimer);
     this.#settle();
