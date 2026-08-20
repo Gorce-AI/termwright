@@ -544,6 +544,11 @@ func TestAWriteToAStalledDriverIsBounded(t *testing.T) {
 	if err := client.Start(2 * time.Second); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
+	if socket, ok := client.conn.(*net.UnixConn); ok {
+		if err := socket.SetWriteBuffer(4 * 1024); err != nil {
+			t.Fatalf("constrain the test socket buffer: %v", err)
+		}
+	}
 
 	// Enough traffic to fill the socket buffer and then some.
 	started := time.Now()
@@ -554,7 +559,7 @@ func TestAWriteToAStalledDriverIsBounded(t *testing.T) {
 	elapsed := time.Since(started)
 
 	if failure == nil {
-		t.Skip("the socket buffer swallowed everything; nothing was stalled")
+		t.Fatal("the bounded-write test never filled its deliberately constrained socket buffer")
 	}
 	if !errors.Is(failure, ErrWriteTimeout) {
 		t.Fatalf("expected a recognisable write timeout, got %v", failure)

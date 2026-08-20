@@ -106,6 +106,9 @@ tree](CONTRACTS.md#git-hygiene-in-this-shared-tree-binding-for-every-agent) is
 binding: commit with explicit paths, never `-a`, never `--amend`, never rewind
 the whole tree.
 
+Do not add `Co-Authored-By` trailers to commit messages. Termwright records the
+author and committer supplied by Git and does not use co-author trailers.
+
 **Bisecting:** commit `1c0442a` does not build on its own for the `termwright`
 package. Its build script compiles `src/reporter.ts` and `src/ui-reporter.ts`,
 and neither file exists at that commit — the manifest was committed ahead of its
