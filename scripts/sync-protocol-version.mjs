@@ -13,7 +13,7 @@
  *
  * The npm package is the source of truth because changesets already owns it:
  * a protocol bump lands there first, and this script propagates it. Go carries
- * no version in the tree, so `tag.yml` derives `clients/go/vX.Y.Z` from the
+ * no version in the tree, so `release.yml` derives `clients/go/vX.Y.Z` from the
  * same number.
  *
  * Everything else on npm versions independently. Lockstep is a promise about

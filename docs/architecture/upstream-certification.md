@@ -425,18 +425,16 @@ split from it:
    replaces an existing patch-set directory.
 4. `promote-upstream.yml` is manual, protected by an environment approval. It
    re-verifies source, evidence, signatures and revocations; requires capability
-   review; then opens the ordinary release changes. The existing release/tag
-   and per-registry publish policy remains authoritative.
+   review; then opens the ordinary release changes. The Release PR remains the
+   human approval boundary.
 
 `upstream-discovery.yml`, `upstream-certify.yml`,
 `publish-upstream-canary.yml` and `promote-upstream.yml` are proposed and do not
-exist today. The existing `.github/workflows/publish-canary.yml` is a manually
-dispatched npm snapshot publisher; it does not discover framework releases or
-certify patch sets. Likewise `preview-release.yml` publishes PR packages
-through `pkg-pr-new`, not upstream certification evidence. Stable repository
-publication is currently manual through `release-pr.yml`, `tag.yml`, the
-per-registry publish workflows and `finalize-release.yml`; the target design
-preserves that human boundary.
+exist today. `preview-release.yml` publishes PR packages through `pkg-pr-new`,
+not upstream certification evidence. Stable repository publication uses the
+single `release.yml` workflow: a manual run prepares the Version PR, and
+merging that reviewed PR publishes every registry automatically. The target
+design preserves that human boundary.
 
 Candidate PRs must show the upstream release identity, structural match report,
 complete allowlisted diff, state transition evidence, capability diff, private

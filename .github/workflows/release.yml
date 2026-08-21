@@ -1,0 +1,566 @@
+name: Release
+
+# Maintainer workflow:
+#   1. Run this workflow manually to create or update the Version PR.
+#   2. Review and merge that PR after its normal CI checks pass.
+#   3. The merge runs this same workflow and publishes every registry.
+#
+# The manual run never publishes. Registry credentials are short-lived OIDC
+# identities and are available only to the registry-specific jobs below.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Branch to prepare a release for'
+        required: true
+        default: main
+        type: choice
+        options:
+          - main
+          - release/0.x
+          - release/1.x
+  push:
+    branches:
+      - main
+      - 'release/**'
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.target || github.ref }}
+  # A cancelled registry upload can leave a partial release. Queue instead.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: prepare Version PR
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: '9.4.0'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply pending changesets
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          changesets=(.changeset/*.md)
+          pending=()
+          for changeset in "${changesets[@]}"; do
+            [[ "$changeset" == ".changeset/README.md" ]] || pending+=("$changeset")
+          done
+
+          if (( ${#pending[@]} == 0 )); then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No unreleased changesets found; there is no Version PR to update."
+            exit 0
+          fi
+
+          pnpm changeset version
+          node scripts/sync-protocol-version.mjs
+          node scripts/sync-protocol-version.mjs --check
+          pnpm install --lockfile-only
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize proposed versions
+        if: steps.version.outputs.changed == 'true'
+        shell: bash
+        run: |
+          {
+            echo '## Proposed release'
+            echo
+            echo '| Package | Version |'
+            echo '|---|---|'
+            node - <<'NODE'
+          const { readdirSync, readFileSync } = require('node:fs');
+          for (const directory of readdirSync('packages').sort()) {
+            const path = `packages/${directory}/package.json`;
+            const manifest = JSON.parse(readFileSync(path, 'utf8'));
+            if (manifest.private !== true) {
+              console.log(`| ${manifest.name} | ${manifest.version} |`);
+            }
+          }
+          NODE
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or update the Version PR
+        if: steps.version.outputs.changed == 'true'
+        id: pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          base: ${{ inputs.target }}
+          branch: release-pr/${{ inputs.target }}
+          delete-branch: true
+          commit-message: 'chore(release): version packages'
+          title: 'chore(release): version packages (${{ inputs.target }})'
+          labels: release
+          body: |
+            This PR applies the pending changesets to `${{ inputs.target }}`.
+
+            Review the package versions and changelogs. After the required CI
+            checks pass, approving and merging this PR publishes npm, PyPI and
+            crates.io, creates the coordinated tags, and publishes one GitHub
+            Release. No additional workflow dispatch is required.
+
+      # Pull requests created with GITHUB_TOKEN do not emit pull_request events.
+      # workflow_dispatch is the documented exception, so explicitly attach the
+      # normal CI suite to the generated branch and its commit.
+      - name: Start CI for the Version PR
+        if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: release-pr/${{ inputs.target }}
+        run: gh workflow run ci.yml --ref "$BRANCH"
+
+  detect:
+    name: detect merged Version PR
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      release: ${{ steps.release.outputs.release }}
+      commit: ${{ steps.release.outputs.commit }}
+      version: ${{ steps.release.outputs.version }}
+      dist_tag: ${{ steps.release.outputs.dist_tag }}
+      latest: ${{ steps.release.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require the push to come from the generated Version PR
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+          TARGET: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          prs=$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$REPOSITORY/commits/$COMMIT/pulls")
+          expected_head="release-pr/$TARGET"
+          if ! PRS="$prs" EXPECTED_HEAD="$expected_head" TARGET="$TARGET" node - <<'NODE'
+          const prs = JSON.parse(process.env.PRS);
+          const match = prs.some((pr) =>
+            pr.merged_at &&
+            pr.base?.ref === process.env.TARGET &&
+            pr.head?.ref === process.env.EXPECTED_HEAD &&
+            pr.title?.startsWith('chore(release): version packages')
+          );
+          process.exit(match ? 0 : 1);
+          NODE
+          then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "Push $COMMIT is not a merged Version PR; nothing to publish."
+            exit 0
+          fi
+
+          pending=$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md | wc -l | tr -d ' ')
+          if [ "$pending" != "0" ]; then
+            echo "::error::merged Version PR left $pending unapplied changeset(s)"
+            exit 1
+          fi
+
+          version=$(node -p "require('./packages/protocol/package.json').version")
+          case "$TARGET" in
+            main)
+              dist_tag=latest
+              latest=true
+              ;;
+            release/[0-9]*.x)
+              major=${TARGET#release/}
+              dist_tag="$major-lts"
+              latest=false
+              ;;
+            *)
+              echo "::error::unsupported release target $TARGET"
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "release=true"
+            echo "commit=$COMMIT"
+            echo "version=$version"
+            echo "dist_tag=$dist_tag"
+            echo "latest=$latest"
+          } >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: verify and pack release
+    needs: detect
+    if: needs.detect.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.detect.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: '9.4.0'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify release metadata
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ needs.detect.outputs.commit }}"
+          test "$(node -p "require('./packages/protocol/package.json').version")" = "$VERSION"
+          test "$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md | wc -l | tr -d ' ')" = 0
+          node scripts/sync-protocol-version.mjs --check
+          node scripts/check-package-metadata.mjs
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm -r --filter './packages/*' run typecheck
+      - run: pnpm -r --filter './packages/*' run test
+
+      - name: Pack npm packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release/npm
+          for directory in packages/*/; do
+            private=$(node -p "require('./${directory}package.json').private === true")
+            [ "$private" = "true" ] && continue
+            archive=$(cd "$directory" && pnpm pack --pack-destination "$GITHUB_WORKSPACE/release/npm" | tail -n 1)
+            test -f "$archive"
+            manifest=$(tar -xOf "$archive" package/package.json)
+            if grep -q 'workspace:' <<<"$manifest"; then
+              echo "::error::$archive contains an unexpanded workspace dependency"
+              exit 1
+            fi
+            repository=$(node -p "JSON.parse(process.argv[1]).repository?.url ?? ''" "$manifest")
+            if [ "$repository" != 'git+https://github.com/Gorce-AI/termwright.git' ]; then
+              echo "::error::$archive does not identify the repository required for npm provenance"
+              exit 1
+            fi
+          done
+
+      - name: Build and test the Python distribution
+        working-directory: clients/python
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install build twine
+          python -m build --outdir "$GITHUB_WORKSPACE/release/pypi"
+          twine check "$GITHUB_WORKSPACE"/release/pypi/*
+          test_env="$RUNNER_TEMP/termwright-wheel-test"
+          python -m venv "$test_env"
+          wheel=$(find "$GITHUB_WORKSPACE/release/pypi" -name 'termwright-*.whl' -print -quit)
+          test -n "$wheel"
+          "$test_env/bin/pip" install "$wheel" pytest pytest-asyncio 'textual>=0.60'
+          "$test_env/bin/python" -m pytest
+
+      - name: Test and package the Rust crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --manifest-path clients/rust/Cargo.toml
+          TERMWRIGHT_REQUIRE_RATATUI=1 cargo test --locked --manifest-path clients/rust-probe/Cargo.toml
+          cargo test --locked --manifest-path clients/rust-ratatui/Cargo.toml
+          cargo package --locked --manifest-path clients/rust/Cargo.toml
+          cargo package --locked --manifest-path clients/rust-probe/Cargo.toml \
+            --config "patch.crates-io.termwright-protocol.path='$GITHUB_WORKSPACE/clients/rust'"
+          cargo package --locked --manifest-path clients/rust-ratatui/Cargo.toml \
+            --config "patch.crates-io.termwright-protocol.path='$GITHUB_WORKSPACE/clients/rust'" \
+            --config "patch.crates-io.termwright-probe-ratatui.path='$GITHUB_WORKSPACE/clients/rust-probe'"
+
+      - name: Seal release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd release && find npm pypi -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-artifacts-${{ needs.detect.outputs.commit }}
+          path: release
+          if-no-files-found: error
+          retention-days: 14
+
+  tag:
+    name: create coordinated tags
+    needs: [detect, verify]
+    runs-on: ubuntu-latest
+    environment: release-tag
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.detect.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Create tags and a draft GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.detect.outputs.version }}
+          VERIFIED_COMMIT: ${{ needs.detect.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$VERIFIED_COMMIT"
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+          mapfile -t tags < <(node <<'NODE'
+          const { readdirSync, readFileSync } = require('node:fs');
+          for (const directory of readdirSync('packages').sort()) {
+            const path = `packages/${directory}/package.json`;
+            const manifest = JSON.parse(readFileSync(path, 'utf8'));
+            if (manifest.private !== true) console.log(`${manifest.name}@${manifest.version}`);
+          }
+          NODE
+          )
+          tags+=("protocol/v$VERSION" "clients/go/v$VERSION")
+
+          refs=()
+          for tag in "${tags[@]}"; do
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$VERIFIED_COMMIT" || {
+                echo "::error::existing tag $tag points at another commit"
+                exit 1
+              }
+            else
+              git tag -a "$tag" -m "$tag"
+            fi
+            refs+=("refs/tags/$tag:refs/tags/$tag")
+          done
+          git push --atomic origin "${refs[@]}"
+
+          anchor="protocol/v$VERSION"
+          if ! gh release view "$anchor" >/dev/null 2>&1; then
+            gh release create "$anchor" --draft \
+              --title "termwright — protocol v$VERSION" --generate-notes
+          fi
+
+  crates:
+    name: publish crates.io
+    needs: [detect, verify, tag]
+    runs-on: ubuntu-latest
+    environment: crates-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.detect.outputs.commit }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - name: Publish in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          VERSION: ${{ needs.detect.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          crates=(
+            'termwright-protocol:clients/rust/Cargo.toml'
+            'termwright-probe-ratatui:clients/rust-probe/Cargo.toml'
+            'termwright-ratatui:clients/rust-ratatui/Cargo.toml'
+          )
+          for entry in "${crates[@]}"; do
+            name=${entry%%:*}
+            manifest=${entry#*:}
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              -H 'User-Agent: termwright-release (github.com/Gorce-AI/termwright)' \
+              "https://crates.io/api/v1/crates/$name/$VERSION")
+            if [ "$code" = 200 ]; then
+              echo "::notice::$name $VERSION already exists; skipping"
+            else
+              cargo publish --locked --manifest-path "$manifest" --no-verify
+            fi
+          done
+
+  pypi:
+    name: publish PyPI
+    needs: [detect, verify, crates]
+    runs-on: ubuntu-latest
+    environment: pypi-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-artifacts-${{ needs.detect.outputs.commit }}
+          path: release
+
+      - name: Verify release artifacts
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+
+      - name: Check whether the version exists
+        id: exists
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        shell: bash
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/termwright/$VERSION/json")
+          if [ "$code" = 200 ]; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::termwright $VERSION already exists; skipping"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.exists.outputs.value == 'false'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: release/pypi
+
+  npm:
+    name: publish npm
+    needs: [detect, verify, pypi]
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.14'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm install --global npm@11.5.1
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-artifacts-${{ needs.detect.outputs.commit }}
+          path: release
+
+      - name: Verify release artifacts
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+
+      - name: Publish every package
+        env:
+          DIST_TAG: ${{ needs.detect.outputs.dist_tag }}
+          NPM_CONFIG_PROVENANCE: 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(release/npm/*.tgz)
+          test "${#archives[@]}" -gt 0
+          for archive in "${archives[@]}"; do
+            manifest=$(tar -xOf "$archive" package/package.json)
+            name=$(node -p "JSON.parse(process.argv[1]).name" "$manifest")
+            version=$(node -p "JSON.parse(process.argv[1]).version" "$manifest")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "::notice::$name@$version already exists; skipping"
+            else
+              npm publish --access public --tag "$DIST_TAG" --workspaces=false \
+                --ignore-scripts "$archive"
+            fi
+          done
+
+  finalize:
+    name: publish GitHub Release
+    needs: [detect, crates, pypi, npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.detect.outputs.commit }}
+
+      - name: Confirm every registry and publish the release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.detect.outputs.version }}
+          MARK_LATEST: ${{ needs.detect.outputs.latest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 300))
+          while true; do
+            missing=()
+
+            while IFS= read -r package; do
+              npm view "$package@$VERSION" version >/dev/null 2>&1 || missing+=("npm:$package")
+            done < <(node - <<'NODE'
+          const { readdirSync, readFileSync } = require('node:fs');
+          for (const directory of readdirSync('packages').sort()) {
+            const manifest = JSON.parse(readFileSync(`packages/${directory}/package.json`, 'utf8'));
+            if (manifest.private !== true) console.log(manifest.name);
+          }
+          NODE
+            )
+
+            [ "$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/termwright/$VERSION/json")" = 200 ] || missing+=("pypi:termwright")
+            for crate in termwright-protocol termwright-probe-ratatui termwright-ratatui; do
+              [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'User-Agent: termwright-release (github.com/Gorce-AI/termwright)' "https://crates.io/api/v1/crates/$crate/$VERSION")" = 200 ] || missing+=("crates:$crate")
+            done
+
+            if (( ${#missing[@]} == 0 )); then
+              break
+            fi
+            if (( SECONDS >= deadline )); then
+              printf '::error::registry confirmation timed out: %s\n' "${missing[*]}"
+              exit 1
+            fi
+            printf 'waiting for registry indexes: %s\n' "${missing[*]}"
+            sleep 15
+          done
+
+          tag="protocol/v$VERSION"
+          if [ "$MARK_LATEST" = true ]; then
+            gh release edit "$tag" --draft=false --latest
+          else
+            gh release edit "$tag" --draft=false --latest=false
+          fi
+          echo "Released $tag to npm, PyPI and crates.io." >> "$GITHUB_STEP_SUMMARY"

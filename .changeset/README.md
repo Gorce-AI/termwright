@@ -17,43 +17,38 @@ genuinely ships nothing.
 
 ## How a release happens
 
-Changesets produce the versions and changelogs. They do **not** publish —
-nothing in this repository does, automatically. The full runbook is
+Changesets produce the versions and changelogs. The full runbook is
 [`RELEASING.md`](../RELEASING.md); the short version:
 
 1. Pull requests land on `main`, each carrying its changesets.
-2. A maintainer dispatches `release-pr.yml`, which applies every pending
+2. A maintainer dispatches `release.yml`, which applies every pending
    changeset and opens the **Version PR**: versions bumped, changelogs written.
-3. Merging that pull request **publishes nothing**. Someone then dispatches
-   `tag.yml`, followed by the per-registry publish workflows, each behind an
-   approval on its own environment.
+3. A maintainer reviews and merges the Version PR after CI passes.
+4. That merge runs `release.yml` again. It tags the exact merge commit,
+   publishes crates.io, PyPI and npm through OIDC, then publishes one GitHub
+   Release after every registry confirms the version.
 
-`createGithubReleases` is set to `aggregate`: one GitHub Release describing the
-whole coordinated bump, rather than one release per package. `tag.yml` creates it as a draft, and
-`finalize-release.yml` publishes it once every registry confirms the version.
+`createGithubReleases` is set to `aggregate`: one GitHub Release describes the
+whole coordinated bump rather than one release per package.
 
 ## The npm packages move together
 
 `config.json` puts every `@termwright/*` package and the `termwright` umbrella
 in one `fixed` group: they share a version and are released together. That is
 deliberate — the driver, framework probes, annotation SDKs, preset and MCP
-server are one product, and a matrix of independently drifting versions is a
-support burden nobody asked for.
+server are one product. Keeping one version makes compatibility easier to
+understand and support.
 
 The language clients publish to different registries. The PyPI package, all
 three Rust crates and the Go module share the **protocol** version rather than
 the npm group's. `scripts/sync-protocol-version.mjs` propagates it and CI checks
 it; see [`RELEASING.md`](../RELEASING.md).
 
-## The 0.1.0 baseline
+## Published baseline
 
-The packages currently sit at `0.1.0` in their `package.json` and have never
-been published, so the first release publishes those versions as they stand —
-no changeset produces `0.1.0`, because changesets compute a bump *from* the
-committed version.
-
-Every change after that first publish needs a changeset. If you are unsure
-whether something qualifies: a change that a user could notice does.
+The coordinated `0.2.0` release is the current baseline. Every user-visible
+change after it needs a changeset. If a user could notice a change in a public
+package, include one.
 
 ## Not published
 
