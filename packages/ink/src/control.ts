@@ -54,11 +54,15 @@ export interface RerenderCommand {
   readonly props: JsonProps;
 }
 
-interface CommandReply {
+type CommandReply = {
   readonly v: 1;
-  readonly type: 'ok' | 'error';
+  readonly type: 'ok';
+  readonly semanticRevision: number;
+} | {
+  readonly v: 1;
+  readonly type: 'error';
   readonly detail?: string;
-}
+};
 
 /**
  * The harness end of the control channel.
@@ -184,7 +188,7 @@ export class ControlChannel {
    * @throws CapacityError when the encoded command exceeds the limit
    * @throws TimeoutError when the fixture does not acknowledge in time
    */
-  async rerender(props: JsonProps, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS): Promise<void> {
+  async rerender(props: JsonProps, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS): Promise<number> {
     assertJsonProps(props);
     const command: RerenderCommand = { v: 1, type: 'rerender', props };
     const line = `${JSON.stringify(command)}\n`;
@@ -206,7 +210,7 @@ export class ControlChannel {
     return commandRun;
   }
 
-  async #sendRerender(line: string, timeoutMs: number): Promise<void> {
+  async #sendRerender(line: string, timeoutMs: number): Promise<number> {
     const socket = this.#socket;
     if (socket === null || this.#closed || this.#fixtureGone) throw this.#sessionClosed();
 
@@ -248,6 +252,7 @@ export class ControlChannel {
         suggestion: 'the runner rejects props it cannot apply; check the component accepts them',
       });
     }
+    return reply.semanticRevision;
   }
 
   /** Closes the endpoint and removes the socket directory. Idempotent. */
@@ -337,9 +342,21 @@ export class ControlChannel {
       return;
     }
     if (record['type'] !== 'ok' && record['type'] !== 'error') return;
+    if (record['type'] === 'ok') {
+      const revision = record['semanticRevision'];
+      if (!Number.isSafeInteger(revision) || (revision as number) <= 0) {
+        this.#pending?.reject(new ProtocolViolationError(
+          'the fixture acknowledged a rerender without a valid semantic revision',
+          { semanticTree: false, suggestion: 'use the runner shipped with this version of @termwright/ink' },
+        ));
+        return;
+      }
+      this.#pending?.resolve({ v: 1, type: 'ok', semanticRevision: revision as number });
+      return;
+    }
     this.#pending?.resolve({
       v: 1,
-      type: record['type'],
+      type: 'error',
       ...(typeof record['detail'] === 'string' ? { detail: record['detail'] } : {}),
     });
   }

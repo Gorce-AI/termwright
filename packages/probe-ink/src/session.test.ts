@@ -172,6 +172,60 @@ describe('Ink probe session', () => {
     expect(coalesced.count).toBe(1);
   });
 
+  it('carries a causal publication boundary forward to a later superseding frame', async () => {
+    const tree = root();
+    const snapshots: SemanticSnapshot[] = [];
+    const coalesced = { count: 0 };
+    const session = createInkSession({
+      channel: channel(snapshots, [], coalesced),
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      stdout: stream([]),
+      tracker: fakeTracker(),
+    });
+
+    const causal = session.notifyRender({ awaitPublication: true });
+    session.notifyRender();
+
+    await expect(causal).resolves.toBe(1);
+    await session.flush();
+    expect(snapshots.map(({ revision }) => revision)).toEqual([1]);
+    expect(coalesced.count).toBe(1);
+  });
+
+  it('rejects a causal publication boundary when the session stops', async () => {
+    const tree = root();
+    const session = createInkSession({
+      channel: channel([], []),
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      stdout: stream([]),
+      tracker: fakeTracker(),
+    });
+
+    const causal = session.notifyRender({ awaitPublication: true });
+    session.stop();
+
+    await expect(causal).rejects.toThrow('Ink probe stopped');
+  });
+
+  it('rejects a causal publication boundary when the semantic channel closes', async () => {
+    const tree = root();
+    const fakeChannel = channel([], []);
+    const session = createInkSession({
+      channel: fakeChannel,
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      stdout: stream([]),
+      tracker: fakeTracker(),
+    });
+
+    const causal = session.notifyRender({ awaitPublication: true });
+    fakeChannel.close();
+
+    await expect(causal).rejects.toThrow('semantic channel closed');
+  });
+
   it('waits when an annotation refresh sees a host tree ahead of the renderer capture', async () => {
     const tree = root();
     let currentCapture = capture(tree);

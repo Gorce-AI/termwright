@@ -53,6 +53,29 @@ describe('fixture rerender', () => {
     expect(harness.screen().text()).toContain('Renamed');
   });
 
+  it('settles the exact causal publication when an effect immediately adds another frame', async () => {
+    const harness = await launch({ label: 'Initial' });
+    const before = harness.checkpoint().semanticRevision ?? 0;
+
+    await harness.rerender({ label: 'Causal', followup: 'effect frame' });
+
+    expect(harness.checkpoint().semanticRevision).toBeGreaterThan(before);
+    expect(harness.screen().text()).toContain('Causal');
+    expect(harness.screen().text()).toContain('followup effect frame');
+    expect(await harness.getByRole('button', { name: 'Causal' }).count()).toBe(1);
+  });
+
+  it('does not require global quiet after the commanded revision is paired', async () => {
+    const harness = await launch({ label: 'Initial' });
+
+    await harness.rerender({ label: 'Animated', animateOutput: true }, { timeout: 500 });
+
+    // An unrelated title animation keeps producing terminal revisions. The
+    // exact semantic marker is nevertheless a complete rerender boundary.
+    expect(harness.screen().text()).toContain('Animated');
+    expect(await harness.getByRole('button', { name: 'Animated' }).count()).toBe(1);
+  });
+
   it('binds concurrent rerender acknowledgements to distinct committed frames', async () => {
     const harness = await launch({ label: 'Initial' });
 

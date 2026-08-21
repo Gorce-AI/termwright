@@ -41,14 +41,15 @@ function contains(metrics, point) {
 }
 
 /**
- * @param {{label?: string, greeting?: string, onPress?: () => void}} props
+ * @param {{label?: string, greeting?: string, followup?: string, animateOutput?: boolean, onPress?: () => void}} props
  */
-export default function CounterApp({ label = 'Approve', greeting = 'ready', onPress }) {
+export default function CounterApp({ label = 'Approve', greeting = 'ready', followup = '', animateOutput = false, onPress }) {
   const buttonRef = useRef(null);
   const inputRef = useRef(null);
   const [pressed, setPressed] = useState(0);
   const [message, setMessage] = useState('');
   const [focus, setFocus] = useState('button');
+  const [followupState, setFollowupState] = useState('');
   const { stdout } = useStdout();
 
   // Mouse reporting is opt-in for the application, exactly as in a real TUI:
@@ -59,6 +60,23 @@ export default function CounterApp({ label = 'Approve', greeting = 'ready', onPr
       stdout.write('\u001B[?1006l\u001B[?1000l');
     };
   }, [stdout]);
+
+  // A prop commit can legitimately trigger another, semantically unrelated
+  // frame from an effect. Fixture rerender must bind to this causal chain and
+  // never let the later frame steal a generic "next revision" waiter.
+  useEffect(() => {
+    if (followup.length > 0) setFollowupState(followup);
+  }, [followup]);
+
+  useEffect(() => {
+    if (!animateOutput) return undefined;
+    let tick = 0;
+    const timer = setInterval(() => {
+      tick += 1;
+      stdout.write(`\u001B]0;termwright-animation-${tick}\u0007`);
+    }, 5);
+    return () => clearInterval(timer);
+  }, [animateOutput, stdout]);
 
   useSemantic(buttonRef, {
     role: 'button',
@@ -119,5 +137,6 @@ export default function CounterApp({ label = 'Approve', greeting = 'ready', onPr
     ),
     createElement(Box, { ref: inputRef }, createElement(Text, null, `> ${message}`)),
     createElement(Text, null, `pressed ${pressed}`),
+    followupState.length > 0 ? createElement(Text, null, `followup ${followupState}`) : null,
   );
 }

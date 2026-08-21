@@ -114,6 +114,34 @@ describe('ControlChannel', () => {
     fixture.destroy();
   });
 
+  it('returns the exact semantic revision from a successful acknowledgement', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+    const fixture = await attachFixture(channel);
+    const command = once(fixture, 'data');
+
+    const rerender = channel.rerender({ label: 'paired' }, 1_000);
+    await command;
+    fixture.write('{"v":1,"type":"ok","semanticRevision":17}\n');
+
+    await expect(rerender).resolves.toBe(17);
+    fixture.destroy();
+  });
+
+  it('rejects an ok acknowledgement without a positive semantic revision', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+    const fixture = await attachFixture(channel);
+    const command = once(fixture, 'data');
+
+    const rerender = channel.rerender({ label: 'unpaired' }, 1_000);
+    await command;
+    fixture.write('{"v":1,"type":"ok"}\n');
+
+    await expect(rerender).rejects.toMatchObject({ code: 'protocol-violation' });
+    fixture.destroy();
+  });
+
   it('classifies a kernel-observed disconnect as session-closed, not a protocol violation', async () => {
     const channel = await ControlChannel.listen();
     open.push(channel);

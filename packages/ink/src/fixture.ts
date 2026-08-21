@@ -13,6 +13,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   launchTerminal,
   ProcessExitedError,
+  SessionClosedError,
+  TimeoutError,
   type AppLogSource,
   type EnvMode,
   type TerminalHarness,
@@ -22,7 +24,7 @@ import { withProbe } from '@termwright/probe-ink';
 import { ControlChannel, ENV_CONTROL_ENDPOINT, ENV_CONTROL_TOKEN } from './control.js';
 import { ForwardingHarness } from './forwarding.js';
 import { encodeFixturePayload, type JsonProps } from './payload.js';
-import { commitFrame, waitForFirstFrame, type SettleOptions } from './settle.js';
+import { waitForFirstFrame, type SettleOptions } from './settle.js';
 
 /** Options for {@link launchInkFixture}. */
 export interface LaunchInkFixtureOptions {
@@ -101,6 +103,7 @@ const FIXTURE_MAX_FPS = 1_000;
 
 /** How long a fixture may take to attach to the control channel. */
 const CONTROL_ATTACH_TIMEOUT_MS = 5_000;
+const DEFAULT_RERENDER_TIMEOUT_MS = 5_000;
 
 /** The runner lives next to `dist/`, one level below the package root. */
 const RUNNER_ENTRY = new URL('../runner/runner-entry.mjs', import.meta.url);
@@ -232,24 +235,105 @@ class InkFixtureHarnessImpl extends ForwardingHarness implements InkFixtureHarne
   }
 
   async #rerenderOne(props: JsonProps, opts?: SettleOptions): Promise<void> {
-    await this.#control.waitForFixture(CONTROL_ATTACH_TIMEOUT_MS);
-
-    // Listen first, send second, and let a failed send win. Attaching the frame
-    // listeners up front means a fixture that repaints immediately cannot
-    // outrun them; awaiting the send before the frame means a rejected command
-    // — unserializable props, an oversized message, a fixture that refused —
-    // fails in milliseconds instead of waiting out a frame that will never come.
-    const committed = commitFrame(this.session, () => undefined, opts ?? this.#settle);
-    committed.catch(() => undefined);
-
-    await this.#control.rerender(props);
-    await committed;
+    const settle = opts ?? this.#settle;
+    const deadline = performance.now() + (settle?.timeout ?? DEFAULT_RERENDER_TIMEOUT_MS);
+    await this.#control.waitForFixture(remainingRerenderTime(deadline, this.session));
+    const paired = pairedRevisionObserver(this.session, deadline);
+    try {
+      const revision = await this.#control.rerender(
+        props,
+        remainingRerenderTime(deadline, this.session),
+      );
+      await paired.waitFor(revision);
+    } finally {
+      paired.close();
+    }
   }
 
   override async close(): Promise<void> {
     await this.#control.close();
     await super.close();
   }
+}
+
+function pairedRevisionObserver(harness: TerminalHarness, deadline: number): {
+  waitFor(revision: number): Promise<void>;
+  close(): void;
+} {
+  const seen = new Set<number>();
+  const waiters = new Map<number, {
+    readonly resolve: () => void;
+    readonly reject: (error: Error) => void;
+  }>();
+  let exited: { readonly code: number | null; readonly signal: string | null } | null = null;
+  const unsubscribes = [harness.events.on('semantic-revision', ({ revision }) => {
+    seen.add(revision);
+    waiters.get(revision)?.resolve();
+  }), harness.events.on('exit', (status) => {
+    exited = status;
+    for (const [revision, waiter] of waiters) {
+      waiter.reject(new ProcessExitedError(
+        `the fixture exited (code ${String(status.code)}, signal ${String(status.signal)}) before semantic revision ${revision} was paired`,
+        { semanticTree: true },
+      ));
+    }
+  })];
+  let closed = false;
+  return {
+    async waitFor(revision) {
+      if (seen.has(revision) || harness.checkpoint().semanticRevision === revision) return;
+      if (exited !== null) {
+        throw new ProcessExitedError(
+          `the fixture exited (code ${String(exited.code)}, signal ${String(exited.signal)}) before semantic revision ${revision} was paired`,
+          { semanticTree: true },
+        );
+      }
+      const timeout = remainingRerenderTime(deadline, harness);
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          waiters.delete(revision);
+          reject(new TimeoutError(
+            `the fixture's semantic revision ${revision} was not paired within ${timeout} ms`,
+            { semanticTree: true, screenExcerpt: harness.screen().text() },
+          ));
+        }, timeout);
+        timer.unref?.();
+        waiters.set(revision, {
+          resolve: () => {
+            clearTimeout(timer);
+            waiters.delete(revision);
+            resolve();
+          },
+          reject: (error) => {
+            clearTimeout(timer);
+            waiters.delete(revision);
+            reject(error);
+          },
+        });
+      });
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      for (const waiter of waiters.values()) {
+        waiter.reject(new SessionClosedError('the paired revision observer was closed', {
+          semanticTree: harness.capabilities().semanticTree,
+        }));
+      }
+      for (const unsubscribe of unsubscribes) unsubscribe();
+    },
+  };
+}
+
+function remainingRerenderTime(deadline: number, harness: TerminalHarness): number {
+  const remaining = deadline - performance.now();
+  if (remaining <= 0) {
+    throw new TimeoutError('the fixture rerender exceeded its total timeout', {
+      semanticTree: harness.capabilities().semanticTree,
+      screenExcerpt: harness.screen().text(),
+    });
+  }
+  return Math.ceil(remaining);
 }
 
 function moduleUrl(component: string | URL): string {

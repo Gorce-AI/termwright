@@ -33,7 +33,11 @@ export interface InkProbeSession {
   readonly revision: number;
   readonly frames: number;
   /** Freeze a renderer commit; refresh-only calls wait when the host tree is ahead of its capture. */
-  notifyRender(options?: { readonly allowUnsettled?: boolean }): void;
+  notifyRender(options?: {
+    readonly allowUnsettled?: boolean;
+    /** Resolve with the first publication at or causally after this frame. */
+    readonly awaitPublication?: boolean;
+  }): Promise<number | null>;
   flush(): Promise<void>;
   stop(): void;
 }
@@ -50,21 +54,41 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
   let latestFrame = 0;
   let stopped = false;
   let queue: Promise<void> = Promise.resolve();
+  const publicationWaiters: Array<{
+    readonly targetFrame: number;
+    readonly resolve: (revision: number) => void;
+    readonly reject: (error: Error) => void;
+  }> = [];
 
   const fail = (error: unknown): void => {
     if (stopped) return;
     stopped = true;
-    options.onGuaranteeViolation?.(error instanceof Error ? error : new Error(String(error)));
+    const failure = error instanceof Error ? error : new Error(String(error));
+    for (const waiter of publicationWaiters.splice(0)) waiter.reject(failure);
+    options.onGuaranteeViolation?.(failure);
     options.channel.close();
   };
 
-  const publish = async (frozen: FrozenFrame): Promise<void> => {
+  const resolvePublications = (frame: number, publishedRevision: number): void => {
+    for (let index = publicationWaiters.length - 1; index >= 0; index -= 1) {
+      const waiter = publicationWaiters[index];
+      if (waiter === undefined || waiter.targetFrame > frame) continue;
+      publicationWaiters.splice(index, 1);
+      waiter.resolve(publishedRevision);
+    }
+  };
+
+  const publish = async (frozen: FrozenFrame): Promise<number | null> => {
     await nextMacrotask();
     await options.tracker.drain();
-    if (stopped || !options.channel.isOpen) return;
+    if (stopped) return null;
+    if (!options.channel.isOpen) {
+      fail(new Error('Ink semantic channel closed before publication'));
+      return null;
+    }
     if (frozen.number !== latestFrame) {
       options.channel.recordCoalescedEvent();
-      return;
+      return null;
     }
     const context = frozen.capture.context;
     if (context === undefined) throw new Error('certified Ink frame context is unavailable');
@@ -91,17 +115,19 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
     const marker = options.channel.publish(snapshot, {
       probeEvents: qualified.objects.length + (qualified.operations?.length ?? 0),
     });
-    if (marker === undefined) return;
+    if (marker === undefined) throw new Error('Ink semantic publication was refused');
     await drain(options.stdout);
-    if (stopped || frozen.number !== latestFrame) return;
+    if (stopped || frozen.number !== latestFrame) return null;
     options.stdout.write(marker);
+    resolvePublications(frozen.number, revision);
+    return revision;
   };
 
   return {
     get revision() { return revision; },
     get frames() { return frames; },
     notifyRender(notifyOptions = {}) {
-      if (stopped) return;
+      if (stopped) return Promise.resolve(null);
       try {
         const root = options.resolveRoot();
         if (root === null) throw new Error('Ink committed frame has no retained root');
@@ -124,15 +150,26 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
         // whose guaranteed geometry may be downgraded. The subsequent real
         // onRender call freezes it. Renderer-originated calls remain strict.
         if (hasDisplayedNodeWithoutGeometry(observation.frame)) {
-          if (notifyOptions.allowUnsettled === true) return;
+          if (notifyOptions.allowUnsettled === true) return Promise.resolve(null);
           throw new Error('certified Ink renderer capture is missing geometry for a displayed host node');
         }
         frames += 1;
         latestFrame = frames;
         const frozen = { number: frames, capture, observation };
-        queue = queue.then(() => publish(frozen)).catch(fail);
+        const boundary = notifyOptions.awaitPublication === true
+          ? new Promise<number>((resolve, reject) => {
+              publicationWaiters.push({ targetFrame: frozen.number, resolve, reject });
+            })
+          : null;
+        const publication = queue.then(() => publish(frozen)).catch((error) => {
+          fail(error);
+          return null;
+        });
+        queue = publication.then(() => undefined);
+        return boundary ?? publication;
       } catch (error) {
         fail(error);
+        return Promise.resolve(null);
       }
     },
     async flush() { await queue.catch(() => undefined); },

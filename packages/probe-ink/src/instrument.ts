@@ -24,6 +24,9 @@ import { onInkAnnotationChange } from './annotations.js';
 const ADAPTER_NAME = '@termwright/probe-ink';
 const ADAPTER_VERSION = PACKAGE_VERSION;
 
+/** Private cross-package hook used by the shipped fixture runner. */
+export const INK_FLUSH_NEXT_RENDER = Symbol.for('@termwright/probe-ink/flush-next-render');
+
 type InkRender = (
   node: ReactNode,
   options?: NodeJS.WriteStream | RenderOptions,
@@ -88,6 +91,10 @@ function instrumentedRender(
     session: null,
   };
   let disposed = false;
+  const renderBoundaries: Array<{
+    readonly resolve: (revision: number) => void;
+    readonly reject: (error: Error) => void;
+  }> = [];
   const releaseAnnotations = onInkAnnotationChange(() => {
     // React layout-effect cleanup/registration can run while Ink is still
     // committing the host mutation that triggered it. Publishing immediately
@@ -110,6 +117,7 @@ function instrumentedRender(
   const instance = ink.render(wrap(node), {
     ...options,
     onRender(metrics) {
+      const boundary = renderBoundaries.shift();
       try {
         if (!certifiedRuntime) {
           const root = (probeRef.current?.parentNode as InkDomElement | undefined) ?? null;
@@ -132,8 +140,22 @@ function instrumentedRender(
         }
         // Freeze the committed host tree before an application callback can
         // synchronously schedule or flush another update.
-        state.session?.notifyRender();
-      } catch {
+        const publication = state.session?.notifyRender({ awaitPublication: boundary !== undefined });
+        if (boundary !== undefined) {
+          if (publication === undefined) {
+            boundary.reject(new Error('Ink semantic session is not attached'));
+          } else {
+            void publication.then(
+              (revision) => {
+                if (revision === null) boundary.reject(new Error('Ink render was not published'));
+                else boundary.resolve(revision);
+              },
+              (error) => boundary.reject(error instanceof Error ? error : new Error(String(error))),
+            );
+          }
+        }
+      } catch (error) {
+        boundary?.reject(error instanceof Error ? error : new Error(String(error)));
         state.session?.stop();
       }
       userOnRender?.(metrics);
@@ -196,6 +218,9 @@ function instrumentedRender(
   const stop = (): void => {
     if (disposed) return;
     disposed = true;
+    for (const boundary of renderBoundaries.splice(0)) {
+      boundary.reject(new Error('Ink probe stopped before the render boundary'));
+    }
     releaseCapture();
     releaseAnnotations();
     tracker.stop();
@@ -215,7 +240,9 @@ function instrumentedRender(
     })
     .catch(stop);
 
-  return {
+  const wrappedInstance: Instance & {
+    [INK_FLUSH_NEXT_RENDER](mutate: () => void): Promise<number>;
+  } = {
     ...instance,
     rerender(next) {
       currentNode = next;
@@ -228,7 +255,21 @@ function instrumentedRender(
       stop();
       instance.cleanup();
     },
+    [INK_FLUSH_NEXT_RENDER](mutate: () => void): Promise<number> {
+      return new Promise<number>((resolve, reject) => {
+        const boundary = { resolve, reject };
+        renderBoundaries.push(boundary);
+        try {
+          mutate();
+        } catch (error) {
+          const index = renderBoundaries.indexOf(boundary);
+          if (index !== -1) renderBoundaries.splice(index, 1);
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
+    },
   };
+  return wrappedInstance;
 }
 
 function normalizeOptions(

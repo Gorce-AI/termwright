@@ -29,6 +29,7 @@ const MAX_PAYLOAD_BYTES = 24 * 1024;
 const ENV_CONTROL_ENDPOINT = 'TERMWRIGHT_FIXTURE_CONTROL';
 const ENV_CONTROL_TOKEN = 'TERMWRIGHT_FIXTURE_CONTROL_TOKEN';
 const MAX_CONTROL_BYTES = 64 * 1024;
+const FLUSH_NEXT_RENDER = Symbol.for('@termwright/probe-ink/flush-next-render');
 
 /** Exit codes. `2` is a usage error, matching the CLI convention in CONTRACTS. */
 const EXIT_USAGE = 2;
@@ -85,7 +86,7 @@ function parsePayload(raw) {
  * from a message, so a compromised or confused channel can change what a
  * component is *showing* but never *which code runs*.
  */
-function connectControlChannel(app, Component, renders) {
+function connectControlChannel(app, Component) {
   const endpoint = process.env[ENV_CONTROL_ENDPOINT];
   const token = process.env[ENV_CONTROL_TOKEN];
   if (typeof endpoint !== 'string' || endpoint.length === 0) return;
@@ -104,8 +105,8 @@ function connectControlChannel(app, Component, renders) {
   // and incorrectly acknowledging both against that single commit.
   let handling = Promise.resolve();
 
-  const reply = (type, detail) => {
-    socket.write(`${JSON.stringify(detail === undefined ? { v: 1, type } : { v: 1, type, detail })}\n`);
+  const reply = (message) => {
+    socket.write(`${JSON.stringify({ v: 1, ...message })}\n`);
   };
 
   const handle = async (line) => {
@@ -113,23 +114,23 @@ function connectControlChannel(app, Component, renders) {
     try {
       message = JSON.parse(line);
     } catch {
-      reply('error', 'message is not valid JSON');
+      reply({ type: 'error', detail: 'message is not valid JSON' });
       return;
     }
     if (message === null || typeof message !== 'object' || Array.isArray(message)) {
-      reply('error', 'message must be a JSON object');
+      reply({ type: 'error', detail: 'message must be a JSON object' });
       return;
     }
     if (message.v !== 1) {
-      reply('error', `unsupported control message version ${JSON.stringify(message.v)}`);
+      reply({ type: 'error', detail: `unsupported control message version ${JSON.stringify(message.v)}` });
       return;
     }
     if (message.type !== 'rerender') {
-      reply('error', `unknown control message type ${JSON.stringify(message.type)}`);
+      reply({ type: 'error', detail: `unknown control message type ${JSON.stringify(message.type)}` });
       return;
     }
     if (message.props === null || typeof message.props !== 'object' || Array.isArray(message.props)) {
-      reply('error', 'rerender props must be a JSON object');
+      reply({ type: 'error', detail: 'rerender props must be a JSON object' });
       return;
     }
     try {
@@ -139,12 +140,20 @@ function connectControlChannel(app, Component, renders) {
       // Arm the renderer boundary first, then acknowledge only after Ink's
       // real onRender callback. Ink writes the resulting terminal output in
       // that same callback before this async continuation can send the reply.
-      const committed = renders.next();
-      app.rerender(createElement(Component, message.props));
-      await committed;
-      reply('ok');
+      const flushNextRender = app[FLUSH_NEXT_RENDER];
+      if (typeof flushNextRender !== 'function') {
+        throw new Error('the Ink probe does not expose a semantic render boundary');
+      }
+      const semanticRevision = await flushNextRender.call(
+        app,
+        () => app.rerender(createElement(Component, message.props)),
+      );
+      if (!Number.isSafeInteger(semanticRevision) || semanticRevision <= 0) {
+        throw new Error('the Ink probe returned an invalid semantic revision');
+      }
+      reply({ type: 'ok', semanticRevision });
     } catch (error) {
-      reply('error', error instanceof Error ? error.message : String(error));
+      reply({ type: 'error', detail: error instanceof Error ? error.message : String(error) });
     }
   };
 
@@ -152,7 +161,7 @@ function connectControlChannel(app, Component, renders) {
     buffer += chunk;
     if (buffer.length > MAX_CONTROL_BYTES) {
       buffer = '';
-      reply('error', 'control message exceeded the size limit');
+      reply({ type: 'error', detail: 'control message exceeded the size limit' });
       return;
     }
     for (;;) {
@@ -193,23 +202,6 @@ if (typeof Component !== 'function') {
   );
 }
 
-let renderRevision = 0;
-let renderWaiters = [];
-const renders = {
-  next() {
-    const after = renderRevision;
-    return new Promise((resolve) => {
-      renderWaiters.push({ after, resolve });
-    });
-  },
-  committed() {
-    renderRevision += 1;
-    const ready = renderWaiters.filter(({ after }) => renderRevision > after);
-    renderWaiters = renderWaiters.filter(({ after }) => renderRevision <= after);
-    for (const { resolve } of ready) resolve();
-  },
-};
-
 const app = render(createElement(Component, payload.props), {
   // The same configuration mountInk uses, so a component's semantic tree does
   // not depend on which mode the test picked.
@@ -217,10 +209,9 @@ const app = render(createElement(Component, payload.props), {
   alternateScreen: true,
   patchConsole: false,
   maxFps: payload.maxFps,
-  onRender: () => renders.committed(),
 });
 
-connectControlChannel(app, Component, renders);
+connectControlChannel(app, Component);
 
 try {
   await app.waitUntilExit();
