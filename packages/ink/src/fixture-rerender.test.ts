@@ -53,6 +53,20 @@ describe('fixture rerender', () => {
     expect(harness.screen().text()).toContain('Renamed');
   });
 
+  it('binds concurrent rerender acknowledgements to distinct committed frames', async () => {
+    const harness = await launch({ label: 'Initial' });
+
+    const first = harness.rerender({ label: 'First' });
+    const second = harness.rerender({ label: 'Second' });
+
+    await Promise.all([first, second]);
+    // The id-less reply protocol previously overwrote the first pending
+    // command here, causing one promise to time out. Both acknowledgements now
+    // correspond to ordered, independently observed commits.
+    expect(harness.screen().text()).toContain('Second');
+    expect(await harness.getByRole('button', { name: 'Second' }).count()).toBe(1);
+  });
+
   it('is driven by its own channel, not by the simulated user', async () => {
     const harness = await launch({ label: 'Approve' });
 

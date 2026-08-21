@@ -77,6 +77,7 @@ export class ControlChannel {
   #socket: Socket | null = null;
   #buffer = '';
   #pending: { readonly resolve: (reply: CommandReply) => void; readonly reject: (error: Error) => void } | null = null;
+  #commandTail: Promise<void> = Promise.resolve();
   #waitingForFixture: { readonly resolve: () => void; readonly reject: (error: Error) => void }[] = [];
   #everAttached = false;
   #fixtureGone = false;
@@ -197,6 +198,15 @@ export class ControlChannel {
       );
     }
 
+    // Replies have no command id, by design. Keep the public API concurrency
+    // safe by sending only one command at a time; the runner mirrors this
+    // ordering so every acknowledgement denotes that command's own commit.
+    const commandRun = this.#commandTail.then(() => this.#sendRerender(line, timeoutMs));
+    this.#commandTail = commandRun.then(() => undefined, () => undefined);
+    return commandRun;
+  }
+
+  async #sendRerender(line: string, timeoutMs: number): Promise<void> {
     const socket = this.#socket;
     if (socket === null || this.#closed || this.#fixtureGone) throw this.#sessionClosed();
 

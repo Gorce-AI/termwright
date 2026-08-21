@@ -85,7 +85,7 @@ function parsePayload(raw) {
  * from a message, so a compromised or confused channel can change what a
  * component is *showing* but never *which code runs*.
  */
-function connectControlChannel(app, Component) {
+function connectControlChannel(app, Component, renders) {
   const endpoint = process.env[ENV_CONTROL_ENDPOINT];
   const token = process.env[ENV_CONTROL_TOKEN];
   if (typeof endpoint !== 'string' || endpoint.length === 0) return;
@@ -98,12 +98,17 @@ function connectControlChannel(app, Component) {
   socket.unref();
 
   let buffer = '';
+  // The protocol intentionally has no command ids, so there can only be one
+  // rerender awaiting its commit boundary at a time. Serializing here also
+  // prevents React from coalescing two received prop updates into one render
+  // and incorrectly acknowledging both against that single commit.
+  let handling = Promise.resolve();
 
   const reply = (type, detail) => {
     socket.write(`${JSON.stringify(detail === undefined ? { v: 1, type } : { v: 1, type, detail })}\n`);
   };
 
-  const handle = (line) => {
+  const handle = async (line) => {
     let message;
     try {
       message = JSON.parse(line);
@@ -128,7 +133,15 @@ function connectControlChannel(app, Component) {
       return;
     }
     try {
+      // `rerender()` only schedules React work. A control acknowledgement is
+      // therefore not a commit boundary by itself: under load it can reach the
+      // harness while the old frame is still both painted and published.
+      // Arm the renderer boundary first, then acknowledge only after Ink's
+      // real onRender callback. Ink writes the resulting terminal output in
+      // that same callback before this async continuation can send the reply.
+      const committed = renders.next();
       app.rerender(createElement(Component, message.props));
+      await committed;
       reply('ok');
     } catch (error) {
       reply('error', error instanceof Error ? error.message : String(error));
@@ -147,7 +160,12 @@ function connectControlChannel(app, Component) {
       if (newline === -1) return;
       const line = buffer.slice(0, newline);
       buffer = buffer.slice(newline + 1);
-      handle(line);
+      handling = handling.then(
+        () => handle(line),
+        // A failed reply write must not permanently poison processing of
+        // already-buffered commands while the socket is still usable.
+        () => handle(line),
+      );
     }
   });
   // Losing the channel is not fatal: the component keeps rendering whatever it
@@ -175,6 +193,23 @@ if (typeof Component !== 'function') {
   );
 }
 
+let renderRevision = 0;
+let renderWaiters = [];
+const renders = {
+  next() {
+    const after = renderRevision;
+    return new Promise((resolve) => {
+      renderWaiters.push({ after, resolve });
+    });
+  },
+  committed() {
+    renderRevision += 1;
+    const ready = renderWaiters.filter(({ after }) => renderRevision > after);
+    renderWaiters = renderWaiters.filter(({ after }) => renderRevision <= after);
+    for (const { resolve } of ready) resolve();
+  },
+};
+
 const app = render(createElement(Component, payload.props), {
   // The same configuration mountInk uses, so a component's semantic tree does
   // not depend on which mode the test picked.
@@ -182,9 +217,10 @@ const app = render(createElement(Component, payload.props), {
   alternateScreen: true,
   patchConsole: false,
   maxFps: payload.maxFps,
+  onRender: () => renders.committed(),
 });
 
-connectControlChannel(app, Component);
+connectControlChannel(app, Component, renders);
 
 try {
   await app.waitUntilExit();

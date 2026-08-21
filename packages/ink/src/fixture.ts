@@ -213,6 +213,7 @@ export async function launchInkFixture(options: LaunchInkFixtureOptions): Promis
 class InkFixtureHarnessImpl extends ForwardingHarness implements InkFixtureHarness {
   readonly #control: ControlChannel;
   readonly #settle: SettleOptions | undefined;
+  #rerenderTail: Promise<void> = Promise.resolve();
 
   constructor(session: TerminalHarness, control: ControlChannel, settle: SettleOptions | undefined) {
     super(session);
@@ -221,7 +222,16 @@ class InkFixtureHarnessImpl extends ForwardingHarness implements InkFixtureHarne
     void session.exit.then(() => control.fixtureExited());
   }
 
-  async rerender(props: JsonProps, opts?: SettleOptions): Promise<void> {
+  rerender(props: JsonProps, opts?: SettleOptions): Promise<void> {
+    // Frame observers are also single-command state: registering two before
+    // either command is sent would let both observe the first commit. Queue the
+    // complete send + paired-frame operation, not merely the socket write.
+    const run = this.#rerenderTail.then(() => this.#rerenderOne(props, opts));
+    this.#rerenderTail = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  async #rerenderOne(props: JsonProps, opts?: SettleOptions): Promise<void> {
     await this.#control.waitForFixture(CONTROL_ATTACH_TIMEOUT_MS);
 
     // Listen first, send second, and let a failed send win. Attaching the frame
