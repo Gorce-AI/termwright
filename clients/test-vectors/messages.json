@@ -747,7 +747,7 @@
           "message": "x"
         },
         "code": "malformed",
-        "detail": "code: Invalid option: expected one of \"bad-token\"|\"bad-version\"|\"malformed\"|\"limit-exceeded\"|\"internal\""
+        "detail": "code: Invalid option: expected one of \"bad-token\"|\"bad-version\"|\"malformed\"|\"limit-exceeded\"|\"duplicate-semantic-key\"|\"adapter-guarantee-violation\"|\"capability-provider-violation\"|\"internal\""
       },
       {
         "name": "log-unknown-level",
