@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@termwright/protocol": "workspace:*",
-    "@lydell/node-pty": "1.1.0",
+    "@lydell/node-pty": "1.2.0-beta.15",
     "@xterm/headless": "^6.0.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@termwright/vt": "workspace:*"
