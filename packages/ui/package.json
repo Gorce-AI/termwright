@@ -45,6 +45,7 @@
   "dependencies": {
     "@termwright/driver": "workspace:*",
     "@termwright/trace": "workspace:*",
+    "chokidar": "^4.0.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {

@@ -17,12 +17,13 @@
  */
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { createReadStream, watch } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openTrace, type TraceReader } from '@termwright/trace';
+import { watch } from 'chokidar';
 import {
   fromBase64,
   MAX_UI_WIRE_STRING_LENGTH,
@@ -871,7 +872,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     trace: reader,
     attach,
     async close(): Promise<void> {
-      stopWatching?.();
+      await stopWatching?.();
       detachRecorder?.();
       for (const client of wss.clients) client.terminate();
       await new Promise<void>((done) => wss.close(() => done()));
@@ -894,26 +895,37 @@ const IGNORED_DIRECTORIES = /(^|[/\\])(node_modules|dist|coverage|\.git)([/\\]|$
  * Re-lists the project's tests when its files change.
  *
  * Debounced, because saving a file in an editor fires several events, and a
- * listing takes seconds. Watching is best-effort: a platform without recursive
- * watching loses the refresh, not the server.
+ * listing takes seconds. The watcher is closed asynchronously with the server
+ * so no native filesystem callback can outlive the project directory.
  */
-function watchForChanges(cwd: string, onChange: () => Promise<void>): (() => void) | undefined {
+function watchForChanges(cwd: string, onChange: () => Promise<void>): () => Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const watcher = watch(cwd, { recursive: true }, (_event, filename) => {
-      const name = filename === null ? '' : filename.toString();
-      if (name === '' || IGNORED_DIRECTORIES.test(name)) return;
-      if (!/\.(ts|tsx|js|jsx|mts|cts|feature)$/.test(name)) return;
-      if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(() => void onChange(), 300);
-    });
-    return () => {
-      if (timer !== undefined) clearTimeout(timer);
-      watcher.close();
-    };
-  } catch {
-    return undefined;
-  }
+  let closed = false;
+  let pendingRefresh: Promise<void> | undefined;
+  const watcher = watch(cwd, {
+    ignoreInitial: true,
+    ignored: (path) => IGNORED_DIRECTORIES.test(path),
+  });
+
+  watcher.on('all', (_event, path) => {
+    if (closed || !/\.(ts|tsx|js|jsx|mts|cts|feature)$/.test(path)) return;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      if (closed) return;
+      // Discovery watching is an optional convenience. A transient listing
+      // failure must not become an unhandled rejection in the UI process.
+      pendingRefresh = onChange().catch(() => undefined);
+    }, 300);
+  });
+  watcher.on('error', () => undefined);
+
+  return async () => {
+    closed = true;
+    if (timer !== undefined) clearTimeout(timer);
+    await watcher.close();
+    await pendingRefresh;
+  };
 }
 
 /** A finite numeric query parameter, or `undefined` when absent or malformed. */
