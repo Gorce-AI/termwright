@@ -53,6 +53,11 @@ jobs:
 
       - name: Apply the changesets
         run: pnpm changeset version
+        env:
+          # @changesets/changelog-github resolves authors and pull requests
+          # while rendering changelog entries. The workflow token already has
+          # the read access it needs; expose it to that process explicitly.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # The protocol version spans npm, Python and three Rust manifests.
       # `changeset version` moves the npm source of truth; this moves the rest,
