@@ -226,26 +226,31 @@ export interface UpstreamModule {
  */
 export async function ensureUpstreamModule(upstream: UpstreamModule): Promise<string> {
   const env = upstream.env ?? process.env;
-
-  const { stdout } = await run('go', ['env', 'GOMODCACHE'], { env });
-  const dir = join(stdout.trim(), ...upstream.cachePath);
-  if (await exists(dir)) return dir;
-
   const { mkdtemp, writeFile, rm: remove } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const scratch = await mkdtemp(join(tmpdir(), 'tw-fetch-'));
+  let dir = '';
   try {
     await writeFile(
       join(scratch, 'go.mod'),
       `module termwright.local/fetch\n\ngo 1.22\n\nrequire ${upstream.module} ${upstream.version}\n`,
       'utf8',
     );
-    await run('go', ['mod', 'download', `${upstream.module}@${upstream.version}`], {
+    const { stdout } = await run(
+      'go',
+      ['mod', 'download', '-json', `${upstream.module}@${upstream.version}`],
+      {
       cwd: scratch,
       // -mod=vendor is incompatible with a download into the cache, and the
       // user's flags are not this command's business.
-      env: { ...env, GOFLAGS: '' },
-    });
+        env: { ...env, GOFLAGS: '' },
+      },
+    );
+    const result = JSON.parse(stdout) as { readonly Dir?: string; readonly Error?: string };
+    if (result.Error !== undefined || result.Dir === undefined || result.Dir.length === 0) {
+      throw new Error(result.Error ?? 'go mod download did not report a module directory');
+    }
+    dir = result.Dir;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new PatchError(

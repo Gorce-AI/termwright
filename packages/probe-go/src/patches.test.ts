@@ -185,13 +185,21 @@ describe.skipIf(!hasGo)('a cold module cache', () => {
     const cache = join(dir, 'empty-cache');
     await mkdir(cache, { recursive: true });
 
-    const fetched = await ensureUpstreamModule({
+    const request = {
       module: 'github.com/rivo/tview',
       version: 'v0.42.0',
       cachePath: ['github.com', 'rivo', 'tview@v0.42.0'],
       env: { ...process.env, GOMODCACHE: cache },
-    });
+    } as const;
+    const fetchedModules = await Promise.all([
+      ensureUpstreamModule(request),
+      ensureUpstreamModule(request),
+      ensureUpstreamModule(request),
+    ]);
+    const [fetched] = fetchedModules;
+    if (fetched === undefined) throw new Error('concurrent module download returned no directory');
 
+    expect(new Set(fetchedModules).size).toBe(1);
     expect(fetched.startsWith(cache)).toBe(true);
     expect(await readFile(join(fetched, 'application.go'), 'utf8')).toContain('package tview');
   }, 600_000);

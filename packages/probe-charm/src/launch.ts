@@ -151,10 +151,11 @@ export async function prepareInstrumentedBuild(
     }
   }
 
+  const clientDir = options.clientDir ?? (await defaultClientDir(env));
   const replaces = [
     { from: flavour.module, to: tea.dir },
     ...Object.entries(companionCopyDirs).map(([from, to]) => ({ from, to })),
-    { from: CLIENT_MODULE, to: options.clientDir ?? (await defaultClientDir(env)) },
+    ...(await clientVersionReplacements(options.moduleDir, clientDir, env)),
   ];
   const inherited = await readWorkspace(options.moduleDir);
   const requestedWorkspace =
@@ -166,6 +167,9 @@ export async function prepareInstrumentedBuild(
     {
       moduleDir: options.moduleDir,
       inherited,
+      suppliedUses: (await modulePath(options.moduleDir, env)) === CLIENT_MODULE
+        ? []
+        : [{ dir: clientDir, module: CLIENT_MODULE }],
       replaces,
     },
   );
@@ -180,6 +184,33 @@ export async function prepareInstrumentedBuild(
     built: builtModules.length > 0,
     builtModules,
   };
+}
+
+async function clientVersionReplacements(
+  moduleDir: string,
+  clientDir: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ from: string; to: string; version: string }[]> {
+  if ((await modulePath(moduleDir, env)) === CLIENT_MODULE) return [];
+  const versions = new Set(['v0.0.0']);
+  try {
+    const { stdout } = await run('go', ['list', '-m', '-f', '{{.Version}}', CLIENT_MODULE], {
+      cwd: moduleDir,
+      env: { ...env, GOWORK: 'off' },
+    });
+    if (stdout.trim() !== '') versions.add(stdout.trim());
+  } catch {
+    // Applications do not need to import the annotation client themselves.
+  }
+  return [...versions].map((version) => ({ from: CLIENT_MODULE, to: clientDir, version }));
+}
+
+async function modulePath(moduleDir: string, env: NodeJS.ProcessEnv): Promise<string> {
+  const { stdout } = await run('go', ['list', '-m', '-f', '{{.Path}}'], {
+    cwd: moduleDir,
+    env: { ...env, GOWORK: 'off' },
+  });
+  return stdout.trim();
 }
 
 async function prepareCopy(options: {

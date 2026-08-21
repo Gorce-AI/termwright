@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CharmDetectionError } from './detect.js';
-import { CharmPrepareError, prepareInstrumentedBuild } from './launch.js';
+import { CharmPrepareError, CLIENT_MODULE, prepareInstrumentedBuild } from './launch.js';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -109,6 +109,9 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     expect(workspace).toContain(
       `replace charm.land/bubbles/v2 => ${first.companionCopyDirs['charm.land/bubbles/v2']}`,
     );
+    const client = await realpath(join(here, '..', '..', '..', 'clients', 'go'));
+    expect(workspace).toContain(`use ${client}`);
+    expect(workspace).toContain(`replace ${CLIENT_MODULE} v0.0.0 => ${client}`);
     // The launcher must consume the current v10 manifest, not resurrect the
     // older handshake/capability patch through a parallel launcher patch set.
     await expect(readFile(join(first.copyDir, 'TERMWRIGHT.md'), 'utf8')).resolves.toContain(
