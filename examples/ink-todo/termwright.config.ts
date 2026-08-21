@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { defineTermwrightConfig, XTERM_PALETTE } from '@termwright/test';
+import { defineTermwrightConfig, XTERM_PALETTE } from 'termwright/test';
 import { withProbe } from '@termwright/probe-ink';
 
 // Each test runs in its own temporary directory, so the command has to be an

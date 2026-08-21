@@ -10,9 +10,12 @@
  * wait and how it ended, every revision.
  */
 
-import { describe, expect, ptyAvailable, test } from '@termwright/test';
+import { describe, expect, ptyAvailable, test } from 'termwright/test';
 
 const pty = await ptyAvailable();
+if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !pty) {
+  throw new Error('Ink end-to-end example requires a working pseudo-terminal');
+}
 
 describe.skipIf(!pty)('the todo app', () => {
   test('starts on the list it was seeded with', async ({ terminal }) => {

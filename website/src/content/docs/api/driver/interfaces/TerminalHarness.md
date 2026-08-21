@@ -300,7 +300,7 @@ Textual-style CSS dialect: 'dialog button.primary:focused', '#id'.
 
 Defined in: [api.ts:156](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L156)
 
-Rebuilds a locator from a ref minted by [ResolvedTarget.ref](../resolvedtarget/#ref)
+Rebuilds a locator from a ref returned by a resolved target.
 (`'n8@42'` for a semantic node, `'grid:r,c,w,h@7'` for a grid match).
 The ref stays bound to its revision: resolving it after that revision was
 superseded raises `stale-snapshot`.

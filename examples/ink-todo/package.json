@@ -18,12 +18,10 @@
     "react": "^19.2.8"
   },
   "devDependencies": {
-    "@termwright/driver": "workspace:*",
-    "@termwright/ink-testing": "workspace:*",
     "@termwright/probe-ink": "workspace:*",
-    "@termwright/test": "workspace:*",
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.18",
+    "termwright": "workspace:*",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",
     "vitest": "^3.2.0"

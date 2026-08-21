@@ -6,8 +6,8 @@
  * this file runs everywhere the suite runs.
  */
 
-import { mountInk } from '@termwright/ink-testing';
-import { expect, test, vi } from '@termwright/test';
+import { mountInk } from 'termwright/ink';
+import { expect, test, vi } from 'termwright/test';
 import { ConfirmDialog } from '../src/confirm-dialog.js';
 
 test('confirms through terminal input, and reports it once', async () => {

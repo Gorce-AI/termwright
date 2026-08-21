@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {"outDir": "dist", "noEmit": true, "types": ["node"]},
+  "include": ["scripts", "tests", "termwright.config.ts", "vitest.config.ts", "vitest.setup.ts"]
+}

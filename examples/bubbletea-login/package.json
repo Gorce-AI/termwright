@@ -1,0 +1,22 @@
+{
+  "name": "@termwright-examples/bubbletea-login",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Bubble Tea login form tested through an instrumented Go build",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "go run ./app",
+    "typecheck": "tsc --noEmit",
+    "pretest": "pnpm build",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@termwright/probe-charm": "workspace:*",
+    "@types/node": "^22.15.0",
+    "termwright": "workspace:*",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { defineTermwrightConfig, XTERM_PALETTE } from '@termwright/test';
+import { defineTermwrightConfig, XTERM_PALETTE } from 'termwright/test';
 
 /** Absolute: each test runs in its own temporary working directory. */
 export const binary = fileURLToPath(new URL('./dist/tview-menu', import.meta.url));

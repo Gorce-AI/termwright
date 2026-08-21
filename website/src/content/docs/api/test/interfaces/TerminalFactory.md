@@ -29,7 +29,7 @@ Everything the programs of this test logged, oldest first.
 
 ### sessions
 
-> `readonly` **sessions**: readonly `TerminalHarness`[]
+> `readonly` **sessions**: readonly [`TerminalHarness`](../terminalharness/)[]
 
 Defined in: [test/src/fixtures.ts:117](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L117)
 
@@ -63,7 +63,7 @@ helper that returns the shared `TerminalHarness` contract.
 
 ##### T
 
-`T` *extends* `TerminalHarness`
+`T` *extends* [`TerminalHarness`](../terminalharness/)
 
 #### Parameters
 
@@ -106,7 +106,7 @@ that *expects* an error path to be exercised.
 
 ### launch()
 
-> **launch**(`options?`): `Promise`\<`TerminalHarness`\>
+> **launch**(`options?`): `Promise`\<[`TerminalHarness`](../terminalharness/)\>
 
 Defined in: [test/src/fixtures.ts:105](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L105)
 
@@ -118,13 +118,13 @@ Defined in: [test/src/fixtures.ts:105](https://github.com/Gorce-AI/termwright/bl
 
 #### Returns
 
-`Promise`\<`TerminalHarness`\>
+`Promise`\<[`TerminalHarness`](../terminalharness/)\>
 
 ***
 
 ### openShell()
 
-> **openShell**(`options?`): `Promise`\<`TerminalHarness`\>
+> **openShell**(`options?`): `Promise`\<[`TerminalHarness`](../terminalharness/)\>
 
 Defined in: [test/src/fixtures.ts:107](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L107)
 
@@ -138,4 +138,4 @@ Opens an interactive shell with exact command boundaries.
 
 #### Returns
 
-`Promise`\<`TerminalHarness`\>
+`Promise`\<[`TerminalHarness`](../terminalharness/)\>

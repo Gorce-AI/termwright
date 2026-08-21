@@ -36,6 +36,11 @@ registerTermwrightMatchers();
 // Vitest's own API, re-exported so a test file has a single import.
 export { afterAll, afterEach, beforeAll, beforeEach, describe, expect, vi } from 'vitest';
 
+// Public harness types belong beside the fixture that returns them. Consumers
+// of the umbrella `termwright` package should not need a second direct package
+// dependency only to type a custom fixture.
+export type { Locator, TerminalHarness } from '@termwright/driver';
+
 export {
   configureTermwright,
   defineTermwrightConfig,
@@ -111,4 +116,5 @@ export {
 
 // The reporter is deliberately NOT re-exported here: `vitest.config.ts` runs
 // before the test runner exists, and this module registers matchers on import.
-// Import it from `@termwright/test/reporter` instead.
+// Umbrella-package users import it from `termwright/reporter`; direct package
+// consumers can use `@termwright/test/reporter`.

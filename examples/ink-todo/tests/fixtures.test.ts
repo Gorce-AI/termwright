@@ -9,8 +9,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { TerminalHarness } from '@termwright/driver';
-import { describe, expect, ptyAvailable, test as base } from '@termwright/test';
+import { describe, expect, ptyAvailable, test as base, type TerminalHarness } from 'termwright/test';
 
 const pty = await ptyAvailable();
 

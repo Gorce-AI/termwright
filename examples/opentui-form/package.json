@@ -1,0 +1,23 @@
+{
+  "name": "@termwright-examples/opentui-form",
+  "version": "0.0.0",
+  "private": true,
+  "description": "An OpenTUI form driven through its observed Renderable tree",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "bun app/form.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.5.3"
+  },
+  "devDependencies": {
+    "@termwright/probe-opentui": "workspace:*",
+    "@types/node": "^22.15.0",
+    "termwright": "workspace:*",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}

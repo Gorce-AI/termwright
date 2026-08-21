@@ -57,7 +57,7 @@ Milliseconds to keep re-probing. Defaults to the `expect` timeout class.
 
 ### within?
 
-> `readonly` `optional` **within?**: `Locator`
+> `readonly` `optional` **within?**: [`Locator`](../locator/)
 
 Defined in: [test/src/matchers.ts:72](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L72)
 

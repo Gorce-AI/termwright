@@ -61,7 +61,7 @@ Defined in: [gherkin/src/definitions.ts:19](https://github.com/Gorce-AI/termwrig
 
 > **step**: `StepRunner`
 
-Defined in: test/dist/index.d.ts:255
+Defined in: test/dist/index.d.ts:256
 
 #### Inherited from
 
@@ -73,7 +73,7 @@ Defined in: test/dist/index.d.ts:255
 
 > **terminal**: `TerminalFactory`
 
-Defined in: test/dist/index.d.ts:254
+Defined in: test/dist/index.d.ts:255
 
 #### Inherited from
 
@@ -85,7 +85,7 @@ Defined in: test/dist/index.d.ts:254
 
 > **termwright**: `TermwrightScopeFixture`
 
-Defined in: test/dist/index.d.ts:253
+Defined in: test/dist/index.d.ts:254
 
 #### Inherited from
 
@@ -97,7 +97,7 @@ Defined in: test/dist/index.d.ts:253
 
 > **termwrightOptions**: `TermwrightOptions`
 
-Defined in: test/dist/index.d.ts:252
+Defined in: test/dist/index.d.ts:253
 
 Options for this file or suite, the equivalent of Playwright's `test.use()`:
 

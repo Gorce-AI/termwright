@@ -512,8 +512,14 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.24'
-          cache-dependency-path: examples/tview-menu/go.sum
+          go-version: '1.25'
+          cache-dependency-path: |
+            examples/tview-menu/go.sum
+            examples/bubbletea-login/app/go.sum
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.15'
+      - uses: dtolnay/rust-toolchain@1.88
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
@@ -521,7 +527,10 @@ jobs:
       - name: Install the Python client for the Textual example
         run: pip install -e "clients/python[textual]"
 
-      - run: pnpm -r --filter './examples/*' run test
+      - name: Run every public example without skips
+        env:
+          TERMWRIGHT_REQUIRE_EXAMPLES: '1'
+        run: pnpm -r --filter './examples/*' run test
 
       - name: Upload failure reports
         if: failure()

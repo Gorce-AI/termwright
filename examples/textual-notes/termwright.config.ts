@@ -1,4 +1,4 @@
-import { defineTermwrightConfig, XTERM_PALETTE } from '@termwright/test';
+import { defineTermwrightConfig, XTERM_PALETTE } from 'termwright/test';
 
 export default defineTermwrightConfig({
   columns: 72,

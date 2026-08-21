@@ -13,10 +13,9 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@termwright/driver": "workspace:*",
     "@termwright/probe-tview": "workspace:*",
-    "@termwright/test": "workspace:*",
     "@types/node": "^22.15.0",
+    "termwright": "workspace:*",
     "typescript": "^5.6.0",
     "vitest": "^3.2.0"
   }

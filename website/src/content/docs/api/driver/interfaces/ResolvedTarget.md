@@ -52,7 +52,7 @@ node is worth having: without it an unrecognised widget says only
 
 Defined in: [api.ts:508](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L508)
 
-Whether [ResolvedTarget.ref](#ref) means anything after this revision.
+Whether a resolved target's `ref` means anything after this revision.
 
 `'stable'` — the identity survives across frames, so the ref can be
 re-resolved later and `locatorForRef` works. `'frame-local'` — the id is

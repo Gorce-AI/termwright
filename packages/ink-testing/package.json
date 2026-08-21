@@ -1,7 +1,7 @@
 {
   "name": "@termwright/ink-testing",
   "version": "0.2.0",
-  "description": "mountInk (in-process) + launchInkFixture (real PTY) over TerminalHarness",
+  "description": "Implementation behind termwright/ink: mountInk and launchInkFixture component tests",
   "license": "MIT",
   "repository": {
     "type": "git",

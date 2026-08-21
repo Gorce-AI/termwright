@@ -707,6 +707,7 @@ describe.skipIf(!ptyAvailable())('waitForReady', { timeout: 20_000 }, () => {
 
 describe.skipIf(!ptyAvailable())('shell command integration', { timeout: 20_000 }, () => {
   it('returns exact command boundaries, exit status, cwd and terminal state', async () => {
+    const reportedCwd = process.platform === 'win32' ? '\\workspace\\project' : '/workspace/project';
     const terminal = await launch('shell-app.mjs');
     await terminal.shell.waitForPrompt();
 
@@ -714,7 +715,7 @@ describe.skipIf(!ptyAvailable())('shell command integration', { timeout: 20_000 
     expect(result).toMatchObject({
       command: 'fail',
       exitCode: 7,
-      cwd: '/workspace/project',
+      cwd: reportedCwd,
       title: 'Termwright shell fixture',
     });
     expect(result.output).toContain('ran fail');
@@ -723,7 +724,7 @@ describe.skipIf(!ptyAvailable())('shell command integration', { timeout: 20_000 
       ready: true,
       lastMark: 'B',
       lastExitCode: 7,
-      cwd: '/workspace/project',
+      cwd: reportedCwd,
       title: 'Termwright shell fixture',
     });
 

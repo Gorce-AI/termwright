@@ -9,10 +9,13 @@
  */
 
 import { existsSync } from 'node:fs';
-import { describe, expect, ptyAvailable, test } from '@termwright/test';
+import { describe, expect, ptyAvailable, test } from 'termwright/test';
 import { binary } from '../termwright.config.js';
 
 const runnable = (await ptyAvailable()) && existsSync(binary);
+if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !runnable) {
+  throw new Error('tview example requires Go, a built binary, and a working pseudo-terminal');
+}
 
 describe.skipIf(!runnable)('the tview menu', () => {
   test('publishes the menu as a semantic tree', async ({ terminal }) => {

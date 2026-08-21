@@ -148,7 +148,7 @@ export interface TerminalHarness {
   /** Textual-style CSS dialect: 'dialog button.primary:focused', '#id'. */
   locator(selector: string): Locator;
   /**
-   * Rebuilds a locator from a ref minted by {@link ResolvedTarget.ref}
+   * Rebuilds a locator from a ref returned by a resolved target.
    * (`'n8@42'` for a semantic node, `'grid:r,c,w,h@7'` for a grid match).
    * The ref stays bound to its revision: resolving it after that revision was
    * superseded raises `stale-snapshot`.
@@ -494,7 +494,7 @@ export interface ResolvedTarget {
   readonly role?: SemanticRole;
   readonly name?: string;
   /**
-   * Whether {@link ResolvedTarget.ref} means anything after this revision.
+   * Whether a resolved target's `ref` means anything after this revision.
    *
    * `'stable'` — the identity survives across frames, so the ref can be
    * re-resolved later and `locatorForRef` works. `'frame-local'` — the id is

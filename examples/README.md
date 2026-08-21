@@ -1,6 +1,6 @@
 # termwright examples
 
-Three applications and the tests that drive them. Every test here is written
+Seven applications and the tests that drive them. Every test here is written
 the way a user writes one — public API only, no imports from termwright's
 internals — so these directories double as the templates the documentation
 copies from.
@@ -8,10 +8,13 @@ copies from.
 | Example | Application | What the tests show |
 |---|---|---|
 | [`ink-todo/`](ink-todo) | Ink 7 + TypeScript | end-to-end over a real PTY, plus component tests with `mountInk` |
+| [`opentui-form/`](opentui-form) | OpenTUI + TypeScript | focused input, semantic values, geometry, and exact pointer ownership |
 | [`textual-notes/`](textual-notes) | Textual + Python | a TypeScript test driving a Python program |
 | [`tview-menu/`](tview-menu) | tview + Go | a TypeScript test driving a Go binary |
+| [`bubbletea-login/`](bubbletea-login) | Bubble Tea + Go | frame-local component state, focus, values, and secret withholding |
+| [`ratatui-list/`](ratatui-list) | Ratatui + Rust | instrumented Cargo build, keyboard navigation, and selected list state |
 
-The three suites read almost identically, which is the point: the driver
+The suites read almost identically, which is the point: the driver
 addresses an application by role and name over a language-neutral protocol, so
 the framework it happens to be written in changes the first line of the test
 and nothing else.
@@ -20,13 +23,13 @@ and nothing else.
 
 ```sh
 pnpm install
-pnpm --filter './examples/*' test       # all three
+pnpm --filter './examples/*' test       # all examples
 pnpm --filter '@termwright-examples/ink-todo' test
 ```
 
-Every suite skips itself rather than failing where it cannot run: no
-pseudo-terminal (`TERMWRIGHT_SKIP_PTY=1`, or a sandbox that cannot fork one),
-no Go toolchain, no Python with Textual and the `termwright` package installed.
+Every suite checks whether its required language runtime and a pseudo-terminal
+are available. CI installs all declared toolchains, so a skipped framework
+example is a failed CI contract rather than an accepted coverage gap.
 
 `TERMWRIGHT_DEBUG=1` streams a live log to stderr while a suite runs — every
 API call with its arguments, every wait and how it ended, screen and semantic
@@ -91,6 +94,25 @@ pnpm test                    # builds the binary first
 The application imports only tview/tcell. The test build uses
 `prepareInstrumentedBuild()` to redirect tview to an ephemeral patched copy;
 the project module files remain byte-identical.
+
+## opentui-form
+
+The application is an ordinary OpenTUI form. `withProbe()` adds the Bun preload
+only to the test command. The test verifies both the semantic field value and
+OpenTUI's exact geometry and pointer ownership evidence.
+
+## bubbletea-login
+
+The application imports only Bubble Tea and Bubbles. Its build script prepares
+an external Go workspace, then the test verifies focused component state and
+that a password never enters semantics or a trace.
+
+## ratatui-list
+
+The application is a normal Crossterm/Ratatui binary. A small Rust build tool
+uses the published `termwright-probe-ratatui` preparation API, restores the
+lockfile after the instrumented build, and leaves the application source
+unchanged.
 
 ## What to copy
 

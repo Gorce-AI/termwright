@@ -1,0 +1,8 @@
+[package]
+name = "termwright-ratatui-example-build"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+termwright-probe-ratatui = { path = "../../../clients/rust-probe" }

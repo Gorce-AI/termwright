@@ -9,12 +9,15 @@
  */
 
 import { fileURLToPath } from 'node:url';
-import { describe, expect, ptyAvailable, test } from '@termwright/test';
+import { describe, expect, ptyAvailable, test } from 'termwright/test';
 import { pythonWithTextual } from './python.js';
 
 const python = pythonWithTextual();
 const script = fileURLToPath(new URL('../app/notes_app.py', import.meta.url));
 const runnable = python !== null && (await ptyAvailable());
+if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !runnable) {
+  throw new Error('Textual example requires Python with Textual/termwright and a working pseudo-terminal');
+}
 
 /** `python` is non-null wherever this command is used. */
 const interpreter = python ?? 'python3';

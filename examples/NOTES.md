@@ -1,11 +1,11 @@
 # examples — implementation notes
 
-Why these three suites are shaped the way they are, and what cost time while
+Why these suites are shaped the way they are, and what cost time while
 writing them. The README says how to use the examples; this file is for whoever
 changes them.
 
-Verified against the driver, the preset and the injected Ink, Textual and tview
-probes as of 2026-08-20. The application-side Termwright imports that remain are
+Verified against the driver, the preset and all documented framework
+integrations as of 2026-08-21. The application-side Termwright imports that remain are
 annotation SDKs, not adapters that own rendering or transport.
 
 ## What these examples are for
@@ -91,7 +91,7 @@ workaround in this directory.
 
 ## Stability, and the one failure that was real
 
-These suites were soaked before 1.0: 50 consecutive runs of all three examples
+The original Ink, Textual and tview suites were soaked before 1.0: 50 consecutive runs
 in parallel, on a machine deliberately kept at a load average of 180–235, with
 `TERMWRIGHT_DEBUG=all` captured for every run and kept for any that failed.
 **50 of 50 passed.** Ninety-eight commits landed in the repository while it

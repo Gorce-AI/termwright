@@ -1,0 +1,10 @@
+[package]
+name = "termwright-ratatui-list-example"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[dependencies]
+crossterm = "0.29"
+ratatui = "=0.30.2"
