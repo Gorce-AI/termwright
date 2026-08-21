@@ -114,19 +114,20 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
   beforeAll(async () => {
     // Process tests execute published JavaScript, not Vitest's source transform.
     const { execFile } = await import('node:child_process');
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    await new Promise<void>((resolve, reject) => {
-      execFile(npm, ['run', 'build'], { cwd: annotationSdkRoot }, (error) => {
-        if (error === null) resolve();
-        else reject(error);
+    const build = (cwd: string) => {
+      const executable = process.platform === 'win32' ? (process.env['ComSpec'] ?? 'cmd.exe') : 'npm';
+      const argv = process.platform === 'win32'
+        ? ['/d', '/s', '/c', 'npm run build']
+        : ['run', 'build'];
+      return new Promise<void>((resolve, reject) => {
+        execFile(executable, argv, { cwd }, (error) => {
+          if (error === null) resolve();
+          else reject(error);
+        });
       });
-    });
-    await new Promise<void>((resolve, reject) => {
-      execFile(npm, ['run', 'build'], { cwd: packageRoot }, (error) => {
-        if (error === null) resolve();
-        else reject(error);
-      });
-    });
+    };
+    await build(annotationSdkRoot);
+    await build(packageRoot);
     const built = await import(join(packageRoot, 'dist', 'index.js')) as {
       readonly withProbe: BuiltWithProbe;
     };
