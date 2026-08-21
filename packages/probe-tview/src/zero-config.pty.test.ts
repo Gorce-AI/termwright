@@ -21,6 +21,8 @@ import {
   createNodePtyBackend,
   launchTerminal,
   type Locator,
+  type PtyBackend,
+  type PtyProcess,
   type TerminalHarness,
 } from "@termwright/driver";
 import type { Rect } from "@termwright/protocol";
@@ -74,6 +76,65 @@ function ptyAvailable(): boolean {
 const runnable = (await goAvailable()) && ptyAvailable();
 const roots: string[] = [];
 const sessions: TerminalHarness[] = [];
+
+/**
+ * Captures the real PTY byte stream without stealing startup chunks from the
+ * driver. The production backend buffers only until its first subscriber, so
+ * a naive tee would make the test itself race TerminalSession attachment.
+ */
+function byteCapturingBackend(): {
+  readonly backend: PtyBackend;
+  readonly bytes: () => Buffer;
+  readonly reset: () => void;
+} {
+  const upstream = createNodePtyBackend();
+  const chunks: Buffer[] = [];
+  return {
+    bytes: () => Buffer.concat(chunks),
+    reset: () => { chunks.length = 0; },
+    backend: {
+      name: `${upstream.name}+byte-capture`,
+      spawn(options): PtyProcess {
+        // launchTerminal installs its private endpoint after merging the public
+        // env option. Remove it at the final spawn boundary: this test needs
+        // the driver's real VT/query responses, but the child itself must have
+        // no way to attach the probe.
+        const process = upstream.spawn({
+          ...options,
+          env: {
+            ...options.env,
+            TERMWRIGHT_ENDPOINT: "",
+            TERMWRIGHT_TOKEN: "",
+          },
+        });
+        const listeners = new Set<(data: Uint8Array) => void>();
+        const pending: Uint8Array[] = [];
+        process.onData((data) => {
+          const copy = Buffer.from(data);
+          chunks.push(copy);
+          if (listeners.size === 0) {
+            pending.push(copy);
+            return;
+          }
+          for (const listener of listeners) listener(copy);
+        });
+        return {
+          get pid() { return process.pid; },
+          write: (data) => process.write(data),
+          resize: (columns, rows) => process.resize(columns, rows),
+          signal: (signal) => process.signal(signal),
+          dispose: () => process.dispose(),
+          onExit: (listener) => process.onExit(listener),
+          onData(listener) {
+            listeners.add(listener);
+            for (const data of pending.splice(0)) listener(data);
+            return () => listeners.delete(listener);
+          },
+        };
+      },
+    },
+  };
+}
 
 afterAll(async () => {
   await Promise.all(sessions.map((session) => session.close()));
@@ -501,7 +562,7 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
     expect(before?.width).toBe(80);
   }, 600_000);
 
-  it("renders byte-identically to the untouched framework when not instrumented", async () => {
+  it("renders byte-identically to the untouched framework when dormant", async () => {
     // The dormancy claim, measured rather than asserted from the source: the
     // instrumented binary run without the handshake variables must paint what
     // the vanilla one paints.
@@ -510,16 +571,19 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
       buildFixture({ instrumented: true }),
     ]);
 
-    const screens: string[] = [];
+    const outputs: Buffer[] = [];
+    const marker = Buffer.from("\u001b]8487;twm;", "utf8");
     for (const binary of [vanilla, instrumented]) {
-      // envMode 'replace' already withholds the handshake variables, so the
-      // instrumented binary has no driver to talk to even though one launched
-      // it. That is exactly the dormant case.
+      // The capturing backend removes the driver's private handshake at the
+      // final spawn boundary. Doing this in `env` would be ineffective because
+      // launchTerminal authoritatively installs its endpoint afterwards.
+      const capture = byteCapturingBackend();
       const session = await launchTerminal({
         command: [binary],
         columns: 80,
         rows: 24,
         env: { TERMWRIGHT_ENDPOINT: "", TERMWRIGHT_TOKEN: "" },
+        backend: capture.backend,
       });
       sessions.push(session);
       // `readme.md` is painted near the start of tview's frame. The status
@@ -528,10 +592,27 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
       // application state rather than at an arbitrary PTY chunk boundary.
       await session.waitForText("status: ready");
       await session.waitForStable();
-      screens.push(session.screen().text());
+      // tcell's startup query and SIGWINCH may race, making even two runs of
+      // the same binary produce one or two equivalent initial draws. Establish
+      // an explicit application redraw boundary, then compare its complete
+      // bytes instead of normalizing a timing-dependent startup prefix.
+      expect(capture.bytes().includes(marker)).toBe(false);
+      capture.reset();
+      const beforeRedraw = session.screen().revision;
+      await session.press("r");
+      await session.waitForRender({ after: beforeRedraw });
+      await session.waitForStable();
+      outputs.push(capture.bytes());
     }
 
-    expect(screens[1]).toBe(screens[0]);
+    expect(outputs[1]).toEqual(outputs[0]);
+
+    // Dormant instrumentation has a stronger byte-level invariant of its own:
+    // no Termwright render marker may enter stdout at any point. The previous
+    // test accidentally activated the probe because launchTerminal overwrote
+    // its public env option, and screen text hid these OSC bytes.
+    expect(outputs.at(0)?.includes(marker)).toBe(false);
+    expect(outputs.at(1)?.includes(marker)).toBe(false);
   }, 900_000);
 });
 

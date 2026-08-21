@@ -56,6 +56,11 @@ func main() {
 			return event
 		}
 		switch event.Rune() {
+		case 'r':
+			// A production-style redraw shortcut gives byte-parity tests an
+			// explicit frame boundary independent of terminal startup queries.
+			app.Sync()
+			return nil
 		case 'q':
 			app.Stop()
 			return nil
