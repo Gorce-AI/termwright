@@ -647,6 +647,10 @@ describe.skipIf(!ptyAvailable())('the debug log', { timeout: 20_000 }, () => {
         env: { TERMWRIGHT_FIXTURE_MOUSE_MODE: '0' },
       });
       await terminal.waitForText('Permission required');
+      // Force a post-startup committed frame. ConPTY can emit host-owned
+      // startup traffic after the first marker; semantic input must bind to a
+      // later exact pair instead of treating that traffic as part of frame 1.
+      await terminal.press('a');
       await terminal.getByRole('button', { name: 'Approve' }).activate();
       await terminal.paste('correct horse battery staple');
     } finally {
@@ -1096,7 +1100,10 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
             { condition: { kind: 'pointer-input' }, verdict: 'satisfied' },
             { condition: { kind: 'mouse-input-enabled' }, verdict: 'unsatisfied' },
           ]
-        : [{ condition: { kind: 'pointer-input' }, verdict: 'inconclusive' }],
+        : [
+            { condition: { kind: 'pointer-input' }, verdict: 'inconclusive' },
+            { condition: { kind: 'mouse-input-enabled' }, verdict: 'unsatisfied' },
+          ],
       reason: { code: pointerInput === 'supported' ? 'input-mode-disabled' : 'capability-unavailable' },
     });
     expect(failedLocatorAction?.actionability?.checkpoint).toEqual(
@@ -1558,6 +1565,7 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     expect((error as TermwrightError).code).toBe('capability-unavailable');
 
     // Keyboard activation still reaches the focused node.
+    if (process.platform === 'win32') await terminal.press('a');
     const receipt = await approve.activate();
     expect(receipt.plan.strategy).toBe('focus-enter');
     await terminal.waitForText('ACTIVATED approve');
@@ -1641,6 +1649,7 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     });
     await terminal.waitForText('Permission required');
 
+    if (process.platform === 'win32') await terminal.press('a');
     const receipt = await terminal.getByTestId('approve').activate();
     expect(receipt.plan.strategy).toBe('focus-enter');
     await terminal.waitForText('ACTIVATED approve');
