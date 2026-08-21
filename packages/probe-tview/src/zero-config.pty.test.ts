@@ -209,11 +209,14 @@ describe.skipIf(!runnable)('developer annotations', () => {
       }),
     );
 
-    // Interaction still works through the annotated handle.
-    await session.press('Tab');
+    // The annotation declares the supported actions, but the locator still
+    // drives the real terminal. Starting focused makes this a deterministic
+    // activation check rather than a duplicate of the Tab-order test below.
     await expect
       .poll(async () => (await session.getByTestId('save').semanticState())?.focused)
       .toBe(true);
+    await session.getByTestId('save').activate();
+    await session.waitForText('status: saved');
   }, 900_000);
 });
 

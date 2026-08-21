@@ -51,6 +51,9 @@ func main() {
 
 	save := tview.NewButton("Save")
 	quit := tview.NewButton("Quit")
+	save.SetSelectedFunc(func() {
+		status.SetText("status: saved")
+	})
 	saveLabel := tview.NewTextView().SetText("Save changes")
 	saveHelp := tview.NewTextView().SetText("Writes the current file")
 
@@ -99,7 +102,7 @@ func main() {
 	// Tab cycles focus, which is what a test needs in order to observe focus
 	// moving at all: tview does not cycle by default.
 	focusOrder := []tview.Primitive{list, save, quit}
-	focused := 0
+	focused := 1
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
@@ -126,7 +129,7 @@ func main() {
 		return event
 	})
 
-	if err := app.SetRoot(pages, true).SetFocus(list).Run(); err != nil {
+	if err := app.SetRoot(pages, true).SetFocus(save).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
