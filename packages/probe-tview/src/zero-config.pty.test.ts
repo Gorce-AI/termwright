@@ -414,7 +414,11 @@ describe.skipIf(!runnable)('a plain tview application under the probe', () => {
         env: { TERMWRIGHT_ENDPOINT: '', TERMWRIGHT_TOKEN: '' },
       });
       sessions.push(session);
-      await session.waitForText('readme.md');
+      // `readme.md` is painted near the start of tview's frame. The status
+      // line is the fixture's own readiness marker and is written only after
+      // the complete frame, so both arms are compared at the same observable
+      // application state rather than at an arbitrary PTY chunk boundary.
+      await session.waitForText('status: ready');
       await session.waitForStable();
       screens.push(session.screen().text());
     }
