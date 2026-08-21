@@ -130,6 +130,14 @@ export function TerminalStage(props: TerminalStageProps) {
     const terminal = terminalRef.current;
     if (terminal === null) return;
     terminal.options.cursorBlink = props.writable;
+    const targetColumns = Math.max(props.columns, 1);
+    const targetRows = Math.max(props.rows, 1);
+    // xterm serialises writes, but resize() is synchronous. Apply the retained
+    // grid before queuing reset/frames so Fit can never measure the 80x24
+    // placeholder while a 60x10 replay is already selected.
+    if (terminal.cols !== targetColumns || terminal.rows !== targetRows) {
+      terminal.resize(targetColumns, targetRows);
+    }
     const applied = appliedRef.current;
     const reset = applied.identity !== props.identity;
     if (reset) {
@@ -143,7 +151,7 @@ export function TerminalStage(props: TerminalStageProps) {
         if (generation !== appliedRef.current.generation) return;
         terminal.reset();
         terminal.clear();
-        terminal.resize(Math.max(props.columns, 1), Math.max(props.rows, 1));
+        terminal.resize(targetColumns, targetRows);
       });
     }
     if (props.mode === 'live') {
@@ -165,7 +173,7 @@ export function TerminalStage(props: TerminalStageProps) {
           if (generation !== appliedRef.current.generation) return;
           terminal.reset();
           terminal.clear();
-          terminal.resize(Math.max(props.columns, 1), Math.max(props.rows, 1));
+          terminal.resize(targetColumns, targetRows);
         });
         applied.replayCursor = 0;
       }
