@@ -24,6 +24,6 @@ describe.skipIf(!runnable)('the OpenTUI release form', () => {
 
     const field = app.getByRole('textbox');
     expect((await field.geometry()).intendedRect.status).toBe('known');
-    expect((await field.hitTest()).receivesEvents).toMatchObject({status: 'known', value: true});
+    await expect(field).toReceivePointerEvents();
   });
 });
