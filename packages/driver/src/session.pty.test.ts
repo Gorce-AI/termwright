@@ -82,6 +82,65 @@ afterEach(async () => {
   }
 });
 
+describe.skipIf(!ptyAvailable())('the production PTY backend', { timeout: 20_000 }, () => {
+  it('exposes the child pid after the PTY becomes ready', async () => {
+    const pty = createNodePtyBackend().spawn({
+      command: [process.execPath, '-e', 'process.stdout.write("ready\\n"); setInterval(() => {}, 1_000)'],
+      env: environment(),
+      columns: 20,
+      rows: 4,
+    });
+    try {
+      await new Promise<void>((resolve) => {
+        const unsubscribe = pty.onData(() => {
+          unsubscribe();
+          resolve();
+        });
+      });
+      expect(pty.pid).toBeGreaterThan(0);
+    } finally {
+      pty.dispose();
+    }
+  });
+
+  it.skipIf(process.platform !== 'win32')('closes concurrent live ConPTY sessions without the AttachConsole fallback stall', async () => {
+    const ptys = Array.from({ length: 10 }, () => createNodePtyBackend().spawn({
+      command: [process.execPath, '-e', 'process.stdout.write("ready\\n"); setInterval(() => {}, 1_000)'],
+      env: environment(),
+      columns: 20,
+      rows: 4,
+    }));
+    try {
+      await Promise.all(ptys.map((pty) => new Promise<void>((resolve) => {
+        const unsubscribe = pty.onData(() => {
+          unsubscribe();
+          resolve();
+        });
+      })));
+      const exits = ptys.map((pty) => new Promise<void>((resolve) => {
+        pty.onExit(() => resolve());
+      }));
+      for (const pty of ptys) pty.dispose();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          Promise.all(exits),
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error('concurrent ConPTY teardown exceeded 3 seconds')),
+              3_000,
+            );
+          }),
+        ]);
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+      }
+    } finally {
+      for (const pty of ptys) pty.dispose();
+    }
+  });
+});
+
 describe.skipIf(!ptyAvailable())('a generic session over a real PTY', { timeout: 20_000 }, () => {
   // ConPTY consumes these terminal queries before xterm-headless can observe
   // and answer them. The child therefore cannot prove Termwright's emulator

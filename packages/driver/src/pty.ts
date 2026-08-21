@@ -61,7 +61,7 @@ interface ByteWritablePty {
 }
 
 /**
- * The production backend: `@lydell/node-pty` pinned to 1.1.0 (prebuilds for all
+ * The production backend: `@lydell/node-pty` pinned to 1.2.0-beta.15 (prebuilds for all
  * six platforms). The pty is opened with `encoding: null` so output arrives as
  * bytes; UTF-8 sequences split across reads are reassembled by the VT layer,
  * not here.
@@ -116,7 +116,12 @@ export function createNodePtyBackend(): PtyBackend {
       ];
 
       const proc: PtyProcess = {
-        pid: pty.pid,
+        // ConPTY connects asynchronously in node-pty 1.2. Reading this lazily
+        // prevents its transient pre-connect value (0) becoming permanent in
+        // Termwright's public wrapper.
+        get pid(): number {
+          return pty.pid;
+        },
         write(data: Uint8Array): void {
           if (disposed || exited) return;
           (pty as unknown as ByteWritablePty).write(Buffer.from(data));
