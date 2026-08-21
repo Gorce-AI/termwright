@@ -17,12 +17,13 @@ import {
 } from '@termwright/protocol';
 import { connectProbe } from './index.js';
 
-async function endpoint(): Promise<{ path: string; dispose(): Promise<void> }> {
+async function endpoint(): Promise<{ path: string; metricsPath: string; dispose(): Promise<void> }> {
   const directory = await mkdtemp(join(tmpdir(), 'termwright-probe-runtime-'));
   return {
     path: process.platform === 'win32'
       ? `\\\\.\\pipe\\termwright-runtime-${randomBytes(8).toString('hex')}`
       : join(directory, 'probe.sock'),
+    metricsPath: join(directory, 'metrics.jsonl'),
     dispose: () => rm(directory, { recursive: true, force: true }),
   };
 }
@@ -87,7 +88,7 @@ describe('shared probe transport', () => {
       adapterName: '@termwright/probe-ink',
       adapterVersion: '0.1.0',
       performanceMetrics: true,
-      performanceMetricsFile: `${target.path}.metrics.jsonl`,
+      performanceMetricsFile: target.metricsPath,
     });
     expect(channel).not.toBeNull();
 
@@ -129,7 +130,7 @@ describe('shared probe transport', () => {
     });
     expect(channel?.performanceMetrics().averageBytesPerFrame).toBeGreaterThan(0);
     expect(channel?.performanceMetrics().averageSerializationMicrosecondsPerFrame).toBeGreaterThanOrEqual(0);
-    const records = (await readFile(`${target.path}.metrics.jsonl`, 'utf8'))
+    const records = (await readFile(target.metricsPath, 'utf8'))
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as Record<string, unknown>);
