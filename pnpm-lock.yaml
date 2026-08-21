@@ -428,9 +428,6 @@ importers:
       '@termwright/driver':
         specifier: workspace:*
         version: link:../driver
-      '@termwright/ink':
-        specifier: workspace:*
-        version: link:../ink
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18
