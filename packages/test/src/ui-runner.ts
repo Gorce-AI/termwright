@@ -6,7 +6,7 @@ import {
   termwrightProviderDeclaration,
   type TermwrightProviderDeclaration,
 } from '@termwright/ui/provider';
-import { parseDiscoveredId, UI_SELECTION_ENV } from '@termwright/ui';
+import { canonicalTestFile, parseDiscoveredId, UI_SELECTION_ENV } from '@termwright/ui';
 
 export const UI_LOCATION_FILTER_ENV = 'TERMWRIGHT_UI_LOCATION_FILTER';
 
@@ -137,7 +137,8 @@ function matchesSelection(
   }
   if (file === undefined) return false;
   const title = names.join(' > ');
-  return selected.some((target) => target.file === file && target.title === title);
+  const canonicalFile = canonicalTestFile(file);
+  return selected.some((target) => target.file === canonicalFile && target.title === title);
 }
 
 function authoredFile(meta: unknown): string | undefined {

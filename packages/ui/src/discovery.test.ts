@@ -33,6 +33,19 @@ describe('parseListing', () => {
     ]);
   });
 
+  it('canonicalizes Windows paths in catalogue and source metadata', () => {
+    const [test] = parseListing(JSON.stringify([{
+      name: 'case',
+      file: 'C:\\repo\\case.feature',
+      source: { file: 'C:\\repo\\case.feature', line: 2, column: 3 },
+    }]));
+    expect(test).toMatchObject({
+      id: 'C:/repo/case.feature::case',
+      file: 'C:/repo/case.feature',
+      source: { file: 'C:/repo/case.feature', line: 2, column: 3 },
+    });
+  });
+
   it('gives every test an id a runner can act on', () => {
     const [first] = parseListing(listing);
     expect(first?.id).toBe('/repo/tests/app.feature::the todo app > starts on the list it was seeded with');

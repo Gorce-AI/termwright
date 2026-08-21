@@ -113,13 +113,15 @@ describe('the UI-only Vitest runner filter', () => {
     const aFoo = task('foo', true);
     const aBar = task('bar', true);
     const fileA = suite('file a', [aFoo, aBar]);
-    fileA.filepath = '/repo/a.test.ts';
+    // Vitest can expose a native Windows path while the browser sends the
+    // catalogue's canonical path spelling.
+    fileA.filepath = 'C:\\repo\\a.test.ts';
     const bFoo = task('foo', true);
     const bBar = task('bar', true);
     const fileB = suite('file b', [bFoo, bBar]);
     fileB.filepath = '/repo/b.test.ts';
     const selectedCases = [
-      { file: '/repo/a.test.ts', title: 'foo' },
+      { file: 'C:/repo/a.test.ts', title: 'foo' },
       { file: '/repo/b.test.ts', title: 'bar' },
     ];
 

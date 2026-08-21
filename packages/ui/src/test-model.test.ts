@@ -129,6 +129,14 @@ describe('discovered ids', () => {
     });
   });
 
+  it('uses one path spelling for ids produced on Windows and POSIX', () => {
+    expect(discoveredId('C:\\repo\\a.test.ts', 'case')).toBe('C:/repo/a.test.ts::case');
+    expect(parseDiscoveredId('C:\\repo\\a.test.ts::case')).toEqual({
+      file: 'C:/repo/a.test.ts',
+      title: 'case',
+    });
+  });
+
   it('rejects an id that did not come from discovery', () => {
     expect(parseDiscoveredId('t1')).toBeNull();
     expect(parseDiscoveredId('::orphan')).toBeNull();

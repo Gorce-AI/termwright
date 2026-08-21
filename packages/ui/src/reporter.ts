@@ -33,7 +33,7 @@ import {
 } from './runs.js';
 import { readRunGit } from './project.js';
 import { encodeMessage, type ServerMessage, type UiRunSummary, type UiTestStatus } from './events.js';
-import { parseDiscoveredId } from './test-model.js';
+import { canonicalTestFile, parseDiscoveredId } from './test-model.js';
 import { hasTermwrightProvider } from './provider.js';
 import { WebSocket } from 'ws';
 
@@ -164,7 +164,7 @@ export class TermwrightUiReporter {
       // Vitest always knows which module a test came from; the fallback keeps
       // the field present, which the protocol requires, rather than dropping
       // the message.
-      file: testCase.module?.moduleId ?? '',
+      file: canonicalTestFile(testCase.module?.moduleId ?? ''),
       startedAt,
     });
   }
@@ -189,7 +189,7 @@ export class TermwrightUiReporter {
         type: 'test-start',
         id,
         title: testCase.fullName ?? testCase.name ?? id,
-        file: testCase.module?.moduleId ?? '',
+        file: canonicalTestFile(testCase.module?.moduleId ?? ''),
         startedAt: Date.now(),
       });
     }
@@ -212,7 +212,7 @@ export class TermwrightUiReporter {
     this.#tests.push({
       id,
       title: testCase.fullName ?? testCase.name ?? id,
-      file: testCase.module?.moduleId ?? '',
+      file: canonicalTestFile(testCase.module?.moduleId ?? ''),
       status,
       durationMs: diagnostic?.duration ?? 0,
       flaky,
@@ -360,11 +360,11 @@ export class TermwrightUiReporter {
     if (this.#selection === null) return true;
     const id = testCase.id;
     const title = testCase.fullName ?? testCase.name ?? id ?? '';
-    const file = testCase.module?.moduleId ?? '';
+    const file = canonicalTestFile(testCase.module?.moduleId ?? '');
     const targetsMatch =
       this.#selection.targets === undefined ||
       this.#selection.targets.some((target) => {
-        if (target === id || target === file) return true;
+        if (target === id || canonicalTestFile(target) === file) return true;
         const parsed = parseDiscoveredId(target);
         return parsed !== null && parsed.file === file && parsed.title === title;
       });
@@ -449,7 +449,7 @@ function validGherkinAnnotation(value: unknown): import('./events.js').UiGherkin
   return {
     keyword: record['keyword'],
     text: record['text'],
-    source: { file: source['file'], line: source['line'] as number, column: source['column'] as number },
+    source: { file: canonicalTestFile(source['file']), line: source['line'] as number, column: source['column'] as number },
     ...(record['background'] === true ? { background: true } : {}),
   };
 }

@@ -17,9 +17,9 @@
  */
 
 import { spawn } from 'node:child_process';
-import { discoveredId } from './test-model.js';
+import { canonicalTestFile, discoveredId } from './test-model.js';
 
-export { discoveredId, parseDiscoveredId } from './test-model.js';
+export { canonicalTestFile, discoveredId, parseDiscoveredId } from './test-model.js';
 
 export type DiscoveredTestKind = 'test' | 'gherkin-scenario' | 'gherkin-outline-example';
 
@@ -116,7 +116,8 @@ export function parseListing(output: string): readonly DiscoveredTest[] {
     const title = record['name'];
     const file = record['file'];
     if (typeof title !== 'string' || title === '' || typeof file !== 'string' || file === '') continue;
-    const id = discoveredId(file, title);
+    const canonicalFile = canonicalTestFile(file);
+    const id = discoveredId(canonicalFile, title);
     if (seen.has(id)) continue; // a parameterised test can list twice
     seen.add(id);
     const provider = parseProvider(record['provider']);
@@ -127,7 +128,7 @@ export function parseListing(output: string): readonly DiscoveredTest[] {
     tests.push({
       id,
       title,
-      file,
+      file: canonicalFile,
       ...(provider === undefined ? {} : { provider }),
       ...(kind === undefined ? {} : { kind }),
       ...(ancestors === undefined ? {} : { ancestors }),
@@ -179,7 +180,7 @@ function parseSource(value: unknown): DiscoveredTestSource | undefined {
   if (!Number.isInteger(record['line']) || (record['line'] as number) < 1) return undefined;
   if (!Number.isInteger(record['column']) || (record['column'] as number) < 1) return undefined;
   return {
-    file: record['file'],
+    file: canonicalTestFile(record['file']),
     line: record['line'] as number,
     column: record['column'] as number,
   };

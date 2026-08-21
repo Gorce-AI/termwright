@@ -56,6 +56,11 @@ export interface TestCounts {
   readonly notRun: number;
 }
 
+/** Stable path spelling used in catalogue ids and UI events on every OS. */
+export function canonicalTestFile(file: string): string {
+  return file.replaceAll('\\', '/');
+}
+
 /**
  * The id a discovered test carries: `<file>::<full name>`.
  *
@@ -64,7 +69,7 @@ export interface TestCounts {
  * would drag Node in.
  */
 export function discoveredId(file: string, title: string): string {
-  return `${file}::${title}`;
+  return `${canonicalTestFile(file)}::${title}`;
 }
 
 /**
@@ -76,7 +81,7 @@ export function discoveredId(file: string, title: string): string {
 export function parseDiscoveredId(id: string): { file: string; title: string } | null {
   const separator = id.indexOf('::');
   if (separator <= 0) return null;
-  const file = id.slice(0, separator);
+  const file = canonicalTestFile(id.slice(0, separator));
   const title = id.slice(separator + 2);
   return title === '' ? null : { file, title };
 }

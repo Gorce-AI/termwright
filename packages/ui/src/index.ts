@@ -82,6 +82,7 @@ export {
 
 export {
   discoverTests,
+  canonicalTestFile,
   discoveredId,
   parseDiscoveredId,
   parseListing,

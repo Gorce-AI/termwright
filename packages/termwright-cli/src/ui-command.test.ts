@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { openTrace } from '@termwright/trace';
-import { discoverTests, startUiServer } from '@termwright/ui';
+import { canonicalTestFile, discoverTests, startUiServer } from '@termwright/ui';
 import {
   discoverTermwrightListing,
   resolveVitestBin,
@@ -24,6 +24,7 @@ const builtUiHost = fileURLToPath(new URL('../dist/vitest-ui-host.js', import.me
 const gherkinUiFixture = fileURLToPath(new URL('./__fixtures__/gherkin-ui/', import.meta.url));
 const gherkinUiConfig = join(gherkinUiFixture, 'vitest.config.ts');
 const gherkinUiFeature = join(gherkinUiFixture, 'mixed.feature');
+const gherkinUiFeatureId = canonicalTestFile(gherkinUiFeature);
 const builtUiReporter = fileURLToPath(new URL('../../ui/dist/reporter.js', import.meta.url));
 
 describe('resolveVitestBin', () => {
@@ -129,10 +130,10 @@ describe('the UI-only runner contract', () => {
       'TypeScript opens the permission terminal',
     ]);
     expect(new Set(discovery.map(({ file }) => file))).toEqual(new Set([
-      gherkinUiFeature,
-      join(gherkinUiFixture, 'permission.test.ts'),
+      gherkinUiFeatureId,
+      canonicalTestFile(join(gherkinUiFixture, 'permission.test.ts')),
     ]));
-    expect(discovery.every(({ file }) => file.startsWith(gherkinUiFixture))).toBe(true);
+    expect(discovery.every(({ file }) => file.startsWith(canonicalTestFile(gherkinUiFixture)))).toBe(true);
 
     const directory = await mkdtemp(join(tmpdir(), 'termwright-gherkin-config-scope-'));
     try {
@@ -169,14 +170,14 @@ describe('the UI-only runner contract', () => {
     expect(discovery.some(({ title }) => title.includes('foreign'))).toBe(false);
     const scenario = discovery.find(({ file }) => file.endsWith('mixed.feature'));
     expect(scenario).toMatchObject({
-      id: `${gherkinUiFeature}::Permission workflow > focuses Reject with the keyboard`,
+      id: `${gherkinUiFeatureId}::Permission workflow > focuses Reject with the keyboard`,
       title: 'Permission workflow > focuses Reject with the keyboard',
-      file: gherkinUiFeature,
+      file: gherkinUiFeatureId,
       provider: { id: '@termwright/test', version: 1 },
       kind: 'gherkin-scenario',
       ancestors: [{ kind: 'feature', title: 'Permission workflow' }],
       tags: ['@smoke'],
-      source: { file: gherkinUiFeature, line: 4, column: 3 },
+      source: { file: gherkinUiFeatureId, line: 4, column: 3 },
     });
 
     const directory = await mkdtemp(join(tmpdir(), 'termwright-gherkin-ui-'));
@@ -217,7 +218,7 @@ describe('the UI-only runner contract', () => {
 
       const rerunEffects = join(directory, 'rerun.log');
       const selectedRerunTargets = [
-        `${gherkinUiFeature}::Permission workflow > focuses Reject with the keyboard`,
+        `${gherkinUiFeatureId}::Permission workflow > focuses Reject with the keyboard`,
       ];
       const rerunTargets = vitestRunTargetArgs(selectedRerunTargets);
       const rerun = await runProcess(
@@ -247,7 +248,7 @@ describe('the UI-only runner contract', () => {
   it('streams physical Gherkin prose, terminal actions and a replayable trace through the real UI wire', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'termwright-gherkin-wire-'));
     const server = await startUiServer({ runsDir: join(directory, 'runs') });
-    const selected = `${gherkinUiFeature}::Permission workflow > focuses Reject with the keyboard`;
+    const selected = `${gherkinUiFeatureId}::Permission workflow > focuses Reject with the keyboard`;
     try {
       const run = await runProcess(
         builtUiHost,
@@ -295,7 +296,7 @@ describe('the UI-only runner contract', () => {
   it('streams an actionless physical Gherkin step without relying on a session or trace', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'termwright-gherkin-actionless-'));
     const server = await startUiServer({ runsDir: join(directory, 'runs') });
-    const selected = `${gherkinUiFeature}::Permission workflow > records an actionless business rule`;
+    const selected = `${gherkinUiFeatureId}::Permission workflow > records an actionless business rule`;
     try {
       const run = await runProcess(
         builtUiHost,
@@ -318,7 +319,7 @@ describe('the UI-only runner contract', () => {
         type: 'step', stepId: 'tw-step-1',
         gherkin: {
           keyword: 'Given', text: 'the approval policy is already recorded',
-          source: { file: gherkinUiFeature, line: 10, column: 5 },
+          source: { file: gherkinUiFeatureId, line: 10, column: 5 },
         },
       });
       expect(messages.some((message) => message.type === 'session')).toBe(false);
