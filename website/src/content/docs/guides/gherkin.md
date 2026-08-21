@@ -1,109 +1,78 @@
 ---
-title: Gherkin feature files
-description: Run physical .feature files as native Termwright and Vitest tests, with local step definitions and no generated source files.
+title: Gherkin scenarios
+description: Write terminal workflows in physical .feature files and run them beside TypeScript tests.
 ---
 
-`@termwright/gherkin` makes a physical `.feature` file a native
-`@termwright/test` suite. It is a Vite/Vitest transform, not another runner:
-the transformed module exists only in memory, Vitest remains the scheduler, and
-no generated `.ts` files are written into the project.
+Use Gherkin when product behavior is already discussed and reviewed as feature
+prose. TypeScript tests remain the simpler default for most test suites.
 
-Parsing, pickle compilation and expressions come from the official Cucumber
-libraries, pinned by this package as a compatible set:
-`@cucumber/gherkin@42.0.1`, `@cucumber/messages@34.2.1` and
-`@cucumber/cucumber-expressions@20.1.0`.
+Termwright runs each Scenario as a normal Vitest case with the same terminal,
+step, retry, trace, report, and Runner behavior as a `.test.ts` case.
 
-## Install and run
+## Install Termwright
 
-The `termwright` umbrella contains both the Gherkin API and the UI integration:
+The umbrella package includes the Gherkin authoring API and Runner integration:
 
 ```sh
 npm install --save-dev termwright vitest
-termwright ui
 ```
 
-There is no feature compiler to run first and no generated-test directory to
-add to `.gitignore`. The UI-owned Vitest host discovers `.feature` files,
-transforms them in memory and lists their Scenarios beside provider-owned
-`.test.ts` cases. Do not add a `pretest`, `predev` or `bddgen` step for this
-path.
-
-## One feature and its steps
+## Write a terminal scenario
 
 ```gherkin
-# tests/features/arithmetic.feature
-Feature: arithmetic
+# tests/features/command-approval.feature
+Feature: Command approval
 
-  Background:
-    Given a starting value of 2
-
-  Rule: addition preserves arithmetic
-    Scenario Outline: add an amount
-      When I add <amount>
-      Then the result is <total>
-
-      Examples:
-        | amount | total |
-        | 3      | 5     |
-        | 4      | 6     |
+  Scenario: Approve a command
+    Given the permission terminal is running
+    When I approve the command
+    Then the command should start
 ```
 
+Pair the feature with a step-definition module:
+
 ```ts
-// tests/features/arithmetic.steps.ts
+// tests/features/command-approval.steps.ts
+import {fileURLToPath} from 'node:url';
+import type {TerminalHarness} from 'termwright';
 import {Given, Then, When, defineSteps} from 'termwright/gherkin';
 
+const program = fileURLToPath(new URL('../../src/permission.js', import.meta.url));
+
 export default defineSteps(
-  Given('a starting value of {int}', ({world}, value) => {
-    world.value = value;
+  Given('the permission terminal is running', async ({terminal, world}) => {
+    world.app = await terminal.launch({command: [process.execPath, program]});
+    await world.app.waitForText('Permission required');
   }),
-  When('I add {int}', ({world}, amount) => {
-    world.value = Number(world.value) + Number(amount);
+  When('I approve the command', async ({world}) => {
+    await (world.app as TerminalHarness).press('Enter');
   }),
-  Then('the result is {int}', ({expect, world}, total) => {
-    expect(world.value).toBe(total);
+  Then('the command should start', async ({expect, world}) => {
+    await expect(world.app as TerminalHarness).toHaveText('running: ls -la');
   }),
 );
 ```
 
-Definitions are inert values in a default export, not registrations in a
-process-global Cucumber world. Every Scenario, and every examples row of a
-Scenario Outline, becomes its own native test with a fresh mutable `world`.
-Feature and Rule `Background` steps are included by the Cucumber compiler and
-run through Termwright's `step()` fixture before the Scenario steps.
+Each Scenario gets a fresh `world`. The step context also provides `terminal`,
+`step`, `expect`, resolved Termwright options, and Scenario metadata.
 
-The first callback argument also contains `terminal`, `termwright`,
-`termwrightOptions`, `step`, `expect`, and `scenario`. `scenario` identifies the
-physical feature name, Scenario name, file URI, line and tags. Captured
-Cucumber Expression values follow the context; a DocString becomes the final
-string argument and a DataTable becomes the final two-dimensional string
-array. Regular expressions, the keyword-neutral `Step(...)`, and local
-`defineParameterType(...)` declarations are supported too.
+## Run Gherkin in the Runner
 
-## Pairing is nearest-first
+```sh
+npx termwright ui
+```
 
-Step-definition patterns are resolved relative to `featureRoot`:
+Runner discovers `.feature` files automatically. Scenarios appear beside
+TypeScript cases in Specs. You can run a directory, feature file, Scenario, or
+the complete catalog. Authored Given/When/Then prose appears in the execution
+timeline, with driver actions and assertions nested below the matching step.
 
-- `[filepath]` is the complete feature path without `.feature`;
-- `[filepart]` walks from the feature path towards the root, nearest first;
-- a pattern containing neither token is global.
+No generated TypeScript files or separate Cucumber process are required.
 
-For `accounts/admin/login.feature`, `[filepart]` expands through
-`accounts/admin/login`, `accounts/admin`, `accounts`, then `.`. At runtime, the
-nearest tier containing a matching expression wins. A farther definition is a
-fallback, not an ambiguity. Two matching definitions in the same winning tier
-fail with an ambiguity error that names both files and expressions; no
-arbitrary match is chosen.
+## Run with Vitest and an IDE
 
-The plugin watches the paired files and the roots implied by the patterns. A
-created, deleted or renamed definition is paired again, and editing paired glue
-invalidates the importing feature.
-
-## Direct Vitest and IDE runs
-
-Ordinary Vitest is deliberately opt-in. Add the plugin and include physical
-features alongside the project's existing TypeScript tests. This is also the
-configuration an IDE's Vitest integration needs; Termwright does not install or
-configure an editor extension:
+Direct Vitest and IDE runs require the plugin and an explicit `.feature`
+include:
 
 ```ts
 // vitest.config.ts
@@ -113,11 +82,7 @@ import {defineConfig} from 'vitest/config';
 export default defineConfig({
   plugins: [gherkinPlugin({
     featureRoot: 'tests/features',
-    stepDefinitions: [
-      '[filepath].steps.{ts,tsx,mts}',
-      '[filepart]/step_definitions/**/*.{ts,tsx,mts}',
-      '../step_definitions/**/*.{ts,tsx,mts}',
-    ],
+    stepDefinitions: ['[filepath].steps.{ts,tsx,mts}'],
   })],
   test: {
     include: ['tests/**/*.test.ts', 'tests/features/**/*.feature'],
@@ -125,27 +90,27 @@ export default defineConfig({
 });
 ```
 
-This does not replace normal `.test.ts` discovery. It adds `.feature` modules
-to the same Vitest process, so both kinds share reporters, retries and the
-Termwright fixtures.
+Then use normal Vitest selection:
 
-## `termwright ui` needs no Gherkin config
+```sh
+npx vitest run tests/features/command-approval.feature
+```
 
-`termwright ui` installs the same transform in the Vitest host it owns and
-discovers physical `.feature` files automatically. TypeScript cases and
-Gherkin Scenarios appear in one Specs catalogue and use the same Run all, file,
-Scenario and rerun paths. It does not start Cucumber or a second UI.
+## Use Background and Scenario Outline
 
-The catalogue receives Feature and Rule ancestry, tags and Scenario kind from
-the provider. Scenario declarations map back to their physical `.feature`
-line, and step calls map to their physical Gherkin lines, so failures and UI
-source actions do not point at synthetic JavaScript. Scenario Outline rows get
-stable `[example N]` suffixes, giving every row an independent catalogue id and
-rerun target even when its title has no placeholder.
+`Background`, `Rule`, `Scenario Outline`, `Examples`, DocStrings, and DataTables
+are supported. Background steps run before the Scenario and remain visible as
+authored steps in Runner.
 
-:::caution[Current boundary]
-This slice has no Gherkin hooks, tag-filter option or editor extension/config.
-Tags are preserved as catalogue and Scenario metadata, but they are not a run
-filter. Keep setup in `Background` or step definitions and use Vitest/CLI
-scoping for the runs supported today.
-:::
+Use `Background` for setup shared by Scenarios in one feature. Use normal
+Termwright fixtures for reusable application setup across feature files.
+
+## Current limitations
+
+Gherkin hooks, tag-based run filtering, and a Termwright-specific editor
+extension are not available. Tags are retained as Scenario metadata. Use
+Background, step definitions, fixtures, and Vitest or Runner run scopes for the
+supported workflows.
+
+For expressions, step pairing, ambiguity, Scenario Outline identity, and the
+transform contract, see [Gherkin reference](../../reference/gherkin/).

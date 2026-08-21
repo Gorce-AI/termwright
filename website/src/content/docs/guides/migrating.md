@@ -5,10 +5,10 @@ description: Coming from an older Termwright adapter, ink-testing-library, teate
 
 ## From `ink-testing-library`
 
-This is the migration termwright was built for. `ink-testing-library` is the
-only test harness Ink ever had; it is unmaintained and broken on current Ink,
-and its model — render to a string, assert on `lastFrame()` — cannot express
-focus, mouse, raw mode or a resize.
+If you currently use `ink-testing-library`, Termwright's component API provides
+an in-process migration path for current Ink releases. It adds terminal input,
+focus, resize, semantic locators, and retained traces beyond `lastFrame()`
+string assertions.
 
 ```tsx
 // before
@@ -191,8 +191,12 @@ class NotesApp(TermwrightApp, App):
 The application becomes an ordinary `App`. Launch it through the probe:
 
 ```ts
+import {fileURLToPath} from 'node:url';
+
+const appPath = fileURLToPath(new URL('../app.py', import.meta.url));
+
 const app = await terminal.launch({
-  command: ['python', '-m', 'termwright_probe', '--', 'python', 'app.py'],
+  command: ['python', '-m', 'termwright_probe', '--', 'python', appPath],
 });
 ```
 
@@ -268,8 +272,12 @@ the probe at interpreter startup:
 
 ```ts
 // the test, in TypeScript, driving the real program
+import {fileURLToPath} from 'node:url';
+
+const appPath = fileURLToPath(new URL('../app.py', import.meta.url));
+
 const app = await terminal.launch({
-  command: ['python', '-m', 'termwright_probe', '--', 'python', 'app.py'],
+  command: ['python', '-m', 'termwright_probe', '--', 'python', appPath],
 });
 await app.getByRole('button', {name: 'Approve'}).activate();
 ```
@@ -307,7 +315,8 @@ by name, so a test's dependencies are its parameter list. Likewise there is no
 shared fixtures directory: each test declares its files into a directory only it
 can see, so no test can inherit what another one left behind.
 
-See [Test data and fixtures](../test-data/).
+See [Test files and isolation](../test-files/) and
+[Extend test fixtures](../fixtures/).
 
 ## From an expect script
 

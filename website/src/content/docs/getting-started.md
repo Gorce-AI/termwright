@@ -117,6 +117,8 @@ assertions observe terminal or semantic revisions and retry until their timeout.
 ## Continue
 
 - [Write maintainable tests](../writing-tests/)
+- [Run a suite, file, or case](../running-tests/)
+- [Understand test files and isolation](../guides/test-files/)
 - [Choose locators](../guides/locators/)
 - [Send keyboard, pointer, and terminal input](../guides/actions/)
 - [Use assertions](../guides/assertions/)

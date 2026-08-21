@@ -9,8 +9,13 @@ another. A **terminal profile** is a named set of answers to exactly those
 questions, recorded with the session so a replay counts the way the session did.
 
 ```ts
+import {fileURLToPath} from 'node:url';
+import {launchTerminal} from '@termwright/driver';
+
+const appPath = fileURLToPath(new URL('../app.js', import.meta.url));
+
 const terminal = await launchTerminal({
-  command: ['node', 'app.js'],
+  command: [process.execPath, appPath],
   terminalProfile: 'iterm2-ambiguous-wide',
 });
 

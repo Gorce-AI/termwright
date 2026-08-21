@@ -53,6 +53,8 @@ export default defineConfig({
 The report is a self-contained HTML file. It uses the same React viewer as the
 Runner but does not expose live-run, history, or file-system actions.
 
+[![A self-contained HTML report showing retained terminal replay and failure evidence.](/termwright/images/runner/html-report.png)](/termwright/images/runner/html-report.png)
+
 Generate a report for one existing archive:
 
 ```sh

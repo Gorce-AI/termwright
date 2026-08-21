@@ -1,24 +1,29 @@
 # termwright
 
-Test terminal programs the way you test web apps: by **role and name**, not by
-counting rows and columns.
+End-to-end testing for command-line and terminal user-interface applications.
+Run a real program in a PTY, send terminal input, use retrying assertions, and
+inspect failures in the desktop Runner. Framework integrations add semantic
+locators when the framework can provide them.
 
 ```sh
 npm i -D termwright
 ```
 
-## Your first test, in ten lines
+## Your first test
 
 ```ts
+import { fileURLToPath } from 'node:url';
 import { expect, test } from 'termwright/test';
 
+const agent = fileURLToPath(new URL('../agent.js', import.meta.url));
+
 test('asks before running a command', async ({ terminal }) => {
-  const app = await terminal.launch({ command: ['node', 'agent.js'] });
+  const app = await terminal.launch({ command: [process.execPath, agent] });
 
   await app.waitForText('Permission required');
-  await app.getByRole('button', { name: 'Approve' }).activate();
+  await app.press('Enter');
 
-  await expect(app.getByTestId('status')).toHaveText('approved');
+  await expect(app).toHaveText('approved');
 });
 ```
 
@@ -28,12 +33,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({ test: { testTimeout: 20_000 } });
 ```
 
-That runs `agent.js` in a **real pseudo-terminal**, waits on facts rather than
-sleeps, and clicks by sending the mouse report a terminal would have sent. If the
-program runs through a framework probe, roles come from its published semantic
-tree. `@termwright/ink` and `@termwright/opentui` are optional annotation SDKs
-consumed by their probes; without a probe everything still works against text
-and cells.
+The test uses text and keyboard input, so it works without a framework
+integration. Integrations provide roles, accessible names, state, geometry,
+and exact pointer ownership where the framework can observe them.
 
 ## What you get from where
 
@@ -121,15 +123,18 @@ The marker is also the extension point for future test providers; no additional
 provider is implied to exist today.
 
 Physical Gherkin features join that same catalogue automatically. Put paired
-step definitions beside the feature (for example `tests/login.feature` and
-`tests/login.ts`) and import the authoring API from the umbrella package:
+step definitions beside the feature and import the authoring API from the
+umbrella package:
 
 ```ts
+import { fileURLToPath } from 'node:url';
 import { Given, defineSteps } from 'termwright/gherkin';
 
+const appPath = fileURLToPath(new URL('../app.js', import.meta.url));
+
 export default defineSteps(
-  Given('the login screen is open', async ({ terminal }) => {
-    await terminal.launch({ command: ['node', 'app.js'] });
+  Given('the login screen is open', async ({ terminal, world }) => {
+    world.app = await terminal.launch({ command: [process.execPath, appPath] });
   }),
 );
 ```
@@ -150,18 +155,17 @@ Ordinary `vitest run` and IDE runs remain unchanged; opt them in by adding
 by `@termwright/gherkin`. Hooks, tag filters and editor configuration are not
 included in the current Gherkin slice.
 
-The page opens in your browser by itself. If it does not — `--no-open`, no
-browser on the machine, or an opener that failed — the printed line is the way
-in, and the token is part of it, so copy the whole URL:
+Interactive use opens the packaged Termwright desktop application. Use
+`--browser` for the system browser or `--no-open` for a server-only process. In
+server-only mode, copy the complete printed URL because it includes the local
+authentication token:
 
 ```
 termwright ui (live) — http://127.0.0.1:53219/?token=k3n…
 ```
 
-Opening is skipped deliberately with `--no-open`, with `--json`, when stdout is
-not a terminal, and whenever `CI` is set to anything at all: a window is for a
-person at a terminal, not for a build agent. The URL is printed in every one of
-those cases, and a failed opener degrades to exactly the same thing.
+Window opening is skipped with `--no-open`, `--json`, non-interactive stdout,
+and CI. The URL is printed in those cases.
 
 Add `--no-watch` to open the runner without starting a suite, and put Vitest
 arguments after `--`:

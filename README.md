@@ -8,11 +8,11 @@
 [![Docs](https://github.com/Gorce-AI/termwright/actions/workflows/docs.yml/badge.svg)](https://gorce-ai.github.io/termwright/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Termwright tests terminal applications through a real pseudo-terminal. It sends
-the same keyboard, paste, resize, and mouse input as a user, and asserts against
-the rendered terminal. Framework integrations add roles, accessible names,
-state, geometry, and exact pointer targeting where the framework can provide
-them.
+Termwright is an end-to-end testing framework for command-line and terminal
+user-interface applications. It runs programs in a real pseudo-terminal, sends
+keyboard, paste, resize, and mouse input, and asserts the rendered terminal.
+Framework integrations add roles, accessible names, state, geometry, and exact
+pointer targeting where the framework can provide them.
 
 ## Install
 
@@ -60,8 +60,10 @@ without a window.
 
 - [Getting started](https://gorce-ai.github.io/termwright/getting-started/)
 - [Writing tests](https://gorce-ai.github.io/termwright/writing-tests/)
+- [Running tests](https://gorce-ai.github.io/termwright/running-tests/)
 - [Runner UI](https://gorce-ai.github.io/termwright/tools/runner-ui/)
 - [Framework integrations](https://gorce-ai.github.io/termwright/adapters/)
+- [Examples](https://gorce-ai.github.io/termwright/guides/examples/)
 - [API and CLI reference](https://gorce-ai.github.io/termwright/reference/test-api/)
 
 The compatibility matrix lists exact supported framework versions and which

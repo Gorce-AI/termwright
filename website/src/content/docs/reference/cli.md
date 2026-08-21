@@ -106,4 +106,4 @@ candidates. Library errors include stable kinds such as `timeout`,
 `process-exited`, and `session-closed`.
 
 See [Runner UI](../../tools/runner-ui/), [Traces and reports](../../tools/traces-reports/),
-and [MCP tools](../../guides/mcp/).
+and [MCP tools](../mcp/).

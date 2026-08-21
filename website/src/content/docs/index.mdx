@@ -1,9 +1,9 @@
 ---
 title: Termwright
-description: Test terminal applications through a real PTY, with semantic locators when your framework can provide them.
+description: End-to-end testing for command-line and terminal user-interface applications.
 template: splash
 hero:
-  tagline: Test terminal applications through a real pseudo-terminal. Drive real keyboard and mouse input, assert the rendered screen, and use roles and names when your TUI framework exposes semantics.
+  tagline: End-to-end testing for terminal applications. Run CLIs and TUIs in a real PTY, drive real input, assert rendered or semantic UI, and debug failures with retained traces.
   actions:
     - text: Write your first test
       link: getting-started/
@@ -45,6 +45,12 @@ Semantic locators such as `getByRole()` require a supported framework probe or
 application integration. Programs without semantics remain testable through
 text, cells, keyboard input, snapshots, and process behavior.
 
+[![Termwright Runner showing an execution timeline, terminal replay, and semantic inspector.](/termwright/images/runner/replay-player.png)](/termwright/images/runner/replay-player.png)
+
+The desktop Runner opens by default with `termwright ui`. Use it to run a
+directory, file, or case; follow concurrent tests; and inspect retained terminal,
+semantic, log, and retry evidence.
+
 <CardGrid>
   <Card title="Write tests" icon="document">
     Start a process, interact with it, and use retrying assertions. [Follow the tutorial →](getting-started/)
@@ -57,7 +63,7 @@ text, cells, keyboard input, snapshots, and process behavior.
   </Card>
 </CardGrid>
 
-## What Termwright can test
+## Core workflows
 
 | Need | Recommended API |
 | --- | --- |
@@ -69,11 +75,15 @@ text, cells, keyboard input, snapshots, and process behavior.
 | Protect application meaning | `await expect(app).toMatchSemanticSnapshot()` |
 | Investigate a failure | Runner replay or a self-contained HTML report |
 
-## Choose the right mode
+## Start with the normal workflow
 
-- Use the normal test API for CI and repeatable test suites.
-- Use the Runner UI while developing or investigating a failure.
-- Use Gherkin when feature prose is part of the project workflow.
-- Use the low-level driver directly only when you are building custom tooling.
+Write repeatable tests with `termwright/test`, run them with Vitest in CI, and
+use the Runner while developing or investigating failures. Add a framework
+integration when you need roles, accessible names, state, geometry, or exact
+pointer targeting.
+
+Gherkin is available for teams that keep executable feature prose. The
+low-level driver is an advanced surface for custom tooling, not the normal test
+authoring path.
 
 [Install Termwright and run your first test →](getting-started/)

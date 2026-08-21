@@ -3,7 +3,7 @@ title: Textual
 description: Run a Python Textual application with semantic locators, geometry, and exact hit testing.
 ---
 
-The Python probe observes an ordinary Textual application. Use it when tests
+The Python integration observes an ordinary Textual application. Use it when tests
 need widgets, roles, names, state, geometry, or pointer targeting.
 
 ## Install and launch
@@ -44,7 +44,7 @@ geometry, or visibility.
 
 ## Supported behavior
 
-Textual 8.2 is verified. The probe observes stable widget identity, intended
+Textual 8.2 is verified. The integration observes stable widget identity, intended
 and clipped geometry, ancestor display, focus, native widget state, and exact
 fresh-pointer ownership through `Screen.get_widget_at()`. Active mouse capture
 is outside that contract.

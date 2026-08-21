@@ -1,16 +1,18 @@
 import { existsSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright';
 import { buildCrashedFixtureTrace, buildFixtureTrace, FIXTURE_TREES } from '../__fixtures__/build-trace.js';
+import { writeInlineReport } from '../inline-report.js';
 import { RUN_MANIFEST_VERSION, writeRunManifest } from '../runs.js';
 import { startUiServer, type UiServer } from '../server.js';
 
 const CAPTURE = process.env['TERMWRIGHT_CAPTURE_DOCS'] === '1';
 const OUTPUT_DIR = fileURLToPath(new URL('../../../../website/public/images/runner/', import.meta.url));
+const APP_DIR = fileURLToPath(new URL('../../dist/app/', import.meta.url));
 const VIEWPORT = { width: 1440, height: 900 } as const;
 
 let browser: Browser;
@@ -38,6 +40,8 @@ describe.skipIf(!CAPTURE)('Runner documentation screenshots', () => {
     await captureReplayAndSemantics();
     await captureRunHistory();
     await captureRecorder();
+    await captureSettings();
+    await captureInlineReport();
   });
 });
 
@@ -144,15 +148,78 @@ async function captureRunHistory(): Promise<void> {
 }
 
 async function captureRecorder(): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), 'termwright-doc-recorder-'));
+  temporaryDirectories.push(directory);
+  const program = join(directory, 'permission-demo');
+  await writeFile(program, [
+    '#!/usr/bin/env node',
+    'process.stdin.setEncoding("utf8");',
+    'process.stdout.write("Permission required\\n  [Approve]    Reject\\n");',
+    'process.stdin.on("data", (data) => process.stdout.write(`received ${data}`));',
+    'setInterval(() => undefined, 1_000);',
+  ].join('\n'), 'utf8');
+  await chmod(program, 0o755);
+  const originalPath = process.env['PATH'];
+  process.env['PATH'] = `${directory}:${originalPath ?? ''}`;
+  try {
+    const server = await openServer();
+    const page = await openPage(server);
+    await page.getByRole('button', { name: 'Specs', exact: true }).click();
+    await page.getByRole('button', { name: /New test/u }).click();
+    await page.getByRole('menuitem', { name: 'Record test' }).click();
+    await page.getByRole('dialog', { name: 'Record a terminal test' }).waitFor();
+    await page.getByLabel('Command').fill('permission-demo');
+    await page.getByLabel('Save destination').fill('tests/permission-dialog.test.ts');
+    await screenshot(page, 'recorder.png');
+    await page.getByRole('button', { name: 'Start recording' }).click();
+    const stop = page.getByRole('button', { name: 'Stop recording' });
+    await stop.waitFor({ timeout: 15_000 });
+    await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('Permission required');
+    await page.locator('.xterm-helper-textarea').focus();
+    await page.keyboard.press('Enter');
+    await page.getByPlaceholder('Name the next step').fill('approve the command');
+    await page.getByRole('button', { name: 'Add step' }).click();
+    await screenshot(page, 'recorder-active.png');
+    await stop.click();
+    const review = page.getByRole('dialog', { name: 'Generated test' });
+    await review.waitFor();
+    await expect.poll(() => review.innerText()).toContain('approve the command');
+    await screenshot(page, 'recorder-review.png');
+  } finally {
+    if (originalPath === undefined) delete process.env['PATH'];
+    else process.env['PATH'] = originalPath;
+  }
+}
+
+async function captureSettings(): Promise<void> {
   const server = await openServer();
   const page = await openPage(server);
-  await page.getByRole('button', { name: 'Specs', exact: true }).click();
-  await page.getByRole('button', { name: /New test/u }).click();
-  await page.getByRole('menuitem', { name: 'Record test' }).click();
-  await page.getByRole('dialog', { name: 'Record a terminal test' }).waitFor();
-  await page.getByLabel('Command').fill('node examples/permission-dialog.mjs');
-  await page.getByLabel('Save destination').fill('tests/permission-dialog.test.ts');
-  await screenshot(page, 'recorder.png');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByLabel('Timeline density').selectOption('comfortable');
+  await page.getByLabel('Motion').selectOption('reduce');
+  await screenshot(page, 'settings.png');
+}
+
+async function captureInlineReport(): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), 'termwright-doc-report-'));
+  temporaryDirectories.push(directory);
+  const sourceTrace = await buildCrashedFixtureTrace();
+  temporaryDirectories.push(dirname(sourceTrace));
+  const trace = join(directory, 'crashed.twtrace');
+  await cp(sourceTrace, trace, { recursive: true });
+  const report = join(directory, 'report.html');
+  const originalCwd = process.cwd();
+  process.chdir(directory);
+  try {
+    await writeInlineReport('crashed.twtrace', report, { appDir: APP_DIR, cwd: '/workspace/permission-demo' });
+  } finally {
+    process.chdir(originalCwd);
+  }
+  const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: 'dark', reducedMotion: 'reduce' });
+  pages.push(page);
+  await page.goto(pathToFileURL(report).href, { waitUntil: 'domcontentloaded' });
+  await page.locator('.tw-replay-controls').waitFor({ timeout: 15_000 });
+  await screenshot(page, 'html-report.png');
 }
 
 async function openServer(options: Parameters<typeof startUiServer>[0] = {}): Promise<UiServer> {
@@ -177,6 +244,7 @@ async function screenshot(page: Page, name: string): Promise<void> {
   const visibleText = await page.locator('body').innerText();
   const home = process.env['HOME'];
   if (home !== undefined) expect(visibleText).not.toContain(home);
+  expect(visibleText).not.toMatch(/\/(?:Users|home|var\/folders|opt\/homebrew)\//u);
   expect(visibleText).not.toMatch(/[?&]token=/u);
   const target = join(OUTPUT_DIR, name);
   await page.screenshot({ path: target, fullPage: false, animations: 'disabled' });

@@ -1,6 +1,6 @@
 ---
 title: Framework integrations
-description: Decide whether your terminal application needs a probe and choose the supported integration for its framework.
+description: Decide whether your terminal application needs a framework integration and choose the supported one.
 ---
 
 Every terminal application can be tested through its rendered screen and PTY.
@@ -35,11 +35,11 @@ source of truth for exact versions, runtimes, packages, and limitations.
 
 ## What integration changes
 
-A probe observes the framework at runtime and publishes a semantic tree. It
+A framework integration observes runtime state and publishes a semantic tree. It
 does not replace rendering or call application callbacks for test actions.
 Keyboard and pointer input still cross the PTY boundary.
 
-Supported probes remain dormant without the Termwright endpoint and token. A
+Integration probes remain dormant without the Termwright endpoint and token. A
 normal application launch does not connect or publish semantic data.
 
 ## Add application intent only when needed
@@ -64,7 +64,7 @@ await expect(app.getByRole('button', {name: 'Approve'})).toBeAttached();
 
 Then inspect `app.capabilities()` or the Runner inspector. Do not infer a
 working integration from the package being installed; the launch command must
-actually inject or use the probe.
+actually enable it.
 
 ## Add another framework
 

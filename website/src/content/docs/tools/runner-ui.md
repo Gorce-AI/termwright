@@ -14,9 +14,16 @@ npx termwright ui
 Use `--browser` when you want the same UI in your system browser. Use
 `--no-open` for a server-only process.
 
-## Run a test scope
+## Runner at a glance
 
-[![The test catalog with directory, file, and individual test Run controls.](/termwright/images/runner/spec-catalog.png)](/termwright/images/runner/spec-catalog.png)
+[![The full Runner test catalog with navigation, test hierarchy, status summary, and run controls.](/termwright/images/runner/spec-catalog.png)](/termwright/images/runner/spec-catalog.png)
+
+- **Specs** selects a directory, file, or case to run.
+- **Runner** follows live executions and replays retained evidence.
+- **Runs** opens dated reports from earlier runs.
+- **Settings** changes workspace layout and behavior.
+
+## Run tests
 
 The catalog groups tests by directory and file. Run a directory, a file, one
 test, or the complete visible catalog. Expanding a group does not run it.
@@ -112,20 +119,12 @@ report uses the same React viewer with live-only controls removed.
 
 ## Change workspace preferences
 
-Settings controls navigation width, timeline density and following, default
-inspector state, replay speed, reduced motion, source editor, and saved layout.
-Reset layout leaves unrelated preferences intact; Reset all restores every UI
-preference. Diagnostics copied from Settings omit authentication values,
+[![Runner Settings with workspace, replay, accessibility, editor, and reset controls.](/termwright/images/runner/settings.png)](/termwright/images/runner/settings.png)
+
+Settings controls layout, timeline behavior, replay speed, reduced motion, and
+the source editor. **Reset layout** preserves unrelated preferences; **Reset
+all** restores every UI preference. Copied diagnostics omit authentication,
 terminal output, raw semantic data, and generated source.
 
-## Regenerate these screenshots
-
-The screenshots on this page come from the current built Runner and
-deterministic fixtures:
-
-```sh
-pnpm docs:screenshots
-```
-
-See the repository [Documentation Guide](https://github.com/gorce-ai/termwright/blob/main/docs/DOCUMENTATION_GUIDE.md)
-for the screenshot review and update policy.
+See [Runner accessibility](../accessibility/) for keyboard, focus, and reduced
+motion behavior.

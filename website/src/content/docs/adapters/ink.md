@@ -1,12 +1,12 @@
 ---
 title: Ink
-description: Add semantic locators to an Ink 7 application with the zero-source-change probe.
+description: Add semantic locators to an Ink 7 application with the Termwright integration.
 ---
 
 Use the Ink integration when tests need roles, names, focus, and retained
 component state. Plain terminal input and text assertions work without it.
 
-## Install the probe
+## Install the integration
 
 ```sh
 npm install --save-dev @termwright/probe-ink

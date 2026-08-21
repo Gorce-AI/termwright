@@ -9,9 +9,12 @@ configured expect timeout.
 
 ```ts
 import {expect, test} from 'termwright/test';
+import {fileURLToPath} from 'node:url';
+
+const profile = fileURLToPath(new URL('../profile.js', import.meta.url));
 
 test('saves a profile', async ({terminal}) => {
-  const app = await terminal.launch({command: ['node', 'profile.js']});
+  const app = await terminal.launch({command: [process.execPath, profile]});
   await app.press('Enter');
   await expect(app).toHaveText('Saved');
 });
@@ -81,7 +84,7 @@ and coordinate space.
 ## Assert application logs
 
 ```ts
-await expect(terminal).toHaveLogged({
+await expect(app).toHaveLogged({
   minLevel: 'warn',
   message: /retrying connection/,
 });
@@ -89,6 +92,10 @@ await expect(terminal).toHaveLogged({
 
 By default, an application `error` log can fail an otherwise passing test. See
 [Application logs](../app-logs/).
+
+Assert on `app` for one launched session. Assert on the `terminal` fixture when
+a test launches several sessions and the query should cover their combined log
+collection.
 
 ## Configure the assertion timeout
 

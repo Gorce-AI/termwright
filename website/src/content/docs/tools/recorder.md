@@ -18,6 +18,8 @@ termwright ui --record --out-file tests/permission.test.ts -- node app.js
 Or open Specs, choose **New test**, and select **Record test**. Enter the command
 and destination, then start the session.
 
+[![Recorder launch dialog with command and output file fields.](/termwright/images/runner/recorder.png)](/termwright/images/runner/recorder.png)
+
 ## Build the test
 
 While recording:
@@ -30,6 +32,8 @@ While recording:
 The recorder shows generated source as the session changes. Semantic actions
 are available only when the application publishes the required target and
 capability.
+
+[![An active recording with the real terminal and recorder controls visible.](/termwright/images/runner/recorder-active.png)](/termwright/images/runner/recorder-active.png)
 
 ## Stop and review
 
@@ -44,6 +48,8 @@ Choose **Stop recording** to enter review. Check:
 Choose **Save** to write the file. Choose **Discard** to close the recording
 without writing it. Closing the review dialog with Escape also leaves the
 destination untouched.
+
+[![Recorder review dialog showing generated test source before it is saved.](/termwright/images/runner/recorder-review.png)](/termwright/images/runner/recorder-review.png)
 
 ## Use the generated test as a starting point
 

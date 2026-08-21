@@ -34,8 +34,10 @@ test('saves a profile', async ({terminal, step}) => {
 Pass a command for one test:
 
 ```ts
+const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
+
 const app = await terminal.launch({
-  command: ['node', 'dist/cli.js'],
+  command: [process.execPath, cli],
 });
 ```
 
@@ -48,8 +50,10 @@ Files are written into the test's isolated working directory before the process
 starts:
 
 ```ts
+const editor = fileURLToPath(new URL('../editor.js', import.meta.url));
+
 const app = await terminal.launch({
-  command: ['node', 'editor.js'],
+  command: [process.execPath, editor],
   files: {
     'config.json': JSON.stringify({theme: 'dark'}),
     'notes/todo.md': '- write tests\n',
@@ -58,7 +62,7 @@ const app = await terminal.launch({
 ```
 
 Use `template` when a test needs an existing directory tree. See
-[Test data and fixtures](../guides/test-data/).
+[Test files and isolation](../guides/test-files/).
 
 ## Wait for observable state
 

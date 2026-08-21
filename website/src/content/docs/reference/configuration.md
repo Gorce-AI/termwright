@@ -55,6 +55,8 @@ Values are resolved in this order, with later values winning:
 Each fixture uses a private temporary working directory and a controlled
 environment. Set `cwd`, `terminalProfile`, `envMode`, or semantic probe options
 on an individual `terminal.launch()` call because they are session-specific.
+See [Test files and isolation](../../guides/test-files/) before opting into a
+shared working directory.
 
 ## Assertion and wait timeouts
 

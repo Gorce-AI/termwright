@@ -1,9 +1,9 @@
 ---
-title: Releasing
+title: Releases and versioning
 description: How termwright versions and ships — manual pipelines, protocol lockstep, and what a version number promises you.
 ---
 
-This page is for people who consume termwright releases. The operational
+This page describes the release contract for people who consume Termwright. The operational
 runbook — which workflow to dispatch, in what order, what to do when a registry
 fails — lives in
 [`RELEASING.md`](https://github.com/gorce-ai/termwright/blob/main/RELEASING.md)

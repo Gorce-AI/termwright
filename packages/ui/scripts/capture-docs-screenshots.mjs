@@ -13,6 +13,10 @@ const expected = [
   'semantics-inspector.png',
   'run-history.png',
   'recorder.png',
+  'recorder-active.png',
+  'recorder-review.png',
+  'settings.png',
+  'html-report.png',
 ];
 
 await run('pnpm', ['run', 'build:app']);

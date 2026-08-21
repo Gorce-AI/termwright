@@ -29,28 +29,26 @@ Requires Node >= 22 and Vitest >= 3.2. ESM only.
 ## Usage
 
 ```ts
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '@termwright/test';
 
+const agent = fileURLToPath(new URL('../agent.js', import.meta.url));
+
 test('asks before running a command', async ({ terminal, step }) => {
-  const app = await terminal.launch({ command: ['node', 'agent.js'] });
+  const app = await terminal.launch({ command: [process.execPath, agent] });
   await app.waitForText('Permission required');
 
-  // The whole tree, matched partially: children you omit are don't-care.
-  await expect(app).toMatchSemanticSnapshot(`
-    - dialog "Permission" [modal]:
-        - button "Approve" [focused]
-        - button /^Rej/
-  `);
-
   await step('approve', async () => {
-    await app.getByRole('button', { name: 'Approve' }).activate();
+    await app.press('Enter');
   });
 
-  // No sleeps: the matcher re-probes until the adapter publishes a new tree.
-  await expect(app.getByRole('dialog')).not.toBeVisible();
   await expect(app).toHaveText('running: ls -la');
 });
 ```
+
+This generic path works without a semantic integration. Use semantic locators
+and visibility matchers only when the selected framework integration publishes
+the required evidence.
 
 The session closes itself, its working directory is removed, and — when the test
 fails — its `.twtrace` archive is kept for the report.
@@ -76,14 +74,16 @@ open a pseudo-terminal, and a suite that reports that as a failure is a suite
 people switch off. The preset ships the probe so no project has to write it:
 
 ```ts
+import { fileURLToPath } from 'node:url';
 import { describe } from 'vitest';
 import { ptyAvailable, test, expect } from '@termwright/test';
 
 const pty = await ptyAvailable();
+const appPath = fileURLToPath(new URL('../app.js', import.meta.url));
 
 describe.skipIf(!pty)('the app', () => {
   test('starts', async ({ terminal }) => {
-    const app = await terminal.launch({ command: ['node', 'app.js'] });
+    const app = await terminal.launch({ command: [process.execPath, appPath] });
     await expect(app).toHaveText('ready');
   });
 });
@@ -125,13 +125,16 @@ concatenated.
 
 ## Files the program starts with
 
-A terminal program's input is mostly files. Declare them on the launch and they
-exist in the test's private directory — which is also the program's `cwd` —
-before it starts:
+Declare files the application needs on the launch. They exist in the test's
+private directory — which is also the program's `cwd` — before it starts:
 
 ```ts
+import { fileURLToPath } from 'node:url';
+
+const editorPath = fileURLToPath(new URL('../editor.js', import.meta.url));
+
 const app = await terminal.launch({
-  command: ['node', 'editor.js'],
+  command: [process.execPath, editorPath],
   files: {
     'config.json': JSON.stringify({ theme: 'dark' }),
     'notes/todo.md': '- write tests\n',
@@ -354,9 +357,13 @@ a log file, or let an instrumented adapter publish structured records, and the
 test can query both the same way:
 
 ```ts
+import { fileURLToPath } from 'node:url';
+
+const editorPath = fileURLToPath(new URL('../editor.js', import.meta.url));
+
 test('saves the file', async ({ terminal }) => {
   const app = await terminal.launch({
-    command: ['node', 'editor.js'],
+    command: [process.execPath, editorPath],
     logs: [{ path: 'var/editor.log', label: 'editor' }],
   });
 
@@ -473,12 +480,15 @@ so whatever the program printed on its way out — secrets included — is in it
 
 ```ts
 // termwright.config.ts
+import { fileURLToPath } from 'node:url';
 import { defineTermwrightConfig, XTERM_PALETTE } from '@termwright/test';
+
+const appPath = fileURLToPath(new URL('./app.js', import.meta.url));
 
 export default defineTermwrightConfig({
   columns: 100,
   rows: 30,
-  command: ['node', 'app.js'],
+  command: [process.execPath, appPath],
   trace: 'retain-on-failure',            // 'on' | 'retain-on-failure' | 'off'
   outputDir: 'termwright-report',
   timeouts: { expect: 5_000, action: 5_000 },

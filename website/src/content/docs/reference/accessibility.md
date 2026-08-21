@@ -1,44 +1,9 @@
 ---
-title: Accessibility
-description: Keyboard and screen-reader behavior in Runner UI, plus the AccessKit tree export.
+title: AccessKit export
+description: Convert semantic snapshots into AccessKit data for an emulator or platform bridge.
 ---
 
-This page covers accessibility of the Termwright Runner and the optional export
-of a terminal application's semantic tree. Termwright does not make an
-application running inside a terminal directly available to platform screen
-readers.
-
-## Runner UI accessibility
-
-Runner uses native controls and ARIA composite patterns for its navigation,
-execution tree, tabs, dialogs, splitters, and inspector. Keyboard interaction
-includes:
-
-- arrow, Home, and End navigation in composite lists and trees;
-- Enter and Space activation;
-- keyboard-operated splitters;
-- trapped focus and Escape dismissal in modal dialogs;
-- focus restoration when a dialog or popover closes.
-
-Status is communicated with text and icons as well as color. Reduced motion can
-follow the operating system or be enabled in Settings.
-
-Automated browser tests verify roles, names, focus order, keyboard interaction,
-and computed accessibility-tree structure. They do not replace testing with
-VoiceOver, NVDA, or another screen reader.
-
-## Semantic inspector accessibility
-
-The inspector maps protocol roles and state to ARIA only where the corresponding
-ARIA attribute is valid. Attributes are removed when state changes. Decorative
-role captions are hidden from assistive technology.
-
-The tree uses the `tree` / `treeitem` / `group` pattern. Selecting a node updates
-the readable property view without requiring pointer input.
-
-## Export an AccessKit tree
-
-Adapter and emulator authors can convert a `SemanticSnapshot` to AccessKit's
+Emulator and platform-bridge authors can convert a `SemanticSnapshot` to AccessKit's
 serde-compatible `TreeUpdate` shape:
 
 ```ts

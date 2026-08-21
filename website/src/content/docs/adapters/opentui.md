@@ -3,7 +3,7 @@ title: OpenTUI
 description: Observe OpenTUI Renderables and use exact semantic pointer targeting.
 ---
 
-The OpenTUI probe observes the existing Renderable tree. It does not replace the
+The OpenTUI integration observes the existing Renderable tree. It does not replace the
 renderer or require application source changes.
 
 ## Install and launch
@@ -46,7 +46,7 @@ remain observed framework facts.
 
 ## Supported behavior
 
-OpenTUI 0.5 is verified. The probe observes stable identity, effective display,
+OpenTUI 0.5 is verified. The integration observes stable identity, effective display,
 focus, values, intended geometry, and the committed native hit grid. Exact
 pointer actions are supported. OpenTUI does not expose ancestor clipping, so
 visible rectangles are unsupported. The hit result describes a fresh pointer,

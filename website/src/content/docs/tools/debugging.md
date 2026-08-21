@@ -15,7 +15,7 @@ when they are available.
 2. Open the Runner inspector and confirm that a semantic tree exists.
 3. Check the role, accessible name, and scope shown in the tree.
 
-**Common causes:** the probe was not injected, the framework does not retain
+**Common causes:** the framework integration was not enabled, the framework does not retain
 that semantic fact, the element is on an inactive screen, or the accessible
 name differs from its visual decoration.
 

@@ -191,21 +191,22 @@ fully paired revision is published.
 
 ## The data model
 
-A snapshot carries a session id, a revision, the viewport, `rootIds`, the nodes,
-and optionally a `cursor` (position, visibility, shape). A node carries an id,
-an optional `parentId`, role and name, plus optional description, value,
-portable `state`, application-owned JSON `extended` state, action hints,
-`labelledBy` / `describedBy` relationships, text ranges, `testId` and `bounds`.
-An unrecognised widget survives as `role: 'generic'` and must carry its native
+A v2 snapshot carries a session id, revision, viewport, coordinate space,
+`rootIds`, nodes, an evidence-qualified `hitGrid`, and optionally a cursor. A
+node carries identity and hierarchy, role and name, optional description and
+value, portable state, application-owned `extended` JSON, action hints,
+relationships, text ranges, `testId`, and evidence-qualified display and
+geometry observations. Intended and visible rectangles are separate facts.
+
+An unrecognised widget survives as `role: 'generic'` and carries its native
 `frameworkType` rather than disappearing from the tree.
 
 `p` records the node's primary provenance and `px` records per-field
 exceptions. Both use the closed set `annotation | recognizer | framework |
 correlation | heuristic`. Legacy v1 `occlusion: known` means only that paint
 order was observable. It does **not** identify the topmost input recipient and
-cannot vouch for pointer targeting. Bounds without `absolute-bounds` may still
-be useful for inspection, but the driver never treats them as terminal cell
-addresses. New consumers use the qualified observations described in
+cannot vouch for pointer targeting. The driver never treats v1 bounds as
+qualified terminal-cell evidence. Current consumers use the observations described in
 [Geometry, visibility and pointer ownership](../geometry-visibility/).
 
 Validation enforces: unique ids, parents that exist, acyclic parent chains,
@@ -221,17 +222,16 @@ them: **every node without a `parentId` must appear in `rootIds`**, and
 **`labelledBy` / `describedBy` must reference nodes present in the same
 snapshot**.
 
-### `bounds` is optional
+### Legacy v1 bounds
 
-By design, from day one. Class-B and class-C frameworks publish role-and-name
-nodes without trustworthy coordinates, and even a class-A adapter drops bounds
-wholesale when it cannot observe its own offset — Ink does exactly that when the
-tree contains `<Static>`. **A snapshot carrying no bounds at all is valid.**
-Consumers can still use non-geometric APIs such as attachment, text, and
-keyboard input; geometric APIs remain unavailable. A pointer action additionally needs
-the producer's `absolute-bounds` capability and proof of the exact recipient;
-paint-order knowledge alone is insufficient. Keyboard locators remain
-available when either fact is absent.
+V1 may carry an unqualified `bounds` field. The v2 driver does not project that
+field into `geometry()`, `visibility()`, or pointer ownership. A v1 compatibility
+session therefore keeps non-geometric locators and keyboard input, while
+qualified geometry matchers and semantic pointer actions remain unavailable.
+
+V2 producers publish `intendedRect`, `visibleRect`, and `hitGrid` observations
+directly. Missing evidence is represented as `unknown` or `unsupported`, not by
+reusing a legacy rectangle.
 
 ### Roles
 
@@ -265,7 +265,7 @@ before writing, so a stale or hand-edited vector fails at generation time.
 
 ## Versioning
 
-The protocol version is negotiated in the handshake and every language client is
-bound to it. Additive changes (new capabilities, diffs, new optional fields)
-land in 1.x; anything that would invalidate an existing adapter's frames is a
-version bump, not a patch.
+The protocol version is negotiated in the handshake and every language client
+is bound to it. Additive changes stay within the selected major. A change that
+invalidates an existing producer frame requires a new protocol major rather
+than a patch-level reinterpretation.

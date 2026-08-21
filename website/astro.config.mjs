@@ -19,7 +19,7 @@ export default defineConfig({
 			},
 			favicon: '/favicon.svg',
 			description:
-				'Test terminal applications through a real PTY, terminal input, rendered cells, and framework semantics.',
+				'End-to-end testing for terminal applications, with real input, retrying assertions, traces, and framework semantics.',
 			social: [
 				{
 					icon: 'github',
@@ -38,6 +38,9 @@ export default defineConfig({
 					items: [
 						{label: 'Getting started', slug: 'getting-started'},
 						{label: 'Writing tests', slug: 'writing-tests'},
+						{label: 'Running tests', slug: 'running-tests'},
+						{label: 'Migration', slug: 'guides/migrating'},
+						{label: 'Examples', slug: 'guides/examples'},
 					],
 				},
 				{
@@ -47,7 +50,8 @@ export default defineConfig({
 						{label: 'Actions and input', slug: 'guides/actions'},
 						{label: 'Assertions', slug: 'guides/assertions'},
 						{label: 'Snapshots', slug: 'guides/snapshots'},
-						{label: 'Test data and fixtures', slug: 'guides/test-data'},
+						{label: 'Test files and isolation', slug: 'guides/test-files'},
+						{label: 'Extend test fixtures', slug: 'guides/fixtures'},
 						{label: 'Gherkin scenarios', slug: 'guides/gherkin'},
 						{label: 'Ink component tests', slug: 'guides/component-testing'},
 					],
@@ -60,6 +64,8 @@ export default defineConfig({
 						{label: 'Traces and reports', slug: 'tools/traces-reports'},
 						{label: 'Record a test', slug: 'tools/recorder'},
 						{label: 'Application logs', slug: 'guides/app-logs'},
+						{label: 'AI agents', slug: 'guides/mcp'},
+						{label: 'Runner accessibility', slug: 'tools/accessibility'},
 					],
 				},
 				{
@@ -73,7 +79,6 @@ export default defineConfig({
 						{label: 'tview (Go)', slug: 'adapters/tview'},
 						{label: 'Ratatui (Rust)', slug: 'adapters/ratatui'},
 						{label: 'Bubble Tea', slug: 'adapters/bubbletea'},
-						{label: 'Write an integration', slug: 'adapters/writing-an-adapter'},
 					],
 				},
 				{
@@ -82,7 +87,6 @@ export default defineConfig({
 					items: [
 						{label: 'Configuration', slug: 'reference/configuration'},
 						{label: 'CI and retries', slug: 'guides/ci'},
-						{label: 'Terminal profiles', slug: 'guides/terminal-profiles'},
 					],
 				},
 				{
@@ -91,6 +95,7 @@ export default defineConfig({
 					items: [
 						{label: 'Terminal semantics', slug: 'concepts/semantics'},
 						{label: 'Waiting and retries', slug: 'concepts/waiting-retries'},
+						{label: 'Terminal profiles', slug: 'guides/terminal-profiles'},
 						{label: 'Why a real terminal?', slug: 'guides/why-not-tmux'},
 					],
 				},
@@ -98,25 +103,26 @@ export default defineConfig({
 					label: 'Reference',
 					collapsed: true,
 					items: [
-						{label: 'Test API', slug: 'reference/test-api'},
+						{label: 'Test API overview', slug: 'reference/test-api'},
 						{label: 'CLI and exit codes', slug: 'reference/cli'},
+						{label: 'Gherkin reference', slug: 'reference/gherkin'},
+						{label: 'MCP tools', slug: 'reference/mcp'},
 						{label: 'Errors', slug: 'reference/errors'},
 						{label: 'Framework compatibility', slug: 'reference/compatibility'},
 						{label: 'Geometry and visibility', slug: 'reference/geometry-visibility'},
 						{label: 'Packages and exports', slug: 'reference/packages'},
 						{label: 'Platforms and limitations', slug: 'reference/limitations'},
-						{label: 'MCP tools', slug: 'guides/mcp'},
+						{label: 'Releases and versioning', slug: 'reference/releasing'},
 					],
 				},
 				{
 					label: 'Internals and contributing',
 					collapsed: true,
 					items: [
+						{label: 'Write an integration', slug: 'adapters/writing-an-adapter'},
 						{label: 'Semantic protocol', slug: 'reference/protocol'},
-						{label: 'Accessibility', slug: 'reference/accessibility'},
-						{label: 'Releasing', slug: 'reference/releasing'},
+						{label: 'AccessKit export', slug: 'reference/accessibility'},
 						{label: 'Architecture decisions', slug: 'reference/decisions'},
-						{label: 'Migrate to current APIs', slug: 'guides/migrating'},
 					],
 				},
 			],
