@@ -176,7 +176,7 @@
             "id": "tview-v0.42.0",
             "frameworkVersion": "v0.42.0",
             "modules": [
-              { "name": "github.com/rivo/tview", "version": "v0.42.0", "patchSetVersion": 9 }
+              { "name": "github.com/rivo/tview", "version": "v0.42.0", "patchSetVersion": 10 }
             ]
           }
         ]

@@ -263,6 +263,15 @@ func TestTheProbeRecognisesARejectedSnapshotSeparately(t *testing.T) {
 	}
 }
 
+func TestMarkerCounterRecognisesOnlyTermwrightOSCMarkers(t *testing.T) {
+	text := "plain\x1b]0;window title\x07" +
+		"\x1b]8487;twm;1;first\x07between" +
+		"\x1b]8487;twm;2;second\x07"
+	if markers := countMarkers(text); markers != 2 {
+		t.Fatalf("counted %d Termwright markers, want 2", markers)
+	}
+}
+
 func TestAnnotationsResolveKeysAfterTheWholeRetainedTreeIsKnown(t *testing.T) {
 	annotate.Reset()
 	t.Cleanup(annotate.Reset)
@@ -391,9 +400,11 @@ func TestQualifiedSnapshotReportsOnlyObservableTviewGeometry(t *testing.T) {
 
 func countMarkers(text string) int {
 	count := 0
-	for index := 0; index+1 < len(text); index++ {
-		if text[index] == 0x1b && text[index+1] == 'P' {
+	const prefix = "\x1b]8487;twm;"
+	for index := 0; index+len(prefix) <= len(text); index++ {
+		if text[index:index+len(prefix)] == prefix {
 			count++
+			index += len(prefix) - 1
 		}
 	}
 	return count
