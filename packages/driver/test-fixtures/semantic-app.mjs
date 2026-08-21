@@ -27,6 +27,7 @@ const helloDelay = Number(process.env['TERMWRIGHT_FIXTURE_HELLO_DELAY'] ?? '0');
 // Prints a plain-text receipt after each render marker. Opt-in, because the
 // extra line is visible and other packages snapshot this fixture's screen.
 const markProbe = process.env['TERMWRIGHT_FIXTURE_MARK_PROBE'] === '1';
+const terminalMouseEnabled = process.env['TERMWRIGHT_FIXTURE_MOUSE_MODE'] !== '0';
 const coverApproveCenter = process.env['TERMWRIGHT_FIXTURE_COVER_APPROVE_CENTER'] === '1';
 const conditionStates = process.env['TERMWRIGHT_FIXTURE_CONDITIONS'] === '1';
 const duplicateSemanticKey = process.env['TERMWRIGHT_FIXTURE_DUPLICATE_KEY'] === '1';
@@ -271,7 +272,9 @@ function decodeFrames(buffer, onMessage) {
   }
 }
 
-process.stdout.write(`${hoverTracking ? '\x1b[?1003h' : '\x1b[?1000h'}\x1b[?1006h`);
+if (terminalMouseEnabled) {
+  process.stdout.write(`${hoverTracking ? '\x1b[?1003h' : '\x1b[?1000h'}\x1b[?1006h`);
+}
 process.stdin.setRawMode?.(true);
 process.stdin.resume();
 process.stdin.on('data', (chunk) => {

@@ -218,6 +218,7 @@ class InkFixtureHarnessImpl extends ForwardingHarness implements InkFixtureHarne
     super(session);
     this.#control = control;
     this.#settle = settle;
+    void session.exit.then(() => control.fixtureExited());
   }
 
   async rerender(props: JsonProps, opts?: SettleOptions): Promise<void> {

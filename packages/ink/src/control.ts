@@ -76,9 +76,10 @@ export class ControlChannel {
   #accepted: Socket | null = null;
   #socket: Socket | null = null;
   #buffer = '';
-  #pending: ((reply: CommandReply) => void) | null = null;
-  #waitingForFixture: (() => void)[] = [];
+  #pending: { readonly resolve: (reply: CommandReply) => void; readonly reject: (error: Error) => void } | null = null;
+  #waitingForFixture: { readonly resolve: () => void; readonly reject: (error: Error) => void }[] = [];
   #everAttached = false;
+  #fixtureGone = false;
   #closed = false;
 
   private constructor(server: Server, endpoint: string, token: string, directory: string | null) {
@@ -124,6 +125,7 @@ export class ControlChannel {
 
   /** Resolves when the fixture attaches, or rejects when the wait runs out. */
   async waitForFixture(timeoutMs: number): Promise<void> {
+    if (this.#closed || this.#fixtureGone) throw this.#sessionClosed();
     if (this.#socket !== null) return;
     if (this.#everAttached) {
       // It was here and it is not any more. Waiting out the full timeout would
@@ -135,7 +137,7 @@ export class ControlChannel {
     }
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.#waitingForFixture = this.#waitingForFixture.filter((waiter) => waiter !== onAttach);
+        this.#waitingForFixture = this.#waitingForFixture.filter((waiter) => waiter.resolve !== onAttach);
         reject(
           new TimeoutError(`the fixture did not attach to the control channel within ${timeoutMs} ms`, {
             semanticTree: false,
@@ -148,8 +150,24 @@ export class ControlChannel {
         clearTimeout(timer);
         resolve();
       };
-      this.#waitingForFixture.push(onAttach);
+      const onClosed = (error: Error): void => {
+        clearTimeout(timer);
+        reject(error);
+      };
+      this.#waitingForFixture.push({ resolve: onAttach, reject: onClosed });
     });
+  }
+
+  /**
+   * Marks the authenticated fixture process as exited.
+   *
+   * The process lifecycle is more authoritative than the timing of the local
+   * socket's `close` event. Calling this before exposing `waitForExit()` to the
+   * user makes every later control operation fail as `session-closed`, even if
+   * the kernel has not delivered the socket event yet.
+   */
+  fixtureExited(): void {
+    this.#markFixtureGone();
   }
 
   /**
@@ -161,7 +179,7 @@ export class ControlChannel {
    *
    * @throws TypeError when props cannot cross as JSON
    * @throws SessionClosedError when no fixture is attached
-   * @throws ProtocolViolationError when the fixture refuses or cannot receive the command
+   * @throws ProtocolViolationError when the fixture explicitly refuses the command
    * @throws CapacityError when the encoded command exceeds the limit
    * @throws TimeoutError when the fixture does not acknowledge in time
    */
@@ -180,16 +198,12 @@ export class ControlChannel {
     }
 
     const socket = this.#socket;
-    if (socket === null || this.#closed) {
-      throw new SessionClosedError('the control channel has no attached fixture', {
-        semanticTree: false,
-        suggestion: 'the fixture exited, or it was not launched by launchInkFixture',
-      });
-    }
+    if (socket === null || this.#closed || this.#fixtureGone) throw this.#sessionClosed();
 
     const reply = await new Promise<CommandReply>((resolve, reject) => {
+      let pending: { readonly resolve: (reply: CommandReply) => void; readonly reject: (error: Error) => void };
       const timer = setTimeout(() => {
-        this.#pending = null;
+        if (this.#pending === pending) this.#pending = null;
         reject(
           new TimeoutError(`the fixture did not acknowledge the rerender within ${timeoutMs} ms`, {
             semanticTree: false,
@@ -197,20 +211,25 @@ export class ControlChannel {
         );
       }, timeoutMs);
       timer.unref?.();
-      this.#pending = (value) => {
-        clearTimeout(timer);
-        this.#pending = null;
-        resolve(value);
+      pending = {
+        resolve: (value: CommandReply): void => {
+          clearTimeout(timer);
+          if (this.#pending === pending) this.#pending = null;
+          resolve(value);
+        },
+        reject: (error: Error): void => {
+          clearTimeout(timer);
+          if (this.#pending === pending) this.#pending = null;
+          reject(error);
+        },
       };
+      this.#pending = pending;
       socket.write(line, (error) => {
         if (error === undefined || error === null) return;
         clearTimeout(timer);
-        this.#pending = null;
-        reject(
-          new ProtocolViolationError(`the rerender could not be delivered: ${error.message}`, {
-            semanticTree: false,
-          }),
-        );
+        if (this.#pending === pending) this.#pending = null;
+        this.#markFixtureGone();
+        reject(this.#sessionClosed(`the rerender could not be delivered: ${error.message}`));
       });
     });
 
@@ -226,6 +245,7 @@ export class ControlChannel {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    this.#rejectLifecycleWaiters(this.#sessionClosed('the control channel was closed'));
     this.#accepted?.destroy();
     this.#accepted = null;
     this.#socket?.destroy();
@@ -250,7 +270,7 @@ export class ControlChannel {
     socket.on('error', () => socket.destroy());
     socket.on('close', () => {
       if (this.#accepted === socket) this.#accepted = null;
-      if (this.#socket === socket) this.#socket = null;
+      if (this.#socket === socket) this.#markFixtureGone(socket);
     });
   }
 
@@ -299,7 +319,7 @@ export class ControlChannel {
       this.#everAttached = true;
       const waiters = this.#waitingForFixture;
       this.#waitingForFixture = [];
-      for (const waiter of waiters) waiter();
+      for (const waiter of waiters) waiter.resolve();
       return;
     }
 
@@ -308,10 +328,36 @@ export class ControlChannel {
       return;
     }
     if (record['type'] !== 'ok' && record['type'] !== 'error') return;
-    this.#pending?.({
+    this.#pending?.resolve({
       v: 1,
       type: record['type'],
       ...(typeof record['detail'] === 'string' ? { detail: record['detail'] } : {}),
+    });
+  }
+
+  #markFixtureGone(socket?: Socket): void {
+    if (socket !== undefined && this.#socket !== socket) return;
+    this.#fixtureGone = true;
+    this.#accepted?.destroy();
+    this.#accepted = null;
+    this.#socket?.destroy();
+    this.#socket = null;
+    this.#rejectLifecycleWaiters(this.#sessionClosed());
+  }
+
+  #rejectLifecycleWaiters(error: SessionClosedError): void {
+    const pending = this.#pending;
+    this.#pending = null;
+    pending?.reject(error);
+    const waiters = this.#waitingForFixture;
+    this.#waitingForFixture = [];
+    for (const waiter of waiters) waiter.reject(error);
+  }
+
+  #sessionClosed(message = 'the control channel has no attached fixture'): SessionClosedError {
+    return new SessionClosedError(message, {
+      semanticTree: false,
+      suggestion: 'the fixture exited, or it was not launched by launchInkFixture',
     });
   }
 }

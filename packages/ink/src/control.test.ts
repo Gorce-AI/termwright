@@ -4,6 +4,7 @@
  */
 
 import { connect } from 'node:net';
+import { once } from 'node:events';
 import { access } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ControlChannel } from './control.js';
@@ -19,6 +20,14 @@ async function exists(path: string): Promise<boolean> {
     () => true,
     () => false,
   );
+}
+
+async function attachFixture(channel: ControlChannel): Promise<ReturnType<typeof connect>> {
+  const fixture = connect(channel.endpoint);
+  await once(fixture, 'connect');
+  fixture.write(`${JSON.stringify({ v: 1, type: 'hello', token: channel.token })}\n`);
+  await channel.waitForFixture(1_000);
+  return fixture;
 }
 
 describe('ControlChannel', () => {
@@ -73,6 +82,45 @@ describe('ControlChannel', () => {
     open.push(channel);
 
     await expect(channel.rerender({ label: 'nobody there' })).rejects.toMatchObject({
+      code: 'session-closed',
+    });
+  });
+
+  it('uses authoritative process exit instead of racing the socket close event', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+    const fixture = await attachFixture(channel);
+
+    // The process exit promise may settle before Node delivers `close` for its
+    // control socket. The process lifecycle freezes the public error now.
+    channel.fixtureExited();
+    await expect(channel.rerender({ label: 'too late' })).rejects.toMatchObject({
+      code: 'session-closed',
+    });
+    fixture.destroy();
+  });
+
+  it('rejects an in-flight rerender as session-closed when the fixture disappears', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+    const fixture = await attachFixture(channel);
+    const command = once(fixture, 'data');
+
+    const rerender = channel.rerender({ label: 'in flight' }, 1_000);
+    await command;
+    channel.fixtureExited();
+
+    await expect(rerender).rejects.toMatchObject({ code: 'session-closed' });
+    fixture.destroy();
+  });
+
+  it('classifies a kernel-observed disconnect as session-closed, not a protocol violation', async () => {
+    const channel = await ControlChannel.listen();
+    open.push(channel);
+    const fixture = await attachFixture(channel);
+
+    fixture.destroy();
+    await expect(channel.rerender({ label: 'raced close' }, 1_000)).rejects.toMatchObject({
       code: 'session-closed',
     });
   });
