@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canPublishInkGeometry } from './geometry.js';
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe('canPublishInkGeometry', () => {
   it('never claims viewport coordinates on a non-TTY, even when interactive is forced', () => {
@@ -29,5 +31,14 @@ describe('canPublishInkGeometry', () => {
       stdoutIsTTY: true,
       inCi: true,
     })).toBe(false);
+  });
+
+  it('reads the same CI flags when no override is supplied', () => {
+    vi.stubEnv('CI', '1');
+    vi.stubEnv('CONTINUOUS_INTEGRATION', '0');
+    expect(canPublishInkGeometry({ alternateScreen: true, stdoutIsTTY: true })).toBe(false);
+
+    vi.stubEnv('CI', 'false');
+    expect(canPublishInkGeometry({ alternateScreen: true, stdoutIsTTY: true })).toBe(true);
   });
 });

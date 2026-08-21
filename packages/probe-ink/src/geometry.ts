@@ -1,7 +1,5 @@
 /** Truthful gate for Ink's live-region coordinates. */
 
-import isInCi from 'is-in-ci';
-
 export interface GeometryGateOptions {
   readonly alternateScreen: boolean;
   readonly interactive?: boolean;
@@ -17,6 +15,15 @@ export interface GeometryGateOptions {
  */
 export function canPublishInkGeometry(options: GeometryGateOptions): boolean {
   const interactive = options.interactive
-    ?? (!(options.inCi ?? isInCi) && options.stdoutIsTTY);
+    ?? (!(options.inCi ?? runningInCi()) && options.stdoutIsTTY);
   return options.alternateScreen && interactive && options.stdoutIsTTY;
+}
+
+function runningInCi(): boolean {
+  return enabledEnvironmentFlag('CI') || enabledEnvironmentFlag('CONTINUOUS_INTEGRATION');
+}
+
+function enabledEnvironmentFlag(name: string): boolean {
+  const value = process.env[name];
+  return value !== undefined && value !== '0' && value !== 'false';
 }

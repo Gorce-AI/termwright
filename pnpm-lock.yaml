@@ -373,9 +373,6 @@ importers:
       '@termwright/recognizers':
         specifier: workspace:^
         version: link:../recognizers
-      is-in-ci:
-        specifier: ^2.0.0
-        version: 2.0.0
     devDependencies:
       '@termwright/ink':
         specifier: workspace:*

@@ -41,8 +41,7 @@
   "dependencies": {
     "@termwright/probe-runtime": "workspace:*",
     "@termwright/protocol": "workspace:*",
-    "@termwright/recognizers": "workspace:^",
-    "is-in-ci": "^2.0.0"
+    "@termwright/recognizers": "workspace:^"
   },
   "peerDependencies": {
     "ink": ">=7.1.0 <8",
