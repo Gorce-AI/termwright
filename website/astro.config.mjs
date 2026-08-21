@@ -19,7 +19,7 @@ export default defineConfig({
 			},
 			favicon: '/favicon.svg',
 			description:
-				'End-to-end testing for terminal applications, with real input, retrying assertions, traces, and framework semantics.',
+				'End-to-end testing for CLIs and TUIs, with real input, retrying assertions, traces, and framework semantics.',
 			social: [
 				{
 					icon: 'github',
@@ -39,8 +39,15 @@ export default defineConfig({
 						{label: 'Getting started', slug: 'getting-started'},
 						{label: 'Writing tests', slug: 'writing-tests'},
 						{label: 'Running tests', slug: 'running-tests'},
-						{label: 'Migration', slug: 'guides/migrating'},
 						{label: 'Examples', slug: 'guides/examples'},
+					],
+				},
+				{
+					label: 'Migration',
+					collapsed: true,
+					items: [
+						{label: 'Migrate to Termwright', slug: 'guides/migrating'},
+						{label: 'Version migration', slug: 'guides/version-migration'},
 					],
 				},
 				{

@@ -79,9 +79,9 @@ The inspector has three views:
 - **Semantic** presents readable properties for the selected node.
 - **Logs** presents application logs up to the current replay time.
 
-Selecting a node highlights it only when the recording contains qualified
-geometry for that exact semantic revision. Runner does not infer a rectangle
-from text or paint order.
+Selecting a node highlights it only when the trace contains exact geometry for
+that recorded state. Runner does not infer a rectangle from rendered text or
+paint order.
 
 ## Open a historical run
 

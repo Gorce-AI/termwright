@@ -29,6 +29,16 @@ await expect(app.getByRole('status')).toHaveText('Approved');
 Python 3.9 and newer are supported. Injection is dormant without a Termwright
 endpoint and token.
 
+## Use Textual Pilot for widget tests
+
+Textual Pilot and Termwright cover different layers. Keep Pilot for fast,
+in-process widget tests that need access to the Python app object. Use
+Termwright for end-to-end tests that need the real terminal boundary, signals,
+exit behavior, retained traces, or the same external interface users run.
+
+The same project can use both: Pilot for the widget-level suite and Termwright
+for the end-to-end lane.
+
 ## Annotate a custom widget
 
 ```python

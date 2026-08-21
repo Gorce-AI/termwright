@@ -9,5 +9,6 @@ This topic is now split by task:
   private working directory, environment isolation, and cleanup.
 - [Extend test fixtures](../fixtures/) covers `test.extend()`, `test.scoped()`,
   and configuration precedence.
-- [Migration](../migrating/) covers existing terminal-test harnesses and older
-  Termwright setup patterns.
+- [Migration](../migrating/) covers existing terminal-test harnesses.
+- [Version migration](../version-migration/) covers older Termwright framework
+  integrations.

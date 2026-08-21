@@ -25,6 +25,16 @@ const app = await terminal.launch({command: [binaryPath]});
 
 Supported Bubble Tea versions are verified and unknown versions are refused.
 
+## Use teatest for model tests
+
+`teatest` remains useful for fast, in-process tests of a Bubble Tea `Model`.
+Use Termwright for end-to-end tests that need the compiled program, a real
+terminal, keyboard input, resize behavior, exit behavior, traces, or semantic
+state from the instrumented build.
+
+The same project can use `teatest` for model tests and Termwright for the
+end-to-end lane.
+
 ## Add stable application meaning
 
 ```go
