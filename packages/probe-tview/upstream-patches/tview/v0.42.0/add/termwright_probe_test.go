@@ -44,6 +44,14 @@ func startStalledDriver(t *testing.T, path string) *stalledDriver {
 			return
 		}
 		driver.conn = conn
+		// Keep this test independent of the host kernel's default socket
+		// capacity. Linux CI otherwise accepted every test frame, so the test
+		// reported a skip without exercising the write deadline at all.
+		if unix, ok := conn.(*net.UnixConn); ok {
+			if err := unix.SetReadBuffer(4 * 1024); err != nil {
+				return
+			}
+		}
 
 		buffer := make([]byte, 64*1024)
 		if _, err := conn.Read(buffer); err != nil {
@@ -170,7 +178,7 @@ func TestAStalledDriverCostsFramesAndNotTheApplication(t *testing.T) {
 	elapsed := time.Since(started)
 
 	if probe.timedOut.Load() == 0 {
-		t.Skip("the socket buffer swallowed everything; nothing was stalled")
+		t.Fatal("the bounded socket accepted every frame; the stalled-driver path was not exercised")
 	}
 
 	// Bounded: 400 frames against a driver that never reads must not take
@@ -221,7 +229,7 @@ func TestAFailedPublishWritesNoMarker(t *testing.T) {
 	written := string(buffer[:n])
 
 	if probe.timedOut.Load() == 0 {
-		t.Skip("the socket buffer swallowed everything; nothing was stalled")
+		t.Fatal("the bounded socket accepted every frame; the failed-publish path was not exercised")
 	}
 	// Whatever markers the first few successful frames wrote, the dropped
 	// ones must not have added any: one marker per published revision.

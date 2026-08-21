@@ -44,7 +44,7 @@ describe.skipIf(!pty)('the todo app', () => {
     // published the tree for the frame the typing caused. There is no sleep and
     // no explicit wait between the input and the expectation.
     await expect(app.getByRole('listitem')).toHaveText('ship 1.0');
-    await expect(app.getByRole('listitem', { name: 'record a demo' })).not.toBeVisible();
+    await expect(app.getByRole('listitem', { name: 'record a demo' })).toBeDetached();
   });
 
   test('asks for confirmation before removing a todo', async ({ terminal, step }) => {
@@ -69,25 +69,25 @@ describe.skipIf(!pty)('the todo app', () => {
     // scope the match is partial: unlisted children are don't-care, and the
     // flags assert only what they list. Cancel holds the focus, which is the
     // point of the dialog — an accidental Enter must not delete anything.
-    await expect(app.getByRole('dialog')).toBeVisible();
+    await expect(app.getByRole('dialog')).toBeAttached();
 
     await step('cancel it', async () => {
       await app.press('Escape');
-      await expect(app.getByRole('dialog')).not.toBeVisible();
+      await expect(app.getByRole('dialog')).toBeDetached();
     });
 
     await expect(app).toHaveText('status: cancelled');
-    await expect(app.getByRole('listitem', { name: 'record a demo' })).toBeVisible();
+    await expect(app.getByRole('listitem', { name: 'record a demo' })).toBeAttached();
 
     await step('open it again and confirm', async () => {
       await app.press('Enter');
-      await expect(app.getByRole('dialog')).toBeVisible();
+      await expect(app.getByRole('dialog')).toBeAttached();
       await app.press('Tab');
       await app.waitForStable();
       await app.press('Enter');
     });
 
-    await expect(app.getByRole('listitem', { name: 'record a demo' })).not.toBeVisible();
+    await expect(app.getByRole('listitem', { name: 'record a demo' })).toBeDetached();
     await expect(app).toHaveText('status: removed record a demo');
   });
 });

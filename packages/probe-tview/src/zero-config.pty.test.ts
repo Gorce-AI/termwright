@@ -102,9 +102,16 @@ async function buildFixture(options: { readonly instrumented: boolean }): Promis
     env['GOWORK'] = await writeWorkspace(join(dir, 'generated.work'), {
       moduleDir: app,
       inherited: { uses: [], replaces: [] },
+      suppliedUses: [
+        { dir: await realpath(CLIENT), module: 'github.com/gorce-ai/termwright/clients/go' },
+      ],
       replaces: [
         { from: 'github.com/rivo/tview', to: copy },
-        { from: 'github.com/gorce-ai/termwright/clients/go', to: await realpath(CLIENT) },
+        {
+          from: 'github.com/gorce-ai/termwright/clients/go',
+          to: await realpath(CLIENT),
+          version: 'v0.0.0',
+        },
       ],
     });
   } else {
@@ -139,9 +146,16 @@ describe.skipIf(!runnable)('developer annotations', () => {
     const workspace = await writeWorkspace(join(dir, 'generated.work'), {
       moduleDir: app,
       inherited: { uses: [], replaces: [] },
+      suppliedUses: [
+        { dir: client, module: 'github.com/gorce-ai/termwright/clients/go' },
+      ],
       replaces: [
         { from: 'github.com/rivo/tview', to: copy },
-        { from: 'github.com/gorce-ai/termwright/clients/go', to: client },
+        {
+          from: 'github.com/gorce-ai/termwright/clients/go',
+          to: client,
+          version: 'v0.0.0',
+        },
       ],
     });
 

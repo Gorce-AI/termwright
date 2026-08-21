@@ -133,9 +133,9 @@
       "attached": "supported",
       "displayed": "supported",
       "intendedRect": "conditional",
-      "visibleRect": "conditional",
+      "visibleRect": "unsupported",
       "hitTest": "unsupported",
-      "reason": "Bounds are valid only while Ink owns a viewport-stable interactive region."
+      "reason": "Intended bounds are conditional on a viewport-stable live region; Ink exposes neither clipping nor pointer ownership."
     },
     {
       "framework": "tview",
@@ -159,7 +159,7 @@
     },
     {
       "framework": "charm",
-      "identity": "stable",
+      "identity": "frame-local",
       "attached": "supported",
       "displayed": "conditional",
       "intendedRect": "unsupported",

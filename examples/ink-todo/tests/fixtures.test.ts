@@ -40,10 +40,10 @@ const test = base.extend<{ app: TerminalHarness }>({
 
 describe.skipIf(!pty)('a suite with its own fixture', () => {
   test('starts from the state the fixture declared', async ({ app }) => {
-    await expect(app.getByRole('listitem', { name: 'restore the backup' })).toBeVisible();
+    await expect(app.getByRole('listitem', { name: 'restore the backup' })).toBeAttached();
     await expect(app).toHaveText('[x] rotate the keys');
     // The seed the app falls back to on a first run is not what it read.
-    await expect(app.getByRole('listitem', { name: 'ship 1.0' })).not.toBeVisible();
+    await expect(app.getByRole('listitem', { name: 'ship 1.0' })).toBeDetached();
   });
 
   test('takes the preset fixtures alongside its own', async ({ app, step, terminal }) => {

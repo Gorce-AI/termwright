@@ -4,6 +4,15 @@ import { defineConfig } from 'vitest/config';
 // configs/runners (examples need per-package vitest.setup.ts to be loaded).
 export default defineConfig({
   test: {
-    exclude: ['**/node_modules/**', '**/dist/**', 'examples/**', 'website/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'examples/**',
+      'website/**',
+      // These are subprocess inputs for the UI-host contract. Collecting them
+      // in the package suite would execute a deliberate `test.only` foreign
+      // case outside the isolated host it is meant to challenge.
+      '**/__fixtures__/**',
+    ],
   },
 });

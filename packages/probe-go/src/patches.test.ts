@@ -334,16 +334,25 @@ describe.skipIf(upstream === null)('against the real framework', () => {
     const file = await writeWorkspace(join(dir, 'generated.work'), {
       moduleDir: app,
       inherited: { uses: [], replaces: [] },
+      suppliedUses: [{ dir: client, module: 'github.com/gorce-ai/termwright/clients/go' }],
       replaces: [
         { from: 'github.com/rivo/tview', to: copy },
-        // A `use` entry does not satisfy a versioned require; the client has
-        // to be replaced, exactly like the framework.
-        { from: 'github.com/gorce-ai/termwright/clients/go', to: client },
+        {
+          from: 'github.com/gorce-ai/termwright/clients/go',
+          to: client,
+          version: 'v0.0.0',
+        },
       ],
     });
 
     await expect(
       run('go', ['build', './...'], { cwd: app, env: { ...process.env, GOWORK: file } }),
+    ).resolves.toBeDefined();
+    await expect(
+      run('go', ['build', './...'], {
+        cwd: app,
+        env: { ...process.env, GOWORK: file, GOOS: 'windows', GOARCH: 'amd64' },
+      }),
     ).resolves.toBeDefined();
 
     // And the canary proves it was our copy that compiled, not the cache.
@@ -366,16 +375,41 @@ describe.skipIf(upstream === null)('against the real framework', () => {
     await applyPatchSet(copy, PATCH_SET);
 
     const client = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'clients', 'go');
+    const harness = join(dir, 'harness');
+    await mkdir(harness, { recursive: true });
+    await writeFile(
+      join(harness, 'go.mod'),
+      'module example.com/probe-tests\n\ngo 1.24\n\nrequire github.com/rivo/tview v0.42.0\n',
+      'utf8',
+    );
     const file = await writeWorkspace(join(dir, 'probe.work'), {
-      moduleDir: copy,
+      // Test the patched package through the same shape a user builds: tview
+      // is the replaced dependency of an application module, while the local
+      // protocol client is a workspace member with its full OS-specific graph.
+      moduleDir: harness,
       inherited: { uses: [], replaces: [] },
-      replaces: [{ from: 'github.com/gorce-ai/termwright/clients/go', to: client }],
+      suppliedUses: [{ dir: client, module: 'github.com/gorce-ai/termwright/clients/go' }],
+      replaces: [
+        { from: 'github.com/rivo/tview', to: copy },
+        {
+          from: 'github.com/gorce-ai/termwright/clients/go',
+          to: client,
+          version: 'v0.0.0',
+        },
+      ],
     });
 
     const { stdout } = await run(
       'go',
-      ['test', '-run', 'Termwright|Probe|Stalled|Marker|Dormant', '-count=1', '-v', '.'],
-      { cwd: copy, env: { ...process.env, GOWORK: file } },
+      [
+        'test',
+        '-run',
+        'Termwright|Probe|Stalled|Marker|Dormant',
+        '-count=1',
+        '-v',
+        'github.com/rivo/tview',
+      ],
+      { cwd: harness, env: { ...process.env, GOWORK: file } },
     );
 
     // Named, so a suite that quietly stopped covering the stall is visible.

@@ -174,6 +174,20 @@ describe('use and replace cannot name the same directory', () => {
 
     expect(rendered).toContain('use /proj/lib');
   });
+
+  it('keeps a supplied module beside an exact-version replacement', () => {
+    const rendered = renderWorkspace({
+      moduleDir: '/proj/app',
+      inherited: { uses: [], replaces: [] },
+      suppliedUses: [{ dir: '/sdk/client', module: 'example.com/client' }],
+      replaces: [
+        { from: 'example.com/client', to: '/sdk/client', version: 'v0.1.0' },
+      ],
+    });
+
+    expect(rendered).toContain('use /sdk/client');
+    expect(rendered).toContain('replace example.com/client v0.1.0 => /sdk/client');
+  });
 });
 
 describe('vendor mode', () => {

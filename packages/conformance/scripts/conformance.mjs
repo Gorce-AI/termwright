@@ -280,7 +280,10 @@ for (const [label, run] of crashed) {
     `\n${label}: every test reported a result, but the runner exited ${run.code} — ` +
       'something failed outside the tests\n',
   );
-  const tail = (run.output ?? '').trimEnd().split('\n').slice(-20);
+  // Keep enough output to include Vitest's unhandled-error section. On a busy
+  // CI host it can precede reporter shutdown by dozens of lines, and the old
+  // 20-line tail reduced a concrete error to an unexplained exit code.
+  const tail = (run.output ?? '').trimEnd().split('\n').slice(-200);
   for (const line of tail) process.stdout.write(`  ${line}\n`);
 }
 

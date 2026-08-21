@@ -106,20 +106,42 @@ export async function prepareInstrumentedBuild(
   const workspaceFile = await writeWorkspace(options.workspaceFile ?? join(copy, '..', 'generated.work'), {
     moduleDir: options.moduleDir,
     inherited: await readWorkspace(options.moduleDir),
+    suppliedUses: await clientWorkspaceUses(options, env),
     replaces: [
       { from: FRAMEWORK, to: copy },
-      // A `use` entry does not satisfy the copy's versioned require; only a
-      // replace does. When the application module is the client module itself
-      // (our zero-import Go fixture is kept there), replacing a workspace
-      // module at all versions is illegal and unnecessary: `use` already
-      // supplies it.
-      ...((await modulePath(options.moduleDir, env)) === CLIENT_MODULE
-        ? []
-        : [{ from: CLIENT_MODULE, to: options.clientDir ?? (await defaultClientDir(env)) }]),
+      ...(await clientVersionReplacements(options, env)),
     ],
   });
 
   return { workspaceFile, copyDir: copy, env: { ...env, GOWORK: workspaceFile }, built };
+}
+
+async function clientWorkspaceUses(
+  options: PrepareOptions,
+  env: NodeJS.ProcessEnv,
+): Promise<{ dir: string; module: string }[]> {
+  if ((await modulePath(options.moduleDir, env)) === CLIENT_MODULE) return [];
+  return [{ dir: options.clientDir ?? (await defaultClientDir(env)), module: CLIENT_MODULE }];
+}
+
+async function clientVersionReplacements(
+  options: PrepareOptions,
+  env: NodeJS.ProcessEnv,
+): Promise<{ from: string; to: string; version: string }[]> {
+  if ((await modulePath(options.moduleDir, env)) === CLIENT_MODULE) return [];
+  const to = options.clientDir ?? (await defaultClientDir(env));
+  const versions = new Set(['v0.0.0']);
+  try {
+    const { stdout } = await run('go', ['list', '-m', '-f', '{{.Version}}', CLIENT_MODULE], {
+      cwd: options.moduleDir,
+      env: { ...env, GOWORK: 'off' },
+    });
+    if (stdout.trim() !== '') versions.add(stdout.trim());
+  } catch {
+    // A project need not import annotations itself. The injected copy still
+    // carries v0.0.0, which is the only version that must be redirected then.
+  }
+  return [...versions].map((version) => ({ from: CLIENT_MODULE, to, version }));
 }
 
 /** Reads the framework version the module actually resolves to. */
