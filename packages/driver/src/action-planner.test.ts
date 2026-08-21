@@ -41,6 +41,7 @@ function context(
     terminal: Object.freeze({ profile: 'xterm', platform: 'test', mouseModesObservable: true }),
   });
   return {
+    actionObservationState: () => 'settled',
     checkpoint: () => stamp,
     contract: () => contract,
     modes: () => ({
@@ -53,6 +54,7 @@ function context(
       regionBounds: { row: 2, column: 3, width: 6, height: 1 },
       spans: [{ row: 2, from: 3, to: 9 }], evidence,
     }) : undefined,
+    screenRegionUnchangedSince: () => true,
     hitGrid: () => ({ status: 'known', value: { regions: [{ recipientId: node.id, rect: { row: 2, column: 3, width: 6, height: 1 } }] }, evidence }),
     errorDiagnostics: () => ({ semanticTree: true }),
     ...contextOverrides,
@@ -73,6 +75,23 @@ describe('canonical condition evaluation', () => {
 });
 
 describe('ActionPlanner keyboard strategies', () => {
+  it.each(['parser-in-flight', 'semantic-frame-open', 'pairing-pending'] as const)(
+    'fails closed while action evidence is %s',
+    (state) => {
+      const planner = new ActionPlanner(context({}, { actionObservationState: () => state }));
+      expect(() => planner.planKeyboard('pending', { kind: 'activate', targetRef: target.ref }, target))
+        .toThrow(expect.objectContaining({
+          code: 'stale-snapshot',
+          message: expect.stringContaining(state),
+        }));
+      expect(() => planner.planPointer('pending-pointer', { kind: 'click', targetRef: target.ref }, target))
+        .toThrow(expect.objectContaining({
+          code: 'stale-snapshot',
+          message: expect.stringContaining(state),
+        }));
+    },
+  );
+
   it('rejects unfocused type without planning hidden pointer input', () => {
     const planner = new ActionPlanner(context({ state: { focused: false } }));
     let failure: unknown;
@@ -123,6 +142,38 @@ describe('ActionPlanner keyboard strategies', () => {
 });
 
 describe('ActionPlanner runtime input requirements', () => {
+  it('allows hover over a disabled target without weakening click actionability', () => {
+    const planner = new ActionPlanner(context({ state: { focused: false, disabled: true } }));
+    const hover = planner.planPointer('disabled-hover', { kind: 'hover', targetRef: target.ref }, target);
+
+    expect(hover.plan.operations).toEqual([
+      expect.objectContaining({ device: 'mouse', kind: 'move' }),
+    ]);
+    expect(hover.plan.requirements.some(({ condition }) => condition.kind === 'enabled')).toBe(false);
+    expect(() => planner.planPointer('disabled-click', { kind: 'click', targetRef: target.ref }, target))
+      .toThrowError(expect.objectContaining({ code: 'not-actionable' }));
+  });
+
+  it('allows an unrelated newer screen revision when the target region is unchanged', () => {
+    const newer = Object.freeze({ ...stamp, sequence: 8, screenRevision: 5, pairedScreenRevision: 4 });
+    const planner = new ActionPlanner(context({}, {
+      checkpoint: () => newer,
+      screenRegionUnchangedSince: () => true,
+    }));
+    expect(planner.planPointer('stable-local', { kind: 'click', targetRef: target.ref }, target).plan.checkpoint)
+      .toBe(newer);
+  });
+
+  it('rejects a newer screen revision that damaged the target region', () => {
+    const newer = Object.freeze({ ...stamp, sequence: 8, screenRevision: 5, pairedScreenRevision: 4 });
+    const planner = new ActionPlanner(context({}, {
+      checkpoint: () => newer,
+      screenRegionUnchangedSince: () => false,
+    }));
+    expect(() => planner.planPointer('damaged-local', { kind: 'click', targetRef: target.ref }, target))
+      .toThrowError(expect.objectContaining({ code: 'stale-snapshot' }));
+  });
+
   it('accepts an explicit frozen application region contract without inventing a hit test', () => {
     const base = context();
     const baseContract = base.contract();

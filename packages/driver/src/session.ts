@@ -73,6 +73,7 @@ import { SessionEventEmitter } from './events.js';
 import { LogTailer } from './logs.js';
 import { encodeFocus, encodeKeys, encodePaste, encodeText } from './keys.js';
 import { LocatorImpl, type LocatorContext } from './locator.js';
+import { assertBeforeActionInput } from './internal/action-retry.js';
 import { waitForQuiet } from './internal/quiet.js';
 import { encodeMouse, normalizeMouseModifiers, type MouseEvent } from './mouse.js';
 import { SemanticIndex, textInRect } from './matching.js';
@@ -492,7 +493,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       this.#lastOutputAt = Date.now();
       this.#shellTracker.feed(data);
       this.#emitter.emit('output', { data, timeMs: this.#now() });
-      void this.#vt.write(data);
+      void this.#vt.write(data).finally(() => {
+        // Parsing can settle without changing a visible cell (for example a
+        // semantic marker or an idempotent control sequence). Action retries
+        // still need to wake when that evidence boundary closes.
+        this.#notifyChange();
+      });
     });
     this.#pty.onExit((status) => {
       void this.#finishExit(status);
@@ -1106,6 +1112,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   // -------------------------------------------------------------------------
   // LocatorContext
 
+  negotiationPending(): boolean {
+    return !this.#settled;
+  }
+
   negotiationSettled(): Promise<void> {
     if (this.#settled) return Promise.resolve();
     return new Promise<void>((resolve) => this.#settleWaiters.push(resolve));
@@ -1181,6 +1191,13 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return Object.freeze({ regionBounds: node.geometry.intendedRect.value, spans: Object.freeze(spans), evidence: availability.evidence });
   }
 
+  screenRegionUnchangedSince(
+    revision: number,
+    spans: import('@termwright/protocol').PhysicalRegion['spans'],
+  ): boolean {
+    return this.#vt.regionUnchangedSince(revision, spans);
+  }
+
   hitGrid(): Observation<PointerHitGrid> | undefined {
     return this.#index?.snapshot.hitGrid;
   }
@@ -1188,7 +1205,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   async executeDeviceOperations(
     operations: readonly DeviceOperation[],
     expected: ObservationStamp,
+    deadline?: number,
   ): Promise<readonly DeviceOperation[]> {
+    const deadlineDiagnostics = this.errorDiagnostics({ suggestion: 'increase the action timeout or wait for the target state explicitly' });
+    if (deadline !== undefined) assertBeforeActionInput(deadline, deadlineDiagnostics);
     const current = this.checkpoint();
     if (current.contractId !== expected.contractId || current.sequence !== expected.sequence) {
       throw new StaleSnapshotError(
@@ -1220,6 +1240,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     let held: { button: 'left' | 'middle' | 'right'; row: number; column: number } | null = null;
     try {
       for (const { operation, bytes, inputKind } of encoded) {
+        if (executed.length === 0 && deadline !== undefined) assertBeforeActionInput(deadline, deadlineDiagnostics);
         await this.sendInput(bytes, inputKind);
         executed.push(operation);
         if (operation.device === 'keyboard') continue;
@@ -1278,6 +1299,13 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   modes(): TerminalModes {
     return this.#vt.modes();
+  }
+
+  actionObservationState(): 'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending' {
+    if (this.#vt.hasPendingWrite) return 'parser-in-flight';
+    if (this.#pairing.hasOpenFrame) return 'semantic-frame-open';
+    if (this.#pairing.hasPendingRender) return 'pairing-pending';
+    return 'settled';
   }
 
   waitForChange(deadline: number): Promise<void> {

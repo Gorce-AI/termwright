@@ -61,7 +61,9 @@ function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("but
         const attached = visibility.attached.status === 'known' ? visibility.attached.value : false;
         observation = known(condition.kind === 'attached' ? attached : !attached);
       } else if (visibility.attached.status === 'known' && !visibility.attached.value) {
-        observation = visibility.displayed as import('@termwright/protocol').Observation<boolean>;
+        observation = condition.kind === 'hidden'
+          ? known(true)
+          : visibility.displayed as import('@termwright/protocol').Observation<boolean>;
       } else if (condition.kind === 'displayed' || condition.kind === 'hidden') {
         observation = visibility.displayed.status === 'known'
           ? known(condition.kind === 'displayed' ? visibility.displayed.value : !visibility.displayed.value)
@@ -322,7 +324,7 @@ describe('qualified geometry matchers', () => {
       offscreen: { status: 'known', value: true, evidence: evidence('viewport-clip') },
     };
     await expect(fakeLocator(() => ({ visibility: detached }))).toBeDetached();
-    await expect(expect(fakeLocator(() => ({ visibility: detached }))).toBeHidden()).rejects.toThrow(/absent/u);
+    await expect(fakeLocator(() => ({ visibility: detached }))).toBeHidden();
     await expect(expect(fakeLocator(() => ({ visibility: detached }))).not.toBeEnabled()).rejects.toThrow(/absent/u);
     await expect(fakeLocator(() => ({ visibility: hidden }))).toBeAttached();
     await expect(fakeLocator(() => ({ visibility: hidden }))).toBeHidden();

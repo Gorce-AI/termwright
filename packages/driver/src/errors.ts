@@ -98,8 +98,16 @@ export class CapabilityUnavailableError extends TermwrightError {
 
 /** The capability exists, but the target cannot currently satisfy the action. */
 export class NotActionableError extends TermwrightError {
-  constructor(message: string, diagnostics: ErrorDiagnostics) {
+  /** Only these planner facts may become actionable on a later committed observation. */
+  readonly transient: 'target-state' | 'pointer-region' | 'covered' | null;
+
+  constructor(
+    message: string,
+    diagnostics: ErrorDiagnostics,
+    transient: 'target-state' | 'pointer-region' | 'covered' | null = null,
+  ) {
     super('not-actionable', message, diagnostics);
+    this.transient = transient;
   }
 }
 

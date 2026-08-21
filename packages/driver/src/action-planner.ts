@@ -19,12 +19,15 @@ import { CapabilityUnavailableError, InputModeDisabledError, NotActionableError,
 import { normalizeMouseModifiers } from './mouse.js';
 
 export interface ActionPlannerContext {
+  /** Whether every source that can change action evidence is at a commit boundary. */
+  actionObservationState(): 'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
   checkpoint(): ObservationStamp;
   contract(): EffectiveSessionContract | null;
   modes(): TerminalModes;
   semanticNode(id: string): SemanticNode | undefined;
   hitGrid(): Observation<PointerHitGrid> | undefined;
   pointerRegion(id: string): { readonly regionBounds: Rect; readonly spans: PhysicalRegion['spans']; readonly evidence: EvidenceProvenance } | undefined;
+  screenRegionUnchangedSince(revision: number, spans: PhysicalRegion['spans']): boolean;
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics;
 }
 
@@ -217,6 +220,7 @@ export class ActionPlanner {
     options?: PointerOptions,
   ): PlannedPointerAction {
     this.#lastRequirements = Object.freeze([]);
+    this.#requireSettledObservation(intent);
     const checkpoint = this.#ctx.checkpoint();
     this.#lastCheckpoint = checkpoint;
     const diagnostics = this.#ctx.errorDiagnostics({ candidates: [target] });
@@ -258,7 +262,7 @@ export class ActionPlanner {
         'semantic pointer actions require a probe revision paired with the committed terminal frame',
         diagnostics,
       );
-      if (target.revision !== checkpoint.semanticRevision || checkpoint.pairedScreenRevision !== checkpoint.screenRevision) {
+      if (target.revision !== checkpoint.semanticRevision || checkpoint.pairedScreenRevision === null) {
         throw new StaleSnapshotError('semantic target and terminal screen do not belong to one committed observation', diagnostics);
       }
       const contract = this.#ctx.contract();
@@ -270,16 +274,21 @@ export class ActionPlanner {
       const displayed: Condition = { kind: 'displayed', target: target.ref };
       const enabledResult = result(enabled, checkpoint, this.#capabilityBoolean('semantic-tree', node.state?.disabled !== true));
       const displayedResult = result(displayed, checkpoint, node.geometry.displayed);
-      requirements.push(enabledResult, displayedResult);
+      // Hover is a physical observation, not activation. Disabled controls can
+      // still receive terminal motion reports and expose useful hover state.
+      // Click/focus and their keyboard-intent callers continue to require an
+      // enabled target.
+      if (intent.kind !== 'hover') requirements.push(enabledResult);
+      requirements.push(displayedResult);
       this.#remember(requirements);
       // A framework may not expose paint/display state while an application
       // provider exposes the production pointer router authoritatively. Do not
       // reject that stronger, action-specific proof before consulting it.
       // Known disabled/hidden state still fails immediately.
       if (requirements.some((entry) => entry.verdict === 'unsatisfied')) {
-        throw new NotActionableError(`target ${target.ref} is disabled or not displayed`, diagnostics);
+        throw new NotActionableError(`target ${target.ref} is disabled or not displayed`, diagnostics, 'target-state');
       }
-      if (enabledResult.verdict === 'inconclusive') {
+      if (intent.kind !== 'hover' && enabledResult.verdict === 'inconclusive') {
         throw new CapabilityUnavailableError(`target ${target.ref} has inconclusive enabled state`, diagnostics);
       }
       const pointerRegion = this.#ctx.pointerRegion(nodeId);
@@ -293,7 +302,13 @@ export class ActionPlanner {
       if (pointerRegionResult.verdict === 'inconclusive') {
         throw new CapabilityUnavailableError('the negotiated contract cannot provide authoritative pointer regions', diagnostics);
       }
-      if (pointerRegion === undefined) throw new NotActionableError(`target ${target.ref} has no physical pointer region in this committed frame`, diagnostics);
+      if (pointerRegion === undefined) throw new NotActionableError(`target ${target.ref} has no physical pointer region in this committed frame`, diagnostics, 'pointer-region');
+      if (
+        checkpoint.pairedScreenRevision !== checkpoint.screenRevision
+        && !this.#ctx.screenRegionUnchangedSince(checkpoint.pairedScreenRevision, pointerRegion.spans)
+      ) {
+        throw new StaleSnapshotError('the pointer target changed after its paired semantic frame', diagnostics);
+      }
       const hitGrid = this.#ctx.hitGrid();
       if (verifiesOwnership && hitGrid?.status !== 'known') {
         throw new CapabilityUnavailableError('the committed frame has no authoritative pointer ownership map', diagnostics);
@@ -333,7 +348,7 @@ export class ActionPlanner {
         evidence: verifiesOwnership && hitGrid?.status === 'known' ? hitGrid.evidence : pointerRegion.evidence,
       }));
       this.#remember(requirements);
-      if (point === null) throw new NotActionableError(`no unoccluded pointer cell belongs to ${target.ref}`, diagnostics);
+      if (point === null) throw new NotActionableError(`no unoccluded pointer cell belongs to ${target.ref}`, diagnostics, 'covered');
       const operations = this.#operations(intent, point, options);
       return { point, plan: Object.freeze({ actionId, contractId: checkpoint.contractId, intent, checkpoint, requirements: Object.freeze(requirements), strategy: 'authoritative-pointer-region', physicalRegion: region, operations }) };
     }
@@ -341,7 +356,7 @@ export class ActionPlanner {
     if (target.revision !== checkpoint.screenRevision) {
       throw new StaleSnapshotError('screen target and terminal screen do not belong to one committed observation', diagnostics);
     }
-    if (target.rect === null) throw new NotActionableError('screen target has no physical rectangle', diagnostics);
+    if (target.rect === null) throw new NotActionableError('screen target has no physical rectangle', diagnostics, 'pointer-region');
     const evidence: EvidenceProvenance = Object.freeze({ source: 'terminal', method: 'measured', strength: 'authoritative', providerId: 'termwright-vt' });
     const region = Object.freeze<PhysicalRegion>({
       checkpoint,
@@ -351,7 +366,7 @@ export class ActionPlanner {
       evidence,
     });
     const point = choosePoint(region, options?.position);
-    if (point === null) throw new NotActionableError('screen target has no actionable cell', diagnostics);
+    if (point === null) throw new NotActionableError('screen target has no actionable cell', diagnostics, 'covered');
     const operations = this.#operations(intent, point, options);
     return { point, plan: Object.freeze({ actionId, contractId: checkpoint.contractId, intent, checkpoint, requirements: Object.freeze(requirements), strategy: 'screen-region', physicalRegion: region, operations }) };
   }
@@ -376,6 +391,7 @@ export class ActionPlanner {
     value = '',
   ): ActionPlan {
     this.#lastRequirements = Object.freeze([]);
+    this.#requireSettledObservation(intent);
     const checkpoint = this.#ctx.checkpoint();
     this.#lastCheckpoint = checkpoint;
     const diagnostics = this.#ctx.errorDiagnostics({ candidates: [target] });
@@ -388,7 +404,7 @@ export class ActionPlanner {
       `${intent.kind} requires a semantic revision paired with the committed terminal frame`,
       diagnostics,
     );
-    if (target.revision !== checkpoint.semanticRevision || checkpoint.pairedScreenRevision !== checkpoint.screenRevision) {
+    if (target.revision !== checkpoint.semanticRevision || checkpoint.pairedScreenRevision === null) {
       throw new StaleSnapshotError(`${intent.kind} target and terminal screen do not belong to one committed observation`, diagnostics);
     }
     const nodeId = target.ref.split('@')[0] ?? '';
@@ -404,7 +420,7 @@ export class ActionPlanner {
       throw new CapabilityUnavailableError(`${intent.kind} needs conclusive target state`, diagnostics);
     }
     if (requirements.some((entry) => entry.verdict === 'unsatisfied')) {
-      throw new NotActionableError(`${intent.kind} target is disabled or not displayed`, diagnostics);
+      throw new NotActionableError(`${intent.kind} target is disabled or not displayed`, diagnostics, 'target-state');
     }
     const focused = node.state?.focused;
     const focusResult = result(
@@ -627,6 +643,17 @@ export class ActionPlanner {
     return availability?.status === 'supported'
       ? Object.freeze({ status: 'known', value, evidence: availability.evidence })
       : Object.freeze({ status: 'unsupported', capability, reason: availability?.reason === 'framework-unobservable' ? 'framework-unobservable' : availability?.reason === undefined || availability.reason === 'not-negotiated' ? 'not-negotiated' : 'capability' });
+  }
+
+  #requireSettledObservation(intent: ActionIntent): void {
+    const state = this.#ctx.actionObservationState();
+    if (state === 'settled') return;
+    throw new StaleSnapshotError(
+      `${intent.kind} cannot be planned while the committed observation is ${state}`,
+      this.#ctx.errorDiagnostics({
+        suggestion: 'retry after terminal parsing and semantic frame pairing reach one committed observation',
+      }),
+    );
   }
 
   #requireCapability(

@@ -436,11 +436,10 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
       semanticNegotiationMs: 5_000,
       env: {
         TERMWRIGHT_FIXTURE_MOUSE_MODE: '0',
-        TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH: '1',
       },
     });
     await terminal.getByTestId('approve').resolve();
-    await waitForPairedSemanticRevision(terminal, 2);
+    await waitForPairedSemanticRevision(terminal, 1);
 
     const actions: ActionEvent[] = [];
     const starts: ActionStartedEvent[] = [];
@@ -659,11 +658,10 @@ describe.skipIf(!ptyAvailable())('the debug log', { timeout: 20_000 }, () => {
         debug: true,
         env: {
           TERMWRIGHT_FIXTURE_MOUSE_MODE: '0',
-          TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH: '1',
         },
       });
       await terminal.waitForText('Permission required');
-      await waitForPairedSemanticRevision(terminal, 2);
+      await waitForPairedSemanticRevision(terminal, 1);
       await terminal.getByRole('button', { name: 'Approve' }).activate();
       await terminal.paste('correct horse battery staple');
     } finally {
@@ -1057,7 +1055,7 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
     expect(receipt.plan.requirements.every(({ checkpoint }) => checkpoint.sequence === receipt.before.sequence)).toBe(true);
   });
 
-  it.skipIf(process.platform === 'win32')('writes no drag bytes when destination resolution makes the source stale', async () => {
+  it.skipIf(process.platform === 'win32')('re-resolves both drag endpoints without bytes when destination resolution makes the source stale', async () => {
     const terminal = await launch('mouse-app.mjs', {
       env: { TERMWRIGHT_MOUSE_DRAG: '1', TERMWRIGHT_MOUSE_LATE_TARGET: '1' },
     });
@@ -1068,11 +1066,16 @@ describe.skipIf(!ptyAvailable())('mouse input over a real PTY', { timeout: 20_00
       if (kind === 'mouse') input.push(data);
     });
 
+    const initial = terminal.checkpoint();
     const drag = terminal.getByScreenText('MOUSE ON').dragTo(terminal.getByScreenText('LATE TARGET'));
     await new Promise((resolve) => setTimeout(resolve, 50));
-    await terminal.write('l');
-    await expect(drag).rejects.toMatchObject({ code: 'stale-snapshot' });
     expect(input).toHaveLength(0);
+    await terminal.write('l');
+    const receipt = await drag;
+    expect(receipt.before.sequence).toBeGreaterThan(initial.sequence);
+    expect(receipt.executed).toEqual(receipt.plan.operations);
+    expect(input).toHaveLength(receipt.executed.length);
+    expect(receipt.plan.requirements.every(({ checkpoint }) => checkpoint.sequence === receipt.before.sequence)).toBe(true);
   });
 
   it('refuses a drag when the tracking level is insufficient or unobservable', async () => {
@@ -1203,10 +1206,25 @@ describe.skipIf(!ptyAvailable())('a probe-backed session', { timeout: 20_000 }, 
     await expect(missing.evaluateCondition({ kind: 'detached', target: missing.description }))
       .resolves.toMatchObject({ verdict: 'satisfied', observation: { status: 'known', value: true } });
     await expect(missing.evaluateCondition({ kind: 'hidden', target: missing.description }))
-      .resolves.toMatchObject({ verdict: 'inconclusive', observation: { status: 'absent', reason: 'detached' } });
+      .resolves.toMatchObject({ verdict: 'satisfied', observation: { status: 'known', value: true } });
     await expect(missing.evaluateCondition({
       kind: 'not', condition: { kind: 'enabled', target: missing.description },
     })).resolves.toMatchObject({ verdict: 'inconclusive', observation: { status: 'absent', reason: 'detached' } });
+  });
+
+  it('waits for a transient loader to become hidden when it is detached', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { TERMWRIGHT_FIXTURE_LOADER: '1', TERMWRIGHT_FIXTURE_MOUSE_MODE: '0' },
+    });
+    const loader = terminal.getByRole('progressbar', { name: 'Saving' });
+    await loader.resolve();
+
+    const hidden = loader.waitFor({ state: 'hidden', timeout: 2_000 });
+    await terminal.write('L');
+    await hidden;
+    await loader.waitFor({ state: 'detached', timeout: 2_000 });
+    expect(await loader.count()).toBe(0);
   });
 
   it('re-resolves a ref when the probe has stable identity', async () => {
@@ -1330,6 +1348,41 @@ describe.skipIf(!ptyAvailable())('a probe-backed session', { timeout: 20_000 }, 
 });
 
 describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout: 20_000 }, () => {
+  it('does not report hidden or detached before the first semantic revision commits', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { TERMWRIGHT_FIXTURE_FIRST_TREE_DELAY: '250' },
+    });
+    const missing = terminal.getByTestId('not-in-the-tree');
+
+    await expect(missing.waitFor({ state: 'hidden', timeout: 60 })).rejects.toMatchObject({ code: 'timeout' });
+    await expect(missing.waitFor({ state: 'detached', timeout: 60 })).rejects.toMatchObject({ code: 'timeout' });
+
+    await terminal.settled();
+    await missing.waitFor({ state: 'hidden' });
+    await missing.waitFor({ state: 'detached' });
+  });
+
+  it('waits for a pending focus frame before choosing a keyboard strategy', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: {
+        TERMWRIGHT_FIXTURE_MOUSE_MODE: '0',
+        TERMWRIGHT_FIXTURE_PENDING_FOCUS_FRAME: '1',
+      },
+    });
+    await terminal.getByTestId('approve').resolve();
+
+    await terminal.write('F');
+    await terminal.waitForText('[Reject]');
+    const receipt = await terminal.getByTestId('reject').activate();
+
+    expect(receipt.plan.strategy).toBe('focus-enter');
+    expect(receipt.before.semanticRevision).toBe(2);
+    expect(receipt.before.pairedScreenRevision).not.toBeNull();
+    await terminal.waitForText('ACTIVATED reject');
+  });
+
   it('returns only after a required semantic capability is frozen as supported', async () => {
     const terminal = await launch('semantic-app.mjs', {
       semanticNegotiationMs: 5_000,
@@ -1474,6 +1527,36 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     expect(await terminal.getByTestId('reject').semanticState()).toMatchObject({ focused: true });
   });
 
+  it.skipIf(process.platform === 'win32')('allows unrelated status animation without weakening target-local pointer safety', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    const reject = terminal.getByTestId('reject');
+    await reject.resolve();
+
+    await terminal.write('R');
+    await terminal.waitForText('SPINNER 1');
+    const before = terminal.checkpoint();
+    expect(before.pairedScreenRevision).not.toBe(before.screenRevision);
+
+    const receipt = await reject.click({ timeout: 1_000 });
+    expect(receipt.plan.checkpoint.pairedScreenRevision).toBeLessThan(receipt.plan.checkpoint.screenRevision);
+    await terminal.waitForText('CLICKED reject');
+  });
+
+  it.skipIf(process.platform === 'win32')('emits no pointer bytes when unpaired output damages the target cells', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    const approve = terminal.getByTestId('approve');
+    await approve.resolve();
+    const mouseInput: Uint8Array[] = [];
+    terminal.events.on('input', ({ kind, data }) => {
+      if (kind === 'mouse') mouseInput.push(data);
+    });
+
+    await terminal.write('O');
+    await terminal.waitForText('OVERLAY!!');
+    await expect(approve.click({ timeout: 100 })).rejects.toMatchObject({ code: 'stale-snapshot' });
+    expect(mouseInput).toHaveLength(0);
+  });
+
   it.skipIf(process.platform === 'win32')('plans around a covered center cell using the authoritative hit region', async () => {
     const terminal = await launch('semantic-app.mjs', {
       semanticNegotiationMs: 5_000,
@@ -1556,12 +1639,11 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
       semanticNegotiationMs: 5_000,
       env: {
         TERMWRIGHT_FIXTURE_NO_BOUNDS: '1',
-        TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH: '1',
         ...(process.platform === 'win32' ? { TERMWRIGHT_FIXTURE_MOUSE_MODE: '0' } : {}),
       },
     });
     await terminal.waitForText('Permission required');
-    await waitForPairedSemanticRevision(terminal, 2);
+    await waitForPairedSemanticRevision(terminal, 1);
 
     const approve = terminal.getByRole('button', { name: 'Approve' });
     const target = await approve.resolve();
@@ -1661,19 +1743,21 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
       semanticNegotiationMs: 5_000,
       env: {
         TERMWRIGHT_FIXTURE_MOUSE_MODE: '0',
-        TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH: '1',
       },
     });
     await terminal.waitForText('Permission required');
-    await waitForPairedSemanticRevision(terminal, 2);
+    await waitForPairedSemanticRevision(terminal, 1);
 
     const receipt = await terminal.getByTestId('approve').activate();
     expect(receipt.plan.strategy).toBe('focus-enter');
     await terminal.waitForText('ACTIVATED approve');
   });
 
-  it('replans a keyboard action after a torn render without sending stale input', async () => {
-    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+  it('does not let unrelated terminal output block a focused keyboard action', async () => {
+    const terminal = await launch('semantic-app.mjs', {
+      semanticNegotiationMs: 5_000,
+      env: { TERMWRIGHT_FIXTURE_UNPAIRED_REFRESH_DELAY: '1000' },
+    });
     const approve = terminal.getByTestId('approve');
     await approve.resolve();
     const keyboardInput: Uint8Array[] = [];
@@ -1685,7 +1769,9 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     await terminal.waitForText('UNPAIRED SCREEN UPDATE');
     const receipt = await approve.activate({ timeout: 2_000 });
 
-    expect(receipt.before.pairedScreenRevision).toBe(receipt.before.screenRevision);
+    expect(receipt.before.pairedScreenRevision).not.toBeNull();
+    expect(receipt.before.pairedScreenRevision).toBeLessThan(receipt.before.screenRevision);
+    expect(receipt.before.semanticRevision).toBe(receipt.plan.checkpoint.semanticRevision);
     expect(receipt.plan.strategy).toBe('focus-enter');
     expect(keyboardInput).toHaveLength(1);
     await terminal.waitForText('ACTIVATED approve');

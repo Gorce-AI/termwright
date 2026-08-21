@@ -28,11 +28,14 @@ const helloDelay = Number(process.env['TERMWRIGHT_FIXTURE_HELLO_DELAY'] ?? '0');
 // extra line is visible and other packages snapshot this fixture's screen.
 const markProbe = process.env['TERMWRIGHT_FIXTURE_MARK_PROBE'] === '1';
 const terminalMouseEnabled = process.env['TERMWRIGHT_FIXTURE_MOUSE_MODE'] !== '0';
-const startupRepublish = process.env['TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH'] === '1';
+const firstTreeDelay = Number(process.env['TERMWRIGHT_FIXTURE_FIRST_TREE_DELAY'] ?? '0');
+const pendingFocusFrame = process.env['TERMWRIGHT_FIXTURE_PENDING_FOCUS_FRAME'] === '1';
+const unpairedRefreshDelay = Number(process.env['TERMWRIGHT_FIXTURE_UNPAIRED_REFRESH_DELAY'] ?? '100');
 const coverApproveCenter = process.env['TERMWRIGHT_FIXTURE_COVER_APPROVE_CENTER'] === '1';
 const conditionStates = process.env['TERMWRIGHT_FIXTURE_CONDITIONS'] === '1';
 const duplicateSemanticKey = process.env['TERMWRIGHT_FIXTURE_DUPLICATE_KEY'] === '1';
 const hoverTracking = process.env['TERMWRIGHT_FIXTURE_HOVER'] === '1';
+let loaderVisible = process.env['TERMWRIGHT_FIXTURE_LOADER'] === '1';
 // Deliberately malicious provider wire frame. Unlike application SDKs (which
 // stamp revisions themselves), this proves the driver rejects a stale frame
 // received from a real adapter process rather than merely unit-testing the
@@ -130,6 +133,16 @@ function tree() {
         state: { focused: focused === 'reject' },
         actions: ['focus', 'activate'],
       },
+      ...(loaderVisible
+        ? [{
+            id: 'loader',
+            parentId: 'n1',
+            role: 'progressbar',
+            name: 'Saving',
+            bounds: { row: 4, column: 0, width: 10, height: 1 },
+            state: {},
+          }]
+        : []),
     ],
   };
 }
@@ -328,11 +341,45 @@ process.stdin.on('data', (chunk) => {
     return;
   }
   if (text === 'U') {
-    // Put the VT one revision ahead of the last semantic/render pair, then
-    // publish a fresh pair shortly afterwards. Locator keyboard actions must
-    // re-plan without emitting input during this ordinary render race.
+    // Put unrelated terminal output ahead of the last semantic/render pair,
+    // then publish a fresh pair shortly afterwards. A focused keyboard action
+    // does not depend on the changed cells and may proceed against the current
+    // semantic revision without waiting for whole-screen quiet.
     process.stdout.write('UNPAIRED SCREEN UPDATE\r\n');
-    setTimeout(publish, 100);
+    setTimeout(publish, unpairedRefreshDelay);
+    return;
+  }
+  if (text === 'F' && pendingFocusFrame) {
+    // Publish the new focus tree before its render marker. The old committed
+    // tree must not authorize a keyboard action while this related semantic
+    // change is explicitly in flight.
+    revision += 1;
+    focused = 'reject';
+    socket?.write(encodeFrame({ type: 'frame-begin', revision }, 1024 * 1024));
+    draw();
+    socket?.write(encodeFrame({ type: 'snapshot', snapshot: fullSnapshot() }, 1024 * 1024));
+    setTimeout(() => {
+      socket?.write(encodeFrame({ type: 'revision-commit', revision }, 1024 * 1024));
+      process.stdout.write(encodeMarker(token, sessionId, revision));
+    }, 150);
+    return;
+  }
+  if (text === 'R') {
+    // An independently animated status row outside every semantic target.
+    // Deliberately no semantic snapshot or marker: pointer planning must prove
+    // the chosen target cells survived rather than demanding global idleness.
+    process.stdout.write('\x1b[10;1HSPINNER 1');
+    return;
+  }
+  if (text === 'O') {
+    // A physical overwrite inside Approve's pointer region, again without a
+    // semantic commit. Safe locator input must fail closed and emit no bytes.
+    process.stdout.write('\x1b[2;3HOVERLAY!!');
+    return;
+  }
+  if (text === 'L') {
+    loaderVisible = false;
+    publish();
     return;
   }
   if (text === '\r' || text === ' ') {
@@ -390,17 +437,20 @@ if (endpoint === undefined || token === undefined) {
                 }],
               }
             : {}),
-          ...(probeMode === undefined
+          ...(probeMode === undefined && !pendingFocusFrame
             ? {}
             : {
                 probe: {
                   framework: 'fixture-fw',
                   frameworkVersion: '1.0.0',
                   probeVersion: '0.1.0',
-                  identityKind: probeMode,
+                  identityKind: probeMode ?? 'stable',
                   // 'stable-identity' would contradict a frame-local kind, and
                   // the protocol refuses that pair on the wire.
-                  capabilities: probeMode === 'stable' ? ['stable-identity'] : [],
+                  capabilities: [
+                    ...(probeMode === 'stable' || pendingFocusFrame ? ['stable-identity'] : []),
+                    ...(pendingFocusFrame ? ['frame-begin'] : []),
+                  ],
                 },
               }),
         },
@@ -425,8 +475,8 @@ if (endpoint === undefined || token === undefined) {
         }
         // Absent 'logs' means the channel was not granted: stay quiet.
         logBudget = message.logs?.enabled === true ? message.logs : null;
-        publish();
-        if (startupRepublish) setTimeout(publish, 100);
+        if (firstTreeDelay > 0) setTimeout(publish, firstTreeDelay);
+        else publish();
       }
     });
   });

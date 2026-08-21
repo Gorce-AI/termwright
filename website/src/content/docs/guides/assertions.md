@@ -71,6 +71,18 @@ Use `toBeHidden()` when either a hidden state or detachment is acceptable. See
 [Geometry and visibility](../../reference/geometry-visibility/) for the complete
 contract and framework matrix.
 
+For transient UI such as a loader, wait on that concrete condition instead of
+waiting for the whole terminal to become idle:
+
+```ts
+const loader = app.getByRole('progressbar', {name: 'Saving'});
+await loader.waitFor({state: 'hidden'}); // hidden or removed from the tree
+```
+
+Use `{state: 'detached'}` when removal from the semantic tree itself is the
+behavior under test. An unrelated animated status bar does not block either
+condition.
+
 ## Assert bounds and spatial relationships
 
 ```ts

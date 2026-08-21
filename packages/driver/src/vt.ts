@@ -23,6 +23,22 @@
 import { createTerminal, loadSerializeAddon, type Terminal, type TerminalProfile } from '@termwright/vt';
 import { MARKER_OSC_CODE, type CursorInfo } from '@termwright/protocol';
 import type { TerminalModes } from './api.js';
+import { captureRows } from './screen.js';
+
+interface ObservableVtState {
+  readonly structural: string;
+  readonly cells: readonly string[];
+  readonly columns: number;
+  readonly rows: number;
+  readonly buffer: 'normal' | 'alternate';
+  readonly viewportY: number;
+  readonly baseY: number;
+  readonly retainedFloor: number;
+}
+
+type PendingObservationEvent =
+  | { readonly kind: 'revision'; readonly revision: number }
+  | { readonly kind: 'marker'; readonly payload: string; readonly screenRevision: number };
 
 
 /** Options for {@link VtScreen}. */
@@ -134,6 +150,13 @@ export class VtScreen {
   readonly #markerListeners = new Set<(marker: MarkerSighting) => void>();
   readonly #titleListeners = new Set<(title: string) => void>();
   readonly #responseListeners = new Set<(response: TerminalResponse) => void>();
+  readonly #pendingObservationEvents: PendingObservationEvent[] = [];
+  #lastObservedState!: ObservableVtState;
+  #cellLastChangedRevision: number[] = [];
+  #globalCoordinateRevision = 0;
+  #pendingWriteCount = 0;
+  #writeInProgress = false;
+  #flushingObservationEvents = false;
   readonly #serialize: {
     serialize(options?: { scrollback?: number }): string;
     serializeAsHTML(options?: { scrollback?: number }): string;
@@ -159,11 +182,26 @@ export class VtScreen {
     this.#serialize = loadSerializeAddon(this.terminal);
 
     this.#registerHandlers();
+    this.#lastObservedState = this.#observableState();
+    this.#cellLastChangedRevision = Array.from(
+      { length: this.#lastObservedState.cells.length },
+      () => this.#revision,
+    );
   }
 
-  /** Current screen revision; incremented once per fully parsed write. */
+  /** Current screen revision; incremented once per observable VT state change. */
   get revision(): number {
     return this.#revision;
+  }
+
+  /** True from enqueue until the callback of the final queued VT write. */
+  get hasPendingWrite(): boolean {
+    return this.#pendingWriteCount > 0;
+  }
+
+  /** Whether every VT write enqueued so far has reached its parse callback. */
+  get isCaughtUp(): boolean {
+    return this.#pendingWriteCount === 0;
   }
 
   /** Window title as last set by OSC 0/2. */
@@ -190,17 +228,28 @@ export class VtScreen {
    */
   write(data: Uint8Array | string): Promise<void> {
     if (this.#disposed) return Promise.resolve();
+    this.#pendingWriteCount += 1;
     const run = this.#queue.then(
       () =>
         new Promise<void>((resolve) => {
           if (this.#disposed) {
+            this.#pendingWriteCount -= 1;
             resolve();
             return;
           }
+          this.#writeInProgress = true;
           this.terminal.write(data as string, () => {
-            this.#revision += 1;
-            for (const cb of this.#revisionListeners) cb(this.#revision);
-            resolve();
+            try {
+              this.#commitObservableState();
+              this.#writeInProgress = false;
+              this.#flushObservationEvents();
+            } finally {
+              // Keep backlog true while observers process the completed write,
+              // but never strand it if an observer unexpectedly throws.
+              this.#writeInProgress = false;
+              this.#pendingWriteCount -= 1;
+              resolve();
+            }
           });
         }),
     );
@@ -232,6 +281,8 @@ export class VtScreen {
   resize(columns: number, rows: number): void {
     if (this.#disposed) return;
     this.terminal.resize(columns, rows);
+    this.#commitObservableState();
+    if (!this.#writeInProgress) this.#flushObservationEvents();
   }
 
   /**
@@ -305,6 +356,36 @@ export class VtScreen {
     return () => this.#revisionListeners.delete(cb);
   }
 
+  /**
+   * Whether every cell in `spans` survived unchanged since `revision`.
+   * Returns false when a resize/buffer/scroll changed the coordinate system.
+   * This is the target-local counterpart of global
+   * waitForStable(): an unrelated status bar may animate without invalidating
+   * a button elsewhere on screen.
+   */
+  regionUnchangedSince(
+    revision: number,
+    spans: readonly { readonly row: number; readonly from: number; readonly to: number }[],
+  ): boolean {
+    if (revision < 0 || revision > this.#revision) return false;
+    if (revision < this.#globalCoordinateRevision) return false;
+    const columns = this.terminal.cols;
+    const rows = this.terminal.rows;
+    for (const span of spans) {
+      if (
+        span.row < 0
+        || span.row >= rows
+        || span.from < 0
+        || span.to < span.from
+        || span.to > columns
+      ) return false;
+      for (let column = span.from; column < span.to; column += 1) {
+        if ((this.#cellLastChangedRevision[span.row * columns + column] ?? this.#revision) > revision) return false;
+      }
+    }
+    return true;
+  }
+
   onMarker(cb: (marker: MarkerSighting) => void): Unsubscribe {
     this.#markerListeners.add(cb);
     return () => this.#markerListeners.delete(cb);
@@ -355,11 +436,17 @@ export class VtScreen {
     // Render-commit marker. An OSC handler receives everything after the
     // number and its separator, which is the payload verbatim.
     parser.registerOscHandler(MARKER_OSC_CODE, (data: string) => {
-      const sighting: MarkerSighting = {
+      // A marker is a logical observation boundary, independent of transport
+      // chunking. Commit all bytes parsed before it now; bytes after the marker
+      // will form a later revision in the write completion callback (or at the
+      // next marker). Listener delivery remains deferred until parsing returns,
+      // avoiding re-entrancy into xterm while preserving event order.
+      this.#commitObservableState();
+      this.#pendingObservationEvents.push({
+        kind: 'marker',
         payload: data,
-        screenRevision: this.#revision + 1,
-      };
-      for (const cb of this.#markerListeners) cb(sighting);
+        screenRevision: this.#revision,
+      });
       // Consumed: never reaches the grid.
       return true;
     });
@@ -431,6 +518,118 @@ export class VtScreen {
 
   #emitResponse(response: TerminalResponse): void {
     for (const cb of this.#responseListeners) cb(response);
+  }
+
+  /**
+   * Exact observable VT state used for screen revisions.
+   *
+   * PTY chunk boundaries are transport accidents (and differ substantially
+   * under ConPTY), so they cannot define observation revisions. The serializer
+   * captures cells, styles and cursor state; the remaining fields cover state
+   * exposed independently by TerminalHarness.
+   */
+  #observableState(): ObservableVtState {
+    const buffer = this.terminal.buffer.active;
+    const cursor = this.cursor();
+    const modes = this.modes();
+    const cells = captureRows(this).flatMap((row) => row.cells.map((cell) => JSON.stringify(cell)));
+    const structural = [
+      this.terminal.cols,
+      this.terminal.rows,
+      this.activeBuffer(),
+      buffer.baseY,
+      buffer.viewportY,
+      buffer.length,
+      cursor.row,
+      cursor.column,
+      cursor.visible,
+      cursor.shape ?? null,
+      modes.mouseTracking,
+      modes.mouseEncoding,
+      modes.bracketedPaste,
+      modes.applicationCursorKeys,
+      modes.applicationKeypad,
+      modes.focusReporting,
+      modes.synchronizedOutput,
+      this.#title,
+      this.#shell.lastMark,
+      this.#shell.lastExitCode,
+      this.#shell.cwd,
+      this.#shell.bellCount,
+      this.#retainedFloor,
+    ];
+    return Object.freeze({
+      structural: JSON.stringify(structural),
+      cells: Object.freeze(cells),
+      columns: this.terminal.cols,
+      rows: this.terminal.rows,
+      buffer: this.activeBuffer(),
+      viewportY: buffer.viewportY,
+      baseY: buffer.baseY,
+      retainedFloor: this.#retainedFloor,
+    });
+  }
+
+  #commitObservableState(): void {
+    const before = this.#lastObservedState;
+    const after = this.#observableState();
+    const changedCells: number[] = [];
+    const count = Math.max(before.cells.length, after.cells.length);
+    for (let index = 0; index < count; index += 1) {
+      if (before.cells[index] !== after.cells[index]) changedCells.push(index);
+    }
+    if (before.structural === after.structural && changedCells.length === 0) return;
+
+    this.#revision += 1;
+    const global = before.columns !== after.columns
+      || before.rows !== after.rows
+      || before.buffer !== after.buffer
+      || before.viewportY !== after.viewportY
+      || before.baseY !== after.baseY
+      || before.retainedFloor !== after.retainedFloor;
+    if (global) {
+      this.#globalCoordinateRevision = this.#revision;
+      this.#cellLastChangedRevision = Array.from(
+        { length: after.cells.length },
+        () => this.#revision,
+      );
+    } else {
+      if (this.#cellLastChangedRevision.length !== after.cells.length) {
+        // Defensive fail-closed fallback. A cell-count change should have been
+        // classified as a coordinate-system change above.
+        this.#globalCoordinateRevision = this.#revision;
+        this.#cellLastChangedRevision = Array.from(
+          { length: after.cells.length },
+          () => this.#revision,
+        );
+      } else {
+        for (const index of changedCells) this.#cellLastChangedRevision[index] = this.#revision;
+      }
+    }
+    this.#lastObservedState = after;
+    this.#pendingObservationEvents.push({ kind: 'revision', revision: this.#revision });
+  }
+
+  #flushObservationEvents(): void {
+    if (this.#flushingObservationEvents) return;
+    this.#flushingObservationEvents = true;
+    try {
+      for (;;) {
+        const event = this.#pendingObservationEvents.shift();
+        if (event === undefined) return;
+        if (event.kind === 'revision') {
+          for (const cb of this.#revisionListeners) cb(event.revision);
+        } else {
+          const sighting: MarkerSighting = {
+            payload: event.payload,
+            screenRevision: event.screenRevision,
+          };
+          for (const cb of this.#markerListeners) cb(sighting);
+        }
+      }
+    } finally {
+      this.#flushingObservationEvents = false;
+    }
   }
 
   #applyPrivateMode(code: number, enabled: boolean): void {

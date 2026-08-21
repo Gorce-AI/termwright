@@ -61,6 +61,7 @@ import {
   isAuthoritativeRegionOwnership,
   type LeafCondition,
 } from './action-planner.js';
+import { ActionRetryController } from './internal/action-retry.js';
 import { matchGrid, matchSemantic, textInRect, type SemanticIndex } from './matching.js';
 import type { CapturedRow } from './screen.js';
 import {
@@ -82,6 +83,8 @@ import {
 export interface LocatorContext {
   readonly sessionId: string;
   readonly timeouts: Required<TimeoutClasses>;
+  actionObservationState(): 'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending';
+  negotiationPending(): boolean;
   /** Resolves once semantic negotiation has settled one way or the other. */
   negotiationSettled(): Promise<void>;
   semanticIndex(): SemanticIndex | null;
@@ -98,6 +101,7 @@ export interface LocatorContext {
   semanticNode(id: string): SemanticNode | undefined;
   hitGrid(): Observation<import('@termwright/protocol').PointerHitGrid> | undefined;
   pointerRegion(id: string): { readonly regionBounds: Rect; readonly spans: import('@termwright/protocol').PhysicalRegion['spans']; readonly evidence: EvidenceProvenance } | undefined;
+  screenRegionUnchangedSince(revision: number, spans: import('@termwright/protocol').PhysicalRegion['spans']): boolean;
   rows(): readonly CapturedRow[];
   modes(): TerminalModes;
   /** The best identity the attached producer can offer for a node. */
@@ -107,7 +111,7 @@ export interface LocatorContext {
   /** Resolves when a screen or semantic revision is published, or the deadline passes. */
   waitForChange(deadline: number): Promise<void>;
   sendInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): Promise<void>;
-  executeDeviceOperations(operations: readonly DeviceOperation[], expected: ObservationStamp): Promise<readonly DeviceOperation[]>;
+  executeDeviceOperations(operations: readonly DeviceOperation[], expected: ObservationStamp, deadline?: number): Promise<readonly DeviceOperation[]>;
   /** Publishes the start of an action and returns its session-local id. */
   beginAction(api: string, about?: { selector?: string }): string;
   /** Publishes the authoritative completion of an action. */
@@ -354,8 +358,8 @@ export class LocatorImpl implements Locator {
 
   async count(): Promise<number> {
     this.#ctx.assertOpen();
-    await this.#ctx.negotiationSettled();
     const deadline = Date.now() + this.#ctx.timeouts.action;
+    await this.#awaitNegotiation(deadline, 'count()');
     while (this.#expr.domain === 'semantic' && this.#ctx.semanticIndex() === null && this.#ctx.semanticPossible()) {
       if (Date.now() >= deadline) break;
       await this.#ctx.waitForChange(deadline);
@@ -365,8 +369,8 @@ export class LocatorImpl implements Locator {
 
   async resolve(opts?: WaitOptions): Promise<ResolvedTarget> {
     this.#ctx.assertOpen();
-    await this.#ctx.negotiationSettled();
     const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
+    await this.#awaitNegotiation(deadline, 'resolve()');
     for (;;) {
       this.#ctx.assertOpen();
       const matches = this.#evaluate(this.#expr, null);
@@ -390,9 +394,9 @@ export class LocatorImpl implements Locator {
 
   async waitFor(opts?: { state?: 'visible' | 'hidden' | 'attached' | 'detached' | 'displayed' | 'offscreen' | 'focused' | 'enabled' | 'disabled' | 'checked' | 'selected' | 'expanded' | 'collapsed' } & WaitOptions): Promise<void> {
     this.#ctx.assertOpen();
-    await this.#ctx.negotiationSettled();
     const wanted = opts?.state ?? 'visible';
     const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
+    await this.#awaitNegotiation(deadline, `waitFor(${wanted})`);
     for (;;) {
       this.#ctx.assertOpen();
       const matches = await this.#tryEvaluate(deadline);
@@ -422,7 +426,8 @@ export class LocatorImpl implements Locator {
 
   async evaluateCondition(condition: Condition): Promise<import('@termwright/protocol').ConditionResult> {
     this.#ctx.assertOpen();
-    await this.#ctx.negotiationSettled();
+    const deadline = Date.now() + this.#ctx.timeouts.action;
+    await this.#awaitNegotiation(deadline, 'evaluateCondition()');
     const before = this.#ctx.checkpoint();
     const selected = this.#select(await this.#tryEvaluate(Date.now()));
     const after = this.#ctx.checkpoint();
@@ -644,9 +649,34 @@ export class LocatorImpl implements Locator {
   /** Immediate strict observation: zero is detached; ambiguity is an error. */
   async #readStrict(): Promise<ResolvedTarget | null> {
     this.#ctx.assertOpen();
-    await this.#ctx.negotiationSettled();
+    const deadline = Date.now() + this.#ctx.timeouts.action;
+    await this.#awaitNegotiation(deadline, 'locator observation');
     const matches = await this.#tryEvaluate(Date.now());
     return this.#select(matches);
+  }
+
+  async #awaitNegotiation(deadline: number, operation: string): Promise<void> {
+    if (!this.#ctx.negotiationPending()) return;
+    const settled = this.#ctx.negotiationSettled().then(() => true);
+    for (;;) {
+      if (Date.now() >= deadline) {
+        throw new TimeoutError(
+          `${operation} exceeded its timeout during semantic capability negotiation`,
+          this.#ctx.errorDiagnostics({ suggestion: 'increase the timeout or diagnose why the framework probe did not complete negotiation' }),
+        );
+      }
+      const completed = await Promise.race([
+        settled,
+        this.#ctx.waitForChange(deadline).then(() => false),
+      ]);
+      if (Date.now() >= deadline) {
+        throw new TimeoutError(
+          `${operation} exceeded its timeout during semantic capability negotiation`,
+          this.#ctx.errorDiagnostics({ suggestion: 'increase the timeout or diagnose why the framework probe did not complete negotiation' }),
+        );
+      }
+      if (completed || !this.#ctx.negotiationPending()) return;
+    }
   }
 
   #stamp(): ObservationStamp {
@@ -725,17 +755,26 @@ export class LocatorImpl implements Locator {
     if (!(raw instanceof LocatorImpl)) {
       throw new TypeError('dragTo() requires a locator created by this harness');
     }
-    const source = await this.resolve(opts);
-    record(source);
-    const destination = await raw.resolve(opts);
-    const { plan } = new ActionPlanner(this.#ctx).planDrag(
-      actionId,
-      { kind: 'drag', selector: this.description, targetRef: source.ref },
-      source,
-      destination,
-      opts,
-    );
-    return this.#executePlan(plan);
+    const retry = new ActionRetryController(opts?.timeout ?? this.#ctx.timeouts.action);
+    for (;;) {
+      try {
+        const remaining = retry.remaining();
+        const source = await this.resolve({ ...opts, timeout: remaining });
+        record(source);
+        const destination = await raw.resolve({ ...opts, timeout: retry.remaining() });
+        const { plan } = new ActionPlanner(this.#ctx).planDrag(
+          actionId,
+          { kind: 'drag', selector: this.description, targetRef: source.ref },
+          source,
+          destination,
+          opts,
+        );
+        retry.assertBeforeInput(this.#ctx.errorDiagnostics({ candidates: [source, destination] }));
+        return await this.#executePlan(plan, retry);
+      } catch (error) {
+        await retry.retry(error, this.#ctx);
+      }
+    }
   }
 
   async wheel(opts: LocatorWheelOptions): Promise<ActionReceipt> {
@@ -747,15 +786,23 @@ export class LocatorImpl implements Locator {
     record: (target: ResolvedTarget) => void,
     actionId: string,
   ): Promise<ActionReceipt> {
-    const target = await this.resolve(opts);
-    record(target);
-    const { plan } = new ActionPlanner(this.#ctx).planWheel(
-      actionId,
-      { kind: 'wheel', selector: this.description, targetRef: target.ref },
-      target,
-      opts,
-    );
-    return this.#executePlan(plan);
+    const retry = new ActionRetryController(opts.timeout ?? this.#ctx.timeouts.action);
+    for (;;) {
+      try {
+        const target = await this.resolve({ ...opts, timeout: retry.remaining() });
+        record(target);
+        const { plan } = new ActionPlanner(this.#ctx).planWheel(
+          actionId,
+          { kind: 'wheel', selector: this.description, targetRef: target.ref },
+          target,
+          opts,
+        );
+        retry.assertBeforeInput(this.#ctx.errorDiagnostics({ candidates: [target] }));
+        return await this.#executePlan(plan, retry);
+      } catch (error) {
+        await retry.retry(error, this.#ctx);
+      }
+    }
   }
 
   async press(keys: string, opts?: WaitOptions): Promise<ActionReceipt> {
@@ -804,7 +851,7 @@ export class LocatorImpl implements Locator {
   async #checkedAction(value: boolean, opts?: WaitOptions): Promise<ActionReceipt> {
     const api = value ? 'check' : 'uncheck';
     return this.#act(api, async (record, actionId) => {
-      const { receipt, target } = await this.#plannedKeyboard(
+      const { receipt, target, retry } = await this.#plannedKeyboard(
         { kind: value ? 'check' : 'uncheck', selector: this.description },
         '',
         opts,
@@ -812,18 +859,19 @@ export class LocatorImpl implements Locator {
         actionId,
       );
       if (receipt.plan.operations.length > 0) {
-        const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
         for (;;) {
-          const remaining = Math.max(1, deadline - Date.now());
-          const current = await this.resolve({ timeout: remaining });
+          const current = await this.resolve({ timeout: retry.remaining() });
           const node = current.semantic
             ? this.#ctx.semanticNode(current.ref.split('@')[0] ?? '')
             : undefined;
           if (node?.state?.checked === value) break;
-          if (Date.now() >= deadline) {
+          if (retry.expired()) {
             throw new TimeoutError(`${api}() did not observe checked=${String(value)} after the physical action`, this.#ctx.errorDiagnostics({ candidates: [target] }));
           }
-          await this.#ctx.waitForChange(deadline);
+          await this.#ctx.waitForChange(retry.waitDeadline());
+          if (retry.expired()) {
+            throw new TimeoutError(`${api}() did not observe checked=${String(value)} after the physical action`, this.#ctx.errorDiagnostics({ candidates: [target] }));
+          }
         }
       }
       return Object.freeze({ ...receipt, after: this.#ctx.checkpoint() });
@@ -836,10 +884,10 @@ export class LocatorImpl implements Locator {
     opts: WaitOptions | undefined,
     record: (target: ResolvedTarget) => void,
     actionId: string,
-  ): Promise<{ readonly receipt: ActionReceipt; readonly target: ResolvedTarget }> {
-    const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
+  ): Promise<{ readonly receipt: ActionReceipt; readonly target: ResolvedTarget; readonly retry: ActionRetryController }> {
+    const retry = new ActionRetryController(opts?.timeout ?? this.#ctx.timeouts.action);
     for (;;) {
-      const target = await this.resolve({ ...opts, timeout: Math.max(1, deadline - Date.now()) });
+      const target = await this.resolve({ ...opts, timeout: retry.remaining() });
       record(target);
       try {
         const plan = new ActionPlanner(this.#ctx).planKeyboard(
@@ -848,13 +896,10 @@ export class LocatorImpl implements Locator {
           target,
           value,
         );
-        return Object.freeze({ receipt: await this.#executePlan(plan), target });
+        retry.assertBeforeInput(this.#ctx.errorDiagnostics({ candidates: [target] }));
+        return Object.freeze({ receipt: await this.#executePlan(plan, retry), target, retry });
       } catch (error) {
-        // No device operation has run when planning detects a torn revision.
-        // Wait for a new committed pair and resolve again, exactly as pointer
-        // planning does, rather than exposing an ordinary render race.
-        if (!(error instanceof StaleSnapshotError) || Date.now() >= deadline) throw error;
-        await this.#ctx.waitForChange(deadline);
+        await retry.retry(error, this.#ctx);
       }
     }
   }
@@ -906,26 +951,27 @@ export class LocatorImpl implements Locator {
     record: (target: ResolvedTarget) => void,
     actionId: string,
   ): Promise<ActionReceipt> {
-    const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
+    const retry = new ActionRetryController(opts?.timeout ?? this.#ctx.timeouts.action);
     for (;;) {
-      const target = await this.resolve({ ...opts, timeout: Math.max(1, deadline - Date.now()) });
+      const target = await this.resolve({ ...opts, timeout: retry.remaining() });
       record(target);
       try {
         const { plan } = new ActionPlanner(this.#ctx).planPointer(actionId, { ...intent, targetRef: target.ref }, target, opts);
-        return this.#executePlan(plan);
+        retry.assertBeforeInput(this.#ctx.errorDiagnostics({ candidates: [target] }));
+        return await this.#executePlan(plan, retry);
       } catch (error) {
         // Planning has not emitted input yet. A render committed between lazy
         // locator resolution and evidence collection, so wait for the next
         // paired observation and resolve the locator again instead of using
         // stale coordinates or surfacing a race to the test author.
-        if (!(error instanceof StaleSnapshotError) || Date.now() >= deadline) throw error;
-        await this.#ctx.waitForChange(deadline);
+        await retry.retry(error, this.#ctx);
       }
     }
   }
 
-  async #executePlan(plan: ActionPlan): Promise<ActionReceipt> {
-    const executed = await this.#ctx.executeDeviceOperations(plan.operations, plan.checkpoint);
+  async #executePlan(plan: ActionPlan, retry: ActionRetryController): Promise<ActionReceipt> {
+    retry.assertBeforeInput(this.#ctx.errorDiagnostics());
+    const executed = await this.#ctx.executeDeviceOperations(plan.operations, plan.checkpoint, retry.deadline);
     return Object.freeze({
       intent: plan.intent,
       plan,
@@ -991,8 +1037,18 @@ export class LocatorImpl implements Locator {
     }
     const bool = (value: boolean, evidence: EvidenceProvenance = availability.evidence): Observation<boolean> =>
       Object.freeze({ status: 'known', value, evidence });
+    // Before the first committed semantic tree, an empty match set is not
+    // evidence of absence. In particular hidden/detached must not false-green
+    // while an attached provider is still producing its initial revision.
+    if (this.#expr.domain === 'semantic' && this.#ctx.semanticIndex() === null) {
+      return Object.freeze({ status: 'unknown', reason: 'awaiting-revision-pair' });
+    }
     if (kind === 'attached' || kind === 'detached') return bool(kind === 'attached' ? target !== null : target === null);
     if (target === null) {
+      // Hidden intentionally includes detachment. This is the ergonomic
+      // condition for transient UI such as loaders; callers that need to
+      // distinguish removal from display:none use `detached` explicitly.
+      if (kind === 'hidden') return bool(true);
       return absent<boolean>('detached', availability.evidence);
     }
     if (!target.semantic) {
