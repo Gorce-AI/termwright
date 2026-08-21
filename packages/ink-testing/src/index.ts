@@ -17,7 +17,7 @@
  * import { mountInk } from '@termwright/ink-testing';
  *
  * const harness = await mountInk(<Approve onApprove={spy} />, { columns: 40, rows: 8 });
- * await harness.getByRole('button', { name: 'Approve' }).click();
+ * await harness.press('Enter');
  * await vi.waitFor(() => expect(spy).toHaveBeenCalledOnce());
  * await harness.close();
  * ```

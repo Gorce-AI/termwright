@@ -206,6 +206,14 @@ describe('the ui command', () => {
     expect(h.closed()).toBe(1);
   });
 
+  it('forwards Gherkin tag selection to discovery and every managed run', async () => {
+    const h = harness();
+    expect(await runCli(['ui', '--tags', '@component and not @slow'], h.deps)).toBe(EXIT_CODES.ok);
+
+    expect(h.runs).toHaveLength(1);
+    expect(h.runs[0]).toMatchObject({ tags: '@component and not @slow' });
+  });
+
   it('opens Electron by default for an interactive terminal', async () => {
     const h = harness();
     const launchDesktop = vi.fn(async () => ({

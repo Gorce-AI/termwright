@@ -36,6 +36,7 @@
     "@cucumber/cucumber-expressions": "20.1.0",
     "@cucumber/gherkin": "42.0.1",
     "@cucumber/messages": "34.2.1",
+    "@cucumber/tag-expressions": "^11.0.1",
     "@termwright/test": "workspace:*",
     "source-map-js": "1.2.1",
     "tinyglobby": "0.2.17"

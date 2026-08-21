@@ -28,8 +28,16 @@ describe('parseArgs', () => {
   });
 
   it('reads the ui flags', () => {
-    const args = parseArgs(['ui', '--port', '4000', '--host', '127.0.0.1', '--no-watch']);
-    expect(args).toMatchObject({ command: 'ui', port: 4000, host: '127.0.0.1', watch: false });
+    const args = parseArgs([
+      'ui', '--port', '4000', '--host', '127.0.0.1', '--tags', '@smoke and not @slow', '--no-watch',
+    ]);
+    expect(args).toMatchObject({
+      command: 'ui',
+      port: 4000,
+      host: '127.0.0.1',
+      tags: '@smoke and not @slow',
+      watch: false,
+    });
     expect(args.surface).toBe('desktop');
   });
 
@@ -92,6 +100,11 @@ describe('parseArgs', () => {
 
   it('rejects a flag it does not know', () => {
     expect(() => parseArgs(['ui', '--turbo'])).toThrow(/unknown argument/u);
+  });
+
+  it('does not apply Gherkin tag filtering to unrelated commands', () => {
+    expect(() => parseArgs(['report', '--trace', 'a.twtrace', '--tags', '@smoke']))
+      .toThrow(/only available with `termwright ui`/u);
   });
 
   it('rejects a flag whose value is missing', () => {

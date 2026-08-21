@@ -56,6 +56,59 @@ export default defineSteps(
 Each Scenario gets a fresh `world`. The step context also provides `terminal`,
 `step`, `expect`, resolved Termwright options, and Scenario metadata.
 
+The generated module imports only `termwright/test` and
+`termwright/gherkin/runtime`. A project using a strict package manager does not
+need to add Termwright's internal packages beside the umbrella package.
+
+## Manage scenario setup and resources
+
+Use `Before` and `After` for setup tied to each Scenario. Hooks are inert values
+in the same nearest-scope glue module as step definitions; they do not register
+process-global state.
+
+```ts
+import {After, Before, Given, defineSteps} from 'termwright/gherkin';
+
+export default defineSteps(
+  Before(async ({terminal, world}) => {
+    world.app = await terminal.launch({command: [process.execPath, program]});
+  }),
+  After(({world}) => {
+    world.app = undefined;
+  }),
+  Given('the application is ready', async ({world}) => {
+    await (world.app as TerminalHarness).waitForReady();
+  }),
+);
+```
+
+Programs created by `terminal.launch()` already close after the Scenario. For a
+component helper or custom integration that returns `TerminalHarness`, attach
+it to the same fixture:
+
+```ts
+Before(async ({terminal, world}) => {
+  world.app = await terminal.attach(await mountInk(<Permission />), {
+    command: ['<mountInk>'],
+  });
+});
+```
+
+The attached harness participates in Runner live state, trace recording,
+application logs, crash reporting, and automatic teardown. This contract is
+framework-neutral. Use `defer(cleanup)` or `use(resource)` for other
+scenario-scoped resources; cleanup runs in reverse order after `After` hooks,
+including after a failed step.
+
+Hooks accept a Cucumber tag expression when setup applies only to part of the
+suite:
+
+```ts
+Before({tags: '@component and not @slow'}, async (context) => {
+  // scenario-scoped setup
+});
+```
+
 ## Run Gherkin in the Runner
 
 ```sh
@@ -96,6 +149,26 @@ Then use normal Vitest selection:
 npx vitest run tests/features/command-approval.feature
 ```
 
+## Filter scenarios by tag
+
+Runner-owned execution accepts standard Cucumber tag expressions:
+
+```sh
+npx termwright ui --tags '@e2e and not @slow'
+```
+
+For direct Vitest or IDE runs, configure the same expression on the plugin:
+
+```ts
+gherkinPlugin({
+  featureRoot: 'tests/features',
+  tags: process.env.GHERKIN_TAGS,
+})
+```
+
+Filtering happens during feature collection, so excluded Scenario and Outline
+rows do not enter the Vitest suite.
+
 ## Use Background and Scenario Outline
 
 `Background`, `Rule`, `Scenario Outline`, `Examples`, DocStrings, and DataTables
@@ -105,12 +178,14 @@ authored steps in Runner.
 Use `Background` for setup shared by Scenarios in one feature. Use normal
 Termwright fixtures for reusable application setup across feature files.
 
-## Current limitations
+## Editor support and step diagnostics
 
-Gherkin hooks, tag-based run filtering, and a Termwright-specific editor
-extension are not available. Tags are retained as Scenario metadata. Use
-Background, step definitions, fixtures, and Vitest or Runner run scopes for the
-supported workflows.
+The source of every case and step remains the physical `.feature` line, so
+Vitest output and Runner's Open source action return to authored prose. Use an
+editor Cucumber extension for `.feature` syntax and navigation to the paired
+`Given`/`When`/`Then` calls. Termwright reports undefined steps and same-tier
+ambiguities with the step text and candidate glue files during the normal test
+run; it does not currently ship a separate language server.
 
 For expressions, step pairing, ambiguity, Scenario Outline identity, and the
 transform contract, see [Gherkin reference](../../reference/gherkin/).

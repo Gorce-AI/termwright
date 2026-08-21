@@ -8,4 +8,24 @@
  * @packageDocumentation
  */
 
+import {
+  gherkinPlugin as packageGherkinPlugin,
+  type GherkinPluginOptions,
+} from '@termwright/gherkin';
+
 export * from '@termwright/gherkin';
+
+/**
+ * Creates the plugin with generated imports that stay on the umbrella package.
+ * Strict package managers therefore need only the documented `termwright`
+ * dependency at the project root.
+ */
+export function gherkinPlugin(options: GherkinPluginOptions = {}) {
+  return packageGherkinPlugin({
+    ...options,
+    generatedImports: {
+      test: 'termwright/test',
+      runtime: 'termwright/gherkin/runtime',
+    },
+  });
+}

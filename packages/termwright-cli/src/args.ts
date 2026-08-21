@@ -53,7 +53,7 @@ export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
   ui: {
     headline: 'open the runner: live terminal, semantic inspector, timeline.',
     synopsis: [
-      'ui [--trace <file>] [--port N] [--host H] [--no-watch] [--browser | --no-open] [-- <vitest args>]',
+      'ui [--trace <file>] [--tags <expression>] [--port N] [--host H] [--no-watch] [--browser | --no-open] [-- <vitest args>]',
       'ui --record [--out-file <file>] -- <command>',
     ],
     summary: [
@@ -139,6 +139,8 @@ export interface ParsedArgs {
   readonly out: string | undefined;
   readonly port: number | undefined;
   readonly host: string | undefined;
+  /** Cucumber tag expression selecting physical Gherkin cases. */
+  readonly tags: string | undefined;
   /** Whether `ui` should also run the test suite in watch mode. Default true. */
   readonly watch: boolean;
   /** Requested UI surface. Interactive use defaults to the desktop host. */
@@ -164,6 +166,7 @@ const NEEDS_VALUE = new Set([
   '--out',
   '--port',
   '--host',
+  '--tags',
   '--at',
   '--step',
   '--scale',
@@ -206,6 +209,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let out: string | undefined;
   let port: number | undefined;
   let host: string | undefined;
+  let tags: string | undefined;
   let watch = true;
   let surface: UiSurface = 'desktop';
   let atMs: number | undefined;
@@ -245,6 +249,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         case '--host':
           host = value;
+          break;
+        case '--tags':
+          tags = value;
           break;
         case '--at':
           atMs = numberFlag('--at', value);
@@ -324,6 +331,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   if (record && trace !== undefined) {
     throw usageError('--trace and --record are different modes; pass one', 'see `termwright --help`');
   }
+  if (tags !== undefined && resolved !== 'ui') {
+    throw usageError('--tags is only available with `termwright ui`');
+  }
   if (resolved === 'screenshot' && trace === undefined) {
     throw usageError(
       'screenshot needs the recording to capture',
@@ -355,6 +365,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     out,
     port,
     host,
+    tags,
     watch,
     surface,
     atMs,

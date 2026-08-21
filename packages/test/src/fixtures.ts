@@ -69,6 +69,14 @@ export interface LaunchFixtureOptions extends Omit<LaunchOptions, 'command'> {
   readonly trace?: TraceMode;
 }
 
+/** Options for adopting a harness created by a framework component helper. */
+export interface AttachFixtureOptions {
+  /** Trace policy for this session, overriding the file's and project's. */
+  readonly trace?: TraceMode;
+  /** Command label stored in the trace metadata. */
+  readonly command?: readonly string[];
+}
+
 /** Runs a titled step; it becomes a marker in the recording and a trace event. */
 export interface StepOptions {
   /** Authored identity for a physical Gherkin step. */
@@ -89,6 +97,14 @@ export interface TermwrightScopeFixture {
 /** Launches terminals that close themselves when the test ends. */
 export interface TerminalFactory {
   launch(options?: LaunchFixtureOptions): Promise<TerminalHarness>;
+  /**
+   * Adopts an existing harness for this test.
+   *
+   * The fixture collects its logs, publishes it to the Runner, records its
+   * trace, and closes it during teardown. This works with every component
+   * helper that returns the shared {@link TerminalHarness} contract.
+   */
+  attach<T extends TerminalHarness>(harness: T, options?: AttachFixtureOptions): Promise<T>;
   /** Sessions launched by this test, in launch order. */
   readonly sessions: readonly TerminalHarness[];
   /** The test's private working directory. */
@@ -215,6 +231,7 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
     const scope = currentScope(scopeKey(task.file.filepath, fullName(task)));
     const sessions: Session[] = [];
     const harnesses: TerminalHarness[] = [];
+    const attached = new WeakSet<TerminalHarness>();
     const logs = createLogCollection();
     const detachers: (() => void)[] = [];
     let threshold: LogLevel | false =
@@ -233,6 +250,42 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
       appendCrashSection(task.result?.errors, crashes);
     });
 
+    const attachHarness = async <T extends TerminalHarness>(
+      harness: T,
+      options: AttachFixtureOptions,
+    ): Promise<T> => {
+      if (attached.has(harness)) {
+        throw new TypeError(`terminal.attach() received session ${harness.sessionId} more than once`);
+      }
+      const merged = mergeOptions(config, termwrightOptions, {
+        ...(options.trace === undefined ? {} : { trace: options.trace }),
+      });
+      const screen = harness.screen();
+      const command = options.command ?? ['<attached-harness>'];
+      const index = sessions.length;
+      const dir = merged.trace === 'off'
+        ? undefined
+        : traceDir(config, { taskId: task.id, name: fullName(task), index, attempt });
+      const writer = dir === undefined
+        ? undefined
+        : createTraceWriter(harness, {
+            dir,
+            command,
+            columns: screen.columns,
+            rows: screen.rows,
+          });
+      const live = connectLiveSession(harness, {
+        testId: task.id,
+        currentStepId: () => currentStepId(scope),
+      });
+      detachers.push(collectLogs(harness, logs).dispose);
+      if (writer !== undefined) attachWriter(scope, writer);
+      sessions.push({ harness, live, writer, dir, trace: merged.trace });
+      harnesses.push(harness);
+      attached.add(harness);
+      return harness;
+    };
+
     const factory: TerminalFactory = {
       sessions: harnesses,
       logs,
@@ -241,6 +294,12 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
       },
       get tmpdir(): string {
         return termwright.tmpdir;
+      },
+      attach<T extends TerminalHarness>(
+        harness: T,
+        options: AttachFixtureOptions = {},
+      ): Promise<T> {
+        return attachHarness(harness, options);
       },
       async launch(options: LaunchFixtureOptions = {}): Promise<TerminalHarness> {
         const merged = mergeOptions(config, termwrightOptions, options, inheritedEnv());
@@ -270,33 +329,7 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
           env: merged.env,
           timeouts: merged.timeouts,
         });
-        const index = sessions.length;
-        const dir =
-          merged.trace === 'off'
-            ? undefined
-            : traceDir(config, { taskId: task.id, name: fullName(task), index, attempt });
-        const writer =
-          dir === undefined
-            ? undefined
-            : createTraceWriter(harness, {
-                dir,
-                command,
-                columns: merged.columns,
-                rows: merged.rows,
-              });
-        // `termwright ui` runs the fixture in a Vitest worker, outside the
-        // server process. This bridge carries the same session event stream a
-        // direct `server.attach()` would consume. With no UI URL it is a true
-        // no-op; an unavailable UI is observability loss, never a test failure.
-        const live = connectLiveSession(harness, {
-          testId: task.id,
-          currentStepId: () => currentStepId(scope),
-        });
-        detachers.push(collectLogs(harness, logs).dispose);
-        if (writer !== undefined) attachWriter(scope, writer);
-        sessions.push({ harness, live, writer, dir, trace: merged.trace });
-        harnesses.push(harness);
-        return harness;
+        return attachHarness(harness, { trace: merged.trace, command });
       },
     };
 

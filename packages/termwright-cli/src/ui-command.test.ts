@@ -156,6 +156,39 @@ describe('the UI-only runner contract', () => {
     }
   }, 60_000);
 
+  it('filters managed physical features with a Cucumber tag expression', async () => {
+    const listing = JSON.parse(await discoverTermwrightListing({
+      cwd: projectRoot,
+      args: ['--config', gherkinUiConfig],
+    }, '@smoke and not @slow')) as { name: string }[];
+
+    expect(listing.map(({ name }) => name).sort()).toEqual([
+      'Permission workflow > focuses Reject with the keyboard',
+      'TypeScript opens the permission terminal',
+    ]);
+
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-gherkin-tags-'));
+    try {
+      const effects = join(directory, 'effects.log');
+      const run = await runProcess(
+        builtUiHost,
+        ['run', '--config', gherkinUiConfig, '--reporter=dot'],
+        {
+          TERMWRIGHT_GHERKIN_TAGS: '@smoke and not @slow',
+          TERMWRIGHT_GHERKIN_UI_EFFECTS: effects,
+          CI: 'true',
+        },
+      );
+      expect(run.code, run.output).toBe(0);
+      expect((await readFile(effects, 'utf8')).trim().split('\n').sort()).toEqual([
+        'FEATURE',
+        'TYPESCRIPT',
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it('uses one mixed TypeScript + Gherkin catalogue and host for discovery, run all, line and rerun', async () => {
     const discovery = await discoverTests({
       cwd: projectRoot,

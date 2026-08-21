@@ -30,6 +30,8 @@ export interface VitestRun {
   /** Published to the test process so the reporter finds the server. */
   readonly uiUrl: string;
   readonly cwd: string;
+  /** Cucumber tag expression forwarded privately to the managed transform. */
+  readonly tags?: string;
 }
 
 /** A running test process the browser's controls can reach. */
@@ -117,12 +119,22 @@ export function uiVitestHostPath(): string {
  * `collect()` model keeps it, so the UI reads that model and emits the same
  * compact shape `@termwright/ui` already validates.
  */
-export async function discoverTermwrightListing(options: DiscoveryOptions): Promise<string> {
+export async function discoverTermwrightListing(
+  options: DiscoveryOptions,
+  tags?: string,
+): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     const child = spawn(
       process.execPath,
       [uiVitestHostPath(), 'list', ...(options.args ?? [])],
-      { cwd: options.cwd, stdio: ['ignore', 'pipe', 'pipe'] },
+      {
+        cwd: options.cwd,
+        env: {
+          ...process.env,
+          ...(tags === undefined ? {} : { TERMWRIGHT_GHERKIN_TAGS: tags }),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
     );
     let stdout = '';
     let stderr = '';
@@ -253,6 +265,7 @@ export function startVitest(
       ...(watcherNamePattern === undefined || watcherNamePattern === ''
         ? {}
         : { [UI_SELECTION_ENV]: JSON.stringify({ testNamePattern: watcherNamePattern }) }),
+      ...(run.tags === undefined ? {} : { TERMWRIGHT_GHERKIN_TAGS: run.tags }),
     },
     stdio: 'inherit',
   });
@@ -317,6 +330,7 @@ export function startVitest(
           ...process.env,
           [UI_URL_ENV]: run.uiUrl,
           ...(selection === undefined ? {} : { [UI_SELECTION_ENV]: selection }),
+          ...(run.tags === undefined ? {} : { TERMWRIGHT_GHERKIN_TAGS: run.tags }),
         },
         stdio: ['ignore', 'inherit', 'inherit'],
       });
@@ -372,6 +386,7 @@ export interface UiRequest {
   readonly outFile: string | undefined;
   readonly port: number | undefined;
   readonly host: string | undefined;
+  readonly tags: string | undefined;
   readonly watch: boolean;
   readonly rest: readonly string[];
   readonly cwd: string;
@@ -427,7 +442,7 @@ export async function runUi(
             cwd: request.cwd,
             watch: request.watch,
             args: request.rest,
-            run: discoverTermwrightListing,
+            run: (options: DiscoveryOptions) => discoverTermwrightListing(options, request.tags),
           },
         }
       : {}),
@@ -454,6 +469,7 @@ export async function runUi(
         args: request.rest,
         uiUrl: server.url,
         cwd: request.cwd,
+        ...(request.tags === undefined ? {} : { tags: request.tags }),
       });
       const outcome = surface === undefined
         ? { type: 'runner' as const, code: await handle.exited }

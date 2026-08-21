@@ -362,6 +362,7 @@ async function launch(
     outFile: args.outFile,
     port: args.port,
     host: args.host,
+    tags: args.tags,
     watch: args.watch,
     // In record mode `rest` is the recorded command, not runner arguments.
     rest: args.record ? [] : args.rest,

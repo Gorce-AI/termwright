@@ -13,25 +13,27 @@ npm install --save-dev termwright vitest
 
 ```tsx
 import {mountInk} from 'termwright/ink';
-import {expect, test, vi} from 'vitest';
+import {expect, test, vi} from 'termwright/test';
 import {Approve} from './Approve.js';
 
-test('approves the request', async () => {
+test('approves the request', async ({terminal}) => {
   const onApprove = vi.fn();
-  const harness = await mountInk(<Approve onApprove={onApprove} />);
+  const harness = await terminal.attach(
+    await mountInk(<Approve onApprove={onApprove} />),
+    {command: ['<mountInk>']},
+  );
 
-  try {
-    await harness.press('Tab');
-    await harness.waitForStable();
-    await harness.press('Enter');
-    await vi.waitFor(() => expect(onApprove).toHaveBeenCalledOnce());
-  } finally {
-    await harness.close();
-  }
+  await harness.press('Tab');
+  await harness.waitForStable();
+  await harness.press('Enter');
+  await vi.waitFor(() => expect(onApprove).toHaveBeenCalledOnce());
 });
 ```
 
 Input is terminal bytes. No helper invokes component callbacks directly.
+`terminal.attach()` adds the component session to traces, Runner live state,
+logs, and test teardown. Call `mountInk()` directly only when a standalone
+Vitest test deliberately owns and closes the harness itself.
 
 Peer dependencies are Ink >= 7.1 and React >= 19.2. A vanilla component is
 observable without an application import. Add optional `useSemantic` or

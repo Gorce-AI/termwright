@@ -14,6 +14,8 @@ generated source is written to the project.
 - custom parameter types
 - DocStrings and DataTables
 - tags as catalog and Scenario metadata
+- Cucumber tag-expression filtering for cases and hooks
+- scenario-scoped `Before` and `After` hooks
 - keyword-neutral `Step()` definitions
 
 The parser, message model, expression engine, and Scenario compilation use the
@@ -58,8 +60,22 @@ Every Scenario receives a fresh mutable `world`. The context also contains:
 - `step`, so authored Gherkin steps share the normal trace timeline;
 - `expect`;
 - `scenario`, including feature and Scenario names, URI, line, and tags.
+- `defer(cleanup)` and `use(resource)` for reverse-order scenario cleanup.
 
 Each Examples row becomes a separate case with a stable `[example N]` suffix.
+
+## Hooks and resource lifecycle
+
+`Before(body)` and `After(body)` run around each Scenario or Outline row.
+`Before({tags}, body)` and `After({tags}, body)` select rows with standard
+Cucumber tag expressions. Before hooks follow nearest-to-global glue order;
+After hooks run in reverse order. After hooks and registered cleanup still run
+when a step fails.
+
+`context.use(resource)` accepts an object with `close()`, `dispose()`,
+`Symbol.dispose`, or `Symbol.asyncDispose`. Use `terminal.attach(harness)`
+instead when the resource implements `TerminalHarness`: the test fixture then
+owns logs, traces, Runner attachment, crash metadata, and closing.
 
 ## Pair step definitions
 
@@ -92,8 +108,14 @@ Direct Vitest and IDE runs must add `gherkinPlugin()` and include `.feature`
 files. See [Gherkin scenarios](../../guides/gherkin/#run-with-vitest-and-an-ide)
 for a complete configuration.
 
-## Unsupported behavior
+`gherkinPlugin({tags: expression})` filters compiled Scenario pickles before
+native Vitest cases are declared. `termwright ui --tags <expression>` applies
+the same filter to discovery, the watch process, and Runner-triggered reruns.
 
-The current integration does not provide Cucumber hooks, tag-expression run
-filtering, or an editor extension. It does not run a Cucumber scheduler or
-write a generated-test directory.
+## Editor and scheduler boundaries
+
+Termwright does not run a Cucumber scheduler or write a generated-test
+directory. It also does not ship a dedicated Gherkin language server. Editor
+Cucumber extensions can navigate the physical feature and TypeScript glue;
+runtime undefined and ambiguous definitions remain fail-closed Termwright test
+errors.

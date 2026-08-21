@@ -148,6 +148,54 @@ describe('transformFeature', () => {
     expect(result.code).toContain('test("same [line 3]"');
     expect(result.code).toContain('test("same [line 6]"');
   });
+
+  test('can keep generated imports on an umbrella package under strict installers', () => {
+    const result = transformFeature({
+      source: 'Feature: packaged\n\n  Scenario: imports\n    Given a value\n',
+      uri: '/tmp/packaged.feature',
+      glue: [],
+      generatedImports: {
+        test: 'termwright/test',
+        runtime: 'termwright/gherkin/runtime',
+      },
+    });
+
+    expect(result.code).toContain("from \"termwright/test\"");
+    expect(result.code).toContain("from \"termwright/gherkin/runtime\"");
+    expect(result.code).not.toContain("from '@termwright/");
+  });
+
+  test('filters native cases with Cucumber tag expressions', () => {
+    const result = transformFeature({
+      source: `@component
+Feature: tagged
+
+  @smoke
+  Scenario: selected
+    Given a value
+
+  @slow
+  Scenario: excluded
+    Given another value
+`,
+      uri: '/tmp/tagged.feature',
+      glue: [],
+      tags: '@component and @smoke and not @slow',
+    });
+
+    expect(result.code).toContain('test("selected"');
+    expect(result.code).not.toContain('test("excluded"');
+    expect(result.scenarioLines).toEqual([5]);
+  });
+
+  test('reports invalid tag expressions during collection', () => {
+    expect(() => transformFeature({
+      source: 'Feature: tagged\n\n  Scenario: selected\n    Given a value\n',
+      uri: '/tmp/tagged.feature',
+      glue: [],
+      tags: '@smoke and',
+    })).toThrow(/Expected operand/u);
+  });
 });
 
 describe('gherkinPlugin', () => {

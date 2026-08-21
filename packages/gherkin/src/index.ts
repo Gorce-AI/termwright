@@ -9,6 +9,8 @@
  */
 
 export {
+  After,
+  Before,
   Given,
   Step,
   Then,
@@ -21,6 +23,10 @@ export {
   type GherkinScenario,
   type GherkinStepArgument,
   type GherkinWorld,
+  type GherkinResource,
+  type HookDefinition,
+  type HookDefinitionBody,
+  type HookDefinitionOptions,
   type ParameterTypeDefinition,
   type ParameterTypeOptions,
   type StepDefinition,
@@ -33,6 +39,7 @@ export {
   resolvePairing,
   transformFeature,
   type GherkinPluginOptions,
+  type GeneratedGherkinImports,
   type PairedGlue,
   type PairingInput,
   type TransformFeatureInput,

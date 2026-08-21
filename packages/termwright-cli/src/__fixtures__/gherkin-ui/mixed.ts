@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import type { TerminalHarness } from '@termwright/driver';
 import { configureTermwright } from '@termwright/test';
-import { Given, Then, When, defineSteps } from '@termwright/gherkin';
+import { After, Before, Given, Then, When, defineSteps } from '@termwright/gherkin';
 
 const semanticApp = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -23,6 +23,15 @@ function app(world: Record<string, unknown>): TerminalHarness {
 }
 
 export default defineSteps(
+  Before(({ world, defer }) => {
+    world['hookReady'] = true;
+    defer(() => {
+      world['cleaned'] = true;
+    });
+  }),
+  After(({ world }) => {
+    if (world['hookReady'] !== true) throw new Error('Before hook did not initialize this scenario');
+  }),
   Given('a permission terminal is running', async ({ terminal, world }) => {
     const effects = process.env['TERMWRIGHT_GHERKIN_UI_EFFECTS'];
     if (effects !== undefined) appendFileSync(effects, 'FEATURE\n', 'utf8');

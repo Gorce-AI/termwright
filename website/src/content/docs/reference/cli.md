@@ -13,7 +13,7 @@ npx termwright --help
 ## `termwright ui`
 
 ```text
-termwright ui [--trace <file>] [--port N] [--host H]
+termwright ui [--trace <file>] [--tags <expression>] [--port N] [--host H]
               [--no-watch] [--browser | --no-open]
               [-- <vitest args>]
 termwright ui --record [--out-file <file>] -- <command>
@@ -28,6 +28,7 @@ desktop app by default.
 | `--no-open` | Start the server without opening a window. |
 | `--no-watch` | Do not start the Vitest watcher. |
 | `--trace <file>` | Open an existing `.twtrace` archive. |
+| `--tags <expression>` | Select physical Gherkin cases with a Cucumber tag expression. |
 | `--record` | Start recorder mode for the command after `--`. |
 | `--out-file <file>` | Set the generated test destination in recorder mode. |
 | `--host <host>` | Bind the Runner server to this host. |

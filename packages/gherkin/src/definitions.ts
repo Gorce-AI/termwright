@@ -17,6 +17,17 @@ export interface GherkinContext extends TermwrightFixtures {
   readonly expect: typeof import('vitest')['expect'];
   readonly world: GherkinWorld;
   readonly scenario: GherkinScenario;
+  /** Registers test-scoped cleanup. Cleanups run in reverse order after `After` hooks. */
+  readonly defer: (cleanup: () => unknown | Promise<unknown>) => void;
+  /** Registers a closeable/disposable resource and returns it unchanged. */
+  readonly use: <T extends GherkinResource>(resource: T) => T;
+}
+
+export interface GherkinResource {
+  close?: () => unknown | Promise<unknown>;
+  dispose?: () => unknown | Promise<unknown>;
+  [Symbol.dispose]?: () => unknown;
+  [Symbol.asyncDispose]?: () => unknown | Promise<unknown>;
 }
 
 /** A DocString or DataTable attached to a Gherkin step. */
@@ -38,6 +49,20 @@ export interface StepDefinition {
   readonly body: StepDefinitionBody;
 }
 
+export type HookDefinitionBody = (context: GherkinContext) => unknown | Promise<unknown>;
+
+export interface HookDefinitionOptions {
+  /** Cucumber tag expression selecting scenarios for this hook. */
+  readonly tags?: string;
+}
+
+export interface HookDefinition {
+  readonly type: 'hook';
+  readonly phase: 'before' | 'after';
+  readonly options: HookDefinitionOptions;
+  readonly body: HookDefinitionBody;
+}
+
 /** Options accepted by {@link defineParameterType}. */
 export interface ParameterTypeOptions<T> {
   readonly name: string;
@@ -53,7 +78,7 @@ export interface ParameterTypeDefinition<T = unknown> {
   readonly options: ParameterTypeOptions<T>;
 }
 
-export type GherkinDefinition = StepDefinition | ParameterTypeDefinition;
+export type GherkinDefinition = StepDefinition | ParameterTypeDefinition | HookDefinition;
 export type GherkinDefinitions = readonly GherkinDefinition[];
 
 function definition(keyword: StepKeyword, expression: string | RegExp, body: StepDefinitionBody): StepDefinition {
@@ -81,6 +106,32 @@ export function Then(expression: string | RegExp, body: StepDefinitionBody): Ste
 /** Declares a keyword-neutral definition. */
 export function Step(expression: string | RegExp, body: StepDefinitionBody): StepDefinition {
   return definition('Step', expression, body);
+}
+
+/** Runs before each matching Scenario or Outline row selected by this glue scope. */
+export function Before(body: HookDefinitionBody): HookDefinition;
+export function Before(options: HookDefinitionOptions, body: HookDefinitionBody): HookDefinition;
+export function Before(
+  optionsOrBody: HookDefinitionOptions | HookDefinitionBody,
+  body?: HookDefinitionBody,
+): HookDefinition {
+  const options = typeof optionsOrBody === 'function' ? {} : optionsOrBody;
+  const resolvedBody = typeof optionsOrBody === 'function' ? optionsOrBody : body;
+  if (resolvedBody === undefined) throw new TypeError('Before() needs a hook body');
+  return Object.freeze({ type: 'hook', phase: 'before', options: Object.freeze({ ...options }), body: resolvedBody });
+}
+
+/** Runs after each matching Scenario or Outline row, including failed scenarios. */
+export function After(body: HookDefinitionBody): HookDefinition;
+export function After(options: HookDefinitionOptions, body: HookDefinitionBody): HookDefinition;
+export function After(
+  optionsOrBody: HookDefinitionOptions | HookDefinitionBody,
+  body?: HookDefinitionBody,
+): HookDefinition {
+  const options = typeof optionsOrBody === 'function' ? {} : optionsOrBody;
+  const resolvedBody = typeof optionsOrBody === 'function' ? optionsOrBody : body;
+  if (resolvedBody === undefined) throw new TypeError('After() needs a hook body');
+  return Object.freeze({ type: 'hook', phase: 'after', options: Object.freeze({ ...options }), body: resolvedBody });
 }
 
 /** Declares a custom Cucumber Expression parameter type. */

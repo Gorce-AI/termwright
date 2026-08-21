@@ -7,6 +7,15 @@
  * exactly the mistake this catches).
  */
 import { describe, expect, it } from 'vitest';
+import { execFile } from 'node:child_process';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+
+const execFileAsync = promisify(execFile);
+const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 describe('subpath entry points', () => {
   it('exposes the driver from the root, with no test-runner import', async () => {
@@ -32,6 +41,55 @@ describe('subpath entry points', () => {
     expect(gherkin.Given).toBeTypeOf('function');
     expect(gherkin.defineSteps).toBeTypeOf('function');
     expect(gherkin.gherkinPlugin).toBeTypeOf('function');
+  });
+
+  it('keeps transformed feature imports on umbrella subpaths', async () => {
+    const { gherkinPlugin } = await import('./gherkin.js');
+    const plugin = gherkinPlugin();
+    const resolveConfig = typeof plugin.configResolved === 'function'
+      ? plugin.configResolved
+      : plugin.configResolved?.handler;
+    (resolveConfig as undefined | ((config: { root: string }) => void))?.({ root: '/tmp' });
+    const transform = typeof plugin.transform === 'function'
+      ? plugin.transform
+      : plugin.transform?.handler;
+    const result = await (transform as unknown as (this: { addWatchFile(): void }, source: string, id: string) => Promise<{ code: string }>).call(
+      { addWatchFile() {} },
+      'Feature: umbrella\n\n  Scenario: strict install\n    Given a value\n',
+      '/tmp/umbrella.feature',
+    );
+
+    expect(result.code).toContain('from "termwright/test"');
+    expect(result.code).toContain('from "termwright/gherkin/runtime"');
+    expect(result.code).not.toContain('from "@termwright/test"');
+  });
+
+  it('resolves generated subpaths from a strict consumer with only termwright installed', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-strict-consumer-'));
+    try {
+      const modules = join(directory, 'node_modules');
+      await mkdir(modules);
+      await symlink(packageRoot, join(modules, 'termwright'), 'dir');
+      await writeFile(join(directory, 'check.mjs'), `
+        if (!import.meta.resolve('termwright/test').endsWith('/dist/test.js')) {
+          throw new Error('termwright/test did not resolve through the umbrella');
+        }
+        if (!import.meta.resolve('termwright/gherkin/runtime').endsWith('/dist/gherkin-runtime.js')) {
+          throw new Error('termwright/gherkin/runtime did not resolve through the umbrella');
+        }
+        try {
+          import.meta.resolve('@termwright/test');
+          throw new Error('strict consumer unexpectedly resolved a transitive package');
+        } catch (error) {
+          if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+        }
+      `, 'utf8');
+
+      await expect(execFileAsync(process.execPath, [join(directory, 'check.mjs')], { cwd: directory }))
+        .resolves.toMatchObject({ stderr: '' });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('exposes the trace reporter, default export included', async () => {

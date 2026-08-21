@@ -50,6 +50,11 @@ facts such as current bounds, focus, clipping, or pointer ownership.
 
 Prefer framework-native accessibility metadata first. Add a Termwright
 annotation when the framework does not retain the intent you need.
+The annotation `name` is the accessible name used by role locators. Choose a
+portable role such as `dialog`, `textbox`, `button`, `list`, `listitem`,
+`status`, or `alert` when it describes the application contract. Integrations
+must not infer an interactive role only because rendered text looks like a
+control.
 
 ## Verify the integration
 

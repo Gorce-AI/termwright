@@ -13,7 +13,9 @@
  */
 
 import { createElement } from 'react';
-import { afterEach, expect, test } from '@termwright/test';
+import { Box, Text } from 'ink';
+import { Semantic } from '@termwright/ink';
+import { afterEach, describe, expect, test } from '@termwright/test';
 import type { InkHarness } from './mount.js';
 import { mountInk } from './mount.js';
 import CounterApp from './testing/counter-app.mjs';
@@ -91,6 +93,39 @@ test('stores a cell snapshot of the painted screen', async () => {
   await expect(harness).toMatchCellSnapshot();
 });
 
+test('publishes explicit interactive roles and accessible names without guessing', async () => {
+  const harness = await mountInk(
+    <Semantic role="dialog" name="Permission">
+      <Box flexDirection="column">
+        <Semantic role="textbox" name="Command"><Box><Text>deploy</Text></Box></Semantic>
+        <Semantic role="button" name="Approve"><Box><Text>Approve</Text></Box></Semantic>
+        <Semantic role="list" name="Targets">
+          <Box>
+            <Semantic role="listitem" name="Production"><Box><Text>Production</Text></Box></Semantic>
+          </Box>
+        </Semantic>
+        <Semantic role="status" name="Ready"><Box><Text>Ready</Text></Box></Semantic>
+        <Semantic role="alert" name="Review required"><Box><Text>Review required</Text></Box></Semantic>
+      </Box>
+    </Semantic>,
+    SIZE,
+  );
+  open.push(harness);
+  await harness.settled();
+
+  for (const [role, name] of [
+    ['dialog', 'Permission'],
+    ['textbox', 'Command'],
+    ['button', 'Approve'],
+    ['list', 'Targets'],
+    ['listitem', 'Production'],
+    ['status', 'Ready'],
+    ['alert', 'Review required'],
+  ] as const) {
+    await expect(harness.getByRole(role, { name })).toBeAttached();
+  }
+});
+
 test('fails a semantic snapshot that does not describe the component', async () => {
   const harness = await mount({ label: 'Approve' });
 
@@ -103,4 +138,22 @@ test('fails a semantic snapshot that does not describe the component', async () 
       { timeout: 500 },
     ),
   ).rejects.toThrowError(/Publish/u);
+});
+
+describe.sequential('test-scoped component harness ownership', () => {
+  let adopted: InkHarness | undefined;
+
+  test('attaches an existing component harness to the standard fixture', async ({ terminal }) => {
+    adopted = await terminal.attach(
+      await mountInk(createElement(CounterApp, { label: 'Attached' }), SIZE),
+      { trace: 'off', command: ['<mountInk>'] },
+    );
+
+    expect(terminal.sessions).toEqual([adopted]);
+    await expect(adopted).toHaveText('Attached');
+  });
+
+  test('closes an attached component harness when the preceding test ends', () => {
+    expect(() => adopted?.screen()).toThrow(/closed/u);
+  });
 });

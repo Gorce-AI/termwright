@@ -36,6 +36,14 @@ Common options include `command`, `cwd`, `env`, terminal `columns` and `rows`,
 terminal profile, startup timeout, and semantic probe configuration. Test
 fixtures use an isolated temporary working directory unless `cwd` is explicit.
 
+### `terminal.attach(harness, options?)`
+
+Adopts an existing `TerminalHarness` created by a component helper or framework
+integration. The fixture publishes it to Runner, records its trace and logs,
+collects crash metadata, and closes it after the test. Use this instead of a
+manual `try/finally` when a component test should have normal Termwright
+observability and lifecycle.
+
 ### `step(name, callback)`
 
 Records a named group in traces, reports, and Runner UI. It does not change test

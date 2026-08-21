@@ -36,10 +36,10 @@ Use `toBeAttached()` or `toBeDisplayed()` when that is the behavior you need.
 
 ## Gherkin
 
-Termwright currently does not provide Cucumber hooks, tag-expression filtering,
-or editor integration. Tags are preserved as metadata. `.feature` files run
-through the same Vitest scheduler and Runner catalog as provider-owned
-TypeScript tests.
+Termwright provides scenario-scoped hooks and Cucumber tag-expression
+filtering, but not a dedicated Gherkin language server. Use an editor Cucumber
+extension for syntax and definition navigation. `.feature` files run through
+the same Vitest scheduler and Runner catalog as provider-owned TypeScript tests.
 
 ## Trace evidence
 

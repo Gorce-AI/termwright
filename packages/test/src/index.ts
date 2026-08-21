@@ -56,6 +56,7 @@ export {
   it,
   step,
   test,
+  type AttachFixtureOptions,
   type LaunchFixtureOptions,
   type StepRunner,
   type TerminalFactory,

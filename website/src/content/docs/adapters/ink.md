@@ -61,6 +61,27 @@ Annotations add role, name, description, test id, relationships, actions, and
 JSON domain state. They cannot override rendered text, focus, geometry,
 visibility, or framework-owned state.
 
+`name` is the accessible name matched by
+`getByRole(role, {name: ...})`. Use the portable roles that describe the
+application contract, including `dialog`, `textbox`, `button`, `list`,
+`listitem`, `status`, and `alert`:
+
+```tsx
+import {Semantic} from '@termwright/ink';
+
+<Semantic role="dialog" name="Permission">
+  <Box flexDirection="column">
+    <Semantic role="button" name="Approve">
+      <Box><Text>Approve</Text></Box>
+    </Semantic>
+  </Box>
+</Semantic>
+```
+
+Ink's `Box` and `Text` types do not prove application intent. The integration
+therefore does not infer interactive roles from their appearance. Annotate the
+component when a role or accessible name is part of the behavior under test.
+
 ## Supported behavior
 
 Ink 7.1 is verified. Stable host identity, display state, rendered text, and

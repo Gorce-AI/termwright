@@ -1,6 +1,18 @@
 import { describe, expect, test, vi } from 'vitest';
-import { Given, defineParameterType, defineSteps, type GherkinContext } from './definitions.js';
-import { createGherkinRuntime, runGherkinStep } from './runtime.js';
+import {
+  After,
+  Before,
+  Given,
+  defineParameterType,
+  defineSteps,
+  type GherkinContext,
+} from './definitions.js';
+import {
+  createGherkinContext,
+  createGherkinRuntime,
+  runGherkinScenario,
+  runGherkinStep,
+} from './runtime.js';
 
 function context(): { value: GherkinContext; titles: string[] } {
   const titles: string[] = [];
@@ -41,6 +53,20 @@ describe('feature-local runtime', () => {
       { text: 'a value', title: 'Given a value' },
       context().value,
     )).rejects.toThrow(/Ambiguous Gherkin step.*\/a\.ts.*\/b\.ts/s);
+  });
+
+  test('validates undefined and ambiguous steps without executing bodies', () => {
+    const body = vi.fn();
+    const runtime = createGherkinRuntime([{
+      path: '/steps.ts',
+      tier: 0,
+      definitions: defineSteps(Given('known', body), Given(/^duplicate$/, body), Given('duplicate', body)),
+    }]);
+
+    expect(() => runtime.validate({ text: 'known', title: 'known' })).not.toThrow();
+    expect(() => runtime.validate({ text: 'missing', title: 'missing' })).toThrow(/Undefined Gherkin step/u);
+    expect(() => runtime.validate({ text: 'duplicate', title: 'duplicate' })).toThrow(/Ambiguous Gherkin step/u);
+    expect(body).not.toHaveBeenCalled();
   });
 
   test('does not run parameter transformers before resolving ambiguity', async () => {
@@ -109,5 +135,70 @@ describe('feature-local runtime', () => {
     await runtime.run({ text: 'a value', title: 'Given a value' }, context().value);
 
     expect(body).toHaveBeenCalledWith(expect.anything(), 'local:value');
+  });
+
+  test('runs scoped hooks and LIFO resource cleanup around each scenario', async () => {
+    const calls: string[] = [];
+    const runtime = createGherkinRuntime([{
+      path: '/steps.ts',
+      tier: 0,
+      definitions: defineSteps(
+        Before(({ defer }) => {
+          calls.push('before');
+          defer(() => calls.push('cleanup:first'));
+          defer(() => calls.push('cleanup:last'));
+        }),
+        Given('a value', () => calls.push('step')),
+        After(() => calls.push('after')),
+      ),
+    }]);
+    const managed = createGherkinContext(context().value);
+
+    await runGherkinScenario(runtime, managed, async () => {
+      await runtime.run({ text: 'a value', title: 'Given a value' }, managed);
+    });
+
+    expect(calls).toEqual(['before', 'step', 'after', 'cleanup:last', 'cleanup:first']);
+  });
+
+  test('runs After hooks and cleanup when a scenario fails', async () => {
+    const after = vi.fn();
+    const close = vi.fn();
+    const runtime = createGherkinRuntime([{
+      path: '/steps.ts',
+      tier: 0,
+      definitions: defineSteps(Before(({ use }) => use({ close })), After(after)),
+    }]);
+    const managed = createGherkinContext(context().value);
+
+    await expect(runGherkinScenario(runtime, managed, async () => {
+      throw new Error('scenario failed');
+    })).rejects.toThrow('scenario failed');
+
+    expect(after).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  test('selects scenario hooks with Cucumber tag expressions', async () => {
+    const smoke = vi.fn();
+    const slow = vi.fn();
+    const runtime = createGherkinRuntime([{
+      path: '/steps.ts',
+      tier: 0,
+      definitions: defineSteps(
+        Before({ tags: '@smoke and not @slow' }, smoke),
+        Before({ tags: '@slow' }, slow),
+      ),
+    }]);
+    const base = context().value;
+    const managed = createGherkinContext({
+      ...base,
+      scenario: { ...base.scenario, tags: ['@smoke'] },
+    });
+
+    await runGherkinScenario(runtime, managed, async () => undefined);
+
+    expect(smoke).toHaveBeenCalledOnce();
+    expect(slow).not.toHaveBeenCalled();
   });
 });

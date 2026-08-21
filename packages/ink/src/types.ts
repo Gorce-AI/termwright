@@ -9,6 +9,7 @@ import type {
 /** Intent an application knows and the Ink host tree cannot derive. */
 export interface InkSemanticAnnotation {
   readonly role?: SemanticRole;
+  /** Accessible name used by `getByRole(role, { name })`. */
   readonly name?: string;
   readonly description?: string;
   readonly testId?: string;
