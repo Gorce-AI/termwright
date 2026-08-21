@@ -60,8 +60,8 @@ painted output for those behaviors and use physical keyboard input. Semantic
 pointer actions are unsupported even when intended geometry is available.
 
 `@termwright/ink-testing` is the focused package behind `termwright/ink`.
-Install it directly only when building component-testing infrastructure that
-deliberately does not use the Termwright umbrella package.
+Install it directly when a component-only project deliberately wants the
+focused harness without the Termwright CLI and Runner dependencies.
 
 ## Fixtures and isolation
 
