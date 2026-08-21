@@ -1,6 +1,6 @@
 {
   "name": "@termwright/probe-ink",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "zero-config Ink 7 probe: render interception and host-tree observation",
   "license": "MIT",
   "repository": {

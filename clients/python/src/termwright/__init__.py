@@ -66,7 +66,7 @@ from .tree import (
 )
 from .validate import ValidationResult, apply_tree_delta, validate_snapshot, validate_tree_delta
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "ABSOLUTE_LIMITS",

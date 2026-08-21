@@ -17,7 +17,7 @@
       ],
       "probe": {
         "package": "@termwright/probe-ink",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "launch": "withProbe('node' | 'bun', argv) preload",
         "identityKind": "stable",
         "capabilities": ["stable-identity", "annotations"],
@@ -39,7 +39,7 @@
       "annotations": {
         "kind": "termwright-sdk",
         "package": "@termwright/ink",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "apis": ["useSemantic", "Semantic"],
         "notes": "Optional developer intent is consumed by the zero-config probe. Ink-retained aria-role and aria-state remain separate framework-native accessibility hints with framework provenance. The SDK cannot override physical facts."
       },
@@ -67,7 +67,7 @@
       ],
       "probe": {
         "package": "@termwright/probe-opentui",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "launch": "withProbe('node' | 'bun', argv) preload",
         "identityKind": "stable",
         "capabilities": ["stable-identity", "paint-order", "annotations"],
@@ -85,7 +85,7 @@
       "annotations": {
         "kind": "termwright-sdk",
         "package": "@termwright/opentui",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "apis": ["describeRenderable"],
         "notes": "Optional developer intent on existing Renderables is consumed by the zero-config probe. The SDK does not own the renderer and cannot override physical or framework state."
       },
@@ -111,7 +111,7 @@
       ],
       "probe": {
         "package": "termwright",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "launch": "python -m termwright_probe -- python app.py, or termwright_probe.with_probe(argv)",
         "identityKind": "stable",
         "capabilities": ["stable-identity", "visible-rect", "annotations", "paint-order"],
@@ -129,7 +129,7 @@
       "annotations": {
         "kind": "termwright-sdk",
         "package": "termwright",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "apis": ["termwright.textual.semantic", "termwright.textual.annotate"],
         "notes": "The class decorator and weak instance registry support dynamic intent, descriptive actions, relationships, extended state and stable semantic keys. Duplicate keys degrade to retained object identity. Physical geometry, focus, visibility and rendered text remain probe-owned."
       },
@@ -158,7 +158,7 @@
       ],
       "probe": {
         "package": "@termwright/probe-tview",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "launch": "prepareInstrumentedBuild({moduleDir}) and build with the returned GOWORK",
         "identityKind": "stable",
         "capabilities": ["stable-identity", "annotations"],
@@ -184,7 +184,7 @@
       "annotations": {
         "kind": "termwright-sdk",
         "package": "github.com/gorce-ai/termwright/clients/go/annotate",
-        "packageVersion": "v0.1.0",
+        "packageVersion": "v0.2.0",
         "apis": ["annotate.Tag", "annotate.Untag", "annotate.Semantics", "annotate.SemanticKey"],
         "notes": "Annotations add intent, closed descriptive actions and SemanticKey relationships to stable widget objects. Relationships resolve in a bounded second pass; missing or duplicate keys are omitted. Nodes keep framework provenance with annotation/recognizer exceptions in px. The SDK has no bounds, focus, visibility, value, rendered-text or framework-state fields."
       },
@@ -211,7 +211,7 @@
       ],
       "probe": {
         "package": "termwright-probe-ratatui",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "launch": "prepare_instrumented_build(&PrepareOptions) and pass returned Cargo --config/env values",
         "identityKind": "frame-local",
         "capabilities": ["operations", "annotations"],
@@ -238,7 +238,7 @@
       "annotations": {
         "kind": "termwright-sdk",
         "package": "termwright-ratatui",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "apis": ["Annotated", "Annotate", "Semantics", "Action"],
         "notes": "The wrapper adds role, name, description, testId, explicit domain JSON, descriptive actions, relationships and an optional stable semantic key to the exact intercepted render call. Bounds, occlusion and collection state remain probe-owned."
       },
@@ -268,7 +268,7 @@
       ],
       "probe": {
         "package": "@termwright/probe-charm",
-        "packageVersion": "0.1.0",
+        "packageVersion": "0.2.0",
         "launch": "prepareInstrumentedBuild({moduleDir}) and build with the returned GOWORK",
         "identityKind": "frame-local",
         "capabilities": ["annotations"],
@@ -303,7 +303,7 @@
       "annotations": {
         "kind": "termwright-sdk",
         "package": "github.com/gorce-ai/termwright/clients/go/annotate",
-        "packageVersion": "v0.1.0",
+        "packageVersion": "v0.2.0",
         "apis": ["annotate.Provider.TermwrightSemantics", "annotate.Semantics", "annotate.SemanticKey"],
         "notes": "Value-type models declare intent, closed descriptive actions and string-key relationships through Provider. A unique SemanticKey stabilizes that annotated node across copied model values; duplicate keys degrade to frame-local structural identity and cannot resolve relationships. Native value/state remain framework-owned, and p/px records every merge."
       },

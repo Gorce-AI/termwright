@@ -1,6 +1,6 @@
 {
   "name": "@termwright/probe-go",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "shared machinery for Go probes: ephemeral workspaces, copy cache, checksummed patch sets",
   "license": "MIT",
   "repository": {

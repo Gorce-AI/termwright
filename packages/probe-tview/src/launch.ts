@@ -38,7 +38,7 @@ export const FRAMEWORK = 'github.com/rivo/tview';
 export const CLIENT_MODULE = 'github.com/gorce-ai/termwright/clients/go';
 
 /** Version of this probe; part of the cache key, so a new patch set invalidates copies. */
-export const PROBE_VERSION = '0.1.0';
+export const PROBE_VERSION = '0.2.0';
 
 export interface PrepareOptions {
   /** Directory of the Go module to build. */
