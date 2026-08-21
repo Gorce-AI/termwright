@@ -66,6 +66,15 @@ async function launch(fixture: string, options: Record<string, unknown> = {}): P
   return terminal;
 }
 
+async function waitForPairedSemanticRevision(terminal: TerminalHarness, minimum: number): Promise<void> {
+  await expect.poll(() => {
+    const checkpoint = terminal.checkpoint();
+    return checkpoint.semanticRevision !== null
+      && checkpoint.semanticRevision >= minimum
+      && checkpoint.pairedScreenRevision === checkpoint.screenRevision;
+  }, { timeout: 5_000 }).toBe(true);
+}
+
 afterEach(async () => {
   while (sessions.length > 0) {
     const terminal = sessions.pop();
@@ -425,28 +434,32 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
   it('reports every action in order, with the target it resolved', async () => {
     const terminal = await launch('semantic-app.mjs', {
       semanticNegotiationMs: 5_000,
-      env: { TERMWRIGHT_FIXTURE_MOUSE_MODE: '0' },
+      env: {
+        TERMWRIGHT_FIXTURE_MOUSE_MODE: '0',
+        TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH: '1',
+      },
     });
     await terminal.getByTestId('approve').resolve();
+    await waitForPairedSemanticRevision(terminal, 2);
 
     const actions: ActionEvent[] = [];
     const starts: ActionStartedEvent[] = [];
     terminal.events.on('action-start', (event) => starts.push(event));
     terminal.events.on('action', (event) => actions.push(event));
 
-    await terminal.press('a');
     await terminal.getByRole('button', { name: 'Approve' }).activate();
+    await terminal.press('Tab');
     await terminal.resize({ columns: 50, rows: 12 });
 
-    expect(actions.map((event) => event.api)).toEqual(['press', 'activate', 'resize']);
-    expect(starts.map((event) => event.api)).toEqual(['press', 'activate', 'resize']);
+    expect(actions.map((event) => event.api)).toEqual(['activate', 'press', 'resize']);
+    expect(starts.map((event) => event.api)).toEqual(['activate', 'press', 'resize']);
     expect(starts.map((event) => event.actionId)).toEqual(actions.map((event) => event.actionId));
     expect(actions.every((event) => event.ok)).toBe(true);
 
     // A locator action names what it aimed at; a harness action has no target.
-    const activation = actions[1];
+    const activation = actions[0];
     expect(activation?.selector).toContain('getByRole');
-    expect(starts[1]?.selector).toContain('getByRole');
+    expect(starts[0]?.selector).toContain('getByRole');
     expect(activation?.ref).toMatch(/^n\d+@\d+$/u);
     expect(activation?.receipt).toMatchObject({
       outcome: 'completed',
@@ -454,12 +467,12 @@ describe.skipIf(!ptyAvailable())('action events', { timeout: 20_000 }, () => {
       plan: { strategy: 'focus-enter' },
     });
     expect(activation?.receipt?.executed).toEqual(activation?.receipt?.plan.operations);
-    expect(actions[0]?.selector).toBeUndefined();
-    expect(actions[0]?.ref).toBeUndefined();
-    expect(actions[0]?.receipt).toMatchObject({
+    expect(actions[1]?.selector).toBeUndefined();
+    expect(actions[1]?.ref).toBeUndefined();
+    expect(actions[1]?.receipt).toMatchObject({
       outcome: 'completed',
       plan: { strategy: 'raw-physical-input' },
-      executed: [{ device: 'keyboard', kind: 'press', value: 'a' }],
+      executed: [{ device: 'keyboard', kind: 'press', value: 'Tab' }],
     });
     expect(actions.every((event) => event.timeMs > 0)).toBe(true);
   });
@@ -644,13 +657,13 @@ describe.skipIf(!ptyAvailable())('the debug log', { timeout: 20_000 }, () => {
       const terminal = await launch('semantic-app.mjs', {
         semanticNegotiationMs: 5_000,
         debug: true,
-        env: { TERMWRIGHT_FIXTURE_MOUSE_MODE: '0' },
+        env: {
+          TERMWRIGHT_FIXTURE_MOUSE_MODE: '0',
+          TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH: '1',
+        },
       });
       await terminal.waitForText('Permission required');
-      // Force a post-startup committed frame. ConPTY can emit host-owned
-      // startup traffic after the first marker; semantic input must bind to a
-      // later exact pair instead of treating that traffic as part of frame 1.
-      await terminal.press('a');
+      await waitForPairedSemanticRevision(terminal, 2);
       await terminal.getByRole('button', { name: 'Approve' }).activate();
       await terminal.paste('correct horse battery staple');
     } finally {
@@ -1543,10 +1556,12 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
       semanticNegotiationMs: 5_000,
       env: {
         TERMWRIGHT_FIXTURE_NO_BOUNDS: '1',
+        TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH: '1',
         ...(process.platform === 'win32' ? { TERMWRIGHT_FIXTURE_MOUSE_MODE: '0' } : {}),
       },
     });
     await terminal.waitForText('Permission required');
+    await waitForPairedSemanticRevision(terminal, 2);
 
     const approve = terminal.getByRole('button', { name: 'Approve' });
     const target = await approve.resolve();
@@ -1565,7 +1580,6 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     expect((error as TermwrightError).code).toBe('capability-unavailable');
 
     // Keyboard activation still reaches the focused node.
-    if (process.platform === 'win32') await terminal.press('a');
     const receipt = await approve.activate();
     expect(receipt.plan.strategy).toBe('focus-enter');
     await terminal.waitForText('ACTIVATED approve');
@@ -1645,11 +1659,14 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     // deliberately unpaired terminal observation after the render marker.
     const terminal = await launch('semantic-app.mjs', {
       semanticNegotiationMs: 5_000,
-      env: { TERMWRIGHT_FIXTURE_MOUSE_MODE: '0' },
+      env: {
+        TERMWRIGHT_FIXTURE_MOUSE_MODE: '0',
+        TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH: '1',
+      },
     });
     await terminal.waitForText('Permission required');
+    await waitForPairedSemanticRevision(terminal, 2);
 
-    if (process.platform === 'win32') await terminal.press('a');
     const receipt = await terminal.getByTestId('approve').activate();
     expect(receipt.plan.strategy).toBe('focus-enter');
     await terminal.waitForText('ACTIVATED approve');

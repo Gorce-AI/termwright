@@ -28,6 +28,7 @@ const helloDelay = Number(process.env['TERMWRIGHT_FIXTURE_HELLO_DELAY'] ?? '0');
 // extra line is visible and other packages snapshot this fixture's screen.
 const markProbe = process.env['TERMWRIGHT_FIXTURE_MARK_PROBE'] === '1';
 const terminalMouseEnabled = process.env['TERMWRIGHT_FIXTURE_MOUSE_MODE'] !== '0';
+const startupRepublish = process.env['TERMWRIGHT_FIXTURE_STARTUP_REPUBLISH'] === '1';
 const coverApproveCenter = process.env['TERMWRIGHT_FIXTURE_COVER_APPROVE_CENTER'] === '1';
 const conditionStates = process.env['TERMWRIGHT_FIXTURE_CONDITIONS'] === '1';
 const duplicateSemanticKey = process.env['TERMWRIGHT_FIXTURE_DUPLICATE_KEY'] === '1';
@@ -261,6 +262,11 @@ function publish() {
   if (markProbe) process.stdout.write(`MARKED ${revision}\r\n`);
 }
 
+// A real TUI repaints after its PTY changes size. Keep the fixture honest:
+// resize() must observe the frame caused by resize itself, never a late frame
+// from whichever input happened to precede it in the test.
+process.stdout.on('resize', publish);
+
 function decodeFrames(buffer, onMessage) {
   let rest = buffer;
   for (;;) {
@@ -420,6 +426,7 @@ if (endpoint === undefined || token === undefined) {
         // Absent 'logs' means the channel was not granted: stay quiet.
         logBudget = message.logs?.enabled === true ? message.logs : null;
         publish();
+        if (startupRepublish) setTimeout(publish, 100);
       }
     });
   });
