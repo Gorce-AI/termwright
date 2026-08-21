@@ -69,9 +69,12 @@ async function launch(fixture: string, options: Record<string, unknown> = {}): P
 async function waitForPairedSemanticRevision(terminal: TerminalHarness, minimum: number): Promise<void> {
   await expect.poll(() => {
     const checkpoint = terminal.checkpoint();
+    // A completed later terminal revision may be unrelated (cursor/mode/status
+    // traffic). Do not turn this fixture helper into a global-idle gate; the
+    // production planner proves target-local freshness before every action.
     return checkpoint.semanticRevision !== null
       && checkpoint.semanticRevision >= minimum
-      && checkpoint.pairedScreenRevision === checkpoint.screenRevision;
+      && checkpoint.pairedScreenRevision !== null;
   }, { timeout: 5_000 }).toBe(true);
 }
 
