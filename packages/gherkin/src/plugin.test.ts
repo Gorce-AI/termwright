@@ -1,5 +1,5 @@
 import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { SourceMapConsumer, type RawSourceMap } from 'source-map-js';
@@ -15,6 +15,7 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const pairingRoot = resolve(here, '__fixtures__/pairing/features');
 const pairingFeature = resolve(pairingRoot, 'orders/create.feature');
+const relativeFixturePath = (path: string): string => relative(pairingRoot, path).split(sep).join('/');
 
 describe('resolvePairing', () => {
   test('expands filepath then filepart nearest-to-root then global', async () => {
@@ -29,7 +30,7 @@ describe('resolvePairing', () => {
     });
 
     expect(result.map(({ path, tier, scope }) => ({
-      path: path.slice(pairingRoot.length + 1),
+      path: relativeFixturePath(path),
       tier,
       scope,
     }))).toEqual([
@@ -48,7 +49,7 @@ describe('resolvePairing', () => {
       stepDefinitions: ['[filepath].{ts,more.ts}', '[filepath].ts'],
     });
 
-    expect(result.map(({ path, tier }) => ({ path: path.slice(pairingRoot.length + 1), tier })))
+    expect(result.map(({ path, tier }) => ({ path: relativeFixturePath(path), tier })))
       .toEqual([
         { path: 'orders/create.more.ts', tier: 0 },
         { path: 'orders/create.ts', tier: 0 },
