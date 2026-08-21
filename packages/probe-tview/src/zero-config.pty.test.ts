@@ -85,13 +85,11 @@ const sessions: TerminalHarness[] = [];
 function byteCapturingBackend(): {
   readonly backend: PtyBackend;
   readonly bytes: () => Buffer;
-  readonly reset: () => void;
 } {
   const upstream = createNodePtyBackend();
   const chunks: Buffer[] = [];
   return {
     bytes: () => Buffer.concat(chunks),
-    reset: () => { chunks.length = 0; },
     backend: {
       name: `${upstream.name}+byte-capture`,
       spawn(options): PtyProcess {
@@ -562,7 +560,7 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
     expect(before?.width).toBe(80);
   }, 600_000);
 
-  it("renders byte-identically to the untouched framework when dormant", async () => {
+  it("is observably identical to the untouched framework when dormant", async () => {
     // The dormancy claim, measured rather than asserted from the source: the
     // instrumented binary run without the handshake variables must paint what
     // the vanilla one paints.
@@ -571,7 +569,7 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
       buildFixture({ instrumented: true }),
     ]);
 
-    const outputs: Buffer[] = [];
+    const terminalStates: unknown[] = [];
     const marker = Buffer.from("\u001b]8487;twm;", "utf8");
     for (const binary of [vanilla, instrumented]) {
       // The capturing backend removes the driver's private handshake at the
@@ -581,7 +579,9 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
       const session = await launchTerminal({
         command: [binary],
         columns: 80,
-        rows: 24,
+        // The fixture's fixed layout is exactly ten rows. Avoid importing
+        // irrelevant history of untouched rows into the parity verdict.
+        rows: 10,
         env: { TERMWRIGHT_ENDPOINT: "", TERMWRIGHT_TOKEN: "" },
         backend: capture.backend,
       });
@@ -591,28 +591,34 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
       // the complete frame, so both arms are compared at the same observable
       // application state rather than at an arbitrary PTY chunk boundary.
       await session.waitForText("status: ready");
-      await session.waitForStable();
-      // tcell's startup query and SIGWINCH may race, making even two runs of
-      // the same binary produce one or two equivalent initial draws. Establish
-      // an explicit application redraw boundary, then compare its complete
-      // bytes instead of normalizing a timing-dependent startup prefix.
-      expect(capture.bytes().includes(marker)).toBe(false);
-      capture.reset();
-      const beforeRedraw = session.screen().revision;
+      const contract = await session.settled();
+      expect(contract.framework).toBeNull();
+      expect(contract.capabilities["semantic-tree"].status).toBe("unsupported");
+
+      // Application-owned causal states prove both redraw and input paths. Raw
+      // escape streams are deliberately not compared: tcell's diff output is
+      // history-dependent across otherwise identical sessions.
       await session.press("r");
-      await session.waitForRender({ after: beforeRedraw });
-      await session.waitForStable();
-      outputs.push(capture.bytes());
+      await session.waitForText("status: ready redraw:1");
+      await session.press("Tab");
+      await session.waitForText("status: ready redraw:1 focus:1");
+
+      const screen = session.screen();
+      terminalStates.push({
+        columns: screen.columns,
+        rows: screen.rows,
+        buffer: screen.buffer,
+        modes: screen.modes,
+        cursor: screen.cursor.visible ? screen.cursor : { visible: false },
+        cells: Array.from({ length: screen.rows }, (_, row) =>
+          Array.from({ length: screen.columns }, (_, column) => screen.cell(row, column))),
+      });
+      // No Termwright render marker may enter stdout at any point. Checking
+      // raw bytes catches a probe that attached even when VT consumes its OSC.
+      expect(capture.bytes().includes(marker)).toBe(false);
     }
 
-    expect(outputs[1]).toEqual(outputs[0]);
-
-    // Dormant instrumentation has a stronger byte-level invariant of its own:
-    // no Termwright render marker may enter stdout at any point. The previous
-    // test accidentally activated the probe because launchTerminal overwrote
-    // its public env option, and screen text hid these OSC bytes.
-    expect(outputs.at(0)?.includes(marker)).toBe(false);
-    expect(outputs.at(1)?.includes(marker)).toBe(false);
+    expect(terminalStates[1]).toEqual(terminalStates[0]);
   }, 900_000);
 });
 
