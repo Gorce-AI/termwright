@@ -335,7 +335,7 @@ jobs:
             test -f "$archive"
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: npm-canary-tarballs
           path: ${{ runner.temp }}/npm-canary/*.tgz
@@ -362,7 +362,7 @@ jobs:
 
       - run: npm install -g npm@11.5.1
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: npm-canary-tarballs
           path: ${{ runner.temp }}/npm-canary
