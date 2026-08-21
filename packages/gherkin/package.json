@@ -1,6 +1,6 @@
 {
   "name": "@termwright/gherkin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Gherkin feature files as native @termwright/test cases through a Vitest plugin",
   "license": "MIT",
   "repository": {

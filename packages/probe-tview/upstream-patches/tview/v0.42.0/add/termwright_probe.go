@@ -47,7 +47,7 @@ import (
 // from the hand-written adapter so a session can be told apart in diagnostics.
 const (
 	probeName        = "termwright-probe-tview"
-	probeVersion     = "0.1.0"
+	probeVersion     = "0.2.0"
 	frameworkVersion = "v0.42.0"
 )
 

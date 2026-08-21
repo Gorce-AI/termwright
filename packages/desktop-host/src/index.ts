@@ -126,7 +126,7 @@ async function ensurePackagedHost(main: string): Promise<string> {
   await writeFile(join(source, 'package.json'), JSON.stringify({
     name: 'termwright-desktop-host-runtime',
     productName: 'Termwright',
-    version: '0.1.0',
+    version: '0.2.0',
     main: 'main.js',
   }));
 
