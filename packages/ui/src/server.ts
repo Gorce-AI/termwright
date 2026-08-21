@@ -907,6 +907,11 @@ async function watchForChanges(cwd: string, onChange: () => Promise<void>): Prom
   const watcher = watch(cwd, {
     ignoreInitial: true,
     ignored: (path) => IGNORED_DIRECTORIES.test(path),
+    // Node's recursive fs-event backend can abort inside libuv while a watched
+    // Windows tree is changing. Chokidar's polling backend preserves the same
+    // catalogue refresh contract without entering that native code path.
+    usePolling: process.platform === 'win32',
+    interval: 200,
   });
   // A delete that happens during chokidar's initial crawl has no prior entry
   // to remove and can be missed. Do not report the server as ready until the
