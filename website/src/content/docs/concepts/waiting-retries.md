@@ -33,6 +33,19 @@ same application frame.
 Avoid `setTimeout()` and fixed sleeps. They wait too long on fast machines and
 remain too short on slow ones.
 
+When raw input must be followed by its next render, capture the boundary before
+sending the input. A post-input `waitForStable()` can legitimately observe the
+old screen as already quiet before the application handles the key.
+
+```ts
+const before = app.checkpoint();
+await app.keyboard.press('Tab');
+await app.waitForRender({after: before.screenRevision});
+```
+
+Prefer a web-first assertion on the intended result when one exists; it is more
+specific than waiting for any render.
+
 ## Action retries and assertion retries
 
 An action may retry while its target is resolving or becoming actionable. It
