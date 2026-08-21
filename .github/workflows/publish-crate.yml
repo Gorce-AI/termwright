@@ -32,7 +32,7 @@ jobs:
       version: ${{ steps.version.outputs.value }}
       commit: ${{ steps.source.outputs.commit }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ inputs.ref }}
           fetch-depth: 0
@@ -60,7 +60,7 @@ jobs:
           echo "commit=$tag_commit" >> "$GITHUB_OUTPUT"
 
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -137,7 +137,7 @@ jobs:
       contents: read
       id-token: write # trusted publishing
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.verify.outputs.commit }}
 

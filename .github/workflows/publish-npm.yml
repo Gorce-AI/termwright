@@ -58,7 +58,7 @@ jobs:
       version: ${{ steps.versions.outputs.protocol }}
       commit: ${{ steps.source.outputs.commit }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ inputs.ref }}
           fetch-depth: 0
@@ -102,11 +102,11 @@ jobs:
           fi
 
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: '9.4.0'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: pnpm
@@ -174,17 +174,17 @@ jobs:
       contents: read
       id-token: write # trusted publishing (OIDC); provenance comes with it
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.verify.outputs.commit }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: '9.4.0'
 
       # No `cache: pnpm` here on purpose: a publish job should resolve from the
       # registry rather than from a cache another workflow populated.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.14'
           registry-url: 'https://registry.npmjs.org'
@@ -284,16 +284,16 @@ jobs:
     if: inputs.mode == 'canary'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: '9.4.0'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.14'
 
@@ -355,7 +355,7 @@ jobs:
       # This is deliberately the same workflow identity as the stable publish:
       # npm supports one trusted-publisher configuration per package. No source
       # checkout, dependency install or project code runs with OIDC permission.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.14'
           registry-url: 'https://registry.npmjs.org'
