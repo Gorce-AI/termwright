@@ -181,6 +181,9 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     const app = await launchTerminal({ command: [binary], columns: 80, rows: 12 });
     sessions.push(app);
     await app.waitForText('Sign in');
+    // Screen output and the semantic socket are independent under ConPTY.
+    // The banner proves rendering started, not that the first tree committed.
+    await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
 
     expect(app.capabilities().semanticTree).toBe(true);
     expect(app.capabilities().adapter?.name).toBe('termwright-probe-charm');
