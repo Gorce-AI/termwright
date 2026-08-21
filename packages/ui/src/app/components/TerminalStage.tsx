@@ -49,6 +49,8 @@ export function TerminalStage(props: TerminalStageProps) {
     const surface = surfaceRef.current;
     if (host === null || surface === null) return;
     const terminal = new Terminal({
+      cols: Math.max(props.columns, 1),
+      rows: Math.max(props.rows, 1),
       convertEol: false,
       cursorBlink: props.writable,
       fontFamily: '"Berkeley Mono", "SFMono-Regular", Consolas, monospace',
