@@ -31,6 +31,7 @@
 
 import {readFile, writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
+import {createHash} from 'node:crypto';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,6 +40,23 @@ const check = process.argv.includes('--check');
 const SOURCE = 'packages/protocol/package.json';
 const COMPATIBILITY_REGISTRY = 'compatibility/registry.json';
 const COMPATIBILITY_VERSION_ENTRIES = 12;
+const patchChecksums = [
+	{
+		source: 'packages/probe-tview/upstream-patches/tview/v0.42.0/add/termwright_probe.go',
+		manifest: 'packages/probe-tview/upstream-patches/tview/v0.42.0/manifest.json',
+		manifestSource: 'add/termwright_probe.go',
+	},
+	{
+		source: 'packages/probe-charm/upstream-patches/bubbletea/v1.3.10/add/termwright_probe.go',
+		manifest: 'packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json',
+		manifestSource: 'add/termwright_probe.go',
+	},
+	{
+		source: 'packages/probe-charm/upstream-patches/bubbletea/v2.0.8/add/termwright_probe.go',
+		manifest: 'packages/probe-charm/upstream-patches/bubbletea/v2.0.8/manifest.json',
+		manifestSource: 'add/termwright_probe.go',
+	},
+];
 
 /**
  * Each target names the one line it owns. Manifest package versions are
@@ -253,6 +271,28 @@ async function main() {
 		const after = before.replace(target.pattern, target.render(version));
 		await writeFile(file, after);
 		console.log(`updated ${target.file}: ${current} -> ${version}`);
+	}
+
+	// Versioned Go probe sources are copied into upstream framework modules.
+	// Their manifests intentionally pin the exact resulting bytes, so changing
+	// the handshake version must refresh those checksums in the same operation.
+	for (const target of patchChecksums) {
+		const source = await readFile(path.join(root, target.source));
+		const expected = `sha256:${createHash('sha256').update(source).digest('hex')}`;
+		const manifestFile = path.join(root, target.manifest);
+		const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
+		const entry = manifest.added?.find((candidate) => candidate.source === target.manifestSource);
+		if (entry === undefined || typeof entry.sha256 !== 'string') {
+			fail(`${target.manifest}: no checksum entry for ${target.manifestSource}`);
+		}
+		if (entry.sha256 === expected) continue;
+
+		drift.push({file: target.manifest, current: entry.sha256});
+		if (check) continue;
+
+		entry.sha256 = expected;
+		await writeFile(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+		console.log(`updated ${target.manifest}: ${target.manifestSource} -> ${expected}`);
 	}
 
 	// The compatibility registry is executable release metadata: its drift
