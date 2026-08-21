@@ -281,11 +281,9 @@ export function commandAvailable(
  * Turns on the child's mouse reporting and reports whether the emulator can
  * see that it happened.
  *
- * ConPTY consumes the child's DECSET, so on Windows the mode reads `'unknown'`
- * — the child did enable tracking, the terminal just cannot say so. Branching
- * on the *observed* mode rather than on `process.platform` keeps one code path:
- * a platform that starts reporting the mode tightens the assertions by itself,
- * and one that stops loosens them, without anyone editing a list of platforms.
+ * ConPTY consumes the child's DECSET, so on Windows the mode reads `'unknown'`.
+ * Unknown never authorizes pointer input: callers use the return value either
+ * to run a positive protocol-delivery proof or to assert the typed refusal.
  *
  * @returns `true` when the mode is observable, so mode-specific claims (an
  * exact tracking level, a refusal for the wrong level) can be asserted.
@@ -307,12 +305,10 @@ export async function enableMouseReporting(
  * Asks the child to enable focus reporting and reports what the emulator made
  * of it.
  *
- * Same shape as the mouse, and the same three answers: `'on'` where the DECSET
- * was seen, `'unknown'` where the platform reports the host's state rather than
- * the child's — ConPTY does that — and `'off'` only while the request is still
- * in flight. Waiting for a settled answer is what keeps the caller off the
- * third: branching on `'off'` would mean branching on how loaded the machine
- * is, which is how this last flaked.
+ * Same shape as the mouse: `'on'` where the DECSET was seen, `'unknown'` where
+ * the platform cannot prove the child's state — ConPTY does that — and `'off'`
+ * only while the request is still in flight. Unknown requires a typed refusal;
+ * it is never treated as permission to send a focus report.
  */
 export async function enableFocusReporting(
   terminal: TerminalHarness,

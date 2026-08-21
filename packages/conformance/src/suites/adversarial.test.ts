@@ -264,10 +264,14 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(terminal.semanticTree()?.revision).toBe(3);
     expect(await terminal.getByRole('button').textContent()).toBe('Third');
 
-    // `revision-dropped` covers two different causes — already published, and
-    // too many in flight — so the revision number is what identifies this one.
-    const dropped = entriesFor(terminal, 'revision-dropped');
-    expect(dropped.map((entry) => entry.revision)).toContain(2);
+    // The screen marker and semantic socket are independent transports. Wait
+    // for the diagnostic itself: screen stability cannot prove that the later
+    // socket frame containing revision 2 has been consumed, especially under
+    // ConPTY where output and the control socket are scheduled very unevenly.
+    await expect.poll(
+      () => entriesFor(terminal, 'revision-dropped').map((entry) => entry.revision),
+      { timeout: 10_000 },
+    ).toContain(2);
     await expectSurvives(terminal);
   });
 

@@ -125,7 +125,7 @@ async function buildV1Fixture(): Promise<string> {
 }
 
 describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe', () => {
-  it('answers startup terminal queries and publishes semantics through real PTY input', async () => {
+  it('publishes semantics through real PTY input and answers observable startup queries', async () => {
     const binary = await buildV1Fixture();
     const app = await launchTerminal({ command: [binary], columns: 80, rows: 12 });
     sessions.push(app);
@@ -137,7 +137,13 @@ describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe',
       frameworkVersion: 'v1.3.10',
       probeVersion: PROBE_VERSION,
     });
-    expect(app.diagnostics().some((entry) => entry.code === 'terminal-response')).toBe(true);
+    // ConPTY consumes startup terminal queries before Termwright's emulator
+    // can observe and answer them. Semantics and ordinary PTY input remain
+    // authoritative there; the terminal-response path is covered by direct VT
+    // tests and real PTYs whose query bytes are actually observable.
+    if (process.platform !== 'win32') {
+      expect(app.diagnostics().some((entry) => entry.code === 'terminal-response')).toBe(true);
+    }
 
     await app.press('x');
     await app.waitForText('changed');

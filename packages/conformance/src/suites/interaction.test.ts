@@ -57,7 +57,7 @@ async function enableMouse(terminal: TerminalHarness, mode: 'click' | 'drag'): P
 afterEach(sessions.closeAll);
 
 describe.skipIf(!ptyAvailable())('pointer interaction', () => {
-  it('clicks, double-clicks and misses', async () => {
+  it.skipIf(process.platform === 'win32')('clicks, double-clicks and misses', async () => {
     const terminal = await generic();
     await enableMouse(terminal, 'click');
 
@@ -77,7 +77,7 @@ describe.skipIf(!ptyAvailable())('pointer interaction', () => {
     await terminal.waitForText('ev: MOUSE press b=0 c=43 r=12');
   });
 
-  it('drags and lets the application own the selection', async () => {
+  it.skipIf(process.platform === 'win32')('drags and lets the application own the selection', async () => {
     const terminal = await generic();
     await enableMouse(terminal, 'drag');
 
@@ -154,7 +154,7 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     expect(wide?.row).toBe(wideStart?.row);
   });
 
-  it('follows mouse mode on and off', async () => {
+  it.skipIf(process.platform === 'win32')('follows mouse mode on and off', async () => {
     const terminal = await generic();
     await enableMouse(terminal, 'click');
     await terminal.getByScreenText('Alpha').click();
@@ -175,9 +175,8 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
 
   it('reports focus in and out only while the child asks for it', async () => {
     const terminal = await generic();
-    // Refusing is a claim about the child, so only a terminal that can see the
-    // request may make it: ConPTY reports `1004` as on for a child that never
-    // asked, and there the driver delivers instead of refusing.
+    // Where the mode is observable, prove the disabled precondition directly.
+    // The unobservable branch below separately proves fail-closed behavior.
     if (focusMode(terminal) === 'off') {
       const before = (await rejection(terminal.window.focus())) as TermwrightError;
       expect(before.code).toBe('input-mode-disabled');
@@ -185,15 +184,12 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
 
     const reporting = await enableFocusReporting(terminal);
     if (reporting === 'unknown') {
-      // The platform reports the host's focus mode rather than the child's, so
-      // there is nothing to refuse from: the driver delivers the report and
-      // records once that it could not verify the mode. The rest of this test
-      // asks what the child prints, which is not a claim the platform supports.
-      await terminal.window.focus();
-      const unverified = terminal
-        .diagnostics()
-        .filter((entry) => entry.code === 'mode-unverifiable' && entry.mode === 'focus');
-      expect(unverified).toHaveLength(1);
+      // Unknown is not permission to emit input. ConPTY hides the child's
+      // DECSET, so the authoritative result is a typed refusal, not a guessed
+      // focus report through the PTY.
+      const unavailable = (await rejection(terminal.window.focus())) as TermwrightError;
+      expect(unavailable.code).toBe('input-mode-disabled');
+      expect(unavailable.message).toContain('not observable');
       return;
     }
     expect(reporting).toBe('on');
