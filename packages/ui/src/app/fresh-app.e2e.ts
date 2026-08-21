@@ -531,6 +531,13 @@ describe('fresh React runner', () => {
     const page = await tracePage(await buildFixtureTrace({ columns: 60, rows: 10 }));
     await page.setViewportSize({ width: 1440, height: 1024 });
     await page.locator('.tw-replay-controls').waitFor({ timeout: 15_000 });
+    await expect.poll(async () => page.evaluate(() => {
+      const viewport = document.querySelector<HTMLElement>('.tw-terminal-viewport')?.getBoundingClientRect();
+      const screen = document.querySelector<HTMLElement>('.xterm-screen')?.getBoundingClientRect();
+      return viewport === undefined || screen === undefined
+        ? 999
+        : Math.min(viewport.width - screen.width, viewport.height - screen.height);
+    })).toBeLessThan(45);
     const metrics = await page.evaluate(() => {
       const box = (selector: string) => document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
       const evidence = box('.tw-evidence');

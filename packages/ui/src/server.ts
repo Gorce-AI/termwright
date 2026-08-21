@@ -856,7 +856,9 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   // Discovery runs in the background: the server is useful before it finishes,
   // and a project whose listing takes ten seconds should not delay the page.
   void publishDiscovery();
-  const stopWatching = options.discovery?.watch === true ? watchForChanges(options.discovery.cwd, publishDiscovery) : undefined;
+  const stopWatching = options.discovery?.watch === true
+    ? await watchForChanges(options.discovery.cwd, publishDiscovery)
+    : undefined;
 
   const port = await listen(http, options.port ?? 0, options.host ?? '127.0.0.1');
   const host = options.host ?? '127.0.0.1';
@@ -898,13 +900,20 @@ const IGNORED_DIRECTORIES = /(^|[/\\])(node_modules|dist|coverage|\.git)([/\\]|$
  * listing takes seconds. The watcher is closed asynchronously with the server
  * so no native filesystem callback can outlive the project directory.
  */
-function watchForChanges(cwd: string, onChange: () => Promise<void>): () => Promise<void> {
+async function watchForChanges(cwd: string, onChange: () => Promise<void>): Promise<() => Promise<void>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   let pendingRefresh: Promise<void> | undefined;
   const watcher = watch(cwd, {
     ignoreInitial: true,
     ignored: (path) => IGNORED_DIRECTORIES.test(path),
+  });
+  // A delete that happens during chokidar's initial crawl has no prior entry
+  // to remove and can be missed. Do not report the server as ready until the
+  // watch set itself is ready to observe every subsequent project change.
+  await new Promise<void>((resolveReady) => {
+    watcher.once('ready', resolveReady);
+    watcher.once('error', () => resolveReady());
   });
 
   watcher.on('all', (_event, path) => {

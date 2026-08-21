@@ -115,6 +115,15 @@ export function TerminalStage(props: TerminalStageProps) {
     fitRef.current = fit;
     const observer = new ResizeObserver(() => requestAnimationFrame(fit));
     observer.observe(host);
+    // Xterm computes its cell metrics after opening and may recompute them when
+    // the selected monospace font becomes available. The host does not resize
+    // in either case, so watching only the host can leave the terminal at the
+    // first, stale scale until the browser window is resized by hand.
+    const screen = surface.querySelector<HTMLElement>('.xterm-screen');
+    if (screen !== null) observer.observe(screen);
+    void document.fonts.ready.then(() => {
+      if (terminalRef.current === terminal) requestAnimationFrame(fit);
+    });
     requestAnimationFrame(fit);
     return () => {
       observer.disconnect();
