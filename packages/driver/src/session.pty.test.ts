@@ -742,9 +742,9 @@ describe.skipIf(!ptyAvailable())('session diagnostics', { timeout: 20_000 }, () 
     const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
     await terminal.getByTestId('approve').resolve();
 
-    const codes = terminal.diagnostics().map((entry) => entry.code);
-    expect(codes).toContain('adapter-attached');
-    expect(codes).toContain('revision-commit');
+    await expect
+      .poll(() => terminal.diagnostics().map((entry) => entry.code))
+      .toEqual(expect.arrayContaining(['adapter-attached', 'revision-commit']));
 
     const commit = terminal.diagnostics().find((entry) => entry.code === 'revision-commit');
     expect(commit?.revision).toBe(1);
