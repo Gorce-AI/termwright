@@ -202,13 +202,18 @@ describe('fresh React runner', () => {
     await page.getByRole('button', { name: 'Expand inspector' }).click();
     await page.getByRole('tab', { name: 'Semantic' }).click();
     const actionability = page.getByRole('region', { name: 'Live actionability' });
-    await expect.poll(() => actionability.getByText('Can click?', { exact: true }).count()).toBe(1);
-    await expect.poll(() => actionability.locator('li[data-actionable]').count()).toBe(4);
-    expect(await actionability.getByText('Can hover?', { exact: true }).count()).toBe(1);
-    expect(await actionability.getByText('Can focus?', { exact: true }).count()).toBe(1);
-    expect(await actionability.getByText('Can type?', { exact: true }).count()).toBe(1);
-    expect(await actionability.getByText(/input-mode-disabled: motion reporting is disabled/u).count()).toBe(1);
-    expect(await actionability.getByText('revision 12', { exact: true }).count()).toBe(4);
+    // The live semantic stream can replace the selected-node projection while
+    // the four planner RPCs complete. Poll one coherent DOM projection instead
+    // of mixing one awaited sentinel with three immediate reads from a later
+    // render.
+    await expect.poll(() => actionability.locator('li[data-actionable] header strong').allTextContents()).toEqual([
+      'Can click?',
+      'Can hover?',
+      'Can focus?',
+      'Can type?',
+    ]);
+    await expect.poll(() => actionability.getByText(/input-mode-disabled: motion reporting is disabled/u).count()).toBe(1);
+    await expect.poll(() => actionability.getByText('revision 12', { exact: true }).count()).toBe(4);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
