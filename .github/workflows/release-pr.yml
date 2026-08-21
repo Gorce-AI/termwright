@@ -52,7 +52,20 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Apply the changesets
-        run: pnpm changeset version
+        shell: bash
+        run: |
+          shopt -s nullglob
+          changesets=(.changeset/*.md)
+          pending=()
+          for changeset in "${changesets[@]}"; do
+            [[ "$changeset" == ".changeset/README.md" ]] || pending+=("$changeset")
+          done
+
+          if (( ${#pending[@]} == 0 )); then
+            echo "No unreleased changesets found; the Version PR is already current."
+          else
+            pnpm changeset version
+          fi
         env:
           # @changesets/changelog-github resolves authors and pull requests
           # while rendering changelog entries. The workflow token already has
