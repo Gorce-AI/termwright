@@ -399,18 +399,27 @@ describe.skipIf(upstream === null)('against the real framework', () => {
       ],
     });
 
-    const { stdout } = await run(
-      'go',
-      [
-        'test',
-        '-run',
-        'Termwright|Probe|Stalled|Marker|Dormant',
-        '-count=1',
-        '-v',
-        'github.com/rivo/tview',
-      ],
-      { cwd: harness, env: { ...process.env, GOWORK: file } },
-    );
+    const args = [
+      'test',
+      '-run',
+      'Termwright|Probe|Stalled|Marker|Dormant',
+      '-count=1',
+      '-v',
+      'github.com/rivo/tview',
+    ];
+    let stdout: string;
+    try {
+      ({ stdout } = await run('go', args, {
+        cwd: harness,
+        env: { ...process.env, GOWORK: file },
+      }));
+    } catch (error) {
+      const processError = error as Error & { stdout?: string; stderr?: string };
+      throw new Error(
+        [processError.message, processError.stdout, processError.stderr].filter(Boolean).join('\n'),
+        { cause: error },
+      );
+    }
 
     // Named, so a suite that quietly stopped covering the stall is visible.
     expect(stdout).toContain('PASS: TestAStalledDriverCostsFramesAndNotTheApplication');
