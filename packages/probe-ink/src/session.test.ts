@@ -4,6 +4,7 @@ import { DEFAULT_LIMITS, type SemanticSnapshot } from '@termwright/protocol';
 import type { ProbeChannel } from '@termwright/probe-runtime';
 import { createInkSession, probeInfo } from './session.js';
 import type { InkDomElement } from './observe.js';
+import { PACKAGE_VERSION } from './version.js';
 
 function root(): InkDomElement {
   const label = {
@@ -49,7 +50,7 @@ describe('Ink probe session', () => {
   it('describes stable host identity and the optional annotation channel', () => {
     expect(probeInfo()).toEqual({
       framework: 'ink',
-      probeVersion: '0.1.0',
+      probeVersion: PACKAGE_VERSION,
       identityKind: 'stable',
       capabilities: ['stable-identity', 'annotations'],
     });

@@ -48,6 +48,24 @@ const COMPATIBILITY_VERSION_ENTRIES = 12;
  */
 const targets = [
 	{
+		file: 'packages/termwright-cli/src/version.ts',
+		pattern: /(?<=export const CLI_VERSION = ')([^']+)(?=';)/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'packages/mcp/src/version.ts',
+		pattern: /(?<=export const SERVER_VERSION = ')([^']+)(?=';)/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'packages/desktop-host/src/index.ts',
+		pattern: /(?<=name: 'termwright-desktop-host-runtime',\n    productName: 'Termwright',\n    version: ')([^']+)(?=',)/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
 		file: 'packages/probe-ink/src/version.ts',
 		pattern: /(?<=export const PACKAGE_VERSION = ')([^']+)(?=';)/,
 		render: (version) => version,
@@ -60,9 +78,57 @@ const targets = [
 		whole: true,
 	},
 	{
+		file: 'packages/probe-tview/src/launch.ts',
+		pattern: /(?<=export const PROBE_VERSION = ')([^']+)(?=';)/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'packages/probe-charm/src/launch.ts',
+		pattern: /(?<=export const PROBE_VERSION = ')([^']+)(?=';)/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'packages/probe-tview/upstream-patches/tview/v0.42.0/add/termwright_probe.go',
+		pattern: /(?<=probeVersion     = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'packages/probe-charm/upstream-patches/bubbletea/v1.3.10/add/termwright_probe.go',
+		pattern: /(?<=probeVersion     = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'packages/probe-charm/upstream-patches/bubbletea/v2.0.8/add/termwright_probe.go',
+		pattern: /(?<=probeVersion     = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
 		file: 'clients/python/pyproject.toml',
 		pattern: /^version = "(.+)"$/m,
 		render: (version) => `version = "${version}"`,
+	},
+	{
+		file: 'clients/python/uv.lock',
+		pattern: /(?<=name = "termwright"\nversion = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/python/src/termwright/__init__.py',
+		pattern: /(?<=__version__ = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/python/src/termwright_probe/__init__.py',
+		pattern: /(?<=__version__ = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
 	},
 	{
 		file: 'clients/rust/Cargo.toml',
@@ -126,6 +192,36 @@ const targets = [
 	{
 		file: 'clients/rust-ratatui/Cargo.lock',
 		pattern: /(?<=name = "termwright-protocol"\nversion = ")([^"]+)(?=")/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/README.md',
+		pattern: /(?<=`termwright` )([^ ]+)(?= \(PyPI\))/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/README.md',
+		pattern: /(?<=`github\.com\/gorce-ai\/termwright\/clients\/go` v)([^ ]+)(?= \|)/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/README.md',
+		pattern: /(?<=`termwright-protocol` )([^ ]+)(?= \(crates\.io\))/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/README.md',
+		pattern: /(?<=`termwright-probe-ratatui` )([^ ]+)(?= \|)/,
+		render: (version) => version,
+		whole: true,
+	},
+	{
+		file: 'clients/README.md',
+		pattern: /(?<=`termwright-ratatui` )([^ ]+)(?= \|)/,
 		render: (version) => version,
 		whole: true,
 	},

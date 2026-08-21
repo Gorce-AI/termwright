@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
 import { afterAll, describe, expect, it } from 'vitest';
-import { prepareInstrumentedBuild } from './launch.js';
+import { prepareInstrumentedBuild, PROBE_VERSION } from './launch.js';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -156,7 +156,7 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     expect(app.capabilities().probe).toEqual({
       framework: 'charm',
       frameworkVersion: 'v2.0.8',
-      probeVersion: '0.1.0',
+      probeVersion: PROBE_VERSION,
       identityKind: 'frame-local',
       capabilities: ['annotations'],
     });

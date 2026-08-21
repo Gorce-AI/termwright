@@ -26,7 +26,7 @@ import {
   materializeUpstream,
   writeWorkspace,
 } from '@termwright/probe-go';
-import { prepareInstrumentedBuild } from './launch.js';
+import { prepareInstrumentedBuild, PROBE_VERSION } from './launch.js';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -325,7 +325,7 @@ describe.skipIf(!runnable)('a plain tview application under the probe', () => {
     expect(app.capabilities().probe).toEqual({
       framework: 'tview',
       frameworkVersion: 'v0.42.0',
-      probeVersion: '0.1.0',
+      probeVersion: PROBE_VERSION,
       identityKind: 'stable',
       capabilities: ['stable-identity', 'annotations'],
     });

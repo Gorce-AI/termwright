@@ -15,6 +15,7 @@ import {
   verifyMarkerPayload,
 } from '@termwright/protocol';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
+import { PACKAGE_VERSION } from './version.js';
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(packageRoot, 'src', 'testing', 'vanilla-app.mjs');
@@ -197,7 +198,7 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
       const hello = await driver.waitForHandshake();
       expect(hello.probe).toMatchObject({
         framework: 'ink',
-        probeVersion: '0.1.0',
+        probeVersion: PACKAGE_VERSION,
         identityKind: 'stable',
       });
       // No guessed frameworkVersion and no source-component claim: Ink's host
