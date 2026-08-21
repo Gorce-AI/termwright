@@ -60,7 +60,12 @@ jobs:
 
       - run: pnpm -r --filter './packages/*' run build
       - run: pnpm -r --filter './packages/*' run typecheck
-      - run: pnpm -r --filter './packages/*' run test
+      # Each package's Vitest suite still uses its own worker pool. Running
+      # several of those pools beside the real-PTY suites oversubscribes
+      # Windows runners and can tear down a healthy worker IPC channel. Bound
+      # package-level fanout; dedicated hostile and stress jobs retain explicit
+      # concurrency coverage.
+      - run: pnpm -r --workspace-concurrency=1 --filter './packages/*' run test
 
       # The Getting Started source is a real workspace package. This catches
       # stale imports, launch assumptions and expected output in the primary
