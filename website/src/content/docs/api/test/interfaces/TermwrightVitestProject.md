@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TermwrightVitestProject
 
-Defined in: [test/src/config.ts:107](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L107)
+Defined in: [test/src/config.ts:115](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L115)
 
 Inline Vitest project generated from one named Termwright profile.
 
@@ -21,7 +21,7 @@ Inline Vitest project generated from one named Termwright profile.
 
 > `readonly` **extends**: `true`
 
-Defined in: [test/src/config.ts:108](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L108)
+Defined in: [test/src/config.ts:116](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L116)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [test/src/config.ts:108](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` **test**: `object`
 
-Defined in: [test/src/config.ts:109](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L109)
+Defined in: [test/src/config.ts:117](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L117)
 
 #### env
 

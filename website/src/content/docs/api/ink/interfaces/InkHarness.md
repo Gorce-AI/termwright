@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: InkHarness
 
-Defined in: ink/src/mount.tsx:93
+Defined in: [ink/src/mount.tsx:93](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L93)
 
 A [TerminalHarness](https://gorce-ai.github.io/termwright/api/driver/interfaces/terminalharness/) over an in-process Ink application, plus the two
 things only an in-process mount can offer.
@@ -541,7 +541,7 @@ Defined in: driver/dist/index.d.ts:141
 
 > **renderError**(): `Error` \| `null`
 
-Defined in: ink/src/mount.tsx:109
+Defined in: [ink/src/mount.tsx:109](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L109)
 
 The error a component threw during render, or `null`.
 
@@ -558,7 +558,7 @@ until the next [InkHarness.rerender](#rerender).
 
 > **rerender**(`element`, `opts?`): `Promise`\<`void`\>
 
-Defined in: ink/src/mount.tsx:101
+Defined in: [ink/src/mount.tsx:101](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L101)
 
 Replaces the mounted element and resolves once the resulting frame has been
 committed and published — the component-test equivalent of a prop update.

@@ -13,7 +13,7 @@ editUrl: false
 
 > **mountInk**(`element`, `options?`): `Promise`\<[`InkHarness`](../../interfaces/inkharness/)\>
 
-Defined in: ink/src/mount.tsx:148
+Defined in: [ink/src/mount.tsx:148](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L148)
 
 Mounts an Ink element in this process and returns a harness over it.
 

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TestTimeoutClasses
 
-Defined in: [test/src/config.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L28)
+Defined in: [test/src/config.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L33)
 
 Timeout classes, extended with the class that governs polling matchers.
 
@@ -49,7 +49,7 @@ Defined in: driver/dist/index.d.ts:15
 
 > `readonly` `optional` **expect?**: `number`
 
-Defined in: [test/src/config.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L30)
+Defined in: [test/src/config.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L35)
 
 Budget for self-polling matchers (`toBeVisible`, …). Default 5 000 ms.
 

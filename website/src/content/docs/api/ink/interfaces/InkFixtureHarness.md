@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: InkFixtureHarness
 
-Defined in: ink/src/fixture.ts:78
+Defined in: [ink/src/fixture.ts:78](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/fixture.ts#L78)
 
 A [TerminalHarness](https://gorce-ai.github.io/termwright/api/driver/interfaces/terminalharness/) over a fixture process, plus the prop update only a
 control channel can deliver.
@@ -541,7 +541,7 @@ Defined in: driver/dist/index.d.ts:141
 
 > **rerender**(`props`, `opts?`): `Promise`\<`void`\>
 
-Defined in: ink/src/fixture.ts:93
+Defined in: [ink/src/fixture.ts:93](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/fixture.ts#L93)
 
 Replaces the fixture's props and resolves once the resulting frame has been
 committed and published.

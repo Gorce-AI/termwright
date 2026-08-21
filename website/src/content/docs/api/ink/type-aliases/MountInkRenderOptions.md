@@ -13,7 +13,7 @@ editUrl: false
 
 > **MountInkRenderOptions** = `Pick`\<`RenderOptions`, `"maxFps"` \| `"exitOnCtrlC"` \| `"patchConsole"` \| `"incrementalRendering"` \| `"concurrent"` \| `"isScreenReaderEnabled"`\>
 
-Defined in: ink/src/mount.tsx:34
+Defined in: [ink/src/mount.tsx:34](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L34)
 
 The Ink render options a mount may override.
 

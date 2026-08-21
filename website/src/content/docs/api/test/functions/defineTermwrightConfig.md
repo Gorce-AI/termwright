@@ -13,7 +13,7 @@ editUrl: false
 
 > **defineTermwrightConfig**(`config`): [`TermwrightConfig`](../../interfaces/termwrightconfig/)
 
-Defined in: [test/src/config.ts:230](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L230)
+Defined in: [test/src/config.ts:238](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L238)
 
 Validates a configuration object and returns it unchanged.
 

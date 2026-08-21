@@ -171,4 +171,40 @@ describe('Ink probe session', () => {
     expect(snapshots[0]?.revision).toBe(1);
     expect(coalesced.count).toBe(1);
   });
+
+  it('waits when an annotation refresh sees a host tree ahead of the renderer capture', async () => {
+    const tree = root();
+    let currentCapture = capture(tree);
+    const snapshots: SemanticSnapshot[] = [];
+    const session = createInkSession({
+      channel: channel(snapshots, []),
+      resolveRoot: () => tree,
+      resolveCapture: () => currentCapture,
+      stdout: stream([]),
+      tracker: fakeTracker(),
+    });
+    const dialog = {
+      nodeName: 'ink-box' as const,
+      style: {},
+      childNodes: [] as InkDomElement[],
+    };
+    (tree.childNodes as InkDomElement[]).push(dialog);
+
+    session.notifyRender({ allowUnsettled: true });
+    await session.flush();
+    expect(session.frames).toBe(0);
+    expect(snapshots).toHaveLength(0);
+
+    const geometry = new Map(currentCapture.geometry);
+    geometry.set(dialog, {
+      intended: { row: 1, column: 0, width: 10, height: 1 },
+      visible: { row: 1, column: 0, width: 10, height: 1 },
+      region: 'live',
+    });
+    currentCapture = { ...currentCapture, geometry };
+    session.notifyRender();
+    await session.flush();
+    expect(session.frames).toBe(1);
+    expect(snapshots).toHaveLength(1);
+  });
 });

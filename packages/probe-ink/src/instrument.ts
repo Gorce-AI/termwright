@@ -95,7 +95,7 @@ function instrumentedRender(
     // The renderer's onRender runs before this macrotask; annotation-only
     // changes still get a deterministic catch-up publication afterwards.
     setImmediate(() => {
-      if (!disposed) state.session?.notifyRender();
+      if (!disposed) state.session?.notifyRender({ allowUnsettled: true });
     });
   });
 

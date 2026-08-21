@@ -13,7 +13,7 @@ editUrl: false
 
 > **launchInkFixture**(`options`): `Promise`\<[`InkFixtureHarness`](../../interfaces/inkfixtureharness/)\>
 
-Defined in: ink/src/fixture.ts:128
+Defined in: [ink/src/fixture.ts:128](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/fixture.ts#L128)
 
 Starts a fixture process in a real pty and returns a harness over it.
 

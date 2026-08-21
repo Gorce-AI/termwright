@@ -32,7 +32,8 @@ export interface InkSessionOptions {
 export interface InkProbeSession {
   readonly revision: number;
   readonly frames: number;
-  notifyRender(): void;
+  /** Freeze a renderer commit; refresh-only calls wait when the host tree is ahead of its capture. */
+  notifyRender(options?: { readonly allowUnsettled?: boolean }): void;
   flush(): Promise<void>;
   stop(): void;
 }
@@ -99,10 +100,8 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
   return {
     get revision() { return revision; },
     get frames() { return frames; },
-    notifyRender() {
+    notifyRender(notifyOptions = {}) {
       if (stopped) return;
-      frames += 1;
-      latestFrame = frames;
       try {
         const root = options.resolveRoot();
         if (root === null) throw new Error('Ink committed frame has no retained root');
@@ -119,6 +118,17 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
           ...(capture.staticChildren.size === 0 ? {} : { retainedChildren: capture.staticChildren }),
           geometry: capture.geometry,
         });
+        // Layout effects can register annotations after React mutates the host
+        // tree but before Ink's throttled renderer has produced the matching
+        // capture. That is a transient refresh state, not a committed frame
+        // whose guaranteed geometry may be downgraded. The subsequent real
+        // onRender call freezes it. Renderer-originated calls remain strict.
+        if (hasDisplayedNodeWithoutGeometry(observation.frame)) {
+          if (notifyOptions.allowUnsettled === true) return;
+          throw new Error('certified Ink renderer capture is missing geometry for a displayed host node');
+        }
+        frames += 1;
+        latestFrame = frames;
         const frozen = { number: frames, capture, observation };
         queue = queue.then(() => publish(frozen)).catch(fail);
       } catch (error) {
@@ -128,6 +138,12 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
     async flush() { await queue.catch(() => undefined); },
     stop() { fail(new Error('Ink probe stopped')); },
   };
+}
+
+function hasDisplayedNodeWithoutGeometry(frame: ProbeFrame): boolean {
+  return frame.objects.some((object) =>
+    object.state?.displayed !== false && object.geometry?.intendedRect === undefined,
+  );
 }
 
 function qualifyFrame(

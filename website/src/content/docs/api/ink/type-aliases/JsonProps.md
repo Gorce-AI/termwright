@@ -13,7 +13,7 @@ editUrl: false
 
 > **JsonProps** = `object`
 
-Defined in: ink/src/payload.ts:19
+Defined in: [ink/src/payload.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/payload.ts#L19)
 
 Props for a fixture component: a JSON object, never a function.
 
