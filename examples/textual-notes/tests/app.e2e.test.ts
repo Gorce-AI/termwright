@@ -32,9 +32,7 @@ describe.skipIf(!runnable)('the notes app', () => {
     const geometry = await add.geometry();
     expect(geometry.intendedRect.status).toBe('known');
     expect(geometry.visibleRect.status).toBe('known');
-    const hit = await add.hitTest();
-    expect(hit.receivesEvents).toMatchObject({ status: 'known', value: true });
-    expect(hit.recipient).toMatchObject({ status: 'known' });
+    await expect(add).toReceivePointerEvents();
 
     const draft = app.getByRole('textbox');
     await app.waitForStable();

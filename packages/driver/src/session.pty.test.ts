@@ -1612,4 +1612,23 @@ describe.skipIf(!ptyAvailable())('a semantic session over a real PTY', { timeout
     expect(receipt.plan.strategy).toBe('focus-enter');
     await terminal.waitForText('ACTIVATED approve');
   });
+
+  it('replans a keyboard action after a torn render without sending stale input', async () => {
+    const terminal = await launch('semantic-app.mjs', { semanticNegotiationMs: 5_000 });
+    const approve = terminal.getByTestId('approve');
+    await approve.resolve();
+    const keyboardInput: Uint8Array[] = [];
+    terminal.events.on('input', ({ kind, data }) => {
+      if (kind === 'key') keyboardInput.push(data);
+    });
+
+    await terminal.write('U');
+    await terminal.waitForText('UNPAIRED SCREEN UPDATE');
+    const receipt = await approve.activate({ timeout: 2_000 });
+
+    expect(receipt.before.pairedScreenRevision).toBe(receipt.before.screenRevision);
+    expect(receipt.plan.strategy).toBe('focus-enter');
+    expect(keyboardInput).toHaveLength(1);
+    await terminal.waitForText('ACTIVATED approve');
+  });
 });

@@ -318,6 +318,14 @@ process.stdin.on('data', (chunk) => {
     socket?.destroy();
     return;
   }
+  if (text === 'U') {
+    // Put the VT one revision ahead of the last semantic/render pair, then
+    // publish a fresh pair shortly afterwards. Locator keyboard actions must
+    // re-plan without emitting input during this ordinary render race.
+    process.stdout.write('UNPAIRED SCREEN UPDATE\r\n');
+    setTimeout(publish, 100);
+    return;
+  }
   if (text === '\r' || text === ' ') {
     lastEvent = `ACTIVATED ${focused}`;
     publish();

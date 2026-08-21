@@ -760,36 +760,36 @@ export class LocatorImpl implements Locator {
 
   async press(keys: string, opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('press', async (record, actionId) => {
-      const target = await this.resolve(opts); record(target);
-      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'press', selector: this.description, targetRef: target.ref }, target, keys));
+      const { receipt } = await this.#plannedKeyboard({ kind: 'press', selector: this.description }, keys, opts, record, actionId);
+      return receipt;
     });
   }
 
   async type(text: string, opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('type', async (record, actionId) => {
-      const target = await this.resolve(opts); record(target);
-      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'type', selector: this.description, targetRef: target.ref }, target, text));
+      const { receipt } = await this.#plannedKeyboard({ kind: 'type', selector: this.description }, text, opts, record, actionId);
+      return receipt;
     });
   }
 
   async fill(text: string, opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('fill', async (record, actionId) => {
-      const target = await this.resolve(opts); record(target);
-      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'fill', selector: this.description, targetRef: target.ref }, target, text));
+      const { receipt } = await this.#plannedKeyboard({ kind: 'fill', selector: this.description }, text, opts, record, actionId);
+      return receipt;
     });
   }
 
   async focus(opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('focus', async (record, actionId) => {
-      const target = await this.resolve(opts); record(target);
-      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'focus', selector: this.description, targetRef: target.ref }, target));
+      const { receipt } = await this.#plannedKeyboard({ kind: 'focus', selector: this.description }, '', opts, record, actionId);
+      return receipt;
     });
   }
 
   async activate(opts?: WaitOptions): Promise<ActionReceipt> {
     return this.#act('activate', async (record, actionId) => {
-      const target = await this.resolve(opts); record(target);
-      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'activate', selector: this.description, targetRef: target.ref }, target));
+      const { receipt } = await this.#plannedKeyboard({ kind: 'activate', selector: this.description }, '', opts, record, actionId);
+      return receipt;
     });
   }
 
@@ -804,10 +804,14 @@ export class LocatorImpl implements Locator {
   async #checkedAction(value: boolean, opts?: WaitOptions): Promise<ActionReceipt> {
     const api = value ? 'check' : 'uncheck';
     return this.#act(api, async (record, actionId) => {
-      const target = await this.resolve(opts); record(target);
-      const plan = new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: value ? 'check' : 'uncheck', selector: this.description, targetRef: target.ref }, target);
-      const receipt = await this.#executePlan(plan);
-      if (plan.operations.length > 0) {
+      const { receipt, target } = await this.#plannedKeyboard(
+        { kind: value ? 'check' : 'uncheck', selector: this.description },
+        '',
+        opts,
+        record,
+        actionId,
+      );
+      if (receipt.plan.operations.length > 0) {
         const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
         for (;;) {
           const remaining = Math.max(1, deadline - Date.now());
@@ -824,6 +828,35 @@ export class LocatorImpl implements Locator {
       }
       return Object.freeze({ ...receipt, after: this.#ctx.checkpoint() });
     });
+  }
+
+  async #plannedKeyboard(
+    intent: Omit<ActionIntent, 'targetRef'>,
+    value: string,
+    opts: WaitOptions | undefined,
+    record: (target: ResolvedTarget) => void,
+    actionId: string,
+  ): Promise<{ readonly receipt: ActionReceipt; readonly target: ResolvedTarget }> {
+    const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
+    for (;;) {
+      const target = await this.resolve({ ...opts, timeout: Math.max(1, deadline - Date.now()) });
+      record(target);
+      try {
+        const plan = new ActionPlanner(this.#ctx).planKeyboard(
+          actionId,
+          { ...intent, targetRef: target.ref },
+          target,
+          value,
+        );
+        return Object.freeze({ receipt: await this.#executePlan(plan), target });
+      } catch (error) {
+        // No device operation has run when planning detects a torn revision.
+        // Wait for a new committed pair and resolve again, exactly as pointer
+        // planning does, rather than exposing an ordinary render race.
+        if (!(error instanceof StaleSnapshotError) || Date.now() >= deadline) throw error;
+        await this.#ctx.waitForChange(deadline);
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
