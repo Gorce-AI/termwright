@@ -36,6 +36,7 @@ import {
   type UiResult,
 } from './ui-command.js';
 import { CLI_NAME, CLI_VERSION } from './version.js';
+import { formatDoctor, runDoctor, type DoctorReport } from './doctor.js';
 
 export type { CliIo };
 
@@ -59,6 +60,7 @@ export interface CliDeps {
     readonly isTty: boolean;
     readonly env: Readonly<Record<string, string | undefined>>;
   };
+  readonly doctor: (cwd: string) => Promise<DoctorReport>;
 }
 
 /** The real collaborators. */
@@ -71,6 +73,7 @@ export function defaultDeps(io: CliIo = defaultIo): CliDeps {
     launchDesktop: (url) => launchDesktopHost({ url }),
     openBrowser: openInBrowser,
     processContext: { isTty: process.stdout.isTTY === true, env: process.env },
+    doctor: runDoctor,
   };
 }
 
@@ -116,6 +119,12 @@ export async function runCli(
 
       case 'skill':
         return await emitSkill(args, io);
+
+      case 'doctor': {
+        const report = await deps.doctor(deps.cwd);
+        io.out(json ? JSON.stringify(report) : formatDoctor(report));
+        return report.ok ? EXIT_CODES.ok : EXIT_CODES.assertion;
+      }
 
       case 'mcp':
         // Forwarded verbatim, `--json` included, so the delegate owns its own

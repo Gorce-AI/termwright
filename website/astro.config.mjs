@@ -55,6 +55,7 @@ export default defineConfig({
 					items: [
 						{label: 'Locators', slug: 'guides/locators'},
 						{label: 'Actions and input', slug: 'guides/actions'},
+						{label: 'Shell commands', slug: 'guides/shell-commands'},
 						{label: 'Assertions', slug: 'guides/assertions'},
 						{label: 'Snapshots', slug: 'guides/snapshots'},
 						{label: 'Test files and isolation', slug: 'guides/test-files'},
@@ -120,6 +121,8 @@ export default defineConfig({
 						{label: 'Geometry and visibility', slug: 'reference/geometry-visibility'},
 						{label: 'Packages and exports', slug: 'reference/packages'},
 						{label: 'Platforms and limitations', slug: 'reference/limitations'},
+						{label: 'Terminal compatibility', slug: 'reference/terminal-compatibility'},
+						{label: 'Security and sensitive data', slug: 'reference/security'},
 						{label: 'Releases and versioning', slug: 'reference/releasing'},
 					],
 				},

@@ -108,6 +108,11 @@ export interface LaunchOptions {
   readonly scrollbackLines?: number; // default 2_000
   readonly timeouts?: TimeoutClasses;
   readonly recording?: RecordingOptions;
+  /**
+   * `'termwright-posix'` instruments an interactive POSIX shell with exact
+   * command markers. Test authors should normally use `terminal.openShell()`.
+   */
+  readonly shellIntegration?: 'external' | 'termwright-posix';
 }
 
 export declare function launchTerminal(options: LaunchOptions): Promise<TerminalHarness>;
@@ -117,6 +122,8 @@ export declare function launchTerminal(options: LaunchOptions): Promise<Terminal
 
 export interface TerminalHarness {
   readonly sessionId: string;
+  /** Shell command boundaries and prompt state when the child emits OSC 133. */
+  readonly shell: ShellApi;
 
   capabilities(): SessionCapabilities;
   /**
@@ -197,6 +204,40 @@ export interface TerminalHarness {
   /** Idempotent; bounded physical cleanup. Never sends signals implicitly. */
   close(): Promise<void>;
   readonly exit: Promise<ExitStatus>;
+}
+
+/** Observable shell-integration state; fields are never inferred from prompt text. */
+export interface ShellStatus {
+  readonly supported: boolean;
+  readonly ready: boolean;
+  readonly lastMark: 'A' | 'B' | 'C' | 'D' | null;
+  readonly lastExitCode: number | null;
+  /** Last OSC 7 working directory, or null when the child never published one. */
+  readonly cwd: string | null;
+  readonly title: string;
+  readonly cursor: CursorInfo;
+  readonly bellCount: number;
+}
+
+export interface ShellRunOptions extends WaitOptions {
+  /** Maximum captured bytes between OSC 133 C and D. Defaults to 8 MiB. */
+  readonly maxOutputBytes?: number;
+}
+
+/** One command, bounded by the shell's OSC 133 C and D marks. */
+export interface ShellCommandResult {
+  readonly command: string;
+  /** Exact terminal bytes emitted between command-start and command-end marks. */
+  readonly output: string;
+  readonly exitCode: number | null;
+  readonly cwd: string | null;
+  readonly title: string;
+}
+
+export interface ShellApi {
+  status(): ShellStatus;
+  waitForPrompt(options?: WaitOptions): Promise<void>;
+  run(command: string, options?: ShellRunOptions): Promise<ShellCommandResult>;
 }
 
 export interface SessionCapabilities {

@@ -77,6 +77,12 @@ export interface AttachFixtureOptions {
   readonly command?: readonly string[];
 }
 
+/** Options for a Termwright-integrated interactive POSIX shell. */
+export interface OpenShellFixtureOptions extends Omit<LaunchFixtureOptions, 'command' | 'shellIntegration'> {
+  /** Shell executable and arguments. Defaults to `$SHELL -i`, then `/bin/sh -i`. */
+  readonly shell?: readonly string[];
+}
+
 /** Runs a titled step; it becomes a marker in the recording and a trace event. */
 export interface StepOptions {
   /** Authored identity for a physical Gherkin step. */
@@ -97,6 +103,8 @@ export interface TermwrightScopeFixture {
 /** Launches terminals that close themselves when the test ends. */
 export interface TerminalFactory {
   launch(options?: LaunchFixtureOptions): Promise<TerminalHarness>;
+  /** Opens an interactive POSIX shell with exact command boundaries. */
+  openShell(options?: OpenShellFixtureOptions): Promise<TerminalHarness>;
   /**
    * Adopts an existing harness for this test.
    *
@@ -263,7 +271,8 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
       const screen = harness.screen();
       const command = options.command ?? ['<attached-harness>'];
       const index = sessions.length;
-      const dir = merged.trace === 'off'
+      const collectsTrace = merged.trace !== 'off' && (merged.trace !== 'on-first-retry' || attempt === 2);
+      const dir = !collectsTrace
         ? undefined
         : traceDir(config, { taskId: task.id, name: fullName(task), index, attempt });
       const writer = dir === undefined
@@ -301,6 +310,18 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
       ): Promise<T> {
         return attachHarness(harness, options);
       },
+      async openShell(options: OpenShellFixtureOptions = {}): Promise<TerminalHarness> {
+        if (process.platform === 'win32') {
+          throw new TypeError('terminal.openShell() currently supports POSIX shells; launch PowerShell directly for terminal-level tests');
+        }
+        const { shell = [process.env['SHELL'] ?? '/bin/sh', '-i'], ...launchOptions } = options;
+        if (shell.length === 0) throw new TypeError('terminal.openShell() needs a non-empty shell command');
+        return factory.launch({
+          ...launchOptions,
+          command: shell,
+          shellIntegration: 'termwright-posix',
+        });
+      },
       async launch(options: LaunchFixtureOptions = {}): Promise<TerminalHarness> {
         const merged = mergeOptions(config, termwrightOptions, options, inheritedEnv());
         const command = merged.command;
@@ -325,6 +346,7 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
           command,
           columns: merged.columns,
           rows: merged.rows,
+          ...(merged.terminalProfile === undefined ? {} : { terminalProfile: merged.terminalProfile }),
           cwd,
           env: merged.env,
           timeouts: merged.timeouts,
@@ -348,7 +370,7 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
     }
 
     for (const session of sessions.reverse()) {
-      const keep = session.trace === 'on' || (failed && session.trace === 'retain-on-failure');
+      const keep = session.trace === 'on' || session.trace === 'on-first-retry' || (failed && session.trace === 'retain-on-failure');
       try {
         // Detach first so terminal shutdown cannot publish late output into a
         // run which Vitest is already finishing. Socket teardown is bounded

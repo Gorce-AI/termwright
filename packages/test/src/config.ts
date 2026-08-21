@@ -12,7 +12,7 @@ import type { TimeoutClasses } from '@termwright/driver';
 import { LOG_LEVEL_SEVERITY, type LogLevel } from '@termwright/protocol';
 
 /** How much of a session ends up in a `.twtrace` archive. */
-export type TraceMode = 'on' | 'retain-on-failure' | 'off';
+export type TraceMode = 'on' | 'retain-on-failure' | 'on-first-retry' | 'off';
 
 /**
  * Snapshot writing policy.
@@ -63,6 +63,8 @@ export interface TermwrightConfig {
   readonly command?: readonly string[];
   /** Extra environment for launched programs. Merged after the palette's. */
   readonly env?: Readonly<Record<string, string>>;
+  /** Character-width and terminal behavior profile used by the emulator. */
+  readonly terminalProfile?: string;
   /** Deterministic palette; also decorates cell snapshots with color names. */
   readonly palette?: ColorPalette;
   /** Overrides selected by the `TERMWRIGHT_PROFILE` environment variable. */
@@ -94,10 +96,42 @@ export interface ResolvedTermwrightConfig {
   readonly command: readonly string[] | undefined;
   readonly env: Readonly<Record<string, string>>;
   readonly palette: ColorPalette | undefined;
+  readonly terminalProfile: string | undefined;
   readonly updateSnapshots: UpdateSnapshotsMode | undefined;
   readonly failOnLogLevel: LogLevel | false;
   /** Name of the profile that was applied, when any. */
   readonly profile: string | undefined;
+}
+
+/** Inline Vitest project generated from one named Termwright profile. */
+export interface TermwrightVitestProject {
+  readonly extends: true;
+  readonly test: {
+    readonly name: string;
+    readonly env: Readonly<Record<'TERMWRIGHT_PROFILE', string>>;
+  };
+}
+
+/** Runs the same Vitest tests once per named Termwright profile. */
+export function termwrightProjects(
+  config: TermwrightConfig,
+  names: readonly string[] = Object.keys(config.profiles ?? {}),
+): readonly TermwrightVitestProject[] {
+  const known = config.profiles ?? {};
+  if (names.length === 0) throw new TypeError('termwrightProjects() needs at least one configured profile');
+  const seen = new Set<string>();
+  return Object.freeze(names.map((name) => {
+    if (seen.has(name)) throw new TypeError(`termwrightProjects() received duplicate profile ${JSON.stringify(name)}`);
+    seen.add(name);
+    if (known[name] === undefined) throw new TypeError(`termwrightProjects() cannot find profile ${JSON.stringify(name)}`);
+    return Object.freeze({
+      extends: true as const,
+      test: Object.freeze({
+        name,
+        env: Object.freeze({ TERMWRIGHT_PROFILE: name }),
+      }),
+    });
+  }));
 }
 
 /**
@@ -133,7 +167,7 @@ const DEFAULT_TIMEOUTS: Required<TestTimeoutClasses> = Object.freeze({
   expect: 5_000,
 });
 
-const TRACE_MODES: readonly TraceMode[] = ['on', 'retain-on-failure', 'off'];
+const TRACE_MODES: readonly TraceMode[] = ['on', 'retain-on-failure', 'on-first-retry', 'off'];
 const UPDATE_MODES: readonly UpdateSnapshotsMode[] = ['all', 'changed', 'missing', 'none'];
 const MAX_RETRIES = 100;
 
@@ -264,10 +298,11 @@ export function resolveTermwrightConfig(
     timeouts: Object.freeze({ ...DEFAULT_TIMEOUTS, ...stripUndefined(merged.timeouts ?? {}) }),
     trace: merged.trace ?? 'retain-on-failure',
     outputDir: merged.outputDir ?? 'termwright-report',
-    snapshotDir: merged.snapshotDir ?? '__snapshots__',
+    snapshotDir: merged.snapshotDir ?? (profile === undefined ? '__snapshots__' : `__snapshots__/${name}`),
     command: merged.command,
     env: Object.freeze({ ...(palette?.env ?? {}), ...(merged.env ?? {}) }),
     palette,
+    terminalProfile: merged.terminalProfile,
     updateSnapshots: merged.updateSnapshots,
     failOnLogLevel: merged.failOnLogLevel ?? 'error',
     profile: profile === undefined ? undefined : name,

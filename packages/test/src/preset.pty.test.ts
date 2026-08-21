@@ -44,6 +44,18 @@ afterAll(() => {
 });
 
 describe.skipIf(!available)('the preset against a real PTY', () => {
+  test('opens an integrated shell and returns each command result', { timeout: 30_000 }, async ({ terminal }) => {
+    const shell = await terminal.openShell({ shell: ['/bin/sh', '-i'] });
+    const printed = await shell.shell.run("printf 'hello from shell\\n'");
+    expect(printed.exitCode).toBe(0);
+    expect(printed.output).toContain('hello from shell');
+    expect(printed.cwd).toBe(terminal.tmpdir);
+
+    const failed = await shell.shell.run('false');
+    expect(failed.exitCode).toBe(1);
+    expect(shell.shell.status()).toMatchObject({ supported: true, ready: true });
+  });
+
   // Each test carries its own timeout: it must exceed the `expect` timeout
   // class, or a failing matcher is cut off by the runner before it can print
   // what it saw.

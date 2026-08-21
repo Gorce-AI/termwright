@@ -97,6 +97,7 @@ interface TestCaseLike {
   readonly name?: string;
   readonly fullName?: string;
   readonly module?: { readonly moduleId?: string };
+  readonly project?: { readonly name?: string };
   result?: () => { state?: string; errors?: readonly { message?: string }[] } | undefined;
   diagnostic?: () => { duration?: number; retryCount?: number; flaky?: boolean } | undefined;
   meta?: () =>
@@ -160,7 +161,7 @@ export class TermwrightUiReporter {
       v: 1,
       type: 'test-start',
       id,
-      title: testCase.fullName ?? testCase.name ?? id,
+      title: displayTitle(testCase),
       // Vitest always knows which module a test came from; the fallback keeps
       // the field present, which the protocol requires, rather than dropping
       // the message.
@@ -188,7 +189,7 @@ export class TermwrightUiReporter {
         v: 1,
         type: 'test-start',
         id,
-        title: testCase.fullName ?? testCase.name ?? id,
+        title: displayTitle(testCase),
         file: canonicalTestFile(testCase.module?.moduleId ?? ''),
         startedAt: Date.now(),
       });
@@ -211,7 +212,7 @@ export class TermwrightUiReporter {
     }
     this.#tests.push({
       id,
-      title: testCase.fullName ?? testCase.name ?? id,
+      title: displayTitle(testCase),
       file: canonicalTestFile(testCase.module?.moduleId ?? ''),
       status,
       durationMs: diagnostic?.duration ?? 0,
@@ -612,6 +613,12 @@ function toStatus(state: string | undefined): UiTestStatus | undefined {
   if (state === 'failed' || state === 'fail') return 'failed';
   if (state === 'skipped' || state === 'pending' || state === 'todo' || state === 'skip') return 'skipped';
   return undefined;
+}
+
+function displayTitle(testCase: TestCaseLike): string {
+  const title = testCase.fullName ?? testCase.name ?? testCase.id ?? 'test';
+  const project = testCase.project?.name;
+  return project === undefined || project === '' ? title : `[${project}] ${title}`;
 }
 
 /**

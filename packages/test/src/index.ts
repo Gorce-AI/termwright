@@ -41,6 +41,7 @@ export {
   resetTermwrightConfig,
   resolveTermwrightConfig,
   termwrightRetry,
+  termwrightProjects,
   ANSI_COLOR_NAMES,
   XTERM_PALETTE,
   type ColorPalette,
@@ -49,6 +50,7 @@ export {
   type TestTimeoutClasses,
   type TraceMode,
   type TermwrightRetryOptions,
+  type TermwrightVitestProject,
   type UpdateSnapshotsMode,
 } from './config.js';
 
@@ -58,6 +60,7 @@ export {
   test,
   type AttachFixtureOptions,
   type LaunchFixtureOptions,
+  type OpenShellFixtureOptions,
   type StepRunner,
   type TerminalFactory,
   type TermwrightFixtures,

@@ -22,6 +22,7 @@ import type {
   ResizeReceipt,
   RoleLocatorOptions,
   ScreenSnapshot,
+  ShellApi,
   ScrollbackApi,
   SelectionApi,
   SessionCapabilities,
@@ -44,6 +45,10 @@ export abstract class ForwardingHarness implements TerminalHarness {
 
   get sessionId(): string {
     return this.session.sessionId;
+  }
+
+  get shell(): ShellApi {
+    return this.session.shell;
   }
 
   get scrollback(): ScrollbackApi {

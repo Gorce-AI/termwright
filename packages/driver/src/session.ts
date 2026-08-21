@@ -23,6 +23,8 @@ import type {
   ResolvedTarget,
   RoleLocatorOptions,
   ScreenSnapshot,
+  ShellApi,
+  ShellCommandResult,
   ScrollbackApi,
   SelectionApi,
   SessionCapabilities,
@@ -67,6 +69,7 @@ import { RevisionPairing } from './pairing.js';
 import { createNodePtyBackend, type PtyBackend, type PtyProcess } from './pty.js';
 import { captureRows, captureScreen, screenExcerpt, type CapturedRow } from './screen.js';
 import { SemanticChannel, type SemanticAttachment } from './semantic.js';
+import { ShellCommandTracker } from './shell.js';
 
 import {
   gridQuery,
@@ -221,6 +224,7 @@ interface ChangeWaiter {
 
 class TerminalSession implements TerminalHarness, LocatorContext {
   readonly sessionId = randomUUID();
+  readonly shell: ShellApi;
   readonly timeouts: Required<TimeoutClasses>;
   readonly events: SessionEvents;
   readonly scrollback: ScrollbackApi;
@@ -273,6 +277,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #selectionRange: { start: { row: number; column: number }; end: { row: number; column: number } } | null = null;
   #actionCounter = 0;
   readonly #pendingActions = new Map<string, { api: string; selector?: string }>();
+  readonly #shellTracker = new ShellCommandTracker();
 
   constructor(options: LaunchTerminalOptions) {
     this.#options = options;
@@ -303,6 +308,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
     this.scrollback = this.#createScrollbackApi();
     this.selection = this.#createSelectionApi();
+    this.shell = Object.freeze<ShellApi>({
+      status: () => this.#shellStatus(),
+      waitForPrompt: (opts) => this.#waitForShellPrompt(opts),
+      run: (command, opts) => this.#runShellCommand(command, opts),
+    });
 
     const mode = debugMode(options.debug);
     if (mode !== 'off') {
@@ -387,6 +397,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
     this.#pty.onData((data) => {
       this.#lastOutputAt = Date.now();
+      this.#shellTracker.feed(data);
       this.#emitter.emit('output', { data, timeMs: this.#now() });
       void this.#vt.write(data);
     });
@@ -416,6 +427,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       this.#settle();
     }, negotiationMs);
     this.#negotiationTimer.unref?.();
+
+    if (this.#options.shellIntegration === 'termwright-posix') {
+      await this.waitForReady();
+      await this.sendInput(encodeText(posixShellBootstrap()), 'raw');
+      await this.#waitForShellPrompt({ timeout: this.timeouts.ready });
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -449,6 +466,79 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   title(): string {
     return this.#vt.title;
+  }
+
+  #shellStatus(): import('./api.js').ShellStatus {
+    this.assertOpen();
+    const integration = this.#vt.shellIntegration();
+    return Object.freeze({
+      supported: integration.supported,
+      ready: integration.lastMark === 'B',
+      lastMark: integration.lastMark as 'A' | 'B' | 'C' | 'D' | null,
+      lastExitCode: integration.lastExitCode,
+      cwd: integration.cwd,
+      title: this.#vt.title,
+      cursor: this.#vt.cursor(),
+      bellCount: integration.bellCount,
+    });
+  }
+
+  async #waitForShellPrompt(opts?: WaitOptions): Promise<void> {
+    this.assertOpen();
+    const timeout = opts?.timeout ?? this.timeouts.ready;
+    const deadline = Date.now() + timeout;
+    for (;;) {
+      this.#assertAlive('shell.waitForPrompt');
+      const integration = this.#vt.shellIntegration();
+      if (integration.supported && integration.lastMark === 'B') return;
+      if (Date.now() >= deadline) {
+        if (!integration.supported) {
+          throw new UnsupportedActionError(
+            'shell commands require OSC 133 prompt and command markers; this program did not publish them',
+            this.errorDiagnostics({ suggestion: 'enable shell integration, or drive the program with press(), type() and terminal assertions' }),
+          );
+        }
+        throw new TimeoutError(
+          `the shell did not report a prompt within ${timeout} ms (last OSC 133 mark ${String(integration.lastMark)})`,
+          this.errorDiagnostics(),
+        );
+      }
+      await this.waitForChange(Math.min(deadline, Date.now() + READY_QUIET_MS));
+    }
+  }
+
+  async #runShellCommand(command: string, opts?: import('./api.js').ShellRunOptions): Promise<ShellCommandResult> {
+    if (command.length === 0 || /[\r\n\0]/u.test(command)) {
+      throw new UnsupportedActionError(
+        'shell.run() requires one non-empty command without newline or NUL characters',
+        this.errorDiagnostics({ suggestion: 'run one command at a time; use a shell script for a multi-line program' }),
+      );
+    }
+    const timeout = opts?.timeout ?? 30_000;
+    await this.#waitForShellPrompt({ timeout });
+    const tracked = this.#shellTracker.arm(command, timeout, opts?.maxOutputBytes);
+    try {
+      await this.type(
+        this.#options.shellIntegration === 'termwright-posix'
+          ? wrapPosixShellCommand(command)
+          : command,
+      );
+      await this.press('Enter');
+      const result = await tracked;
+      await this.#vt.drain();
+      await this.#waitForShellPrompt({ timeout: Math.max(1, timeout) });
+      const integration = this.#vt.shellIntegration();
+      return Object.freeze({
+        command: result.command,
+        output: result.output,
+        exitCode: result.exitCode,
+        cwd: integration.cwd,
+        title: this.#vt.title,
+      });
+    } catch (error) {
+      this.#shellTracker.close(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1028,6 +1118,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       });
     }
     this.#closed = true;
+    this.#shellTracker.close(new SessionClosedError('the shell session was closed', { semanticTree: this.#attachment !== null }));
     this.#notifyChange();
     if (this.#negotiationTimer !== null) clearTimeout(this.#negotiationTimer);
     if (this.#graceTimer !== null) clearTimeout(this.#graceTimer);
@@ -1287,6 +1378,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #onExit(status: ExitStatus): void {
     if (this.#exitStatus !== null) return;
     this.#exitStatus = Object.freeze(status);
+    this.#shellTracker.close(new ProcessExitedError(
+      `the shell process exited before the command completed (code ${String(status.code)})`,
+      this.errorDiagnostics(),
+    ));
     if (this.#isCrash(status)) {
       this.#crash = this.#buildCrashReport(status);
       this.#emitter.emit('crash', this.#crash);
@@ -1611,6 +1706,23 @@ function crashTail(lines: readonly string[]): readonly string[] {
 function actionErrorCode(error: unknown): string {
   if (error instanceof TermwrightError) return error.code;
   return error instanceof Error ? error.name : 'unknown';
+}
+
+/** Establishes an exact initial prompt for a shell opened by Termwright. */
+function posixShellBootstrap(): string {
+  return "printf '\\033]133;A\\007\\033]133;B\\007'\r";
+}
+
+/** Wraps one user command without parsing its output or its prompt text. */
+function wrapPosixShellCommand(command: string): string {
+  const quoted = command.replaceAll("'", "'\\''");
+  return (
+    "printf '\\033]133;C\\007'; " +
+    `eval '${quoted}'; ` +
+    "__termwright_status=$?; " +
+    "printf '\\033]133;D;%s\\007\\033]7;file://localhost%s\\007\\033]133;A\\007\\033]133;B\\007' " +
+    '"$__termwright_status" "$PWD"; unset __termwright_status'
+  );
 }
 
 function delay(ms: number): Promise<void> {

@@ -705,6 +705,41 @@ describe.skipIf(!ptyAvailable())('waitForReady', { timeout: 20_000 }, () => {
   });
 });
 
+describe.skipIf(!ptyAvailable())('shell command integration', { timeout: 20_000 }, () => {
+  it('returns exact command boundaries, exit status, cwd and terminal state', async () => {
+    const terminal = await launch('shell-app.mjs');
+    await terminal.shell.waitForPrompt();
+
+    const result = await terminal.shell.run('fail');
+    expect(result).toMatchObject({
+      command: 'fail',
+      exitCode: 7,
+      cwd: '/workspace/project',
+      title: 'Termwright shell fixture',
+    });
+    expect(result.output).toContain('ran fail');
+    expect(terminal.shell.status()).toMatchObject({
+      supported: true,
+      ready: true,
+      lastMark: 'B',
+      lastExitCode: 7,
+      cwd: '/workspace/project',
+      title: 'Termwright shell fixture',
+    });
+
+    await terminal.shell.run('bell');
+    expect(terminal.shell.status().bellCount).toBe(1);
+  });
+
+  it('does not infer shell support from a quiet generic program', async () => {
+    const terminal = await launch('echo-app.mjs');
+    await expect(terminal.shell.waitForPrompt({ timeout: 30 })).rejects.toMatchObject({
+      code: 'unsupported-action',
+      message: expect.stringContaining('OSC 133'),
+    });
+  });
+});
+
 describe.skipIf(!ptyAvailable())('session diagnostics', { timeout: 20_000 }, () => {
   it('records why a generic session stayed generic, and emits it', async () => {
     const terminal = await launch('echo-app.mjs', { semanticNegotiationMs: 60 });

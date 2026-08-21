@@ -18,6 +18,7 @@ export interface TermwrightOptions {
   readonly command?: readonly string[];
   readonly columns?: number;
   readonly rows?: number;
+  readonly terminalProfile?: string;
   /**
    * Merged key by key over the project's `env` — scoping one variable keeps
    * the rest, which is the only behaviour that makes scoping usable here.
@@ -36,6 +37,7 @@ export interface LaunchOverrides {
   readonly command?: readonly string[];
   readonly columns?: number;
   readonly rows?: number;
+  readonly terminalProfile?: string;
   readonly env?: Readonly<Record<string, string>>;
   readonly timeouts?: TimeoutClasses;
   readonly trace?: TraceMode;
@@ -46,6 +48,7 @@ export interface MergedOptions {
   readonly command: readonly string[] | undefined;
   readonly columns: number;
   readonly rows: number;
+  readonly terminalProfile: string | undefined;
   readonly env: Readonly<Record<string, string>>;
   /** Driver timeout classes only; the `expect` class never reaches the driver. */
   readonly timeouts: TimeoutClasses;
@@ -71,6 +74,7 @@ export function mergeOptions(
     command: call.command ?? scoped.command ?? config.command,
     columns: call.columns ?? scoped.columns ?? config.columns,
     rows: call.rows ?? scoped.rows ?? config.rows,
+    terminalProfile: call.terminalProfile ?? scoped.terminalProfile ?? config.terminalProfile,
     env: { ...baseEnv, ...config.env, ...(scoped.env ?? {}), ...(call.env ?? {}) },
     timeouts: { ...configTimeouts, ...strip(scopedTimeouts), ...strip(call.timeouts ?? {}) },
     trace: call.trace ?? scoped.trace ?? config.trace,

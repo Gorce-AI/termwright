@@ -23,6 +23,7 @@ function harness(
     readonly mcpExit?: number;
     /** Thrown by `startUi`, to stand in for an archive that will not open. */
     readonly startUiError?: unknown;
+    readonly doctorOk?: boolean;
   } = {},
 ): Harness {
   const out: string[] = [];
@@ -35,6 +36,9 @@ function harness(
   const deps: CliDeps = {
     io: { out: (text) => out.push(text), err: (text) => err.push(text) },
     cwd: '/workspace',
+    doctor: async () => overrides.doctorOk === false
+      ? ({ ok: false, checks: [{ name: 'PTY backend', status: 'fail' as const, detail: 'unavailable' }] })
+      : ({ ok: true, checks: [] }),
     runMcp: async (argv) => {
       mcpArgs.push([...argv]);
       return overrides.mcpExit ?? EXIT_CODES.ok;
@@ -148,12 +152,23 @@ describe('informational commands', () => {
       'agent-context',
       'usage',
       'skill',
+      'doctor',
     ]);
     expect(document.exitCodes).toMatchObject({ ...EXIT_CODES });
     for (const command of document.commands) {
       expect(command.synopsis.length, command.name).toBeGreaterThan(0);
       expect(command.summary.length, command.name).toBeGreaterThan(0);
     }
+  });
+
+  it('prints doctor results and fails only for failed checks', async () => {
+    const healthy = harness();
+    expect(await runCli(['doctor'], healthy.deps)).toBe(EXIT_CODES.ok);
+    expect(healthy.out.join('\n')).toContain('Ready to run Termwright');
+
+    const broken = harness({ doctorOk: false });
+    expect(await runCli(['doctor', '--json'], broken.deps)).toBe(EXIT_CODES.assertion);
+    expect(JSON.parse(broken.out[0] ?? '{}')).toMatchObject({ ok: false });
   });
 
   it('keeps help and usage describing the same commands', async () => {

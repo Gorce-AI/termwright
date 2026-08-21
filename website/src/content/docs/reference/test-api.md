@@ -44,6 +44,12 @@ collects crash metadata, and closes it after the test. Use this instead of a
 manual `try/finally` when a component test should have normal Termwright
 observability and lifecycle.
 
+### `terminal.openShell(options?)`
+
+Opens a test-scoped interactive POSIX shell and enables exact command
+boundaries. It uses `$SHELL -i` by default. Set `shell` to choose another shell
+command. Windows shells are not yet supported by this helper.
+
 ### `step(name, callback)`
 
 Records a named group in traces, reports, and Runner UI. It does not change test
@@ -64,6 +70,20 @@ The session exposes terminal-level input and observation:
 | `getByRole(role, options?)` | Locate by semantic role and accessible name. |
 | `getByText(text, options?)` | Locate semantic text. |
 | `getByTestId(id)` | Locate an application-defined semantic test id. |
+
+### `session.shell`
+
+Provides exact shell command and prompt observations when the child publishes
+OSC 133 shell-integration marks:
+
+| Method | Result |
+| --- | --- |
+| `shell.run(command, options?)` | Run one command and return its bounded output, exit code, cwd, and title. |
+| `shell.waitForPrompt(options?)` | Wait for an OSC 133 input-prompt mark. |
+| `shell.status()` | Read prompt state, last command exit code, OSC 7 cwd, title, cursor, and bell count. |
+
+These methods do not infer prompts or command boundaries from rendered text.
+See [Test commands in an integrated shell](../../guides/shell-commands/).
 
 The exact type surface is exported by `@termwright/driver`, which the umbrella
 package exposes through the supported Termwright entry points.

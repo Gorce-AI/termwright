@@ -18,6 +18,7 @@ configureTermwright({
 | Policy | Use when |
 | --- | --- |
 | `retain-on-failure` | Normal local and CI runs. This is the default. |
+| `on-first-retry` | Large suites where only the first retry needs a trace. |
 | `on` | Successful runs must also remain replayable. |
 | `off` | Recording is not permitted or needed. |
 

@@ -19,6 +19,7 @@ afterEach(() => {
 });
 
 interface CaseOptions {
+  readonly project?: string;
   readonly state?: string;
   readonly retryCount?: number;
   readonly flaky?: boolean;
@@ -39,6 +40,7 @@ function testCase(id: string, fullName: string, options: CaseOptions = {}): Para
     id,
     fullName,
     module: { moduleId: '/repo/src/login.test.ts' },
+    ...(options.project === undefined ? {} : { project: { name: options.project } }),
     result: () => ({
       state: options.state ?? 'passed',
       ...(options.errors !== undefined
@@ -65,6 +67,12 @@ function testCase(id: string, fullName: string, options: CaseOptions = {}): Para
 }
 
 describe('TermwrightReporter', () => {
+  it('labels matrix results with their Vitest project', () => {
+    const reporter = new TermwrightReporter({ silent: true });
+    reporter.onTestRunStart();
+    reporter.onTestCaseResult(testCase('matrix-1', 'layout > works', { project: 'compact' }));
+    expect(reporter.tests[0]?.title).toBe('[compact] layout > works');
+  });
   it('is assignable to the Reporter interface Vitest expects', () => {
     // Compile-time assertion. This package builds with
     // `exactOptionalPropertyTypes`, and so do its users: the structural views

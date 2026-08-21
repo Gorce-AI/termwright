@@ -19,14 +19,20 @@ export default defineTermwrightConfig({
 ```
 
 ```ts
-// vitest.config.ts
-import {defineConfig} from 'vitest/config';
+// termwright.setup.ts
 import {configureTermwright} from 'termwright/test';
 import termwright from './termwright.config.js';
 
 configureTermwright(termwright);
+```
 
-export default defineConfig({test: {}});
+```ts
+// vitest.config.ts
+import {defineConfig} from 'vitest/config';
+
+export default defineConfig({
+  test: {setupFiles: ['./termwright.setup.ts']},
+});
 ```
 
 ## Configuration precedence
@@ -44,6 +50,7 @@ Values are resolved in this order, with later values winning:
 | `columns`, `rows` | Initial PTY dimensions. Defaults: 100 × 30. |
 | `command` | Default command for `terminal.launch()`. |
 | `env` | Environment additions for launched applications. |
+| `terminalProfile` | Emulator width/behavior profile. |
 | `timeouts` | Action, text, idle, ready, exit, and assertion budgets. |
 | `trace` | Trace retention policy. |
 | `outputDir` | Trace and HTML report directory. Default: `termwright-report`. |
@@ -53,10 +60,47 @@ Values are resolved in this order, with later values winning:
 | `profiles` | Named overrides selected by `TERMWRIGHT_PROFILE`. |
 
 Each fixture uses a private temporary working directory and a controlled
-environment. Set `cwd`, `terminalProfile`, `envMode`, or semantic probe options
+environment. Set `cwd`, `envMode`, or semantic integration options
 on an individual `terminal.launch()` call because they are session-specific.
 See [Test files and isolation](../../guides/test-files/) before opting into a
 shared working directory.
+
+## Test matrices
+
+Use named profiles with Vitest projects to run the same test once per terminal
+configuration:
+
+```ts
+// termwright.config.ts
+import {defineTermwrightConfig} from 'termwright/test';
+
+export default defineTermwrightConfig({
+  profiles: {
+    compact: {columns: 80, rows: 24, terminalProfile: 'default'},
+    wide: {columns: 140, rows: 40, terminalProfile: 'kitty'},
+  },
+});
+```
+
+```ts
+// vitest.config.ts
+import {defineConfig} from 'vitest/config';
+import {termwrightProjects} from 'termwright/test';
+import termwright from './termwright.config.js';
+
+export default defineConfig({
+  test: {
+    setupFiles: ['./termwright.setup.ts'],
+    projects: termwrightProjects(termwright),
+  },
+});
+```
+
+Vitest schedules and filters the projects. Their names appear with test results,
+and each profile gets its own default snapshot directory under
+`__snapshots__/<profile>`. Select one with `--project compact`. Use the CI
+operating-system matrix for macOS, Linux, and Windows; an OS is not an emulator
+setting.
 
 ## Assertion and wait timeouts
 
@@ -84,6 +128,7 @@ export default defineTermwrightConfig({
 | `off` | Do not retain traces. |
 | `on` | Retain every trace. |
 | `retain-on-failure` | Retain failed and flaky evidence. |
+| `on-first-retry` | Record only the first retry attempt. |
 
 See [Traces and reports](../../tools/traces-reports/) for reporter and artifact
 configuration.

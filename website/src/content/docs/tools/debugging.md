@@ -7,6 +7,9 @@ Start with the failure message. Termwright includes the expectation, observed
 state, timeout, matching candidates, terminal excerpt, and process diagnostics
 when they are available.
 
+If the suite cannot start at all, run `npx termwright doctor` first. It checks
+the project-local Vitest installation, PTY backend, locale, and artifact access.
+
 ## A locator finds nothing
 
 **Check:**

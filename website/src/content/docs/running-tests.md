@@ -78,6 +78,20 @@ keep the ordered attempt failures and mark a case flaky when a later attempt
 passes. See [Waiting and retries](../concepts/waiting-retries/) and
 [CI and retries](../guides/ci/).
 
+## Run a terminal matrix
+
+Configure named Termwright profiles as Vitest projects when layout or character
+width must work in more than one terminal configuration:
+
+```sh
+npx vitest run
+npx vitest run --project compact
+```
+
+The first command runs every configured project. The second selects one. See
+[Test matrices](../reference/configuration/#test-matrices) for configuration;
+use the CI operating-system matrix for platform coverage.
+
 ## Choose a command
 
 | Task | Command |

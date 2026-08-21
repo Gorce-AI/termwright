@@ -80,6 +80,7 @@ interface TestCaseLike {
   readonly name?: string | undefined;
   readonly fullName?: string | undefined;
   readonly module?: { readonly moduleId?: string | undefined } | undefined;
+  readonly project?: { readonly name?: string | undefined } | undefined;
   result?:
     | (() => { state?: string | undefined; errors?: readonly ErrorLike[] | undefined } | undefined)
     | undefined;
@@ -247,7 +248,7 @@ function collect(testCase: TestCaseLike): (CollectedTest & { id: string }) | und
   const attempts = attemptsOf(meta, status, diagnostic?.retryCount ?? 0, diagnostic?.duration, result?.errors);
   return {
     id,
-    title: testCase.fullName ?? testCase.name ?? id,
+    title: displayTitle(testCase),
     status,
     flaky: diagnostic?.flaky === true || (status === 'passed' && (diagnostic?.retryCount ?? 0) > 0),
     ...(testCase.module?.moduleId === undefined ? {} : { file: testCase.module.moduleId }),
@@ -403,4 +404,10 @@ function toStatus(state: string | undefined): 'passed' | 'failed' | 'skipped' | 
   if (state === 'failed' || state === 'fail') return 'failed';
   if (state === 'skipped' || state === 'pending' || state === 'todo' || state === 'skip') return 'skipped';
   return undefined;
+}
+
+function displayTitle(testCase: TestCaseLike): string {
+  const title = testCase.fullName ?? testCase.name ?? testCase.id ?? 'test';
+  const project = testCase.project?.name;
+  return project === undefined || project === '' ? title : `[${project}] ${title}`;
 }

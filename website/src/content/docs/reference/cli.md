@@ -10,6 +10,17 @@ npm install --save-dev termwright
 npx termwright --help
 ```
 
+## `termwright doctor`
+
+```text
+termwright doctor [--json]
+```
+
+Verifies the current Node.js version, the project's Vitest resolution, a real
+PTY spawn/output/exit cycle, UTF-8 locale, artifact-directory access, and the
+host platform. Warnings describe reduced portability; failed checks produce
+exit code 1. Use `--json` in agents and environment diagnostics.
+
 ## `termwright ui`
 
 ```text

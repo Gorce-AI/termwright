@@ -29,10 +29,12 @@ function testCase(options: {
   retryCount?: number;
   lostLogRecords?: number;
   attemptFailures?: readonly { readonly attempt: number; readonly errors: readonly { readonly message: string }[] }[];
+  project?: string;
 }): Parameters<TermwrightUiReporter['onTestCaseResult']>[0] {
   return {
     id: options.id,
     fullName: options.title,
+    ...(options.project === undefined ? {} : { project: { name: options.project } }),
     ...(options.file === undefined ? {} : { module: { moduleId: options.file } }),
     result: () => ({
       state: options.state,
@@ -60,6 +62,14 @@ afterEach(async () => {
 });
 
 describe('TermwrightUiReporter', () => {
+  it('labels matrix executions with their Vitest project', () => {
+    const sink = new Collected();
+    const reporter = new TermwrightUiReporter({ sink, runsDir: null });
+    reporter.onTestRunStart();
+    const current = testCase({ id: 'matrix-1', title: 'layout > works', state: 'run', project: 'compact' });
+    reporter.onTestCaseReady(current);
+    expect(sink.messages).toContainEqual(expect.objectContaining({ type: 'test-start', title: '[compact] layout > works' }));
+  });
   it('publishes and retains an actionless Gherkin step without inventing a terminal session', async () => {
     const sink = new Collected();
     const reporter = new TermwrightUiReporter({ sink, stepsFromTraces: false, runsDir: null });

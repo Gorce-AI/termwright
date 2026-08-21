@@ -17,6 +17,7 @@ export type CliCommand =
   | 'agent-context'
   | 'usage'
   | 'skill'
+  | 'doctor'
   | 'help'
   | 'version';
 
@@ -111,6 +112,11 @@ export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
     headline: 'an agent-skill package (SKILL.md + reference + context).',
     synopsis: ['skill [--out <dir>]'],
     summary: ['an agent-skill package (SKILL.md + reference + context).'],
+  },
+  doctor: {
+    headline: 'verify Node.js, Vitest, PTY, locale and artifact access.',
+    synopsis: ['doctor [--json]'],
+    summary: ['run an environment smoke test and print actionable diagnostics.'],
   },
   help: { headline: 'print the full help.', synopsis: ['--help, -h'], summary: ['print the full help.'], global: true },
   version: { headline: 'print the version.', synopsis: ['--version, -v'], summary: ['print the version.'], global: true },
@@ -310,6 +316,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case 'agent-context':
       case 'usage':
       case 'skill':
+      case 'doctor':
       case 'help':
         if (command === 'help' || command === 'version') break;
         if (command !== undefined) {

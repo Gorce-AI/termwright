@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import type { UserConfig } from 'vitest/config';
 import {
   XTERM_PALETTE,
   configureTermwright,
@@ -6,6 +7,7 @@ import {
   getTermwrightConfig,
   resetTermwrightConfig,
   resolveTermwrightConfig,
+  termwrightProjects,
   termwrightRetry,
 } from './config.js';
 
@@ -65,6 +67,7 @@ describe('resolveTermwrightConfig', () => {
     expect(config.rows).toBe(50);
     expect(config.trace).toBe('on');
     expect(config.profile).toBe('ci');
+    expect(config.snapshotDir).toBe('__snapshots__/ci');
     expect(config.env['TERM']).toBe('xterm-256color');
   });
 
@@ -83,6 +86,24 @@ describe('resolveTermwrightConfig', () => {
   it('merges timeout classes instead of replacing them', () => {
     const config = resolveTermwrightConfig({ timeouts: { expect: 100 } }, {});
     expect(config.timeouts).toEqual({ action: 5_000, text: 5_000, idle: 2_000, ready: 10_000, exit: 10_000, expect: 100 });
+  });
+});
+
+describe('termwrightProjects', () => {
+  it('maps named profiles to inherited Vitest projects', () => {
+    const config = defineTermwrightConfig({ profiles: { compact: { columns: 80 }, wide: { columns: 140 } } });
+    expect(termwrightProjects(config)).toEqual([
+      { extends: true, test: { name: 'compact', env: { TERMWRIGHT_PROFILE: 'compact' } } },
+      { extends: true, test: { name: 'wide', env: { TERMWRIGHT_PROFILE: 'wide' } } },
+    ]);
+    const vitest: UserConfig = { test: { projects: [...termwrightProjects(config)] } };
+    expect(vitest.test?.projects).toHaveLength(2);
+  });
+
+  it('rejects missing and duplicate profile names', () => {
+    const config = defineTermwrightConfig({ profiles: { compact: {} } });
+    expect(() => termwrightProjects(config, ['missing'])).toThrow('cannot find profile');
+    expect(() => termwrightProjects(config, ['compact', 'compact'])).toThrow('duplicate profile');
   });
 });
 

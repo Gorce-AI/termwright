@@ -75,6 +75,10 @@ export interface ShellIntegration {
   readonly lastMark: string | null;
   /** Exit status reported by an `OSC 133 ; D ; <code>` mark, when it carried one. */
   readonly lastExitCode: number | null;
+  /** Working directory published through OSC 7, never parsed from prompt text. */
+  readonly cwd: string | null;
+  /** Number of BEL control characters observed since launch. */
+  readonly bellCount: number;
 }
 
 /** A marker payload observed during a write, tagged with its revision. */
@@ -106,9 +110,11 @@ export class VtScreen {
     cursorVisible: true,
     cursorShape: undefined,
   };
-  #shell: { lastMark: string | null; lastExitCode: number | null } = {
+  #shell: { lastMark: string | null; lastExitCode: number | null; cwd: string | null; bellCount: number } = {
     lastMark: null,
     lastExitCode: null,
+    cwd: null,
+    bellCount: 0,
   };
 
   readonly #revisionListeners = new Set<(revision: number) => void>();
@@ -260,6 +266,8 @@ export class VtScreen {
       ready: this.#shell.lastMark === 'B' || this.#shell.lastMark === 'D',
       lastMark: this.#shell.lastMark,
       lastExitCode: this.#shell.lastExitCode,
+      cwd: this.#shell.cwd,
+      bellCount: this.#shell.bellCount,
     });
   }
 
@@ -346,6 +354,23 @@ export class VtScreen {
         }
       }
       return false;
+    });
+
+    // OSC 7 — shell working directory as a file URL. Invalid or non-file
+    // payloads remain unknown rather than being guessed from prompt text.
+    parser.registerOscHandler(7, (data: string) => {
+      try {
+        const url = new URL(data);
+        if (url.protocol === 'file:') this.#shell.cwd = decodeURIComponent(url.pathname);
+      } catch {
+        // Malformed application output is still passed to xterm; it simply
+        // does not become a shell fact.
+      }
+      return false;
+    });
+
+    this.terminal.onBell(() => {
+      this.#shell.bellCount += 1;
     });
 
     this.terminal.onTitleChange((title) => {
