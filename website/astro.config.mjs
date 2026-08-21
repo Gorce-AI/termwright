@@ -13,9 +13,9 @@ export default defineConfig({
 		starlight({
 			title: 'termwright',
 			logo: {
-				src: './src/assets/termwright-logo.svg',
+				src: './src/assets/termwright-mark.svg',
 				alt: '',
-				replacesTitle: true,
+				replacesTitle: false,
 			},
 			favicon: '/favicon.svg',
 			description:
@@ -53,11 +53,10 @@ export default defineConfig({
 						{label: 'Test files and isolation', slug: 'guides/test-files'},
 						{label: 'Extend test fixtures', slug: 'guides/fixtures'},
 						{label: 'Gherkin scenarios', slug: 'guides/gherkin'},
-						{label: 'Ink component tests', slug: 'guides/component-testing'},
 					],
 				},
 				{
-					label: 'Runner and debugging',
+					label: 'Tools and debugging',
 					items: [
 						{label: 'Runner UI', slug: 'tools/runner-ui'},
 						{label: 'Debug a failed test', slug: 'tools/debugging'},
@@ -74,6 +73,7 @@ export default defineConfig({
 					items: [
 						{label: 'Overview', slug: 'adapters'},
 						{label: 'Ink', slug: 'adapters/ink'},
+						{label: 'Test Ink components', slug: 'guides/component-testing'},
 						{label: 'OpenTUI', slug: 'adapters/opentui'},
 						{label: 'Textual (Python)', slug: 'adapters/textual'},
 						{label: 'tview (Go)', slug: 'adapters/tview'},
@@ -95,6 +95,7 @@ export default defineConfig({
 					items: [
 						{label: 'Terminal semantics', slug: 'concepts/semantics'},
 						{label: 'Waiting and retries', slug: 'concepts/waiting-retries'},
+						{label: 'Coming from web testing', slug: 'concepts/web-testing'},
 						{label: 'Terminal profiles', slug: 'guides/terminal-profiles'},
 						{label: 'Why a real terminal?', slug: 'guides/why-not-tmux'},
 					],

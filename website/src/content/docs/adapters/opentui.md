@@ -13,11 +13,14 @@ npm install --save-dev @termwright/probe-opentui
 ```
 
 ```ts
+import {fileURLToPath} from 'node:url';
 import {withProbe} from '@termwright/probe-opentui';
 import {test, expect} from 'termwright/test';
 
+const appPath = fileURLToPath(new URL('../app.ts', import.meta.url));
+
 test('deploys a release', async ({terminal}) => {
-  const instrumented = withProbe('bun', ['bun', 'app.ts']);
+  const instrumented = withProbe('bun', ['bun', appPath]);
   const app = await terminal.launch({command: instrumented.command});
   const deploy = app.getByRole('button', {name: 'Deploy'});
   await expect(deploy).toBeAttached();

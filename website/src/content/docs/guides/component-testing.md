@@ -1,30 +1,37 @@
 ---
-title: Component testing
-description: mountInk and launchInkFixture through the same injected probe path.
+title: Test Ink components
+description: Test one Ink component in process or in an isolated terminal fixture.
 ---
 
-`termwright/ink` runs an Ink component behind the standard terminal harness.
-It uses normal `ink.render` and the same `@termwright/probe-ink` observation
-path as a launched application.
-
-```ts
-import {mountInk} from 'termwright/ink';
-```
-
-```tsx
-const harness = await mountInk(<Approve onApprove={spy} />);
-await harness.press('Tab');
-await harness.waitForStable();
-await harness.press('Enter');
-await vi.waitFor(() => expect(spy).toHaveBeenCalledOnce());
-await harness.close();
-```
-
-Input is terminal bytes. No helper invokes component callbacks directly.
+Use `mountInk()` for normal Ink component tests. Use `launchInkFixture()` when
+the component's process, environment, signals, crash behavior, or real PTY is
+part of the test.
 
 ```sh
 npm install --save-dev termwright vitest
 ```
+
+```tsx
+import {mountInk} from 'termwright/ink';
+import {expect, test, vi} from 'vitest';
+import {Approve} from './Approve.js';
+
+test('approves the request', async () => {
+  const onApprove = vi.fn();
+  const harness = await mountInk(<Approve onApprove={onApprove} />);
+
+  try {
+    await harness.press('Tab');
+    await harness.waitForStable();
+    await harness.press('Enter');
+    await vi.waitFor(() => expect(onApprove).toHaveBeenCalledOnce());
+  } finally {
+    await harness.close();
+  }
+});
+```
+
+Input is terminal bytes. No helper invokes component callbacks directly.
 
 Peer dependencies are Ink >= 7.1 and React >= 19.2. A vanilla component is
 observable without an application import. Add optional `useSemantic` or

@@ -13,11 +13,14 @@ npm install --save-dev @termwright/probe-ink
 ```
 
 ```ts
+import {fileURLToPath} from 'node:url';
 import {withProbe} from '@termwright/probe-ink';
 import {test, expect} from 'termwright/test';
 
+const appPath = fileURLToPath(new URL('../app.mjs', import.meta.url));
+
 test('approves the request', async ({terminal}) => {
-  const instrumented = withProbe('node', [process.execPath, 'app.mjs']);
+  const instrumented = withProbe('node', [process.execPath, appPath]);
   const app = await terminal.launch({command: instrumented.command});
   await app.press('Tab');
   await app.press('Enter');

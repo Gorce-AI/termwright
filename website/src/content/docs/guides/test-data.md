@@ -9,5 +9,5 @@ This topic is now split by task:
   private working directory, environment isolation, and cleanup.
 - [Extend test fixtures](../fixtures/) covers `test.extend()`, `test.scoped()`,
   and configuration precedence.
-- [Migration](../migrating/) maps Cypress fixtures and older Termwright setup
-  patterns to the current API.
+- [Migration](../migrating/) covers existing terminal-test harnesses and older
+  Termwright setup patterns.

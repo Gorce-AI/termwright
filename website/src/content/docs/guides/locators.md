@@ -4,7 +4,7 @@ description: Find semantic elements by role, label, text, test ID, or selector.
 ---
 
 Locators find elements in the semantic tree published by your application or
-framework probe. Prefer a role and accessible name when they describe what a
+framework integration. Prefer a role and accessible name when they describe what a
 user interacts with.
 
 ```ts

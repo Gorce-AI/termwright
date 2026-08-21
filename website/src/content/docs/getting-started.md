@@ -101,7 +101,7 @@ terminal, test steps, retained evidence, and replay controls. Use
 ## Add semantic locators
 
 The first test uses text and keyboard input because every terminal program
-supports them. A framework probe can additionally publish roles, names, state,
+supports them. A framework integration can additionally publish roles, names, state,
 and—where the framework exposes it—geometry and pointer ownership.
 
 With semantics available, the interaction can be written as:

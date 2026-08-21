@@ -39,8 +39,8 @@ A framework integration observes runtime state and publishes a semantic tree. It
 does not replace rendering or call application callbacks for test actions.
 Keyboard and pointer input still cross the PTY boundary.
 
-Integration probes remain dormant without the Termwright endpoint and token. A
-normal application launch does not connect or publish semantic data.
+The integration mechanism remains dormant without the Termwright endpoint and
+token. A normal application launch does not connect or publish semantic data.
 
 ## Add application intent only when needed
 

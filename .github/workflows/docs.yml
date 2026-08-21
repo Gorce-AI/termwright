@@ -48,6 +48,7 @@ jobs:
       # https://gorce-ai.github.io/termwright/.
       # TODO(custom domain): when a custom domain is configured, drop `base`
       # there, set `site` to the domain, and add website/public/CNAME.
+      - run: pnpm --filter @termwright/website run check
       - run: pnpm --filter @termwright/website run build
 
       - name: Check internal links resolve inside the base path

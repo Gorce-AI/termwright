@@ -1,7 +1,11 @@
 ---
 title: Migrating
-description: Coming from an older Termwright adapter, ink-testing-library, teatest, Textual's Pilot, Cypress, or an expect script.
+description: Replace an existing terminal-test harness with Termwright.
 ---
+
+Use this guide when you already test a CLI or TUI with another harness. If you
+know Playwright or Cypress but are starting a terminal test suite, see
+[Coming from Playwright or Cypress](../../concepts/web-testing/) instead.
 
 ## From `ink-testing-library`
 
@@ -21,7 +25,7 @@ expect(lastFrame()).toContain('approved');
 
 ```tsx
 // after
-import {mountInk} from '@termwright/ink-testing';
+import {mountInk} from 'termwright/ink';
 
 const harness = await mountInk(<Approve />);
 await harness.press('Enter');
@@ -39,7 +43,7 @@ The mapping is mostly mechanical:
 | `stdin.write('\r')` | `harness.press('Enter')` |
 | `rerender(<App/>)` | `await harness.rerender(<App/>)` |
 | `unmount()` | `await harness.close()` |
-| — | `getByRole`, `click`, `activate`, resize, raw mode, semantic snapshots |
+| — | `getByRole`, retrying assertions, resize, raw mode, semantic snapshots |
 
 Two differences to plan for. Everything is asynchronous, because everything
 waits on a real render rather than on a string that was already built. And once
@@ -49,43 +53,6 @@ assertions stop being about frames at all:
 ```tsx
 await expect(harness.getByRole('button', {name: 'Approve'})).toBeFocused();
 ```
-
-## From `@badeball/cypress-cucumber-preprocessor` or `playwright-bdd`
-
-Keep the physical `.feature` files, but replace process-global support-code
-registration with a paired module that default-exports `defineSteps(...)`.
-`Given`, `When` and `Then` still accept Cucumber Expressions or regular
-expressions, and DocStrings, DataTables, Background, Rule and Scenario Outline
-remain authoring constructs.
-
-| `@badeball/cypress-cucumber-preprocessor` / `playwright-bdd` | Termwright |
-|---|---|
-| physical `.feature` files | keep them in place |
-| Cypress `[filepath]` / `[filepart]` step-definition patterns | keep the same template vocabulary; matching uses Termwright's nearest-scope rules |
-| global `Given(...)` registration or `createBdd()` bindings | `export default defineSteps(Given(...), When(...), Then(...))` |
-| `cy.*` commands or a browser `page` fixture | the step context's `terminal` fixture and Termwright locators/actions |
-| a generated-tests or `bddgen` pre-step | remove it; the Vite plugin transforms `.feature` files in memory |
-| Cucumber hooks and tag expressions | not available in the shipped slice; use `Background` and Vitest/CLI run scopes |
-
-Pairing compatibility does not mean global-registry compatibility. For each
-step, Termwright checks exact `[filepath]`, then `[filepart]` from the nearest
-ancestor towards the feature root, then global patterns. The first tier with a
-match wins; two matches inside that same tier are an error. This lets a local
-definition shadow a shared fallback without making resolution depend on import
-order.
-
-The execution model changes in one important way: `@termwright/gherkin` parses
-and transforms the feature in memory, then declares native `@termwright/test`
-cases in Vitest. There is no Cucumber scheduler, generated test directory or
-second report. TypeScript tests and `.feature` Scenarios therefore share one
-Vitest process and one `termwright ui` catalogue.
-
-Move shared state into the fresh `world` passed to every step callback. Put
-per-Scenario setup in `Background` for now: Cucumber hooks, tag filtering and
-editor configuration are not included in the shipped slice. Tags are retained
-as metadata but do not select a run. Add `gherkinPlugin()` plus a `.feature`
-include for direct Vitest/IDE runs; the UI-owned host adds both automatically.
-See [Gherkin feature files](../gherkin/) for pairing and a complete config.
 
 ## From the pre-probe Termwright adapters
 
@@ -126,9 +93,11 @@ render(<App />, {alternateScreen: true});
 
 ```ts
 // test launcher
+import {fileURLToPath} from 'node:url';
 import {withProbe} from '@termwright/probe-ink';
 
-const {command} = withProbe('node', ['node', 'dist/cli.js']);
+const entry = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
+const {command} = withProbe('node', [process.execPath, entry]);
 const app = await terminal.launch({command});
 ```
 
@@ -159,9 +128,11 @@ const renderer = await createCliRenderer();
 
 ```ts
 // after: test launcher
+import {fileURLToPath} from 'node:url';
 import {withProbe} from '@termwright/probe-opentui';
 
-const {command} = withProbe('bun', ['bun', 'app.ts']);
+const entry = fileURLToPath(new URL('../app.ts', import.meta.url));
+const {command} = withProbe('bun', ['bun', entry]);
 const app = await terminal.launch({command});
 ```
 
@@ -222,14 +193,17 @@ Remove `clients/go/termwright`, `Attach`, and its `WithChildren`,
 Build the unchanged tview program through the exact-version probe:
 
 ```ts
+import {resolve} from 'node:path';
 import {prepareInstrumentedBuild} from '@termwright/probe-tview';
 
-const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
+const moduleDir = resolve('path/to/app');
+const binaryPath = resolve(moduleDir, 'app-binary');
+const build = await prepareInstrumentedBuild({moduleDir});
 await execFile('go', ['build', '-o', 'app-binary', '.'], {
-  cwd: 'path/to/app',
+  cwd: moduleDir,
   env: build.env,
 });
-const app = await terminal.launch({command: ['./app-binary']});
+const app = await terminal.launch({command: [binaryPath]});
 ```
 
 The probe can read tview's private container structure, so the legacy
@@ -298,27 +272,7 @@ style locators still cover the rendered grid. Read
 [Bubble Tea](../../adapters/bubbletea/) before planning the split between
 `teatest` model tests and Termwright end-to-end tests.
 
-## From Cypress
-
-Not a terminal tool, but the habits transfer — and two of them need rethinking
-rather than translating.
-
-| Cypress | Here |
-|---|---|
-| `cy.fixture('user.json')` and the shared `fixtures/` directory | `launch({files})` / `launch({template})`, declared per test into its own directory |
-| custom commands (`Cypress.Commands.add`) | a fixture composed with `test.extend` |
-| `beforeEach` that logs in | the same, but as a fixture — it also tears down, and only the tests that ask for it pay for it |
-
-The shape of the change is that setup stops being ambient. A custom command is
-available everywhere and costs every test that loads it; a fixture is requested
-by name, so a test's dependencies are its parameter list. Likewise there is no
-shared fixtures directory: each test declares its files into a directory only it
-can see, so no test can inherit what another one left behind.
-
-See [Test files and isolation](../test-files/) and
-[Extend test fixtures](../fixtures/).
-
-## From an expect script
+## From `expect` or `pexpect`
 
 `expect` and `pexpect` are line-oriented: they match patterns on a stream. That
 works until the program starts repainting the same rows, which is precisely when
@@ -345,3 +299,22 @@ instead of a stream transcript.
 Translate stream expectations to `waitForText()` and input writes to
 `press()`, `type()`, or `paste()`. There is no `send` / `expect(pattern)`
 compatibility API.
+
+## From a custom PTY, `spawn()`, or tmux harness
+
+Keep the executable and the user-visible scenarios. Replace process lifecycle,
+input, terminal parsing, polling, and artifact collection with the corresponding
+Termwright surfaces:
+
+| Existing harness | Termwright |
+|---|---|
+| `spawn()` or PTY setup | `terminal.launch()` |
+| raw stdout buffer | `app.screen()` |
+| polling loop | `waitForText()` or a retrying assertion |
+| stdin writes | `press()`, `type()`, or `paste()` |
+| shared fixture directory | `launch({files})` or `launch({template})` |
+| transcript on failure | retained trace and HTML report |
+
+Start by preserving the existing keyboard-driven workflow. Add semantic
+locators only after the relevant [framework integration](../../adapters/) is
+running and verified.

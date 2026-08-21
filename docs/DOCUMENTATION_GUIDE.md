@@ -7,6 +7,19 @@ package READMEs, examples, screenshots, and public API documentation.
 Read this guide before making a substantial documentation change. Product code,
 public types, tests, and executable behavior take precedence over existing prose.
 
+## Non-negotiables
+
+- Write for the developer using Termwright.
+- Show the recommended path before alternatives.
+- Put working examples before implementation details.
+- Document observable public behavior before mechanisms.
+- Keep one canonical explanation for each concept.
+- Show the actual product for visual workflows.
+- Validate important examples against current code and tests.
+- Build the site and check links before merging.
+- Treat Playwright and Cypress as familiar mental models, not migration sources
+  for terminal tests.
+
 ## Audience
 
 The primary reader is a developer who wants to test a terminal or TUI

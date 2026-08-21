@@ -545,5 +545,6 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @termwright/website run check
       - run: pnpm --filter @termwright/website run build
       - run: pnpm --filter @termwright/website run check:links
