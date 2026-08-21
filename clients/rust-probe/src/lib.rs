@@ -15,10 +15,9 @@
 //!   nothing records that it happened, so the rectangle a widget was drawn
 //!   into is not the cells it ended up with. It is reported as the intended
 //!   rectangle and never as a visible one.
-//! - **Paint order is unavailable**, so every node this probe produces says
-//!   `occlusion: "unknown"` and the driver refuses pointer actions against it.
-//!   That is the correct outcome for this framework, not a gap to be filled in
-//!   later.
+//! - **Paint order is unavailable**, so the snapshot reports pointer hit-grid
+//!   support as unavailable. Intended geometry is never promoted to pointer
+//!   ownership.
 //!
 //! The crate is deliberately small. It is a hook, a buffer of what one frame
 //! contained, and the protocol client — everything that needs `std`, kept out
@@ -514,7 +513,11 @@ pub fn probe_info(framework_version: Option<&str>) -> ProbeInfo {
         framework_version: framework_version.map(str::to_owned),
         probe_version: env!("CARGO_PKG_VERSION").to_owned(),
         identity_kind: ProbeIdentityKind::FrameLocal,
-        capabilities: vec!["operations".to_owned(), "annotations".to_owned()],
+        capabilities: vec![
+            "intended-rect".to_owned(),
+            "operations".to_owned(),
+            "annotations".to_owned(),
+        ],
     }
 }
 

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { encodeFocus, encodeKeys, encodePaste, encodeText } from './keys.js';
-import { TermwrightError } from './errors.js';
 
 const NORMAL = { applicationCursorKeys: false, applicationKeypad: false };
 const APPLICATION = { applicationCursorKeys: true, applicationKeypad: false };
@@ -57,14 +56,9 @@ describe('encodeKeys', () => {
     expect(text(encodeKeys('Control+K Control+U', NORMAL))).toBe('\x0b\x15');
   });
 
-  it('rejects unknown key names with a typed error', () => {
-    expect(() => encodeKeys('Bananas', NORMAL)).toThrow(TermwrightError);
-    try {
-      encodeKeys('Bananas', NORMAL);
-    } catch (error) {
-      expect((error as TermwrightError).code).toBe('unsupported-action');
-      expect((error as TermwrightError).diagnostics.suggestion).toContain('Arrow{Up');
-    }
+  it('rejects unknown key names as invalid input', () => {
+    expect(() => encodeKeys('Bananas', NORMAL)).toThrow(TypeError);
+    expect(() => encodeKeys('Bananas', NORMAL)).toThrow(/Arrow\{Up/u);
   });
 });
 

@@ -9,8 +9,9 @@
  */
 
 import { WebSocket } from 'ws';
-import { encodeMessage, type ServerMessage } from './events.js';
+import { encodeMessage, parseClientMessage, UiProtocolError, type ServerMessage } from './events.js';
 import {
+  inspectNodeActionability,
   streamSession,
   type UiSessionMessageSink,
   type UiSessionSource,
@@ -71,7 +72,7 @@ export function connectLiveSession(
 
   let sink: ProducerSocketSink;
   try {
-    sink = new ProducerSocketSink(configured, options.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS);
+    sink = new ProducerSocketSink(configured, options.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS, source);
   } catch {
     return DISABLED;
   }
@@ -120,7 +121,7 @@ class ProducerSocketSink implements UiSessionMessageSink {
   #accepting = true;
   #closing: Promise<void> | undefined;
 
-  constructor(url: string, closeTimeoutMs: number) {
+  constructor(url: string, closeTimeoutMs: number, source: UiSessionSource) {
     if (!Number.isFinite(closeTimeoutMs) || closeTimeoutMs < 0) {
       throw new TypeError('closeTimeoutMs must be a non-negative finite number');
     }
@@ -147,6 +148,35 @@ class ProducerSocketSink implements UiSessionMessageSink {
     });
     this.#socket.on('close', () => {
       this.#fail();
+    });
+    this.#socket.on('message', (raw: Buffer) => {
+      let message;
+      try {
+        message = parseClientMessage(raw);
+      } catch (error) {
+        if (error instanceof UiProtocolError) return;
+        throw error;
+      }
+      if (message.type !== 'inspect-actionability' || message.sessionId !== source.sessionId) return;
+      void inspectNodeActionability(source, message.nodeId).then((results) => {
+        this.publish({
+          v: 1,
+          type: 'actionability-inspection',
+          requestId: message.requestId,
+          sessionId: message.sessionId,
+          nodeId: message.nodeId,
+          results,
+        });
+      }).catch((error: unknown) => {
+        this.publish({
+          v: 1,
+          type: 'actionability-inspection',
+          requestId: message.requestId,
+          sessionId: message.sessionId,
+          nodeId: message.nodeId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     });
   }
 

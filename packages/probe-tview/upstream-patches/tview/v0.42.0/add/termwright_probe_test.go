@@ -73,7 +73,7 @@ func startStalledDriver(t *testing.T, path string) *stalledDriver {
 		}
 		ack, _ := protocol.EncodeFrame(map[string]any{
 			"type": "hello-ack", "protocol": protocol.ProtocolID, "sessionId": "s-1",
-			"limits": protocol.DefaultLimits, "subscribe": "diffs",
+			"limits": protocol.DefaultLimits, "subscribe": "snapshots",
 			"marker": map[string]any{"enabled": true},
 		}, protocol.DefaultLimits.MaxFrameBytes)
 		_, _ = conn.Write(ack)
@@ -103,6 +103,7 @@ func probeAgainst(t *testing.T, endpoint string) *termwrightProbeState {
 		t.Fatal("the probe stayed dormant with the handshake variables set")
 	}
 	t.Cleanup(func() { _ = probe.client.Close() })
+	probe.ensureStarted()
 
 	deadline := time.Now().Add(2 * time.Second)
 	for !probe.client.Connected() && time.Now().Before(deadline) {
@@ -142,11 +143,8 @@ func sampleApplication(t *testing.T) (*Application, tcell.Screen, *List) {
 	return app, screen, list
 }
 
-// churn rewrites every label, so the frame really differs from the last one.
-//
-// Without it the driver subscribes to diffs and an unchanged tree produces a
-// delta of almost nothing — which never fills a socket buffer, so the stalled
-// tests skip themselves and cover nothing while looking green.
+// churn rewrites every label so each attempted publication represents a new
+// application frame rather than repeatedly publishing one fixture state.
 func churn(list *List, round int) {
 	suffix := strconv.Itoa(round)
 	for index := 0; index < list.GetItemCount(); index++ {
@@ -182,13 +180,9 @@ func TestAStalledDriverCostsFramesAndNotTheApplication(t *testing.T) {
 	app, screen, list := sampleApplication(t)
 
 	started := time.Now()
-	var deltasBefore int64
 	for attempt := 0; attempt < 400 && probe.timedOut.Load() == 0; attempt++ {
 		churn(list, attempt)
 		probe.afterFrame(app, screen)
-		if probe.frames.Load() > 0 && deltasBefore == 0 {
-			deltasBefore = probe.client.DeltasSent()
-		}
 	}
 	elapsed := time.Since(started)
 
@@ -209,11 +203,6 @@ func TestAStalledDriverCostsFramesAndNotTheApplication(t *testing.T) {
 	// without having held anything open.
 	probe.afterFrame(app, screen)
 
-	// And the obligation is outstanding, so the driver cannot be handed a
-	// delta based on a revision it never received.
-	if !probe.client.FullSnapshotRequired() {
-		t.Fatal("frames were dropped without demanding a full snapshot next")
-	}
 	_ = driver
 }
 
@@ -300,7 +289,10 @@ func TestAnnotationsResolveKeysAfterTheWholeRetainedTreeIsKnown(t *testing.T) {
 	root.SetRect(0, 0, 40, 3)
 
 	probe := &termwrightProbeState{ids: make(map[Primitive]string)}
-	snapshot := probe.snapshot(app, 40, 3, false)
+	snapshot, duplicateKey := probe.snapshot(app, 40, 3)
+	if duplicateKey != "" {
+		t.Fatalf("unexpected duplicate key: %q", duplicateKey)
+	}
 	controlID := probe.identity(control)
 	labelID := probe.identity(label)
 	helpID := probe.identity(help)
@@ -329,12 +321,12 @@ func TestAnnotationsResolveKeysAfterTheWholeRetainedTreeIsKnown(t *testing.T) {
 			t.Fatalf("%s provenance = %q, want annotation (all px=%v)", field, node.PX[field], node.PX)
 		}
 	}
-	if node.Bounds == nil || node.Role != protocol.RoleButton || node.PX["role"] != protocol.ProvenanceRecognizer {
+	if node.Geometry.Displayed.Status != "known" || node.Role != protocol.RoleButton || node.PX["role"] != protocol.ProvenanceRecognizer {
 		t.Fatalf("annotation replaced framework/recognizer facts: %+v", node)
 	}
 }
 
-func TestDuplicateSemanticKeysCannotBecomeAmbiguousRelations(t *testing.T) {
+func TestDuplicateSemanticKeysFailClosed(t *testing.T) {
 	annotate.Reset()
 	t.Cleanup(annotate.Reset)
 
@@ -353,16 +345,16 @@ func TestDuplicateSemanticKeysCannotBecomeAmbiguousRelations(t *testing.T) {
 	app.root = root
 	root.SetRect(0, 0, 30, 1)
 	probe := &termwrightProbeState{ids: make(map[Primitive]string)}
-	snapshot := probe.snapshot(app, 30, 1, false)
-	controlID := probe.identity(control)
-	for _, node := range snapshot.Nodes {
-		if node.ID == controlID && len(node.LabelledBy) != 0 {
-			t.Fatalf("duplicate key resolved arbitrarily to %v", node.LabelledBy)
-		}
+	snapshot, duplicateKey := probe.snapshot(app, 30, 1)
+	if duplicateKey != "duplicate" {
+		t.Fatalf("duplicate semantic key was not rejected: %q", duplicateKey)
+	}
+	if len(snapshot.Nodes) == 0 {
+		t.Fatal("fixture did not exercise the semantic walk")
 	}
 }
 
-func TestQualifiedSnapshotReportsOnlyObservableTviewGeometry(t *testing.T) {
+func TestSnapshotReportsOnlyObservableTviewGeometry(t *testing.T) {
 	root := NewFlex()
 	button := NewButton("Approve")
 	hidden := NewButton("Hidden")
@@ -374,17 +366,17 @@ func TestQualifiedSnapshotReportsOnlyObservableTviewGeometry(t *testing.T) {
 	app := NewApplication()
 	app.root = root
 	probe := &termwrightProbeState{ids: make(map[Primitive]string)}
-	snapshot := probe.snapshot(app, 80, 24, true)
+	snapshot, duplicateKey := probe.snapshot(app, 80, 24)
+	if duplicateKey != "" {
+		t.Fatalf("unexpected duplicate key: %q", duplicateKey)
+	}
 
-	if snapshot.V != 2 || snapshot.CoordinateSpace == nil || snapshot.HitGrid == nil || snapshot.HitGrid.Status != "unsupported" {
-		t.Fatalf("snapshot is not honestly qualified: %+v", snapshot)
+	if snapshot.V != 2 || snapshot.CoordinateSpace.Status != "known" || snapshot.HitGrid.Status != "unsupported" {
+		t.Fatalf("snapshot does not carry required v2 observations: %+v", snapshot)
 	}
 	for index, node := range snapshot.Nodes {
-		if node.Geometry == nil {
-			t.Fatalf("node %d has no qualified geometry: %+v", index, node)
-		}
-		if node.Bounds != nil || node.Occlusion != "" {
-			t.Fatalf("v2 node retained legacy geometry fields: %+v", node)
+		if node.Geometry.Displayed.Status == "" {
+			t.Fatalf("node %d has no geometry observation: %+v", index, node)
 		}
 	}
 	geometry := snapshot.Nodes[1].Geometry
@@ -394,7 +386,7 @@ func TestQualifiedSnapshotReportsOnlyObservableTviewGeometry(t *testing.T) {
 	if geometry.IntendedRect.Value == nil || *geometry.IntendedRect.Value != (protocol.Rect{Row: 23, Column: 75, Width: 10, Height: 1}) {
 		t.Fatalf("intended rect = %+v", geometry.IntendedRect)
 	}
-	if geometry.VisibleRect.Value == nil || *geometry.VisibleRect.Value != (protocol.Rect{Row: 23, Column: 75, Width: 5, Height: 1}) {
+	if geometry.VisibleRect.Status != "unsupported" || geometry.VisibleRect.Capability != string(protocol.CapClippedGeometry) {
 		t.Fatalf("visible rect = %+v", geometry.VisibleRect)
 	}
 }

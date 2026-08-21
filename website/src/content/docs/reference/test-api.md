@@ -69,8 +69,14 @@ The session exposes terminal-level input and observation:
 | `resize({columns, rows})` | Resize and return a receipt tied to the rendered revision. |
 | `waitForText(text, options?)` | Wait until the terminal contains text. |
 | `screen()` | Take a screen snapshot; use `.text()`, `.line()`, or `.cell()`. |
+| `terminalState.snapshot()` | Read authoritative cursor, title, bell, buffer, dimensions, and terminal modes at the current screen revision. |
+| `keyboard.press/type/paste` | Use the one physical keyboard device directly. |
+| `mouse.move/down/up/click/wheel/drag` | Use viewport coordinates, optional Shift/Alt/Control modifiers, and the one physical mouse device. |
+| `checkpoint()` | Capture the paired terminal/semantic committed observation. |
+| `waitForCheckpointChange({after})` | Wait for a committed observation newer than a checkpoint. |
 | `getByRole(role, options?)` | Locate by semantic role and accessible name. |
 | `getByText(text, options?)` | Locate semantic text. |
+| `getByScreenText(text, options?)` | Locate text in the physical terminal grid, with optional occurrence and cell-style filters. |
 | `getByTestId(id)` | Locate an application-defined semantic test id. |
 
 ### `session.shell`
@@ -80,7 +86,7 @@ OSC 133 shell-integration marks:
 
 | Method | Result |
 | --- | --- |
-| `shell.run(command, options?)` | Run one command and return its bounded output, exit code, cwd, and title. |
+| `shell.run(command, options?)` | Run one command and return its bounded output, exit code, cwd, title, and shared action receipt. |
 | `shell.waitForPrompt(options?)` | Wait for an OSC 133 input-prompt mark. |
 | `shell.status()` | Read prompt state, last command exit code, OSC 7 cwd, title, cursor, and bell count. |
 
@@ -97,14 +103,19 @@ package exposes through the supported Termwright entry points.
 | `press(key)` | Send a key to a focused or exactly targetable node. |
 | `type(text)` | Type into a focused or exactly targetable node. |
 | `activate()` | Activate an already focused node, or use an exact pointer recipient. |
-| `click()` | Click only when exact pointer ownership is known. |
+| `click({modifiers?})` | Click only when authoritative pointer ownership is known; modifiers are preserved in input and receipts. |
 | `doubleClick()` | Double-click an exact pointer recipient. |
+| `hover()` | Move the real terminal pointer to an exact pointer recipient. |
 | `dragTo(target)` | Drag between two exact pointer recipients. |
 | `wheel({deltaY, deltaX?})` | Send wheel input to an exact target. |
-| `focusNode()` | Focus by an exact supported input strategy. |
+| `fill(text)` | Focus through an exact real-input strategy, then enter text. |
+| `focus()` | Focus the semantic element through an exact real-input strategy. |
+| `check()` / `uncheck()` | Drive real input and verify the resulting semantic checked state. |
+| `actionability(action)` | Explain the production action plan without executing it. |
 
-Unsupported pointer targeting throws `UnsupportedActionError`. `activate()`
-does not silently move focus to an arbitrary node.
+Missing session capability, disabled terminal input modes, and a currently
+non-actionable target are separate typed failures. `activate()` does not
+silently move focus to an arbitrary node.
 
 ## Locator observations
 

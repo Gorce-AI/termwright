@@ -15,6 +15,7 @@ action that matches how the application is used.
 | Type normal text | `app.type()` or `locator.type()` |
 | Insert clipboard-style text | `app.paste()` |
 | Click an exact semantic target | `locator.click()` when hit testing is supported |
+| Click empty space or a canvas cell | `app.mouse.click({row, column})` |
 | Scroll a pointer-aware region | `locator.wheel()` |
 | Change terminal dimensions | `app.resize()` |
 | Send raw bytes | `app.write()` as a low-level escape hatch |
@@ -63,12 +64,16 @@ including bracketed paste when the application enables it.
 
 ```ts
 await app.getByRole('button', {name: 'Approve'}).click();
-await source.dragTo(destination);
+await app.getByRole('button', {name: 'Open menu'}).click({modifiers: ['control']});
+await source.dragTo(destination, {steps: 12});
 ```
 
-Pointer actions require two observable facts: terminal mouse reporting and an
-exact hit test showing that the chosen cell belongs to the target. Termwright
-does not infer ownership from paint order or unqualified bounds.
+Pointer actions require terminal mouse reporting plus authoritative ownership.
+That ownership is either verified by a negotiated production hit test, or is
+an explicit application provider contract whose regions mean “cells currently
+routed to this semantic recipient.” Ordinary layout bounds, paint order, and
+annotations never become pointer ownership. When a hit test is negotiated,
+Termwright always intersects and verifies the region against it.
 
 Use `hitTest()` to inspect support and the recipient:
 
@@ -80,6 +85,19 @@ expect(hit.receivesEvents).toMatchObject({status: 'known', value: true});
 See the [framework compatibility matrix](../../reference/compatibility/) before
 depending on semantic pointer input. Keyboard input remains available when a
 framework cannot publish hit-test ownership.
+
+Raw coordinate actions use the same physical Mouse and PTY path. They are
+appropriate for empty space, outside-click behavior, terminal canvases, and
+mouse-capture tests:
+
+```ts
+await app.mouse.click({row: 3, column: 20, modifiers: ['shift']});
+await app.mouse.drag({
+  from: {row: 4, column: 2},
+  to: {row: 9, column: 30},
+  steps: 16,
+});
+```
 
 ## Scroll
 
@@ -103,8 +121,8 @@ resulting layout separately.
 ## Focus, signals, and raw input
 
 ```ts
-await app.focus();
-await app.blur();
+await app.window.focus();
+await app.window.blur();
 await app.signal('INT');
 await app.write('\u001b[6n');
 ```

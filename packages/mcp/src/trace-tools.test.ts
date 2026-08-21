@@ -74,23 +74,31 @@ class ScriptedSession {
 }
 
 function tree(revision: number, approveDisabled: boolean): SemanticSnapshot {
+  const unknownGeometry = () => ({
+    displayed: { status: 'unknown' as const, reason: 'awaiting-revision-pair' as const },
+    intendedRect: { status: 'unknown' as const, reason: 'awaiting-revision-pair' as const },
+    visibleRect: { status: 'unknown' as const, reason: 'awaiting-revision-pair' as const },
+  });
   return {
-    v: 1,
+    v: 2,
     sessionId: 'sess-1',
     revision,
     columns: 40,
     rows: 6,
     rootIds: ['n1'],
     nodes: [
-      { id: 'n1', role: 'dialog', name: 'Permission', state: { modal: true } },
+      { id: 'n1', role: 'dialog', name: 'Permission', state: { modal: true }, geometry: unknownGeometry() },
       {
         id: 'n2',
         parentId: 'n1',
         role: 'button',
         name: 'Approve',
         state: approveDisabled ? { disabled: true } : { focused: true },
+        geometry: unknownGeometry(),
       },
     ],
+    coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 

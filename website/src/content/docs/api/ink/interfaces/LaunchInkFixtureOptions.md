@@ -3,15 +3,15 @@ title: "Interface: LaunchInkFixtureOptions"
 editUrl: false
 ---
 
-[**@termwright/ink-testing**](../../)
+[**@termwright/ink**](../../)
 
 ***
 
-[@termwright/ink-testing](../../) / LaunchInkFixtureOptions
+[@termwright/ink](../../) / LaunchInkFixtureOptions
 
 # Interface: LaunchInkFixtureOptions
 
-Defined in: [ink-testing/src/fixture.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L28)
+Defined in: ink/src/fixture.ts:28
 
 Options for [launchInkFixture](../../functions/launchinkfixture/).
 
@@ -21,7 +21,7 @@ Options for [launchInkFixture](../../functions/launchinkfixture/).
 
 > `readonly` `optional` **columns?**: `number`
 
-Defined in: [ink-testing/src/fixture.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L42)
+Defined in: ink/src/fixture.ts:42
 
 Terminal width in cells. Default 80.
 
@@ -31,7 +31,7 @@ Terminal width in cells. Default 80.
 
 > `readonly` **component**: `string` \| `URL`
 
-Defined in: [ink-testing/src/fixture.ts:36](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L36)
+Defined in: ink/src/fixture.ts:36
 
 The module holding the component: an absolute path or a `file:` URL.
 
@@ -45,7 +45,7 @@ passed in [LaunchInkFixtureOptions.nodeArgs](#nodeargs).
 
 > `readonly` `optional` **cwd?**: `string`
 
-Defined in: [ink-testing/src/fixture.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L46)
+Defined in: ink/src/fixture.ts:46
 
 Working directory of the fixture process.
 
@@ -55,7 +55,7 @@ Working directory of the fixture process.
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: [ink-testing/src/fixture.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L48)
+Defined in: ink/src/fixture.ts:48
 
 Extra environment variables for the fixture process.
 
@@ -65,7 +65,7 @@ Extra environment variables for the fixture process.
 
 > `readonly` `optional` **envMode?**: `EnvMode`
 
-Defined in: [ink-testing/src/fixture.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L59)
+Defined in: ink/src/fixture.ts:59
 
 How the fixture's environment is built, as in `launchTerminal`. Default
 `'replace'`: the process starts from a documented allowlist plus
@@ -82,7 +82,7 @@ when the component genuinely needs the runner's environment.
 
 > `readonly` `optional` **exportName?**: `string`
 
-Defined in: [ink-testing/src/fixture.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L38)
+Defined in: ink/src/fixture.ts:38
 
 Export to render. Default `default`.
 
@@ -92,7 +92,7 @@ Export to render. Default `default`.
 
 > `readonly` `optional` **logs?**: readonly `AppLogSource`[]
 
-Defined in: [ink-testing/src/fixture.ts:65](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L65)
+Defined in: ink/src/fixture.ts:65
 
 Log files to follow for the lifetime of the fixture, as in
 `launchTerminal`. Entries arrive on the session timeline as `app-log`
@@ -104,7 +104,7 @@ events; `collectLogs` in `@termwright/test` reads them off the harness.
 
 > `readonly` `optional` **nodeArgs?**: readonly `string`[]
 
-Defined in: [ink-testing/src/fixture.ts:67](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L67)
+Defined in: ink/src/fixture.ts:67
 
 Arguments inserted before the runner, e.g. `['--import', 'tsx']`.
 
@@ -114,7 +114,7 @@ Arguments inserted before the runner, e.g. `['--import', 'tsx']`.
 
 > `readonly` `optional` **props?**: [`JsonProps`](../../type-aliases/jsonprops/)
 
-Defined in: [ink-testing/src/fixture.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L40)
+Defined in: ink/src/fixture.ts:40
 
 Props for the component, transferred as bounded JSON. Never functions.
 
@@ -124,7 +124,7 @@ Props for the component, transferred as bounded JSON. Never functions.
 
 > `readonly` `optional` **rows?**: `number`
 
-Defined in: [ink-testing/src/fixture.ts:44](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L44)
+Defined in: ink/src/fixture.ts:44
 
 Terminal height in cells. Default 24.
 
@@ -134,7 +134,7 @@ Terminal height in cells. Default 24.
 
 > `readonly` `optional` **settleTimeout?**: `number`
 
-Defined in: [ink-testing/src/fixture.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L71)
+Defined in: ink/src/fixture.ts:71
 
 How long the fixture may take to commit its first frame.
 
@@ -144,6 +144,6 @@ How long the fixture may take to commit its first frame.
 
 > `readonly` `optional` **timeouts?**: `TimeoutClasses`
 
-Defined in: [ink-testing/src/fixture.ts:69](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/fixture.ts#L69)
+Defined in: ink/src/fixture.ts:69
 
 Driver timeout classes, as in `launchTerminal`.

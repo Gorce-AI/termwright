@@ -16,7 +16,7 @@
  */
 
 import type { CrashInput, SessionDiagnostic } from '@termwright/driver';
-import type { LogAttrValue, LogLevel, ObservationStamp, SemanticSnapshot } from '@termwright/protocol';
+import type { ActionReceipt, ActionabilityExplanation, EffectiveSessionContract, LogAttrValue, LogLevel, ObservationStamp, SemanticSnapshot } from '@termwright/protocol';
 
 /** Current archive version. Readers reject anything else. */
 export const TRACE_VERSION = 1 as const;
@@ -61,6 +61,8 @@ export interface TraceMeta {
   readonly terminalProfile?: string;
   /** Whether the recorded session published a semantic tree. */
   readonly semanticTree: boolean;
+  /** Frozen capability/provenance contract used to plan the recorded actions. */
+  readonly contract?: EffectiveSessionContract;
   readonly exit?: TraceExit;
   /** Present and `true` when recording hit a size limit and stopped early. */
   readonly truncated?: boolean;
@@ -294,13 +296,20 @@ export interface ActionEvent extends TraceEventBase {
   readonly ref?: string;
   readonly ok: boolean;
   /**
-   * Failure reason as a **code** (`'unsupported-action'`, `'timeout'`), not
+   * Failure reason as a **code** (`'not-actionable'`, `'timeout'`), not
    * prose: the message belongs to the thrown error, this field is for grouping
    * and filtering.
    */
   readonly error?: string;
   /** Exact screen/tree pair observed when the driver completed the action. */
   readonly observation?: ObservationStamp;
+  /**
+   * Authoritative planning evidence and the real keyboard/mouse operations
+   * executed through the PTY. Present for centrally planned semantic actions.
+   */
+  readonly receipt?: ActionReceipt;
+  /** Exact rejection produced by the same planner invocation that failed. */
+  readonly actionability?: ActionabilityExplanation;
   readonly stepId?: string;
 }
 

@@ -206,16 +206,6 @@ has to delete an assertion that explains itself.
   judged from outside a subprocess, so a missing heading is a documentation gap,
   and failing a conformance run over something no user can observe would train
   people to ignore the run.
-- **Delta composition is checked against an oracle, not a self-check.** The
-  probe composes with the protocol's own `applyTreeDelta` and compares the
-  result against a tree the adapter builds itself in answer to `get-tree`. An
-  adapter that composed its own deltas to validate them would only prove it
-  agrees with itself; the disagreement worth catching is between producer and
-  receiver.
-- **Deltas need their own session.** An adapter only sends them to a driver that
-  asked (`subscribe: 'diffs'`), so the delta obligation opens a second probe.
-  The shared session keeps subscribing to whole trees, which is the path most
-  adapters use and which the other obligations exercise.
 - **The adversarial peer imports nothing from termwright.** It re-derives the
   4-byte length prefix and the marker MAC from the spec text. Using
   `encodeFrame`/`encodeMarker` would only prove the implementation agrees with
@@ -417,6 +407,6 @@ has to delete an assertion that explains itself.
   ownership, the ceiling and cursor independence, but not resuming a session
   from a new transport (the SDK supports it; nothing in this project relies on
   it yet).
-- The in-process half of §20.2a lives in `@termwright/ink-testing`; this package
+- The in-process half of §20.2a lives in `@termwright/ink`; this package
   ships the shared component and the process-mode expectations it is compared
   against.

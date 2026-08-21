@@ -18,7 +18,6 @@
 
 // Normative types (api.ts declares the contract; the values live below).
 export type {
-  ActivateReceipt,
   CellAttributes,
   CellColor,
   CellLink,
@@ -34,16 +33,25 @@ export type {
   ErrorDiagnostics,
   ExitStatus,
   LaunchOptions,
+  Keyboard,
   Locator,
   LocatorCellSnapshot,
   LocatorCellSnapshotOptions,
+  LocatorDragOptions,
+  LocatorFilterOptions,
+  LocatorWheelOptions,
+  MouseModifier,
+  MouseModifierOptions,
   PointerOptions,
+  Mouse,
+  MousePoint,
   RecordingOptions,
   ResizeReceipt,
   ResolvedTarget,
   BoundsExpectation,
   SpatialRelationExpectation,
   RoleLocatorOptions,
+  ScreenTextLocatorOptions,
   ScreenSnapshot,
   ShellApi,
   ShellCommandResult,
@@ -56,6 +64,9 @@ export type {
   SessionEventMap,
   SessionEvents,
   TerminalHarness,
+  TerminalWindow,
+  TerminalState,
+  TerminalStateSnapshot,
   TerminalModes,
   TermwrightErrorCode,
   TextLocatorOptions,
@@ -63,21 +74,49 @@ export type {
   WaitOptions,
 } from './api.js';
 
+// These protocol-owned types are part of the driver's public planning and
+// observation surface. Re-export them here so users never need a transitive
+// @termwright/protocol import merely to name a value returned by the driver.
+export type {
+  ActionIntent,
+  ActionKind,
+  ActionPlan,
+  ActionReceipt,
+  ActionabilityExplanation,
+  Condition,
+  ConditionResult,
+  DeviceOperation,
+  EffectiveSessionContract,
+  EvidenceProvenance,
+  Observation,
+  ObservationStamp,
+  PhysicalRegion,
+  SessionCapabilityId,
+} from '@termwright/protocol';
+
 export { launchTerminal, type LaunchTerminalOptions } from './session.js';
 export { debugMode, type DebugCategory } from './debug.js';
 
 export {
   AmbiguousLocatorError,
+  AdapterGuaranteeViolationError,
+  DuplicateSemanticKeyError,
+  CapabilityProviderLostError,
+  CapabilityProviderViolationError,
+  CapabilityUnavailableError,
   CapacityError,
   HistoryTruncatedError,
+  InputModeDisabledError,
   NotFoundError,
+  NotActionableError,
+  ProbeAttachFailedError,
   ProcessExitedError,
   ProtocolViolationError,
   SessionClosedError,
+  SemanticCapabilityUnavailableError,
   StaleSnapshotError,
   TermwrightError,
   TimeoutError,
-  UnsupportedActionError,
 } from './errors.js';
 
 export {
@@ -90,7 +129,7 @@ export {
 } from './pty.js';
 
 export { encodeKeys, encodePaste, encodeText, type KeyEncodingModes } from './keys.js';
-export { encodeMouse, type MouseButton, type MouseEvent } from './mouse.js';
+export { encodeMouse, normalizeMouseModifiers, type MouseButton, type MouseEvent } from './mouse.js';
 export {
   parseRef,
   parseSelector,

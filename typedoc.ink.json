@@ -1,8 +1,8 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["packages/ink-testing/src/index.ts"],
+  "entryPoints": ["packages/ink/src/index.ts"],
   "entryPointStrategy": "resolve",
-  "tsconfig": "packages/ink-testing/tsconfig.json",
+  "tsconfig": "packages/ink/tsconfig.json",
   "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter"],
   "out": "website/src/content/docs/api/ink",
   "readme": "none",

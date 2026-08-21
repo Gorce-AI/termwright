@@ -31,6 +31,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { safeExtractTarGz } from './safe-tar.mjs';
 
 const exec = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
@@ -205,8 +206,8 @@ function candidateKey(candidate) {
 export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(['go', 'rust'])) {
   const registryPath = join(root, 'compatibility/registry.json');
   const registry = JSON.parse(await readFile(registryPath, 'utf8'));
-  if (registry?.schemaVersion !== 1 || !Array.isArray(registry.frameworks)) {
-    throw new CertificationError('compatibility/registry.json is not schemaVersion 1');
+  if (registry?.schemaVersion !== 3 || !Array.isArray(registry.frameworks)) {
+    throw new CertificationError('compatibility/registry.json is not schemaVersion 3');
   }
   const declarations = new Map();
   for (const framework of registry.frameworks) {
@@ -226,32 +227,32 @@ export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(
     }
     const ecosystem = framework.id === 'ratatui' ? 'rust' : 'go';
     if (!ecosystems.has(ecosystem)) continue;
-    for (const variant of framework.instrumentation?.variants ?? []) {
-      for (const module of variant.modules ?? []) {
-        if (
-          typeof module.name !== 'string'
-          || typeof module.version !== 'string'
-          || !Number.isSafeInteger(module.patchSetVersion)
-          || module.patchSetVersion <= 0
-        ) {
-          throw new CertificationError(`${framework.id}/${variant.id} has an invalid module declaration`);
-        }
-        const key = `${module.name}@${module.version}`;
-        if (declarations.has(key)) throw new CertificationError(`duplicate compatibility declaration ${key}`);
-        declarations.set(key, {
-          ecosystem,
-          frameworkId: framework.id,
-          variantId: variant.id,
-          frameworkVersion: variant.frameworkVersion,
-          module: module.name,
-          version: module.version,
-          patchSetVersion: module.patchSetVersion,
-          optional: module.optional === true,
-          identityKind: framework.probe.identityKind,
-          probeCapabilities: framework.probe.capabilities,
-          adapterCapabilityVariants: framework.probe.adapterCapabilityVariants,
-        });
+    for (const module of framework.instrumentation?.patchSets ?? []) {
+      if (
+        typeof module.name !== 'string'
+        || typeof module.version !== 'string'
+        || !Number.isSafeInteger(module.patchSetVersion)
+        || module.patchSetVersion <= 0
+      ) {
+        throw new CertificationError(`${framework.id} has an invalid patch-set declaration`);
       }
+      const key = `${module.name}@${module.version}`;
+      if (declarations.has(key)) throw new CertificationError(`duplicate compatibility declaration ${key}`);
+      const executableVariants = (framework.instrumentation?.variants ?? [])
+        .filter((variant) => variant.modules?.some((entry) => entry.name === module.name && entry.version === module.version))
+        .map((variant) => variant.id)
+        .sort();
+      declarations.set(key, {
+        ecosystem,
+        frameworkId: framework.id,
+        executableVariants,
+        module: module.name,
+        version: module.version,
+        patchSetVersion: module.patchSetVersion,
+        identityKind: framework.probe.identityKind,
+        probeCapabilities: framework.probe.capabilities,
+        adapterCapabilityVariants: framework.probe.adapterCapabilityVariants,
+      });
     }
   }
   return { declarations, registryDigest: await sha256File(registryPath) };
@@ -485,26 +486,30 @@ async function rustPackages(root) {
     }));
 }
 
-async function rustCrate(root, candidate, packages) {
+async function rustCrate(root, candidate) {
   const { manifest, patchSetDir } = candidate;
-  const crate = packages.get(`${manifest.framework}@${manifest.frameworkVersion}`);
-  if (crate === undefined) throw new CertificationError(`${candidateKey(manifest)} is absent from Cargo metadata`);
   const scratch = await mkdtemp(join(tmpdir(), 'tw-upstream-rust-'));
   try {
-    // Cargo's registry source directory is a mutable cache. Bind the input to
-    // the lockfile by hashing the original `.crate`, then extract that verified
-    // archive into this run's private scratch directory.
-    const archiveDigest = await sha256File(crate.archivePath).catch(() => null);
-    if (archiveDigest !== crate.checksum) {
+    const metadataResponse = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(manifest.framework)}/${encodeURIComponent(manifest.frameworkVersion)}`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });
+    if (!metadataResponse.ok) throw new CertificationError(`${candidateKey(manifest)}: crates.io metadata failed with ${metadataResponse.status}`);
+    const metadata = await metadataResponse.json();
+    const published = metadata.version?.num === manifest.frameworkVersion ? metadata.version : undefined;
+    if (!/^[0-9a-f]{64}$/u.test(published?.checksum ?? '')) throw new CertificationError(`${candidateKey(manifest)}: crates.io returned no exact checksum`);
+    const archiveResponse = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(manifest.framework)}/${encodeURIComponent(manifest.frameworkVersion)}/download`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });
+    if (!archiveResponse.ok) throw new CertificationError(`${candidateKey(manifest)}: crates.io archive failed with ${archiveResponse.status}`);
+    const archive = Buffer.from(await archiveResponse.arrayBuffer());
+    const archiveDigest = sha256(archive);
+    const checksum = `sha256:${published.checksum}`;
+    if (archiveDigest !== checksum) {
       throw new CertificationError(
-        `${candidateKey(manifest)}: crates.io archive hashes ${archiveDigest ?? 'missing'}, expected ${crate.checksum}`,
+        `${candidateKey(manifest)}: crates.io archive hashes ${archiveDigest}, expected ${checksum}`,
       );
     }
     const registrySource = join(scratch, 'registry-source');
     await mkdir(registrySource);
-    await run('tar', ['-xzf', crate.archivePath, '-C', registrySource], { cwd: root });
+    await safeExtractTarGz(archive, registrySource);
     const extracted = await readdir(registrySource, { withFileTypes: true });
-    const expectedDirectory = `${crate.name}-${crate.version}`;
+    const expectedDirectory = `${manifest.framework}-${manifest.frameworkVersion}`;
     if (
       extracted.length !== 1
       || extracted[0].name !== expectedDirectory
@@ -536,9 +541,9 @@ async function rustCrate(root, candidate, packages) {
     return {
       material: {
         source: 'crates.io',
-        crate: crate.name,
-        version: crate.version,
-        checksum: crate.checksum,
+        crate: manifest.framework,
+        version: manifest.frameworkVersion,
+        checksum,
         archiveDigest,
         upstreamTreeDigest,
         sourceBinding: 'lockfile-checksum-matched-crate-archive',
@@ -578,12 +583,10 @@ function candidateRecord(root, candidate, local, execution) {
     id: candidateKey(manifest),
     ecosystem,
     frameworkId: declaration.frameworkId,
-    variantId: declaration.variantId,
-    frameworkVersion: declaration.frameworkVersion,
+    executableVariants: declaration.executableVariants,
     module: manifest.framework,
     upstreamVersion: manifest.frameworkVersion,
     patchSetVersion: manifest.patchSetVersion,
-    optional: declaration.optional,
     identityKind: declaration.identityKind,
     capabilities: {
       probe: declaration.probeCapabilities,
@@ -722,13 +725,12 @@ export async function certify(options = {}) {
     const { declarations, registryDigest } = await loadDeclarations(root, ecosystems);
     const candidates = crossCheckDeclarations(patchSets, declarations);
     const toolchains = await collectToolchains(root, ecosystems);
-    const rust = ecosystems.has('rust') ? await rustPackages(root) : new Map();
     const records = [];
     for (const candidate of candidates) {
       const local = await validatePatchSetFiles(candidate);
       const execution = candidate.ecosystem === 'go'
         ? await goModule(root, candidate)
-        : await rustCrate(root, candidate, rust);
+        : await rustCrate(root, candidate);
       records.push(candidateRecord(root, candidate, local, execution));
     }
 

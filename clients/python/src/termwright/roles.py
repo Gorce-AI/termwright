@@ -40,15 +40,13 @@ SEMANTIC_ACTIONS = (
 
 ADAPTER_CAPABILITIES = (
     "tree",
-    "bounds",
-    "absolute-bounds",
+    "intended-geometry",
+    "clipped-geometry",
     "states",
     "actions",
     "text-ranges",
     "render-revisions",
-    "tree-diffs",
     "logs",
-    "qualified-observations",
     "pointer-hit-grid",
 )
 

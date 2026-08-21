@@ -29,6 +29,13 @@ await expect(app.getByRole('status')).toHaveText('Approved');
 Python 3.9 and newer are supported. Injection is dormant without a Termwright
 endpoint and token.
 
+The launcher uses CPython's `sitecustomize` startup hook and exercises scripts,
+`python -m`, console entry points, `uv run`, and `poetry run` in real subprocess
+tests. `python -S` disables `site`, while `python -E` ignores `PYTHONPATH`; both
+therefore bypass this hook by design. If semantic capabilities are required,
+Termwright reports `probe-attach-failed` at startup instead of silently running
+the test as a generic terminal session.
+
 ## Use Textual Pilot for widget tests
 
 Textual Pilot and Termwright cover different layers. Keep Pilot for fast,

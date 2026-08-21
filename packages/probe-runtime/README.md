@@ -2,7 +2,7 @@
 
 Framework-neutral, fail-closed socket transport shared by zero-config
 JavaScript probes. It owns handshake validation, full-snapshot publication,
-revision commits, marker authentication, `get-tree`, limits and channel
+revision commits, marker authentication, limits and channel
 shutdown.
 
 It intentionally does not observe framework state or write markers. Only the
@@ -16,7 +16,7 @@ Collection turns on automatically with `TERMWRIGHT_DEBUG=1`/`all` or
 `TERMWRIGHT_DEBUG_FILE`, and can be forced with `connectProbe({
 performanceMetrics: true, ... })`. Disabled sessions do not call the timer.
 
-The snapshot reports full snapshots, deltas, encoded semantic bytes, node and
+The snapshot reports full snapshots, encoded semantic bytes, node and
 generic-node counts, failed publications, requested markers and serialization
 time, together with per-frame averages. Framework sessions also supply their
 Probe IR fact count and report publications superseded in their marker queue.

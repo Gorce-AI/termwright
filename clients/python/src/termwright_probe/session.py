@@ -17,10 +17,10 @@ import asyncio
 import sys
 from typing import Any, Dict, Optional
 
-from termwright.client import DEFAULT_CAPABILITIES, SemanticClient, client_from_env
+from termwright.client import SemanticClient, client_from_env
 
 from . import __version__
-from .textual_tree import Identities, build_snapshot
+from .textual_tree import DuplicateSemanticKeyError, Identities, build_snapshot
 
 #: What this probe tells the driver it can do.
 #:
@@ -28,7 +28,22 @@ from .textual_tree import Identities, build_snapshot
 #: flush, so there is no moment we could honestly report as the start of a
 #: frame. `paint-order` and `visible-rect` are claimed because Textual
 #: computes both and we read them rather than deriving them.
-PROBE_CAPABILITIES = ("stable-identity", "visible-rect", "annotations", "paint-order")
+PROBE_CAPABILITIES = (
+    "stable-identity",
+    "intended-rect",
+    "visible-rect",
+    "annotations",
+    "paint-order",
+)
+TEXTUAL_CAPABILITIES = (
+    "tree",
+    "intended-geometry",
+    "clipped-geometry",
+    "states",
+    "actions",
+    "render-revisions",
+    "pointer-hit-grid",
+)
 
 
 def probe_info(framework_version: Optional[str] = None) -> Dict[str, Any]:
@@ -61,6 +76,7 @@ class ProbeSession:
         # semantic tree after connecting, without waiting for an unrelated
         # future repaint.
         self._pending_snapshot = None
+        self._fatal_error: Optional[str] = None
         #: Frames that arrived before the handshake finished, or while a
         #: previous publish was still in flight. Counted, never queued: at most
         #: one coalesced observation of the latest completed frame is retained.
@@ -74,6 +90,10 @@ class ProbeSession:
         """Called once per completed frame. Never raises into Textual."""
         try:
             self._on_frame()
+        except DuplicateSemanticKeyError as error:
+            self._fatal_error = str(error)
+            self._client.fail_nowait("duplicate-semantic-key", self._fatal_error)
+            _log("diag", f"fatal semantic identity violation: {error}")
         except Exception as error:  # pragma: no cover - defensive
             _log("diag", f"frame handling failed: {type(error).__name__}: {error}")
 
@@ -99,7 +119,6 @@ class ProbeSession:
             self._identities,
             session_id=self._client.session_id or "pending",
             revision=self._client.revision + 1,
-            qualified=self._client.protocol == "termwright/2",
         )
 
     def _capture_pending(self) -> None:
@@ -115,15 +134,8 @@ class ProbeSession:
             self._write(marker)
 
     def _drop(self) -> None:
-        """Record a frame that never reached the driver.
-
-        The count is diagnostics; the obligation is protocol. A tree the driver
-        never saw means the next one it does see must be whole — a patch would
-        be applied to a state that never accounted for what was skipped, and
-        nothing would report the divergence.
-        """
+        """Record a frame that never reached the driver."""
         self.frames_dropped += 1
-        self._client.require_full_snapshot()
 
     def _begin(self) -> None:
         """Start the handshake, once, from inside the running event loop."""
@@ -135,7 +147,10 @@ class ProbeSession:
             ok = await self._client.start()
             self._started = ok
             if ok:
-                self._publish_pending()
+                if self._fatal_error is not None:
+                    self._client.fail_nowait("duplicate-semantic-key", self._fatal_error)
+                else:
+                    self._publish_pending()
             else:
                 _log("diag", "probe session did not start; publishing nothing")
 
@@ -182,8 +197,7 @@ def session_for(app: Any, framework_version: Optional[str] = None) -> Optional[P
         # The zero-config probe publishes semantic frames only. Application
         # logs remain an explicit client feature: no handler is installed here,
         # so advertising `logs` would promise traffic this path cannot emit.
-        capabilities=DEFAULT_CAPABILITIES,
-        qualified_capabilities=("pointer-hit-grid",),
+        capabilities=TEXTUAL_CAPABILITIES,
         probe=probe_info(framework_version),
     )
     if client is None:

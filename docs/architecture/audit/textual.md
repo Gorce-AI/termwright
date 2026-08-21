@@ -256,11 +256,12 @@ Ordered by how much of the design would move if it broke.
 | `Compositor.visible_widgets` | **private** (`_compositor.py`) | the cheap bulk read is off the supported path |
 | `DOMNode._nodes` | **private** | `children` is the public equivalent; prefer it |
 
-The repository currently declares `textual>=0.60`, which spans a very large
-range — 0.60 predates several renames in this table. A probe that reads
-`MapGeometry` and `post_display_hook` should assert its assumptions at load
-time and disable itself with a diagnostic when they do not hold, rather than
-publishing a tree built from guesses.
+The optional Python extra accepts `textual>=0.60` for annotation-only and
+generic-terminal use, but that install range is not a semantic certification.
+Strong instrumentation is allowlisted by exact version (currently 8.2.8),
+then additionally shape-checked at attach time. Unknown versions remain
+generic until the daily exact candidate suite certifies them and regenerates
+the bundled allowlist.
 
 ## 8. Summary of findings that change the design
 

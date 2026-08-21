@@ -6,26 +6,6 @@
         "name": "hello",
         "message": {
           "type": "hello",
-          "protocol": "termwright/1",
-          "token": "test-token",
-          "adapter": {
-            "name": "vectors",
-            "version": "0.1.0"
-          },
-          "capabilities": [
-            "tree",
-            "bounds",
-            "absolute-bounds",
-            "states",
-            "actions",
-            "render-revisions"
-          ]
-        }
-      },
-      {
-        "name": "hello-v2-qualified",
-        "message": {
-          "type": "hello",
           "protocol": "termwright/2",
           "token": "test-token",
           "adapter": {
@@ -35,9 +15,8 @@
           "capabilities": [
             "tree",
             "states",
-            "render-revisions",
-            "qualified-observations",
-            "pointer-hit-grid"
+            "actions",
+            "render-revisions"
           ]
         }
       },
@@ -53,7 +32,7 @@
         "message": {
           "type": "snapshot",
           "snapshot": {
-            "v": 1,
+            "v": 2,
             "sessionId": "s-0001",
             "revision": 1,
             "columns": 80,
@@ -71,11 +50,47 @@
                 "id": "n1",
                 "role": "dialog",
                 "name": "Permission",
-                "bounds": {
-                  "row": 0,
-                  "column": 0,
-                  "width": 40,
-                  "height": 2
+                "geometry": {
+                  "displayed": {
+                    "status": "known",
+                    "value": true,
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "intendedRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 0,
+                      "column": 0,
+                      "width": 40,
+                      "height": 2
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "visibleRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 0,
+                      "column": 0,
+                      "width": 40,
+                      "height": 2
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  }
                 },
                 "state": {
                   "modal": true
@@ -87,11 +102,47 @@
                 "role": "button",
                 "name": "Approve",
                 "testId": "approve",
-                "bounds": {
-                  "row": 1,
-                  "column": 2,
-                  "width": 9,
-                  "height": 1
+                "geometry": {
+                  "displayed": {
+                    "status": "known",
+                    "value": true,
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "intendedRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 2,
+                      "width": 9,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "visibleRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 2,
+                      "width": 9,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  }
                 },
                 "state": {
                   "focused": true
@@ -106,11 +157,47 @@
                 "parentId": "n1",
                 "role": "button",
                 "name": "Reject",
-                "bounds": {
-                  "row": 1,
-                  "column": 14,
-                  "width": 8,
-                  "height": 1
+                "geometry": {
+                  "displayed": {
+                    "status": "known",
+                    "value": true,
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "intendedRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 14,
+                      "width": 8,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "visibleRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 14,
+                      "width": 8,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  }
                 },
                 "state": {
                   "focused": false
@@ -120,93 +207,23 @@
                   "activate"
                 ]
               }
-            ]
-          }
-        }
-      },
-      {
-        "name": "get-tree-result-ok",
-        "message": {
-          "type": "get-tree-result",
-          "requestId": 0,
-          "snapshot": {
-            "v": 1,
-            "sessionId": "s-0001",
-            "revision": 1,
-            "columns": 80,
-            "rows": 24,
-            "cursor": {
-              "row": 0,
-              "column": 0,
-              "visible": false
-            },
-            "rootIds": [
-              "n1"
             ],
-            "nodes": [
-              {
-                "id": "n1",
-                "role": "dialog",
-                "name": "Permission",
-                "bounds": {
-                  "row": 0,
-                  "column": 0,
-                  "width": 40,
-                  "height": 2
-                },
-                "state": {
-                  "modal": true
-                }
-              },
-              {
-                "id": "n2",
-                "parentId": "n1",
-                "role": "button",
-                "name": "Approve",
-                "testId": "approve",
-                "bounds": {
-                  "row": 1,
-                  "column": 2,
-                  "width": 9,
-                  "height": 1
-                },
-                "state": {
-                  "focused": true
-                },
-                "actions": [
-                  "focus",
-                  "activate"
-                ]
-              },
-              {
-                "id": "n3",
-                "parentId": "n1",
-                "role": "button",
-                "name": "Reject",
-                "bounds": {
-                  "row": 1,
-                  "column": 14,
-                  "width": 8,
-                  "height": 1
-                },
-                "state": {
-                  "focused": false
-                },
-                "actions": [
-                  "focus",
-                  "activate"
-                ]
+            "coordinateSpace": {
+              "status": "known",
+              "value": "viewport-cells",
+              "evidence": {
+                "source": "framework",
+                "method": "native",
+                "strength": "authoritative",
+                "providerId": "vector-provider"
               }
-            ]
+            },
+            "hitGrid": {
+              "status": "unsupported",
+              "capability": "pointer-hit-grid",
+              "reason": "framework-unobservable"
+            }
           }
-        }
-      },
-      {
-        "name": "get-tree-result-error",
-        "message": {
-          "type": "get-tree-result",
-          "requestId": 1,
-          "error": "no such revision"
         }
       },
       {
@@ -307,150 +324,6 @@
             "seq": 7,
             "revision": 3
           }
-        }
-      },
-      {
-        "name": "tree-delta",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
-        }
-      },
-      {
-        "name": "tree-delta-empty",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [],
-          "removed": []
-        }
-      },
-      {
-        "name": "tree-delta-with-root-ids",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ],
-          "rootIds": [
-            "root",
-            "aside"
-          ]
-        }
-      },
-      {
-        "name": "tree-delta-with-cursor",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ],
-          "cursor": {
-            "row": 3,
-            "column": 9,
-            "visible": true
-          }
-        }
-      },
-      {
-        "name": "tree-delta-cursor-hidden",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ],
-          "cursor": {
-            "row": 0,
-            "column": 0,
-            "visible": false
-          }
-        }
-      },
-      {
-        "name": "tree-delta-cursor-shape",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ],
-          "cursor": {
-            "row": 1,
-            "column": 1,
-            "visible": true,
-            "shape": "bar"
-          }
-        }
-      },
-      {
-        "name": "tree-delta-node-without-bounds",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
         }
       },
       {
@@ -561,8 +434,6 @@
           },
           "capabilities": [
             "tree",
-            "bounds",
-            "absolute-bounds",
             "states",
             "actions",
             "render-revisions"
@@ -575,7 +446,7 @@
         "name": "hello-empty-token",
         "message": {
           "type": "hello",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "token": "",
           "adapter": {
             "name": "vectors",
@@ -583,8 +454,6 @@
           },
           "capabilities": [
             "tree",
-            "bounds",
-            "absolute-bounds",
             "states",
             "actions",
             "render-revisions"
@@ -597,7 +466,7 @@
         "name": "hello-unknown-capability",
         "message": {
           "type": "hello",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "token": "test-token",
           "adapter": {
             "name": "vectors",
@@ -608,10 +477,30 @@
           ]
         },
         "code": "malformed",
-        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"bounds\"|\"absolute-bounds\"|\"states\"|\"actions\"|\"text-ranges\"|\"render-revisions\"|\"tree-diffs\"|\"logs\"|\"qualified-observations\"|\"pointer-hit-grid\""
+        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"intended-geometry\"|\"clipped-geometry\"|\"states\"|\"actions\"|\"text-ranges\"|\"render-revisions\"|\"logs\"|\"pointer-hit-grid\""
       },
       {
-        "name": "hello-v2-without-qualified-capability",
+        "name": "hello-v1-rejected",
+        "message": {
+          "type": "hello",
+          "protocol": "termwright/1",
+          "token": "test-token",
+          "adapter": {
+            "name": "vectors",
+            "version": "0.1.0"
+          },
+          "capabilities": [
+            "tree",
+            "states",
+            "actions",
+            "render-revisions"
+          ]
+        },
+        "code": "bad-version",
+        "detail": "unsupported protocol termwright/1"
+      },
+      {
+        "name": "hello-extra-field",
         "message": {
           "type": "hello",
           "protocol": "termwright/2",
@@ -621,62 +510,7 @@
             "version": "0.1.0"
           },
           "capabilities": [
-            "tree"
-          ]
-        },
-        "code": "malformed",
-        "detail": "termwright/2 requires the 'qualified-observations' capability"
-      },
-      {
-        "name": "hello-v1-with-qualified-capability",
-        "message": {
-          "type": "hello",
-          "protocol": "termwright/1",
-          "token": "test-token",
-          "adapter": {
-            "name": "vectors",
-            "version": "0.1.0"
-          },
-          "capabilities": [
             "tree",
-            "qualified-observations"
-          ]
-        },
-        "code": "malformed",
-        "detail": "'qualified-observations' requires termwright/2"
-      },
-      {
-        "name": "hello-pointer-grid-without-qualified-capability",
-        "message": {
-          "type": "hello",
-          "protocol": "termwright/1",
-          "token": "test-token",
-          "adapter": {
-            "name": "vectors",
-            "version": "0.1.0"
-          },
-          "capabilities": [
-            "tree",
-            "pointer-hit-grid"
-          ]
-        },
-        "code": "malformed",
-        "detail": "'pointer-hit-grid' requires qualified observations"
-      },
-      {
-        "name": "hello-extra-field",
-        "message": {
-          "type": "hello",
-          "protocol": "termwright/1",
-          "token": "test-token",
-          "adapter": {
-            "name": "vectors",
-            "version": "0.1.0"
-          },
-          "capabilities": [
-            "tree",
-            "bounds",
-            "absolute-bounds",
             "states",
             "actions",
             "render-revisions"
@@ -709,7 +543,7 @@
         "message": {
           "type": "snapshot",
           "snapshot": {
-            "v": 1,
+            "v": 2,
             "sessionId": "s-0001",
             "revision": 0,
             "columns": 80,
@@ -727,11 +561,47 @@
                 "id": "n1",
                 "role": "dialog",
                 "name": "Permission",
-                "bounds": {
-                  "row": 0,
-                  "column": 0,
-                  "width": 40,
-                  "height": 2
+                "geometry": {
+                  "displayed": {
+                    "status": "known",
+                    "value": true,
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "intendedRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 0,
+                      "column": 0,
+                      "width": 40,
+                      "height": 2
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "visibleRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 0,
+                      "column": 0,
+                      "width": 40,
+                      "height": 2
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  }
                 },
                 "state": {
                   "modal": true
@@ -743,11 +613,47 @@
                 "role": "button",
                 "name": "Approve",
                 "testId": "approve",
-                "bounds": {
-                  "row": 1,
-                  "column": 2,
-                  "width": 9,
-                  "height": 1
+                "geometry": {
+                  "displayed": {
+                    "status": "known",
+                    "value": true,
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "intendedRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 2,
+                      "width": 9,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "visibleRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 2,
+                      "width": 9,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  }
                 },
                 "state": {
                   "focused": true
@@ -762,11 +668,47 @@
                 "parentId": "n1",
                 "role": "button",
                 "name": "Reject",
-                "bounds": {
-                  "row": 1,
-                  "column": 14,
-                  "width": 8,
-                  "height": 1
+                "geometry": {
+                  "displayed": {
+                    "status": "known",
+                    "value": true,
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "intendedRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 14,
+                      "width": 8,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "visibleRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 14,
+                      "width": 8,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  }
                 },
                 "state": {
                   "focused": false
@@ -776,100 +718,26 @@
                   "activate"
                 ]
               }
-            ]
+            ],
+            "coordinateSpace": {
+              "status": "known",
+              "value": "viewport-cells",
+              "evidence": {
+                "source": "framework",
+                "method": "native",
+                "strength": "authoritative",
+                "providerId": "vector-provider"
+              }
+            },
+            "hitGrid": {
+              "status": "unsupported",
+              "capability": "pointer-hit-grid",
+              "reason": "framework-unobservable"
+            }
           }
         },
         "code": "malformed",
         "detail": "snapshot revision: revision: expected a positive safe integer"
-      },
-      {
-        "name": "get-tree-result-both",
-        "message": {
-          "type": "get-tree-result",
-          "requestId": 0,
-          "snapshot": {
-            "v": 1,
-            "sessionId": "s-0001",
-            "revision": 1,
-            "columns": 80,
-            "rows": 24,
-            "cursor": {
-              "row": 0,
-              "column": 0,
-              "visible": false
-            },
-            "rootIds": [
-              "n1"
-            ],
-            "nodes": [
-              {
-                "id": "n1",
-                "role": "dialog",
-                "name": "Permission",
-                "bounds": {
-                  "row": 0,
-                  "column": 0,
-                  "width": 40,
-                  "height": 2
-                },
-                "state": {
-                  "modal": true
-                }
-              },
-              {
-                "id": "n2",
-                "parentId": "n1",
-                "role": "button",
-                "name": "Approve",
-                "testId": "approve",
-                "bounds": {
-                  "row": 1,
-                  "column": 2,
-                  "width": 9,
-                  "height": 1
-                },
-                "state": {
-                  "focused": true
-                },
-                "actions": [
-                  "focus",
-                  "activate"
-                ]
-              },
-              {
-                "id": "n3",
-                "parentId": "n1",
-                "role": "button",
-                "name": "Reject",
-                "bounds": {
-                  "row": 1,
-                  "column": 14,
-                  "width": 8,
-                  "height": 1
-                },
-                "state": {
-                  "focused": false
-                },
-                "actions": [
-                  "focus",
-                  "activate"
-                ]
-              }
-            ]
-          },
-          "error": "x"
-        },
-        "code": "malformed",
-        "detail": "<root>: exactly one of snapshot or error must be present"
-      },
-      {
-        "name": "get-tree-result-neither",
-        "message": {
-          "type": "get-tree-result",
-          "requestId": 0
-        },
-        "code": "malformed",
-        "detail": "<root>: exactly one of snapshot or error must be present"
       },
       {
         "name": "error-unknown-code",
@@ -1139,505 +1007,16 @@
         "detail": "log record schema: log record must be an object"
       },
       {
-        "name": "tree-delta-revision-not-forward",
+        "name": "obsolete-tree-delta",
         "message": {
           "type": "tree-delta",
-          "baseRevision": 5,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
+          "baseRevision": 1,
+          "revision": 2,
+          "changed": [],
+          "removed": []
         },
         "code": "malformed",
-        "detail": "tree delta revision: revision 5 must be greater than baseRevision 5"
-      },
-      {
-        "name": "tree-delta-revision-backwards",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 6,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta revision: revision 5 must be greater than baseRevision 6"
-      },
-      {
-        "name": "tree-delta-base-revision-zero",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 0,
-          "revision": 1,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta revision: baseRevision: expected a positive safe integer"
-      },
-      {
-        "name": "tree-delta-unknown-envelope-field",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ],
-          "speculative": true
-        },
-        "code": "malformed",
-        "detail": "tree delta schema: unknown delta property \"speculative\""
-      },
-      {
-        "name": "tree-delta-duplicate-changed-id",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "a",
-              "parentId": "r",
-              "role": "button",
-              "name": "Approve"
-            },
-            {
-              "id": "a",
-              "parentId": "r",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta duplicate-id: node id a appears twice in changed"
-      },
-      {
-        "name": "tree-delta-duplicate-removed-id",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "a",
-            "a"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta duplicate-id: node id a appears twice in removed"
-      },
-      {
-        "name": "tree-delta-changed-and-removed",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "a",
-              "parentId": "r",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "a"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta schema: node id a is both changed and removed"
-      },
-      {
-        "name": "tree-delta-self-parent",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "a",
-              "parentId": "a",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta cycle: node a is its own parent"
-      },
-      {
-        "name": "tree-delta-unknown-role",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "a",
-              "role": "supervillain",
-              "name": "A"
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta unknown-role: changed.0.role: Invalid option: expected one of \"application\"|\"region\"|\"dialog\"|\"alert\"|\"status\"|\"list\"|\"listitem\"|\"menu\"|\"menuitem\"|\"button\"|\"checkbox\"|\"radio\"|\"tab\"|\"textbox\"|\"heading\"|\"text\"|\"progressbar\"|\"separator\"|\"scrollbar\"|\"table\"|\"row\"|\"cell\"|\"generic\""
-      },
-      {
-        "name": "tree-delta-unknown-node-field",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "a",
-              "role": "button",
-              "name": "A",
-              "onClick": "x"
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta schema: changed.0: Unrecognized key: \"onClick\""
-      },
-      {
-        "name": "tree-delta-bad-rect",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "a",
-              "role": "button",
-              "name": "A",
-              "bounds": {
-                "row": 0.5,
-                "column": 0,
-                "width": 1,
-                "height": 1
-              }
-            }
-          ],
-          "removed": [
-            "stale"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta bad-rect: changed.0.bounds.row: expected a safe integer"
-      },
-      {
-        "name": "tree-delta-bad-cursor",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ],
-          "cursor": {
-            "row": -1,
-            "column": 0,
-            "visible": true
-          }
-        },
-        "code": "malformed",
-        "detail": "tree delta schema: cursor.row: expected a non-negative safe integer"
-      },
-      {
-        "name": "tree-delta-cursor-unknown-field",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ],
-          "cursor": {
-            "row": 0,
-            "column": 0,
-            "visible": true,
-            "blink": true
-          }
-        },
-        "code": "malformed",
-        "detail": "tree delta schema: cursor: Unrecognized key: \"blink\""
-      },
-      {
-        "name": "tree-delta-duplicate-root-id",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ],
-          "rootIds": [
-            "r",
-            "r"
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta duplicate-id: root id r appears twice"
-      },
-      {
-        "name": "tree-delta-depth-over-ceiling",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ],
-          "removed": [
-            "stale"
-          ],
-          "nested": {
-            "deep": {
-              "deep": {
-                "deep": {
-                  "deep": {
-                    "deep": {
-                      "deep": {
-                        "deep": {
-                          "deep": {
-                            "deep": {
-                              "deep": {
-                                "deep": {
-                                  "deep": {
-                                    "deep": {
-                                      "deep": {
-                                        "deep": {
-                                          "deep": {
-                                            "deep": {
-                                              "deep": {
-                                                "deep": {
-                                                  "deep": {
-                                                    "deep": {
-                                                      "deep": {
-                                                        "deep": {
-                                                          "deep": {
-                                                            "deep": {
-                                                              "deep": {
-                                                                "deep": {
-                                                                  "deep": {
-                                                                    "deep": {
-                                                                      "deep": {
-                                                                        "deep": {
-                                                                          "deep": {
-                                                                            "deep": {
-                                                                              "deep": {
-                                                                                "deep": {
-                                                                                  "deep": {
-                                                                                    "deep": {
-                                                                                      "deep": {
-                                                                                        "deep": {
-                                                                                          "deep": {
-                                                                                            "deep": {
-                                                                                              "deep": {
-                                                                                                "deep": {
-                                                                                                  "deep": {
-                                                                                                    "deep": {
-                                                                                                      "deep": {
-                                                                                                        "deep": {
-                                                                                                          "deep": {
-                                                                                                            "deep": {
-                                                                                                              "deep": {
-                                                                                                                "deep": {
-                                                                                                                  "deep": {
-                                                                                                                    "deep": {
-                                                                                                                      "deep": {
-                                                                                                                        "deep": {
-                                                                                                                          "deep": {
-                                                                                                                            "deep": {
-                                                                                                                              "deep": {
-                                                                                                                                "deep": {
-                                                                                                                                  "deep": {
-                                                                                                                                    "deep": {
-                                                                                                                                      "deep": {
-                                                                                                                                        "deep": {
-                                                                                                                                          "deep": {
-                                                                                                                                            "deep": {
-                                                                                                                                              "deep": {
-                                                                                                                                                "deep": {
-                                                                                                                                                  "deep": {
-                                                                                                                                                    "deep": {
-                                                                                                                                                      "deep": "leaf"
-                                                                                                                                                    }
-                                                                                                                                                  }
-                                                                                                                                                }
-                                                                                                                                              }
-                                                                                                                                            }
-                                                                                                                                          }
-                                                                                                                                        }
-                                                                                                                                      }
-                                                                                                                                    }
-                                                                                                                                  }
-                                                                                                                                }
-                                                                                                                              }
-                                                                                                                            }
-                                                                                                                          }
-                                                                                                                        }
-                                                                                                                      }
-                                                                                                                    }
-                                                                                                                  }
-                                                                                                                }
-                                                                                                              }
-                                                                                                            }
-                                                                                                          }
-                                                                                                        }
-                                                                                                      }
-                                                                                                    }
-                                                                                                  }
-                                                                                                }
-                                                                                              }
-                                                                                            }
-                                                                                          }
-                                                                                        }
-                                                                                      }
-                                                                                    }
-                                                                                  }
-                                                                                }
-                                                                              }
-                                                                            }
-                                                                          }
-                                                                        }
-                                                                      }
-                                                                    }
-                                                                  }
-                                                                }
-                                                              }
-                                                            }
-                                                          }
-                                                        }
-                                                      }
-                                                    }
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "code": "limit-exceeded",
-        "detail": "nesting exceeds 64 at $.nested.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep.deep"
-      },
-      {
-        "name": "tree-delta-missing-removed",
-        "message": {
-          "type": "tree-delta",
-          "baseRevision": 4,
-          "revision": 5,
-          "changed": [
-            {
-              "id": "ok",
-              "parentId": "dialog",
-              "role": "button",
-              "name": "Approve"
-            }
-          ]
-        },
-        "code": "malformed",
-        "detail": "tree delta schema: removed: Invalid input: expected array, received undefined"
+        "detail": "unknown or missing message type"
       }
     ]
   },
@@ -1645,31 +1024,6 @@
     "accept": [
       {
         "name": "hello-ack",
-        "message": {
-          "type": "hello-ack",
-          "protocol": "termwright/1",
-          "sessionId": "s-0001",
-          "limits": {
-            "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 2097152,
-            "maxNodes": 5000,
-            "maxDepth": 64,
-            "maxStringBytes": 16384,
-            "maxRelationTargets": 64,
-            "maxQueuedFrames": 32,
-            "maxPendingWaiters": 256,
-            "maxSessions": 16,
-            "maxLogRecordBytes": 32768,
-            "maxLogQueue": 1000
-          },
-          "subscribe": "snapshots",
-          "marker": {
-            "enabled": true
-          }
-        }
-      },
-      {
-        "name": "hello-ack-v2",
         "message": {
           "type": "hello-ack",
           "protocol": "termwright/2",
@@ -1697,7 +1051,7 @@
         "name": "hello-ack-unknown-limit-key",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1724,7 +1078,7 @@
         "name": "hello-ack-unknown-envelope-field",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1750,7 +1104,7 @@
         "name": "hello-ack-unknown-nested-field",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1773,43 +1127,10 @@
         }
       },
       {
-        "name": "get-tree-unknown-envelope-field",
-        "message": {
-          "type": "get-tree",
-          "requestId": 3,
-          "priority": "high"
-        }
-      },
-      {
-        "name": "hello-ack-subscribe-diffs",
-        "message": {
-          "type": "hello-ack",
-          "protocol": "termwright/1",
-          "sessionId": "s-0001",
-          "limits": {
-            "maxFrameBytes": 1048576,
-            "maxSnapshotBytes": 2097152,
-            "maxNodes": 5000,
-            "maxDepth": 64,
-            "maxStringBytes": 16384,
-            "maxRelationTargets": 64,
-            "maxQueuedFrames": 32,
-            "maxPendingWaiters": 256,
-            "maxSessions": 16,
-            "maxLogRecordBytes": 32768,
-            "maxLogQueue": 1000
-          },
-          "subscribe": "diffs",
-          "marker": {
-            "enabled": true
-          }
-        }
-      },
-      {
         "name": "hello-ack-subscribe-revisions",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1831,21 +1152,6 @@
         }
       },
       {
-        "name": "get-tree-latest",
-        "message": {
-          "type": "get-tree",
-          "requestId": 0
-        }
-      },
-      {
-        "name": "get-tree-revision",
-        "message": {
-          "type": "get-tree",
-          "requestId": 4,
-          "revision": 12
-        }
-      },
-      {
         "name": "error",
         "message": {
           "type": "error",
@@ -1859,7 +1165,7 @@
         "name": "hello-ack-missing-limit-key",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1912,7 +1218,7 @@
         "name": "hello-ack-empty-session",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "sessionId": "",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1939,7 +1245,7 @@
         "name": "hello-ack-bad-subscribe",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "sessionId": "s-0001",
           "limits": {
             "maxFrameBytes": 1048576,
@@ -1960,13 +1266,13 @@
           }
         },
         "code": "malformed",
-        "detail": "subscribe: Invalid option: expected one of \"snapshots\"|\"revisions\"|\"diffs\""
+        "detail": "subscribe: Invalid option: expected one of \"snapshots\"|\"revisions\""
       },
       {
         "name": "hello-ack-missing-limits",
         "message": {
           "type": "hello-ack",
-          "protocol": "termwright/1",
+          "protocol": "termwright/2",
           "sessionId": "s-0001",
           "subscribe": "snapshots",
           "marker": {
@@ -1977,30 +1283,20 @@
         "detail": "limits: Invalid input: expected object, received undefined"
       },
       {
-        "name": "get-tree-negative-request-id",
+        "name": "obsolete-get-tree",
         "message": {
           "type": "get-tree",
-          "requestId": -1
+          "requestId": 0
         },
         "code": "malformed",
-        "detail": "requestId: expected a non-negative safe integer"
-      },
-      {
-        "name": "get-tree-revision-zero",
-        "message": {
-          "type": "get-tree",
-          "requestId": 0,
-          "revision": 0
-        },
-        "code": "malformed",
-        "detail": "revision: expected a positive safe integer"
+        "detail": "unknown or missing message type"
       },
       {
         "name": "unknown-type",
         "message": {
           "type": "snapshot",
           "snapshot": {
-            "v": 1,
+            "v": 2,
             "sessionId": "s-0001",
             "revision": 1,
             "columns": 80,
@@ -2018,11 +1314,47 @@
                 "id": "n1",
                 "role": "dialog",
                 "name": "Permission",
-                "bounds": {
-                  "row": 0,
-                  "column": 0,
-                  "width": 40,
-                  "height": 2
+                "geometry": {
+                  "displayed": {
+                    "status": "known",
+                    "value": true,
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "intendedRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 0,
+                      "column": 0,
+                      "width": 40,
+                      "height": 2
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "visibleRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 0,
+                      "column": 0,
+                      "width": 40,
+                      "height": 2
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  }
                 },
                 "state": {
                   "modal": true
@@ -2034,11 +1366,47 @@
                 "role": "button",
                 "name": "Approve",
                 "testId": "approve",
-                "bounds": {
-                  "row": 1,
-                  "column": 2,
-                  "width": 9,
-                  "height": 1
+                "geometry": {
+                  "displayed": {
+                    "status": "known",
+                    "value": true,
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "intendedRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 2,
+                      "width": 9,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "visibleRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 2,
+                      "width": 9,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  }
                 },
                 "state": {
                   "focused": true
@@ -2053,11 +1421,47 @@
                 "parentId": "n1",
                 "role": "button",
                 "name": "Reject",
-                "bounds": {
-                  "row": 1,
-                  "column": 14,
-                  "width": 8,
-                  "height": 1
+                "geometry": {
+                  "displayed": {
+                    "status": "known",
+                    "value": true,
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "intendedRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 14,
+                      "width": 8,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  },
+                  "visibleRect": {
+                    "status": "known",
+                    "value": {
+                      "row": 1,
+                      "column": 14,
+                      "width": 8,
+                      "height": 1
+                    },
+                    "evidence": {
+                      "source": "framework",
+                      "method": "native",
+                      "strength": "authoritative",
+                      "providerId": "vector-provider"
+                    }
+                  }
                 },
                 "state": {
                   "focused": false
@@ -2067,7 +1471,22 @@
                   "activate"
                 ]
               }
-            ]
+            ],
+            "coordinateSpace": {
+              "status": "known",
+              "value": "viewport-cells",
+              "evidence": {
+                "source": "framework",
+                "method": "native",
+                "strength": "authoritative",
+                "providerId": "vector-provider"
+              }
+            },
+            "hitGrid": {
+              "status": "unsupported",
+              "capability": "pointer-hit-grid",
+              "reason": "framework-unobservable"
+            }
           }
         },
         "code": "malformed",

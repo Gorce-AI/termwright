@@ -138,7 +138,7 @@ fn dormancy_reason_is_recorded() {
     let directory = support::temp_dir();
     let path = directory.join("adapter.log");
     let (options, log) = options_logging_to(&path);
-    assert!(Client::from_values(None, None, None, options).is_none());
+    assert!(Client::from_values(None, None, options).is_none());
     log.close();
 
     let text = fs::read_to_string(&path).expect("readable");
@@ -153,32 +153,11 @@ fn dormancy_reason_names_only_the_missing_variable() {
     let directory = support::temp_dir();
     let path = directory.join("adapter.log");
     let (options, log) = options_logging_to(&path);
-    assert!(Client::from_values(Some("/tmp/x.sock"), None, None, options).is_none());
+    assert!(Client::from_values(Some("/tmp/x.sock"), None, options).is_none());
     log.close();
 
     let text = fs::read_to_string(&path).expect("readable");
     assert!(text.contains("dormant: TERMWRIGHT_TOKEN not set"), "{text}");
-}
-
-#[test]
-fn a_protocol_mismatch_says_so() {
-    let directory = support::temp_dir();
-    let path = directory.join("adapter.log");
-    let (options, log) = options_logging_to(&path);
-    assert!(Client::from_values(
-        Some("/tmp/x.sock"),
-        Some("token"),
-        Some("termwright/99"),
-        options
-    )
-    .is_none());
-    log.close();
-
-    let text = fs::read_to_string(&path).expect("readable");
-    assert!(
-        text.contains(r#"dormant: TERMWRIGHT_PROTOCOL="termwright/99""#),
-        "{text}"
-    );
 }
 
 /// This client has no Windows transport, and a pipe path is the shape that
@@ -188,13 +167,9 @@ fn a_pipe_endpoint_says_which_transport_is_missing() {
     let directory = support::temp_dir();
     let path = directory.join("adapter.log");
     let (options, log) = options_logging_to(&path);
-    assert!(Client::from_values(
-        Some(r"\\.\pipe\termwright-ab12"),
-        Some("token"),
-        None,
-        options
-    )
-    .is_none());
+    assert!(
+        Client::from_values(Some(r"\\.\pipe\termwright-ab12"), Some("token"), options).is_none()
+    );
     log.close();
 
     let text = fs::read_to_string(&path).expect("readable");

@@ -9,6 +9,7 @@ import { buildCrashedFixtureTrace, buildFixtureTrace, FIXTURE_TREES } from '../_
 import { writeInlineReport } from '../inline-report.js';
 import { RUN_MANIFEST_VERSION, writeRunManifest } from '../runs.js';
 import { startUiServer, type UiServer } from '../server.js';
+import { FakeSession, node, snapshot } from '../__fixtures__/fake-session.js';
 
 const APP_DIR = fileURLToPath(new URL('../../dist/app', import.meta.url));
 let browser: Browser;
@@ -139,7 +140,26 @@ describe('fresh React runner', () => {
       server.hub.publish({ v: 1, type: 'output', sessionId, dataB64: Buffer.from(`${text}\r\n`).toString('base64'), t: 1 });
       server.hub.publish({
         v: 1, type: 'semantic', sessionId, revision: 1,
-        snapshot: { v: 1, sessionId, revision: 1, columns, rows, rootIds: ['root'], nodes: [{ id: 'root', role: 'status', name: nodeName, bounds: { row: 0, column: 0, width: 10, height: 1 } }] },
+        snapshot: {
+          v: 2,
+          sessionId,
+          revision: 1,
+          columns,
+          rows,
+          rootIds: ['root'],
+          nodes: [{
+            id: 'root',
+            role: 'status',
+            name: nodeName,
+            geometry: {
+              displayed: { status: 'known', value: true, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-e2e' } },
+              intendedRect: { status: 'known', value: { row: 0, column: 0, width: 10, height: 1 }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-e2e' } },
+              visibleRect: { status: 'known', value: { row: 0, column: 0, width: 10, height: 1 }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-e2e' } },
+            },
+          }],
+          coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-e2e' } },
+          hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+        },
       });
     };
     publishSession('opaque-a', 'Ink', 'unicode', 80, 24, 'FIRST SCREEN', 'First inspector');
@@ -156,6 +176,39 @@ describe('fresh React runner', () => {
     expect(await page.locator('.tw-terminal-viewport').innerText()).not.toContain('SECOND SCREEN');
     await expect.poll(() => page.getByRole('treeitem', { name: /First inspector/u }).count()).toBe(1);
     expect(await page.getByRole('treeitem', { name: /Second inspector/u }).count()).toBe(0);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('shows live Can click/hover/focus/type answers from the production planner', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    const startedAt = Date.now();
+    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'test-start', id: 'planner-case', title: 'planner inspector', file: '/repo/planner.test.ts', startedAt, sessionId: 'planner-session' });
+    const session = new FakeSession('planner-session');
+    session.actionabilityPlanner = async (action, ref) => ({
+      actionable: action !== 'hover',
+      intent: { kind: action, targetRef: ref },
+      checkpoint: { sessionId: session.sessionId, contractId: 'planner-session:0', epoch: 0, sequence: 12, screenRevision: 11, semanticRevision: 7, pairedScreenRevision: 11 },
+      requirements: [],
+      ...(action === 'hover'
+        ? { reason: { code: 'input-mode-disabled', message: 'motion reporting is disabled', targetRef: ref } }
+        : { strategy: action === 'type' ? 'focused-keyboard-type' : 'production-plan' }),
+    });
+    server.attach({ source: session });
+    session.semantic(snapshot(7, [node({ id: 'save', role: 'button', name: 'Save' })], session.sessionId));
+    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('tab', { name: 'Semantic' }).click();
+    const actionability = page.getByRole('region', { name: 'Live actionability' });
+    await expect.poll(() => actionability.getByText('Can click?', { exact: true }).count()).toBe(1);
+    await expect.poll(() => actionability.locator('li[data-actionable]').count()).toBe(4);
+    expect(await actionability.getByText('Can hover?', { exact: true }).count()).toBe(1);
+    expect(await actionability.getByText('Can focus?', { exact: true }).count()).toBe(1);
+    expect(await actionability.getByText('Can type?', { exact: true }).count()).toBe(1);
+    expect(await actionability.getByText(/input-mode-disabled: motion reporting is disabled/u).count()).toBe(1);
+    expect(await actionability.getByText('revision 12', { exact: true }).count()).toBe(4);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 

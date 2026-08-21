@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { TermwrightError } from './errors.js';
 import { matchesText, parseSelector, textMatcher } from './selectors.js';
 
 describe('parseSelector', () => {
@@ -32,12 +31,12 @@ describe('parseSelector', () => {
 
   it('rejects unknown roles, unknown pseudo-classes and stray characters', () => {
     for (const selector of ['widget', 'button:glowing', 'button[name=x]', '']) {
-      expect(() => parseSelector(selector), selector).toThrow(TermwrightError);
+      expect(() => parseSelector(selector), selector).toThrow(TypeError);
     }
   });
 
   it('rejects two roles or two ids in one compound selector', () => {
-    expect(() => parseSelector('#a#b')).toThrow(TermwrightError);
+    expect(() => parseSelector('#a#b')).toThrow(TypeError);
   });
 });
 

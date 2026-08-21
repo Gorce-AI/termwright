@@ -34,23 +34,26 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/node-hook.ts src/bun-preload.ts src/instrument.ts --format esm --dts --sourcemap --clean",
+    "build": "tsup src/index.ts src/node-hook.ts src/bun-preload.ts src/instrument.ts src/instrumentation.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@termwright/evidence-provider": "workspace:*",
     "@termwright/probe-runtime": "workspace:*",
     "@termwright/protocol": "workspace:*",
-    "@termwright/recognizers": "workspace:^"
+    "@termwright/recognizers": "workspace:^",
+    "@termwright/vt": "workspace:*"
   },
   "peerDependencies": {
-    "ink": ">=7.1.0 <8",
+    "ink": "7.1.1",
     "react": ">=19.2.0"
   },
   "devDependencies": {
+    "@termwright/driver": "workspace:*",
     "@termwright/ink": "workspace:*",
     "@types/react": "^19.2.18",
-    "ink": "^7.1.1",
+    "ink": "7.1.1",
     "react": "^19.2.8"
   }
 }

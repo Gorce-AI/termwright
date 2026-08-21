@@ -93,7 +93,7 @@ semantic revision or a process event. A `setTimeout` in a test is a bug report
 about a missing wait.
 
 **Degrade honestly.** Where something cannot be observed, say so in a typed
-error or a diagnostic — `semanticTree: false`, `unsupported-action`,
+error or a diagnostic — `semanticTree: false`, `capability-unavailable`,
 `stale-snapshot`. Never infer a role from rendered text, and never send input
 nothing will read. A locator that silently matches the wrong cell turns a test
 suite into a source of false confidence, which is worse than no suite.
@@ -161,8 +161,8 @@ with no changeset fails `release-hygiene`.
 
 All the npm packages share a version and release together; see
 [`.changeset/README.md`](.changeset/README.md). Adding a changeset does not
-release anything — publishing is a manual, approved pipeline, documented in
-[`RELEASING.md`](RELEASING.md).
+release anything by itself — publishing requires the autonomous exact-SHA,
+full-CI Release PR gates documented in [`RELEASING.md`](RELEASING.md).
 
 ## Writing an adapter
 

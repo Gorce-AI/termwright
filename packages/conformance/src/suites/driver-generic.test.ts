@@ -7,7 +7,7 @@
  * and exact exit/close semantics.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { TermwrightError, UnsupportedActionError, type Locator } from '@termwright/driver';
+import { SemanticCapabilityUnavailableError, TermwrightError, type Locator } from '@termwright/driver';
 import type { Rect } from '@termwright/protocol';
 import {
   CONFORMANCE_FIXTURES,
@@ -43,21 +43,14 @@ const launch = async (options = {}) => {
 afterEach(sessions.closeAll);
 
 describe.skipIf(!ptyAvailable())('a generic session', () => {
-  it('waits out the late-attach grace, then refuses semantic locators', async () => {
+  it('freezes the generic contract, then refuses semantic locators', async () => {
     const started = Date.now();
     const terminal = await launch({ semanticNegotiationMs: 250 });
 
-    // The negotiation window bounds when the session starts *behaving*
-    // generically; the late-attach grace bounds when that becomes final. While
-    // an adapter could still attach — a child booting slower than the window is
-    // routine when suites run in parallel — a semantic locator is a wait, so
-    // `count()` answers 0 rather than refusing.
-    expect(await terminal.getByRole('button').count()).toBe(0);
-
-    // Once the verdict is final, a semantic locator against a program that has
-    // no tree is an honest error rather than a silent zero.
+    // Negotiation produces one immutable contract. Semantic queries do not
+    // keep an implicit compatibility window open after that decision.
     await expect
-      .poll(async () => (await rejection(terminal.getByRole('button').count())) instanceof UnsupportedActionError, {
+      .poll(async () => (await rejection(terminal.getByRole('button').count())) instanceof SemanticCapabilityUnavailableError, {
         timeout: 15_000,
       })
       .toBe(true);
@@ -75,34 +68,34 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
   it('never invents a role for a grid match', async () => {
     const terminal = await launch();
 
-    const target = await terminal.getByText('Alpha').resolve();
+    const target = await terminal.getByScreenText('Alpha').resolve();
     expect(target.semantic).toBe(false);
     expect(target.role).toBeUndefined();
     expect(target.name).toBeUndefined();
     expect(target.ref).toMatch(/^grid:/u);
-    expect(await terminal.getByText('Alpha').semanticState()).toBeNull();
+    expect(await terminal.getByScreenText('Alpha').semanticState()).toBeNull();
   });
 
   it('resolves text, regex, occurrence, style and cell locators', async () => {
     const terminal = await launch();
 
-    expect(await intendedRect(terminal.getByText('Alpha'))).toEqual({
+    expect(await intendedRect(terminal.getByScreenText('Alpha'))).toEqual({
       row: 1,
       column: 2,
       width: 5,
       height: 1,
     });
-    expect(await terminal.getByText(/G[a-z]+ma/u).textContent()).toBe('Gamma');
-    expect(await terminal.getByText(/ev: /u).count()).toBe(4);
-    expect(await intendedRect(terminal.getByText(/ev: /u, { occurrence: 1 }))).toMatchObject({ row: 8 });
+    expect(await terminal.getByScreenText(/G[a-z]+ma/u).textContent()).toBe('Gamma');
+    expect(await terminal.getByScreenText(/ev: /u).count()).toBe(4);
+    expect(await intendedRect(terminal.getByScreenText(/ev: /u, { occurrence: 1 }))).toMatchObject({ row: 8 });
 
     // The selected row is the only bold green one, so a style predicate is what
     // separates it from the two plain rows.
-    expect(await terminal.getByText('Alpha', { fg: 'green', attributes: { bold: true } }).count()).toBe(1);
-    expect(await terminal.getByText('Beta', { fg: 'green' }).count()).toBe(0);
-    expect(await terminal.getByText('RED', { fg: 'red' }).count()).toBe(1);
-    expect(await terminal.getByText('ONBLUE', { bg: 'blue' }).count()).toBe(1);
-    expect(await terminal.getByText('UNDER', { attributes: { underline: true } }).count()).toBe(1);
+    expect(await terminal.getByScreenText('Alpha', { fg: 'green', attributes: { bold: true } }).count()).toBe(1);
+    expect(await terminal.getByScreenText('Beta', { fg: 'green' }).count()).toBe(0);
+    expect(await terminal.getByScreenText('RED', { fg: 'red' }).count()).toBe(1);
+    expect(await terminal.getByScreenText('ONBLUE', { bg: 'blue' }).count()).toBe(1);
+    expect(await terminal.getByScreenText('UNDER', { attributes: { underline: true } }).count()).toBe(1);
 
     const cell = terminal.cell({ row: 4, column: 0 });
     expect(cell.char).toBe('R');
@@ -158,8 +151,8 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     // hidden the driver sends the report instead, which is the honest choice:
     // 'none' is a reason to refuse, 'unknown' is not.
     if (!mouseModeHidden(terminal)) {
-      const refused = await rejection(terminal.getByText('Alpha').click());
-      expect((refused as TermwrightError).code).toBe('unsupported-action');
+      const refused = await rejection(terminal.getByScreenText('Alpha').click());
+      expect((refused as TermwrightError).code).toBe('input-mode-disabled');
     }
 
     const observable = await enableMouseReporting(terminal, 'click');
@@ -168,16 +161,16 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     // 'Alpha' sits at row 1, columns 2..6; its centre is cell (1, 4), which SGR
     // reports one-based. A wrong aim would report different coordinates rather
     // than fail, so the assertion is on the numbers.
-    await terminal.getByText('Alpha').click();
+    await terminal.getByScreenText('Alpha').click();
     await terminal.waitForText('ev: MOUSE press b=0 c=5 r=2');
     await terminal.waitForText('ev: MOUSE release b=0 c=5 r=2');
 
-    await terminal.getByText('Gamma').wheel({ deltaY: -1 });
+    await terminal.getByScreenText('Gamma').wheel({ deltaY: -1 });
     await terminal.waitForText('ev: MOUSE wheel b=64');
-    await terminal.getByText('Gamma').wheel({ deltaY: 1 });
+    await terminal.getByScreenText('Gamma').wheel({ deltaY: 1 });
     await terminal.waitForText('ev: MOUSE wheel b=65');
 
-    await terminal.getByText('Alpha').click({ button: 'right' });
+    await terminal.getByScreenText('Alpha').click({ button: 'right' });
     await terminal.waitForText('ev: MOUSE press b=2');
 
     // Whatever the terminal could or could not observe, the bytes reached the
@@ -198,13 +191,13 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     // — ConPTY has `1004` on for a child that never sent it — there is nothing
     // to refuse from, and the driver says so rather than refusing.
     if (focusMode(terminal) === 'off') {
-      const noFocus = (await rejection(terminal.focus())) as TermwrightError;
-      expect(noFocus.code).toBe('unsupported-action');
+      const noFocus = (await rejection(terminal.window.focus())) as TermwrightError;
+      expect(noFocus.code).toBe('input-mode-disabled');
       expect(noFocus.diagnostics.suggestion).toContain('1004');
     }
 
     const observable = await enableMouseReporting(terminal, 'click'); // clicks only: no motion
-    const drag = terminal.getByText('Alpha').drag({ from: { row: 1, column: 2 }, to: { row: 3, column: 2 } });
+    const drag = terminal.mouse.drag({ from: { row: 1, column: 2 }, to: { row: 3, column: 2 } });
     if (observable) {
       // The mode says motion was never enabled, so the driver can refuse and
       // name the sequence the application would have to send.
@@ -222,7 +215,7 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
       // The platform reports focus reporting as the host has it, not as the
       // child asked for it. There is nothing to refuse from, so the report is
       // sent and the session says once that it could not verify the mode.
-      await terminal.focus();
+      await terminal.window.focus();
       const unverified = terminal
         .diagnostics()
         .filter((entry) => entry.code === 'mode-unverifiable' && entry.mode === 'focus');
@@ -231,9 +224,9 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     }
 
     expect(reporting).toBe('on');
-    await terminal.focus();
+    await terminal.window.focus();
     await terminal.waitForText('ev: FOCUS:in');
-    await terminal.blur();
+    await terminal.window.blur();
     await terminal.waitForText('ev: FOCUS:out');
   });
 

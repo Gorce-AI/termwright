@@ -70,8 +70,8 @@ describe('what each major can promise', () => {
     // attribution channels, but this patch set has not wired either one.
     for (const major of ['v1', 'v2'] as const) {
       expect(capabilitiesFor(major)).toEqual(['tree', 'states', 'actions', 'render-revisions']);
-      expect(capabilitiesFor(major)).not.toContain('bounds');
-      expect(capabilitiesFor(major)).not.toContain('absolute-bounds');
+      expect(capabilitiesFor(major)).not.toContain('intended-geometry');
+      expect(capabilitiesFor(major)).not.toContain('clipped-geometry');
       expect(reportsGeometry(major)).toBe(false);
     }
   });

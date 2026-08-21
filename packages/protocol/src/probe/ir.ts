@@ -253,6 +253,8 @@ export interface ProbeFrame {
 export const PROBE_CAPABILITIES = [
   /** Identities survive across frames and may be correlated. */
   'stable-identity',
+  /** `intendedRect` comes from the framework's layout/render boundary. */
+  'intended-rect',
   /** `visibleRect` is computed, not guessed. */
   'visible-rect',
   /** A render/layout call stream is reported. */

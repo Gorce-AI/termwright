@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TextLocatorOptions
 
-Defined in: [api.ts:389](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L389)
+Defined in: [driver/src/api.ts:457](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L457)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -30,44 +30,14 @@ await terminal.getByRole('button', { name: 'Approve' }).activate();
 await terminal.close();
 ```
 
+## Extended by
+
+- [`ScreenTextLocatorOptions`](../screentextlocatoroptions/)
+
 ## Properties
-
-### attributes?
-
-> `readonly` `optional` **attributes?**: `Partial`\<[`CellAttributes`](../cellattributes/)\>
-
-Defined in: [api.ts:395](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L395)
-
-***
-
-### bg?
-
-> `readonly` `optional` **bg?**: `string`
-
-Defined in: [api.ts:394](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L394)
-
-***
 
 ### exact?
 
 > `readonly` `optional` **exact?**: `boolean`
 
-Defined in: [api.ts:390](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L390)
-
-***
-
-### fg?
-
-> `readonly` `optional` **fg?**: `string`
-
-Defined in: [api.ts:393](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L393)
-
-Style predicates for generic (non-semantic) matching.
-
-***
-
-### occurrence?
-
-> `readonly` `optional` **occurrence?**: `number`
-
-Defined in: [api.ts:391](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L391)
+Defined in: [driver/src/api.ts:458](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L458)

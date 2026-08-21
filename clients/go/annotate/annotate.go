@@ -37,8 +37,9 @@ import (
 // tview (and creating the wrong dependency direction for the injected probe).
 // Keys also avoid retaining related widgets merely because another widget
 // points at them. A probe resolves keys only among nodes present in the same
-// snapshot; missing or duplicate keys are ignored rather than producing a
-// dangling wire reference.
+// snapshot. Missing relationship targets are omitted. Declaring one non-empty
+// key for multiple nodes is instead a producer-contract violation and ends the
+// semantic session with `duplicate-semantic-key`.
 type SemanticKey string
 
 // Semantics is what an author knows and a probe cannot see.

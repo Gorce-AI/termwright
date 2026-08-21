@@ -38,9 +38,16 @@ const save = app.getByRole('button', {name: 'Save'});
 
 await expect(save).toBeAttached();
 await expect(save).toBeFocused();
-await expect(save).toHaveState({disabled: false});
+await expect(save).toBeEnabled();
+await expect(mode).toBeChecked();
+await expect(tab).toBeSelected();
+await expect(details).toBeExpanded();
+await expect(name).toHaveValue('Ada');
 await expect(save).toHaveExtendedState({value: 'release'});
 ```
+
+Use `toHaveState()` for less common portable flags. The named matchers above
+are clearer for enabled, checked, selected, expanded, and value state.
 
 `toBeAttached()` asks whether the node is present in the semantic tree. It does
 not claim that the element is painted or inside the viewport.

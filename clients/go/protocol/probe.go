@@ -23,6 +23,7 @@ type ProbeCapability string
 
 const (
 	ProbeCapStableIdentity ProbeCapability = "stable-identity"
+	ProbeCapIntendedRect   ProbeCapability = "intended-rect"
 	ProbeCapVisibleRect    ProbeCapability = "visible-rect"
 	ProbeCapOperations     ProbeCapability = "operations"
 	ProbeCapAnnotations    ProbeCapability = "annotations"
@@ -34,6 +35,7 @@ const maxProbeInfoStringLength = 128
 
 var probeCapabilitySet = map[ProbeCapability]struct{}{
 	ProbeCapStableIdentity: {},
+	ProbeCapIntendedRect:   {},
 	ProbeCapVisibleRect:    {},
 	ProbeCapOperations:     {},
 	ProbeCapAnnotations:    {},
@@ -51,7 +53,7 @@ type ProbeInfo struct {
 	Capabilities     []ProbeCapability `json:"capabilities"`
 }
 
-// ValidProbeCapability reports whether capability is part of the v1 probe
+// ValidProbeCapability reports whether capability is part of the current probe
 // capability vocabulary.
 func ValidProbeCapability(capability ProbeCapability) bool {
 	_, ok := probeCapabilitySet[capability]

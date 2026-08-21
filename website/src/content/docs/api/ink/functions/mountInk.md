@@ -3,17 +3,17 @@ title: "Function: mountInk()"
 editUrl: false
 ---
 
-[**@termwright/ink-testing**](../../)
+[**@termwright/ink**](../../)
 
 ***
 
-[@termwright/ink-testing](../../) / mountInk
+[@termwright/ink](../../) / mountInk
 
 # Function: mountInk()
 
 > **mountInk**(`element`, `options?`): `Promise`\<[`InkHarness`](../../interfaces/inkharness/)\>
 
-Defined in: [ink-testing/src/mount.tsx:148](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L148)
+Defined in: ink/src/mount.tsx:148
 
 Mounts an Ink element in this process and returns a harness over it.
 

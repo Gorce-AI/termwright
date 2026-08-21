@@ -12,40 +12,71 @@ import type {
   LocatorGeometry,
   LocatorVisibility,
   CoordinateSpace,
+  ActionabilityExplanation,
+  ActionIntent,
+  ActionPlan,
+  ActionReceipt,
+  Condition,
+  DeviceOperation,
   Observation,
   ObservationStamp,
   PointerHitTest,
   Rect,
+  EvidenceProvenance,
   SemanticExtendedState,
   SemanticNode,
   SemanticState,
+  ViewportIntersection,
 } from '@termwright/protocol';
 import type {
-  ActivateReceipt,
   CellSnapshot,
   ErrorDiagnostics,
   Locator,
   LocatorCellSnapshot,
   LocatorCellSnapshotOptions,
+  LocatorFilterOptions,
+  LocatorDragOptions,
+  LocatorWheelOptions,
   PointerOptions,
   ResolvedTarget,
+  RoleLocatorOptions,
+  ScreenTextLocatorOptions,
+  TextLocatorOptions,
   TerminalModes,
   TimeoutClasses,
   WaitOptions,
 } from './api.js';
 import {
   AmbiguousLocatorError,
+  CapabilityUnavailableError,
+  SemanticCapabilityUnavailableError,
   StaleSnapshotError,
   TermwrightError,
   TimeoutError,
-  UnsupportedActionError,
 } from './errors.js';
 import { unwrap } from './debug.js';
-import { encodeKeys, encodeText } from './keys.js';
-import { concatBytes, encodeMouse, type MouseButton, type MouseEvent } from './mouse.js';
+import {
+  ActionPlanner,
+  evaluateCondition as evaluateCanonicalCondition,
+  isAuthoritativeRegionOwnership,
+  type LeafCondition,
+} from './action-planner.js';
 import { matchGrid, matchSemantic, textInRect, type SemanticIndex } from './matching.js';
 import type { CapturedRow } from './screen.js';
-import type { GenericQuery, LocatorQuery, RefQuery, SemanticQuery } from './selectors.js';
+import {
+  gridQuery,
+  labelQuery,
+  parseSelector,
+  roleQuery,
+  testIdQuery,
+  textMatcher,
+  textQuery,
+  type GenericQuery,
+  type LocatorQuery,
+  type RefQuery,
+  type SemanticQuery,
+  type TextMatcher,
+} from './selectors.js';
 
 /** Everything a locator needs from its session. */
 export interface LocatorContext {
@@ -62,6 +93,11 @@ export interface LocatorContext {
   semanticViolation(): TermwrightError | null;
   semanticRevision(): number;
   screenRevision(): number;
+  checkpoint(): ObservationStamp;
+  contract(): import('@termwright/protocol').EffectiveSessionContract | null;
+  semanticNode(id: string): SemanticNode | undefined;
+  hitGrid(): Observation<import('@termwright/protocol').PointerHitGrid> | undefined;
+  pointerRegion(id: string): { readonly regionBounds: Rect; readonly spans: import('@termwright/protocol').PhysicalRegion['spans']; readonly evidence: EvidenceProvenance } | undefined;
   rows(): readonly CapturedRow[];
   modes(): TerminalModes;
   /** The best identity the attached producer can offer for a node. */
@@ -71,6 +107,7 @@ export interface LocatorContext {
   /** Resolves when a screen or semantic revision is published, or the deadline passes. */
   waitForChange(deadline: number): Promise<void>;
   sendInput(data: Uint8Array, kind: 'key' | 'mouse' | 'paste' | 'raw'): Promise<void>;
+  executeDeviceOperations(operations: readonly DeviceOperation[], expected: ObservationStamp): Promise<readonly DeviceOperation[]>;
   /** Publishes the start of an action and returns its session-local id. */
   beginAction(api: string, about?: { selector?: string }): string;
   /** Publishes the authoritative completion of an action. */
@@ -78,7 +115,7 @@ export interface LocatorContext {
     actionId: string,
     api: string,
     ok: boolean,
-    about?: { selector?: string; ref?: string; error?: string },
+    about?: { selector?: string; ref?: string; error?: string; receipt?: ActionReceipt; actionability?: ActionabilityExplanation },
   ): void;
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics;
   assertOpen(): void;
@@ -87,17 +124,65 @@ export interface LocatorContext {
 /** Maximum candidates rendered into an ambiguity diagnostic. */
 const MAX_CANDIDATES = 10;
 
-/** Wheel events sent per unit of `deltaY`, capped so a typo cannot spin forever. */
-const MAX_WHEEL_STEPS = 100;
+const EVIDENCE_BY_KIND = Object.freeze({
+  adapter: Object.freeze({ source: 'application', method: 'declared', strength: 'authoritative', providerId: 'semantic-adapter' }),
+  probe: Object.freeze({ source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'framework-probe' }),
+  'terminal-grid': Object.freeze({ source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'termwright-vt' }),
+  'viewport-clip': Object.freeze({ source: 'driver', method: 'derived', strength: 'authoritative', providerId: 'termwright-driver' }),
+  'paint-order': Object.freeze({ source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'framework-probe' }),
+  'hit-grid': Object.freeze({ source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'framework-hit-grid' }),
+} as const satisfies Record<string, EvidenceProvenance>);
 
-function known<T>(value: T, evidence: 'adapter' | 'probe' | 'terminal-grid' | 'viewport-clip' | 'paint-order' | 'hit-grid' | 'legacy-v1'): Observation<T> {
-  return Object.freeze({ status: 'known', value, evidence });
+function known<T>(value: T, evidence: EvidenceProvenance | keyof typeof EVIDENCE_BY_KIND): Observation<T> {
+  return Object.freeze({ status: 'known', value, evidence: typeof evidence === 'string' ? EVIDENCE_BY_KIND[evidence] : evidence });
 }
 
-interface LocatorState {
-  readonly parent?: LocatorImpl;
-  /** Index selection from `first()`/`nth()`; `undefined` keeps strict mode. */
-  readonly index?: number;
+function absent<T>(reason: 'detached' | 'not-displayed' | 'not-laid-out', evidence: EvidenceProvenance | keyof typeof EVIDENCE_BY_KIND): Observation<T> {
+  const provenance = typeof evidence === 'string' ? EVIDENCE_BY_KIND[evidence] : evidence;
+  if (provenance.strength !== 'authoritative') throw new TypeError('absent observation requires authoritative evidence');
+  return Object.freeze({ status: 'absent', reason, evidence: Object.freeze({ ...provenance, strength: 'authoritative' as const }) });
+}
+
+function withoutValue<T>(observation: Observation<unknown>): Observation<T> {
+  switch (observation.status) {
+    case 'known': throw new TypeError('cannot erase a known observation value');
+    case 'absent': return Object.freeze({ status: 'absent', reason: observation.reason, evidence: observation.evidence });
+    case 'unknown': return Object.freeze({ status: 'unknown', reason: observation.reason });
+    case 'unsupported': return Object.freeze({ status: 'unsupported', capability: observation.capability, reason: observation.reason });
+  }
+}
+
+interface LocatorFilter {
+  readonly hasText?: TextMatcher;
+  readonly has?: LocatorExpr;
+  readonly hasNot?: LocatorExpr;
+}
+
+type LocatorDomain = 'semantic' | 'screen';
+
+/** Immutable lazy query algebra. Operator order is part of the expression. */
+type LocatorExpr =
+  | { readonly kind: 'leaf'; readonly query: LocatorQuery; readonly domain: LocatorDomain }
+  | { readonly kind: 'descendant'; readonly parent: LocatorExpr; readonly child: LocatorExpr; readonly domain: LocatorDomain }
+  | { readonly kind: 'select'; readonly source: LocatorExpr; readonly index: number | 'last'; readonly domain: LocatorDomain }
+  | { readonly kind: 'filter'; readonly source: LocatorExpr; readonly filter: LocatorFilter; readonly domain: LocatorDomain }
+  | { readonly kind: 'and' | 'or'; readonly left: LocatorExpr; readonly right: LocatorExpr; readonly domain: LocatorDomain };
+
+function queryDomain(query: LocatorQuery): LocatorDomain {
+  if (query.kind === 'semantic') return 'semantic';
+  if (query.kind === 'generic') return 'screen';
+  return query.ref.kind === 'node' ? 'semantic' : 'screen';
+}
+
+function describeExpr(expr: LocatorExpr): string {
+  switch (expr.kind) {
+    case 'leaf': return expr.query.description;
+    case 'descendant': return `${describeExpr(expr.parent)} >> ${describeExpr(expr.child)}`;
+    case 'select': return `${describeExpr(expr.source)} >> ${expr.index === 'last' ? 'last()' : `nth(${expr.index})`}`;
+    case 'filter': return `${describeExpr(expr.source)} >> filter()`;
+    case 'and': return `(${describeExpr(expr.left)}) and (${describeExpr(expr.right)})`;
+    case 'or': return `(${describeExpr(expr.left)}) or (${describeExpr(expr.right)})`;
+  }
 }
 
 function nodeTarget(
@@ -109,18 +194,15 @@ function nodeTarget(
     ref: `${node.id}@${revision}`,
     revision,
     semantic: true,
-    rect:
-      node.geometry?.visibleRect.status === 'known'
-        ? node.geometry.visibleRect.value
-        : node.geometry?.intendedRect.status === 'known'
-          ? node.geometry.intendedRect.value
-          : node.bounds ?? null,
+    // Only a qualified visible region is a safe semantic-to-physical bridge.
+    // Intended geometry remains available through geometry(), but is not
+    // silently promoted to action coordinates.
+    rect: node.geometry?.visibleRect.status === 'known' ? node.geometry.visibleRect.value : null,
     role: node.role,
     name: node.name,
     identity,
     ...(node.frameworkType !== undefined ? { frameworkType: node.frameworkType } : {}),
     ...(node.p !== undefined ? { provenance: node.p } : {}),
-    ...(node.occlusion !== undefined ? { occlusion: node.occlusion } : {}),
   });
 }
 
@@ -139,52 +221,146 @@ function rectTarget(rect: Rect, revision: number): ResolvedTarget {
 /** Concrete {@link Locator}; created only by the session and by `within/first/nth`. */
 export class LocatorImpl implements Locator {
   readonly #ctx: LocatorContext;
-  readonly #query: LocatorQuery;
-  readonly #state: LocatorState;
+  readonly #expr: LocatorExpr;
 
-  constructor(ctx: LocatorContext, query: LocatorQuery, state: LocatorState = {}) {
+  constructor(ctx: LocatorContext, query: LocatorQuery, expr?: LocatorExpr) {
     this.#ctx = ctx;
-    this.#query = query;
-    this.#state = state;
+    this.#expr = expr ?? Object.freeze({ kind: 'leaf', query, domain: queryDomain(query) });
   }
 
   /** Human-readable form used in error messages. */
   get description(): string {
-    const own = this.#query.description;
-    const scoped = this.#state.parent === undefined ? own : `${this.#state.parent.description} >> ${own}`;
-    return this.#state.index === undefined ? scoped : `${scoped} >> nth(${this.#state.index})`;
+    return describeExpr(this.#expr);
   }
 
   within(parent: Locator): Locator {
     // A debug-instrumented locator is a Proxy; the raw object is what may be
     // stored and later reached into.
     const raw = unwrap(parent);
-    if (!(raw instanceof LocatorImpl)) {
-      throw new UnsupportedActionError('within() requires a locator created by this harness', {
-        semanticTree: this.#ctx.semanticAttached(),
-      });
+    if (!(raw instanceof LocatorImpl) || raw.#ctx !== this.#ctx) {
+      throw new TypeError('within() requires a locator from the same terminal session');
     }
-    return new LocatorImpl(this.#ctx, this.#query, { ...this.#state, parent: raw });
+    this.#assertDomain(raw.#expr.domain, 'within()');
+    return this.#fromExpr(Object.freeze({ kind: 'descendant', parent: raw.#expr, child: this.#expr, domain: this.#expr.domain }));
+  }
+
+  getByRole(role: import('@termwright/protocol').SemanticRole, opts?: RoleLocatorOptions): Locator {
+    const name = opts?.name === undefined ? undefined : textMatcher(opts.name, opts.exact ?? false);
+    const frameworkType = opts?.frameworkType === undefined ? undefined : textMatcher(opts.frameworkType, true);
+    return this.#descendant(roleQuery(role, name, opts?.state ?? {}, frameworkType));
+  }
+
+  getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator {
+    return this.#descendant(labelQuery(textMatcher(text, opts?.exact ?? false)));
+  }
+
+  getByText(text: string | RegExp, opts?: TextLocatorOptions): Locator {
+    return this.#descendant(textQuery(textMatcher(text, opts?.exact ?? false)));
+  }
+
+  getByScreenText(text: string | RegExp, opts?: ScreenTextLocatorOptions): Locator {
+    const style = opts?.fg !== undefined || opts?.bg !== undefined || opts?.attributes !== undefined
+      ? {
+          ...(opts.fg !== undefined ? { fg: opts.fg } : {}),
+          ...(opts.bg !== undefined ? { bg: opts.bg } : {}),
+          ...(opts.attributes !== undefined ? { attributes: opts.attributes } : {}),
+        }
+      : undefined;
+    return this.#descendant(gridQuery(textMatcher(text, opts?.exact ?? false), opts?.occurrence, style));
+  }
+
+  getByTestId(testId: string): Locator {
+    return this.#descendant(testIdQuery(testId));
+  }
+
+  locator(selector: string): Locator {
+    return this.#descendant(parseSelector(selector));
+  }
+
+  #descendant(query: LocatorQuery): Locator {
+    const child = Object.freeze<LocatorExpr>({ kind: 'leaf', query, domain: queryDomain(query) });
+    this.#assertDomain(child.domain, 'descendant locator');
+    return this.#fromExpr(Object.freeze({ kind: 'descendant', parent: this.#expr, child, domain: child.domain }));
+  }
+
+  #fromExpr(expr: LocatorExpr): LocatorImpl {
+    const leaf = this.#firstLeaf(expr);
+    return new LocatorImpl(this.#ctx, leaf.query, expr);
+  }
+
+  #firstLeaf(expr: LocatorExpr): Extract<LocatorExpr, { kind: 'leaf' }> {
+    if (expr.kind === 'leaf') return expr;
+    if (expr.kind === 'descendant') return this.#firstLeaf(expr.parent);
+    if (expr.kind === 'select' || expr.kind === 'filter') return this.#firstLeaf(expr.source);
+    return this.#firstLeaf(expr.left);
+  }
+
+  #assertDomain(domain: LocatorDomain, api: string): void {
+    if (domain !== this.#expr.domain) {
+      throw new TypeError(`${api} cannot combine semantic and terminal-grid locators; use an explicit screen query instead`);
+    }
   }
 
   first(): Locator {
     return this.nth(0);
   }
 
+  last(): Locator {
+    return this.#fromExpr(Object.freeze({ kind: 'select', source: this.#expr, index: 'last', domain: this.#expr.domain }));
+  }
+
   nth(index: number): Locator {
     if (!Number.isInteger(index) || index < 0) {
-      throw new UnsupportedActionError(`nth() needs a non-negative integer, received ${index}`, {
-        semanticTree: this.#ctx.semanticAttached(),
-      });
+      throw new TypeError(`nth() needs a non-negative integer, received ${index}`);
     }
-    return new LocatorImpl(this.#ctx, this.#query, { ...this.#state, index });
+    return this.#fromExpr(Object.freeze({ kind: 'select', source: this.#expr, index, domain: this.#expr.domain }));
+  }
+
+  filter(options: LocatorFilterOptions): Locator {
+    const has = options.has === undefined ? undefined : this.#sameHarness(options.has, 'filter({has})');
+    const hasNot = options.hasNot === undefined ? undefined : this.#sameHarness(options.hasNot, 'filter({hasNot})');
+    if (options.hasText === undefined && has === undefined && hasNot === undefined) {
+      throw new TypeError('filter() requires hasText, has, or hasNot');
+    }
+    const filter: LocatorFilter = {
+      ...(options.hasText === undefined ? {} : { hasText: textMatcher(options.hasText) }),
+      ...(has === undefined ? {} : { has: has.#expr }),
+      ...(hasNot === undefined ? {} : { hasNot: hasNot.#expr }),
+    };
+    return this.#fromExpr(Object.freeze({ kind: 'filter', source: this.#expr, filter: Object.freeze(filter), domain: this.#expr.domain }));
+  }
+
+  and(other: Locator): Locator {
+    return this.#combine('and', other);
+  }
+
+  or(other: Locator): Locator {
+    return this.#combine('or', other);
+  }
+
+  #combine(mode: 'and' | 'or', other: Locator): Locator {
+    const right = this.#sameHarness(other, `${mode}()`);
+    this.#assertDomain(right.#expr.domain, `${mode}()`);
+    return this.#fromExpr(Object.freeze({ kind: mode, left: this.#expr, right: right.#expr, domain: this.#expr.domain }));
+  }
+
+  #sameHarness(locator: Locator, api: string): LocatorImpl {
+    const raw = unwrap(locator);
+    if (!(raw instanceof LocatorImpl) || raw.#ctx !== this.#ctx) {
+      throw new TypeError(`${api} requires a locator from the same terminal session`);
+    }
+    return raw;
   }
 
   async count(): Promise<number> {
     this.#ctx.assertOpen();
     await this.#ctx.negotiationSettled();
-    const scope = await this.#resolveScope(Date.now() + this.#ctx.timeouts.action);
-    return this.#evaluate(scope).length;
+    const deadline = Date.now() + this.#ctx.timeouts.action;
+    while (this.#expr.domain === 'semantic' && this.#ctx.semanticIndex() === null && this.#ctx.semanticPossible()) {
+      if (Date.now() >= deadline) break;
+      await this.#ctx.waitForChange(deadline);
+    }
+    return this.#evaluate(this.#expr, null).length;
   }
 
   async resolve(opts?: WaitOptions): Promise<ResolvedTarget> {
@@ -193,8 +369,7 @@ export class LocatorImpl implements Locator {
     const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
     for (;;) {
       this.#ctx.assertOpen();
-      const scope = await this.#resolveScope(deadline);
-      const matches = this.#evaluate(scope);
+      const matches = this.#evaluate(this.#expr, null);
       const selected = this.#select(matches);
       if (selected !== null) return selected;
       if (Date.now() >= deadline) {
@@ -213,7 +388,7 @@ export class LocatorImpl implements Locator {
     }
   }
 
-  async waitFor(opts?: { state?: 'visible' | 'hidden' | 'attached' } & WaitOptions): Promise<void> {
+  async waitFor(opts?: { state?: 'visible' | 'hidden' | 'attached' | 'detached' | 'displayed' | 'offscreen' | 'focused' | 'enabled' | 'disabled' | 'checked' | 'selected' | 'expanded' | 'collapsed' } & WaitOptions): Promise<void> {
     this.#ctx.assertOpen();
     await this.#ctx.negotiationSettled();
     const wanted = opts?.state ?? 'visible';
@@ -222,13 +397,19 @@ export class LocatorImpl implements Locator {
       this.#ctx.assertOpen();
       const matches = await this.#tryEvaluate(deadline);
       const selected = this.#select(matches);
-      const visible = selected === null ? false : this.#knownVisibleState(selected);
-      const satisfied = wanted === 'attached'
-        ? selected !== null
-        : wanted === 'hidden'
-          ? selected === null || visible === false
-          : visible === true;
-      if (satisfied) return;
+      const condition: Condition = wanted === 'checked'
+        ? { kind: 'checked', target: this.description, value: true }
+        : wanted === 'selected'
+          ? { kind: 'selected', target: this.description, value: true }
+          : wanted === 'expanded'
+            ? { kind: 'expanded', target: this.description, value: true }
+            : { kind: wanted, target: this.description };
+      const evaluation = evaluateCanonicalCondition(
+        condition,
+        this.#ctx.checkpoint(),
+        (leaf) => this.#observeCondition(leaf, selected),
+      );
+      if (evaluation.verdict === 'satisfied') return;
       if (Date.now() >= deadline) {
         throw new TimeoutError(
           `locator ${this.description} did not become ${wanted} in time`,
@@ -239,19 +420,36 @@ export class LocatorImpl implements Locator {
     }
   }
 
+  async evaluateCondition(condition: Condition): Promise<import('@termwright/protocol').ConditionResult> {
+    this.#ctx.assertOpen();
+    await this.#ctx.negotiationSettled();
+    const before = this.#ctx.checkpoint();
+    const selected = this.#select(await this.#tryEvaluate(Date.now()));
+    const after = this.#ctx.checkpoint();
+    if (before.contractId !== after.contractId || before.sequence !== after.sequence) {
+      return Object.freeze({
+        condition,
+        checkpoint: after,
+        observation: Object.freeze({ status: 'unknown', reason: 'stale-revision' }),
+        verdict: 'inconclusive',
+      });
+    }
+    return evaluateCanonicalCondition(condition, before, (leaf) => this.#observeCondition(leaf, selected));
+  }
+
   async geometry(): Promise<LocatorGeometry> {
     const target = await this.#readStrict();
     const stamp = this.#stamp();
     if (target === null) {
-      const absent = Object.freeze({ status: 'absent', reason: 'detached' } as const);
-      return Object.freeze({ stamp, coordinateSpace: absent, intendedRect: absent, visibleRect: absent });
+      const detached = absent<never>('detached', 'adapter');
+      return Object.freeze({ stamp, coordinateSpace: detached, intendedRect: detached, visibleRect: detached });
     }
     if (!target.semantic && target.rect !== null) {
       return Object.freeze({
         stamp,
-        coordinateSpace: known<CoordinateSpace>('viewport-cells', 'terminal-grid'),
-        intendedRect: known(target.rect, 'terminal-grid'),
-        visibleRect: known(this.#clip(target.rect), 'viewport-clip'),
+        coordinateSpace: known<CoordinateSpace>('viewport-cells', { source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'termwright-vt' }),
+        intendedRect: known(target.rect, { source: 'terminal', method: 'measured', strength: 'authoritative', providerId: 'termwright-vt' }),
+        visibleRect: known(this.#clip(target.rect), { source: 'driver', method: 'derived', strength: 'authoritative', providerId: 'termwright-driver' }),
       });
     }
     const qualifiedNode = this.#node(target);
@@ -260,39 +458,26 @@ export class LocatorImpl implements Locator {
         stamp,
         coordinateSpace:
           this.#ctx.semanticIndex()?.snapshot.coordinateSpace ??
-          Object.freeze({ status: 'unknown', reason: 'not-reported' } as const),
+          Object.freeze({ status: 'unsupported', capability: 'coordinate-space', reason: 'not-negotiated' } as const),
         intendedRect: qualifiedNode.geometry.intendedRect,
         visibleRect: qualifiedNode.geometry.visibleRect,
       });
     }
-    if (target.rect === null) {
-      const unknown = Object.freeze({ status: 'unknown', reason: 'not-reported' } as const);
-      return Object.freeze({ stamp, coordinateSpace: unknown, intendedRect: unknown, visibleRect: unknown });
-    }
-    // termwright/1 did not qualify whether bounds were intended, clipped or
-    // actually visible. Preserve that uncertainty rather than retroactively
-    // changing the v1 wire contract.
-    return Object.freeze({
-      stamp,
-      coordinateSpace: this.#ctx.semanticBoundsAreAbsolute()
-        ? known<CoordinateSpace>('viewport-cells', 'legacy-v1')
-        : known<CoordinateSpace>('framework-local-cells', 'legacy-v1'),
-      intendedRect: Object.freeze({ status: 'unknown', reason: 'legacy-unqualified' } as const),
-      visibleRect: Object.freeze({ status: 'unknown', reason: 'legacy-unqualified' } as const),
-    });
+    const unsupported = Object.freeze({ status: 'unsupported', capability: 'intended-geometry', reason: 'not-negotiated' } as const);
+    return Object.freeze({ stamp, coordinateSpace: unsupported, intendedRect: unsupported, visibleRect: unsupported });
   }
 
   async visibility(): Promise<LocatorVisibility> {
     const target = await this.#readStrict();
     const stamp = this.#stamp();
     if (target === null) {
-      const absent = Object.freeze({ status: 'absent', reason: 'detached' } as const);
+      const detached = absent<never>('detached', 'adapter');
       return Object.freeze({
         stamp,
         attached: known(false, 'adapter'),
-        displayed: absent,
-        viewport: absent,
-        offscreen: absent,
+        displayed: detached,
+        viewport: detached,
+        offscreen: detached,
       });
     }
     if (!target.semantic && target.rect !== null) {
@@ -310,7 +495,7 @@ export class LocatorImpl implements Locator {
       const intended = node.geometry.intendedRect;
       const visible = node.geometry.visibleRect;
       const displayed = node.geometry.displayed;
-      const notDisplayed = Object.freeze({ status: 'absent', reason: 'not-displayed' } as const);
+      const notDisplayed = absent<never>('not-displayed', displayed.status === 'known' ? displayed.evidence : 'adapter');
       const viewport: LocatorVisibility['viewport'] = displayed.status === 'known' && displayed.value === false
         ? notDisplayed
         : intended.status === 'known' && visible.status === 'known'
@@ -325,57 +510,42 @@ export class LocatorImpl implements Locator {
               intended.value.width === visible.value.width &&
               intended.value.height === visible.value.height,
           }, 'viewport-clip')
-        : visible.status === 'unsupported' || visible.status === 'absent'
-          ? visible
-          : Object.freeze({ status: 'unknown', reason: visible.status === 'unknown' ? visible.reason : 'not-reported' } as const);
+        : visible.status !== 'known'
+          ? withoutValue<ViewportIntersection>(visible)
+          : withoutValue<ViewportIntersection>(intended);
       const offscreen: LocatorVisibility['offscreen'] = displayed.status === 'known' && displayed.value === false
         ? notDisplayed
         : intended.status === 'known' && visible.status === 'known'
           ? known(intended.value.width * intended.value.height > 0 && visible.value.width * visible.value.height === 0, 'viewport-clip')
-          : visible.status === 'unsupported'
-            ? visible
-            : Object.freeze({ status: 'unknown', reason: visible.status === 'unknown' ? visible.reason : 'not-reported' } as const);
+          : visible.status !== 'known'
+            ? withoutValue<boolean>(visible)
+            : withoutValue<boolean>(intended);
       return Object.freeze({ stamp, attached: known(true, 'adapter'), displayed, viewport, offscreen });
     }
-    const hidden = node.state?.hidden;
-    const offscreen = node.state?.offscreen;
-    const displayed: Observation<boolean> = offscreen === true
-      ? known(true, 'probe')
-      : hidden === true
-        ? known(false, 'probe')
-        : hidden === false
-          ? known(true, 'probe')
-        : Object.freeze({ status: 'unknown', reason: 'not-reported' } as const);
-    const viewport: LocatorVisibility['viewport'] = offscreen === true
-      ? known({ rect: target.rect ?? { row: 0, column: 0, width: 0, height: 0 }, ratio: 0, fullyInside: false }, 'viewport-clip')
-      : Object.freeze({ status: 'unknown', reason: target.rect === null ? 'not-reported' : 'legacy-unqualified' } as const);
-    return Object.freeze({
-      stamp,
-      attached: known(true, 'adapter'),
-      displayed,
-      viewport,
-      offscreen: offscreen === true
-        ? known(true, 'probe')
-        : offscreen === false
-          ? known(false, 'probe')
-        : Object.freeze({ status: 'unknown', reason: 'clip-unobservable' } as const),
-    });
+    const unsupported = Object.freeze({ status: 'unsupported', capability: 'clipped-geometry', reason: 'not-negotiated' } as const);
+    return Object.freeze({ stamp, attached: known(true, 'adapter'), displayed: unsupported, viewport: unsupported, offscreen: unsupported });
   }
 
   async hitTest(opts?: { readonly position?: PointerOptions['position'] }): Promise<PointerHitTest> {
     const target = await this.#readStrict();
     const stamp = this.#stamp();
     if (target === null) {
-      const absent = Object.freeze({ status: 'absent', reason: 'detached' } as const);
-      return Object.freeze({ stamp, point: absent, receivesEvents: absent, recipient: absent });
+      const detached = absent<never>('detached', 'adapter');
+      return Object.freeze({ stamp, point: detached, receivesEvents: detached, recipient: detached });
     }
     if (target.rect === null) {
-      const absent = Object.freeze({ status: 'absent', reason: 'not-laid-out' } as const);
-      return Object.freeze({ stamp, point: absent, receivesEvents: absent, recipient: absent });
+      const notLaidOut = absent<never>('not-laid-out', 'adapter');
+      return Object.freeze({ stamp, point: notLaidOut, receivesEvents: notLaidOut, recipient: notLaidOut });
+    }
+    if (target.semantic && stamp.pairedScreenRevision !== stamp.screenRevision) {
+      const pairingFailure = this.#ctx.contract()?.capabilities['paired-revisions'].status === 'supported'
+        ? Object.freeze({ status: 'unknown', reason: 'stale-revision' } as const)
+        : Object.freeze({ status: 'unsupported', capability: 'paired-revisions', reason: 'not-negotiated' } as const);
+      return Object.freeze({ stamp, point: pairingFailure, receivesEvents: pairingFailure, recipient: pairingFailure });
     }
     const point = this.#center(target, opts?.position);
     const snapshot = this.#ctx.semanticIndex()?.snapshot;
-    if (snapshot?.v === 2 && snapshot.hitGrid !== undefined) {
+    if (snapshot !== undefined) {
       if (snapshot.hitGrid.status !== 'known') {
         return Object.freeze({
           stamp,
@@ -389,8 +559,8 @@ export class LocatorImpl implements Locator {
         point.column >= rect.column && point.column < rect.column + rect.width,
       );
       if (owner === undefined) {
-        const absent = Object.freeze({ status: 'absent', reason: 'not-laid-out' } as const);
-        return Object.freeze({ stamp, point: known(point, 'hit-grid'), receivesEvents: known(false, 'hit-grid'), recipient: absent });
+        const noRecipient = absent<string>('not-laid-out', 'hit-grid');
+        return Object.freeze({ stamp, point: known(point, 'hit-grid'), receivesEvents: known(false, 'hit-grid'), recipient: noRecipient });
       }
       const targetId = target.ref.split('@')[0] ?? '';
       return Object.freeze({
@@ -400,18 +570,27 @@ export class LocatorImpl implements Locator {
         recipient: known(owner.recipientId, 'hit-grid'),
       });
     }
-    // v1's occlusion flag says that paint order was observable. It does not
-    // identify the topmost recipient at this point, so it can never prove a
-    // click reaches the selected node.
-    const unknown = Object.freeze({ status: 'unknown', reason: 'legacy-unqualified' } as const);
-    return Object.freeze({ stamp, point: known(point, 'legacy-v1'), receivesEvents: unknown, recipient: unknown });
+    const unsupported = Object.freeze({ status: 'unsupported', capability: 'pointer-hit-testing', reason: 'not-negotiated' } as const);
+    return Object.freeze({ stamp, point: known(point, 'probe'), receivesEvents: unsupported, recipient: unsupported });
   }
 
   async cellSnapshot(opts: LocatorCellSnapshotOptions = {}): Promise<LocatorCellSnapshot> {
     const geometry = await this.geometry();
+    if (this.#expr.domain === 'semantic' && geometry.stamp.pairedScreenRevision !== geometry.stamp.screenRevision) {
+      if (this.#ctx.contract()?.capabilities['paired-revisions'].status === 'supported') {
+        throw new StaleSnapshotError(
+          'cellSnapshot() semantic geometry is waiting for its committed terminal frame',
+          this.#ctx.errorDiagnostics({ suggestion: 'retry after the paired observation commits' }),
+        );
+      }
+      throw new CapabilityUnavailableError(
+        'cellSnapshot() requires semantic geometry paired with the committed terminal frame',
+        this.#ctx.errorDiagnostics({ suggestion: 'use a certified adapter that negotiates render-revisions' }),
+      );
+    }
     const observation = opts.box === 'intended' ? geometry.intendedRect : geometry.visibleRect;
     if (observation.status !== 'known') {
-      throw new UnsupportedActionError(
+      throw new CapabilityUnavailableError(
         `cellSnapshot() needs known ${opts.box ?? 'visible'} bounds; received ${observation.status}`,
         this.#ctx.errorDiagnostics({ suggestion: 'use a grid locator or a probe that publishes qualified viewport geometry' }),
       );
@@ -458,15 +637,8 @@ export class LocatorImpl implements Locator {
   }
 
   /** Evaluates without propagating a parent-scope timeout: no scope, no matches. */
-  async #tryEvaluate(deadline: number): Promise<ResolvedTarget[]> {
-    let scope: ResolvedTarget | null;
-    try {
-      scope = await this.#resolveScope(deadline);
-    } catch (error) {
-      if (error instanceof TimeoutError) return [];
-      throw error;
-    }
-    return this.#evaluate(scope);
+  async #tryEvaluate(_deadline: number): Promise<ResolvedTarget[]> {
+    return this.#evaluate(this.#expr, null);
   }
 
   /** Immediate strict observation: zero is detached; ambiguity is an error. */
@@ -478,11 +650,7 @@ export class LocatorImpl implements Locator {
   }
 
   #stamp(): ObservationStamp {
-    return Object.freeze({
-      sessionId: this.#ctx.sessionId,
-      screenRevision: this.#ctx.screenRevision(),
-      semanticRevision: this.#ctx.semanticIndex()?.snapshot.revision ?? null,
-    });
+    return this.#ctx.checkpoint();
   }
 
   async textContent(): Promise<string> {
@@ -500,7 +668,13 @@ export class LocatorImpl implements Locator {
   async semanticState(): Promise<SemanticState | null> {
     const target = await this.resolve();
     if (!target.semantic) return null;
-    return this.#node(target).state ?? null;
+    return this.#node(target).state ?? {};
+  }
+
+  async semanticValue(): Promise<string | null> {
+    const target = await this.resolve();
+    if (!target.semantic) return null;
+    return this.#node(target).value ?? null;
   }
 
   async extendedState(): Promise<SemanticExtendedState | null> {
@@ -512,136 +686,144 @@ export class LocatorImpl implements Locator {
   // -------------------------------------------------------------------------
   // Actions
 
-  async click(opts?: PointerOptions): Promise<void> {
-    await this.#act('click', (record) => this.#pointer(opts, 1, record));
+  async click(opts?: PointerOptions): Promise<ActionReceipt> {
+    return this.#act('click', (record, actionId) => this.#plannedPointer({ kind: 'click', selector: this.description }, opts, record, actionId));
   }
 
-  async doubleClick(opts?: PointerOptions): Promise<void> {
-    await this.#act('doubleClick', (record) => this.#pointer(opts, 2, record));
+  async doubleClick(opts?: PointerOptions): Promise<ActionReceipt> {
+    return this.#act('doubleClick', (record, actionId) => this.#plannedPointer({ kind: 'double-click', selector: this.description }, opts, record, actionId));
   }
 
-  async dragTo(target: Locator, opts?: WaitOptions): Promise<void> {
-    return this.#act('dragTo', (record) => this.#dragTo(target, record, opts));
+  async hover(opts?: PointerOptions): Promise<ActionReceipt> {
+    return this.#act('hover', (record, actionId) => this.#plannedPointer({ kind: 'hover', selector: this.description }, opts, record, actionId));
+  }
+
+  async actionability(
+    action: 'click' | 'double-click' | 'hover' | 'focus' | 'activate' | 'press' | 'type' | 'fill' | 'check' | 'uncheck',
+    opts?: PointerOptions & { readonly value?: string },
+  ): Promise<ActionabilityExplanation> {
+    const target = await this.resolve(opts);
+    return new ActionPlanner(this.#ctx).explain(
+      { kind: action, selector: this.description, targetRef: target.ref },
+      target,
+      opts,
+      opts?.value,
+    );
+  }
+
+  async dragTo(target: Locator, opts?: LocatorDragOptions): Promise<ActionReceipt> {
+    return this.#act('dragTo', (record, actionId) => this.#dragTo(target, record, actionId, opts));
   }
 
   async #dragTo(
     target: Locator,
     record: (t: ResolvedTarget) => void,
-    opts?: WaitOptions,
-  ): Promise<void> {
+    actionId: string,
+    opts?: LocatorDragOptions,
+  ): Promise<ActionReceipt> {
     const raw = unwrap(target);
     if (!(raw instanceof LocatorImpl)) {
-      throw new UnsupportedActionError('dragTo() requires a locator created by this harness', this.#ctx.errorDiagnostics());
+      throw new TypeError('dragTo() requires a locator created by this harness');
     }
-    const source = await this.#actionTarget('dragTo', opts);
+    const source = await this.resolve(opts);
     record(source);
-    this.#assertPointable(source);
-    const from = this.#center(source);
-    const destination = await raw.#actionTarget('dragTo', opts);
-    raw.#assertPointable(destination);
-    const to = this.#center(destination);
-    await this.#dragBetween(from, to);
-  }
-
-  async drag(opts: { from: { row: number; column: number }; to: { row: number; column: number } }): Promise<void> {
-    await this.#act('drag', () => this.#dragBetween(opts.from, opts.to));
-  }
-
-  async #dragBetween(
-    from: { row: number; column: number },
-    to: { row: number; column: number },
-  ): Promise<void> {
-    const opts = { from, to };
-    this.#ctx.assertOpen();
-    const modes = this.#ctx.modes();
-    const events: MouseEvent[] = [
-      { kind: 'press', button: 'left', row: opts.from.row, column: opts.from.column },
-      { kind: 'move', button: 'left', row: opts.to.row, column: opts.to.column, dragging: true },
-      { kind: 'release', button: 'left', row: opts.to.row, column: opts.to.column },
-    ];
-    await this.#ctx.sendInput(
-      concatBytes(events.map((event) => encodeMouse(event, modes))),
-      'mouse',
+    const destination = await raw.resolve(opts);
+    const { plan } = new ActionPlanner(this.#ctx).planDrag(
+      actionId,
+      { kind: 'drag', selector: this.description, targetRef: source.ref },
+      source,
+      destination,
+      opts,
     );
+    return this.#executePlan(plan);
   }
 
-  async wheel(opts: { deltaY: number; deltaX?: number }): Promise<void> {
-    await this.#act('wheel', (record) => this.#wheel(opts, record));
+  async wheel(opts: LocatorWheelOptions): Promise<ActionReceipt> {
+    return this.#act('wheel', (record, actionId) => this.#wheel(opts, record, actionId));
   }
 
   async #wheel(
-    opts: { deltaY: number; deltaX?: number },
+    opts: LocatorWheelOptions,
     record: (target: ResolvedTarget) => void,
-  ): Promise<void> {
-    const target = await this.#actionTarget('wheel');
+    actionId: string,
+  ): Promise<ActionReceipt> {
+    const target = await this.resolve(opts);
     record(target);
-    this.#assertPointable(target);
-    const { row, column } = this.#center(target);
-    const modes = this.#ctx.modes();
-    const steps = Math.min(Math.abs(Math.trunc(opts.deltaY)), MAX_WHEEL_STEPS);
-    if (steps === 0) return;
-    const event: MouseEvent = { kind: 'wheel', row, column, wheelDelta: opts.deltaY };
-    const bytes = Array.from({ length: steps }, () => encodeMouse(event, modes));
-    await this.#ctx.sendInput(concatBytes(bytes), 'mouse');
-  }
-
-  async press(keys: string, opts?: WaitOptions): Promise<void> {
-    await this.#act('press', async () => {
-      await this.#ensureFocused('press', opts);
-      await this.#ctx.sendInput(encodeKeys(keys, this.#ctx.modes()), 'key');
-    });
-  }
-
-  async type(text: string, opts?: WaitOptions): Promise<void> {
-    await this.#act('type', async () => {
-      await this.#ensureFocused('type', opts);
-      await this.#ctx.sendInput(encodeText(text), 'key');
-    });
-  }
-
-  async focusNode(opts?: WaitOptions): Promise<void> {
-    await this.#act('focusNode', async (record) => {
-      const target = await this.#actionTarget('focusNode', opts);
-      record(target);
-      if (target.semantic && this.#node(target).state?.focused === true) return;
-      await this.#clickTarget(target, 'left', 1);
-    });
-  }
-
-  async activate(opts?: WaitOptions): Promise<ActivateReceipt> {
-    return this.#act('activate', (record) => this.#activate(record, opts));
-  }
-
-  async #activate(record: (t: ResolvedTarget) => void, opts?: WaitOptions): Promise<ActivateReceipt> {
-    const target = await this.#actionTarget('activate', opts, false);
-    record(target);
-    const node = target.semantic ? this.#node(target) : null;
-    const focused = node?.state?.focused === true;
-
-    if (focused) {
-      const strategy = node !== null && (node.role === 'checkbox' || node.role === 'radio')
-        ? 'focus-space'
-        : 'focus-enter';
-      await this.#ctx.sendInput(
-        encodeKeys(strategy === 'focus-space' ? 'Space' : 'Enter', this.#ctx.modes()),
-        'key',
-      );
-      return Object.freeze({ strategy, ref: target.ref });
-    }
-
-    if (this.#ctx.modes().mouseTracking !== 'none' && target.rect !== null) {
-      await this.#clickTarget(target, 'left', 1);
-      return Object.freeze({ strategy: 'click' as const, ref: target.ref });
-    }
-
-    throw new UnsupportedActionError(
-      `activate() cannot reach ${this.description}: the node is not focused and mouse input is unavailable`,
-      this.#ctx.errorDiagnostics({
-        candidates: [target],
-        suggestion:
-          'move focus with press() first, or run the application under test with mouse reporting enabled',
-      }),
+    const { plan } = new ActionPlanner(this.#ctx).planWheel(
+      actionId,
+      { kind: 'wheel', selector: this.description, targetRef: target.ref },
+      target,
+      opts,
     );
+    return this.#executePlan(plan);
+  }
+
+  async press(keys: string, opts?: WaitOptions): Promise<ActionReceipt> {
+    return this.#act('press', async (record, actionId) => {
+      const target = await this.resolve(opts); record(target);
+      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'press', selector: this.description, targetRef: target.ref }, target, keys));
+    });
+  }
+
+  async type(text: string, opts?: WaitOptions): Promise<ActionReceipt> {
+    return this.#act('type', async (record, actionId) => {
+      const target = await this.resolve(opts); record(target);
+      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'type', selector: this.description, targetRef: target.ref }, target, text));
+    });
+  }
+
+  async fill(text: string, opts?: WaitOptions): Promise<ActionReceipt> {
+    return this.#act('fill', async (record, actionId) => {
+      const target = await this.resolve(opts); record(target);
+      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'fill', selector: this.description, targetRef: target.ref }, target, text));
+    });
+  }
+
+  async focus(opts?: WaitOptions): Promise<ActionReceipt> {
+    return this.#act('focus', async (record, actionId) => {
+      const target = await this.resolve(opts); record(target);
+      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'focus', selector: this.description, targetRef: target.ref }, target));
+    });
+  }
+
+  async activate(opts?: WaitOptions): Promise<ActionReceipt> {
+    return this.#act('activate', async (record, actionId) => {
+      const target = await this.resolve(opts); record(target);
+      return this.#executePlan(new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: 'activate', selector: this.description, targetRef: target.ref }, target));
+    });
+  }
+
+  async check(opts?: WaitOptions): Promise<ActionReceipt> {
+    return this.#checkedAction(true, opts);
+  }
+
+  async uncheck(opts?: WaitOptions): Promise<ActionReceipt> {
+    return this.#checkedAction(false, opts);
+  }
+
+  async #checkedAction(value: boolean, opts?: WaitOptions): Promise<ActionReceipt> {
+    const api = value ? 'check' : 'uncheck';
+    return this.#act(api, async (record, actionId) => {
+      const target = await this.resolve(opts); record(target);
+      const plan = new ActionPlanner(this.#ctx).planKeyboard(actionId, { kind: value ? 'check' : 'uncheck', selector: this.description, targetRef: target.ref }, target);
+      const receipt = await this.#executePlan(plan);
+      if (plan.operations.length > 0) {
+        const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
+        for (;;) {
+          const remaining = Math.max(1, deadline - Date.now());
+          const current = await this.resolve({ timeout: remaining });
+          const node = current.semantic
+            ? this.#ctx.semanticNode(current.ref.split('@')[0] ?? '')
+            : undefined;
+          if (node?.state?.checked === value) break;
+          if (Date.now() >= deadline) {
+            throw new TimeoutError(`${api}() did not observe checked=${String(value)} after the physical action`, this.#ctx.errorDiagnostics({ candidates: [target] }));
+          }
+          await this.#ctx.waitForChange(deadline);
+        }
+      }
+      return Object.freeze({ ...receipt, after: this.#ctx.checkpoint() });
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -655,188 +837,76 @@ export class LocatorImpl implements Locator {
    * a locator is reused, and a ref left over from a previous action would
    * attach itself to the next one.
    */
-  async #act<T>(api: string, run: (record: (target: ResolvedTarget) => void) => Promise<T>): Promise<T> {
+  async #act(
+    api: string,
+    run: (record: (target: ResolvedTarget) => void, actionId: string) => Promise<ActionReceipt>,
+  ): Promise<ActionReceipt> {
     const actionId = this.#ctx.beginAction(api, { selector: this.description });
     let ref: string | undefined;
     const record = (target: ResolvedTarget): void => {
       ref = target.ref;
     };
     try {
-      const result = await run(record);
-      this.#ctx.endAction(actionId, api, true, { selector: this.description, ...(ref !== undefined ? { ref } : {}) });
+      const result = await run(record, actionId);
+      this.#ctx.endAction(actionId, api, true, {
+        selector: this.description,
+        ...(ref !== undefined ? { ref } : {}),
+        receipt: result,
+      });
       return result;
     } catch (error) {
       this.#ctx.endAction(actionId, api, false, {
         selector: this.description,
         ...(ref !== undefined ? { ref } : {}),
         error: error instanceof TermwrightError ? error.code : error instanceof Error ? error.name : 'unknown',
+        ...(error instanceof TermwrightError && error.actionability !== undefined
+          ? { actionability: error.actionability }
+          : {}),
       });
       throw error;
     }
   }
 
-  async #pointer(
+  async #plannedPointer(
+    intent: ActionIntent,
     opts: PointerOptions | undefined,
-    clicks: number,
     record: (target: ResolvedTarget) => void,
-  ): Promise<void> {
-    const target = await this.#actionTarget('click', opts);
-    record(target);
-    await this.#clickTarget(target, opts?.button ?? 'left', clicks, opts?.position);
-  }
-
-  /** Refuses pointer input unless the exact recipient is observable. */
-  #assertPointable(target: ResolvedTarget, position?: PointerOptions['position']): void {
-    if (!target.semantic) return;
-    if (!this.#ctx.semanticBoundsAreAbsolute()) {
-      throw new UnsupportedActionError(
-        `${this.description} cannot be targeted by pointer: the producer did not promise absolute bounds`,
-        this.#ctx.errorDiagnostics({
-          candidates: [target],
-          suggestion:
-            "drive the widget with press()/keyboard locators, or use an adapter that announces 'absolute-bounds'",
-        }),
-      );
-    }
-    const snapshot = this.#ctx.semanticIndex()?.snapshot;
-    if (snapshot?.v === 2) {
-      const point = this.#center(target, position);
-      if (snapshot.hitGrid?.status !== 'known') {
-        throw new UnsupportedActionError(
-          `${this.description} cannot be clicked safely: exact pointer ownership is ${snapshot.hitGrid?.status ?? 'not reported'}`,
-          this.#ctx.errorDiagnostics({
-            candidates: [target],
-            suggestion: 'use keyboard input or a producer that publishes an exact pointer hit grid',
-          }),
-        );
-      }
-      const owner = snapshot.hitGrid.value.regions.find(({ rect }) =>
-        point.row >= rect.row && point.row < rect.row + rect.height &&
-        point.column >= rect.column && point.column < rect.column + rect.width,
-      );
-      const targetId = target.ref.split('@')[0] ?? '';
-      if (owner?.recipientId !== targetId) {
-        throw new UnsupportedActionError(
-          `${this.description} cannot receive pointer input at (${point.row}, ${point.column}); actual recipient is ${owner?.recipientId ?? 'none'}`,
-          this.#ctx.errorDiagnostics({ candidates: [target] }),
-        );
-      }
-      return;
-    }
-    throw new UnsupportedActionError(
-      `${this.description} cannot be clicked safely: termwright/1 does not identify which node receives input when cells are covered`,
-      this.#ctx.errorDiagnostics({
-        candidates: [target],
-        suggestion:
-          'drive the widget with press()/keyboard locators; paint-order knowledge alone cannot prove which node receives the click',
-      }),
-    );
-  }
-
-  async #clickTarget(
-    target: ResolvedTarget,
-    button: MouseButton,
-    clicks: number,
-    position?: PointerOptions['position'],
-  ): Promise<void> {
-    this.#assertFreshTarget(target);
-    this.#assertPointable(target, position);
-    const modes = this.#ctx.modes();
-    const { row, column } = this.#center(target, position);
-    const events: MouseEvent[] = [];
-    for (let click = 0; click < clicks; click += 1) {
-      events.push({ kind: 'press', button, row, column });
-      if (modes.mouseTracking !== 'x10') events.push({ kind: 'release', button, row, column });
-    }
-    await this.#ctx.sendInput(concatBytes(events.map((event) => encodeMouse(event, modes))), 'mouse');
-  }
-
-  #assertFreshTarget(target: ResolvedTarget): void {
-    const live = target.semantic ? this.#ctx.semanticRevision() : this.#ctx.screenRevision();
-    if (target.revision === live) return;
-    throw new StaleSnapshotError(
-      `${this.description} advanced from revision ${target.revision} to ${live} before pointer input could be sent`,
-      this.#ctx.errorDiagnostics({
-        candidates: [target],
-        suggestion: 'retry the action so it resolves geometry and pointer ownership from one current observation',
-      }),
-    );
-  }
-
-  /**
-   * Resolves and runs the pre-flight checks shared by every physical action.
-   *
-   * @param needsBounds - whether the action must land on a cell. Keyboard-only
-   * paths (`press`, `type`, and `activate` on an already-focused node) work on
-   * trees that carry no coordinates at all, which is a legal adapter state.
-   */
-  async #actionTarget(action: string, opts?: WaitOptions, needsBounds = true): Promise<ResolvedTarget> {
-    const target = await this.resolve(opts);
-    if (target.semantic) {
-      const node = this.#node(target);
-      if (node.state?.disabled === true) {
-        throw new UnsupportedActionError(
-          `${action}() refused: ${this.description} is disabled`,
-          this.#ctx.errorDiagnostics({ candidates: [target] }),
-        );
-      }
-      if (node.state?.hidden === true) {
-        throw new UnsupportedActionError(
-          `${action}() refused: ${this.description} is hidden`,
-          this.#ctx.errorDiagnostics({ candidates: [target] }),
-        );
+    actionId: string,
+  ): Promise<ActionReceipt> {
+    const deadline = Date.now() + (opts?.timeout ?? this.#ctx.timeouts.action);
+    for (;;) {
+      const target = await this.resolve({ ...opts, timeout: Math.max(1, deadline - Date.now()) });
+      record(target);
+      try {
+        const { plan } = new ActionPlanner(this.#ctx).planPointer(actionId, { ...intent, targetRef: target.ref }, target, opts);
+        return this.#executePlan(plan);
+      } catch (error) {
+        // Planning has not emitted input yet. A render committed between lazy
+        // locator resolution and evidence collection, so wait for the next
+        // paired observation and resolve the locator again instead of using
+        // stale coordinates or surfacing a race to the test author.
+        if (!(error instanceof StaleSnapshotError) || Date.now() >= deadline) throw error;
+        await this.#ctx.waitForChange(deadline);
       }
     }
-    if (target.rect === null && needsBounds) {
-      throw new UnsupportedActionError(
-        `${action}() needs bounds, but ${this.description} was published without them`,
-        this.#ctx.errorDiagnostics({
-          candidates: [target],
-          suggestion:
-            'the adapter did not announce the bounds capability; drive this node with press()/type() instead',
-        }),
-      );
-    }
-    if (target.rect !== null && !this.#inViewport(target.rect)) {
-      throw new UnsupportedActionError(
-        `${action}() refused: ${this.description} lies outside the viewport`,
-        this.#ctx.errorDiagnostics({ candidates: [target] }),
-      );
-    }
-    return target;
   }
 
-  /** Brings the node into focus when the tree says it is focusable and unfocused. */
-  async #ensureFocused(action: string, opts?: WaitOptions): Promise<void> {
-    const index = this.#ctx.semanticIndex();
-    if (index === null) return; // generic session: keystrokes go to whatever has focus
-    const target = await this.resolve(opts);
-    if (!target.semantic) return;
-    const node = this.#node(target);
-    if (node.state?.focused === true) return;
-    if (node.state?.disabled === true) {
-      throw new UnsupportedActionError(
-        `${action}() refused: ${this.description} is disabled`,
-        this.#ctx.errorDiagnostics({ candidates: [target] }),
-      );
-    }
-    if (this.#ctx.modes().mouseTracking !== 'none' && target.rect !== null) {
-      await this.#clickTarget(target, 'left', 1);
-      return;
-    }
-    throw new UnsupportedActionError(
-      `${action}() refused: ${this.description} is not focused and cannot be focused physically`,
-      this.#ctx.errorDiagnostics({
-        candidates: [target],
-        suggestion: 'move focus with harness.press() (Tab, arrows) before typing into this node',
-      }),
-    );
+  async #executePlan(plan: ActionPlan): Promise<ActionReceipt> {
+    const executed = await this.#ctx.executeDeviceOperations(plan.operations, plan.checkpoint);
+    return Object.freeze({
+      intent: plan.intent,
+      plan,
+      before: plan.checkpoint,
+      after: this.#ctx.checkpoint(),
+      executed,
+      outcome: 'completed',
+    });
   }
 
   #center(target: ResolvedTarget, position?: PointerOptions['position']): { row: number; column: number } {
     const rect = target.rect;
     if (rect === null) {
-      throw new UnsupportedActionError(
+      throw new CapabilityUnavailableError(
         `${this.description} has no bounds, so it has no clickable cell`,
         this.#ctx.errorDiagnostics({ candidates: [target] }),
       );
@@ -879,21 +949,115 @@ export class LocatorImpl implements Locator {
     return Object.freeze({ rect: clipped, ratio: area === 0 ? 0 : visible / area, fullyInside: area > 0 && visible === area });
   }
 
-  #knownVisibleState(target: ResolvedTarget): boolean | null {
-    if (!target.semantic) return target.rect !== null && this.#inViewport(target.rect);
-    const node = this.#ctx.semanticIndex()?.node(target.ref.split('@')[0] ?? '');
-    if (node === undefined) return false;
-    if (node.geometry !== undefined) {
-      if (node.geometry.displayed.status === 'known' && node.geometry.displayed.value === false) return false;
-      if (node.geometry.visibleRect.status === 'known') {
-        return node.geometry.visibleRect.value.width > 0 && node.geometry.visibleRect.value.height > 0;
-      }
-      return null;
+  #observeCondition(condition: LeafCondition, target: ResolvedTarget | null): Observation<boolean> {
+    const kind = condition.kind;
+    const capability = this.#expr.domain === 'semantic' ? 'semantic-tree' : 'keyboard-input';
+    const availability = this.#ctx.contract()?.capabilities[capability];
+    if (availability?.status !== 'supported') {
+      return Object.freeze({ status: 'unsupported', capability, reason: availability?.reason === 'framework-unobservable' ? 'framework-unobservable' : availability?.reason === undefined || availability.reason === 'not-negotiated' ? 'not-negotiated' : 'capability' });
     }
-    if (node.state?.hidden === true) return false;
-    // v1 bounds do not say whether they are intended or clipped, and absence
-    // does not mean on-screen. Both are unknown rather than a guessed true.
-    return null;
+    const bool = (value: boolean, evidence: EvidenceProvenance = availability.evidence): Observation<boolean> =>
+      Object.freeze({ status: 'known', value, evidence });
+    if (kind === 'attached' || kind === 'detached') return bool(kind === 'attached' ? target !== null : target === null);
+    if (target === null) {
+      return absent<boolean>('detached', availability.evidence);
+    }
+    if (!target.semantic) {
+      if (kind === 'displayed') return bool(true);
+      if (kind === 'hidden') return bool(false);
+      if (kind === 'visible' || kind === 'in-viewport' || kind === 'offscreen') {
+        const ratio = target.rect === null ? 0 : this.#viewport(target.rect).ratio;
+        return bool(kind === 'offscreen' ? ratio === 0 : kind === 'visible' ? ratio > 0 : ratio >= (condition.kind === 'in-viewport' ? condition.minRatio : 0));
+      }
+      return Object.freeze({ status: 'unsupported', capability: kind, reason: 'capability' });
+    }
+    const node = this.#ctx.semanticIndex()?.node(target.ref.split('@')[0] ?? '');
+    if (node === undefined) return absent<boolean>('detached', availability.evidence);
+    const displayed = node.geometry.displayed;
+    if (kind === 'displayed' || kind === 'hidden') {
+      return displayed.status === 'known'
+        ? bool(kind === 'displayed' ? displayed.value : !displayed.value, displayed.evidence)
+        : withoutValue<boolean>(displayed);
+    }
+    if (kind === 'visible' || kind === 'in-viewport' || kind === 'offscreen') {
+      if (displayed.status !== 'known') return withoutValue<boolean>(displayed);
+      if (!displayed.value) return bool(kind === 'offscreen' ? false : false, displayed.evidence);
+      const intended = node.geometry.intendedRect;
+      const visible = node.geometry.visibleRect;
+      if (intended.status !== 'known') return withoutValue<boolean>(intended);
+      if (visible.status !== 'known') return withoutValue<boolean>(visible);
+      const intendedArea = intended.value.width * intended.value.height;
+      const visibleArea = visible.value.width * visible.value.height;
+      const ratio = intendedArea === 0 ? 0 : visibleArea / intendedArea;
+      return bool(kind === 'offscreen' ? intendedArea > 0 && visibleArea === 0 : kind === 'visible' ? visibleArea > 0 : ratio >= (condition.kind === 'in-viewport' ? condition.minRatio : 0), visible.evidence);
+    }
+    if (kind === 'pointer-input') {
+      const pointer = this.#ctx.contract()?.capabilities['pointer-input'];
+      return pointer?.status === 'supported'
+        ? bool(true, pointer.evidence)
+        : Object.freeze({ status: 'unsupported', capability: kind, reason: pointer?.reason === 'not-negotiated' || pointer === undefined ? 'not-negotiated' : 'capability' });
+    }
+    if (kind === 'mouse-input-enabled') {
+      const modes = this.#ctx.modes();
+      const evidence = Object.freeze({ source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'termwright-vt' } as const);
+      return modes.mouseTracking === 'unknown' || modes.mouseEncoding === 'unknown'
+        ? Object.freeze({ status: 'unknown', reason: 'provider-refresh' })
+        : bool(modes.mouseTracking !== 'none', evidence);
+    }
+    if (kind === 'pointer-region' || kind === 'receives-pointer') {
+      const pointer = this.#ctx.contract()?.capabilities[kind === 'pointer-region' ? 'pointer-geometry' : 'pointer-hit-testing'];
+      if (pointer?.status !== 'supported') {
+        if (kind === 'receives-pointer') {
+          const nodeId = target.ref.split('@')[0] ?? '';
+          const region = this.#ctx.pointerRegion(nodeId);
+          if (region !== undefined && isAuthoritativeRegionOwnership(this.#ctx.contract(), region.evidence)) {
+            return bool(region.spans.length > 0, region.evidence);
+          }
+        }
+        return Object.freeze({ status: 'unsupported', capability: kind, reason: pointer?.reason === 'framework-unobservable' ? 'framework-unobservable' : pointer?.reason === 'not-negotiated' || pointer === undefined ? 'not-negotiated' : 'capability' });
+      }
+      const nodeId = target.ref.split('@')[0] ?? '';
+      const region = this.#ctx.pointerRegion(nodeId);
+      if (kind === 'pointer-region') return bool(region !== undefined && region.spans.length > 0, pointer.evidence);
+      const grid = this.#ctx.hitGrid();
+      if (grid === undefined) return Object.freeze({ status: 'unknown', reason: 'provider-refresh' });
+      if (grid.status !== 'known') return withoutValue<boolean>(grid);
+      if (region === undefined) return bool(false, grid.evidence);
+      const receives = region.spans.some((span) => grid.value.regions.some((hit) =>
+        hit.recipientId === nodeId && span.row >= hit.rect.row && span.row < hit.rect.row + hit.rect.height &&
+        Math.max(span.from, hit.rect.column) < Math.min(span.to, hit.rect.column + hit.rect.width),
+      ));
+      return bool(receives, grid.evidence);
+    }
+    const stateEvidence = this.#ctx.contract()?.capabilities[kind === 'focused' ? 'focus' : 'semantic-tree'];
+    if (stateEvidence?.status !== 'supported') {
+      return Object.freeze({ status: 'unsupported', capability: kind, reason: stateEvidence?.reason === 'framework-unobservable' ? 'framework-unobservable' : stateEvidence?.reason === 'not-negotiated' || stateEvidence === undefined ? 'not-negotiated' : 'capability' });
+    }
+    const state = node.state ?? {};
+    if (kind === 'focused') return bool(state.focused === true, stateEvidence.evidence);
+    if (kind === 'enabled' || kind === 'disabled') return bool(kind === 'enabled' ? state.disabled !== true : state.disabled === true, stateEvidence.evidence);
+    if (kind === 'checked') return state.checked === undefined
+      ? Object.freeze({ status: 'unsupported', capability: 'checked-state', reason: 'capability' })
+      : bool(state.checked === condition.value, stateEvidence.evidence);
+    if (kind === 'selected') return state.selected === undefined
+      ? Object.freeze({ status: 'unsupported', capability: 'selected-state', reason: 'capability' })
+      : bool(state.selected === condition.value, stateEvidence.evidence);
+    if (kind === 'expanded') return state.expanded === undefined
+      ? Object.freeze({ status: 'unsupported', capability: 'expanded-state', reason: 'capability' })
+      : bool(state.expanded === condition.value, stateEvidence.evidence);
+    if (kind === 'collapsed') return state.expanded === undefined
+      ? Object.freeze({ status: 'unsupported', capability: 'expanded-state', reason: 'capability' })
+      : bool(state.expanded === false, stateEvidence.evidence);
+    if (kind === 'value') {
+      const value = node.value;
+      if (value === undefined) return Object.freeze({ status: 'unsupported', capability: 'semantic-value', reason: 'capability' });
+      const matcher = condition.matcher;
+      const matches = matcher.kind === 'regex'
+        ? new RegExp(matcher.source, matcher.flags.replace(/[gy]/gu, '')).test(value)
+        : matcher.kind === 'exact' ? value === matcher.text : value.includes(matcher.text);
+      return bool(matches, stateEvidence.evidence);
+    }
+    return Object.freeze({ status: 'unsupported', capability: kind, reason: 'capability' });
   }
 
   /** Re-reads the node behind a ref; a vanished stable identity is stale. */
@@ -912,17 +1076,60 @@ export class LocatorImpl implements Locator {
     return node;
   }
 
-  /** Resolves the parent locator, when the query is scoped with `within()`. */
-  async #resolveScope(deadline: number): Promise<ResolvedTarget | null> {
-    const parent = this.#state.parent;
-    if (parent === undefined) return null;
-    return parent.resolve({ timeout: Math.max(0, deadline - Date.now()) });
+  #evaluate(expr: LocatorExpr, scope: ResolvedTarget | null): ResolvedTarget[] {
+    switch (expr.kind) {
+      case 'leaf':
+        return expr.query.kind === 'semantic'
+          ? this.#evaluateSemantic(expr.query, scope)
+          : expr.query.kind === 'ref'
+            ? this.#evaluateRef(expr.query)
+            : this.#evaluateGeneric(expr.query, scope);
+      case 'descendant': {
+        const parents = this.#evaluate(expr.parent, scope);
+        return parents.flatMap((parent) => this.#evaluate(expr.child, parent));
+      }
+      case 'select': {
+        const matches = this.#evaluate(expr.source, scope);
+        const match = expr.index === 'last' ? matches.at(-1) : matches[expr.index];
+        return match === undefined ? [] : [match];
+      }
+      case 'filter':
+        return this.#evaluate(expr.source, scope).filter((target) => this.#matchesFilter(target, expr.filter));
+      case 'and': {
+        const left = this.#evaluate(expr.left, scope);
+        const rightRefs = new Set(this.#evaluate(expr.right, scope).map((target) => target.ref));
+        return left.filter((target) => rightRefs.has(target.ref));
+      }
+      case 'or': {
+        const left = this.#evaluate(expr.left, scope);
+        const refs = new Set(left.map((target) => target.ref));
+        return [...left, ...this.#evaluate(expr.right, scope).filter((target) => !refs.has(target.ref))];
+      }
+    }
   }
 
-  #evaluate(scope: ResolvedTarget | null): ResolvedTarget[] {
-    if (this.#query.kind === 'semantic') return this.#evaluateSemantic(this.#query, scope);
-    if (this.#query.kind === 'ref') return this.#evaluateRef(this.#query);
-    return this.#evaluateGeneric(this.#query, scope);
+  #matchesFilter(target: ResolvedTarget, filter: LocatorFilter): boolean {
+    if (filter.hasText !== undefined) {
+      const text = target.semantic
+        ? (() => {
+            const index = this.#ctx.semanticIndex();
+            const node = index?.node(target.ref.split('@')[0] ?? '');
+            if (node === undefined) return '';
+            const nodes = [node, ...(index?.nodes.filter((candidate) => index.isDescendantOf(candidate, node.id)) ?? [])];
+            return nodes.flatMap((candidate) => [candidate.name, candidate.value, index?.label(candidate)]).filter(Boolean).join(' ');
+          })()
+        : target.rect === null ? '' : textInRect(this.#ctx.rows(), target.rect);
+      const matcher = filter.hasText;
+      const matches = matcher.kind === 'regex'
+        ? new RegExp(matcher.source.source, matcher.source.flags.replace(/[gy]/gu, '')).test(text)
+        : matcher.kind === 'exact'
+          ? text.trim() === matcher.text.trim()
+          : text.toLowerCase().includes(matcher.text.trim().toLowerCase());
+      if (!matches) return false;
+    }
+    if (filter.has !== undefined && this.#evaluate(filter.has, target).length === 0) return false;
+    if (filter.hasNot !== undefined && this.#evaluate(filter.hasNot, target).length > 0) return false;
+    return true;
   }
 
   /** Resolves a grid ref in its frame, or a semantic ref by producer identity. */
@@ -946,7 +1153,7 @@ export class LocatorImpl implements Locator {
       const violation = this.#ctx.semanticViolation();
       if (violation !== null) throw violation;
       if (this.#ctx.semanticPossible()) return [];
-      throw new UnsupportedActionError(
+      throw new SemanticCapabilityUnavailableError(
         `${query.description} needs a semantic tree, but this session has none`,
         this.#ctx.errorDiagnostics({
           suggestion: 'target by text or by grid coordinates in a generic session',
@@ -973,6 +1180,8 @@ export class LocatorImpl implements Locator {
   }
 
   #evaluateSemantic(query: SemanticQuery, scope: ResolvedTarget | null): ResolvedTarget[] {
+    const providerFailure = this.#ctx.semanticViolation();
+    if (providerFailure !== null) throw providerFailure;
     const index = this.#ctx.semanticIndex();
     if (index === null) {
       // A channel that died before publishing anything is reported as what it
@@ -983,19 +1192,16 @@ export class LocatorImpl implements Locator {
       // adapter whose first tree is in flight, or a child still booting inside
       // the late-attach grace. The caller's deadline decides.
       if (this.#ctx.semanticPossible()) return [];
-      throw new UnsupportedActionError(
+      throw new SemanticCapabilityUnavailableError(
         `locator ${this.description} needs a semantic tree, but this session has none`,
         this.#ctx.errorDiagnostics({
           suggestion:
-            'use getByText()/screen() for uninstrumented programs, or run one that ships a termwright adapter',
+            'use getByScreenText() for an uninstrumented program, or install the matching Termwright framework integration',
         }),
       );
     }
     if (scope !== null && !scope.semantic) {
-      throw new UnsupportedActionError(
-        `within() cannot scope a semantic locator to a grid match`,
-        this.#ctx.errorDiagnostics(),
-      );
+      throw new TypeError('within() cannot scope a semantic locator to a grid match');
     }
     const scopeId = scope === null ? undefined : (scope.ref.split('@')[0] ?? undefined);
     const revision = index.snapshot.revision;
@@ -1006,14 +1212,18 @@ export class LocatorImpl implements Locator {
   }
 
   #evaluateGeneric(query: GenericQuery, scope: ResolvedTarget | null): ResolvedTarget[] {
+    if (scope?.semantic === true) {
+      throw new TypeError(
+        'terminal-grid locators cannot be scoped through semantic geometry implicitly; ' +
+        'query the screen explicitly with getByScreenText()',
+      );
+    }
     const revision = this.#ctx.screenRevision();
     return matchGrid(this.#ctx.rows(), query, scope?.rect ?? null).map((rect) => rectTarget(rect, revision));
   }
 
   /** Applies strict-mode selection; returns `null` when nothing is selectable yet. */
   #select(matches: readonly ResolvedTarget[]): ResolvedTarget | null {
-    const index = this.#state.index;
-    if (index !== undefined) return matches[index] ?? null;
     if (matches.length === 1) return matches[0] ?? null;
     if (matches.length > 1) {
       throw new AmbiguousLocatorError(

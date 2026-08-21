@@ -3,7 +3,7 @@
  * Not exported from `src/index.ts` — it never ships.
  */
 
-import type { LogRecord, ObservationStamp, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
+import type { ActionReceipt, ActionabilityExplanation, EffectiveSessionContract, LogRecord, ObservationStamp, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type {
   CrashReport,
   ExitStatus,
@@ -20,6 +20,7 @@ export class FakeSession implements TraceSource {
   #listeners = new Map<keyof SessionEventMap, Set<Listener>>();
   #tree: SemanticSnapshot | null = null;
   #actionCounter = 0;
+  negotiatedContract: EffectiveSessionContract | null = null;
   /** Milliseconds since session start; advance it with {@link tick}. */
   clock = 0;
 
@@ -52,6 +53,10 @@ export class FakeSession implements TraceSource {
 
   semanticTree(): SemanticSnapshot | null {
     return this.#tree;
+  }
+
+  contract(): EffectiveSessionContract | null {
+    return this.negotiatedContract;
   }
 
   #emit<E extends keyof SessionEventMap>(event: E, payload: SessionEventMap[E]): void {
@@ -95,7 +100,7 @@ export class FakeSession implements TraceSource {
    */
   action(
     api: string,
-    outcome: { ok?: boolean; selector?: string; ref?: string; error?: string; observation?: ObservationStamp } = {},
+    outcome: { ok?: boolean; selector?: string; ref?: string; error?: string; observation?: ObservationStamp; receipt?: ActionReceipt; actionability?: ActionabilityExplanation } = {},
   ): void {
     this.#emit('action', {
       actionId: `a${++this.#actionCounter}`,
@@ -105,6 +110,8 @@ export class FakeSession implements TraceSource {
       ...(outcome.ref === undefined ? {} : { ref: outcome.ref }),
       ...(outcome.error === undefined ? {} : { error: outcome.error }),
       ...(outcome.observation === undefined ? {} : { observation: outcome.observation }),
+      ...(outcome.receipt === undefined ? {} : { receipt: outcome.receipt }),
+      ...(outcome.actionability === undefined ? {} : { actionability: outcome.actionability }),
       timeMs: this.clock,
     });
   }
@@ -166,17 +173,19 @@ export function snapshot(
   sessionId = 't1',
 ): SemanticSnapshot {
   return {
-    v: 1,
+    v: 2,
     sessionId,
     revision,
     columns: 80,
     rows: 24,
     rootIds: nodes.filter((node) => node.parentId === undefined).map((node) => node.id),
     nodes,
+    coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 
 /** Builds a semantic node with sane defaults. */
 export function node(partial: Partial<SemanticNode> & Pick<SemanticNode, 'id' | 'role'>): SemanticNode {
-  return { name: '', ...partial };
+  return { name: '', geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } }, ...partial };
 }

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LocatorCellSnapshot
 
-Defined in: [api.ts:447](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L447)
+Defined in: [driver/src/api.ts:559](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L559)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **columns**: `number`
 
-Defined in: [api.ts:450](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L450)
+Defined in: [driver/src/api.ts:562](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L562)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [api.ts:450](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **origin**: `object`
 
-Defined in: [api.ts:449](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L449)
+Defined in: [driver/src/api.ts:561](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L561)
 
 #### column
 
@@ -60,15 +60,15 @@ Defined in: [api.ts:449](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **rows**: `number`
 
-Defined in: [api.ts:451](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L451)
+Defined in: [driver/src/api.ts:563](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L563)
 
 ***
 
 ### stamp
 
-> `readonly` **stamp**: `ObservationStamp`
+> `readonly` **stamp**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: [api.ts:448](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L448)
+Defined in: [driver/src/api.ts:560](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L560)
 
 ## Methods
 
@@ -76,7 +76,7 @@ Defined in: [api.ts:448](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > **cell**(`row`, `column`): [`CellSnapshot`](../cellsnapshot/)
 
-Defined in: [api.ts:454](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L454)
+Defined in: [driver/src/api.ts:566](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L566)
 
 #### Parameters
 
@@ -98,7 +98,7 @@ Defined in: [api.ts:454](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > **line**(`row`): `string`
 
-Defined in: [api.ts:453](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L453)
+Defined in: [driver/src/api.ts:565](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L565)
 
 #### Parameters
 
@@ -116,7 +116,7 @@ Defined in: [api.ts:453](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > **text**(): `string`
 
-Defined in: [api.ts:452](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L452)
+Defined in: [driver/src/api.ts:564](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L564)
 
 #### Returns
 

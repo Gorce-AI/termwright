@@ -3,26 +3,38 @@ import { DEFAULT_LIMITS, type ProtocolLimits } from './limits.js';
 import type { SemanticSnapshot } from './tree.js';
 import { type ValidationErrorCode, validateSnapshot } from './validate.js';
 
+function unknownGeometry(): Record<string, unknown> {
+  return { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } };
+}
+
 /** A minimal valid snapshot: one root region containing one button. */
 function baseSnapshot(): Record<string, unknown> {
+  const evidence = () => ({ source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test' });
+  const geometry = (rect: Record<string, number>) => ({
+    displayed: { status: 'known', value: true, evidence: evidence() },
+    intendedRect: { status: 'known', value: { ...rect }, evidence: evidence() },
+    visibleRect: { status: 'known', value: { ...rect }, evidence: evidence() },
+  });
   return {
-    v: 1,
+    v: 2,
     sessionId: 's1',
     revision: 1,
     columns: 80,
     rows: 24,
     rootIds: ['root'],
     nodes: [
-      { id: 'root', role: 'region', name: 'main', bounds: { row: 0, column: 0, width: 80, height: 24 } },
+      { id: 'root', role: 'region', name: 'main', geometry: geometry({ row: 0, column: 0, width: 80, height: 24 }) },
       {
         id: 'ok',
         parentId: 'root',
         role: 'button',
         name: 'OK',
-        bounds: { row: 2, column: 4, width: 6, height: 1 },
+        geometry: geometry({ row: 2, column: 4, width: 6, height: 1 }),
         state: { focused: true },
       },
     ],
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 
@@ -42,6 +54,76 @@ describe('validateSnapshot — happy path', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('accepts revision-bound authoritative application pointer evidence', () => {
+    const snapshot = baseSnapshot();
+    snapshot['providerEvidence'] = [{
+      providerId: 'app.router',
+      sessionId: 's1',
+      revision: 1,
+      status: 'available',
+      evidence: {
+        source: 'application',
+        method: 'declared',
+        strength: 'authoritative',
+        providerId: 'app.router',
+      },
+      pointerRegions: [{
+        recipientId: 'ok',
+        regionBounds: { row: 2, column: 4, width: 6, height: 1 },
+        spans: [{ row: 2, from: 4, to: 10 }],
+      }],
+      hitGrid: { regions: [{
+        recipientId: 'ok',
+        rect: { row: 2, column: 4, width: 6, height: 1 },
+      }] },
+    }];
+    expect(codeOf(snapshot)).toBe('ok');
+  });
+
+  it('rejects stale, duplicate, forged, and out-of-bounds provider evidence', () => {
+    const entry = {
+      providerId: 'app.router',
+      sessionId: 's1',
+      revision: 1,
+      status: 'available',
+      evidence: {
+        source: 'application',
+        method: 'declared',
+        strength: 'authoritative',
+        providerId: 'app.router',
+      },
+      pointerRegions: [{
+        recipientId: 'ok',
+        regionBounds: { row: 2, column: 4, width: 6, height: 1 },
+        spans: [{ row: 2, from: 4, to: 10 }],
+      }],
+    };
+    const stale = baseSnapshot();
+    stale['providerEvidence'] = [{ ...entry, revision: 2 }];
+    expect(codeOf(stale)).toBe('provider');
+
+    const duplicate = baseSnapshot();
+    duplicate['providerEvidence'] = [entry, structuredClone(entry)];
+    expect(codeOf(duplicate)).toBe('provider');
+
+    const forged = baseSnapshot();
+    forged['providerEvidence'] = [{
+      ...entry,
+      evidence: { ...entry.evidence, providerId: 'someone-else' },
+    }];
+    expect(codeOf(forged)).toBe('schema');
+
+    const outside = baseSnapshot();
+    outside['providerEvidence'] = [{
+      ...entry,
+      pointerRegions: [{
+        ...entry.pointerRegions[0],
+        spans: [{ row: 2, from: 4, to: 81 }],
+      }],
+    }];
+    expect(codeOf(outside)).toBe('bad-rect');
+  });
+
   it('returns a deep-frozen copy that shares nothing with the input', () => {
     const input = baseSnapshot();
     const result = validateSnapshot(input, DEFAULT_LIMITS);
@@ -51,51 +133,8 @@ describe('validateSnapshot — happy path', () => {
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(Object.isFrozen(snapshot.nodes)).toBe(true);
     expect(Object.isFrozen(snapshot.nodes[0])).toBe(true);
-    expect(Object.isFrozen(snapshot.nodes[1]?.bounds)).toBe(true);
+    expect(Object.isFrozen(snapshot.nodes[1]?.geometry)).toBe(true);
     expect(snapshot.nodes).not.toBe(input['nodes']);
-  });
-
-  it('accepts a node without bounds (class-B/C adapters)', () => {
-    const snapshot = baseSnapshot();
-    delete (snapshot['nodes'] as Record<string, unknown>[])[1]!['bounds'];
-    expect(codeOf(snapshot)).toBe('ok');
-  });
-
-  // An Ink tree containing <Static> shifts the live region by an amount the
-  // adapter cannot observe from inside the process, so it drops bounds
-  // wholesale. A snapshot with no bounds anywhere is a legal class-A state,
-  // not a degraded one — consumers must not treat it as an adapter fault.
-  it('accepts a snapshot where no node carries bounds at all', () => {
-    const snapshot = baseSnapshot();
-    for (const node of snapshot['nodes'] as Record<string, unknown>[]) {
-      delete node['bounds'];
-    }
-    expect(codeOf(snapshot)).toBe('ok');
-  });
-
-  it('accepts a snapshot where only some nodes carry bounds', () => {
-    const snapshot = baseSnapshot();
-    delete (snapshot['nodes'] as Record<string, unknown>[])[0]!['bounds'];
-    expect(codeOf(snapshot)).toBe('ok');
-  });
-
-  it('accepts an offscreen node when it is marked hidden', () => {
-    const snapshot = baseSnapshot();
-    const node = (snapshot['nodes'] as Record<string, unknown>[])[1]!;
-    node['bounds'] = { row: 500, column: 500, width: 4, height: 1 };
-    node['state'] = { hidden: true };
-    expect(codeOf(snapshot)).toBe('ok');
-  });
-
-  it('accepts a node clipped by the viewport edge', () => {
-    const snapshot = baseSnapshot();
-    (snapshot['nodes'] as Record<string, unknown>[])[1]!['bounds'] = {
-      row: -1,
-      column: 78,
-      width: 10,
-      height: 3,
-    };
-    expect(codeOf(snapshot)).toBe('ok');
   });
 
   it('accepts every declared role and action', () => {
@@ -150,6 +189,7 @@ describe('validateSnapshot — generic nodes and provenance (D1, D2)', () => {
       role: 'generic',
       frameworkType: 'ScrollBoxRenderable',
       name: '',
+      geometry: unknownGeometry(),
     };
     expect(codeOf(snapshot)).toBe('ok');
   });
@@ -218,7 +258,9 @@ describe('validateSnapshot — offscreen', () => {
   it('lets a zero-area rectangle through when the node says why', () => {
     const snapshot = baseSnapshot();
     const node = (snapshot['nodes'] as Record<string, unknown>[])[1]!;
-    node['bounds'] = { row: 3, column: 4, width: 0, height: 0 };
+    const geometry = node['geometry'] as Record<string, Record<string, unknown>>;
+    geometry['intendedRect']!['value'] = { row: 3, column: 4, width: 0, height: 0 };
+    geometry['visibleRect']!['value'] = { row: 3, column: 4, width: 0, height: 0 };
     node['state'] = { hidden: true, offscreen: true };
     expect(codeOf(snapshot)).toBe('ok');
   });
@@ -271,9 +313,9 @@ describe('validateSnapshot — structural invariants', () => {
     const snapshot = baseSnapshot();
     snapshot['rootIds'] = [];
     snapshot['nodes'] = [
-      { id: 'a', parentId: 'c', role: 'generic', frameworkType: 'Fixture', name: 'a' },
-      { id: 'b', parentId: 'a', role: 'generic', frameworkType: 'Fixture', name: 'b' },
-      { id: 'c', parentId: 'b', role: 'generic', frameworkType: 'Fixture', name: 'c' },
+      { id: 'a', parentId: 'c', role: 'generic', frameworkType: 'Fixture', name: 'a', geometry: unknownGeometry() },
+      { id: 'b', parentId: 'a', role: 'generic', frameworkType: 'Fixture', name: 'b', geometry: unknownGeometry() },
+      { id: 'c', parentId: 'b', role: 'generic', frameworkType: 'Fixture', name: 'c', geometry: unknownGeometry() },
     ];
     expect(codeOf(snapshot)).toBe('cycle');
   });
@@ -294,18 +336,18 @@ describe('validateSnapshot — structural invariants', () => {
 describe('validateSnapshot — capacity limits', () => {
   it('rejects more nodes than maxNodes allows', () => {
     const snapshot = baseSnapshot();
-    const nodes: Record<string, unknown>[] = [{ id: 'root', role: 'region', name: 'main' }];
+    const nodes: Record<string, unknown>[] = [{ id: 'root', role: 'region', name: 'main', geometry: unknownGeometry() }];
     for (let i = 0; i < 20; i += 1) {
-      nodes.push({ id: `n${i}`, parentId: 'root', role: 'text', name: `n${i}` });
+      nodes.push({ id: `n${i}`, parentId: 'root', role: 'text', name: `n${i}`, geometry: unknownGeometry() });
     }
     snapshot['nodes'] = nodes;
     expect(codeOf(snapshot, withLimits({ maxNodes: 5 }))).toBe('count');
   });
 
   it('rejects a tree deeper than maxDepth', () => {
-    const nodes: Record<string, unknown>[] = [{ id: 'n0', role: 'region', name: 'n0' }];
+    const nodes: Record<string, unknown>[] = [{ id: 'n0', role: 'region', name: 'n0', geometry: unknownGeometry() }];
     for (let i = 1; i < 10; i += 1) {
-      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', frameworkType: 'Fixture', name: `n${i}` });
+      nodes.push({ id: `n${i}`, parentId: `n${i - 1}`, role: 'generic', frameworkType: 'Fixture', name: `n${i}`, geometry: unknownGeometry() });
     }
     const snapshot = { ...baseSnapshot(), rootIds: ['n0'], nodes };
     expect(codeOf(snapshot, withLimits({ maxDepth: 5 }))).toBe('depth');
@@ -317,7 +359,7 @@ describe('validateSnapshot — capacity limits', () => {
     // 'ż' is 2 UTF-8 bytes, so 6 characters exceed a 10-byte ceiling.
     (snapshot['nodes'] as Record<string, unknown>[])[1]!['name'] = 'ż'.repeat(6);
     expect(codeOf(snapshot, withLimits({ maxStringBytes: 10 }))).toBe('string-bytes');
-    expect(codeOf(snapshot, withLimits({ maxStringBytes: 12 }))).toBe('ok');
+    expect(codeOf(snapshot, withLimits({ maxStringBytes: 18 }))).toBe('ok');
   });
 
   it('rejects a snapshot heavier than maxSnapshotBytes', () => {
@@ -357,12 +399,13 @@ describe('validateSnapshot — scalar and shape checks', () => {
   });
 
   it('rejects a wrong version tag', () => {
-    expect(codeOf({ ...baseSnapshot(), v: 2 })).toBe('bad-rect');
+    expect(codeOf({ ...baseSnapshot(), v: 1 })).toBe('schema');
   });
 
   it('rejects unsafe integers in rects', () => {
     const snapshot = baseSnapshot();
-    (snapshot['nodes'] as Record<string, unknown>[])[1]!['bounds'] = {
+    const geometry = (snapshot['nodes'] as Record<string, unknown>[])[1]!['geometry'] as Record<string, Record<string, unknown>>;
+    geometry['intendedRect']!['value'] = {
       row: Number.MAX_SAFE_INTEGER,
       column: 0,
       width: 1,
@@ -373,7 +416,8 @@ describe('validateSnapshot — scalar and shape checks', () => {
 
   it('rejects negative rect extents', () => {
     const snapshot = baseSnapshot();
-    (snapshot['nodes'] as Record<string, unknown>[])[1]!['bounds'] = {
+    const geometry = (snapshot['nodes'] as Record<string, unknown>[])[1]!['geometry'] as Record<string, Record<string, unknown>>;
+    geometry['intendedRect']!['value'] = {
       row: 0,
       column: 0,
       width: -5,
@@ -382,14 +426,19 @@ describe('validateSnapshot — scalar and shape checks', () => {
     expect(codeOf(snapshot)).toBe('bad-rect');
   });
 
-  it('rejects visible bounds entirely outside the viewport', () => {
+  it('rejects a non-empty visible rectangle outside the viewport', () => {
     const snapshot = baseSnapshot();
-    (snapshot['nodes'] as Record<string, unknown>[])[1]!['bounds'] = {
-      row: 900,
-      column: 900,
-      width: 4,
-      height: 1,
-    };
+    const geometry = (snapshot['nodes'] as Record<string, unknown>[])[1]!['geometry'] as Record<string, Record<string, unknown>>;
+    geometry['intendedRect']!['value'] = { row: 9_000, column: 9_000, width: 5, height: 5 };
+    geometry['visibleRect']!['value'] = { row: 9_000, column: 9_000, width: 5, height: 5 };
+    expect(codeOf(snapshot)).toBe('bad-rect');
+  });
+
+  it('rejects a visible rectangle that escapes its intended rectangle', () => {
+    const snapshot = baseSnapshot();
+    const geometry = (snapshot['nodes'] as Record<string, unknown>[])[1]!['geometry'] as Record<string, Record<string, unknown>>;
+    geometry['intendedRect']!['value'] = { row: 2, column: 4, width: 3, height: 1 };
+    geometry['visibleRect']!['value'] = { row: 2, column: 4, width: 6, height: 1 };
     expect(codeOf(snapshot)).toBe('bad-rect');
   });
 

@@ -3,6 +3,12 @@
 import * as nodeModule from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { buildShimSource, shouldShim } from './shim.js';
+import {
+  instrumentInkCore,
+  instrumentInkRenderer,
+  INK_CORE_PATTERN,
+  INK_RENDERER_PATTERN,
+} from './instrumentation.js';
 import { isInstrumented } from './runtime.js';
 
 type LoadResult = {
@@ -12,9 +18,26 @@ type LoadResult = {
 };
 type NextLoad = (url: string, context: unknown) => LoadResult;
 
-function syncLoad(url: string, context: unknown, nextLoad: NextLoad): LoadResult {
-  if (!shouldShim(url)) return nextLoad(url, context);
-  return { format: 'module', shortCircuit: true, source: buildShimSource(url) };
+function loadWithInstrumentation(url: string, context: unknown, nextLoad: NextLoad): LoadResult {
+  if (shouldShim(url)) return { format: 'module', shortCircuit: true, source: buildShimSource(url) };
+  const loaded = nextLoad(url, context);
+  const path = url.split('?')[0] ?? '';
+  if (!INK_RENDERER_PATTERN.test(path) && !INK_CORE_PATTERN.test(path)) return loaded;
+  const source = sourceText(loaded.source);
+  const instrumented = source === undefined
+    ? undefined
+    : INK_RENDERER_PATTERN.test(path)
+      ? instrumentInkRenderer(url, source)
+      : instrumentInkCore(url, source);
+  return instrumented === undefined
+    ? loaded
+    : { ...loaded, format: 'module', shortCircuit: true, source: instrumented };
+}
+
+function sourceText(source: LoadResult['source']): string | undefined {
+  if (typeof source === 'string') return source;
+  if (source === undefined) return undefined;
+  return Buffer.from(source.buffer, source.byteOffset, source.byteLength).toString('utf8');
 }
 
 /** Install the best loader API available on the current Node 22+ release. */
@@ -27,7 +50,7 @@ export function installNodeHook(env: NodeJS.ProcessEnv = process.env): 'sync' | 
     readonly registerHooks?: (hooks: { load: never }) => unknown;
   }).registerHooks;
   if (typeof registerHooks === 'function') {
-    registerHooks({ load: syncLoad as never });
+    registerHooks({ load: loadWithInstrumentation as never });
     return 'sync';
   }
   nodeModule.register(new URL(import.meta.url), { parentURL: new URL(import.meta.url) });
@@ -40,8 +63,19 @@ export async function loadHook(
   context: unknown,
   nextLoad: (url: string, context: unknown) => Promise<LoadResult>,
 ): Promise<LoadResult> {
-  if (!shouldShim(url)) return nextLoad(url, context);
-  return { format: 'module', shortCircuit: true, source: buildShimSource(url) };
+  if (shouldShim(url)) return { format: 'module', shortCircuit: true, source: buildShimSource(url) };
+  const loaded = await nextLoad(url, context);
+  const path = url.split('?')[0] ?? '';
+  if (!INK_RENDERER_PATTERN.test(path) && !INK_CORE_PATTERN.test(path)) return loaded;
+  const source = sourceText(loaded.source);
+  const instrumented = source === undefined
+    ? undefined
+    : INK_RENDERER_PATTERN.test(path)
+      ? instrumentInkRenderer(url, source)
+      : instrumentInkCore(url, source);
+  return instrumented === undefined
+    ? loaded
+    : { ...loaded, format: 'module', shortCircuit: true, source: instrumented };
 }
 
 export { loadHook as load };

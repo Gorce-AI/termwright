@@ -13,6 +13,11 @@ export function node(
     id,
     role,
     name,
+    geometry: {
+      displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    },
     ...(extra.parentId === undefined ? {} : { parentId: extra.parentId }),
     ...(extra.state === undefined ? {} : { state: extra.state }),
     ...(extra.testId === undefined ? {} : { testId: extra.testId }),
@@ -23,13 +28,15 @@ export function node(
 /** Wraps nodes into a snapshot, deriving `rootIds` from the parentless ones. */
 export function snapshot(nodes: readonly SemanticNode[], revision = 1): SemanticSnapshot {
   return {
-    v: 1,
+    v: 2,
     sessionId: 'session-1',
     revision,
     columns: 80,
     rows: 24,
     rootIds: nodes.filter((entry) => entry.parentId === undefined).map((entry) => entry.id),
     nodes,
+    coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 

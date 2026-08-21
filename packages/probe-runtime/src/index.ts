@@ -10,6 +10,11 @@ import { createConnection, type Socket } from 'node:net';
 import { appendFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import {
+  freezeEvidenceProviders,
+  type EvidenceProviderRegistry,
+  type FrozenEvidenceProviderRegistry,
+} from '@termwright/evidence-provider';
+import {
   createFrameDecoder,
   encodeFrame,
   encodeMarker,
@@ -41,7 +46,8 @@ export interface ConnectOptions {
   readonly capabilities: readonly AdapterCapability[];
   readonly adapterName: string;
   readonly adapterVersion: string;
-  readonly protocol?: ProtocolId;
+  /** Isolated application provider registry. Defaults to the process facade. */
+  readonly evidenceProviderRegistry?: EvidenceProviderRegistry;
   /** Milliseconds for connect plus handshake. Default 1000. */
   readonly handshakeTimeoutMs?: number;
   /**
@@ -62,7 +68,6 @@ export interface ConnectOptions {
 export interface ProbePerformanceMetrics {
   readonly enabled: boolean;
   readonly fullSnapshots: number;
-  readonly deltas: number;
   readonly semanticBytes: number;
   readonly semanticNodes: number;
   readonly unknownFrameworkNodes: number;
@@ -128,9 +133,9 @@ export class ProbeChannel {
   readonly #socket: Socket;
   readonly session: ChannelSession;
   readonly #token: string;
+  readonly #evidenceProviders: FrozenEvidenceProviderRegistry;
   #open = true;
   #revision = 0;
-  #latest: SemanticSnapshot | undefined;
   readonly #performance: MutableProbePerformanceMetrics | null;
   readonly #performanceSink: (() => void) | null;
 
@@ -141,12 +146,14 @@ export class ProbeChannel {
     token: string,
     decoder: FrameDecoder,
     pending: readonly unknown[] = [],
+    evidenceProviders: FrozenEvidenceProviderRegistry = freezeEvidenceProviders(),
     performanceMetrics = false,
     performanceSink?: (metrics: ProbePerformanceMetrics) => void,
   ) {
     this.#socket = socket;
     this.session = session;
     this.#token = token;
+    this.#evidenceProviders = evidenceProviders;
     this.#performance = performanceMetrics
       ? {
           fullSnapshots: 0,
@@ -201,7 +208,6 @@ export class ProbeChannel {
       return Object.freeze({
         enabled: false,
         fullSnapshots: 0,
-        deltas: 0,
         semanticBytes: 0,
         semanticNodes: 0,
         unknownFrameworkNodes: 0,
@@ -222,8 +228,6 @@ export class ProbeChannel {
     return Object.freeze({
       enabled: true,
       fullSnapshots: frames,
-      // ProbeChannel deliberately does not advertise tree-diffs.
-      deltas: 0,
       semanticBytes: metrics.semanticBytes,
       semanticNodes: metrics.semanticNodes,
       unknownFrameworkNodes: metrics.unknownFrameworkNodes,
@@ -259,8 +263,31 @@ export class ProbeChannel {
       if (this.#performance !== null) this.#performance.droppedEvents += 1;
       return undefined;
     }
+    const providerEvidence = this.#evidenceProviders.collect({
+      sessionId: snapshot.sessionId,
+      revision: snapshot.revision,
+      columns: snapshot.columns,
+      rows: snapshot.rows,
+      resolveRecipient: (recipient) => {
+        const matches = 'semanticId' in recipient
+          ? snapshot.nodes.filter((node) => node.id === recipient.semanticId)
+          : 'testId' in recipient
+            ? snapshot.nodes.filter((node) => node.testId === recipient.testId)
+            : snapshot.nodes.filter((node) =>
+                node.role === recipient.role && node.name === recipient.name);
+        if (matches.length !== 1) {
+          throw new Error(
+            `application evidence recipient resolved to ${matches.length} semantic nodes`,
+          );
+        }
+        return matches[0]!.id;
+      },
+    });
+    const qualifiedSnapshot: SemanticSnapshot = providerEvidence.length === 0
+      ? snapshot
+      : Object.freeze({ ...snapshot, providerEvidence });
     const sent = this.#send(
-      { type: 'snapshot', snapshot },
+      { type: 'snapshot', snapshot: qualifiedSnapshot },
       this.#performance !== null,
     );
     if (sent === undefined) {
@@ -269,7 +296,6 @@ export class ProbeChannel {
       return undefined;
     }
     this.#revision = snapshot.revision;
-    this.#latest = snapshot;
     if (this.#performance !== null) {
       this.#performance.fullSnapshots += 1;
       this.#performance.semanticBytes += sent.bytes;
@@ -316,11 +342,18 @@ export class ProbeChannel {
     }
   }
 
+  /** Report a typed fatal producer-contract violation and close the channel. */
+  fail(code: 'duplicate-semantic-key' | 'adapter-guarantee-violation' | 'internal', message: string): void {
+    if (!this.#open) return;
+    this.#send({ type: 'error', code, message: message.slice(0, 1_024) });
+    this.close();
+  }
+
   /** Disable the channel and release the socket. Idempotent. */
   close(): void {
     if (!this.#open) return;
     this.#open = false;
-    this.#latest = undefined;
+    this.#evidenceProviders.close();
     this.#socket.removeAllListeners('data');
     this.#socket.destroy();
   }
@@ -336,16 +369,6 @@ export class ProbeChannel {
       this.close();
       return;
     }
-    if (message.type !== 'get-tree') return;
-
-    const held = this.#latest;
-    const usable = held !== undefined
-      && (message.revision === undefined || message.revision === held.revision);
-    this.#send(
-      usable
-        ? { type: 'get-tree-result', requestId: message.requestId, snapshot: held }
-        : { type: 'get-tree-result', requestId: message.requestId, error: 'revision not retained' },
-    );
   }
 
   #send(message: AdapterToDriverMessage, measureSerialization = false): SendResult | undefined {
@@ -423,6 +446,9 @@ function filePerformanceSink(
  */
 export async function connectProbe(options: ConnectOptions): Promise<ProbeChannel | null> {
   const timeoutMs = options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
+  // Freeze synchronously, before a socket can connect and before hello is
+  // constructed. Any later application registration is a lifecycle error.
+  const evidenceProviders = freezeEvidenceProviders(options.evidenceProviderRegistry);
 
   return new Promise<ProbeChannel | null>((resolve) => {
     let settled = false;
@@ -440,6 +466,7 @@ export async function connectProbe(options: ConnectOptions): Promise<ProbeChanne
       settled = true;
       detach();
       socket.destroy();
+      evidenceProviders.close();
       resolve(null);
     };
     const accept = (session: ChannelSession, pending: readonly unknown[]): void => {
@@ -453,6 +480,7 @@ export async function connectProbe(options: ConnectOptions): Promise<ProbeChanne
         options.token,
         decoder,
         pending,
+        evidenceProviders,
         options.performanceMetrics ?? (metricsPath !== undefined || debugMetricsEnabled(process.env)),
         filePerformanceSink(metricsPath, {
           adapter: options.adapterName,
@@ -467,6 +495,7 @@ export async function connectProbe(options: ConnectOptions): Promise<ProbeChanne
       socket.unref();
     } catch {
       clearTimeout(timer);
+      evidenceProviders.close();
       resolve(null);
       return;
     }
@@ -479,11 +508,14 @@ export async function connectProbe(options: ConnectOptions): Promise<ProbeChanne
           encodeFrame(
             {
               type: 'hello',
-              protocol: options.protocol ?? PROTOCOL_ID,
+              protocol: PROTOCOL_ID,
               token: options.token,
               adapter: { name: options.adapterName, version: options.adapterVersion },
               capabilities: options.capabilities,
               probe: options.probe,
+              ...(evidenceProviders.registrations.length === 0
+                ? {}
+                : { providers: evidenceProviders.registrations }),
             },
             DEFAULT_LIMITS.maxFrameBytes,
           ),
@@ -510,7 +542,7 @@ export async function connectProbe(options: ConnectOptions): Promise<ProbeChanne
         return;
       }
       const ack = parsed.message;
-      if (ack.protocol !== (options.protocol ?? PROTOCOL_ID)) {
+      if (ack.protocol !== PROTOCOL_ID) {
         abandon();
         return;
       }

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: KeyEncodingModes
 
-Defined in: [keys.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L18)
+Defined in: [driver/src/keys.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L16)
 
 Emulator state the encoder must honor.
 
@@ -21,7 +21,7 @@ Emulator state the encoder must honor.
 
 > `readonly` **applicationCursorKeys**: `boolean`
 
-Defined in: [keys.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L19)
+Defined in: [driver/src/keys.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L17)
 
 ***
 
@@ -29,4 +29,4 @@ Defined in: [keys.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **applicationKeypad**: `boolean`
 
-Defined in: [keys.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L20)
+Defined in: [driver/src/keys.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L18)

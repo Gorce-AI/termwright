@@ -115,7 +115,8 @@ the same filter to discovery, the watch process, and Runner-triggered reruns.
 ## Editor and scheduler boundaries
 
 Termwright does not run a Cucumber scheduler or write a generated-test
-directory. It also does not ship a dedicated Gherkin language server. Editor
-Cucumber extensions can navigate the physical feature and TypeScript glue;
-runtime undefined and ambiguous definitions remain fail-closed Termwright test
-errors.
+directory. It integrates with the official Cucumber language server through
+`cucumber.features` and `cucumber.glue`; see the
+[editor setup](../../guides/gherkin/#editor-support-and-step-diagnostics).
+Collection still validates undefined and ambiguous definitions independently,
+so an editor extension is optional and cannot make an invalid suite pass.

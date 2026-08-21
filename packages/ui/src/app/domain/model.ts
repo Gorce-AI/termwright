@@ -1,7 +1,7 @@
-import type { ProbeInfo, SemanticSnapshot } from '@termwright/protocol';
+import type { EffectiveSessionContract, ProbeInfo, SemanticSnapshot } from '@termwright/protocol';
 import type { AppLogView } from '../../app-log.js';
 import type { CommandRow } from '../../commands.js';
-import type { UiGherkinStep, UiRunSummary, UiServerMode } from '../../events.js';
+import type { UiActionability, UiActionPlan, UiGherkinStep, UiRunSummary, UiServerMode } from '../../events.js';
 import type { PlaybackSpeed } from '../../playback.js';
 import type { ProjectInfo } from '../../project.js';
 import type { TraceLogs } from '../../trace-logs.js';
@@ -33,6 +33,8 @@ export interface ExecutionNode {
   /** UI-only explanation for a structural row that cannot choose one exact target. */
   readonly targetIssue?: string;
   readonly error?: string;
+  readonly actionPlan?: UiActionPlan;
+  readonly actionability?: UiActionability;
   readonly gherkin?: UiGherkinStep;
 }
 
@@ -77,6 +79,7 @@ export interface SessionRecord {
   readonly adapter?: { readonly name: string; readonly version: string };
   readonly probe?: ProbeInfo;
   readonly capabilities?: readonly string[];
+  readonly contract?: EffectiveSessionContract;
   readonly adapterStatus?: 'attached' | 'disconnected' | 'error';
   readonly command: readonly string[];
   readonly writable: boolean;

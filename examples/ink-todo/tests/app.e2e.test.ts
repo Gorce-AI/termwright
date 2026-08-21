@@ -93,4 +93,25 @@ describe.skipIf(!pty)('the todo app', () => {
     await expect(app.getByRole('listitem', { name: 'record a demo' })).toBeDetached();
     await expect(app).toHaveText('status: removed record a demo');
   });
+
+  test('uses the production pointer router but delivers clicks through the PTY', async ({ terminal }) => {
+    const app = await terminal.launch();
+    await app.waitForReady();
+
+    const remove = await app.getByRole('button', { name: 'Remove' }).click();
+    await expect(app.getByRole('dialog', { name: 'Confirm' })).toBeAttached();
+    const confirm = await app.getByRole('button', { name: 'Delete' }).click();
+
+    await expect(app.getByRole('listitem', { name: 'write the README' })).toBeDetached();
+    await expect(app).toHaveText('status: removed write the README');
+    expect(remove.executed.map((step) => `${step.device}:${step.kind}`)).toEqual([
+      'mouse:down',
+      'mouse:up',
+    ]);
+    expect(confirm.plan.strategy).toBe('authoritative-pointer-region');
+    expect(app.contract()?.capabilities['pointer-hit-testing']).toMatchObject({
+      status: 'supported',
+      evidence: { providerId: 'ink-todo-production-router' },
+    });
+  });
 });

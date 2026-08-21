@@ -13,7 +13,7 @@ editUrl: false
 
 > **parseRef**(`ref`): [`ParsedRef`](../../type-aliases/parsedref/) \| `null`
 
-Defined in: [selectors.ts:90](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L90)
+Defined in: [driver/src/selectors.ts:88](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L88)
 
 Parses a ref minted by `ResolvedTarget.ref`. Returns `null` for anything
 that is not a ref — callers turn that into a typed error with context.

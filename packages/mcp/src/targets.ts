@@ -20,14 +20,16 @@ import type { SemanticRole, SemanticState } from './model.js';
 export interface TargetInput {
   /** A ref from a previous snapshot: `n8@42`, or `grid:1,2,9,1@7`. */
   readonly ref?: string | undefined;
-  /** The Textual-style CSS dialect, e.g. `dialog button#approve:focused`. */
+  /** Termwright Semantic Selector Language, e.g. `dialog button#approve:focused`. */
   readonly selector?: string | undefined;
   readonly role?: SemanticRole | undefined;
   /** Accessible name; `/…/flags` is read as a regular expression. */
   readonly name?: string | undefined;
   readonly testId?: string | undefined;
-  /** Visible text (grid matching when there is no semantic tree). */
+  /** Text carried by a semantic node. Requires a semantic tree. */
   readonly text?: string | undefined;
+  /** Text rendered in the physical terminal grid. */
+  readonly screenText?: string | undefined;
   /** Label text (`labelledBy`, else name). */
   readonly label?: string | undefined;
   readonly exact?: boolean | undefined;
@@ -63,13 +65,14 @@ export function hasTarget(input: TargetInput): boolean {
     input.role !== undefined ||
     input.testId !== undefined ||
     input.text !== undefined ||
+    input.screenText !== undefined ||
     input.label !== undefined
   );
 }
 
 /**
  * Builds the locator described by `input`. Precedence is `ref`, `selector`,
- * `testId`, `role`, `label`, `text` — the order from most to least specific.
+ * `testId`, `role`, `label`, `text`, `screenText` — the order from most to least specific.
  *
  * Every branch hands straight to a driver factory; nothing here matches, waits
  * or decides staleness.
@@ -98,10 +101,12 @@ export function buildLocator(harness: TerminalHarness, input: TargetInput): Loca
     locator = harness.getByLabel(textOrRegExp(input.label), definedOnly({ exact: input.exact }));
   } else if (input.text !== undefined) {
     locator = harness.getByText(textOrRegExp(input.text), definedOnly({ exact: input.exact }));
+  } else if (input.screenText !== undefined) {
+    locator = harness.getByScreenText(textOrRegExp(input.screenText), definedOnly({ exact: input.exact }));
   } else {
     throw usageError(
       'no target given',
-      'pass one of ref, selector, testId, role (+name), label or text',
+      'pass one of ref, selector, testId, role (+name), label, text or screenText',
     );
   }
   return input.nth === undefined ? locator : locator.nth(input.nth);

@@ -47,13 +47,35 @@ func (serverInput) TermwrightSemantics() annotate.Semantics {
 }
 ```
 
-A unique key stabilizes an annotated copied value between frames. Duplicate or
-missing keys remain frame-local and cannot become relation targets.
+A unique key stabilizes an annotated copied value between frames. A missing key
+is explicitly frame-local. Duplicate explicit keys are a producer-contract
+violation and fail with `TW_DUPLICATE_SEMANTIC_KEY` rather than selecting an
+unstable winner.
+
+## Expose a production pointer router
+
+Bubble Tea applications commonly route `tea.MouseClickMsg` themselves. Register
+that exact router before `tea.NewProgram(...).Run()`:
+
+```go
+registration, err := evidence.RegisterPointerEvidenceProvider(provider)
+if err != nil { return err }
+defer registration.Close()
+```
+
+The provider returns `semantic node → region` and optionally `x/y → semantic
+node`; it does not call `Update` and has no dispatch callback. Termwright plans
+a physical point and sends the ordinary mouse protocol through the PTY. The
+runnable [Bubble Tea login example](https://github.com/gorce-ai/termwright/tree/main/examples/bubbletea-login)
+uses an explicit SemanticKey for its Submit control and proves that only the
+normal `tea.MouseClickMsg` branch changes its status.
 
 ## Supported behavior
 
 Bubble Tea 1.3.10 and 2.0.8 with Go 1.24+ are verified. Roles, names, values,
 selection, and observable component state are available. Password values are
-withheld. Geometry and hit testing are unsupported; use keyboard input.
+withheld. Layout geometry is unavailable automatically. Exact pointer regions
+and hit testing are application-integrated through a production router; without
+one, use keyboard input.
 
 See [Framework compatibility](../../reference/compatibility/) for current coverage.

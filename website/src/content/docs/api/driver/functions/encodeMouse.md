@@ -13,7 +13,7 @@ editUrl: false
 
 > **encodeMouse**(`event`, `modes`): `Uint8Array`
 
-Defined in: [mouse.ts:81](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/mouse.ts#L81)
+Defined in: [driver/src/mouse.ts:99](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/mouse.ts#L99)
 
 Encodes one mouse event.
 
@@ -37,5 +37,5 @@ current tracking/encoding modes as observed on the wire
 
 ## Throws
 
-UnsupportedActionError when the child has no mouse tracking enabled,
+InputModeDisabledError when the child has no mouse tracking enabled,
 or when the coordinates cannot be expressed in the negotiated encoding.

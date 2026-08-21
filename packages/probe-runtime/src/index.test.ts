@@ -15,6 +15,7 @@ import {
   type AdapterToDriverMessage,
   type SemanticSnapshot,
 } from '@termwright/protocol';
+import { createEvidenceProviderRegistry } from '@termwright/evidence-provider';
 import { connectProbe } from './index.js';
 
 async function endpoint(): Promise<{ path: string; metricsPath: string; dispose(): Promise<void> }> {
@@ -30,13 +31,15 @@ async function endpoint(): Promise<{ path: string; metricsPath: string; dispose(
 
 function snapshot(): SemanticSnapshot {
   return {
-    v: 1,
+    v: 2,
     sessionId: 's1',
     revision: 1,
     columns: 80,
     rows: 24,
     rootIds: ['root'],
-    nodes: [{ id: 'root', role: 'application', name: '' }],
+    nodes: [{ id: 'root', role: 'application', name: '', geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } } }],
+    coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 
@@ -55,17 +58,14 @@ describe('shared probe transport', () => {
           if (!parsed.ok) throw new Error(parsed.detail);
           messages.push(parsed.message);
           if (parsed.message.type === 'hello') {
-            socket.write(Buffer.concat([
-              encodeFrame({
+            socket.write(encodeFrame({
                 type: 'hello-ack',
                 protocol: PROTOCOL_ID,
                 sessionId: 's1',
                 limits: DEFAULT_LIMITS,
                 subscribe: 'snapshots',
                 marker: { enabled: true },
-              }, DEFAULT_LIMITS.maxFrameBytes),
-              encodeFrame({ type: 'get-tree', requestId: 9 }, DEFAULT_LIMITS.maxFrameBytes),
-            ]));
+              }, DEFAULT_LIMITS.maxFrameBytes));
           }
         }
       });
@@ -73,6 +73,22 @@ describe('shared probe transport', () => {
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
       server.listen(target.path, resolve);
+    });
+
+    const evidenceProviderRegistry = createEvidenceProviderRegistry();
+    evidenceProviderRegistry.register({
+      id: 'app.router',
+      version: '1',
+      method: 'native',
+      capabilities: ['pointer-regions', 'hit-test'],
+      observe: () => ({
+        pointerRegions: [{
+          recipient: { semanticId: 'root' },
+          regionBounds: { row: 1, column: 2, width: 4, height: 1 },
+          spans: [{ row: 1, from: 2, to: 6 }],
+        }],
+        hitTest: (column, row) => row === 1 && column >= 2 && column < 6 ? { semanticId: 'root' } : null,
+      }),
     });
 
     const channel = await connectProbe({
@@ -87,6 +103,7 @@ describe('shared probe transport', () => {
       capabilities: ['tree', 'render-revisions'],
       adapterName: '@termwright/probe-ink',
       adapterVersion: '0.1.0',
+      evidenceProviderRegistry,
       performanceMetrics: true,
       performanceMetricsFile: target.metricsPath,
     });
@@ -95,29 +112,28 @@ describe('shared probe transport', () => {
     const marker = channel?.publish(snapshot(), { probeEvents: 7 });
     channel?.recordCoalescedEvent();
     const deadline = Date.now() + 1_000;
-    while (messages.length < 4 && Date.now() < deadline) {
+    while (messages.length < 3 && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     expect(messages[0]).toMatchObject({
       type: 'hello',
       probe: { framework: 'ink', identityKind: 'stable' },
+      providers: [{ id: 'app.router', version: '1', method: 'native' }],
     });
-    expect(messages.slice(1).map((message) => message.type)).toEqual([
-      'get-tree-result',
-      'snapshot',
-      'revision-commit',
-    ]);
+    expect(messages.slice(1).map((message) => message.type)).toEqual(['snapshot', 'revision-commit']);
     expect(messages[1]).toMatchObject({
-      type: 'get-tree-result',
-      requestId: 9,
-      error: 'revision not retained',
+      type: 'snapshot',
+      snapshot: {
+        providerEvidence: [{
+          providerId: 'app.router', sessionId: 's1', revision: 1, status: 'available',
+        }],
+      },
     });
     const payload = (marker as string).slice((marker as string).indexOf(';') + 1, -1);
     expect(verifyMarkerPayload(payload, token, 's1')).toMatchObject({ revision: 1 });
     expect(channel?.performanceMetrics()).toMatchObject({
       enabled: true,
       fullSnapshots: 1,
-      deltas: 0,
       semanticNodes: 1,
       unknownFrameworkNodes: 0,
       droppedEvents: 0,
@@ -185,7 +201,7 @@ describe('shared probe transport', () => {
     } as unknown as Socket;
     const channel = new (await import('./index.js')).ProbeChannel(
       fake,
-      { protocol: 'termwright/1', sessionId: 's1', limits: DEFAULT_LIMITS, markerEnabled: false },
+      { protocol: PROTOCOL_ID, sessionId: 's1', limits: DEFAULT_LIMITS, markerEnabled: false },
       'token',
       createFrameDecoder(DEFAULT_LIMITS.maxFrameBytes),
     );
@@ -208,16 +224,16 @@ describe('shared probe transport', () => {
         return true;
       },
     } as unknown as Socket;
-    const limits = { ...DEFAULT_LIMITS, maxFrameBytes: 512 };
+    const limits = { ...DEFAULT_LIMITS, maxFrameBytes: 1_024 };
     const channel = new (await import('./index.js')).ProbeChannel(
       fake,
-      { protocol: 'termwright/1', sessionId: 's1', limits, markerEnabled: false },
+      { protocol: PROTOCOL_ID, sessionId: 's1', limits, markerEnabled: false },
       'token',
       createFrameDecoder(limits.maxFrameBytes),
     );
     const oversized: SemanticSnapshot = {
       ...snapshot(),
-      nodes: [{ id: 'root', role: 'application', name: 'x'.repeat(2_048) }],
+      nodes: [{ id: 'root', role: 'application', name: 'x'.repeat(2_048), geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } } }],
     };
 
     expect(channel.publish(oversized)).toBeUndefined();

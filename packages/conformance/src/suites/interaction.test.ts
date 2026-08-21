@@ -61,18 +61,19 @@ describe.skipIf(!ptyAvailable())('pointer interaction', () => {
     const terminal = await generic();
     await enableMouse(terminal, 'click');
 
-    await terminal.getByText('Beta').click();
+    await terminal.getByScreenText('Beta').click();
     await terminal.waitForText('ev: MOUSE press b=0 c=4 r=3');
 
     // The fixture reports the double click as its own event, so this waits for
     // the pair to complete rather than counting two identical lines — a count
     // is already satisfied by the first press when the pair arrives in two
     // chunks, which a loaded machine does regularly.
-    await terminal.getByText('Gamma').doubleClick();
+    await terminal.getByScreenText('Gamma').doubleClick();
     await terminal.waitForText('ev: MOUSE dblclick c=5 r=4');
 
-    // A click outside every drawn glyph still lands where it was aimed.
-    await terminal.getByText('Gamma').click({ position: { rowOffset: 8, columnOffset: 40 } });
+    // Device-level input can deliberately aim outside every locator region.
+    // Locator offsets remain constrained to the target's PhysicalRegion.
+    await terminal.mouse.click({ row: 11, column: 42 });
     await terminal.waitForText('ev: MOUSE press b=0 c=43 r=12');
   });
 
@@ -80,7 +81,7 @@ describe.skipIf(!ptyAvailable())('pointer interaction', () => {
     const terminal = await generic();
     await enableMouse(terminal, 'drag');
 
-    await terminal.getByText('Alpha').drag({ from: { row: 1, column: 2 }, to: { row: 3, column: 6 } });
+    await terminal.mouse.drag({ from: { row: 1, column: 2 }, to: { row: 3, column: 6 }, steps: 1 });
 
     // Press at the origin, motion with the drag bit set, release at the target.
     await terminal.waitForText('ev: MOUSE press b=0 c=3 r=2');
@@ -142,33 +143,33 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     await terminal.press('w');
     await terminal.waitForText('W: 0123456789');
 
-    const wrapped = await intendedRect(terminal.getByText('END'));
-    const start = await intendedRect(terminal.getByText('W: 0123456789'));
+    const wrapped = await intendedRect(terminal.getByScreenText('END'));
+    const start = await intendedRect(terminal.getByScreenText('W: 0123456789'));
     expect(wrapped?.row).toBeGreaterThan(start?.row ?? 0);
 
     await terminal.resize({ columns: 140, rows: 20 });
     await terminal.waitForText('size: 140x20');
-    const wide = await intendedRect(terminal.getByText('END'));
-    const wideStart = await intendedRect(terminal.getByText('W: 0123456789'));
+    const wide = await intendedRect(terminal.getByScreenText('END'));
+    const wideStart = await intendedRect(terminal.getByScreenText('W: 0123456789'));
     expect(wide?.row).toBe(wideStart?.row);
   });
 
   it('follows mouse mode on and off', async () => {
     const terminal = await generic();
     await enableMouse(terminal, 'click');
-    await terminal.getByText('Alpha').click();
+    await terminal.getByScreenText('Alpha').click();
     await terminal.waitForText('ev: MOUSE press b=0');
 
     await terminal.press('m'); // the child gives the mouse back
     if (!mouseModeHidden(terminal)) {
       // Observed off: the driver knows there is nothing listening and says so.
       await expect.poll(() => terminal.screen().modes.mouseTracking).toBe('none');
-      const refused = (await rejection(terminal.getByText('Alpha').click())) as TermwrightError;
-      expect(refused.code).toBe('unsupported-action');
+      const refused = (await rejection(terminal.getByScreenText('Alpha').click())) as TermwrightError;
+      expect(refused.code).toBe('input-mode-disabled');
     }
 
     await enableMouse(terminal, 'drag');
-    await terminal.getByText('Alpha').drag({ from: { row: 1, column: 2 }, to: { row: 2, column: 2 } });
+    await terminal.mouse.drag({ from: { row: 1, column: 2 }, to: { row: 2, column: 2 } });
     await terminal.waitForText('ev: MOUSE press b=32');
   });
 
@@ -178,8 +179,8 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     // request may make it: ConPTY reports `1004` as on for a child that never
     // asked, and there the driver delivers instead of refusing.
     if (focusMode(terminal) === 'off') {
-      const before = (await rejection(terminal.focus())) as TermwrightError;
-      expect(before.code).toBe('unsupported-action');
+      const before = (await rejection(terminal.window.focus())) as TermwrightError;
+      expect(before.code).toBe('input-mode-disabled');
     }
 
     const reporting = await enableFocusReporting(terminal);
@@ -188,7 +189,7 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
       // there is nothing to refuse from: the driver delivers the report and
       // records once that it could not verify the mode. The rest of this test
       // asks what the child prints, which is not a claim the platform supports.
-      await terminal.focus();
+      await terminal.window.focus();
       const unverified = terminal
         .diagnostics()
         .filter((entry) => entry.code === 'mode-unverifiable' && entry.mode === 'focus');
@@ -197,14 +198,14 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     }
     expect(reporting).toBe('on');
 
-    await terminal.focus();
+    await terminal.window.focus();
     await terminal.waitForText('ev: FOCUS:in');
-    await terminal.blur();
+    await terminal.window.blur();
     await terminal.waitForText('ev: FOCUS:out');
 
     await terminal.press('f');
     await expect.poll(() => terminal.screen().modes.focusReporting).toBe('off');
-    expect(((await rejection(terminal.focus())) as TermwrightError).code).toBe('unsupported-action');
+    expect(((await rejection(terminal.window.focus())) as TermwrightError).code).toBe('input-mode-disabled');
   });
 
   it('brackets a paste only when the child enabled bracketed paste', async () => {
@@ -223,7 +224,7 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     await terminal.press('u');
     await terminal.waitForText('日本語');
 
-    const cjk = await intendedRect(terminal.getByText('日本語'));
+    const cjk = await intendedRect(terminal.getByScreenText('日本語'));
     expect(cjk).not.toBeNull();
     // Three CJK glyphs occupy six columns.
     expect(cjk?.width).toBe(6);
@@ -234,11 +235,11 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     expect(terminal.cell({ row: cjk?.row ?? 0, column: (cjk?.column ?? 0) + 1 }).width).toBe(0);
 
     // A combining mark belongs to the cell it modifies, not to one of its own.
-    const combining = await intendedRect(terminal.getByText('é'));
+    const combining = await intendedRect(terminal.getByScreenText('é'));
     expect(combining?.width).toBe(1);
 
-    expect(await terminal.getByText('\u{1F600}').count()).toBe(1);
-    expect(await terminal.getByText('ok').count()).toBe(1);
+    expect(await terminal.getByScreenText('\u{1F600}').count()).toBe(1);
+    expect(await terminal.getByScreenText('ok').count()).toBe(1);
   });
 
   it('enters and leaves the alternate screen, restoring what was underneath', async () => {

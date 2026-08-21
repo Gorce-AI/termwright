@@ -8,10 +8,10 @@
  * @packageDocumentation
  */
 
-import type { DiagnosticCode, SessionEvents } from '@termwright/driver';
-import type { ProbeInfo, SemanticSnapshot } from '@termwright/protocol';
+import type { ActionabilityExplanation, DiagnosticCode, SessionEvents } from '@termwright/driver';
+import type { EffectiveSessionContract, ProbeInfo, SemanticSnapshot } from '@termwright/protocol';
 import { parseAppLog } from './app-log.js';
-import { toBase64, type ServerMessage, type UiAdapterStatus } from './events.js';
+import { toBase64, type ServerMessage, type UiActionability, type UiAdapterStatus } from './events.js';
 import type { UiHub } from './hub.js';
 
 /** Anything that can receive the session messages produced by this module. */
@@ -46,9 +46,59 @@ export interface UiSessionSource {
     readonly probe?: ProbeInfo;
     readonly capabilities?: readonly string[];
   };
+  /** Frozen contract once semantic negotiation settles. */
+  contract?(): EffectiveSessionContract | null;
   screen(): { readonly columns: number; readonly rows: number };
   /** Current tree, when the session has an adapter. */
   semanticTree?(): SemanticSnapshot | null;
+  /** Resolves the exact live Locator used by tests; never approximate this from node fields. */
+  locatorForRef?(ref: string): {
+    actionability(action: 'click' | 'hover' | 'focus' | 'type'): Promise<ActionabilityExplanation>;
+  };
+}
+
+const INSPECTED_ACTIONS = ['click', 'hover', 'focus', 'type'] as const;
+
+/**
+ * Runs the production ActionPlanner for the four Inspector questions.
+ *
+ * A render between individual plans would make the panel combine different
+ * worlds. Such a batch is rejected and the browser retries on the next live
+ * revision; no diagnostic approximation is substituted.
+ */
+export async function inspectNodeActionability(
+  source: UiSessionSource,
+  nodeId: string,
+): Promise<readonly UiActionability[]> {
+  const snapshot = source.semanticTree?.();
+  if (snapshot === null || snapshot === undefined) throw new Error('the live session has no committed semantic tree');
+  if (!snapshot.nodes.some((node) => node.id === nodeId)) throw new Error(`semantic node ${nodeId} is not attached at revision ${snapshot.revision}`);
+  if (source.locatorForRef === undefined) throw new Error('the live session does not expose production Locator actionability');
+  const locator = source.locatorForRef(`${nodeId}@${snapshot.revision}`);
+  const explanations = await Promise.all(INSPECTED_ACTIONS.map((action) => locator.actionability(action)));
+  const checkpoint = explanations[0]?.checkpoint;
+  if (checkpoint === undefined || explanations.some((entry) =>
+    entry.checkpoint.contractId !== checkpoint.contractId || entry.checkpoint.sequence !== checkpoint.sequence
+  )) throw new Error('the semantic observation changed while actionability was being inspected');
+  return explanations.map(toUiActionability);
+}
+
+function toUiActionability(explanation: ActionabilityExplanation): UiActionability {
+  return {
+    actionable: explanation.actionable,
+    kind: explanation.intent.kind,
+    contractId: explanation.checkpoint.contractId,
+    sequence: explanation.checkpoint.sequence,
+    requirements: explanation.requirements.map((requirement) => ({
+      kind: requirement.condition.kind,
+      ...('target' in requirement.condition ? { target: requirement.condition.target } : {}),
+      verdict: requirement.verdict,
+      observation: requirement.observation.status,
+      ...('evidence' in requirement.observation ? { evidence: requirement.observation.evidence } : {}),
+    })),
+    ...(explanation.strategy === undefined ? {} : { strategy: explanation.strategy }),
+    ...(explanation.reason === undefined ? {} : { reason: explanation.reason }),
+  };
 }
 
 /**
@@ -99,6 +149,7 @@ export function streamSession(
   const announce = (nextStatus?: UiAdapterStatus): void => {
     const screen = source.screen();
     const capabilities = source.capabilities();
+    const contract = source.contract?.() ?? null;
     if (capabilities.adapter !== undefined) lastAdapter = capabilities.adapter;
     if (capabilities.probe !== undefined && lastAdapter !== undefined) lastProbe = capabilities.probe;
     if (capabilities.capabilities !== undefined) lastCapabilities = capabilities.capabilities;
@@ -113,6 +164,7 @@ export function streamSession(
       ...(lastAdapter === undefined ? {} : { adapter: lastAdapter }),
       ...(lastProbe === undefined ? {} : { probe: lastProbe }),
       ...(lastCapabilities === undefined ? {} : { capabilities: lastCapabilities }),
+      ...(contract === null ? {} : { contract }),
       ...(lastStatus === undefined ? {} : { adapterStatus: lastStatus }),
       columns: screen.columns,
       rows: screen.rows,
@@ -165,6 +217,32 @@ export function streamSession(
       ...(event.selector === undefined ? {} : { selector: event.selector }),
       ...(event.ref === undefined ? {} : { ref: event.ref }),
       ...(event.error === undefined ? {} : { error: event.error }),
+      ...(event.receipt === undefined ? {} : {
+        actionPlan: {
+          actionId: event.receipt.plan.actionId,
+          kind: event.receipt.intent.kind,
+          strategy: event.receipt.plan.strategy,
+          contractId: event.receipt.plan.contractId,
+          beforeSequence: event.receipt.before.sequence,
+          afterSequence: event.receipt.after.sequence,
+          operations: event.receipt.executed.map((operation) => ({
+            device: operation.device,
+            kind: operation.kind,
+            ...(operation.device === 'mouse' && operation.modifiers !== undefined ? { modifiers: operation.modifiers } : {}),
+          })),
+          requirements: event.receipt.plan.requirements.map((requirement) => ({
+            kind: requirement.condition.kind,
+            ...('target' in requirement.condition ? { target: requirement.condition.target } : {}),
+            verdict: requirement.verdict,
+            observation: requirement.observation.status,
+            ...('evidence' in requirement.observation ? { evidence: requirement.observation.evidence } : {}),
+          })),
+          ...(event.receipt.plan.physicalRegion === undefined
+            ? {}
+            : { physicalEvidence: event.receipt.plan.physicalRegion.evidence }),
+        },
+      }),
+      ...(event.actionability === undefined ? {} : { actionability: toUiActionability(event.actionability) }),
       ...(stepId === undefined ? {} : { stepId }),
     });
   });

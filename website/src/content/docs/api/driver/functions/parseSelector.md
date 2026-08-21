@@ -13,9 +13,9 @@ editUrl: false
 
 > **parseSelector**(`selector`): [`SemanticQuery`](../../interfaces/semanticquery/)
 
-Defined in: [selectors.ts:212](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L212)
+Defined in: [driver/src/selectors.ts:209](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L209)
 
-Parses the Textual-style CSS dialect into a [SemanticQuery](../../interfaces/semanticquery/).
+Parses the Termwright Semantic Selector Language into a [SemanticQuery](../../interfaces/semanticquery/).
 
 ## Parameters
 

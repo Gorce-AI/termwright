@@ -62,7 +62,7 @@ class _Issue(Exception):
             return "unknown-role"
         if "revision" in self.path:
             return "revision"
-        if "bounds" in self.path or "rect" in self.path:
+        if "rect" in self.path:
             return "bad-rect"
         if self.too_big and ("nodes" in self.path or "rootIds" in self.path):
             return "count"
@@ -187,7 +187,6 @@ _NODE_KEYS = (
     "name",
     "description",
     "value",
-    "bounds",
     "state",
     "extended",
     "actions",
@@ -196,13 +195,26 @@ _NODE_KEYS = (
     "textRanges",
     "testId",
     "frameworkType",
-    "occlusion",
     "p",
     "px",
+    "geometry",
 )
-_NODE_V2_KEYS = tuple(key for key in _NODE_KEYS if key not in ("bounds", "occlusion")) + ("geometry",)
 
-_OBSERVATION_EVIDENCE = ("adapter", "probe", "terminal-grid", "viewport-clip", "paint-order", "hit-grid", "legacy-v1")
+_EVIDENCE_SOURCES = ("framework", "application", "terminal", "recognizer", "driver")
+_EVIDENCE_METHODS = ("native", "instrumented", "declared", "correlated", "measured", "derived", "heuristic")
+_EVIDENCE_STRENGTHS = ("authoritative", "diagnostic")
+
+
+def _evidence(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
+    item = _obj(value, path)
+    _strict(item, ("source", "method", "strength", "providerId"), path)
+    if item.get("source") not in _EVIDENCE_SOURCES:
+        raise _Issue(tuple(path) + ("source",), "invalid evidence source")
+    if item.get("method") not in _EVIDENCE_METHODS:
+        raise _Issue(tuple(path) + ("method",), "invalid evidence method")
+    if item.get("strength") not in _EVIDENCE_STRENGTHS:
+        raise _Issue(tuple(path) + ("strength",), "invalid evidence strength")
+    _text(item.get("providerId"), tuple(path) + ("providerId",), limits)
 
 
 def _observation(value: Any, path: Sequence[str], known, limits: ProtocolLimits) -> None:
@@ -210,16 +222,22 @@ def _observation(value: Any, path: Sequence[str], known, limits: ProtocolLimits)
     status = item.get("status")
     if status == "known":
         _strict(item, ("status", "value", "evidence"), path)
-        if "value" not in item or item.get("evidence") not in _OBSERVATION_EVIDENCE:
+        if "value" not in item or "evidence" not in item:
             raise _Issue(path, "known observation requires value and evidence")
+        _evidence(item["evidence"], tuple(path) + ("evidence",), limits)
         known(item["value"], tuple(path) + ("value",))
     elif status == "absent":
-        _strict(item, ("status", "reason"), path)
+        _strict(item, ("status", "reason", "evidence"), path)
         if item.get("reason") not in ("detached", "not-displayed", "not-laid-out"):
             raise _Issue(tuple(path) + ("reason",), "invalid absent reason")
+        if "evidence" not in item:
+            raise _Issue(path, "absent observation requires evidence")
+        _evidence(item["evidence"], tuple(path) + ("evidence",), limits)
+        if item["evidence"].get("strength") != "authoritative":
+            raise _Issue(tuple(path) + ("evidence", "strength"), "absent observation requires authoritative evidence")
     elif status == "unknown":
         _strict(item, ("status", "reason"), path)
-        if item.get("reason") not in ("not-reported", "temporary", "clip-unobservable", "legacy-unqualified"):
+        if item.get("reason") not in ("awaiting-revision-pair", "provider-refresh", "stale-revision"):
             raise _Issue(tuple(path) + ("reason",), "invalid unknown reason")
     elif status == "unsupported":
         _strict(item, ("status", "capability", "reason"), path)
@@ -238,11 +256,6 @@ PROVENANCE_SOURCES = (
     "correlation",
     "heuristic",
 )
-
-#: Whether the producer can say if a node's cells are covered. A producer that
-#: cannot see paint order says `unknown`, and the driver refuses to click it.
-OCCLUSION_VALUES = ("known", "unknown")
-
 
 def _extended(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
     if value is None or isinstance(value, bool):
@@ -279,11 +292,9 @@ def _relations(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
         _text(item, tuple(path) + (str(index),), limits)
 
 
-def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits, v: int = 1) -> None:
+def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
     node = _obj(value, path)
-    if v == 2 and "bounds" in node:
-        raise _Issue(tuple(path) + ("bounds",), "legacy bounds are forbidden in v2")
-    _strict(node, _NODE_V2_KEYS if v == 2 else _NODE_KEYS, path)
+    _strict(node, _NODE_KEYS, path)
 
     if "id" not in node:
         raise _Issue(tuple(path) + ("id",), "expected a string")
@@ -292,15 +303,13 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits, v: int
     if "parentId" in node:
         _text(node["parentId"], tuple(path) + ("parentId",), limits)
     if node.get("role") not in ROLE_SET:
-        raise _Issue(tuple(path) + ("role",), "expected one of the v1 semantic roles")
+        raise _Issue(tuple(path) + ("role",), "expected a supported semantic role")
     if "name" not in node:
         raise _Issue(tuple(path) + ("name",), "expected a string")
     _text(node["name"], tuple(path) + ("name",), limits)
     for key in ("description", "value", "testId", "frameworkType"):
         if key in node:
             _text(node[key], tuple(path) + (key,), limits)
-    if "occlusion" in node and node["occlusion"] not in OCCLUSION_VALUES:
-        raise _Issue(tuple(path) + ("occlusion",), "expected 'known' or 'unknown'")
     if "p" in node and node["p"] not in PROVENANCE_SOURCES:
         raise _Issue(tuple(path) + ("p",), "expected one of the provenance sources")
     if "px" in node:
@@ -322,14 +331,11 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits, v: int
             f"node {node.get('id')} has role 'generic' without a frameworkType; "
             "an unrecognised widget must name what the framework called it",
         )
-    if "bounds" in node:
-        _rect(node["bounds"], tuple(path) + ("bounds",))
-    if v == 2:
-        geometry = _obj(node.get("geometry"), tuple(path) + ("geometry",))
-        _strict(geometry, ("displayed", "intendedRect", "visibleRect"), tuple(path) + ("geometry",))
-        _observation(geometry.get("displayed"), tuple(path) + ("geometry", "displayed"), _bool, limits)
-        _observation(geometry.get("intendedRect"), tuple(path) + ("geometry", "intendedRect"), _rect, limits)
-        _observation(geometry.get("visibleRect"), tuple(path) + ("geometry", "visibleRect"), _rect, limits)
+    geometry = _obj(node.get("geometry"), tuple(path) + ("geometry",))
+    _strict(geometry, ("displayed", "intendedRect", "visibleRect"), tuple(path) + ("geometry",))
+    _observation(geometry.get("displayed"), tuple(path) + ("geometry", "displayed"), _bool, limits)
+    _observation(geometry.get("intendedRect"), tuple(path) + ("geometry", "intendedRect"), _rect, limits)
+    _observation(geometry.get("visibleRect"), tuple(path) + ("geometry", "visibleRect"), _rect, limits)
     if "state" in node:
         _state(node["state"], tuple(path) + ("state",))
         state = node["state"]
@@ -355,7 +361,7 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits, v: int
         for index, action in enumerate(actions):
             if action not in ACTION_SET:
                 raise _Issue(
-                    tuple(path) + ("actions", str(index)), "expected one of the v1 semantic actions"
+                    tuple(path) + ("actions", str(index)), "expected a supported semantic action"
                 )
     for key in ("labelledBy", "describedBy"):
         if key in node:
@@ -393,17 +399,16 @@ def _cursor(value: Any, path: Sequence[str]) -> None:
         raise _Issue(tuple(path) + ("shape",), "expected 'block', 'underline' or 'bar'")
 
 
-_SNAPSHOT_KEYS = ("v", "sessionId", "revision", "columns", "rows", "cursor", "rootIds", "nodes")
-_SNAPSHOT_V2_KEYS = _SNAPSHOT_KEYS + ("coordinateSpace", "hitGrid")
+_SNAPSHOT_KEYS = ("v", "sessionId", "revision", "columns", "rows", "cursor", "rootIds", "nodes", "coordinateSpace", "hitGrid")
 
 
 def _snapshot_schema(value: Any, limits: ProtocolLimits) -> None:
     snapshot = _obj(value, ())
     version = snapshot.get("v")
-    _strict(snapshot, _SNAPSHOT_V2_KEYS if version == 2 else _SNAPSHOT_KEYS, ())
+    _strict(snapshot, _SNAPSHOT_KEYS, ())
 
-    if version not in (1, 2):
-        raise _Issue(("v",), "expected the literal 1 or 2")
+    if version != 2:
+        raise _Issue(("v",), "expected the literal 2")
     if "sessionId" not in snapshot:
         raise _Issue(("sessionId",), "expected a string")
     if _text(snapshot["sessionId"], ("sessionId",), limits) == "":
@@ -432,39 +437,38 @@ def _snapshot_schema(value: Any, limits: ProtocolLimits) -> None:
     if len(nodes) > limits.maxNodes:
         raise _Issue(("nodes",), f"expected at most {limits.maxNodes} items", too_big=True)
     for index, node in enumerate(nodes):
-        _node_schema(node, ("nodes", str(index)), limits, version)
-    if version == 2:
-        _observation(snapshot.get("coordinateSpace"), ("coordinateSpace",), lambda value, path: value in ("viewport-cells", "framework-local-cells") or (_ for _ in ()).throw(_Issue(path, "invalid coordinate space")), limits)
-        def _grid(value: Any, path: Sequence[str]) -> None:
-            grid = _obj(value, path)
-            _strict(grid, ("regions",), path)
-            regions = grid.get("regions")
-            if not isinstance(regions, list) or len(regions) > limits.maxNodes:
-                raise _Issue(tuple(path) + ("regions",), "invalid hit regions")
-            previous = None
-            for index, region_value in enumerate(regions):
-                region_path = tuple(path) + ("regions", str(index))
-                region = _obj(region_value, region_path)
-                _strict(region, ("rect", "recipientId"), region_path)
-                rect = _rect(region.get("rect"), region_path + ("rect",))
-                if rect["width"] <= 0 or rect["height"] != 1:
-                    raise _Issue(
-                        region_path + ("rect",), "hit regions must be non-empty row runs"
-                    )
-                if previous is not None and (
-                    rect["row"] < previous["row"]
-                    or (
-                        rect["row"] == previous["row"]
-                        and rect["column"] < previous["column"] + previous["width"]
-                    )
-                ):
-                    raise _Issue(
-                        region_path + ("rect",),
-                        "hit regions must be non-overlapping row-major runs",
-                    )
-                previous = rect
-                _text(region.get("recipientId"), region_path + ("recipientId",), limits)
-        _observation(snapshot.get("hitGrid"), ("hitGrid",), _grid, limits)
+        _node_schema(node, ("nodes", str(index)), limits)
+    _observation(snapshot.get("coordinateSpace"), ("coordinateSpace",), lambda value, path: value in ("viewport-cells", "framework-local-cells") or (_ for _ in ()).throw(_Issue(path, "invalid coordinate space")), limits)
+    def _grid(value: Any, path: Sequence[str]) -> None:
+        grid = _obj(value, path)
+        _strict(grid, ("regions",), path)
+        regions = grid.get("regions")
+        if not isinstance(regions, list) or len(regions) > limits.maxNodes:
+            raise _Issue(tuple(path) + ("regions",), "invalid hit regions")
+        previous = None
+        for index, region_value in enumerate(regions):
+            region_path = tuple(path) + ("regions", str(index))
+            region = _obj(region_value, region_path)
+            _strict(region, ("rect", "recipientId"), region_path)
+            rect = _rect(region.get("rect"), region_path + ("rect",))
+            if rect["width"] <= 0 or rect["height"] != 1:
+                raise _Issue(
+                    region_path + ("rect",), "hit regions must be non-empty row runs"
+                )
+            if previous is not None and (
+                rect["row"] < previous["row"]
+                or (
+                    rect["row"] == previous["row"]
+                    and rect["column"] < previous["column"] + previous["width"]
+                )
+            ):
+                raise _Issue(
+                    region_path + ("rect",),
+                    "hit regions must be non-overlapping row-major runs",
+                )
+            previous = rect
+            _text(region.get("recipientId"), region_path + ("recipientId",), limits)
+    _observation(snapshot.get("hitGrid"), ("hitGrid",), _grid, limits)
 
 
 # --------------------------------------------------------------------------
@@ -489,21 +493,6 @@ def _check_node_shape(
     ids: Set[str],
     limits: ProtocolLimits,
 ) -> Optional[ValidationResult]:
-    bounds = node.get("bounds")
-    if bounds is not None:
-        if (
-            abs(bounds["row"] + bounds["height"]) > _MAX_SAFE_INTEGER
-            or abs(bounds["column"] + bounds["width"]) > _MAX_SAFE_INTEGER
-        ):
-            return _fail("bad-rect", f"node {node['id']}: bounds overflow the safe-integer range")
-        hidden = (node.get("state") or {}).get("hidden") is True
-        if not hidden and not _rect_intersects_viewport(bounds, snapshot["columns"], snapshot["rows"]):
-            return _fail(
-                "bad-rect",
-                f"node {node['id']}: bounds do not intersect the "
-                f"{snapshot['columns']}x{snapshot['rows']} viewport and the node is not hidden",
-            )
-
     for text_range in node.get("textRanges") or []:
         if text_range["endOffset"] < text_range["startOffset"]:
             return _fail("bad-rect", f"node {node['id']}: text range ends before it starts")
@@ -555,116 +544,6 @@ def _compute_depths(
     return depths, None
 
 
-DELTA_KEYS = ("type", "baseRevision", "revision", "changed", "removed", "rootIds", "cursor")
-
-
-def validate_tree_delta(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> ValidationResult:
-    """Validate the SHAPE of a `tree-delta` message.
-
-    Only the shape is checkable here. A delta carries no ``columns``/``rows``,
-    so whether a parent exists, whether the tree stays acyclic and within the
-    depth ceiling, and whether bounds or the cursor fall inside the viewport
-    can only be judged once the delta is applied to its base — put the
-    assembled tree through :func:`validate_snapshot` for that.
-
-    What is checkable without the base: sizes, node shape, unique ids, a
-    revision that moves forward, and the same id never both upserted and
-    removed by one delta.
-    """
-    try:
-        projected = project_dto(value, limits.maxDepth)
-    except ProtocolViolation as error:
-        return _fail("depth" if error.code == "dto-depth" else "schema", str(error))
-
-    try:
-        serialised = encode_json(projected)
-    except ProtocolViolation:
-        return _fail("schema", "delta is not JSON-serialisable")
-    if len(serialised) > limits.maxSnapshotBytes:
-        return _fail(
-            "bytes", f"delta is {len(serialised)} bytes, ceiling is {limits.maxSnapshotBytes}"
-        )
-
-    try:
-        _tree_delta_schema(projected, limits)
-    except _Issue as issue:
-        return _fail(issue.code, issue.detail)
-
-    delta: Dict[str, Any] = projected
-    changed_ids: Set[str] = set()
-    for index, node in enumerate(delta["changed"]):
-        if node["id"] in changed_ids:
-            return _fail("duplicate-id", f"node id {node['id']} appears twice in changed")
-        changed_ids.add(node["id"])
-        if node.get("parentId") == node["id"]:
-            return _fail("cycle", f"node {node['id']} is its own parent")
-        _ = index
-
-    removed_ids: Set[str] = set()
-    for node_id in delta["removed"]:
-        if node_id in removed_ids:
-            return _fail("duplicate-id", f"node id {node_id} appears twice in removed")
-        removed_ids.add(node_id)
-
-    both = changed_ids & removed_ids
-    if both:
-        # Removals apply before upserts, so this would be a delta arguing with
-        # itself about one id rather than moving a node between parents.
-        return _fail(
-            "schema", f"node id {sorted(both)[0]} is both changed and removed by one delta"
-        )
-
-    if "rootIds" in delta:
-        seen: Set[str] = set()
-        for node_id in delta["rootIds"]:
-            if node_id in seen:
-                return _fail("duplicate-id", f"root id {node_id} appears more than once")
-            seen.add(node_id)
-
-    return ValidationResult(ok=True, snapshot=delta)
-
-
-def _tree_delta_schema(value: Any, limits: ProtocolLimits) -> None:
-    delta = _obj(value, ())
-    _strict(delta, DELTA_KEYS, ())
-
-    base = _positive_int(delta.get("baseRevision"), ("baseRevision",))
-    revision = _positive_int(delta.get("revision"), ("revision",))
-    if revision <= base:
-        raise _Issue(
-            ("revision",), f"revision {revision} must move forward from base {base}"
-        )
-
-    changed = delta.get("changed")
-    if not isinstance(changed, list):
-        raise _Issue(("changed",), "expected an array")
-    if len(changed) > limits.maxNodes:
-        raise _Issue(("changed",), f"expected at most {limits.maxNodes} items", too_big=True)
-    for index, node in enumerate(changed):
-        _node_schema(node, ("changed", str(index)), limits)
-
-    removed = delta.get("removed")
-    if not isinstance(removed, list):
-        raise _Issue(("removed",), "expected an array")
-    if len(removed) > limits.maxNodes:
-        raise _Issue(("removed",), f"expected at most {limits.maxNodes} items", too_big=True)
-    for index, node_id in enumerate(removed):
-        if _text(node_id, ("removed", str(index)), limits) == "":
-            raise _Issue(("removed", str(index)), "node id must not be empty")
-
-    if "rootIds" in delta:
-        root_ids = delta["rootIds"]
-        if not isinstance(root_ids, list):
-            raise _Issue(("rootIds",), "expected an array")
-        if len(root_ids) > limits.maxNodes:
-            raise _Issue(("rootIds",), f"expected at most {limits.maxNodes} items", too_big=True)
-        for index, node_id in enumerate(root_ids):
-            _text(node_id, ("rootIds", str(index)), limits)
-
-    if "cursor" in delta:
-        _cursor(delta["cursor"], ("cursor",))
-
-
 def validate_snapshot(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> ValidationResult:
     """Validate an untrusted snapshot against ``limits``.
 
@@ -707,15 +586,15 @@ def validate_snapshot(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> Va
         if node_id in root_ids:
             return _fail("duplicate-id", f"root id {node_id} appears more than once")
         root_ids.add(node_id)
-        node = by_id.get(node_id)
-        if node is None:
+        root_node = by_id.get(node_id)
+        if root_node is None:
             return _fail("missing-parent", f"rootIds references unknown node {node_id}")
-        if node.get("parentId") is not None:
+        if root_node.get("parentId") is not None:
             return _fail("schema", f"root node {node_id} declares a parent")
 
     ids = set(by_id)
 
-    if snapshot["v"] == 2 and snapshot["hitGrid"]["status"] == "known":
+    if snapshot["hitGrid"]["status"] == "known":
         for region in snapshot["hitGrid"]["value"]["regions"]:
             recipient_id = region["recipientId"]
             if recipient_id not in ids:
@@ -760,87 +639,3 @@ def validate_snapshot(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> Va
             )
 
     return ValidationResult(ok=True, snapshot=snapshot)
-
-
-def apply_tree_delta(
-    base: Mapping[str, Any], delta: Mapping[str, Any], limits: ProtocolLimits = DEFAULT_LIMITS
-) -> ValidationResult:
-    """Compose a delta onto the snapshot it names, then validate the result.
-
-    The four composition rules, in the order they are applied:
-
-    1. ``removed`` takes each id **with its whole subtree**. The cascade is
-       what keeps a delta small — dropping a dialog is one id, not one per
-       descendant — and it is the only rule that leaves no orphans behind.
-    2. Removals happen **before** upserts, so one delta can move a node out of
-       a subtree it is deleting.
-    3. ``changed`` upserts by id, **replacing a node wholesale**. Merging would
-       need a third state meaning "clear this optional field", which the wire
-       cannot express.
-    4. ``rootIds`` present replaces the list; absent inherits the base's minus
-       whatever the removals took. Adding a new root therefore *requires*
-       sending ``rootIds`` — otherwise the parentless node is missing from the
-       root list and validation says so, loudly.
-
-    An absent ``cursor`` is inherited; there is no way to remove one, and none
-    is needed, because hiding it is ``visible: false``.
-
-    A base that disagrees is reported rather than patched around: the caller
-    asks for a full snapshot instead of guessing (§8.3).
-
-    The composed tree then goes through :func:`validate_snapshot`, because a
-    delta is trusted to *describe* a valid tree, never to produce one.
-    """
-    if delta.get("baseRevision") != base.get("revision"):
-        return _fail(
-            "revision",
-            f"delta is based on revision {delta.get('baseRevision')} but the held snapshot "
-            f"is revision {base.get('revision')}; request a full snapshot instead of patching",
-        )
-
-    by_id: Dict[str, Any] = {node["id"]: node for node in base["nodes"]}
-
-    children_of: Dict[str, List[str]] = {}
-    for node in base["nodes"]:
-        parent = node.get("parentId")
-        if parent is not None:
-            children_of.setdefault(parent, []).append(node["id"])
-
-    for node_id in delta["removed"]:
-        if node_id not in by_id:
-            return _fail(
-                "missing-parent",
-                f"delta removes unknown node {node_id}; the producer's base disagrees with "
-                "ours, so the tree must be resynchronised rather than patched",
-            )
-        # Iterative descent: a hostile delta must not be able to blow the stack.
-        pending = [node_id]
-        while pending:
-            current = pending.pop()
-            if by_id.pop(current, None) is None:
-                continue
-            pending.extend(children_of.get(current, ()))
-
-    for node in delta["changed"]:
-        by_id[node["id"]] = node
-
-    if "rootIds" in delta:
-        root_ids = list(delta["rootIds"])
-    else:
-        root_ids = [node_id for node_id in base["rootIds"] if node_id in by_id]
-
-    cursor = delta.get("cursor", base.get("cursor"))
-
-    composed: Dict[str, Any] = {
-        "v": 1,
-        "sessionId": base["sessionId"],
-        "revision": delta["revision"],
-        "columns": base["columns"],
-        "rows": base["rows"],
-    }
-    if cursor is not None:
-        composed["cursor"] = cursor
-    composed["rootIds"] = root_ids
-    composed["nodes"] = list(by_id.values())
-
-    return validate_snapshot(composed, limits)

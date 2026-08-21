@@ -1,6 +1,13 @@
 /** Bun entry: `bun --preload @termwright/probe-ink/bun-preload app.js`. */
 
 import { buildShimSource, INK_ENTRY_PATTERN, shouldShim } from './shim.js';
+import { readFile } from 'node:fs/promises';
+import {
+  instrumentInkCore,
+  instrumentInkRenderer,
+  INK_CORE_PATTERN,
+  INK_RENDERER_PATTERN,
+} from './instrumentation.js';
 import { isInstrumented } from './runtime.js';
 
 interface BunPluginBuild {
@@ -28,6 +35,16 @@ export function installBunPreload(
       build.onLoad({ filter: INK_ENTRY_PATTERN }, async (args) => {
         if (!shouldShim(args.path)) return undefined;
         return { loader: 'js', contents: buildShimSource(args.path) };
+      });
+      build.onLoad({ filter: INK_RENDERER_PATTERN }, async (args) => {
+        const source = await readFile(args.path, 'utf8');
+        const contents = instrumentInkRenderer(args.path, source);
+        return contents === undefined ? undefined : { loader: 'js', contents };
+      });
+      build.onLoad({ filter: INK_CORE_PATTERN }, async (args) => {
+        const source = await readFile(args.path, 'utf8');
+        const contents = instrumentInkCore(args.path, source);
+        return contents === undefined ? undefined : { loader: 'js', contents };
       });
     },
   });

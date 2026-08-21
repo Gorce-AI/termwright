@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-from conftest import load_vectors
+from conftest import node, snapshot
 
 from termwright import (
     DEFAULT_LIMITS,
@@ -12,42 +11,55 @@ from termwright import (
     parse_adapter_message,
     parse_driver_message,
 )
-from termwright.messages import hello, get_tree_result, protocol_error, revision_commit
+from termwright.messages import hello, protocol_error, revision_commit
 
-VECTORS = load_vectors("messages")
 PARSERS = {"adapterToDriver": parse_adapter_message, "driverToAdapter": parse_driver_message}
 
 
-def _cases(direction: str, kind: str):
-    return [
-        pytest.param(direction, case, id=f"{direction}-{case['name']}")
-        for case in VECTORS[direction][kind]
+def ack(**changes):
+    message = {
+        "type": "hello-ack",
+        "protocol": PROTOCOL_ID,
+        "sessionId": "s-1",
+        "limits": DEFAULT_LIMITS.to_wire(),
+        "subscribe": "snapshots",
+        "marker": {"enabled": True},
+    }
+    message.update(changes)
+    return message
+
+
+def test_protocol_v2_messages_are_accepted():
+    tree = snapshot(nodes=[node(id="root", role="application", name="app")], root_ids=["root"])
+    messages = [
+        (parse_adapter_message, hello("token", "pytest", "0.1.0", ["tree"])),
+        (parse_adapter_message, {"type": "snapshot", "snapshot": tree.to_wire()}),
+        (parse_driver_message, ack()),
+        (parse_driver_message, ack(subscribe="revisions")),
     ]
+    for parser, message in messages:
+        result = parser(message, DEFAULT_LIMITS)
+        assert result.ok, f"{message['type']}: {result.code} {result.detail}"
 
 
-@pytest.mark.parametrize(
-    ("direction", "case"), _cases("adapterToDriver", "accept") + _cases("driverToAdapter", "accept")
-)
-def test_valid_messages_are_accepted(direction, case):
-    result = PARSERS[direction](case["message"], DEFAULT_LIMITS)
-    assert result.ok, f"{result.code}: {result.detail}"
-    assert result.message == case["message"]
+def test_protocol_v1_is_rejected_in_both_directions():
+    adapter = hello("token", "pytest", "0.1.0", ["tree"])
+    adapter["protocol"] = "termwright/1"
+    driver = ack(protocol="termwright/1")
+    assert parse_adapter_message(adapter, DEFAULT_LIMITS).code == "bad-version"
+    assert parse_driver_message(driver, DEFAULT_LIMITS).code == "bad-version"
 
 
-@pytest.mark.parametrize(
-    ("direction", "case"), _cases("adapterToDriver", "reject") + _cases("driverToAdapter", "reject")
-)
-def test_invalid_messages_are_rejected_with_the_same_code(direction, case):
-    result = PARSERS[direction](case["message"], DEFAULT_LIMITS)
-    assert not result.ok
-    assert result.code == case["code"], result.detail
+def test_diff_subscription_and_delta_messages_are_rejected():
+    assert not parse_driver_message(ack(subscribe="diffs"), DEFAULT_LIMITS).ok
+    delta = {"type": "tree-delta", "baseRevision": 1, "revision": 2, "changed": [], "removed": []}
+    assert not parse_adapter_message(delta, DEFAULT_LIMITS).ok
 
 
 def test_builders_produce_parseable_messages():
     built = [
-        hello("token", "pytest", "0.1.0", ["tree", "bounds"]),
+        hello("token", "pytest", "0.1.0", ["tree"]),
         revision_commit(4),
-        get_tree_result(1, error="no such revision"),
         protocol_error("internal", "boom"),
     ]
     for message in built:
@@ -69,10 +81,9 @@ def test_limits_tolerate_ceilings_this_version_does_not_know():
     the protocol gained one, which is exactly what happened when the driver
     started sending the log limits.
     """
-    ack = VECTORS["driverToAdapter"]["accept"][0]["message"]
-    assert ack["type"] == "hello-ack"
+    current = ack()
 
-    future = {**ack, "limits": {**ack["limits"], "maxQuantumFlux": 7, "maxTeaPots": 1}}
+    future = {**current, "limits": {**current["limits"], "maxQuantumFlux": 7, "maxTeaPots": 1}}
     result = parse_driver_message(future, DEFAULT_LIMITS)
     assert result.ok, f"a forward-compatible hello-ack was rejected: {result.detail}"
 
@@ -82,9 +93,9 @@ def test_limits_tolerate_ceilings_this_version_does_not_know():
 
 
 def test_limits_still_require_every_known_ceiling():
-    ack = VECTORS["driverToAdapter"]["accept"][0]["message"]
-    truncated = {key: value for key, value in ack["limits"].items() if key != "maxNodes"}
-    result = parse_driver_message({**ack, "limits": truncated}, DEFAULT_LIMITS)
+    current = ack()
+    truncated = {key: value for key, value in current["limits"].items() if key != "maxNodes"}
+    result = parse_driver_message({**current, "limits": truncated}, DEFAULT_LIMITS)
     assert not result.ok
     assert "maxNodes" in result.detail
 
@@ -105,13 +116,13 @@ def test_tolerance_follows_the_speaker_not_the_message():
 
 def test_closed_sets_stay_closed_in_both_directions():
     """Tolerance is not leniency: a vocabulary is not a growth point."""
-    ack = VECTORS["driverToAdapter"]["accept"][0]["message"]
-    assert not parse_driver_message({**ack, "subscribe": "everything"}, DEFAULT_LIMITS).ok
+    current = ack()
+    assert not parse_driver_message({**current, "subscribe": "everything"}, DEFAULT_LIMITS).ok
     assert not parse_driver_message(
         {"type": "error", "code": "meltdown", "message": "x"}, DEFAULT_LIMITS
     ).ok
-    assert not parse_driver_message({**ack, "type": "hello-ack-v2"}, DEFAULT_LIMITS).ok
+    assert not parse_driver_message({**current, "type": "hello-ack-v2"}, DEFAULT_LIMITS).ok
     # Known fields keep their types even when unknown ones are tolerated.
     assert not parse_driver_message(
-        {**ack, "marker": {"enabled": "yes", "style": "dcs"}}, DEFAULT_LIMITS
+        {**current, "marker": {"enabled": "yes", "style": "dcs"}}, DEFAULT_LIMITS
     ).ok

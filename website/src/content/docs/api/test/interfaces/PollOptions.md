@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: PollOptions
 
-Defined in: [test/src/matchers.ts:43](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L43)
+Defined in: [test/src/matchers.ts:44](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L44)
 
 Every matcher accepts a per-assertion timeout override.
 
@@ -27,6 +27,6 @@ Every matcher accepts a per-assertion timeout override.
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [test/src/matchers.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L45)
+Defined in: [test/src/matchers.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L46)
 
 Milliseconds to keep re-probing. Defaults to the `expect` timeout class.

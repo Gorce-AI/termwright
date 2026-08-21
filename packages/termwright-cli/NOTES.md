@@ -5,13 +5,13 @@ Decisions that are not obvious from the code.
 ## Subpaths, not one entry point
 
 The brief asked for "a sensible one-starter-package surface — driver, test,
-ink-testing". They are all here, but on three entry points rather than one:
+Ink component testing". They are all here, but on three entry points rather than one:
 
 | Entry | Re-exports |
 |---|---|
 | `termwright` | `@termwright/driver` |
 | `termwright/test` | `@termwright/test` |
-| `termwright/ink` | `@termwright/ink-testing` |
+| `termwright/ink` | `@termwright/ink` |
 | `termwright/reporter` | `@termwright/test/reporter` |
 | `termwright/ui-reporter` | `@termwright/ui/reporter` |
 

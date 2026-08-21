@@ -1,28 +1,48 @@
 package protocol
 
 import (
-	"encoding/json"
 	"fmt"
 )
 
 // ProtocolID is the wire protocol identifier both sides must agree on.
-const ProtocolID = "termwright/1"
-const ProtocolV2ID = "termwright/2"
+const ProtocolID = "termwright/2"
 
 // ProtocolVersion is the current major version.
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 
 // maxIdentifierLength bounds tokens, ids and free-text error messages.
 const maxIdentifierLength = 1024
 
 // Hello is the adapter's handshake: sent exactly once, before anything else.
 type Hello struct {
-	Type         string       `json:"type"`
-	Protocol     string       `json:"protocol"`
-	Token        string       `json:"token"`
-	Adapter      AdapterInfo  `json:"adapter"`
-	Capabilities []Capability `json:"capabilities"`
-	Probe        *ProbeInfo   `json:"probe,omitempty"`
+	Type         string                         `json:"type"`
+	Protocol     string                         `json:"protocol"`
+	Token        string                         `json:"token"`
+	Adapter      AdapterInfo                    `json:"adapter"`
+	Capabilities []Capability                   `json:"capabilities"`
+	Probe        *ProbeInfo                     `json:"probe,omitempty"`
+	Providers    []EvidenceProviderRegistration `json:"providers,omitempty"`
+}
+
+// EvidenceProviderRegistration freezes an application evidence producer in
+// the same hello negotiation as the framework adapter.
+type EvidenceProviderRegistration struct {
+	ID           string   `json:"id"`
+	Version      string   `json:"version"`
+	Method       string   `json:"method"` // native or declared
+	Capabilities []string `json:"capabilities"`
+}
+
+// EvidenceProviderRegistry freezes application providers once per client session.
+type EvidenceProviderRegistry interface {
+	Freeze() (EvidenceProviderLease, error)
+}
+
+// EvidenceProviderLease is the immutable provider set owned by one session.
+type EvidenceProviderLease interface {
+	Registrations() []EvidenceProviderRegistration
+	Collect(sessionID string, revision int64, columns, rows int) []ProviderRevisionEvidence
+	Close()
 }
 
 // AdapterInfo identifies the adapter implementation to the driver.
@@ -71,21 +91,6 @@ type SnapshotMessage struct {
 	Snapshot *Snapshot `json:"snapshot"`
 }
 
-// GetTree is the driver asking for a tree: the latest, or a held revision.
-type GetTree struct {
-	Type      string `json:"type"`
-	RequestID int64  `json:"requestId"`
-	Revision  *int64 `json:"revision,omitempty"`
-}
-
-// GetTreeResult answers a GetTree with exactly one of a snapshot or an error.
-type GetTreeResult struct {
-	Type      string          `json:"type"`
-	RequestID int64           `json:"requestId"`
-	Snapshot  json.RawMessage `json:"snapshot,omitempty"`
-	Error     string          `json:"error,omitempty"`
-}
-
 // ProtocolErrorMessage is terminal: the sender closes after emitting it.
 type ProtocolErrorMessage struct {
 	Type    string `json:"type"`
@@ -96,29 +101,6 @@ type ProtocolErrorMessage struct {
 // NewHello builds a handshake message, refusing unknown capabilities locally.
 func NewHello(token, name, version string, capabilities []Capability) (*Hello, error) {
 	return newHello(token, name, version, capabilities, nil)
-}
-
-// NewHelloV2 builds a qualified-observation handshake.
-func NewHelloV2(token, name, version string, capabilities []Capability) (*Hello, error) {
-	capabilities = append([]Capability{}, capabilities...)
-	if !containsCapability(capabilities, CapQualifiedObservations) {
-		capabilities = append(capabilities, CapQualifiedObservations)
-	}
-	hello, err := newHello(token, name, version, capabilities, nil)
-	if err != nil {
-		return nil, err
-	}
-	hello.Protocol = ProtocolV2ID
-	return hello, nil
-}
-
-func containsCapability(values []Capability, wanted Capability) bool {
-	for _, value := range values {
-		if value == wanted {
-			return true
-		}
-	}
-	return false
 }
 
 func newHello(token, name, version string, capabilities []Capability, probe *ProbeInfo) (*Hello, error) {
@@ -163,7 +145,7 @@ func malformed(format string, args ...any) *ParseError {
 }
 
 var errorCodes = map[string]struct{}{
-	"bad-token": {}, "bad-version": {}, "malformed": {}, "limit-exceeded": {}, "internal": {},
+	"bad-token": {}, "bad-version": {}, "malformed": {}, "limit-exceeded": {}, "duplicate-semantic-key": {}, "adapter-guarantee-violation": {}, "internal": {},
 }
 
 func project(value any, limits Limits) (any, *ParseError) {
@@ -297,7 +279,11 @@ func messageObject(value any) (map[string]any, string, *ParseError) {
 }
 
 func checkProtocolField(object map[string]any) *ParseError {
-	if protocol, ok := object["protocol"].(string); ok && protocol != ProtocolID && protocol != ProtocolV2ID {
+	protocol, ok := object["protocol"].(string)
+	if !ok {
+		return malformed("protocol: expected a string")
+	}
+	if protocol != ProtocolID {
 		return &ParseError{Code: "bad-version", Detail: "unsupported protocol " + protocol}
 	}
 	return nil
@@ -351,19 +337,6 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 				return nil, malformed("capabilities: unknown capability")
 			}
 		}
-		protocol, _ := object["protocol"].(string)
-		qualified := false
-		pointerGrid := false
-		for _, item := range capabilities {
-			qualified = qualified || item == string(CapQualifiedObservations)
-			pointerGrid = pointerGrid || item == string(CapPointerHitGrid)
-		}
-		if (protocol == ProtocolV2ID) != qualified {
-			return nil, malformed("termwright/2 and qualified-observations must be negotiated together")
-		}
-		if pointerGrid && !qualified {
-			return nil, malformed("pointer-hit-grid requires qualified-observations")
-		}
 		if probe, present := object["probe"]; present {
 			if problem := checkProbeInfo(probe); problem != nil {
 				return nil, problem
@@ -389,35 +362,6 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 		}
 		return object, nil
 
-	case "get-tree-result":
-		if problem := requireKeys(object, []string{"type", "requestId"}, []string{"snapshot", "error"}); problem != nil {
-			return nil, problem
-		}
-		if problem := wholeNumber(object, "requestId", false); problem != nil {
-			return nil, problem
-		}
-		_, hasSnapshot := object["snapshot"]
-		_, hasError := object["error"]
-		if hasSnapshot == hasError {
-			return nil, malformed("exactly one of snapshot or error must be present")
-		}
-		if hasError {
-			if problem := identifier(object, "error", true); problem != nil {
-				return nil, problem
-			}
-			return object, nil
-		}
-		if problem := checkEmbeddedSnapshot(object["snapshot"], limits); problem != nil {
-			return nil, problem
-		}
-		return object, nil
-
-	case "tree-delta":
-		if problem := checkTreeDelta(object, limits); problem != nil {
-			return nil, problem
-		}
-		return object, nil
-
 	case "log":
 		if problem := requireKeys(object, []string{"type", "record"}, nil); problem != nil {
 			return nil, problem
@@ -434,20 +378,6 @@ func ParseAdapterMessage(value any, limits Limits) (map[string]any, error) {
 		return object, nil
 	}
 	return nil, malformed("unknown or missing message type")
-}
-
-// checkTreeDelta maps a delta shape failure onto the wire taxonomy.
-func checkTreeDelta(value any, limits Limits) *ParseError {
-	err := ValidateTreeDelta(value, limits)
-	if err == nil {
-		return nil
-	}
-	wire := "malformed"
-	switch ValidationCode(err) {
-	case "bytes", "count", "depth", "string-bytes":
-		wire = "limit-exceeded"
-	}
-	return &ParseError{Code: wire, Detail: "tree-delta " + err.Error()}
 }
 
 // checkLogRecord maps a record failure onto the wire taxonomy: capacity
@@ -516,8 +446,8 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 			}
 		}
 		subscribe, _ := object["subscribe"].(string)
-		if subscribe != "snapshots" && subscribe != "revisions" && subscribe != "diffs" {
-			return nil, malformed("subscribe: expected 'snapshots', 'revisions' or 'diffs'")
+		if subscribe != "snapshots" && subscribe != "revisions" {
+			return nil, malformed("subscribe: expected 'snapshots' or 'revisions'")
 		}
 		marker, ok := object["marker"].(map[string]any)
 		if !ok {
@@ -531,20 +461,6 @@ func ParseDriverMessage(value any, limits Limits) (map[string]any, error) {
 		}
 		if logs, present := object["logs"]; present {
 			if problem := checkLogBudget(logs); problem != nil {
-				return nil, problem
-			}
-		}
-		return object, nil
-
-	case "get-tree":
-		if problem := requiredKeys(object, []string{"type", "requestId"}); problem != nil {
-			return nil, problem
-		}
-		if problem := wholeNumber(object, "requestId", false); problem != nil {
-			return nil, problem
-		}
-		if _, ok := object["revision"]; ok {
-			if problem := wholeNumber(object, "revision", true); problem != nil {
 				return nil, problem
 			}
 		}

@@ -3,7 +3,7 @@ import { encodeMarker, verifyMarkerPayload } from '@termwright/protocol';
 import { captureScreen, captureRows } from './screen.js';
 import { matchGrid } from './matching.js';
 import { textMatcher } from './selectors.js';
-import { VtScreen, type MarkerSighting } from './vt.js';
+import { VtScreen, type MarkerSighting, type TerminalResponse } from './vt.js';
 
 let vt: VtScreen | null = null;
 
@@ -21,6 +21,21 @@ afterEach(() => {
 });
 
 describe('VtScreen', () => {
+  it('answers DSR and deterministic colour queries without painting query bytes', async () => {
+    const screen = createVt();
+    const responses: TerminalResponse[] = [];
+    screen.onResponse((response) => responses.push(response));
+
+    await screen.write('\x1b[3;7H\x1b[6n\x1b]11;?\x1b\\');
+
+    expect(responses).toEqual([
+      { data: '\x1b[3;7R', kind: 'emulator' },
+      { data: '\x1b]11;rgb:0000/0000/0000\x1b\\', kind: 'background-color' },
+    ]);
+    expect(captureRows(screen).every((row) => row.text === '')).toBe(true);
+    expect(screen.cursor()).toMatchObject({ row: 2, column: 6 });
+  });
+
   it('increments a revision per parsed write', async () => {
     const screen = createVt();
     expect(screen.revision).toBe(0);

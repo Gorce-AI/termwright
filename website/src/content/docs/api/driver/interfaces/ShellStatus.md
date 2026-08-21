@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ShellStatus
 
-Defined in: [api.ts:210](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L210)
+Defined in: [driver/src/api.ts:275](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L275)
 
 Observable shell-integration state; fields are never inferred from prompt text.
 
@@ -21,7 +21,7 @@ Observable shell-integration state; fields are never inferred from prompt text.
 
 > `readonly` **bellCount**: `number`
 
-Defined in: [api.ts:219](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L219)
+Defined in: [driver/src/api.ts:284](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L284)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [api.ts:219](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **cursor**: `CursorInfo`
 
-Defined in: [api.ts:218](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L218)
+Defined in: [driver/src/api.ts:283](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L283)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [api.ts:218](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **cwd**: `string` \| `null`
 
-Defined in: [api.ts:216](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L216)
+Defined in: [driver/src/api.ts:281](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L281)
 
 Last OSC 7 working directory, or null when the child never published one.
 
@@ -47,7 +47,7 @@ Last OSC 7 working directory, or null when the child never published one.
 
 > `readonly` **lastExitCode**: `number` \| `null`
 
-Defined in: [api.ts:214](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L214)
+Defined in: [driver/src/api.ts:279](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L279)
 
 ***
 
@@ -55,7 +55,7 @@ Defined in: [api.ts:214](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **lastMark**: `"A"` \| `"B"` \| `"C"` \| `"D"` \| `null`
 
-Defined in: [api.ts:213](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L213)
+Defined in: [driver/src/api.ts:278](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L278)
 
 ***
 
@@ -63,7 +63,7 @@ Defined in: [api.ts:213](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **ready**: `boolean`
 
-Defined in: [api.ts:212](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L212)
+Defined in: [driver/src/api.ts:277](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L277)
 
 ***
 
@@ -71,7 +71,7 @@ Defined in: [api.ts:212](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **supported**: `boolean`
 
-Defined in: [api.ts:211](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L211)
+Defined in: [driver/src/api.ts:276](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L276)
 
 ***
 
@@ -79,4 +79,4 @@ Defined in: [api.ts:211](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **title**: `string`
 
-Defined in: [api.ts:217](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L217)
+Defined in: [driver/src/api.ts:282](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L282)

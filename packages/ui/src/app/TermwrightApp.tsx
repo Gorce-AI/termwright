@@ -311,6 +311,7 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
           onRun={run}
           onStop={stop}
           onInput={(sessionId, data) => client?.sendInput(sessionId, data)}
+          {...(client === undefined ? {} : { onInspectActionability: (sessionId: string, nodeId: string) => client.inspectActionability(sessionId, nodeId) })}
           onTraceStateAt={(timeMs) => source.traceState(timeMs)}
           onOpenReplay={(executionId) => {
             const execution = state.executions.find((test) => test.executionId === executionId)

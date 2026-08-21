@@ -26,7 +26,7 @@ use termwright_protocol::debug::{Category, DebugLog};
 use termwright_protocol::roles::Capability;
 use termwright_protocol::Error;
 
-use crate::tree::snapshot_from_with_relation_limit;
+use crate::tree::{duplicate_semantic_key, snapshot_from_with_relation_limit};
 use crate::{probe_info, take_frame};
 
 /// How long the handshake may take before the probe gives up on this run.
@@ -86,13 +86,19 @@ pub fn on_frame_end(frame: u64, columns: u16, rows: u16) {
     };
 
     let calls = take_frame();
+    if let Some(key) = duplicate_semantic_key(&calls) {
+        let message = format!("duplicate SemanticKey {key:?}");
+        let _ = client.fail("duplicate-semantic-key", &message);
+        log(Category::Diag, &message);
+        *guard = State::Done;
+        return;
+    }
     let mut snapshot = snapshot_from_with_relation_limit(
         &calls,
         frame,
         columns,
         rows,
         client.limits().max_relation_targets,
-        client.qualified_observations(),
     );
     match client.publish(&mut snapshot) {
         Ok(Some(marker)) => write_marker(&marker),
@@ -104,7 +110,6 @@ pub fn on_frame_end(frame: u64, columns: u16, rows: u16) {
             // tree. Transport failures may have written a partial frame and
             // are therefore permanently unrecoverable.
             log(Category::Diag, &format!("publish failed: {error}"));
-            client.require_full_snapshot();
             if matches!(error, Error::Io(_) | Error::WriteTimeout) {
                 *guard = State::Done;
             }
@@ -144,10 +149,10 @@ fn announce_dormant_once() {
 
 fn connect() -> Option<Client> {
     let mut options = Options::new("ratatui-probe", env!("CARGO_PKG_VERSION"));
+    options.evidence_registry = Some(termwright_protocol::evidence::global_registry());
     options.capabilities = vec![
         Capability::Tree,
-        Capability::Bounds,
-        Capability::AbsoluteBounds,
+        Capability::IntendedGeometry,
         Capability::States,
         Capability::Actions,
         Capability::RenderRevisions,

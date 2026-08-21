@@ -15,7 +15,11 @@ import {
   type SemanticSnapshot,
 } from '@termwright/protocol';
 
-const DEFAULT_WAIT_MS = 4_000;
+// Full real-process conformance intentionally runs several Node, Bun, Go and
+// Rust fixtures in parallel. This is only the test driver's observation
+// ceiling (not the product negotiation window), so leave enough scheduler
+// headroom to diagnose a real rejection instead of producing a load flake.
+const DEFAULT_WAIT_MS = 10_000;
 
 export interface FakeDriver {
   readonly endpoint: string;

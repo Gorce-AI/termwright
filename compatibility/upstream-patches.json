@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "maxCandidatesPerRun": 8,
+  "streams": [
+    {
+      "id": "ink",
+      "frameworkId": "ink",
+      "ecosystem": "npm",
+      "registry": "npm",
+      "package": "ink",
+      "minimumVersion": "7.1.1",
+      "mode": "hook"
+    },
+    {
+      "id": "opentui",
+      "frameworkId": "opentui",
+      "ecosystem": "npm",
+      "registry": "npm",
+      "package": "@opentui/core",
+      "minimumVersion": "0.5.3",
+      "mode": "hook",
+      "monitorDependencyClosure": true
+    },
+    {
+      "id": "textual",
+      "frameworkId": "textual",
+      "ecosystem": "python",
+      "registry": "pypi",
+      "package": "textual",
+      "minimumVersion": "8.2.8",
+      "mode": "hook"
+    },
+    {
+      "id": "tview",
+      "frameworkId": "tview",
+      "ecosystem": "go",
+      "registry": "go",
+      "package": "github.com/rivo/tview",
+      "minimumVersion": "v0.42.0",
+      "mode": "patch",
+      "patchRoot": "packages/probe-tview/upstream-patches/tview"
+    },
+    {
+      "id": "bubbletea-v3",
+      "frameworkId": "charm",
+      "ecosystem": "go",
+      "registry": "go",
+      "package": "charm.land/bubbletea/v3",
+      "minimumVersion": "v3.0.0",
+      "major": 3,
+      "mode": "patch",
+      "allowMissingPackage": true,
+      "patchRoot": "packages/probe-charm/upstream-patches/bubbletea"
+    },
+    {
+      "id": "bubbletea-v1",
+      "frameworkId": "charm",
+      "ecosystem": "go",
+      "registry": "go",
+      "package": "github.com/charmbracelet/bubbletea",
+      "minimumVersion": "v1.3.10",
+      "major": 1,
+      "mode": "patch",
+      "patchRoot": "packages/probe-charm/upstream-patches/bubbletea"
+    },
+    {
+      "id": "bubbles-v3",
+      "frameworkId": "charm",
+      "ecosystem": "go",
+      "registry": "go",
+      "package": "charm.land/bubbles/v3",
+      "minimumVersion": "v3.0.0",
+      "major": 3,
+      "mode": "patch",
+      "allowMissingPackage": true,
+      "patchRoot": "packages/probe-charm/upstream-patches/bubbles"
+    },
+    {
+      "id": "bubbletea-v2",
+      "frameworkId": "charm",
+      "ecosystem": "go",
+      "registry": "go",
+      "package": "charm.land/bubbletea/v2",
+      "minimumVersion": "v2.0.8",
+      "major": 2,
+      "mode": "patch",
+      "patchRoot": "packages/probe-charm/upstream-patches/bubbletea"
+    },
+    {
+      "id": "bubbles-v1",
+      "frameworkId": "charm",
+      "ecosystem": "go",
+      "registry": "go",
+      "package": "github.com/charmbracelet/bubbles",
+      "minimumVersion": "v1.0.0",
+      "major": 1,
+      "mode": "patch",
+      "patchRoot": "packages/probe-charm/upstream-patches/bubbles"
+    },
+    {
+      "id": "bubbles-v2",
+      "frameworkId": "charm",
+      "ecosystem": "go",
+      "registry": "go",
+      "package": "charm.land/bubbles/v2",
+      "minimumVersion": "v2.1.1",
+      "major": 2,
+      "mode": "patch",
+      "patchRoot": "packages/probe-charm/upstream-patches/bubbles"
+    },
+    {
+      "id": "ratatui-core",
+      "frameworkId": "ratatui",
+      "ecosystem": "rust",
+      "registry": "crates.io",
+      "package": "ratatui-core",
+      "minimumVersion": "0.1.2",
+      "mode": "patch",
+      "patchRoot": "clients/rust-probe/upstream-patches/ratatui-core"
+    },
+    {
+      "id": "ratatui-widgets",
+      "frameworkId": "ratatui",
+      "ecosystem": "rust",
+      "registry": "crates.io",
+      "package": "ratatui-widgets",
+      "minimumVersion": "0.3.2",
+      "mode": "patch",
+      "patchRoot": "clients/rust-probe/upstream-patches/ratatui-widgets"
+    }
+  ]
+}

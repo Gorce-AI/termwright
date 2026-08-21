@@ -13,6 +13,6 @@ editUrl: false
 
 > **LocatorQuery** = [`SemanticQuery`](../../interfaces/semanticquery/) \| [`GenericQuery`](../../interfaces/genericquery/) \| [`RefQuery`](../../interfaces/refquery/)
 
-Defined in: [selectors.ts:78](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L78)
+Defined in: [driver/src/selectors.ts:76](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L76)
 
 Anything a [Locator](../../interfaces/locator/) can be built from.

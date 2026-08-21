@@ -50,7 +50,7 @@ The three Ink-related names serve different processes:
 | `@termwright/probe-ink` | launched Ink application | Adding semantic observation to an end-to-end Ink test. |
 | `@termwright/ink` | Ink application | Adding optional roles, names, or domain annotations that Ink does not retain itself. |
 
-`termwright/ink` re-exports the focused `@termwright/ink-testing` package. Most
+`termwright/ink` re-exports the focused `@termwright/ink` package. Most
 projects should not add both dependencies.
 
 ## Specialist and supporting packages

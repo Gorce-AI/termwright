@@ -4,14 +4,21 @@ import { Stream } from 'node:stream';
 import { createElement, Fragment, type ComponentType, type ReactNode } from 'react';
 import type { DOMElement, Instance, RenderOptions } from 'ink';
 import type { AdapterCapability } from '@termwright/protocol';
-import { ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN, PROTOCOL_V2_ID } from '@termwright/protocol';
+import { ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import { connectProbe, type ProbeChannel } from '@termwright/probe-runtime';
-import { canPublishInkGeometry } from './geometry.js';
 import type { InkDomElement, MeasureElement } from './observe.js';
 import { createInkSession, probeInfo, type InkProbeSession } from './session.js';
 import { isInstrumented } from './runtime.js';
 import type { EnvSource } from './runtime.js';
 import { PACKAGE_VERSION } from './version.js';
+import {
+  captureInkLayout,
+  capturedInkFrame,
+  installInkCaptureHook,
+  retainInkFrame,
+} from './frame-capture.js';
+import { instrumentationSentinel } from './instrumentation.js';
+import { trackTerminal } from './terminal-tracker.js';
 import { onInkAnnotationChange } from './annotations.js';
 
 const ADAPTER_NAME = '@termwright/probe-ink';
@@ -32,6 +39,8 @@ export interface InkModule {
 /** @internal Used only by the in-process component harness. */
 export interface InstrumentInkOptions {
   readonly env?: EnvSource;
+  /** Exact pinned in-process harness; never enabled by the application shim. */
+  readonly certifiedHarness?: boolean;
 }
 
 /**
@@ -45,7 +54,7 @@ export function wrapInkRender(ink: InkModule, options: InstrumentInkOptions = {}
     if (!isInstrumented(env)) return ink.render(node, suppliedOptions);
 
     try {
-      return instrumentedRender(ink, node, suppliedOptions, env);
+      return instrumentedRender(ink, node, suppliedOptions, env, options.certifiedHarness === true);
     } catch {
       // Setup failures are probe failures. The application still gets its
       // ordinary render rather than inheriting our exception.
@@ -61,16 +70,34 @@ function instrumentedRender(
   node: ReactNode,
   suppliedOptions: NodeJS.WriteStream | RenderOptions | undefined,
   env: EnvSource,
+  certifiedHarness: boolean,
 ): Instance {
+  // A modified or unsupported Ink artifact is never observed through a weaker
+  // path. The driver sees no adapter and required semantics fail negotiation.
+  const certifiedRuntime = instrumentationSentinel() !== undefined;
+  if (!certifiedRuntime && !certifiedHarness) return ink.render(node, suppliedOptions);
   const options = normalizeOptions(suppliedOptions);
+  let currentNode = node;
   const stdout = options.stdout ?? process.stdout;
+  const stderr = options.stderr ?? process.stderr;
+  const releaseCapture = installInkCaptureHook();
+  const tracker = trackTerminal(stdout, stderr);
   const probeRef: { current: DOMElement | null } = { current: null };
   const state: { channel: ProbeChannel | null; session: InkProbeSession | null } = {
     channel: null,
     session: null,
   };
   let disposed = false;
-  const releaseAnnotations = onInkAnnotationChange(() => state.session?.notifyRender());
+  const releaseAnnotations = onInkAnnotationChange(() => {
+    // React layout-effect cleanup/registration can run while Ink is still
+    // committing the host mutation that triggered it. Publishing immediately
+    // could combine the new host tree with the previous renderer capture.
+    // The renderer's onRender runs before this macrotask; annotation-only
+    // changes still get a deterministic catch-up publication afterwards.
+    setImmediate(() => {
+      if (!disposed) state.session?.notifyRender();
+    });
+  });
 
   const wrap = (child: ReactNode): ReactNode => createElement(
     Fragment,
@@ -84,6 +111,25 @@ function instrumentedRender(
     ...options,
     onRender(metrics) {
       try {
+        if (!certifiedRuntime) {
+          const root = (probeRef.current?.parentNode as InkDomElement | undefined) ?? null;
+          if (root !== null) {
+            const measured = ink.measureElement(root);
+            const staticNode = root.staticNode;
+            const staticRows = staticNode === undefined ? 0 : ink.measureElement(staticNode).height;
+            retainInkFrame(captureInkLayout(root, {
+              output: '',
+              outputHeight: measured.height,
+              staticOutput: '\n'.repeat(staticRows),
+            }, {
+              interactive: options.interactive === true,
+              alternateScreen: options.alternateScreen === true,
+              debug: options.debug === true,
+              stdoutIsTTY: stdout.isTTY === true,
+              rows: stdout.rows ?? 24,
+            }));
+          }
+        }
         // Freeze the committed host tree before an application callback can
         // synchronously schedule or flush another update.
         state.session?.notifyRender();
@@ -94,18 +140,14 @@ function instrumentedRender(
     },
   });
 
-  const includeGeometry = canPublishInkGeometry({
-    alternateScreen: options.alternateScreen === true,
-    ...(options.interactive === undefined ? {} : { interactive: options.interactive }),
-    stdoutIsTTY: stdout.isTTY === true,
-  });
-  const baseCapabilities: readonly AdapterCapability[] = includeGeometry
-    ? ['tree', 'bounds', 'absolute-bounds', 'states', 'actions', 'render-revisions']
-    : ['tree', 'states', 'actions', 'render-revisions'];
-  const qualified = env[ENV_PROTOCOL] === PROTOCOL_V2_ID;
-  const capabilities: readonly AdapterCapability[] = qualified
-    ? [...baseCapabilities, 'qualified-observations']
-    : baseCapabilities;
+  const capabilities: readonly AdapterCapability[] = [
+    'tree',
+    'intended-geometry',
+    'clipped-geometry',
+    'states',
+    'actions',
+    'render-revisions',
+  ];
 
   const connection = connectProbe({
     endpoint: env[ENV_ENDPOINT] as string,
@@ -114,7 +156,6 @@ function instrumentedRender(
     capabilities,
     adapterName: ADAPTER_NAME,
     adapterVersion: ADAPTER_VERSION,
-    ...(qualified ? { protocol: PROTOCOL_V2_ID } : {}),
   })
     .then(async (channel) => {
       if (channel === null || disposed) {
@@ -126,15 +167,23 @@ function instrumentedRender(
         channel,
         resolveRoot: () => (probeRef.current?.parentNode as InkDomElement | undefined) ?? null,
         resolveExcluded: () => probeRef.current as InkDomElement | null,
-        measureElement: ink.measureElement,
+        resolveCapture: (root) => capturedInkFrame(root),
         stdout,
-        includeGeometry,
+        tracker,
+        onGuaranteeViolation: () => {
+          state.session?.stop();
+          state.channel?.close();
+        },
       });
       // The first commit may have beaten the handshake, but the live host tree
       // can already contain a throttled commit whose bytes are not on screen.
       // Flush Ink first. If that emits onRender, the newly-installed session
       // captures it there; otherwise the stable current tree is a safe catch-up.
       try {
+        // The first onRender can run before React assigns the hidden host ref.
+        // Force one real commit after the session exists instead of fabricating
+        // a catch-up frame from a tree that was never captured.
+        instance.rerender(wrap(currentNode));
         await instance.waitUntilRenderFlush();
       } catch {
         state.session.stop();
@@ -147,7 +196,9 @@ function instrumentedRender(
   const stop = (): void => {
     if (disposed) return;
     disposed = true;
+    releaseCapture();
     releaseAnnotations();
+    tracker.stop();
     state.session?.stop();
     state.channel?.close();
   };
@@ -167,6 +218,7 @@ function instrumentedRender(
   return {
     ...instance,
     rerender(next) {
+      currentNode = next;
       instance.rerender(wrap(next));
     },
     unmount(error?: unknown) {

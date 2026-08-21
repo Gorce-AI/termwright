@@ -86,35 +86,6 @@ from a process-local registry.
 when the driver considers the session to have started, so the wall clock is the
 only clock both sides agree on without negotiating. The driver rebases it.
 
-## Tree deltas
-
-The clients validate the **shape** of a `tree-delta` (sizes, node shape, unique
-ids, a revision that moves forward, no id both upserted and removed) and stop
-there, because a delta carries no `columns`/`rows`: whether a parent exists,
-whether the tree stays acyclic and within the depth ceiling, and whether bounds
-or the cursor fall inside the viewport can only be judged against the base it
-applies to. Those are snapshot checks, run on the assembled tree.
-
-All three also **compose** deltas (`apply_tree_delta` / `ApplyTreeDelta`) and
-**produce** them: under `subscribe: 'diffs'` a publish sends a patch against
-the last tree the driver received. The first publish, a snapshots
-subscription, a change touching more than about half the tree, and a cursor
-that disappears all fall back to the whole snapshot — the last because a delta
-can replace a cursor but never remove one.
-
-Producing and composing are mirrors, so each language tests its producer
-against its composer: every emitted delta is applied back onto its base and
-must reproduce exactly the tree the client meant to publish. That oracle is
-what catches the two rules easiest to get wrong — a node surviving under a
-removed parent has to be re-sent even though nothing about it changed, and
-`rootIds` has to travel whenever the inherited list is not the one the new
-tree wants.
-
-The order of `nodes` in a composed tree is **not** normative: the reference
-composes through an insertion-ordered map, a client backed by a hash map
-reports another order, and both are correct. Compare them as a set keyed by
-id — the vectors say so, and the tests here do it.
-
 ## Protocol evolution
 
 Capacity is negotiated and therefore extensible; vocabulary is closed and
@@ -183,13 +154,13 @@ await runAdapterConformance({
   ready: 'Permission required',
   interaction: { input: '\t', expect: 'focus: reject' },
   quit: { input: '\u0011', exitCode: 0 },
-  expectAbsoluteBounds: true,
+  expectIntendedGeometry: true,
 });
 ```
 
 Both examples run in the real conformance suite. The tview arm builds both a
 plain binary and a binary through `prepareInstrumentedBuild`, compares their
-dormant output, then verifies the live handshake, snapshots, deltas and marker
+dormant output, then verifies the live handshake, full snapshots and marker
 ordering.
 
 ## Running the suites

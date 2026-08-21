@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticQuery
 
-Defined in: [selectors.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L38)
+Defined in: [driver/src/selectors.ts:36](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L36)
 
 A descendant chain evaluated against the semantic tree.
 
@@ -21,7 +21,7 @@ A descendant chain evaluated against the semantic tree.
 
 > `readonly` **description**: `string`
 
-Defined in: [selectors.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L42)
+Defined in: [driver/src/selectors.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L40)
 
 Human-readable form used in diagnostics.
 
@@ -31,7 +31,7 @@ Human-readable form used in diagnostics.
 
 > `readonly` **kind**: `"semantic"`
 
-Defined in: [selectors.ts:39](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L39)
+Defined in: [driver/src/selectors.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L37)
 
 ***
 
@@ -39,4 +39,4 @@ Defined in: [selectors.ts:39](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` **steps**: readonly [`SemanticStep`](../semanticstep/)[]
 
-Defined in: [selectors.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L40)
+Defined in: [driver/src/selectors.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L38)

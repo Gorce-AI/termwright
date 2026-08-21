@@ -25,7 +25,8 @@
   option is accepted and ignored by the driver — recording belongs to
   `@termwright/trace` via `SessionEvents`. `capabilities().semanticTree` is
   true from successful handshake (not first tree); semantic locators wait when
-  no tree arrived yet, `unsupported-action` only in settled-generic sessions.
+  no tree arrived yet; settled generic sessions fail semantic queries with
+  `semantic-capability-unavailable`.
   `close()` hangs up the PTY (SIGHUP/TerminateProcess) as part of physical
   cleanup; destructive signals remain explicit. `.class` CSS-dialect semantics
   provisional (matches testId/name token) pending protocol-level classes.
@@ -104,7 +105,7 @@
   6f41325. **Blast radius, corrected after impl-ink verified it:** the wire is
   unaffected, because `encodeFrame` is `JSON.stringify`, which has no concept
   of reference identity and flattens an alias into two equal values. Only
-  IN-PROCESS consumers of a snapshot object see it — `@termwright/ink-testing`,
+  IN-PROCESS consumers of a snapshot object see it — `@termwright/ink`,
   the conformance probe's in-memory checks, and `get-tree` answers that hand
   back the retained object. This is therefore a TypeScript-only trap; a Python,
   Go or Rust adapter serialises on the way out and cannot hit it.
@@ -130,7 +131,7 @@
 - 2026-08-16 (approved, driver 7f77ea3): negotiation window says when a session
   STARTS behaving generic; a bounded late-attach grace (default 2 s) says when
   that verdict becomes FINAL. During grace semantic locators wait; after it
-  they throw 'unsupported-action' immediately. Hello after grace expiry is
+  they throw `semantic-capability-unavailable` immediately. Hello after grace expiry is
   REJECTED (wire 'internal' + diagnostic) — §4.1 "late hello never flips a
   selected mode" is now enforced, with the grace as the explicit tolerance.
   api.ts gains LaunchOptions.debug?: boolean (TERMWRIGHT_DEBUG=1|all).
@@ -253,7 +254,7 @@
   means "this entry does not aggregate", NOT zero.
 - 2026-08-16 (mountOpenTui, task #27b): `@termwright/opentui` gains a
   **`./testing` subpath** that imports `@termwright/driver` and
-  `@termwright/ink-testing`. Read against §Dependency rules ("adapters depend on
+  `@termwright/ink`. Read against §Dependency rules ("adapters depend on
   `protocol` + their framework, never on driver") this is a deviation, and it is
   deliberate: task #27b placed the mount inside the adapter package rather than
   in a sibling `opentui-testing` the way Ink has one. The rule's actual purpose —
@@ -456,7 +457,7 @@
   `paintOrder` opcjonalne z capability (3/6 frameworków); własność komórki
   poza IR.
 - 2026-08-16 (driver, #34 Phase 1): `ResolvedTarget.identity:
-  'stable'|'frame-local'` — `locatorForRef` ODMAWIA (unsupported-action) przy
+  'stable'|'frame-local'` — `locatorForRef` ODMAWIA (`capability-unavailable`) przy
   frame-local zamiast rozwiązywać ref na cokolwiek nosi ten numer; adapter
   bez bloku probe = stabilne (zero zmian dla istniejących).
   `ResolvedTarget.frameworkType?`/`provenance?` przenoszone z węzła;

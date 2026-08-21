@@ -1,0 +1,432 @@
+name: Trusted autonomous coordinator
+run-name: Coordinate ${{ github.event.workflow_run.name }} @ ${{ github.event.workflow_run.head_sha }}
+
+on:
+  workflow_run:
+    workflows: ['Framework compatibility candidates', 'CI', 'Release']
+    types: [completed]
+
+concurrency:
+  # One repository-wide state machine: compatibility merge, Version PR merge,
+  # release retry, and the next cycle may never leapfrog one another.
+  group: autonomous-coordinator-${{ github.event.repository.full_name }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  notify-upstream-failure:
+    name: notify compatibility workflow failure
+    if: >-
+      github.event.workflow_run.name == 'Framework compatibility candidates' &&
+      github.event.workflow_run.conclusion != 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
+      SOURCE_RUN_URL: ${{ github.event.workflow_run.html_url }}
+      SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      SOURCE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      SOURCE_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+    steps:
+      - name: Open an idempotent dead-man issue before artifact reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ISSUE_OWNER"
+          test "$SOURCE_BRANCH" = "$DEFAULT_BRANCH"
+          test "$SOURCE_REPOSITORY" = "$GITHUB_REPOSITORY"
+          gh api "/repos/$GITHUB_REPOSITORY/assignees/$ISSUE_OWNER" >/dev/null
+          gh label create upstream-compatibility --color 0E8A16 \
+            --description 'Automated upstream compatibility candidate' --force
+          title='[compatibility] daily certification workflow failed'
+          body_file="$(mktemp)"
+          printf 'The daily compatibility workflow failed before trusted artifact reconciliation.\n\nConclusion: %s\nSource SHA: %s\nRun: %s\n\nNo compatibility or release change was applied.\n' \
+            "$SOURCE_CONCLUSION" "$SOURCE_SHA" "$SOURCE_RUN_URL" > "$body_file"
+          # shellcheck disable=SC2016
+          number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=all&labels=upstream-compatibility&per_page=100" \
+            | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .title == $title) | .number' | sed -n '1p')"
+          if [ -n "$number" ]; then
+            gh issue reopen "$number" || true
+            gh issue edit "$number" --body-file "$body_file" --add-assignee "$ISSUE_OWNER"
+          else
+            gh issue create --title "$title" --label upstream-compatibility \
+              --assignee "$ISSUE_OWNER" --body-file "$body_file"
+          fi
+
+  reconcile:
+    name: reconcile trusted compatibility artifacts
+    if: >-
+      github.event.workflow_run.name == 'Framework compatibility candidates' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: automation/framework-compatibility
+      SOURCE_RUN_URL: ${{ github.event.workflow_run.html_url }}
+      ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
+    steps:
+      # workflow_run checks out the default branch by default. State it
+      # explicitly: this write-token job never checks out the triggering ref or
+      # any pull-request branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Bind the source run to the current trusted default-branch commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.event.workflow_run.head_sha }}'
+          node scripts/autonomous-release-coordinator.mjs validate-upstream \
+            "$GITHUB_EVENT_PATH" "$(git rev-parse HEAD)"
+          gh api "/repos/$GITHUB_REPOSITORY/assignees/$ISSUE_OWNER" >/dev/null
+
+      - name: Download artifacts from the exact completed source run
+        shell: bash
+        env:
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          CANDIDATE_DIR="$RUNNER_TEMP/upstream-candidates"
+          VERDICT_DIR="$RUNNER_TEMP/upstream-verdicts"
+          PUBLISH_PLAN="$RUNNER_TEMP/upstream-publish-plan.json"
+          {
+            echo "CANDIDATE_DIR=$CANDIDATE_DIR"
+            echo "VERDICT_DIR=$VERDICT_DIR"
+            echo "PUBLISH_PLAN=$PUBLISH_PLAN"
+            echo "SOURCE_RUN_ID=$RUN_ID"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$CANDIDATE_DIR" "$VERDICT_DIR"
+          gh run download "$RUN_ID" --name framework-candidate-registry --dir "$CANDIDATE_DIR"
+          count=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq '[.artifacts[] | select(.expired == false and (.name | startswith("framework-verdict-")))] | length')
+          if [ "$count" -gt 0 ]; then
+            gh run download "$RUN_ID" --pattern 'framework-verdict-*' --dir "$VERDICT_DIR"
+          fi
+
+      - name: Start from the trusted default-branch ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Establish only the expected remote ref for force-with-lease. Its
+          # contents are never read or used as reconciliation input.
+          git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
+          git checkout -B "$BRANCH"
+
+      - name: Reconcile only source-SHA-bound verdicts
+        env:
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          node scripts/reconcile-framework-candidates.mjs \
+            --registry "$CANDIDATE_DIR/candidate-registry.json" \
+            --verdicts "$VERDICT_DIR" \
+            --ledger compatibility/certified-upstreams.json \
+            --plan "$PUBLISH_PLAN"
+
+      - name: Open or update owned failure issues with the source run URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh label create upstream-compatibility --color 0E8A16 \
+            --description 'Automated upstream compatibility candidate' --force
+          jq -c '.issues[]' "$PUBLISH_PLAN" | while IFS= read -r issue; do
+            test "$(jq -r '.owner' <<<"$issue")" = "$ISSUE_OWNER"
+            title="$(jq -r '.title' <<<"$issue")"
+            body_file="$(mktemp)"
+            jq -r '.body' <<<"$issue" > "$body_file"
+            grep -Fq "$SOURCE_RUN_URL" "$body_file"
+            number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=all&labels=upstream-compatibility&per_page=100" \
+              | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .title == $title) | .number' | sed -n '1p')"
+            if [ -n "$number" ]; then
+              gh issue reopen "$number" || true
+              gh issue edit "$number" --body-file "$body_file" --add-assignee "$ISSUE_OWNER"
+            else
+              gh issue create --title "$title" --label upstream-compatibility \
+                --assignee "$ISSUE_OWNER" --body-file "$body_file"
+            fi
+          done
+
+      - name: Commit only the compatibility allowlist and dispatch exact CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          kind=compatibility
+          title='chore(compatibility): record certified upstream releases'
+          summary='Automated compatibility certification. Every recorded source is checksum-bound and all required gates passed.'
+          mapfile -t changed < <(git ls-files --modified --deleted --others --exclude-standard | sort -u)
+          if (( ${#changed[@]} == 0 )); then
+            node scripts/autonomous-release-coordinator.mjs refresh-heartbeat \
+              "$GITHUB_EVENT_PATH" compatibility/workflow-heartbeat.json
+            mapfile -t changed < <(git ls-files --modified --deleted --others --exclude-standard | sort -u)
+            if (( ${#changed[@]} == 0 )); then
+              echo 'Heartbeat is current; checking ordinary pending changesets.' >> "$GITHUB_STEP_SUMMARY"
+              node scripts/autonomous-release-coordinator.mjs dispatch-pending-changesets \
+                "$GITHUB_EVENT_PATH" '${{ github.event.workflow_run.head_sha }}'
+              exit 0
+            fi
+            kind=heartbeat
+            BRANCH=automation/workflow-heartbeat
+            title='chore(automation): refresh schedule heartbeat'
+            summary='Automated 30-day schedule heartbeat. This PR never dispatches a release.'
+          fi
+          node scripts/autonomous-release-coordinator.mjs validate-files "$kind" "${changed[@]}"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "${changed[@]}"
+          git commit -m "$title"
+          git fetch origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
+          git push --force-with-lease \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:refs/heads/$BRANCH"
+          head_sha=$(git rev-parse HEAD)
+          number=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh api "/repos/$GITHUB_REPOSITORY/pulls/$number" > /tmp/pr.json
+            test "$(jq -r '.user.login' /tmp/pr.json)" = 'github-actions[bot]'
+            test "$(jq -r '.base.ref' /tmp/pr.json)" = '${{ github.event.repository.default_branch }}'
+            test "$(jq -r '.head.ref' /tmp/pr.json)" = "$BRANCH"
+            test "$(jq -r '.head.repo.full_name' /tmp/pr.json)" = "$GITHUB_REPOSITORY"
+            gh pr edit "$BRANCH" --title "$title" \
+              --body "$summary
+
+          Source certification run: $RUN_ID"
+          else
+            gh pr create --head "$BRANCH" --base '${{ github.event.repository.default_branch }}' \
+              --title "$title" \
+              --body "$summary
+
+          Source certification run: $RUN_ID"
+          fi
+          existing=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&head_sha=$head_sha" --jq '.total_count')
+          if [ "$existing" = 0 ]; then gh workflow run ci.yml --ref "$BRANCH"; fi
+          if [ "$kind" = heartbeat ]; then
+            echo 'Opened a release-suppressed schedule heartbeat PR.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            jq -r '"Certified: " + (.green | join(", "))' "$PUBLISH_PLAN" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  inspect:
+    name: validate exact autonomous PR and CI
+    if: github.event.workflow_run.name == 'CI' && github.event.workflow_run.event == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      kind: ${{ steps.inspect.outputs.kind }}
+      head-sha: ${{ steps.inspect.outputs.head-sha }}
+      base-sha: ${{ steps.inspect.outputs.base-sha }}
+      pr-number: ${{ steps.inspect.outputs.pr-number }}
+      tree-verified: ${{ steps.reproduce.outputs.verified || steps.reproduce-compatibility.outputs.verified || steps.reproduce-heartbeat.outputs.verified || 'false' }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: inspect
+        run: node scripts/autonomous-release-coordinator.mjs inspect-ci "$GITHUB_EVENT_PATH"
+
+      - name: Reproduce the Version PR from trusted base code and compare the entire Git tree
+        id: reproduce
+        if: steps.inspect.outputs.kind == 'version'
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.inspect.outputs.head-sha }}
+          BASE_SHA: ${{ steps.inspect.outputs.base-sha }}
+          PR_NUMBER: ${{ steps.inspect.outputs.pr-number }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_SHA" "refs/pull/$PR_NUMBER/head"
+          git checkout --detach "$BASE_SHA"
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          actual_tree=$(git rev-parse "$HEAD_SHA^{tree}")
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm changeset version
+          node scripts/sync-protocol-version.mjs
+          node scripts/sync-protocol-version.mjs --check
+          pnpm install --lockfile-only
+          git add -A
+          expected_tree=$(git write-tree)
+          test "$expected_tree" = "$actual_tree" || {
+            echo '::error::Version PR differs from the deterministic transformation reproduced from trusted base code'
+            exit 1
+          }
+          echo 'verified=true' >> "$GITHUB_OUTPUT"
+
+      - name: Reproduce the compatibility PR from its exact trusted source run
+        id: reproduce-compatibility
+        if: steps.inspect.outputs.kind == 'compatibility'
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.inspect.outputs.head-sha }}
+          BASE_SHA: ${{ steps.inspect.outputs.base-sha }}
+          SOURCE_RUN_ID: ${{ steps.inspect.outputs.source-run-id }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/reproduce-compatibility"
+          candidates="$work/candidates"
+          verdicts="$work/verdicts"
+          plan="$work/plan.json"
+          mkdir -p "$candidates" "$verdicts"
+          gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > "$work/source-run.json"
+          node - "$GITHUB_EVENT_PATH" "$work/source-run.json" "$work/source-run-event.json" <<'NODE'
+          const fs = require('node:fs');
+          const event = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const workflowRun = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+          fs.writeFileSync(process.argv[4], JSON.stringify({ repository: event.repository, workflow_run: workflowRun }));
+          NODE
+          node scripts/autonomous-release-coordinator.mjs validate-upstream "$work/source-run-event.json" "$BASE_SHA"
+          gh run download "$SOURCE_RUN_ID" --name framework-candidate-registry --dir "$candidates"
+          count=$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts" \
+            --jq '[.artifacts[] | select(.expired == false and (.name | startswith("framework-verdict-")))] | length')
+          if [ "$count" -gt 0 ]; then
+            gh run download "$SOURCE_RUN_ID" --pattern 'framework-verdict-*' --dir "$verdicts"
+          fi
+          git fetch origin "$BASE_SHA" "$HEAD_SHA"
+          git checkout --detach "$BASE_SHA"
+          export GITHUB_SHA="$BASE_SHA"
+          SOURCE_RUN_URL="$(jq -r '.html_url' "$work/source-run.json")"
+          export SOURCE_RUN_URL ISSUE_OWNER
+          node scripts/reconcile-framework-candidates.mjs \
+            --registry "$candidates/candidate-registry.json" \
+            --verdicts "$verdicts" \
+            --ledger compatibility/certified-upstreams.json \
+            --plan "$plan"
+          git add -A
+          expected_tree=$(git write-tree)
+          actual_tree=$(git rev-parse "$HEAD_SHA^{tree}")
+          test "$expected_tree" = "$actual_tree" || {
+            echo '::error::Compatibility PR differs from exact trusted artifact reconciliation'
+            exit 1
+          }
+          echo 'verified=true' >> "$GITHUB_OUTPUT"
+
+      - name: Reproduce the heartbeat PR from its exact trusted source run
+        id: reproduce-heartbeat
+        if: steps.inspect.outputs.kind == 'heartbeat'
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.inspect.outputs.head-sha }}
+          BASE_SHA: ${{ steps.inspect.outputs.base-sha }}
+          SOURCE_RUN_ID: ${{ steps.inspect.outputs.source-run-id }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/reproduce-heartbeat"
+          mkdir -p "$work"
+          gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > "$work/source-run.json"
+          node - "$GITHUB_EVENT_PATH" "$work/source-run.json" "$work/source-run-event.json" <<'NODE'
+          const fs = require('node:fs');
+          const event = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const workflowRun = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+          fs.writeFileSync(process.argv[4], JSON.stringify({ repository: event.repository, workflow_run: workflowRun }));
+          NODE
+          node scripts/autonomous-release-coordinator.mjs validate-upstream "$work/source-run-event.json" "$BASE_SHA"
+          git fetch origin "$BASE_SHA" "$HEAD_SHA"
+          git checkout --detach "$BASE_SHA"
+          node scripts/autonomous-release-coordinator.mjs refresh-heartbeat \
+            "$work/source-run-event.json" compatibility/workflow-heartbeat.json
+          git add -A
+          expected_tree=$(git write-tree)
+          actual_tree=$(git rev-parse "$HEAD_SHA^{tree}")
+          test "$expected_tree" = "$actual_tree" || {
+            echo '::error::Heartbeat PR differs from the deterministic source-run-bound transformation'
+            exit 1
+          }
+          echo 'verified=true' >> "$GITHUB_OUTPUT"
+
+  merge:
+    name: merge exact green automation and dispatch next trusted mode
+    needs: inspect
+    if: needs.inspect.outputs.kind == 'compatibility' || needs.inspect.outputs.kind == 'version' || needs.inspect.outputs.kind == 'heartbeat'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: autonomous-merge-${{ needs.inspect.outputs.head-sha }}
+      cancel-in-progress: false
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Merge exact PR head and dispatch release prepare or publish once
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
+          AUTOMATION_TREE_VERIFIED: ${{ needs.inspect.outputs.tree-verified }}
+        run: node scripts/autonomous-release-coordinator.mjs coordinate-ci "$GITHUB_EVENT_PATH"
+
+  retry-release:
+    name: retry exact transient release failure
+    if: >-
+      github.event.workflow_run.name == 'Release' &&
+      (github.event.workflow_run.conclusion == 'failure' ||
+       github.event.workflow_run.conclusion == 'cancelled' ||
+       github.event.workflow_run.conclusion == 'timed_out')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - id: validate
+        run: node scripts/autonomous-release-coordinator.mjs validate-release-retry "$GITHUB_EVENT_PATH"
+      - name: Retry the same run and exact inputs
+        if: steps.validate.outputs.retry == 'true'
+        env:
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: gh api --method POST "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/rerun-failed-jobs"
+      - name: Open or update one exhausted-retry issue
+        if: steps.validate.outputs.retry != 'true'
+        shell: bash
+        env:
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RELEASE_SHA: ${{ steps.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          gh api "/repos/$GITHUB_REPOSITORY/assignees/$ISSUE_OWNER" >/dev/null
+          title="[release] unattended publication needs intervention for $RELEASE_SHA"
+          body_file=$(mktemp)
+          printf 'The exact SHA-bound release exhausted its automatic retries.\n\nRun: %s\n' "$RUN_URL" > "$body_file"
+          number=$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=all&per_page=100" \
+            | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .title == $title) | .number' | sed -n '1p')
+          if [ -n "$number" ]; then
+            gh issue reopen "$number" || true
+            gh issue edit "$number" --body-file "$body_file" --add-assignee "$ISSUE_OWNER"
+          else
+            gh issue create --title "$title" --body-file "$body_file" --assignee "$ISSUE_OWNER"
+          fi

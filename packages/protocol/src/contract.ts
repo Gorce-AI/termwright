@@ -1,0 +1,125 @@
+/** Capabilities whose presence is frozen when a session finishes negotiation. */
+export const SESSION_CAPABILITIES = [
+  'semantic-tree',
+  'stable-identity',
+  'intended-geometry',
+  'clipped-geometry',
+  'painted-region',
+  'pointer-geometry',
+  'pointer-hit-testing',
+  'focus',
+  'scroll',
+  'render-order',
+  'keyboard-input',
+  'pointer-input',
+  'paired-revisions',
+] as const;
+
+export type SessionCapabilityId = (typeof SESSION_CAPABILITIES)[number];
+
+/** Closed adapter handshake vocabulary; browser-safe for Runner validation. */
+export const ADAPTER_CAPABILITIES = [
+  'tree',
+  'intended-geometry',
+  'clipped-geometry',
+  'states',
+  'actions',
+  'text-ranges',
+  'render-revisions',
+  'logs',
+  'pointer-hit-grid',
+] as const;
+export type AdapterCapability = (typeof ADAPTER_CAPABILITIES)[number];
+
+/** Application evidence that can be frozen into a session contract. */
+export const EVIDENCE_PROVIDER_CAPABILITIES = [
+  'pointer-regions',
+  'hit-test',
+] as const;
+
+export type EvidenceProviderCapability = (typeof EVIDENCE_PROVIDER_CAPABILITIES)[number];
+
+/**
+ * Stable application provider identity announced in the adapter hello.
+ *
+ * Providers are collected before hello is sent. The declaration is therefore
+ * part of the same immutable negotiation as framework and terminal evidence;
+ * there is no late-registration message and no mutable side channel.
+ */
+export interface EvidenceProviderRegistration {
+  readonly id: string;
+  readonly version: string;
+  readonly capabilities: readonly EvidenceProviderCapability[];
+  /** How the application obtains its authoritative production-router facts. */
+  readonly method: 'native' | 'declared';
+}
+
+/** Where a fact originated, how it was obtained, and what consumers may infer. */
+export interface EvidenceProvenance {
+  readonly source: 'framework' | 'application' | 'terminal' | 'recognizer' | 'driver';
+  readonly method: 'native' | 'instrumented' | 'declared' | 'correlated' | 'measured' | 'derived' | 'heuristic';
+  readonly strength: 'authoritative' | 'diagnostic';
+  /** Stable identity of the producer, never a display label. */
+  readonly providerId: string;
+}
+
+export function evidence(
+  source: EvidenceProvenance['source'],
+  method: EvidenceProvenance['method'],
+  strength: EvidenceProvenance['strength'],
+  providerId: string,
+): EvidenceProvenance {
+  if (providerId.trim().length === 0) throw new TypeError('evidence providerId must not be empty');
+  return Object.freeze({ source, method, strength, providerId });
+}
+
+export type SessionCapabilityAvailability =
+  | { readonly status: 'supported'; readonly evidence: EvidenceProvenance }
+  | {
+      readonly status: 'unsupported';
+      readonly reason:
+        | 'not-negotiated'
+        | 'framework-unobservable'
+        | 'terminal-unobservable'
+        | 'provider-required';
+    };
+
+export type ContractProvider =
+  | {
+      readonly id: string;
+      readonly kind: 'framework' | 'terminal';
+      readonly version: string;
+    }
+  | {
+      readonly id: string;
+      readonly kind: 'application';
+      readonly version: string;
+      readonly method: 'native' | 'declared';
+      readonly capabilities: readonly EvidenceProviderCapability[];
+    };
+
+/**
+ * Immutable public contract negotiated once for one session epoch.
+ *
+ * Runtime state (disabled nodes, clipping, terminal modes currently off) is
+ * intentionally absent. Those are actionability observations, not capability.
+ */
+export interface EffectiveSessionContract {
+  readonly contractId: string;
+  readonly sessionId: string;
+  readonly epoch: number;
+  readonly protocol: 'termwright/2';
+  readonly framework: {
+    readonly name: string;
+    readonly version: string;
+    readonly adapterVersion: string;
+    readonly certificationId: string;
+  } | null;
+  readonly providers: readonly ContractProvider[];
+  readonly capabilities: Readonly<Record<SessionCapabilityId, SessionCapabilityAvailability>>;
+  readonly terminal: {
+    readonly profile: string;
+    readonly platform: string;
+    readonly mouseModesObservable: boolean;
+  };
+}

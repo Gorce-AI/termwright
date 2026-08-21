@@ -7,6 +7,10 @@ An instrumented app publishes its widget tree over a unix socket and commits
 each render with a signed OSC marker, so the driver can assert on *roles and
 names* instead of screen-scraping cells.
 
+The protocol client speaks `termwright/2`. Every published semantic revision
+is a complete v2 snapshot with evidence-qualified geometry and pointer
+observations.
+
 **Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` the
 probe installs nothing, opens no socket, writes no marker, and renders exactly
 the bytes it would have rendered anyway.
@@ -50,11 +54,11 @@ Under the driver this publishes, after every flushed frame:
 
 ```
 application "PermissionApp"
-  region                          bounds=(0,0,80,24)
-    text "Allow bash to run?"     bounds=(0,0,80,1)  testId=prompt
-    button "Approve"              bounds=(1,0,80,3)  testId=approve  [focused]
-    button "Reject"               bounds=(4,0,80,3)  testId=reject
-    textbox "Reason"              bounds=(7,0,80,3)  testId=reason
+  region                          visibleRect=(0,0,80,24)
+    text "Allow bash to run?"     visibleRect=(0,0,80,1)  testId=prompt
+    button "Approve"              visibleRect=(1,0,80,3)  testId=approve  [focused]
+    button "Reject"               visibleRect=(4,0,80,3)  testId=reject
+    textbox "Reason"              visibleRect=(7,0,80,3)  testId=reason
 ```
 
 ### Roles and names
@@ -107,7 +111,7 @@ recreate. `actions` uses the protocol's closed descriptive vocabulary; it never
 registers an out-of-band callback, and interaction still becomes real PTY
 input.
 
-The API intentionally has no bounds, focus, visibility, rendered-text or
+The API intentionally has no geometry, focus, visibility, rendered-text or
 portable-state arguments. Those physical facts remain probe-owned, and merge
 tests enforce that the annotation cannot replace them.
 
@@ -123,7 +127,22 @@ Any TUI can drive the client directly. You own the render; the client owns the
 revision numbers and hands you the marker to write after the render's last byte.
 
 ```python
-from termwright import SemanticNode, SemanticSnapshot, Rect, client_from_env
+from termwright import (
+    NodeGeometryObservations,
+    Observation,
+    Rect,
+    SemanticNode,
+    SemanticSnapshot,
+    client_from_env,
+    framework_evidence,
+)
+
+def geometry(rect: Rect) -> NodeGeometryObservations:
+    return NodeGeometryObservations(
+        displayed=Observation("known", True, evidence=framework_evidence("my-adapter")),
+        intendedRect=Observation("known", rect, evidence=framework_evidence("my-adapter")),
+        visibleRect=Observation("known", rect, evidence=framework_evidence("my-adapter")),
+    )
 
 client = client_from_env(adapter_name="my-tui", adapter_version="1.0.0")
 if client is not None and await client.start():
@@ -132,10 +151,14 @@ if client is not None and await client.start():
             sessionId="", revision=0, columns=80, rows=24,   # both are overwritten
             rootIds=["root"],
             nodes=[
-                SemanticNode(id="root", role="dialog", name="Permission"),
+                SemanticNode(id="root", role="dialog", name="Permission",
+                             geometry=geometry(Rect(0, 0, 80, 24))),
                 SemanticNode(id="ok", parentId="root", role="button", name="Approve",
-                             bounds=Rect(row=1, column=2, width=9, height=1)),
+                             geometry=geometry(Rect(row=1, column=2, width=9, height=1))),
             ],
+            coordinateSpace=Observation("known", "viewport-cells", evidence=framework_evidence("my-adapter")),
+            hitGrid=Observation("unsupported", capability="pointer-hit-grid",
+                                reason="framework-unobservable"),
         )
     )
     sys.stdout.write(marker)   # only after the render is fully written
@@ -184,8 +207,8 @@ or, on a session that came up:
 
 ```text
   tw:sem  [p41207]   0.002s dial unix:/tmp/tw-8f21/s timeout=5000ms
-  tw:sem  [p41207]   0.003s hello sent adapter=textual/1.0.0 caps=tree,bounds,…
-  tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=diffs logs=off
+  tw:sem  [p41207]   0.003s hello sent adapter=textual/1.0.0 caps=tree,states,actions,render-revisions,intended-geometry,clipped-geometry,pointer-hit-grid
+  tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=snapshots logs=off
   tw:io   [3f9c1a04]  0.048s r1 snapshot nodes=17
 ```
 
@@ -243,19 +266,20 @@ the claim that the probe observes rather than redraws.
 
 | Fact | Where it comes from |
 |---|---|
-| `bounds` = what is on screen | `MapGeometry.visible_region`, Textual's `clip ∩ region` |
-| `occlusion: "known"` | widgets ranked by `MapGeometry.order`, the compositor's own sort key |
+| intended and visible rectangles | `MapGeometry.region` and `MapGeometry.visible_region` |
+| exact pointer recipient | `Screen.get_widget_at`, compressed into the snapshot hit grid |
 | roles for your own widget classes | the MRO, so `SaveButton(Button)` is a button with no registration |
 | `frameworkType` on anything unrecognised | the widget's class name |
 | scrolled out of view vs `display = False` | both `hidden`; the first also `state.offscreen`, with a zero-area rect |
 
-Because paint order is real here, the driver allows pointer actions against
-Textual nodes; it refuses them for producers that cannot say whether a node's
-cells are covered.
+The driver allows pointer actions only when the snapshot's hit grid names the
+node as the recipient at the target cell. Paint order alone is not sufficient.
 
 **Where the injection reaches**, measured on CPython 3.12 (see
 `docs/architecture/audit/textual.md` for the full table): a plain script,
-`-m`, `-c`, a console-script entry point and `uv run` all work. `python -S`
+`-m`, `-c`, a console-script entry point, `uv run` and `poetry run` all work. The
+Python 3.12 CI lane installs both environment managers and executes these real
+subprocess cases. `python -S`
 and `python -E` do not, and are not meant to — the first disables `site`
 entirely and the second makes the interpreter ignore `PYTHONPATH`. Both are
 the person running the interpreter opting out.
@@ -280,12 +304,6 @@ not listed here follows them.
   tree at all. A widget hidden on the *active* screen (`display = False`) does
   publish `hidden: true`. Textual owns the screen stack; reaching into it would
   mean publishing widgets that no longer receive events.
-- **`poetry` is unverified.** Poetry was not installed on the machine where the
-  injection table was measured. It runs the interpreter from the project venv
-  as a subprocess and passes the environment through, so it is *expected* to
-  behave like the venv row, and that expectation has not been confirmed. Treat
-  a poetry-run application as untested for the probe until somebody watches it
-  work.
 - **The probe instruments grandchildren too.** `PYTHONPATH` is inherited, so a
   process the application spawns is also instrumented unless the variable is
   scrubbed. Visible to the application as well: it can read its own

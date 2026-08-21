@@ -5,7 +5,7 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { SemanticSnapshot } from '@termwright/protocol';
+import type { EffectiveSessionContract, SemanticSnapshot } from '@termwright/protocol';
 import type { SessionCapabilities, SessionEvents } from '@termwright/driver';
 import { formatCastEvent, formatCastHeader, type CastEventCode, type CastHeader } from './cast.js';
 import { TraceError } from './errors.js';
@@ -39,6 +39,7 @@ export interface TraceSource {
   /** Called on every `semantic-revision` to capture the tree, when available. */
   semanticTree?(): SemanticSnapshot | null;
   capabilities?(): SessionCapabilities;
+  contract?(): EffectiveSessionContract | null;
 }
 
 /** Options for {@link createTraceWriter}. */
@@ -363,6 +364,8 @@ export function createTraceWriter(
         ok: event.ok,
         ...(event.error === undefined ? {} : { error: event.error }),
         ...(event.observation === undefined ? {} : { observation: event.observation }),
+        ...(event.receipt === undefined ? {} : { receipt: event.receipt }),
+        ...(event.actionability === undefined ? {} : { actionability: event.actionability }),
         ...(stepId === undefined ? {} : { stepId }),
       });
     }),
@@ -524,6 +527,7 @@ export function createTraceWriter(
       detach();
       decoder.decode();
       const recordedExit = exit ?? finalizeOptions.exit;
+      const contract = session.contract?.() ?? null;
 
       return writeArchive({
         dir: options.dir,
@@ -545,6 +549,7 @@ export function createTraceWriter(
           startedAt,
           platform: options.platform ?? process.platform,
           semanticTree: resolveSemanticFlag(),
+          ...(contract === null ? {} : { contract }),
           ...(resolveTerminalProfile() === undefined
             ? {}
             : { terminalProfile: resolveTerminalProfile() as string }),

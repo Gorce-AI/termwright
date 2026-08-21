@@ -13,6 +13,6 @@ editUrl: false
 
 > **ParsedRef** = \{ `kind`: `"node"`; `nodeId`: `string`; `revision`: `number`; \} \| \{ `kind`: `"rect"`; `rect`: `Rect`; `revision`: `number`; \}
 
-Defined in: [selectors.ts:63](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L63)
+Defined in: [driver/src/selectors.ts:61](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L61)
 
 A ref parsed back into the thing it identifies.

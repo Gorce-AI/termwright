@@ -1,6 +1,6 @@
 {
   "kind": "termwright-performance-report",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "generatedAt": "2026-08-20T10:40:12.594Z",
   "environment": {
     "runtime": "node v24.1.0; go version go1.24.4 darwin/arm64",
@@ -29,19 +29,13 @@
           "status": "measured",
           "unit": "bytes/frame",
           "value": 472.67816091954023,
-          "note": "Actual canonical Go snapshot/delta envelope bytes including the four-byte frame header."
+          "note": "Actual canonical Go snapshot envelope bytes including the four-byte frame header."
         },
         "fullSnapshots": {
           "status": "measured",
           "unit": "count",
           "value": 87,
           "note": "Adapter debug counters across instrumented runs."
-        },
-        "deltas": {
-          "status": "measured",
-          "unit": "count",
-          "value": 0,
-          "note": "Charm currently advertises no tree-diffs capability."
         },
         "droppedEvents": {
           "status": "measured",

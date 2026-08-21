@@ -63,7 +63,7 @@ export const targetShape = {
   selector: z
     .string()
     .optional()
-    .describe('CSS dialect: "dialog button#approve:focused" (role, #testId, .class, :state)'),
+    .describe('Termwright semantic selector: "dialog button#approve:focused" (role, #testId, .class, :state)'),
   role: z.enum(SEMANTIC_ROLES).optional().describe('semantic role; requires a semantic tree'),
   name: z
     .string()
@@ -74,7 +74,11 @@ export const targetShape = {
   text: z
     .string()
     .optional()
-    .describe('visible text; matches the grid when there is no semantic tree'),
+    .describe('semantic node text; requires a semantic tree'),
+  screenText: z
+    .string()
+    .optional()
+    .describe('text rendered in the physical terminal grid'),
   exact: z.boolean().optional().describe('exact rather than substring text matching'),
   state: stateFilter.optional(),
   nth: z
@@ -90,7 +94,7 @@ export const targetShape = {
  * something else (`terminal.type` types it, `terminal.wait_for` awaits it).
  * Those tools target by ref, selector, testId, role or label.
  */
-export const targetShapeWithoutText = (({ text: _text, ...rest }) => rest)(targetShape);
+export const targetShapeWithoutText = (({ text: _text, screenText: _screenText, ...rest }) => rest)(targetShape);
 
 /** Same fields, as a nested object (drag destinations). */
 export const targetObject = z.object(targetShape);
@@ -116,6 +120,14 @@ export const refEntrySchema = z.object({
 
 /** Whether the session publishes a semantic tree. */
 export const semanticTreeState = z.enum(['available', 'unavailable']);
+
+/** Authoritative/diagnostic evidence identity shared with protocol v2. */
+export const evidenceProvenanceSchema = z.object({
+  source: z.enum(['framework', 'application', 'terminal', 'recognizer', 'driver']),
+  method: z.enum(['native', 'instrumented', 'declared', 'correlated', 'measured', 'derived', 'heuristic']),
+  strength: z.enum(['authoritative', 'diagnostic']),
+  providerId: z.string().min(1),
+});
 
 /** Cursor and modes, so one snapshot answers "what is on screen right now". */
 export const cursorSchema = z.object({

@@ -34,6 +34,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gorce-ai/termwright/clients/go/annotate"
+	"github.com/gorce-ai/termwright/clients/go/evidence"
 	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
@@ -46,14 +47,25 @@ const (
 type termwrightProbeState struct {
 	client *protocol.Client
 
-	mu      sync.Mutex
-	ids     map[string]string
-	nextID  int
-	frames  atomic.Uint64
-	dropped atomic.Uint64
+	mu        sync.Mutex
+	ids       map[string]string
+	nextID    int
+	pendingMu sync.Mutex
+	pending   *protocol.Snapshot
+	publishMu sync.Mutex
+	frames    atomic.Uint64
+	dropped   atomic.Uint64
 }
 
-var termwrightProbe = newTermwrightProbe()
+var (
+	termwrightProbeOnce sync.Once
+	termwrightProbe     *termwrightProbeState
+)
+
+func termwrightCurrentProbe() *termwrightProbeState {
+	termwrightProbeOnce.Do(func() { termwrightProbe = newTermwrightProbe() })
+	return termwrightProbe
+}
 
 func newTermwrightProbe() *termwrightProbeState {
 	client := protocol.FromEnv(protocol.Options{
@@ -82,13 +94,25 @@ func newTermwrightProbe() *termwrightProbeState {
 		// The publish happens on the event-loop goroutine, between Update and
 		// the renderer. An unbounded write would stall the loop whenever the
 		// driver stops reading.
-		WriteTimeout: protocol.DefaultWriteTimeout,
+		WriteTimeout:      protocol.DefaultWriteTimeout,
+		EvidenceProviders: evidence.DefaultRegistry(),
 	})
 	if client == nil {
 		return nil
 	}
 	p := &termwrightProbeState{client: client, ids: make(map[string]string)}
-	go func() { _ = client.Start(protocol.DialTimeout) }()
+	go func() {
+		if client.Start(protocol.DialTimeout) != nil {
+			return
+		}
+		p.pendingMu.Lock()
+		pending := p.pending
+		p.pending = nil
+		p.pendingMu.Unlock()
+		if pending != nil {
+			p.publish(pending)
+		}
+	}()
 	return p
 }
 
@@ -98,8 +122,8 @@ func newTermwrightProbe() *termwrightProbeState {
 // One call site, unlike v1's three: v2 consolidated the loop, initial and
 // final frames into this wrapper, which is why the v2 patch is a single hunk.
 func termwrightAfterView(program *Program, model Model, view View) {
-	p := termwrightProbe
-	if p == nil || !p.client.Connected() {
+	p := termwrightCurrentProbe()
+	if p == nil {
 		return
 	}
 
@@ -112,13 +136,27 @@ func termwrightAfterView(program *Program, model Model, view View) {
 		return
 	}
 
-	snapshot := p.snapshot(model, view, columns, rows, p.client.QualifiedObservations())
+	snapshot, duplicateKey := p.snapshot(model, view, columns, rows)
+	if duplicateKey != "" {
+		_ = p.client.Fail("duplicate-semantic-key", "duplicate SemanticKey: "+string(duplicateKey))
+		return
+	}
+	p.pendingMu.Lock()
+	if !p.client.Connected() {
+		p.pending = snapshot
+		p.pendingMu.Unlock()
+		return
+	}
+	p.pendingMu.Unlock()
+	p.publish(snapshot)
+}
+
+func (p *termwrightProbeState) publish(snapshot *protocol.Snapshot) {
+	p.publishMu.Lock()
+	defer p.publishMu.Unlock()
 	marker, err := p.client.Publish(snapshot)
 	if err != nil || marker == "" {
 		p.dropped.Add(1)
-		// A dropped frame means this probe lost part of its own fact stream,
-		// so the next publication owes the driver a whole tree.
-		p.client.RequireFullSnapshot()
 		return
 	}
 	_, _ = os.Stdout.WriteString(marker)
@@ -126,8 +164,8 @@ func termwrightAfterView(program *Program, model Model, view View) {
 }
 
 // snapshot reflects over the user's model and reports what it recognises.
-func (p *termwrightProbeState) snapshot(model Model, view View, columns, rows int, qualified bool) *protocol.Snapshot {
-	snapshot := termwrightNewSnapshot(columns, rows, qualified)
+func (p *termwrightProbeState) snapshot(model Model, view View, columns, rows int) (*protocol.Snapshot, annotate.SemanticKey) {
+	snapshot := termwrightNewSnapshot(columns, rows)
 
 	rootID := p.identity("root")
 	snapshot.RootIDs = append(snapshot.RootIDs, rootID)
@@ -141,13 +179,13 @@ func (p *termwrightProbeState) snapshot(model Model, view View, columns, rows in
 			"role": protocol.ProvenanceRecognizer,
 		},
 	}
-	termwrightCharmGeometry(&root, qualified, true)
+	termwrightCharmGeometry(&root, true)
 	snapshot.Nodes = append(snapshot.Nodes, root)
 
 	candidates := make([]termwrightCandidate, 0)
 	p.walk(reflect.ValueOf(model), rootID, "", &candidates, 0)
-	p.appendCandidates(snapshot, rootID, candidates)
-	return snapshot
+	duplicateKey := p.appendCandidates(snapshot, rootID, candidates)
+	return snapshot, duplicateKey
 }
 
 type termwrightCandidate struct {
@@ -170,28 +208,33 @@ func (p *termwrightProbeState) appendCandidates(
 	snapshot *protocol.Snapshot,
 	rootID string,
 	candidates []termwrightCandidate,
-) {
+) annotate.SemanticKey {
 	counts := make(map[annotate.SemanticKey]int)
 	for _, candidate := range candidates {
 		if candidate.annotated && candidate.meta.Key != "" {
 			counts[candidate.meta.Key]++
 		}
 	}
+	for _, candidate := range candidates {
+		if candidate.annotated && candidate.meta.Key != "" && counts[candidate.meta.Key] > 1 {
+			return candidate.meta.Key
+		}
+	}
 
 	keys := make(map[annotate.SemanticKey]string)
 	pending := make([]termwrightRelations, 0)
 	for _, candidate := range candidates {
-		identityKey := candidate.identityKey
 		keyApplied := candidate.annotated && candidate.meta.Key != "" && counts[candidate.meta.Key] == 1
-		if keyApplied {
-			identityKey = "semantic/" + string(candidate.meta.Key)
-		}
+		identityKey := candidate.identityKey
 		candidate.node.ID = p.identity(identityKey)
+		if keyApplied {
+			candidate.node.ID = "k:" + string(candidate.meta.Key)
+		}
 		candidate.node.ParentID = rootID
 		if candidate.annotated {
 			termwrightApplyAnnotation(candidate.meta, &candidate.node)
 		}
-		termwrightCharmGeometry(&candidate.node, snapshot.V == 2, false)
+		termwrightCharmGeometry(&candidate.node, false)
 		if keyApplied {
 			keys[candidate.meta.Key] = candidate.node.ID
 			termwrightProvenance(&candidate.node, "id", protocol.ProvenanceAnnotation)
@@ -210,40 +253,41 @@ func (p *termwrightProbeState) appendCandidates(
 		maxRelations = p.client.Limits().MaxRelationTargets
 	}
 	termwrightResolveRelations(snapshot, keys, pending, maxRelations)
+	return ""
 }
 
 // Bubble Tea exposes the completed View but not a component-to-cell mapping.
 // The root is known to have produced this frame; reflected model membership
 // alone does not prove that any particular component contributed to View.
-func termwrightCharmGeometry(node *protocol.Node, qualified, root bool) {
-	if !qualified {
-		return
-	}
+func termwrightCharmGeometry(node *protocol.Node, root bool) {
 	if root {
 		displayed := true
-		node.Geometry = &protocol.NodeGeometryObservations{
-			Displayed:    protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: "probe"},
-			IntendedRect: protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: "geometry", Reason: "framework-unobservable"},
-			VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: "geometry", Reason: "framework-unobservable"},
+		node.Geometry = protocol.NodeGeometryObservations{
+			Displayed:    protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: termwrightEvidence("instrumented")},
+			IntendedRect: protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapIntendedGeometry), Reason: "framework-unobservable"},
+			VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapClippedGeometry), Reason: "framework-unobservable"},
 		}
 		return
 	}
-	node.Geometry = &protocol.NodeGeometryObservations{
-		Displayed:    protocol.Observation[bool]{Status: "unknown", Reason: "not-reported"},
-		IntendedRect: protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: "geometry", Reason: "framework-unobservable"},
-		VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: "geometry", Reason: "framework-unobservable"},
+	node.Geometry = protocol.NodeGeometryObservations{
+		Displayed:    protocol.Observation[bool]{Status: "unsupported", Capability: "displayed", Reason: "framework-unobservable"},
+		IntendedRect: protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapIntendedGeometry), Reason: "framework-unobservable"},
+		VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapClippedGeometry), Reason: "framework-unobservable"},
 	}
 }
 
-func termwrightNewSnapshot(columns, rows int, qualified bool) *protocol.Snapshot {
-	if !qualified {
-		return protocol.NewSnapshot("", 0, columns, rows)
-	}
-	snapshot := protocol.NewSnapshotV2("", 0, columns, rows)
-	snapshot.HitGrid = &protocol.Observation[protocol.PointerHitGrid]{
+func termwrightNewSnapshot(columns, rows int) *protocol.Snapshot {
+	snapshot := protocol.NewSnapshot("", 0, columns, rows)
+	snapshot.HitGrid = protocol.Observation[protocol.PointerHitGrid]{
 		Status: "unsupported", Capability: "pointer-hit-grid", Reason: "framework-unobservable",
 	}
 	return snapshot
+}
+
+func termwrightEvidence(method string) *protocol.EvidenceProvenance {
+	return &protocol.EvidenceProvenance{
+		Source: "framework", Method: method, Strength: "authoritative", ProviderID: probeName,
+	}
 }
 
 func termwrightResolveRelations(
@@ -472,7 +516,7 @@ func termwrightDeclaredSemantics(value reflect.Value) (annotate.Semantics, bool)
 
 // termwrightApplyAnnotation merges what the application declared.
 //
-// Only what the probe cannot observe. There is no field here for bounds or
+// Only what the probe cannot observe. There is no field here for geometry or
 // focus, and that is the guarantee rather than an omission.
 func termwrightApplyAnnotation(meta annotate.Semantics, node *protocol.Node) {
 	if meta.Role != "" {

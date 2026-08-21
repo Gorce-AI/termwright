@@ -16,7 +16,7 @@
 
 - Updated dependencies []:
   - @termwright/driver@0.2.0
-  - @termwright/ink-testing@0.2.0
+  - @termwright/ink@0.2.0
   - @termwright/mcp@0.2.0
   - @termwright/screenshot@0.2.0
   - @termwright/test@0.2.0

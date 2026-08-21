@@ -112,9 +112,8 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(snapshot.data['semanticTree']).toBe('available');
     expect(snapshot.text).toMatch(/^Terminal t1 60x10 revision \d+$/mu);
     expect(snapshot.text).toContain('semanticTree: available');
-    expect(snapshot.text).toMatch(/dialog "Permission" ref=n1@\d+ modal/u);
-    expect(snapshot.text).toMatch(/ {2}button "Approve" ref=n2@\d+ focused/u);
-    expect(snapshot.text).not.toContain('bounds=');
+    expect(snapshot.text).toMatch(/dialog "Permission" ref=n1@\d+ bounds=\(0,0,40,2\) modal/u);
+    expect(snapshot.text).toMatch(/ {2}button "Approve" ref=n2@\d+ bounds=\(1,2,9,1\) focused/u);
     expect(snapshot.text).toContain('visible text:');
 
     const refs = snapshot.data['refs'] as { ref: string; name: string }[];
@@ -122,9 +121,48 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(reject).toBeDefined();
     const cursor = snapshot.data['revision'] as number;
 
-    const clicked = await call('terminal.click', { terminal, ref: reject?.ref });
+    const checkpoint = await call('terminal.checkpoint', { terminal });
+    expect(checkpoint.isError, checkpoint.text).toBe(false);
+    expect(checkpoint.data).toMatchObject({ terminal, contractId: expect.any(String), sequence: expect.any(Number) });
+
+    const explanation = await call('terminal.actionability', {
+      terminal,
+      ref: reject?.ref,
+      action: 'click',
+    });
+    expect(explanation.isError, explanation.text).toBe(false);
+    expect(explanation.data).toMatchObject({
+      actionable: true,
+      strategy: 'authoritative-pointer-region',
+      contractId: expect.any(String),
+      requirements: expect.arrayContaining([
+        expect.objectContaining({ kind: 'pointer-input', verdict: 'satisfied', observation: 'known' }),
+        expect.objectContaining({ kind: 'mouse-input-enabled', verdict: 'satisfied', observation: 'known' }),
+        expect.objectContaining({
+          kind: 'receives-pointer', verdict: 'satisfied', observation: 'known',
+          evidence: expect.objectContaining({ strength: 'authoritative', providerId: expect.any(String) }),
+        }),
+      ]),
+    });
+
+    const clicked = await call('terminal.click', {
+      terminal,
+      ref: reject?.ref,
+      modifiers: ['control', 'shift', 'alt'],
+    });
     expect(clicked.isError, clicked.text).toBe(false);
     expect(clicked.data['ok']).toBe(true);
+    expect(clicked.data['action']).toMatchObject({
+      kind: 'click',
+      strategy: 'authoritative-pointer-region',
+      contractId: expect.any(String),
+      operations: [
+        { device: 'mouse', kind: 'down', modifiers: ['shift', 'alt', 'control'] },
+        { device: 'mouse', kind: 'up', modifiers: ['shift', 'alt', 'control'] },
+      ],
+      requirements: expect.any(Array),
+      physicalEvidence: expect.objectContaining({ strength: 'authoritative', providerId: expect.any(String) }),
+    });
 
     const waited = await call('terminal.wait_for', {
       terminal,

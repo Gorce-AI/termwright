@@ -199,7 +199,7 @@ identity that re-resolution is **not** "did this node change?" but "does the
 number 8 mean anything in this frame?", and the honest answer is no.
 
 Proposed: `ResolvedTarget` gains `identity: 'stable' | 'frame-local'`, and
-`locatorForRef` refuses with `unsupported-action` for a frame-local ref,
+`locatorForRef` refuses with `capability-unavailable` for a frame-local ref,
 suggesting role/name/testId instead. The failure this prevents is the worst
 kind: a ref that silently resolves to a *different widget* between frames, so
 a passing test asserts about something it never targeted.

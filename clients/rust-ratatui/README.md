@@ -33,18 +33,19 @@ The SDK can express only author intent:
 - descriptive protocol actions, relationships to other semantic keys and an
   optional stable semantic key for a recreated widget value.
 
-It has no API for bounds, focus, visibility, cells or collection selection.
+It has no API for geometry, focus, visibility, cells or collection selection.
 Domain keys named `bounds`, `state` or `actions` remain nested JSON; the probe
 never promotes them into portable facts or callback capabilities. A declared
 `Action` is only a capability hint and still resolves through real terminal
 input.
-Geometry, collection state, frame commit ordering and `occlusion: unknown`
-continue to come from the instrumented framework.
+Geometry, clipping and pointer observations, collection state, and frame commit
+ordering continue to come from the instrumented framework.
 
 `test_id` remains a locator and correlation hint. `semantic_key` is deliberately
 separate: a unique key produces a `k:<key>` node id that survives recreation and
-can be used by `labelled_by` / `described_by`. Duplicate or empty keys degrade
-to distinct frame-local ids. The handshake remains conservatively
+can be used by `labelled_by` / `described_by`. Empty keys remain frame-local;
+duplicate non-empty keys terminate the semantic session with
+`duplicate-semantic-key`. The handshake remains conservatively
 `identityKind: frame-local` because ordinary unannotated Ratatui nodes still do.
 
 The wrapper must be passed through `Frame::render_widget` or

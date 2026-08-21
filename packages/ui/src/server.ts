@@ -26,6 +26,7 @@ import { openTrace, type TraceReader } from '@termwright/trace';
 import { watch } from 'chokidar';
 import {
   fromBase64,
+  encodeMessage,
   MAX_UI_WIRE_STRING_LENGTH,
   parseClientMessage,
   parseServerMessage,
@@ -39,7 +40,7 @@ import { readProjectInfo } from './project.js';
 import { readSpecFacts } from './specs.js';
 import { DEFAULT_RUNS_DIR, readRunHistory, readRunManifest } from './runs.js';
 import { UiHub, type UiHubOptions } from './hub.js';
-import { attachSession, type UiSessionSource } from './live.js';
+import { attachSession, inspectNodeActionability, type UiSessionSource } from './live.js';
 import { startRecorder, type RecorderOptions, type RecorderSession } from './recorder.js';
 import {
   publishTraceTimeline,
@@ -54,7 +55,7 @@ import {
   type TraceCommands,
   type TraceFrames,
 } from './trace-playback.js';
-import { WebSocketServer, type WebSocket } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 
 /** Maximum accepted request body. Bodies here are small by construction. */
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -164,6 +165,9 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     WebSocket,
     { readonly generation: number; readonly requestedRunGeneration: number | undefined }
   >();
+  const producerSessions = new Map<string, WebSocket>();
+  let nextInspectionRequest = 0;
+  const pendingInspections = new Map<string, { readonly viewer: WebSocket; readonly clientRequestId: string; readonly timer: ReturnType<typeof setTimeout> }>();
   let reader: TraceReader | undefined;
   let overview: TraceOverview | undefined;
   let recorder: RecorderSession | undefined;
@@ -348,9 +352,16 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       // Session input and runner callbacks are allowed to be asynchronous. A
       // failed child write must not become an unhandled rejection that takes
       // the long-lived UI server down; stop has its own explicit failure event.
-      void handleClientMessage(message).catch(() => undefined);
+      void handleClientMessage(message, ws).catch(() => undefined);
     });
-    ws.on('close', remove);
+    ws.on('close', () => {
+      remove();
+      for (const [requestId, pending] of pendingInspections) {
+        if (pending.viewer !== ws) continue;
+        clearTimeout(pending.timer);
+        pendingInspections.delete(requestId);
+      }
+    });
     ws.on('error', remove);
   }
 
@@ -377,13 +388,25 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         // A producer owns its lifecycle. Never let an old watcher completion
         // release a newer browser run (or vice versa).
         producerRuns.delete(ws);
+      } else if (message.type === 'session') {
+        producerSessions.set(message.sessionId, ws);
+      } else if (message.type === 'actionability-inspection') {
+        const pending = pendingInspections.get(message.requestId);
+        if (pending === undefined || producerSessions.get(message.sessionId) !== ws) return;
+        clearTimeout(pending.timer);
+        pendingInspections.delete(message.requestId);
+        if (pending.viewer.readyState === WebSocket.OPEN) pending.viewer.send(encodeMessage({ ...message, requestId: pending.clientRequestId }));
+        return;
       }
       hub.publish(message);
     });
     // The reporter normally sends run-end before closing. If it crashes or
     // cannot finish the WebSocket handshake, retaining its lease forever
     // would make every later run impossible.
-    ws.on('close', () => producerRuns.delete(ws));
+    ws.on('close', () => {
+      producerRuns.delete(ws);
+      for (const [sessionId, producer] of producerSessions) if (producer === ws) producerSessions.delete(sessionId);
+    });
   }
 
   function runIsBusy(): boolean {
@@ -419,7 +442,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     }
   }
 
-  async function handleClientMessage(message: ClientMessage): Promise<void> {
+  async function handleClientMessage(message: ClientMessage, viewer: WebSocket): Promise<void> {
     switch (message.type) {
       case 'rerun':
         // Legacy socket controls have no response channel, but they share the
@@ -454,6 +477,26 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         const session = sessions.get(message.sessionId);
         if (session?.write === undefined) return;
         await session.write(fromBase64(message.dataB64));
+        return;
+      }
+      case 'inspect-actionability': {
+        const local = sessions.get(message.sessionId)?.source;
+        if (local !== undefined) {
+          const response = await inspectNodeActionability(local, message.nodeId)
+            .then<ServerMessage>((results) => ({ v: 1, type: 'actionability-inspection', requestId: message.requestId, sessionId: message.sessionId, nodeId: message.nodeId, results }))
+            .catch<ServerMessage>((error: unknown) => ({ v: 1, type: 'actionability-inspection', requestId: message.requestId, sessionId: message.sessionId, nodeId: message.nodeId, error: describeError(error) }));
+          if (viewer.readyState === WebSocket.OPEN) viewer.send(encodeMessage(response));
+          return;
+        }
+        const producer = producerSessions.get(message.sessionId);
+        if (producer === undefined || producer.readyState !== WebSocket.OPEN) {
+          viewer.send(encodeMessage({ v: 1, type: 'actionability-inspection', requestId: message.requestId, sessionId: message.sessionId, nodeId: message.nodeId, error: 'the live session owner is unavailable' }));
+          return;
+        }
+        const internalRequestId = `server-inspect:${++nextInspectionRequest}`;
+        const timer = setTimeout(() => pendingInspections.delete(internalRequestId), 5_000);
+        pendingInspections.set(internalRequestId, { viewer, clientRequestId: message.requestId, timer });
+        producer.send(encodeMessage({ ...message, requestId: internalRequestId }));
         return;
       }
     }
@@ -732,10 +775,19 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
           sendJson(response, 400, { error: 'nodeId must be a string' });
           return;
         }
-        const selector =
-          kind === 'assert-visible' ? recorder.recordAssertVisible(nodeId) : recorder.recordClick(nodeId);
+        if (kind !== 'click' && kind !== 'assert-visible') {
+          sendJson(response, 400, { error: 'kind must be click or assert-visible' });
+          return;
+        }
+        const selector = kind === 'assert-visible'
+          ? recorder.recordAssertVisible(nodeId)
+          : recorder.recordClick(nodeId);
         if (selector === undefined) {
-          sendJson(response, 409, { error: 'no semantic tree, or unknown node' });
+          sendJson(response, 409, {
+            error: kind === 'click'
+              ? 'semantic click requires an authoritative pointer owner in the negotiated contract and current revision'
+              : 'no semantic tree, or unknown node',
+          });
           return;
         }
         sendJson(response, 200, { selector, source: recorder.source() });

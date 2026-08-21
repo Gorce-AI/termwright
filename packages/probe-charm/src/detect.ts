@@ -145,7 +145,7 @@ async function moduleVersion(
  *
  * v2 has two channels that could survive that — the layer compositor and
  * per-cell OSC 8 parameters — but this probe wires neither one yet. Therefore
- * both majors report **component known, final position unknown**. Capabilities
+ * both majors report **component known, final position unsupported**. Capabilities
  * describe what this build emits, not what its framework could support after
  * future instrumentation work.
  */

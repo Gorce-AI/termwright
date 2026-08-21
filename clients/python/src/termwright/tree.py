@@ -25,12 +25,40 @@ class Rect:
 
 
 @dataclass(frozen=True)
+class EvidenceProvenance:
+    """Origin and strength of an authoritative or diagnostic observation."""
+
+    source: str
+    method: str
+    strength: str
+    providerId: str
+
+    def to_wire(self) -> Dict[str, str]:
+        return {
+            "source": self.source,
+            "method": self.method,
+            "strength": self.strength,
+            "providerId": self.providerId,
+        }
+
+
+def framework_evidence(provider_id: str) -> EvidenceProvenance:
+    """Build authoritative native framework provenance for a provider."""
+
+    return EvidenceProvenance("framework", "native", "authoritative", provider_id)
+
+
+@dataclass(frozen=True)
 class Observation:
-    """Evidence-qualified wire fact; value is present only for ``known``."""
+    """Evidence-qualified wire fact.
+
+    ``known`` carries the value and provenance; authoritative ``absent`` also
+    carries provenance proving that no value exists.
+    """
 
     status: str
     value: Any = None
-    evidence: Optional[str] = None
+    evidence: Optional[EvidenceProvenance] = None
     reason: Optional[str] = None
     capability: Optional[str] = None
 
@@ -38,7 +66,10 @@ class Observation:
         wire: Dict[str, Any] = {"status": self.status}
         if self.status == "known":
             wire["value"] = self.value.to_wire() if hasattr(self.value, "to_wire") else self.value
-            wire["evidence"] = self.evidence
+            wire["evidence"] = self.evidence.to_wire() if self.evidence is not None else None
+        elif self.status == "absent":
+            wire["reason"] = self.reason
+            wire["evidence"] = self.evidence.to_wire() if self.evidence is not None else None
         elif self.status == "unsupported":
             wire["capability"] = self.capability
             wire["reason"] = self.reason
@@ -107,15 +138,15 @@ class SemanticTextRange:
 
 @dataclass(frozen=True)
 class SemanticNode:
-    """One accessible node. ``bounds`` are absolute viewport cells."""
+    """One accessible node with evidence-qualified geometry."""
 
     id: str
     role: str
+    geometry: NodeGeometryObservations
     name: str = ""
     parentId: Optional[str] = None
     description: Optional[str] = None
     value: Optional[str] = None
-    bounds: Optional[Rect] = None
     state: Optional[SemanticState] = None
     #: Application-defined JSON state. Portable flags stay in ``state``.
     extended: Optional[Mapping[str, Any]] = None
@@ -128,15 +159,10 @@ class SemanticNode:
     #: ``generic``: an unrecognised widget must at least name its own type, so
     #: a reader can tell one unknown thing from another.
     frameworkType: Optional[str] = None
-    #: Whether the producer can say if these cells are covered by something
-    #: painted later. Only a producer that observes paint order may say
-    #: ``"known"``; the driver refuses pointer actions on anything else.
-    occlusion: Optional[str] = None
     #: Where this node's facts came from, as a whole.
     p: Optional[str] = None
     #: Where individual fields came from, when they differ from ``p``.
     px: Optional[Mapping[str, str]] = None
-    geometry: Optional[NodeGeometryObservations] = None
 
     def to_wire(self) -> Dict[str, Any]:
         wire: Dict[str, Any] = {"id": self.id, "role": self.role, "name": self.name}
@@ -146,8 +172,6 @@ class SemanticNode:
             wire["description"] = self.description
         if self.value is not None:
             wire["value"] = self.value
-        if self.bounds is not None:
-            wire["bounds"] = self.bounds.to_wire()
         if self.state is not None:
             state = self.state.to_wire()
             if state:
@@ -166,14 +190,11 @@ class SemanticNode:
             wire["testId"] = self.testId
         if self.frameworkType is not None:
             wire["frameworkType"] = self.frameworkType
-        if self.occlusion is not None:
-            wire["occlusion"] = self.occlusion
         if self.p is not None:
             wire["p"] = self.p
         if self.px:
             wire["px"] = dict(self.px)
-        if self.geometry is not None:
-            wire["geometry"] = self.geometry.to_wire()
+        wire["geometry"] = self.geometry.to_wire()
         return wire
 
 
@@ -210,12 +231,12 @@ class SemanticSnapshot:
     revision: int
     columns: int
     rows: int
+    coordinateSpace: Observation
+    hitGrid: Observation
     rootIds: Sequence[str] = field(default_factory=list)
     nodes: Sequence[SemanticNode] = field(default_factory=list)
     cursor: Optional[CursorInfo] = None
-    v: int = 1
-    coordinateSpace: Optional[Observation] = None
-    hitGrid: Optional[Observation] = None
+    v: int = 2
 
     def to_wire(self) -> Dict[str, Any]:
         wire: Dict[str, Any] = {
@@ -229,20 +250,30 @@ class SemanticSnapshot:
             wire["cursor"] = self.cursor.to_wire()
         wire["rootIds"] = list(self.rootIds)
         wire["nodes"] = [node.to_wire() for node in self.nodes]
-        if self.coordinateSpace is not None:
-            wire["coordinateSpace"] = self.coordinateSpace.to_wire()
-        if self.hitGrid is not None:
-            wire["hitGrid"] = self.hitGrid.to_wire()
+        wire["coordinateSpace"] = self.coordinateSpace.to_wire()
+        wire["hitGrid"] = self.hitGrid.to_wire()
         return wire
 
 
 def snapshot_from_wire(value: Dict[str, Any]) -> SemanticSnapshot:
     """Rebuild a snapshot from an already-validated wire object."""
+    def observation(raw: Mapping[str, Any], *, rect: bool = False) -> Observation:
+        observed = raw.get("value")
+        if rect and isinstance(observed, Mapping):
+            observed = Rect(**observed)
+        return Observation(
+            status=raw["status"],
+            value=observed,
+            evidence=(EvidenceProvenance(**raw["evidence"]) if isinstance(raw.get("evidence"), dict) else None),
+            reason=raw.get("reason"),
+            capability=raw.get("capability"),
+        )
+
     nodes: List[SemanticNode] = []
     for raw in value["nodes"]:
-        bounds = raw.get("bounds")
         state = raw.get("state")
         ranges = raw.get("textRanges")
+        geometry = raw["geometry"]
         nodes.append(
             SemanticNode(
                 id=raw["id"],
@@ -251,8 +282,8 @@ def snapshot_from_wire(value: Dict[str, Any]) -> SemanticSnapshot:
                 parentId=raw.get("parentId"),
                 description=raw.get("description"),
                 value=raw.get("value"),
-                bounds=Rect(**bounds) if bounds is not None else None,
                 state=SemanticState(**state) if state is not None else None,
+                extended=raw.get("extended"),
                 actions=tuple(raw["actions"]) if raw.get("actions") is not None else None,
                 labelledBy=tuple(raw["labelledBy"]) if raw.get("labelledBy") is not None else None,
                 describedBy=tuple(raw["describedBy"]) if raw.get("describedBy") is not None else None,
@@ -267,6 +298,14 @@ def snapshot_from_wire(value: Dict[str, Any]) -> SemanticSnapshot:
                 if ranges is not None
                 else None,
                 testId=raw.get("testId"),
+                frameworkType=raw.get("frameworkType"),
+                p=raw.get("p"),
+                px=raw.get("px"),
+                geometry=NodeGeometryObservations(
+                    displayed=observation(geometry["displayed"]),
+                    intendedRect=observation(geometry["intendedRect"], rect=True),
+                    visibleRect=observation(geometry["visibleRect"], rect=True),
+                ),
             )
         )
     cursor = value.get("cursor")
@@ -279,4 +318,6 @@ def snapshot_from_wire(value: Dict[str, Any]) -> SemanticSnapshot:
         nodes=tuple(nodes),
         cursor=CursorInfo(**cursor) if cursor is not None else None,
         v=value["v"],
+        coordinateSpace=observation(value["coordinateSpace"]),
+        hitGrid=observation(value["hitGrid"]),
     )

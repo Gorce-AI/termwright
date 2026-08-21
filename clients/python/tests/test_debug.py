@@ -135,22 +135,6 @@ def test_dormancy_reason_names_only_the_missing_variable(tmp_path):
     assert "dormant: TERMWRIGHT_TOKEN not set" in target.read_text()
 
 
-def test_a_protocol_mismatch_says_so(tmp_path):
-    target = tmp_path / "adapter.log"
-    client = client_from_env(
-        adapter_name="test",
-        adapter_version="0.0.0",
-        env={
-            "TERMWRIGHT_DEBUG_FILE": str(target),
-            "TERMWRIGHT_ENDPOINT": "/tmp/x.sock",
-            "TERMWRIGHT_TOKEN": "s3cret",
-            "TERMWRIGHT_PROTOCOL": "termwright/99",
-        },
-    )
-    assert client is None
-    assert "dormant: TERMWRIGHT_PROTOCOL='termwright/99'" in target.read_text()
-
-
 async def test_the_token_never_appears(tmp_path):
     target = tmp_path / "adapter.log"
     client = client_from_env(

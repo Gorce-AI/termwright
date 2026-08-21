@@ -53,5 +53,5 @@ export const ABSOLUTE_LIMITS: ProtocolLimits = Object.freeze({
   maxLogQueue: 10_000,
 });
 
-/** Default semantic negotiation window (ms) before a session settles as generic. */
-export const DEFAULT_NEGOTIATION_MS = 250;
+/** Default semantic negotiation window (ms) before an auto-detected session settles as generic. */
+export const DEFAULT_NEGOTIATION_MS = 2_000;

@@ -7,7 +7,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTraceWriter } from '@termwright/trace';
-import type { SemanticSnapshot } from '@termwright/protocol';
+import type { NodeGeometryObservations, Rect, SemanticSnapshot } from '@termwright/protocol';
 import type { SessionEventMap, SessionEvents } from '@termwright/driver';
 
 type Listener = (payload: never) => void;
@@ -50,28 +50,63 @@ class Recorded {
   }
 }
 
+const unknownGeometry = (): NodeGeometryObservations => ({
+  displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+  intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+  visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+});
+
+const visibleGeometry = (rect: Rect): NodeGeometryObservations => ({
+  displayed: {
+    status: 'known',
+    value: true,
+    evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-fixture' },
+  },
+  intendedRect: {
+    status: 'known',
+    value: { ...rect },
+    evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-fixture' },
+  },
+  visibleRect: {
+    status: 'known',
+    value: { ...rect },
+    evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-fixture' },
+  },
+});
+
+const snapshotFacts = {
+  coordinateSpace: { status: 'unknown' as const, reason: 'awaiting-revision-pair' as const },
+  hitGrid: {
+    status: 'unsupported' as const,
+    capability: 'pointer-hit-grid',
+    reason: 'framework-unobservable' as const,
+  },
+};
+
 /** The tree published at each of the fixture's two revisions. */
 export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
   {
-    v: 1,
+    v: 2,
     sessionId: 'trace-session',
     revision: 1,
     columns: 80,
     rows: 24,
     rootIds: ['d1'],
     nodes: [
-      { id: 'd1', role: 'dialog', name: 'Permission', state: { modal: true } },
-      { id: 'b1', role: 'button', name: 'Approve', parentId: 'd1', bounds: { row: 3, column: 4, width: 9, height: 1 } },
+      { id: 'd1', role: 'dialog', name: 'Permission', state: { modal: true }, geometry: unknownGeometry() },
+      { id: 'b1', role: 'button', name: 'Approve', parentId: 'd1', geometry: visibleGeometry({ row: 3, column: 4, width: 9, height: 1 }) },
     ],
+    ...snapshotFacts,
   },
   {
-    v: 1,
+    v: 2,
     sessionId: 'trace-session',
     revision: 2,
     columns: 80,
     rows: 24,
     rootIds: ['s1'],
-    nodes: [{ id: 's1', role: 'status', name: 'running: ls -la' }],
+    nodes: [{ id: 's1', role: 'status', name: 'running: ls -la', geometry: unknownGeometry() }],
+    ...snapshotFacts,
   },
 ];
 

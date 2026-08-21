@@ -37,8 +37,16 @@ preload is dormant outside a Termwright session.
 await expect(app.getByRole('button', {name: 'Approve'})).toBeAttached();
 ```
 
-Prefer keyboard input for Ink. The framework does not expose clipping or exact
-pointer ownership, so semantic `click()` is unsupported.
+The certified renderer instrumentation publishes intended and clipped geometry
+automatically. Ink itself does not own a universal pointer router, so semantic
+pointer actions additionally require an application evidence provider exposing
+the application's production pointer regions and hit test. Termwright uses that
+evidence only to plan coordinates; the input still travels through the PTY.
+The runnable [Ink todo example](https://github.com/gorce-ai/termwright/tree/main/examples/ink-todo)
+registers its measured production router with `@termwright/evidence-provider`.
+Its E2E test clicks `getByRole('button', {name: 'Remove'})`, records the
+provider-backed plan, and proves that Ink's normal stdin mouse handler changed
+the application state.
 
 ## Annotate a custom component
 
@@ -84,7 +92,10 @@ component when a role or accessible name is part of the behavior under test.
 
 ## Supported behavior
 
-Ink 7.1 is verified. Stable host identity, display state, rendered text, and
-retained ARIA state are observable. Intended geometry is conditional; visible
-clipping and hit testing are unsupported. See
-[Framework compatibility](../../reference/compatibility/) for the operation matrix.
+Ink 7.1.1 is certified exactly. Stable host identity, display state, rendered
+text, retained ARIA state, intended geometry, and visible clipping are
+automatic. The checksummed hooks correlate Yoga layout and nested overflow with
+Static/live origins, emitted output, and the committed normal or alternate VT
+buffer. Exact hit testing is application-integrated, not inferred from those
+rectangles. See [Framework compatibility](../../reference/compatibility/) for
+the generated operation matrix.

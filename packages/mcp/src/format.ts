@@ -109,12 +109,13 @@ export function refEntries(snapshot: SemanticSnapshot): readonly RefEntry[] {
 
 /** Projects a single node into a {@link RefEntry}. */
 export function toRefEntry(node: SemanticNode, revision: number, depth = 0): RefEntry {
+  const visibleRect = node.geometry.visibleRect;
   return {
     ref: formatRef(node.id, revision),
     role: node.role,
     name: node.name,
     depth,
-    ...(node.bounds === undefined ? {} : { bounds: node.bounds }),
+    ...(visibleRect.status === 'known' ? { bounds: visibleRect.value } : {}),
     flags: stateFlags(node.state),
     ...(node.testId === undefined ? {} : { testId: node.testId }),
     ...(node.value === undefined ? {} : { value: node.value }),

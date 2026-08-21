@@ -254,7 +254,7 @@ never claims the bytes came after it — worth remembering before drawing any
 "this action caused that output" arrow. Failed actions are published too, and
 are the ones worth watching live: *"the click did not land because the app never
 enabled mouse reporting"* beats wondering why nothing happened. Their `error` is
-a code (`unsupported-action`, `timeout`), not prose, so it groups and filters.
+a code (`not-actionable`, `timeout`), not prose, so it groups and filters.
 
 Clicking a row can highlight the node an action targeted, but only when the
 recorded event carries a `ref` (`n8@42`, node plus the revision it resolved at).

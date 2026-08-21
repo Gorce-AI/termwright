@@ -3,17 +3,17 @@ title: "Type Alias: MountInkRenderOptions"
 editUrl: false
 ---
 
-[**@termwright/ink-testing**](../../)
+[**@termwright/ink**](../../)
 
 ***
 
-[@termwright/ink-testing](../../) / MountInkRenderOptions
+[@termwright/ink](../../) / MountInkRenderOptions
 
 # Type Alias: MountInkRenderOptions
 
 > **MountInkRenderOptions** = `Pick`\<`RenderOptions`, `"maxFps"` \| `"exitOnCtrlC"` \| `"patchConsole"` \| `"incrementalRendering"` \| `"concurrent"` \| `"isScreenReaderEnabled"`\>
 
-Defined in: [ink-testing/src/mount.tsx:34](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L34)
+Defined in: ink/src/mount.tsx:34
 
 The Ink render options a mount may override.
 

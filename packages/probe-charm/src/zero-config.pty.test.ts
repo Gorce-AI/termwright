@@ -21,6 +21,7 @@ import { prepareInstrumentedBuild, PROBE_VERSION } from './launch.js';
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, 'testing', 'fixture-v2');
+const FIXTURE_V1 = join(here, 'testing', 'fixture-v1');
 const FIXTURE_BUBBLES = join(here, 'testing', 'fixture-bubbles');
 const FIXTURE_ANNOTATED = join(here, 'testing', 'fixture-annotated');
 
@@ -108,8 +109,43 @@ async function buildFixture(): Promise<string> {
   return binary;
 }
 
+async function buildV1Fixture(): Promise<string> {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-v1-')));
+  roots.push(dir);
+  const app = join(dir, 'app');
+  await mkdir(app, { recursive: true });
+  await cp(FIXTURE_V1, app, { recursive: true });
+  const prepared = await prepareInstrumentedBuild({
+    moduleDir: app,
+    env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') },
+  });
+  const binary = join(dir, 'app-binary');
+  await run('go', ['build', '-o', binary, '.'], { cwd: app, env: prepared.env });
+  return binary;
+}
+
+describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe', () => {
+  it('answers startup terminal queries and publishes semantics through real PTY input', async () => {
+    const binary = await buildV1Fixture();
+    const app = await launchTerminal({ command: [binary], columns: 80, rows: 12 });
+    sessions.push(app);
+
+    await app.waitForText('ready');
+    await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
+    expect(app.capabilities().probe).toMatchObject({
+      framework: 'charm',
+      frameworkVersion: 'v1.3.10',
+      probeVersion: PROBE_VERSION,
+    });
+    expect(app.diagnostics().some((entry) => entry.code === 'terminal-response')).toBe(true);
+
+    await app.press('x');
+    await app.waitForText('changed');
+  }, 900_000);
+});
+
 describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () => {
-	it('qualifies unobservable component layout instead of inventing it', async () => {
+	it('reports unobservable component geometry instead of inventing it', async () => {
 		const binary = await buildFixture();
 		const app = await launchTerminal({
 			command: [binary],
@@ -118,7 +154,7 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
 		});
 		sessions.push(app);
 		await app.waitForText('Sign in');
-		await expect.poll(() => app.semanticTree()?.v).toBe(2);
+		await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
 
 		const tree = app.semanticTree();
 		expect(tree?.hitGrid).toEqual({
@@ -128,11 +164,10 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
 		});
 		const textbox = tree?.nodes.find((node) => node.role === 'textbox' && node.name === 'Name');
 		expect(textbox?.geometry).toEqual({
-			displayed: { status: 'unknown', reason: 'not-reported' },
-			intendedRect: { status: 'unsupported', capability: 'geometry', reason: 'framework-unobservable' },
-			visibleRect: { status: 'unsupported', capability: 'geometry', reason: 'framework-unobservable' },
+			displayed: { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' },
+			intendedRect: { status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' },
+			visibleRect: { status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' },
 		});
-		expect(textbox?.bounds).toBeUndefined();
 	}, 900_000);
 
   it('names the components the screen only shows as text', async () => {
@@ -148,7 +183,6 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
       'states',
       'actions',
       'render-revisions',
-      'qualified-observations',
     ]);
     // Probe capabilities describe what Bubble Tea lets the instrumentation
     // observe; they are intentionally not the adapter traffic negotiated
@@ -293,7 +327,12 @@ describe.skipIf(!runnable)('developer annotations', () => {
 describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {
   it('reports state the library keeps entirely private', async () => {
     const binary = await buildBubblesFixture();
-    const app = await launchTerminal({ command: [binary], columns: 60, rows: 10 });
+    const app = await launchTerminal({
+      command: [binary],
+      columns: 60,
+      rows: 10,
+      semanticNegotiationMs: 2_000,
+    });
     sessions.push(app);
     await app.waitForText('Loading');
 

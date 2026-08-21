@@ -25,7 +25,7 @@ Options for a Termwright-integrated interactive shell.
 
 > `readonly` `optional` **columns?**: `number`
 
-Defined in: driver/dist/index.d.ts:83
+Defined in: driver/dist/index.d.ts:69
 
 #### Inherited from
 
@@ -37,7 +37,7 @@ Defined in: driver/dist/index.d.ts:83
 
 > `readonly` `optional` **cwd?**: `string`
 
-Defined in: driver/dist/index.d.ts:44
+Defined in: driver/dist/index.d.ts:45
 
 #### Inherited from
 
@@ -49,7 +49,7 @@ Defined in: driver/dist/index.d.ts:44
 
 > `readonly` `optional` **debug?**: `boolean`
 
-Defined in: driver/dist/index.d.ts:52
+Defined in: driver/dist/index.d.ts:53
 
 Streams a live log of API calls, waits, revisions and diagnostics to
 stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
@@ -64,7 +64,7 @@ stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: driver/dist/index.d.ts:45
+Defined in: driver/dist/index.d.ts:46
 
 #### Inherited from
 
@@ -76,7 +76,7 @@ Defined in: driver/dist/index.d.ts:45
 
 > `readonly` `optional` **envMode?**: `EnvMode`
 
-Defined in: driver/dist/index.d.ts:47
+Defined in: driver/dist/index.d.ts:48
 
 Defaults to `'replace'`: a test process's secrets are not the child's.
 
@@ -113,7 +113,7 @@ await terminal.launch({
 
 > `readonly` `optional` **logs?**: readonly `AppLogSource`[]
 
-Defined in: driver/dist/index.d.ts:58
+Defined in: driver/dist/index.d.ts:59
 
 Log files to follow for the lifetime of the session. A file that does not
 exist yet is waited for; one that already exists is followed from its
@@ -129,7 +129,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **recording?**: `RecordingOptions`
 
-Defined in: driver/dist/index.d.ts:88
+Defined in: driver/dist/index.d.ts:74
 
 #### Inherited from
 
@@ -137,11 +137,27 @@ Defined in: driver/dist/index.d.ts:88
 
 ***
 
+### requiredCapabilities?
+
+> `readonly` `optional` **requiredCapabilities?**: readonly (`"focus"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"keyboard-input"` \| `"pointer-input"` \| `"paired-revisions"`)[]
+
+Defined in: driver/dist/index.d.ts:85
+
+Capabilities that must be present in the frozen session contract.
+Launch waits for negotiation and throws `CapabilityUnavailableError`
+before returning a harness when any requirement is missing.
+
+#### Inherited from
+
+`Omit.requiredCapabilities`
+
+***
+
 ### rows?
 
 > `readonly` `optional` **rows?**: `number`
 
-Defined in: driver/dist/index.d.ts:84
+Defined in: driver/dist/index.d.ts:70
 
 #### Inherited from
 
@@ -153,7 +169,7 @@ Defined in: driver/dist/index.d.ts:84
 
 > `readonly` `optional` **scrollbackLines?**: `number`
 
-Defined in: driver/dist/index.d.ts:86
+Defined in: driver/dist/index.d.ts:72
 
 #### Inherited from
 
@@ -165,27 +181,11 @@ Defined in: driver/dist/index.d.ts:86
 
 > `readonly` `optional` **semanticNegotiationMs?**: `number`
 
-Defined in: driver/dist/index.d.ts:85
+Defined in: driver/dist/index.d.ts:71
 
 #### Inherited from
 
 `Omit.semanticNegotiationMs`
-
-***
-
-### semanticProtocol?
-
-> `readonly` `optional` **semanticProtocol?**: `"termwright/1"` \| `"termwright/2"`
-
-Defined in: driver/dist/index.d.ts:82
-
-Semantic wire major. V2 is the default and requires evidence-qualified
-geometry, visibility and exact hit grids. V1 is an explicit compatibility
-mode for older producers; it never enables unqualified pointer actions.
-
-#### Inherited from
-
-`Omit.semanticProtocol`
 
 ***
 
@@ -218,7 +218,7 @@ change only what it is about. `files` are written over it.
 
 > `readonly` `optional` **terminalProfile?**: `string`
 
-Defined in: driver/dist/index.d.ts:67
+Defined in: driver/dist/index.d.ts:68
 
 Terminal profile: which width tables and which of the switches terminals
 disagree on this session uses. A built-in id (`'default'`, `'kitty'`,
@@ -237,7 +237,7 @@ pane can count characters exactly as the live session did.
 
 > `readonly` `optional` **timeouts?**: `TimeoutClasses`
 
-Defined in: driver/dist/index.d.ts:87
+Defined in: driver/dist/index.d.ts:73
 
 #### Inherited from
 
@@ -256,22 +256,3 @@ Trace policy for this session, overriding the file's and the project's.
 #### Inherited from
 
 [`LaunchFixtureOptions`](../launchfixtureoptions/).[`trace`](../launchfixtureoptions/#trace)
-
-***
-
-### treeUpdates?
-
-> `readonly` `optional` **treeUpdates?**: `"auto"` \| `"snapshots"`
-
-Defined in: driver/dist/index.d.ts:76
-
-How an instrumented application should push its semantic tree.
-
-`'auto'` (default) takes deltas from any adapter that offers them, which
-is far cheaper for a tree that changes on every keystroke. `'snapshots'`
-forces full trees — the switch to reach for when a replay and a live
-session disagree and the delta path is a suspect.
-
-#### Inherited from
-
-`Omit.treeUpdates`

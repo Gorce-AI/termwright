@@ -79,7 +79,7 @@ describe('diffSemanticSnapshots', () => {
         id: 'n1',
         role: 'button',
         name: 'Submit',
-        bounds: { row: 1, column: 1, width: 8, height: 1 },
+        geometry: visibleGeometry({ row: 1, column: 1, width: 8, height: 1 }),
       }),
     ]);
     const moved = snapshot(2, [
@@ -87,7 +87,7 @@ describe('diffSemanticSnapshots', () => {
         id: 'n1',
         role: 'button',
         name: 'Submit',
-        bounds: { row: 4, column: 1, width: 8, height: 1 },
+        geometry: visibleGeometry({ row: 4, column: 1, width: 8, height: 1 }),
       }),
     ]);
     expect(diffSemanticSnapshots(before, moved).sentences).toEqual([
@@ -100,7 +100,7 @@ describe('diffSemanticSnapshots', () => {
         role: 'button',
         name: 'Submit',
         state: { disabled: true },
-        bounds: { row: 4, column: 1, width: 8, height: 1 },
+        geometry: visibleGeometry({ row: 4, column: 1, width: 8, height: 1 }),
       }),
     ]);
     const diff = diffSemanticSnapshots(before, movedAndDisabled);
@@ -139,4 +139,9 @@ describe('diffSemanticSnapshots', () => {
     const after = snapshot(2, [node({ id: 'n1', role: 'separator' })]);
     expect(diffSemanticSnapshots(before, after).sentences).toEqual(['separator appeared']);
   });
+});
+const visibleGeometry = (rect: { row: number; column: number; width: number; height: number }) => ({
+  displayed: { status: 'known', value: true, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test' } } as const,
+  intendedRect: { status: 'known', value: { ...rect }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test' } } as const,
+  visibleRect: { status: 'known', value: { ...rect }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test' } } as const,
 });

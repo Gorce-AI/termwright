@@ -13,6 +13,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/gorce-ai/termwright/clients/go/annotate"
+	"github.com/gorce-ai/termwright/clients/go/evidence"
 	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
@@ -40,6 +41,18 @@ func (b *badge) Draw(screen tcell.Screen) {
 }
 
 func main() {
+	// This fixture owns no pointer targets, but still registers an authoritative
+	// region provider. The tview probe must freeze this application registry into
+	// its hello rather than silently running with framework evidence alone.
+	if _, err := evidence.RegisterPointerEvidenceProvider(evidence.Provider{
+		ID: "fixture.pointer-regions", Version: "1", Method: "declared",
+		Capabilities: []string{"pointer-regions"},
+		Observe: func(evidence.Context) (evidence.Observation, error) {
+			return evidence.Observation{PointerRegions: nil}, nil
+		},
+	}); err != nil {
+		panic(err)
+	}
 	app := tview.NewApplication()
 
 	status := tview.NewTextView().SetText("status: ready")

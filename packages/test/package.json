@@ -22,7 +22,7 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts src/reporter.ts src/config.ts src/ui-runner.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/reporter.ts src/config.ts src/ui-runner.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

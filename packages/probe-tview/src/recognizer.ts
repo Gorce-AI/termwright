@@ -17,7 +17,7 @@
  *    existed to prevent.
  */
 
-import type { ProbeFrame, ProbeObject } from '@termwright/protocol';
+import { evidence, type ProbeFrame, type ProbeObject } from '@termwright/protocol';
 import type { SemanticNode, SemanticRole, SemanticSnapshot } from '@termwright/protocol';
 
 /**
@@ -79,13 +79,15 @@ export function recognize(frame: ProbeFrame, options: RecognizeOptions): Semanti
   }
 
   return {
-    v: 1,
+    v: 2,
     sessionId: options.sessionId,
     revision: options.revision,
     columns: options.columns,
     rows: options.rows,
     rootIds,
     nodes,
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 
@@ -102,11 +104,15 @@ function recognizeObject(object: ProbeObject): SemanticNode {
     frameworkType: object.frameworkType,
     name: object.annotations?.name ?? object.text ?? '',
     ...(object.parent === undefined ? {} : { parentId: object.parent }),
-    // intendedRect is where the widget was drawn. visibleRect is absent for
-    // tview, which computes no clip, so nothing here fabricates one.
-    ...(object.geometry?.intendedRect === undefined
-      ? {}
-      : { bounds: object.geometry.intendedRect }),
+    geometry: {
+      displayed: object.state?.displayed === undefined
+        ? { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' }
+        : { status: 'known', value: object.state.displayed, evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
+      intendedRect: object.geometry?.intendedRect === undefined
+        ? { status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' }
+        : { status: 'known', value: object.geometry.intendedRect, evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
+      visibleRect: { status: 'unsupported', capability: 'visible-rect', reason: 'framework-unobservable' },
+    },
     ...(object.state?.value === undefined ? {} : { value: object.state.value }),
     ...(state === undefined ? {} : { state }),
   } as SemanticNode;

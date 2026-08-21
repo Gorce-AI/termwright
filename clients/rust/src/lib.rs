@@ -12,7 +12,7 @@
 //! all: no socket, no marker, no change to what the terminal receives.
 //!
 //! ```no_run
-//! use termwright_protocol::{Client, Node, Options, Rect, Role, Snapshot};
+//! use termwright_protocol::{Client, Node, Options, Role, Snapshot};
 //!
 //! let mut client = match Client::from_env(Options::new("my-tui", "1.0.0")) {
 //!     Some(client) => client,
@@ -22,11 +22,7 @@
 //!
 //! let mut snapshot = Snapshot::new(80, 24);
 //! snapshot.push(Node::new("root", Role::Dialog, "Permission"));
-//! snapshot.push(
-//!     Node::new("ok", Role::Button, "Approve")
-//!         .with_parent("root")
-//!         .with_bounds(Rect::new(1, 2, 9, 1)),
-//! );
+//! snapshot.push(Node::new("ok", Role::Button, "Approve").with_parent("root"));
 //!
 //! if let Some(marker) = client.publish(&mut snapshot).expect("publish") {
 //!     // Only after the render's last byte has been written.
@@ -45,8 +41,8 @@
 
 pub mod client;
 pub mod debug;
-pub mod diffing;
 pub mod error;
+pub mod evidence;
 pub mod framing;
 pub mod limits;
 pub mod logs;
@@ -58,11 +54,10 @@ pub mod roles;
 pub mod tracing_layer;
 
 pub mod tree;
-pub mod validate;
+mod validate;
 
-pub use client::{Client, Options, DIAL_TIMEOUT, ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN};
+pub use client::{Client, Options, DIAL_TIMEOUT, ENV_ENDPOINT, ENV_TOKEN};
 pub use debug::{debug_path, Category, DebugLog, ENV_DEBUG, ENV_DEBUG_FILE};
-pub use diffing::{build_delta, diff_trees, DELTA_SHARE_CEILING};
 pub use error::{Error, ParseError, ValidationError, Violation};
 pub use framing::{encode_frame, project_dto, Frame, FrameDecoder, FRAME_HEADER_BYTES};
 pub use limits::{Limits, ABSOLUTE_LIMITS, DEFAULT_LIMITS, DEFAULT_NEGOTIATION_MS};
@@ -72,15 +67,17 @@ pub use marker::{
     MARKER_OSC_CODE, MARKER_OSC_PREFIX,
 };
 pub use messages::{
-    parse_adapter_message, parse_driver_message, ProbeIdentityKind, ProbeInfo, PROTOCOL_ID,
-    PROTOCOL_V2_ID, PROTOCOL_VERSION,
+    parse_adapter_message, parse_driver_message, EvidenceProviderRegistration, ProbeIdentityKind,
+    ProbeInfo, PROTOCOL_ID, PROTOCOL_VERSION,
 };
 pub use roles::{Action, Capability, Role};
 pub use tree::{
-    Cursor, CursorShape, Node, NodeGeometryObservations, Observation, Occlusion, Orientation,
-    PointerHitGrid, PointerHitRegion, Provenance, Rect, Snapshot, State, TextRange,
+    Cursor, CursorShape, EvidenceMethod, EvidenceProvenance, EvidenceSource, EvidenceStrength,
+    Node, NodeGeometryObservations, Observation, Orientation, PointerHitGrid, PointerHitRegion,
+    Provenance, ProviderPointerRegion, ProviderPointerSpan, ProviderRevisionEvidence, Rect,
+    Snapshot, State, TextRange,
 };
-pub use validate::{apply_tree_delta, validate_snapshot, validate_tree_delta};
+pub use validate::validate_snapshot;
 
 /// The fields a node and a state may carry, as this client knows them.
 ///

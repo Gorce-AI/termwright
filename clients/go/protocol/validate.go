@@ -240,14 +240,41 @@ func checkState(value any, path []string) *issue {
 }
 
 var nodeKeys = []string{
-	"id", "parentId", "role", "name", "description", "value", "bounds",
-	"state", "extended", "actions", "labelledBy", "describedBy", "textRanges", "testId",
-	"frameworkType", "occlusion", "p", "px",
-}
-var nodeV2Keys = []string{
 	"id", "parentId", "role", "name", "description", "value", "geometry",
 	"state", "extended", "actions", "labelledBy", "describedBy", "textRanges", "testId",
 	"frameworkType", "p", "px",
+}
+
+var evidenceKeys = []string{"source", "method", "strength", "providerId"}
+
+func checkEvidence(value any, path []string, limits Limits) *issue {
+	object, problem := checkObject(value, path)
+	if problem != nil {
+		return problem
+	}
+	if problem := checkStrict(object, evidenceKeys, path); problem != nil {
+		return problem
+	}
+	source, _ := object["source"].(string)
+	if !oneOf(source, []string{"framework", "application", "terminal", "recognizer", "driver"}) {
+		return fail(at(path, "source"), "invalid evidence source")
+	}
+	method, _ := object["method"].(string)
+	if !oneOf(method, []string{"native", "instrumented", "declared", "correlated", "measured", "derived", "heuristic"}) {
+		return fail(at(path, "method"), "invalid evidence method")
+	}
+	strength, _ := object["strength"].(string)
+	if strength != "authoritative" && strength != "diagnostic" {
+		return fail(at(path, "strength"), "invalid evidence strength")
+	}
+	provider, problem := checkText(object["providerId"], at(path, "providerId"), limits)
+	if problem != nil {
+		return problem
+	}
+	if provider == "" {
+		return fail(at(path, "providerId"), "providerId must not be empty")
+	}
+	return nil
 }
 
 func checkObservation(value any, path []string, limits Limits, known func(any, []string) *issue) *issue {
@@ -261,16 +288,31 @@ func checkObservation(value any, path []string, limits Limits, known func(any, [
 		if problem := checkStrict(object, []string{"status", "value", "evidence"}, path); problem != nil {
 			return problem
 		}
-		if _, ok := object["evidence"].(string); !ok {
-			return fail(at(path, "evidence"), "expected evidence")
+		if problem := checkEvidence(object["evidence"], at(path, "evidence"), limits); problem != nil {
+			return problem
 		}
 		return known(object["value"], at(path, "value"))
-	case "absent", "unknown":
+	case "absent":
+		if problem := checkStrict(object, []string{"status", "reason", "evidence"}, path); problem != nil {
+			return problem
+		}
+		if reason, _ := object["reason"].(string); !oneOf(reason, []string{"detached", "not-displayed", "not-laid-out"}) {
+			return fail(at(path, "reason"), "invalid absent reason")
+		}
+		if problem := checkEvidence(object["evidence"], at(path, "evidence"), limits); problem != nil {
+			return problem
+		}
+		evidence := object["evidence"].(map[string]any)
+		if evidence["strength"] != "authoritative" {
+			return fail(at(path, "evidence", "strength"), "absent observation requires authoritative evidence")
+		}
+		return nil
+	case "unknown":
 		if problem := checkStrict(object, []string{"status", "reason"}, path); problem != nil {
 			return problem
 		}
-		if _, ok := object["reason"].(string); !ok {
-			return fail(at(path, "reason"), "expected reason")
+		if reason, _ := object["reason"].(string); !oneOf(reason, []string{"awaiting-revision-pair", "provider-refresh", "stale-revision"}) {
+			return fail(at(path, "reason"), "invalid unknown reason")
 		}
 		return nil
 	case "unsupported":
@@ -280,8 +322,8 @@ func checkObservation(value any, path []string, limits Limits, known func(any, [
 		if _, problem := checkText(object["capability"], at(path, "capability"), limits); problem != nil {
 			return problem
 		}
-		if _, ok := object["reason"].(string); !ok {
-			return fail(at(path, "reason"), "expected reason")
+		if reason, _ := object["reason"].(string); !oneOf(reason, []string{"capability", "framework-unobservable", "not-negotiated"}) {
+			return fail(at(path, "reason"), "invalid unsupported reason")
 		}
 		return nil
 	default:
@@ -354,19 +396,12 @@ func checkRelations(value any, path []string, limits Limits) *issue {
 	return nil
 }
 
-func checkNodeSchema(value any, path []string, limits Limits, v2 bool) *issue {
+func checkNodeSchema(value any, path []string, limits Limits) *issue {
 	object, problem := checkObject(value, path)
 	if problem != nil {
 		return problem
 	}
-	keys := nodeKeys
-	if v2 {
-		if _, present := object["bounds"]; present {
-			return fail(at(path, "bounds"), "legacy bounds are forbidden in v2")
-		}
-		keys = nodeV2Keys
-	}
-	if problem := checkStrict(object, keys, path); problem != nil {
+	if problem := checkStrict(object, nodeKeys, path); problem != nil {
 		return problem
 	}
 
@@ -384,7 +419,7 @@ func checkNodeSchema(value any, path []string, limits Limits, v2 bool) *issue {
 	}
 	role, ok := object["role"].(string)
 	if !ok || !ValidRole(Role(role)) {
-		return fail(at(path, "role"), "expected one of the v1 semantic roles")
+		return fail(at(path, "role"), "expected a semantic role")
 	}
 	if _, problem := checkText(object["name"], at(path, "name"), limits); problem != nil {
 		return problem
@@ -394,12 +429,6 @@ func checkNodeSchema(value any, path []string, limits Limits, v2 bool) *issue {
 			if _, problem := checkText(present, at(path, key), limits); problem != nil {
 				return problem
 			}
-		}
-	}
-	if occlusion, ok := object["occlusion"]; ok {
-		text, isText := occlusion.(string)
-		if !isText || !oneOf(text, []string{OcclusionKnown, OcclusionUnknown}) {
-			return fail(at(path, "occlusion"), "expected 'known' or 'unknown'")
 		}
 	}
 	if source, ok := object["p"]; ok {
@@ -433,31 +462,24 @@ func checkNodeSchema(value any, path []string, limits Limits, v2 bool) *issue {
 					"must name what the framework called it", id))
 		}
 	}
-	if bounds, ok := object["bounds"]; ok {
-		if _, problem := checkRect(bounds, at(path, "bounds")); problem != nil {
-			return problem
-		}
+	geometry, problem := checkObject(object["geometry"], at(path, "geometry"))
+	if problem != nil {
+		return problem
 	}
-	if v2 {
-		geometry, problem := checkObject(object["geometry"], at(path, "geometry"))
-		if problem != nil {
-			return problem
+	if problem := checkStrict(geometry, []string{"displayed", "intendedRect", "visibleRect"}, at(path, "geometry")); problem != nil {
+		return problem
+	}
+	if problem := checkObservation(geometry["displayed"], at(path, "geometry", "displayed"), limits, func(v any, p []string) *issue {
+		if _, ok := v.(bool); !ok {
+			return fail(p, "expected boolean")
 		}
-		if problem := checkStrict(geometry, []string{"displayed", "intendedRect", "visibleRect"}, at(path, "geometry")); problem != nil {
+		return nil
+	}); problem != nil {
+		return problem
+	}
+	for _, field := range []string{"intendedRect", "visibleRect"} {
+		if problem := checkObservation(geometry[field], at(path, "geometry", field), limits, func(v any, p []string) *issue { _, issue := checkRect(v, p); return issue }); problem != nil {
 			return problem
-		}
-		if problem := checkObservation(geometry["displayed"], at(path, "geometry", "displayed"), limits, func(v any, p []string) *issue {
-			if _, ok := v.(bool); !ok {
-				return fail(p, "expected boolean")
-			}
-			return nil
-		}); problem != nil {
-			return problem
-		}
-		for _, field := range []string{"intendedRect", "visibleRect"} {
-			if problem := checkObservation(geometry[field], at(path, "geometry", field), limits, func(v any, p []string) *issue { _, issue := checkRect(v, p); return issue }); problem != nil {
-				return problem
-			}
 		}
 	}
 	if state, ok := object["state"]; ok {
@@ -497,7 +519,7 @@ func checkNodeSchema(value any, path []string, limits Limits, v2 bool) *issue {
 		for index, item := range items {
 			name, isString := item.(string)
 			if !isString || !ValidAction(Action(name)) {
-				return fail(at(path, "actions", fmt.Sprint(index)), "expected one of the v1 semantic actions")
+				return fail(at(path, "actions", fmt.Sprint(index)), "expected a semantic action")
 			}
 		}
 	}
@@ -562,8 +584,7 @@ func checkCursor(value any, path []string) *issue {
 	return nil
 }
 
-var snapshotKeys = []string{"v", "sessionId", "revision", "columns", "rows", "cursor", "rootIds", "nodes"}
-var snapshotV2Keys = append(append([]string{}, snapshotKeys...), "coordinateSpace", "hitGrid")
+var snapshotKeys = []string{"v", "sessionId", "revision", "columns", "rows", "cursor", "rootIds", "nodes", "coordinateSpace", "hitGrid", "providerEvidence"}
 
 func checkSnapshotSchema(value any, limits Limits) *issue {
 	object, problem := checkObject(value, nil)
@@ -571,16 +592,11 @@ func checkSnapshotSchema(value any, limits Limits) *issue {
 		return problem
 	}
 	version, ok := object["v"].(float64)
-	v2 := ok && version == 2
-	keys := snapshotKeys
-	if v2 {
-		keys = snapshotV2Keys
-	}
-	if problem := checkStrict(object, keys, nil); problem != nil {
+	if problem := checkStrict(object, snapshotKeys, nil); problem != nil {
 		return problem
 	}
-	if !ok || (version != 1 && version != 2) {
-		return fail([]string{"v"}, "expected the literal 1 or 2")
+	if !ok || version != 2 {
+		return fail([]string{"v"}, "expected the literal 2")
 	}
 	sessionID, problem := checkText(object["sessionId"], []string{"sessionId"}, limits)
 	if problem != nil {
@@ -624,62 +640,69 @@ func checkSnapshotSchema(value any, limits Limits) *issue {
 		return failBig([]string{"nodes"}, fmt.Sprintf("expected at most %d items", limits.MaxNodes))
 	}
 	for index, node := range nodes {
-		if problem := checkNodeSchema(node, []string{"nodes", fmt.Sprint(index)}, limits, v2); problem != nil {
+		if problem := checkNodeSchema(node, []string{"nodes", fmt.Sprint(index)}, limits); problem != nil {
 			return problem
 		}
 	}
-	if v2 {
-		if problem := checkObservation(object["coordinateSpace"], []string{"coordinateSpace"}, limits, func(v any, p []string) *issue {
-			s, ok := v.(string)
-			if !ok || (s != "viewport-cells" && s != "framework-local-cells") {
-				return fail(p, "invalid coordinate space")
-			}
-			return nil
-		}); problem != nil {
-			return problem
+	if raw, present := object["providerEvidence"]; present {
+		entries, ok := raw.([]any)
+		if !ok {
+			return fail([]string{"providerEvidence"}, "expected an array")
 		}
-		if problem := checkObservation(object["hitGrid"], []string{"hitGrid"}, limits, func(v any, p []string) *issue {
-			grid, issue := checkObject(v, p)
+		if len(entries) > 64 {
+			return failBig([]string{"providerEvidence"}, "expected at most 64 items")
+		}
+	}
+	if problem := checkObservation(object["coordinateSpace"], []string{"coordinateSpace"}, limits, func(v any, p []string) *issue {
+		s, ok := v.(string)
+		if !ok || (s != "viewport-cells" && s != "framework-local-cells") {
+			return fail(p, "invalid coordinate space")
+		}
+		return nil
+	}); problem != nil {
+		return problem
+	}
+	if problem := checkObservation(object["hitGrid"], []string{"hitGrid"}, limits, func(v any, p []string) *issue {
+		grid, issue := checkObject(v, p)
+		if issue != nil {
+			return issue
+		}
+		if issue := checkStrict(grid, []string{"regions"}, p); issue != nil {
+			return issue
+		}
+		regions, ok := grid["regions"].([]any)
+		if !ok || len(regions) > limits.MaxNodes {
+			return fail(at(p, "regions"), "invalid hit regions")
+		}
+		var previous map[string]float64
+		for i, raw := range regions {
+			rp := at(p, "regions", fmt.Sprint(i))
+			region, issue := checkObject(raw, rp)
 			if issue != nil {
 				return issue
 			}
-			if issue := checkStrict(grid, []string{"regions"}, p); issue != nil {
+			if issue := checkStrict(region, []string{"rect", "recipientId"}, rp); issue != nil {
 				return issue
 			}
-			regions, ok := grid["regions"].([]any)
-			if !ok || len(regions) > limits.MaxNodes {
-				return fail(at(p, "regions"), "invalid hit regions")
+			rect, issue := checkRect(region["rect"], at(rp, "rect"))
+			if issue != nil {
+				return issue
 			}
-			var previous map[string]float64
-			for i, raw := range regions {
-				rp := at(p, "regions", fmt.Sprint(i))
-				region, issue := checkObject(raw, rp)
-				if issue != nil {
-					return issue
-				}
-				if issue := checkStrict(region, []string{"rect", "recipientId"}, rp); issue != nil {
-					return issue
-				}
-				rect, issue := checkRect(region["rect"], at(rp, "rect"))
-				if issue != nil {
-					return issue
-				}
-				if rect["width"] <= 0 || rect["height"] != 1 {
-					return fail(at(rp, "rect"), "hit regions must be non-empty row runs")
-				}
-				if previous != nil && (rect["row"] < previous["row"] ||
-					(rect["row"] == previous["row"] && rect["column"] < previous["column"]+previous["width"])) {
-					return fail(at(rp, "rect"), "hit regions must be non-overlapping row-major runs")
-				}
-				previous = rect
-				if _, issue := checkText(region["recipientId"], at(rp, "recipientId"), limits); issue != nil {
-					return issue
-				}
+			if rect["width"] <= 0 || rect["height"] != 1 {
+				return fail(at(rp, "rect"), "hit regions must be non-empty row runs")
 			}
-			return nil
-		}); problem != nil {
-			return problem
+			if previous != nil && (rect["row"] < previous["row"] ||
+				(rect["row"] == previous["row"] && rect["column"] < previous["column"]+previous["width"])) {
+				return fail(at(rp, "rect"), "hit regions must be non-overlapping row-major runs")
+			}
+			previous = rect
+			if _, issue := checkText(region["recipientId"], at(rp, "recipientId"), limits); issue != nil {
+				return issue
+			}
 		}
+		return nil
+	}); problem != nil {
+		return problem
 	}
 	return nil
 }
@@ -701,19 +724,20 @@ func stringOr(value any) string {
 
 func checkNodeShape(node map[string]any, columns, rows float64, ids map[string]struct{}, limits Limits) *ValidationError {
 	id := stringOr(node["id"])
-	if boundsValue, ok := node["bounds"]; ok {
-		rect, _ := checkRect(boundsValue, nil)
+	geometry := node["geometry"].(map[string]any)
+	for _, field := range []string{"intendedRect", "visibleRect"} {
+		observation := geometry[field].(map[string]any)
+		if observation["status"] != "known" {
+			continue
+		}
+		rect, _ := checkRect(observation["value"], nil)
 		if math.Abs(rect["row"]+rect["height"]) > maxSafeInteger ||
 			math.Abs(rect["column"]+rect["width"]) > maxSafeInteger {
-			return invalid("bad-rect", "node %s: bounds overflow the safe-integer range", id)
+			return invalid("bad-rect", "node %s: geometry.%s overflows the safe-integer range", id, field)
 		}
-		hidden := false
-		if state, ok := node["state"].(map[string]any); ok {
-			hidden, _ = state["hidden"].(bool)
-		}
-		if !hidden && !rectIntersectsViewport(rect, columns, rows) {
+		if field == "visibleRect" && rect["width"] > 0 && rect["height"] > 0 && !rectIntersectsViewport(rect, columns, rows) {
 			return invalid("bad-rect",
-				"node %s: bounds do not intersect the %gx%g viewport and the node is not hidden",
+				"node %s: geometry.visibleRect does not intersect the %gx%g viewport",
 				id, columns, rows)
 		}
 	}
@@ -788,160 +812,6 @@ func computeDepths(nodes []map[string]any, byID map[string]map[string]any) (map[
 		}
 	}
 	return depths, ""
-}
-
-var deltaKeys = []string{"type", "baseRevision", "revision", "changed", "removed", "rootIds", "cursor"}
-
-// ValidateTreeDelta checks the SHAPE of a tree-delta message.
-//
-// Only the shape is checkable here. A delta carries no columns/rows, so
-// whether a parent exists, whether the tree stays acyclic and inside the depth
-// ceiling, and whether bounds or the cursor fall within the viewport can only
-// be judged once the delta is applied to its base — put the assembled tree
-// through ValidateSnapshot for that.
-//
-// What is checkable without the base: sizes, node shape, unique ids, a
-// revision that moves forward, and the same id never both upserted and removed
-// by one delta.
-func ValidateTreeDelta(value any, limits Limits) error {
-	projected, err := ProjectDTO(value, limits.MaxDepth)
-	if err != nil {
-		code := "schema"
-		if ViolationCode(err) == "dto-depth" {
-			code = "depth"
-		}
-		return invalid(code, "%s", err.Error())
-	}
-
-	serialised, err := marshalCanonical(projected)
-	if err != nil {
-		return invalid("schema", "delta is not JSON-serialisable")
-	}
-	if len(serialised) > limits.MaxSnapshotBytes {
-		return invalid("bytes", "delta is %d bytes, ceiling is %d", len(serialised), limits.MaxSnapshotBytes)
-	}
-
-	if problem := checkTreeDeltaSchema(projected, limits); problem != nil {
-		return problem.toError()
-	}
-	delta := projected.(map[string]any)
-
-	changedIDs := map[string]struct{}{}
-	for _, raw := range delta["changed"].([]any) {
-		node := raw.(map[string]any)
-		id := stringOr(node["id"])
-		if _, duplicate := changedIDs[id]; duplicate {
-			return invalid("duplicate-id", "node id %s appears twice in changed", id)
-		}
-		changedIDs[id] = struct{}{}
-		if parent, ok := node["parentId"].(string); ok && parent == id {
-			return invalid("cycle", "node %s is its own parent", id)
-		}
-	}
-
-	removedIDs := map[string]struct{}{}
-	for _, raw := range delta["removed"].([]any) {
-		id := stringOr(raw)
-		if _, duplicate := removedIDs[id]; duplicate {
-			return invalid("duplicate-id", "node id %s appears twice in removed", id)
-		}
-		removedIDs[id] = struct{}{}
-	}
-
-	for id := range changedIDs {
-		if _, both := removedIDs[id]; both {
-			// Removals apply before upserts, so this would be a delta arguing
-			// with itself about one id rather than moving a node elsewhere.
-			return invalid("schema", "node id %s is both changed and removed by one delta", id)
-		}
-	}
-
-	if rootIDs, present := delta["rootIds"]; present {
-		seen := map[string]struct{}{}
-		for _, raw := range rootIDs.([]any) {
-			id := stringOr(raw)
-			if _, duplicate := seen[id]; duplicate {
-				return invalid("duplicate-id", "root id %s appears more than once", id)
-			}
-			seen[id] = struct{}{}
-		}
-	}
-	return nil
-}
-
-func checkTreeDeltaSchema(value any, limits Limits) *issue {
-	delta, problem := checkObject(value, nil)
-	if problem != nil {
-		return problem
-	}
-	if problem := checkStrict(delta, deltaKeys, nil); problem != nil {
-		return problem
-	}
-
-	base, problem := checkPositive(delta["baseRevision"], []string{"baseRevision"})
-	if problem != nil {
-		return problem
-	}
-	revision, problem := checkPositive(delta["revision"], []string{"revision"})
-	if problem != nil {
-		return problem
-	}
-	if revision <= base {
-		return fail([]string{"revision"},
-			fmt.Sprintf("revision %g must move forward from base %g", revision, base))
-	}
-
-	changed, ok := delta["changed"].([]any)
-	if !ok {
-		return fail([]string{"changed"}, "expected an array")
-	}
-	if len(changed) > limits.MaxNodes {
-		return failBig([]string{"changed"}, fmt.Sprintf("expected at most %d items", limits.MaxNodes))
-	}
-	for index, node := range changed {
-		if problem := checkNodeSchema(node, []string{"changed", fmt.Sprint(index)}, limits, false); problem != nil {
-			return problem
-		}
-	}
-
-	removed, ok := delta["removed"].([]any)
-	if !ok {
-		return fail([]string{"removed"}, "expected an array")
-	}
-	if len(removed) > limits.MaxNodes {
-		return failBig([]string{"removed"}, fmt.Sprintf("expected at most %d items", limits.MaxNodes))
-	}
-	for index, id := range removed {
-		text, problem := checkText(id, []string{"removed", fmt.Sprint(index)}, limits)
-		if problem != nil {
-			return problem
-		}
-		if text == "" {
-			return fail([]string{"removed", fmt.Sprint(index)}, "node id must not be empty")
-		}
-	}
-
-	if rootIDs, present := delta["rootIds"]; present {
-		items, ok := rootIDs.([]any)
-		if !ok {
-			return fail([]string{"rootIds"}, "expected an array")
-		}
-		if len(items) > limits.MaxNodes {
-			return failBig([]string{"rootIds"}, fmt.Sprintf("expected at most %d items", limits.MaxNodes))
-		}
-		for index, id := range items {
-			if _, problem := checkText(id, []string{"rootIds", fmt.Sprint(index)}, limits); problem != nil {
-				return problem
-			}
-		}
-	}
-
-	if cursor, present := delta["cursor"]; present {
-		if problem := checkCursor(cursor, []string{"cursor"}); problem != nil {
-			return problem
-		}
-	}
-	return nil
 }
 
 // ValidateSnapshot checks an untrusted snapshot against limits: unique ids,
@@ -1080,135 +950,4 @@ func (s *Snapshot) Validate(limits Limits) error {
 		return invalid("schema", "snapshot is not JSON-serialisable")
 	}
 	return ValidateSnapshot(parsed, limits)
-}
-
-// ApplyTreeDelta composes a delta onto the snapshot it names, then validates
-// the result. The composed snapshot is returned as a generic wire value.
-//
-// The four composition rules, in the order they are applied:
-//
-//  1. `removed` takes each id WITH ITS WHOLE SUBTREE. The cascade is what
-//     keeps a delta small — dropping a dialog is one id, not one per
-//     descendant — and it is the only rule that leaves no orphans behind.
-//  2. Removals happen BEFORE upserts, so one delta can move a node out of a
-//     subtree it is deleting.
-//  3. `changed` upserts by id, REPLACING a node wholesale. Merging would need
-//     a third state meaning "clear this optional field", which the wire cannot
-//     express.
-//  4. `rootIds` present replaces the list; absent inherits the base's minus
-//     whatever the removals took. Adding a new root therefore REQUIRES sending
-//     `rootIds` — otherwise the parentless node is missing from the root list
-//     and validation says so, loudly.
-//
-// An absent cursor is inherited; there is no way to remove one, and none is
-// needed, because hiding it is `visible: false`.
-//
-// A base that disagrees is reported rather than patched around: the caller
-// asks for a full snapshot instead of guessing (§8.3). The composed tree then
-// goes through ValidateSnapshot, because a delta is trusted to DESCRIBE a
-// valid tree, never to produce one.
-//
-// The order of the composed `nodes` is not normative; this implementation
-// keeps base order with new nodes appended, which makes output deterministic.
-func ApplyTreeDelta(base, delta map[string]any, limits Limits) (map[string]any, error) {
-	baseRevision, _ := delta["baseRevision"].(float64)
-	held, _ := base["revision"].(float64)
-	if baseRevision != held {
-		return nil, invalid("revision",
-			"delta is based on revision %g but the held snapshot is revision %g; "+
-				"request a full snapshot instead of patching", baseRevision, held)
-	}
-
-	baseNodes, _ := base["nodes"].([]any)
-	order := make([]string, 0, len(baseNodes))
-	byID := make(map[string]map[string]any, len(baseNodes))
-	childrenOf := make(map[string][]string)
-	for _, raw := range baseNodes {
-		node, _ := raw.(map[string]any)
-		id := stringOr(node["id"])
-		order = append(order, id)
-		byID[id] = node
-		if parent, ok := node["parentId"].(string); ok {
-			childrenOf[parent] = append(childrenOf[parent], id)
-		}
-	}
-
-	removed, _ := delta["removed"].([]any)
-	for _, raw := range removed {
-		id := stringOr(raw)
-		if _, known := byID[id]; !known {
-			return nil, invalid("missing-parent",
-				"delta removes unknown node %s; the producer's base disagrees with ours, "+
-					"so the tree must be resynchronised rather than patched", id)
-		}
-		// Iterative descent: a hostile delta must not be able to blow the stack.
-		pending := []string{id}
-		for len(pending) > 0 {
-			current := pending[len(pending)-1]
-			pending = pending[:len(pending)-1]
-			if _, present := byID[current]; !present {
-				continue
-			}
-			delete(byID, current)
-			pending = append(pending, childrenOf[current]...)
-		}
-	}
-
-	changed, _ := delta["changed"].([]any)
-	for _, raw := range changed {
-		node, _ := raw.(map[string]any)
-		id := stringOr(node["id"])
-		if _, present := byID[id]; !present {
-			order = append(order, id)
-		}
-		byID[id] = node
-	}
-
-	var rootIDs []any
-	if explicit, present := delta["rootIds"]; present {
-		rootIDs, _ = explicit.([]any)
-	} else {
-		baseRoots, _ := base["rootIds"].([]any)
-		rootIDs = make([]any, 0, len(baseRoots))
-		for _, raw := range baseRoots {
-			if _, survives := byID[stringOr(raw)]; survives {
-				rootIDs = append(rootIDs, raw)
-			}
-		}
-	}
-
-	nodes := make([]any, 0, len(byID))
-	seen := make(map[string]struct{}, len(byID))
-	for _, id := range order {
-		node, present := byID[id]
-		if !present {
-			continue
-		}
-		if _, duplicate := seen[id]; duplicate {
-			continue
-		}
-		seen[id] = struct{}{}
-		nodes = append(nodes, node)
-	}
-
-	composed := map[string]any{
-		"v":         float64(1),
-		"sessionId": base["sessionId"],
-		"revision":  delta["revision"],
-		"columns":   base["columns"],
-		"rows":      base["rows"],
-		"rootIds":   rootIDs,
-		"nodes":     nodes,
-	}
-	// Absent cursor means unchanged, so the base's carries over.
-	if cursor, present := delta["cursor"]; present {
-		composed["cursor"] = cursor
-	} else if cursor, present := base["cursor"]; present {
-		composed["cursor"] = cursor
-	}
-
-	if err := ValidateSnapshot(composed, limits); err != nil {
-		return nil, err
-	}
-	return composed, nil
 }

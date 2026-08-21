@@ -16,22 +16,18 @@ import (
 const (
 	EnvEndpoint = "TERMWRIGHT_ENDPOINT"
 	EnvToken    = "TERMWRIGHT_TOKEN"
-	EnvProtocol = "TERMWRIGHT_PROTOCOL"
 )
 
-// DefaultCapabilities is what a tree-publishing adapter with real bounds
+// DefaultCapabilities is what a tree-publishing adapter with measured geometry
 // announces.
 var DefaultCapabilities = []Capability{
-	CapTree, CapBounds, CapAbsoluteBounds, CapStates, CapActions, CapRenderRevisions,
+	CapTree, CapIntendedGeometry, CapClippedGeometry, CapStates, CapActions, CapRenderRevisions,
 }
 
 // CapabilitiesWithLogs adds the log channel. Announcing `logs` is what makes
 // the driver grant a budget; without it the driver sends none and the adapter
 // must stay silent.
 var CapabilitiesWithLogs = append(append([]Capability{}, DefaultCapabilities...), CapLogs)
-
-// snapshotHistory is how many recent revisions stay answerable by get-tree.
-const snapshotHistory = 8
 
 // DialTimeout is the default handshake budget for adapters that do not pick
 // one themselves.
@@ -61,8 +57,6 @@ type Options struct {
 	// AdapterName and AdapterVersion identify the adapter in the handshake.
 	AdapterName    string
 	AdapterVersion string
-	// Protocol selects termwright/1 (default) or qualified termwright/2.
-	Protocol string
 	// Probe describes the instrumented framework. Hand-written adapters leave
 	// it nil; framework probes must report only facts they can actually observe.
 	Probe *ProbeInfo
@@ -79,6 +73,8 @@ type Options struct {
 	// file. Every use is on a nil-safe method, so the client behaves
 	// identically with and without one.
 	Debug *DebugLog
+	// EvidenceProviders is frozen before hello and collected per revision.
+	EvidenceProviders EvidenceProviderRegistry
 }
 
 // Client is one semantic session: handshake, snapshot publishing, markers.
@@ -91,25 +87,21 @@ type Client struct {
 	token    string
 	options  Options
 
-	mu          sync.Mutex
-	conn        net.Conn
-	limits      Limits
-	sessionID   string
-	revision    int64
-	marker      bool
-	logBudget   *LogBudget
-	subscribe   string
-	closed      bool
-	history     map[int64]json.RawMessage
-	order       []int64
-	published   map[string]any
-	deltasSent  int64
-	snapsSent   int64
-	logSeq      int64
-	logBucket   *tokenBucket
-	logsDropped int64
-	forceFull   bool
-	performance clientPerformanceCounters
+	mu            sync.Mutex
+	conn          net.Conn
+	limits        Limits
+	sessionID     string
+	revision      int64
+	marker        bool
+	logBudget     *LogBudget
+	subscribe     string
+	closed        bool
+	snapsSent     int64
+	logSeq        int64
+	logBucket     *tokenBucket
+	logsDropped   int64
+	performance   clientPerformanceCounters
+	providerLease EvidenceProviderLease
 
 	ready chan error
 	once  sync.Once
@@ -130,7 +122,6 @@ func New(endpoint, token string, options Options) *Client {
 		options:   options,
 		limits:    limits,
 		subscribe: "snapshots",
-		history:   make(map[int64]json.RawMessage),
 		ready:     make(chan error, 1),
 	}
 }
@@ -150,10 +141,10 @@ func FromEnv(options Options) *Client {
 	}
 	endpoint := os.Getenv(EnvEndpoint)
 	token := os.Getenv(EnvToken)
-	return fromEnvValues(endpoint, token, os.Getenv(EnvProtocol), options)
+	return fromEnvValues(endpoint, token, options)
 }
 
-func fromEnvValues(endpoint, token, protocol string, options Options) *Client {
+func fromEnvValues(endpoint, token string, options Options) *Client {
 	if endpoint == "" || token == "" {
 		missing := []string{}
 		if endpoint == "" {
@@ -165,18 +156,8 @@ func fromEnvValues(endpoint, token, protocol string, options Options) *Client {
 		options.Debug.Line("diag", "dormant: "+strings.Join(missing, " and ")+" not set")
 		return nil
 	}
-	if protocol != "" && protocol != ProtocolID && protocol != ProtocolV2ID && protocol != "1" && protocol != "2" {
-		options.Debug.Line("diag", fmt.Sprintf("dormant: %s=%q is not %q", EnvProtocol, protocol, ProtocolID))
-		return nil
-	}
-	if protocol == ProtocolV2ID || protocol == "2" {
-		options.Protocol = ProtocolV2ID
-		if len(options.Capabilities) == 0 {
-			options.Capabilities = append([]Capability(nil), DefaultCapabilities...)
-		}
-		if !containsCapability(options.Capabilities, CapQualifiedObservations) {
-			options.Capabilities = append(options.Capabilities, CapQualifiedObservations)
-		}
+	if len(options.Capabilities) == 0 {
+		options.Capabilities = append([]Capability(nil), DefaultCapabilities...)
 	}
 	// The endpoint's shape is not the constructor's business: on Windows the
 	// driver hands out `\\.\pipe\…`, and which transport can open it is
@@ -217,8 +198,14 @@ func (c *Client) Start(timeout time.Duration) error {
 		c.Close()
 		return err
 	}
-	if c.options.Protocol == ProtocolV2ID {
-		hello.Protocol = ProtocolV2ID
+	if c.options.EvidenceProviders != nil {
+		lease, freezeErr := c.options.EvidenceProviders.Freeze()
+		if freezeErr != nil {
+			c.Close()
+			return freezeErr
+		}
+		c.providerLease = lease
+		hello.Providers = lease.Registrations()
 	}
 	if err := c.send(hello, limits); err != nil {
 		c.options.Debug.Line("diag", "hello could not be sent, staying dormant: "+errorLabel(err))
@@ -247,13 +234,17 @@ func (c *Client) Close() error {
 	c.mu.Lock()
 	conn := c.conn
 	wasOpen := !c.closed
-	summary := fmt.Sprintf("close r%d snapshots=%d deltas=%d logs_dropped=%d performance_dropped=%d",
-		c.revision, c.snapsSent, c.deltasSent, c.logsDropped, c.performance.droppedEvents)
+	summary := fmt.Sprintf("close r%d snapshots=%d logs_dropped=%d performance_dropped=%d",
+		c.revision, c.snapsSent, c.logsDropped, c.performance.droppedEvents)
 	c.conn = nil
 	c.closed = true
 	c.mu.Unlock()
 	if wasOpen {
 		c.options.Debug.Line("sem", summary)
+	}
+	if c.providerLease != nil {
+		c.providerLease.Close()
+		c.providerLease = nil
 	}
 	c.once.Do(func() {
 		select {
@@ -265,6 +256,25 @@ func (c *Client) Close() error {
 		return conn.Close()
 	}
 	return nil
+}
+
+// Fail reports a terminal producer-contract violation and closes the semantic
+// channel. A negotiated guarantee is immutable: callers use this instead of
+// publishing weakened evidence after an integration invariant breaks.
+func (c *Client) Fail(code, message string) error {
+	c.mu.Lock()
+	connected := c.sessionID != "" && !c.closed && c.conn != nil
+	limits := c.limits
+	c.mu.Unlock()
+	var sendErr error
+	if connected {
+		sendErr = c.send(ProtocolErrorMessage{Type: "error", Code: code, Message: message}, limits)
+	}
+	closeErr := c.Close()
+	if sendErr != nil {
+		return sendErr
+	}
+	return closeErr
 }
 
 // Connected reports whether the handshake completed and the link is still up.
@@ -303,17 +313,6 @@ func (c *Client) Limits() Limits {
 	return c.limits
 }
 
-// QualifiedObservations reports whether this session negotiated termwright/2.
-//
-// Producers need this before constructing a snapshot: strict v1 forbids the
-// qualified fields, while v2 requires them on every node. Publish cannot add
-// those framework facts after the producer has finished observing the frame.
-func (c *Client) QualifiedObservations() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.options.Protocol == ProtocolV2ID
-}
-
 // Publish sends a snapshot for the next revision and returns the OSC marker
 // committing it. Write that marker to stdout after the render's last byte.
 //
@@ -328,13 +327,12 @@ func (c *Client) Publish(snapshot *Snapshot) (string, error) {
 	}
 	c.revision++
 	revision := c.revision
-	if c.options.Protocol == ProtocolV2ID {
-		snapshot.V = 2
-	} else {
-		snapshot.V = 1
-	}
+	snapshot.V = ProtocolVersion
 	snapshot.SessionID = c.sessionID
 	snapshot.Revision = revision
+	if c.providerLease != nil {
+		snapshot.ProviderEvidence = c.providerLease.Collect(c.sessionID, revision, snapshot.Columns, snapshot.Rows)
+	}
 	limits := c.limits
 	subscribe := c.subscribe
 	markerEnabled := c.marker
@@ -345,32 +343,19 @@ func (c *Client) Publish(snapshot *Snapshot) (string, error) {
 		c.mu.Lock()
 		c.revision--
 		c.mu.Unlock()
+		c.options.Debug.Line("diag", "snapshot refused: "+err.Error())
 		c.performanceDrop()
 		return "", err
 	}
 
-	var serializationStarted time.Time
-	if c.options.Debug != nil {
-		serializationStarted = time.Now()
-	}
-	body, err := marshalCanonical(snapshot)
 	serialization := time.Duration(0)
-	if !serializationStarted.IsZero() {
-		serialization = time.Since(serializationStarted)
-	}
-	if err != nil {
-		c.performanceDrop()
-		return "", err
-	}
-	c.remember(revision, body)
 
 	if subscribe != "revisions" {
-		message, err := c.treeMessage(snapshot, subscribe, body)
-		if err != nil {
-			c.performanceDrop()
-			return "", err
-		}
-		bytes, encodedFor, err := c.sendMeasured(message, limits, c.options.Debug != nil)
+		c.mu.Lock()
+		c.snapsSent++
+		c.mu.Unlock()
+		c.options.Debug.Line("io", fmt.Sprintf("r%d snapshot nodes=%d", snapshot.Revision, len(snapshot.Nodes)))
+		bytes, encodedFor, err := c.sendMeasured(SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, limits, c.options.Debug != nil)
 		serialization += encodedFor
 		if err != nil {
 			c.performanceDrop()
@@ -550,92 +535,11 @@ func withOriginSeq(attrs map[string]any, origin int64, limits Limits, record *Lo
 	return next
 }
 
-// treeMessage picks a delta when the driver asked for one and it is worth
-// sending, and a whole tree otherwise: on the first publish there is no base,
-// under a snapshots subscription no delta is wanted, and past roughly half the
-// tree a patch costs more than the thing it replaces.
-//
-// The base advances only once a message has been built from it, so a skipped
-// publish cannot leave the driver applying a delta onto a tree it never got.
-func (c *Client) treeMessage(snapshot *Snapshot, subscribe string, body json.RawMessage) (any, error) {
-	var wire map[string]any
-	if err := json.Unmarshal(body, &wire); err != nil {
-		return nil, err
-	}
-
-	c.mu.Lock()
-	previous := c.published
-	forced := c.forceFull
-	c.forceFull = false
-	c.published = wire
-	c.mu.Unlock()
-
-	if forced {
-		c.options.Debug.Line("io", fmt.Sprintf(
-			"r%d full snapshot: the producer reported a gap", snapshot.Revision))
-	}
-	if subscribe == "diffs" && previous != nil && !forced {
-		if delta := BuildDelta(previous, wire); delta != nil {
-			c.mu.Lock()
-			c.deltasSent++
-			c.mu.Unlock()
-			c.options.Debug.Line("io", fmt.Sprintf("r%d delta changed=%d removed=%d",
-				snapshot.Revision, countIn(delta, "changed"), countIn(delta, "removed")))
-			return delta, nil
-		}
-	}
-	c.mu.Lock()
-	c.snapsSent++
-	c.mu.Unlock()
-	c.options.Debug.Line("io", fmt.Sprintf("r%d snapshot nodes=%d", snapshot.Revision, len(snapshot.Nodes)))
-	return SnapshotMessage{Type: "snapshot", Snapshot: snapshot}, nil
-}
-
-// RequireFullSnapshot makes the next Publish send a whole tree.
-//
-// The producer's obligation from D5: a probe that lost anything from its own
-// stream of facts — a dropped frame, a coalesced burst, a write that failed —
-// must not follow it with a patch. The driver would apply that patch to a tree
-// that never accounted for what was lost, and the divergence would be silent.
-//
-// The flag clears once a full snapshot has actually been built, so calling
-// this while disconnected still does the right thing when the link returns.
-func (c *Client) RequireFullSnapshot() {
-	c.mu.Lock()
-	c.forceFull = true
-	c.mu.Unlock()
-}
-
-// FullSnapshotRequired reports whether the obligation is outstanding.
-func (c *Client) FullSnapshotRequired() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.forceFull
-}
-
-// DeltasSent counts the patches this client has published.
-func (c *Client) DeltasSent() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.deltasSent
-}
-
 // SnapshotsSent counts the whole trees this client has published.
 func (c *Client) SnapshotsSent() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.snapsSent
-}
-
-func (c *Client) remember(revision int64, body json.RawMessage) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.history[revision] = body
-	c.order = append(c.order, revision)
-	for len(c.order) > snapshotHistory {
-		delete(c.history, c.order[0])
-		c.order = c.order[1:]
-	}
 }
 
 func (c *Client) send(message any, limits Limits) error {
@@ -776,35 +680,10 @@ func (c *Client) handle(frame Frame) bool {
 			default:
 			}
 		})
-	case "get-tree":
-		var request GetTree
-		if err := json.Unmarshal(frame.Raw, &request); err != nil {
-			return true
-		}
-		c.answerGetTree(request)
 	case "error":
 		c.options.Debug.Line("diag", fmt.Sprintf("driver ended the session: %v", message["code"]))
 		c.Close()
 		return false
 	}
 	return true
-}
-
-func (c *Client) answerGetTree(request GetTree) {
-	c.mu.Lock()
-	wanted := c.revision
-	if request.Revision != nil {
-		wanted = *request.Revision
-	}
-	body, held := c.history[wanted]
-	limits := c.limits
-	c.mu.Unlock()
-
-	result := GetTreeResult{Type: "get-tree-result", RequestID: request.RequestID}
-	if held {
-		result.Snapshot = body
-	} else {
-		result.Error = "revision is not retained"
-	}
-	_ = c.send(result, limits)
 }

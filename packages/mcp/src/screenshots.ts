@@ -48,7 +48,7 @@ export interface ScreenshotRequest {
  *
  * Failures are typed rather than thrown as raw errors: a scale out of range is
  * `usage`, an image over the ceiling is `capacity`, and a renderer that cannot
- * run at all (no font, no rasteriser) is `unsupported-action` — each with the
+ * run at all (no font, no rasteriser) is `capability-unavailable` — each with the
  * next thing to try.
  */
 export function renderScreenshot(frame: ScreenFrame, request: ScreenshotRequest = {}): ScreenshotImage {
@@ -69,7 +69,7 @@ export function renderScreenshot(frame: ScreenFrame, request: ScreenshotRequest 
     });
   } catch (error) {
     throw new McpError(
-      'unsupported-action',
+      'capability-unavailable',
       `the screenshot renderer failed: ${error instanceof Error ? error.message : String(error)}`,
       'omit screenshot — the tool still returns the screen as text and the compact tree',
     );

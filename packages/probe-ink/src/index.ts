@@ -14,7 +14,5 @@ export {
 } from './shim.js';
 export { observeInkTree } from './observe.js';
 export type { InkDomElement, InkDomNode, InkObservation, MeasureElement } from './observe.js';
-export { canPublishInkGeometry } from './geometry.js';
-export type { GeometryGateOptions } from './geometry.js';
 export { createInkSession, probeInfo } from './session.js';
 export type { InkProbeSession, InkSessionOptions } from './session.js';

@@ -68,7 +68,7 @@ const PEER_ARGS: readonly string[] = (() => {
 })();
 
 /** Scenarios that do not publish an opening revision, so `arm` must not wait for one. */
-const PUBLISHES_NOTHING = new Set(['bad-token', 'bad-version', 'no-hello', 'delta-before-snapshot']);
+const PUBLISHES_NOTHING = new Set(['bad-token', 'bad-version', 'no-hello']);
 
 /** Launches the peer, lets it publish a valid revision 1, and returns it armed. */
 async function arm(scenario: string): Promise<TerminalHarness> {
@@ -159,7 +159,7 @@ const REJECTED: readonly { readonly scenario: string; readonly wireError: string
   { scenario: 'unknown-message', wireError: 'malformed' },
   { scenario: 'cycle', wireError: 'malformed' },
   { scenario: 'missing-parent', wireError: 'malformed' },
-  { scenario: 'impossible-bounds', wireError: 'malformed' },
+  { scenario: 'impossible-geometry', wireError: 'malformed' },
   { scenario: 'hostile-unicode', wireError: 'malformed' },
   { scenario: 'foreign-session', wireError: 'malformed' },
   { scenario: 'deep-nesting', wireError: 'limit-exceeded' },
@@ -174,9 +174,11 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await fire(terminal);
     await expect.poll(() => codes(terminal)).toContain('protocol-violation');
 
-    // The channel is gone, but the tree the driver already accepted is not.
+    // The retained tree stays inspectable as historical evidence, but new
+    // semantic operations fail closed after the provider violated its contract.
     expect(terminal.semanticTree()?.revision).toBe(1);
-    expect(await terminal.getByRole('button').textContent()).toBe('Peer');
+    const semanticError = (await rejection(terminal.getByRole('button').textContent())) as TermwrightError;
+    expect(semanticError.code).toBe('protocol-violation');
     expect(terminal.capabilities().semanticTree).toBe(true);
 
     // The session says why it closed the channel, in its own log.
@@ -208,7 +210,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(codes(terminal)).not.toContain('adapter-attached');
     // Grid locators keep working: a refused adapter is a generic session, not
     // a broken one.
-    expect(await terminal.getByText('PEER START').count()).toBe(1);
+    expect(await terminal.getByScreenText('PEER START').count()).toBe(1);
     await expectSurvives(terminal);
   });
 
@@ -370,15 +372,14 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expectSurvives(terminal);
   });
 
-  it('accepts a handshake that arrives inside the late-attach grace', async () => {
-    // A child that boots slower than the negotiation window is routine when
-    // suites run in parallel; the grace is the tolerance for exactly that, so
-    // this adapter must still get its session.
+  it('accepts a delayed handshake before the negotiation contract freezes', async () => {
+    // A slow child is accepted while the explicit negotiation window remains
+    // open. Once that window closes, the contract is immutable.
     const terminal = await sessions.launch(CONFORMANCE_FIXTURES.adversarialPeer(), {
       columns: 70,
       rows: 16,
-      semanticNegotiationMs: 250,
-      args: ['none', '--hello-delay=700', ...PEER_ARGS],
+      semanticNegotiationMs: 1_000,
+      args: ['none', '--hello-delay=400', ...PEER_ARGS],
     });
     await terminal.waitForText('PEER SENT HELLO');
 
@@ -507,108 +508,6 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expectSurvives(terminal);
   });
 
-  it('composes a correct delta chain without ever resynchronising', async () => {
-    const terminal = await arm('delta-sequence');
-    expect(terminal.semanticTree()?.revision).toBe(1);
-
-    await fire(terminal);
-    await expect.poll(() => terminal.semanticTree()?.revision).toBe(4);
-
-    // Composed, not merely counted: the node the deltas rewrote holds the last
-    // value, and the locator finds it through the composed tree.
-    expect(await terminal.getByRole('button').textContent()).toBe('Fourth');
-    // This hostile fixture explicitly exercises v1 delta compatibility. Its
-    // unqualified rectangle is retained only on the resolved compatibility
-    // target; qualified geometry correctly remains unknown.
-    expect((await terminal.getByTestId('peer-button').resolve()).rect).toEqual({
-      row: 1,
-      column: 0,
-      width: 10,
-      height: 1,
-    });
-
-    // A chain that composes needs no repair and loses nothing.
-    expect(codes(terminal)).not.toContain('delta-resync');
-    expect(codes(terminal)).not.toContain('revision-dropped');
-    await expectSurvives(terminal);
-  });
-
-  it('asks for a full tree when a delta names a base it never held', async () => {
-    const terminal = await arm('delta-bad-base');
-    await fire(terminal);
-    await expect.poll(() => codes(terminal)).toContain('delta-resync');
-
-    // The repair completes end to end: the driver asks, the peer supplies, and
-    // the session lands on the tree that answer carried.
-    await terminal.waitForText('PEER SENT FULL TREE');
-    await expect.poll(async () => terminal.getByRole('button').textContent()).toBe('Resynced');
-    expect(terminal.semanticTree()?.revision).toBe(1001);
-
-    // A successful repair is not data loss and must not be reported as any.
-    const afterResync = terminal
-      .diagnostics()
-      .slice(terminal.diagnostics().findIndex((entry) => entry.code === 'delta-resync'));
-    expect(afterResync.map((entry) => entry.code)).not.toContain('revision-dropped');
-    await expectSurvives(terminal);
-  });
-
-  it('lets a delta set the cursor but only a full tree clear it', async () => {
-    const terminal = await arm('delta-cursor-clear');
-    expect(terminal.semanticTree()?.cursor).toBeUndefined();
-
-    await fire(terminal);
-    await expect.poll(() => terminal.semanticTree()?.cursor?.column).toBe(7);
-    expect(terminal.semanticTree()?.cursor).toMatchObject({ row: 3, column: 7, visible: true });
-
-    // The asymmetry: absent in a delta means "unchanged", so clearing is
-    // something only a whole tree can express.
-    await terminal.press('c');
-    await expect.poll(() => terminal.semanticTree()?.revision).toBe(3);
-    expect(terminal.semanticTree()?.cursor).toBeUndefined();
-    expect(codes(terminal)).not.toContain('delta-resync');
-    await expectSurvives(terminal);
-  });
-
-  it('resynchronises when a delta removes a node that is not there', async () => {
-    const terminal = await arm('delta-removed-missing');
-    await fire(terminal);
-    await expect.poll(() => codes(terminal)).toContain('delta-resync');
-
-    // Removing an unknown id means the producer's base disagrees with ours, so
-    // the tree is replaced rather than patched into something plausible.
-    await terminal.waitForText('PEER SENT FULL TREE');
-    await expect.poll(async () => terminal.getByRole('button').textContent()).toBe('Resynced');
-    await expectSurvives(terminal);
-  });
-
-  it('resynchronises when a delta arrives before any full tree', async () => {
-    const terminal = await arm('delta-before-snapshot');
-    // The peer published nothing first, on purpose.
-    expect(terminal.semanticTree()).toBeNull();
-
-    await fire(terminal);
-    await expect.poll(() => codes(terminal)).toContain('delta-resync');
-    await terminal.waitForText('PEER SENT FULL TREE');
-    await expect.poll(async () => terminal.getByRole('button').textContent()).toBe('Resynced');
-    await expectSurvives(terminal);
-  });
-
-  it(
-    'survives a delta flood and lands on the last revision',
-    async () => {
-      const terminal = await arm('delta-flood');
-      await fire(terminal);
-      await expectBurstSettles(terminal, 'Rev200');
-
-      // A flood is pressure on the pairing, not a reason to give up composing:
-      // whatever it settled on was composed, not repaired.
-      expect(codes(terminal)).not.toContain('delta-resync');
-      expect(terminal.capabilities().semanticTree).toBe(true);
-      await expectSurvives(terminal);
-    },
-    180_000,
-  );
-
   it('accepts a marker closed with ST as readily as one closed with BEL', async () => {
     const terminal = await arm('marker-st-terminator');
     expect(terminal.semanticTree()?.revision).toBe(1);
@@ -637,14 +536,15 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expectSurvives(terminal);
   });
 
-  it('keeps the session usable after the peer disconnects mid-render', async () => {
+  it('fails semantic operations closed after the peer disconnects mid-render', async () => {
     const terminal = await arm('disconnect-mid-render');
     await fire(terminal);
     await terminal.waitForText('PEER SOCKET CLOSED');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
     expect(terminal.capabilities().semanticTree).toBe(true);
-    expect(await terminal.getByRole('button').textContent()).toBe('Peer');
+    const error = (await rejection(terminal.getByRole('button').textContent())) as TermwrightError;
+    expect(error.code).toBe('capability-provider-lost');
     await expect.poll(() => codes(terminal)).toContain('adapter-disconnected');
     await expectSurvives(terminal);
   });

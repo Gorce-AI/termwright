@@ -122,10 +122,10 @@ async def test_an_unrecognised_widget_names_its_own_type():
     assert validate_snapshot(snapshot, DEFAULT_LIMITS).ok
 
 
-# -- bounds are what the user can see --------------------------------------
+# -- geometry is what the framework observed ------------------------------
 
 
-async def test_bounds_are_the_visible_rectangle_not_the_region():
+async def test_visible_rect_is_clipped_to_the_viewport():
     """The audit's finding, and the reason this probe exists at all.
 
     In a scrolling container most rows sit outside the viewport. `region`
@@ -153,11 +153,12 @@ async def test_bounds_are_the_visible_rectangle_not_the_region():
 
     # No published rectangle may claim rows outside the 10-row viewport.
     for node in snapshot["nodes"]:
-        bounds = node.get("bounds")
-        if bounds is None or node.get("state", {}).get("hidden"):
+        visible = node["geometry"]["visibleRect"]
+        if visible["status"] != "known":
             continue
-        assert bounds["row"] + bounds["height"] <= 10 + 1, node
-        assert bounds["width"] > 0 and bounds["height"] > 0, node
+        rect = visible["value"]
+        if rect["height"] > 0:
+            assert rect["row"] + rect["height"] <= 10 + 1, node
     assert validate_snapshot(snapshot, DEFAULT_LIMITS).ok
 
 
@@ -180,7 +181,10 @@ async def test_clipped_away_and_not_displayed_are_told_apart():
     assert "offscreen" not in gone["state"], (
         "a widget that was never laid out is not scrolled away"
     )
-    assert "bounds" not in gone, "a widget Textual is not displaying has no rectangle"
+    assert gone["geometry"]["visibleRect"] == {
+        "status": "absent", "reason": "not-displayed",
+        "evidence": {"source": "framework", "method": "native", "strength": "authoritative", "providerId": "textual-compositor"},
+    }
 
     app = ScrollingApp()
     async with app.run_test(size=(40, 10)) as pilot:
@@ -189,10 +193,11 @@ async def test_clipped_away_and_not_displayed_are_told_apart():
     clipped = [
         node
         for node in scrolled["nodes"]
-        if node.get("state", {}).get("hidden") and "bounds" in node
+        if node["geometry"]["displayed"].get("value") is True
+        and node["geometry"]["visibleRect"].get("status") == "known"
+        and node["geometry"]["visibleRect"]["value"]["height"] == 0
     ]
     assert clipped, "nothing was reported as on-screen-but-clipped"
-    assert all(node["bounds"]["width"] == 0 for node in clipped)
     assert all(node["state"].get("offscreen") is True for node in clipped), (
         "a clipped node did not say why it is hidden"
     )
@@ -219,20 +224,11 @@ async def test_paint_order_comes_from_textuals_own_compositor():
         assert keys == sorted(keys)
 
 
-async def test_v1_never_promotes_paint_order_to_pointer_ownership():
-    """Paint order is not an exact recipient-at-point observation."""
-    snapshot = await snapshot_of(DemoApp())
-    claims = {node.get("occlusion") for node in snapshot["nodes"]}
-    assert claims == {"unknown"}, claims
-
-
-async def test_v2_publishes_qualified_geometry_and_exact_hit_grid():
+async def test_publishes_qualified_geometry_and_exact_hit_grid():
     app = DemoApp()
     async with app.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
-        snapshot = build_snapshot(
-            app, Identities(), session_id="s", revision=1, qualified=True
-        ).to_wire()
+        snapshot = build_snapshot(app, Identities(), session_id="s", revision=1).to_wire()
     assert snapshot["v"] == 2
     assert snapshot["coordinateSpace"]["value"] == "viewport-cells"
     assert snapshot["hitGrid"]["status"] == "known"
@@ -246,23 +242,31 @@ async def test_v2_publishes_qualified_geometry_and_exact_hit_grid():
     assert result.ok, f"{result.code}: {result.detail}"
 
 
-async def test_v2_distinguishes_hidden_from_fully_clipped():
+async def test_distinguishes_hidden_from_fully_clipped():
     hidden = HiddenApp()
     async with hidden.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
-        hidden_snapshot = build_snapshot(
-            hidden, Identities(), session_id="s", revision=1, qualified=True
-        ).to_wire()
+        hidden_snapshot = build_snapshot(hidden, Identities(), session_id="s", revision=1).to_wire()
     gone = by_test_id(hidden_snapshot)["gone"]["geometry"]
-    assert gone["displayed"] == {"status": "known", "value": False, "evidence": "probe"}
-    assert gone["visibleRect"] == {"status": "absent", "reason": "not-displayed"}
+    assert gone["displayed"] == {
+        "status": "known",
+        "value": False,
+        "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "textual-probe",
+        },
+    }
+    assert gone["visibleRect"] == {
+        "status": "absent", "reason": "not-displayed",
+        "evidence": {"source": "framework", "method": "native", "strength": "authoritative", "providerId": "textual-compositor"},
+    }
 
     scrolling = ScrollingApp()
     async with scrolling.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
-        clipped_snapshot = build_snapshot(
-            scrolling, Identities(), session_id="s", revision=1, qualified=True
-        ).to_wire()
+        clipped_snapshot = build_snapshot(scrolling, Identities(), session_id="s", revision=1).to_wire()
     clipped = [
         node for node in clipped_snapshot["nodes"]
         if node["geometry"]["displayed"].get("value") is True
@@ -274,13 +278,11 @@ async def test_v2_distinguishes_hidden_from_fully_clipped():
     assert clipped, "no displayed-but-fully-clipped widget was qualified"
 
 
-async def test_v2_hit_grid_names_the_cover_not_the_covered_target():
+async def test_hit_grid_names_the_cover_not_the_covered_target():
     app = OverlayApp()
     async with app.run_test(size=(30, 8)) as pilot:
         await pilot.pause()
-        snapshot = build_snapshot(
-            app, Identities(), session_id="s", revision=1, qualified=True
-        ).to_wire()
+        snapshot = build_snapshot(app, Identities(), session_id="s", revision=1).to_wire()
 
     nodes = by_test_id(snapshot)
     target = nodes["target"]

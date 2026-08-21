@@ -28,7 +28,6 @@ interface ApplicationRun {
 
 export interface CharmDebugMetrics {
   readonly fullSnapshots: number;
-  readonly deltas: number;
   readonly droppedEvents: number;
   readonly bytes: readonly number[];
   readonly nodes: readonly number[];
@@ -74,19 +73,17 @@ export function parseCharmDebug(text: string): CharmDebugMetrics {
     serializationMicroseconds.push(Number(match[4]));
   }
   const fullSnapshots = [...text.matchAll(/\br\d+ snapshot nodes=\d+/gu)].length;
-  const deltas = [...text.matchAll(/\br\d+ delta changed=\d+ removed=\d+/gu)].length;
-  const close = /close r\d+ snapshots=(\d+) deltas=(\d+) logs_dropped=\d+ performance_dropped=(\d+)/u.exec(text);
+  const close = /close r\d+ snapshots=(\d+) logs_dropped=\d+ performance_dropped=(\d+)/u.exec(text);
   const dropLines = [...text.matchAll(/performance_drop total=(\d+)/gu)];
   if (bytes.length === 0) throw new Error('Charm adapter debug log has no performance publications');
   return {
     fullSnapshots: close === null ? fullSnapshots : Number(close[1]),
-    deltas: close === null ? deltas : Number(close[2]),
     // Every failed publication emits its cumulative count immediately in
     // debug mode. A clean normal-exit log with publications and no such line
     // therefore proves zero even though the fixture does not call Close.
     droppedEvents: close === null
       ? Number(dropLines.at(-1)?.[1] ?? 0)
-      : Number(close[3]),
+      : Number(close[2]),
     bytes,
     nodes,
     unknownNodes,
@@ -187,10 +184,7 @@ export async function runCharmPerformanceBenchmark(
     const debug = instrumented.map((entry) => entry.debug);
     if (debug.some((entry) => entry === null)) throw new Error('instrumented run produced no debug metrics');
     const observed = debug as CharmDebugMetrics[];
-    const semanticFrames = observed.reduce(
-      (total, entry) => total + entry.fullSnapshots + entry.deltas,
-      0,
-    );
+    const semanticFrames = observed.reduce((total, entry) => total + entry.fullSnapshots, 0);
     const correlated = instrumented.reduce(
       (total, entry) => total + entry.latestSemanticRevision,
       0,
@@ -221,17 +215,12 @@ export async function runCharmPerformanceBenchmark(
         bytesPerFrame: measured(
           'bytes/frame',
           average(allBytes),
-          'Actual canonical Go snapshot/delta envelope bytes including the four-byte frame header.',
+          'Actual canonical Go snapshot envelope bytes including the four-byte frame header.',
         ),
         fullSnapshots: measured(
           'count',
           observed.reduce((total, entry) => total + entry.fullSnapshots, 0),
           'Adapter debug counters across instrumented runs.',
-        ),
-        deltas: measured(
-          'count',
-          observed.reduce((total, entry) => total + entry.deltas, 0),
-          'Charm currently advertises no tree-diffs capability.',
         ),
         droppedEvents: measured(
           'count',
@@ -280,7 +269,7 @@ export async function runCharmPerformanceBenchmark(
 
     return {
       kind: 'termwright-performance-report',
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: new Date().toISOString(),
       environment: {
         runtime: `node ${process.version}; ${(await run('go', ['version'])).stdout.trim()}`,

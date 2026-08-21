@@ -13,7 +13,7 @@ editUrl: false
 
 > **textMatcher**(`value`, `exact?`): [`TextMatcher`](../../type-aliases/textmatcher/)
 
-Defined in: [selectors.ts:170](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L170)
+Defined in: [driver/src/selectors.ts:167](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L167)
 
 Builds a [TextMatcher](../../type-aliases/textmatcher/) from the `string | RegExp` public API shape.
 

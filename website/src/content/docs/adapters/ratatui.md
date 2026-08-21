@@ -46,10 +46,28 @@ frame.render_widget(
 The annotation wrapper adds role, name, test id, relationships, actions, and
 domain state. It does not override geometry or rendered cells.
 
+Applications that already route `crossterm::Event::Mouse` can expose that same
+production router as authoritative evidence:
+
+```rust
+use std::sync::Arc;
+use termwright_ratatui::register_pointer_evidence_provider;
+
+let _registration = register_pointer_evidence_provider(Arc::new(mouse_router))?;
+```
+
+The provider reports regions and an optional hit test; it never dispatches an
+event. `locator.click()` still encodes terminal mouse bytes and sends them
+through the PTY. The runnable [Ratatui list example](https://github.com/gorce-ai/termwright/tree/main/examples/ratatui-list)
+uses one router for both evidence and its normal `crossterm` event handler.
+
 ## Supported behavior
 
-Ratatui 0.30.2 is verified on macOS and Linux. Nodes and intended rectangles are
-frame-local. Viewport clipping is conditional. Exact pointer ownership is
-unsupported, so use keyboard input. Unsupported dependency graphs are rejected.
+Ratatui 0.30.2 is verified on macOS and Linux. Nodes are frame-local unless an
+annotated render call has a unique `semantic_key`; intended rectangles are
+automatic. Display state and paint ownership are unavailable from Ratatui.
+Exact pointer ownership is application-integrated when the production router
+is registered; without one, semantic pointer actions fail deterministically.
+Unsupported dependency graphs are rejected.
 
 See [Framework compatibility](../../reference/compatibility/) for exact versions.

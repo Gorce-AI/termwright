@@ -14,10 +14,14 @@
  */
 
 import type {
+  EffectiveSessionContract,
+  EvidenceProvenance,
   ProbeCapability,
   ProbeInfo,
   SemanticSnapshot,
 } from '@termwright/protocol';
+import { ADAPTER_CAPABILITIES, SESSION_CAPABILITIES } from '@termwright/protocol/contract';
+import { CONDITION_KINDS } from '@termwright/protocol/action-model';
 import { parseAppLog, type AppLogView } from './app-log.js';
 import type {
   DiscoveredTest,
@@ -71,6 +75,41 @@ export type UiServerMode = 'live' | 'post-mortem' | 'record';
 /** Last known state of the semantic adapter connection. */
 export type UiAdapterStatus = 'attached' | 'disconnected' | 'error';
 
+/** Exact projection of the driver's ActionReceipt for live Runner diagnostics. */
+export interface UiActionRequirement {
+  readonly kind: string;
+  readonly target?: string;
+  readonly verdict: 'satisfied' | 'unsatisfied' | 'inconclusive';
+  readonly observation: 'known' | 'absent' | 'unknown' | 'unsupported';
+  readonly evidence?: EvidenceProvenance;
+}
+
+export interface UiActionPlan {
+  readonly actionId: string;
+  readonly kind: string;
+  readonly strategy: string;
+  readonly contractId: string;
+  readonly beforeSequence: number;
+  readonly afterSequence: number;
+  readonly operations: readonly {
+    readonly device: 'keyboard' | 'mouse';
+    readonly kind: string;
+    readonly modifiers?: readonly ('shift' | 'alt' | 'control')[];
+  }[];
+  readonly requirements: readonly UiActionRequirement[];
+  readonly physicalEvidence?: EvidenceProvenance;
+}
+
+export interface UiActionability {
+  readonly actionable: boolean;
+  readonly kind: string;
+  readonly contractId: string;
+  readonly sequence: number;
+  readonly requirements: readonly UiActionRequirement[];
+  readonly strategy?: string;
+  readonly reason?: { readonly code: string; readonly message: string; readonly targetRef?: string };
+}
+
 /** server → client. */
 export type ServerMessage =
   | {
@@ -100,6 +139,8 @@ export type ServerMessage =
       readonly adapter?: { readonly name: string; readonly version: string };
       readonly probe?: ProbeInfo;
       readonly capabilities?: readonly string[];
+      /** Frozen, negotiated public contract used by Locator and ActionPlanner. */
+      readonly contract?: EffectiveSessionContract;
       readonly adapterStatus?: UiAdapterStatus;
       readonly columns: number;
       readonly rows: number;
@@ -214,7 +255,18 @@ export type ServerMessage =
       /** Resolved target ref, `n8@42`. */
       readonly ref?: string;
       readonly error?: string;
+      readonly actionPlan?: UiActionPlan;
+      readonly actionability?: UiActionability;
       readonly stepId?: string;
+    }
+  | {
+      readonly v: 1;
+      readonly type: 'actionability-inspection';
+      readonly requestId: string;
+      readonly sessionId: string;
+      readonly nodeId: string;
+      readonly results?: readonly UiActionability[];
+      readonly error?: string;
     };
 
 /** client → server. */
@@ -222,7 +274,8 @@ export type ClientMessage =
   | { readonly v: 1; readonly type: 'rerun'; readonly testIds?: readonly string[] }
   | { readonly v: 1; readonly type: 'stop' }
   | { readonly v: 1; readonly type: 'pick'; readonly sessionId: string; readonly enabled?: boolean }
-  | { readonly v: 1; readonly type: 'input'; readonly sessionId: string; readonly dataB64: string };
+  | { readonly v: 1; readonly type: 'input'; readonly sessionId: string; readonly dataB64: string }
+  | { readonly v: 1; readonly type: 'inspect-actionability'; readonly requestId: string; readonly sessionId: string; readonly nodeId: string };
 
 /** Any message on the socket, in either direction. */
 export type UiMessage = ServerMessage | ClientMessage;
@@ -242,8 +295,9 @@ const SERVER_TYPES = new Set([
   'app-log',
   'action-start',
   'action',
+  'actionability-inspection',
 ]);
-const CLIENT_TYPES = new Set(['rerun', 'stop', 'pick', 'input']);
+const CLIENT_TYPES = new Set(['rerun', 'stop', 'pick', 'input', 'inspect-actionability']);
 
 /** Thrown by {@link parseClientMessage} and {@link parseServerMessage}. */
 export class UiProtocolError extends Error {
@@ -324,6 +378,14 @@ export function parseClientMessage(raw: string | Uint8Array): ClientMessage {
         type: 'input',
         sessionId: requireString(value, 'sessionId', 'input'),
         dataB64: requireBase64(value, 'dataB64', 'input'),
+      };
+    case 'inspect-actionability':
+      return {
+        v: 1,
+        type: 'inspect-actionability',
+        requestId: requireBoundedString(value, 'requestId', 'inspect-actionability'),
+        sessionId: requireBoundedString(value, 'sessionId', 'inspect-actionability'),
+        nodeId: requireBoundedString(value, 'nodeId', 'inspect-actionability'),
       };
     default:
       throw new UiProtocolError(`unknown client message type: ${String(value.type)}`);
@@ -417,10 +479,17 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
       if (adapterStatus !== undefined && adapter === undefined) {
         throw new UiProtocolError('session: adapterStatus requires an adapter');
       }
+      const contract = value['contract'] === undefined
+        ? undefined
+        : parseEffectiveSessionContract(value['contract']);
+      const sessionId = requireString(value, 'sessionId', 'session');
+      if (contract !== undefined && contract.sessionId !== sessionId) {
+        throw new UiProtocolError('session: contract sessionId does not match the message');
+      }
       return {
         v: 1,
         type: 'session',
-        sessionId: requireString(value, 'sessionId', 'session'),
+        sessionId,
         ...(value['testId'] === undefined
           ? {}
           : { testId: requireString(value, 'testId', 'session') }),
@@ -428,6 +497,7 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         ...(adapter === undefined ? {} : { adapter }),
         ...(probe === undefined ? {} : { probe }),
         ...(capabilities === undefined ? {} : { capabilities }),
+        ...(contract === undefined ? {} : { contract }),
         ...(adapterStatus === undefined ? {} : { adapterStatus }),
         columns: requireNumber(value, 'columns', 'session'),
         rows: requireNumber(value, 'rows', 'session'),
@@ -583,6 +653,11 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         if (typeof found !== 'string') throw new UiProtocolError(`action: ${key} must be a string`);
         return { [key]: found };
       };
+      const actionPlan = value['actionPlan'] === undefined ? undefined : parseUiActionPlan(value['actionPlan']);
+      const actionability = value['actionability'] === undefined ? undefined : parseUiActionability(value['actionability']);
+      if (actionability !== undefined && (kind !== 'action' || value['ok'] || actionability.actionable)) {
+        throw new UiProtocolError('action: actionability is only valid for a rejected driver action');
+      }
       return {
         v: 1,
         type: 'action',
@@ -596,7 +671,29 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         ...optionalText('selector'),
         ...optionalText('ref'),
         ...optionalText('error'),
+        ...(actionPlan === undefined ? {} : { actionPlan }),
+        ...(actionability === undefined ? {} : { actionability }),
         ...optionalText('stepId'),
+      };
+    }
+    case 'actionability-inspection': {
+      const resultsValue = value['results'];
+      const error = value['error'] === undefined ? undefined : requireBoundedString(value, 'error', 'actionability-inspection');
+      if (resultsValue !== undefined && (!Array.isArray(resultsValue) || resultsValue.length !== 4)) {
+        throw new UiProtocolError('actionability-inspection: results must contain four planner explanations');
+      }
+      if ((resultsValue === undefined) === (error === undefined)) {
+        throw new UiProtocolError('actionability-inspection: exactly one of results or error is required');
+      }
+      const results = resultsValue?.map((entry) => parseUiActionability(entry));
+      return {
+        v: 1,
+        type: 'actionability-inspection',
+        requestId: requireBoundedString(value, 'requestId', 'actionability-inspection'),
+        sessionId: requireBoundedString(value, 'sessionId', 'actionability-inspection'),
+        nodeId: requireBoundedString(value, 'nodeId', 'actionability-inspection'),
+        ...(results === undefined ? {} : { results }),
+        ...(error === undefined ? {} : { error }),
       };
     }
     case 'app-log': {
@@ -633,6 +730,52 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
     default:
       throw new UiProtocolError(`unknown server message type: ${String(value.type)}`);
   }
+}
+
+function parseUiActionability(value: unknown): UiActionability {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new UiProtocolError('action.actionability must be an object');
+  const record = value as Record<string, unknown>;
+  if (typeof record['actionable'] !== 'boolean') throw new UiProtocolError('action.actionability actionable must be boolean');
+  const sequence = requireNumber(record, 'sequence', 'action.actionability');
+  if (!Number.isSafeInteger(sequence) || sequence < 0) throw new UiProtocolError('action.actionability sequence must be a non-negative integer');
+  const requirementsValue = record['requirements'];
+  if (!Array.isArray(requirementsValue) || requirementsValue.length > 128) throw new UiProtocolError('action.actionability requirements must be a bounded array');
+  const requirements = requirementsValue.map((value, index) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new UiProtocolError(`action.actionability.requirements[${index}] must be an object`);
+    const requirement = value as Record<string, unknown>;
+    const verdict = requirement['verdict'];
+    const observation = requirement['observation'];
+    if (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid verdict`);
+    if (observation !== 'known' && observation !== 'absent' && observation !== 'unknown' && observation !== 'unsupported') throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid observation`);
+    const target = requirement['target'];
+    if (target !== undefined && typeof target !== 'string') throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid target`);
+    const requirementEvidence = requirement['evidence'] === undefined ? undefined : parseEvidence(requirement['evidence'], `action.actionability.requirements[${index}]`);
+    validateUiRequirementEvidence(observation, requirementEvidence, `action.actionability.requirements[${index}]`);
+    const requirementKind = requireBoundedString(requirement, 'kind', `action.actionability.requirements[${index}]`);
+    if (!UI_ACTION_REQUIREMENT_KINDS.has(requirementKind)) throw new UiProtocolError(`action.actionability.requirements[${index}] has invalid kind`);
+    return {
+      kind: requirementKind,
+      ...(target === undefined ? {} : { target }), verdict, observation,
+      ...(requirementEvidence === undefined ? {} : { evidence: requirementEvidence }),
+    } as UiActionRequirement;
+  });
+  const rawReason = record['reason'];
+  let reason: UiActionability['reason'];
+  if (rawReason !== undefined) {
+    if (typeof rawReason !== 'object' || rawReason === null || Array.isArray(rawReason)) throw new UiProtocolError('action.actionability reason must be an object');
+    const item = rawReason as Record<string, unknown>;
+    const targetRef = item['targetRef'];
+    if (targetRef !== undefined && typeof targetRef !== 'string') throw new UiProtocolError('action.actionability reason targetRef must be a string');
+    reason = { code: requireBoundedString(item, 'code', 'action.actionability.reason'), message: requireBoundedString(item, 'message', 'action.actionability.reason'), ...(targetRef === undefined ? {} : { targetRef }) };
+  }
+  if (record['actionable'] === false && reason === undefined) throw new UiProtocolError('action.actionability rejected result requires reason');
+  const strategy = record['strategy'];
+  if (strategy !== undefined && typeof strategy !== 'string') throw new UiProtocolError('action.actionability strategy must be a string');
+  return {
+    actionable: record['actionable'], kind: requireBoundedString(record, 'kind', 'action.actionability'),
+    contractId: requireBoundedString(record, 'contractId', 'action.actionability'), sequence, requirements,
+    ...(strategy === undefined ? {} : { strategy }), ...(reason === undefined ? {} : { reason }),
+  };
 }
 
 function parseGherkinStep(value: unknown): UiGherkinStep | undefined {
@@ -688,6 +831,7 @@ function parsePriorFailures(value: unknown): readonly UiPriorFailure[] | undefin
 
 const PROBE_CAPABILITY_SET: ReadonlySet<string> = new Set([
   'stable-identity',
+  'intended-rect',
   'visible-rect',
   'operations',
   'annotations',
@@ -695,23 +839,12 @@ const PROBE_CAPABILITY_SET: ReadonlySet<string> = new Set([
   'paint-order',
 ]);
 
-// Kept browser-local deliberately: importing the protocol package's runtime
-// schema would also pull its Node transport/crypto entrypoint into the Vite
-// bundle. This is the same closed set as `ADAPTER_CAPABILITIES` in protocol.
-const ADAPTER_CAPABILITY_SET: ReadonlySet<string> = new Set([
-  'tree',
-  'bounds',
-  'absolute-bounds',
-  'states',
-  'actions',
-  'text-ranges',
-  'render-revisions',
-  'tree-diffs',
-  'logs',
-]);
+const ADAPTER_CAPABILITY_SET: ReadonlySet<string> = new Set(ADAPTER_CAPABILITIES);
 
 /** Maximum UTF-16 length of the short labels carried by UI wire events. */
 export const MAX_UI_WIRE_STRING_LENGTH = 256;
+
+const UI_ACTION_REQUIREMENT_KINDS: ReadonlySet<string> = new Set(CONDITION_KINDS);
 
 function parseDiscoveredProvider(
   value: unknown,
@@ -787,6 +920,246 @@ function parseDiscoveredSource(value: unknown, context: string): DiscoveredTestS
   const file = requireString(source, 'file', `${context}.source`);
   if (file === '') throw new UiProtocolError(`${context}.source: file must be non-empty`);
   return { file, line, column };
+}
+
+const EVIDENCE_SOURCES = new Set(['framework', 'application', 'terminal', 'recognizer', 'driver']);
+const EVIDENCE_METHODS = new Set(['native', 'instrumented', 'declared', 'correlated', 'measured', 'derived', 'heuristic']);
+const EVIDENCE_STRENGTHS = new Set(['authoritative', 'diagnostic']);
+const UNSUPPORTED_REASONS = new Set(['not-negotiated', 'framework-unobservable', 'terminal-unobservable', 'provider-required']);
+
+function parseUiActionPlan(value: unknown): UiActionPlan {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new UiProtocolError('action.actionPlan must be an object');
+  }
+  const record = value as Record<string, unknown>;
+  const operationsValue = record['operations'];
+  if (!Array.isArray(operationsValue) || operationsValue.length > 10_000) {
+    throw new UiProtocolError('action.actionPlan operations must be a bounded array');
+  }
+  const operations = operationsValue.map((value, index) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new UiProtocolError(`action.actionPlan.operations[${index}] must be an object`);
+    }
+    const operation = value as Record<string, unknown>;
+    const rawDevice = operation['device'];
+    if (rawDevice !== 'keyboard' && rawDevice !== 'mouse') {
+      throw new UiProtocolError(`action.actionPlan.operations[${index}] has invalid device`);
+    }
+    const device: 'keyboard' | 'mouse' = rawDevice;
+    const rawModifiers = operation['modifiers'];
+    if (rawModifiers !== undefined && (device !== 'mouse' || !Array.isArray(rawModifiers) ||
+        rawModifiers.some((modifier) => modifier !== 'shift' && modifier !== 'alt' && modifier !== 'control'))) {
+      throw new UiProtocolError(`action.actionPlan.operations[${index}] has invalid modifiers`);
+    }
+    const modifiers = rawModifiers as ('shift' | 'alt' | 'control')[] | undefined;
+    return {
+      device,
+      kind: requireBoundedString(operation, 'kind', `action.actionPlan.operations[${index}]`),
+      ...(modifiers === undefined ? {} : { modifiers }),
+    };
+  });
+  const beforeSequence = requireNumber(record, 'beforeSequence', 'action.actionPlan');
+  const afterSequence = requireNumber(record, 'afterSequence', 'action.actionPlan');
+  if (!Number.isInteger(beforeSequence) || !Number.isInteger(afterSequence)) {
+    throw new UiProtocolError('action.actionPlan sequences must be integers');
+  }
+  const requirementsValue = record['requirements'];
+  if (!Array.isArray(requirementsValue) || requirementsValue.length > 128) {
+    throw new UiProtocolError('action.actionPlan requirements must be a bounded array');
+  }
+  const requirements = requirementsValue.map((value, index) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new UiProtocolError(`action.actionPlan.requirements[${index}] must be an object`);
+    }
+    const requirement = value as Record<string, unknown>;
+    const verdict = requirement['verdict'];
+    const observation = requirement['observation'];
+    if (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') {
+      throw new UiProtocolError(`action.actionPlan.requirements[${index}] has invalid verdict`);
+    }
+    if (observation !== 'known' && observation !== 'absent' && observation !== 'unknown' && observation !== 'unsupported') {
+      throw new UiProtocolError(`action.actionPlan.requirements[${index}] has invalid observation`);
+    }
+    const checkedVerdict: 'satisfied' | 'unsatisfied' | 'inconclusive' = verdict;
+    const checkedObservation: 'known' | 'absent' | 'unknown' | 'unsupported' = observation;
+    const target = requirement['target'];
+    if (target !== undefined && typeof target !== 'string') {
+      throw new UiProtocolError(`action.actionPlan.requirements[${index}] has invalid target`);
+    }
+    const requirementEvidence = requirement['evidence'] === undefined
+      ? undefined
+      : parseEvidence(requirement['evidence'], `action.actionPlan.requirements[${index}]`);
+    validateUiRequirementEvidence(checkedObservation, requirementEvidence, `action.actionPlan.requirements[${index}]`);
+    const requirementKind = requireBoundedString(requirement, 'kind', `action.actionPlan.requirements[${index}]`);
+    if (!UI_ACTION_REQUIREMENT_KINDS.has(requirementKind)) throw new UiProtocolError(`action.actionPlan.requirements[${index}] has invalid kind`);
+    return {
+      kind: requirementKind,
+      ...(target === undefined ? {} : { target }), verdict: checkedVerdict, observation: checkedObservation,
+      ...(requirementEvidence === undefined ? {} : { evidence: requirementEvidence }),
+    };
+  });
+  const physicalEvidence = record['physicalEvidence'] === undefined
+    ? undefined
+    : parseEvidence(record['physicalEvidence'], 'action.actionPlan.physicalEvidence');
+  if (physicalEvidence !== undefined && physicalEvidence.strength !== 'authoritative') {
+    throw new UiProtocolError('action.actionPlan.physicalEvidence must be authoritative');
+  }
+  return {
+    actionId: requireBoundedString(record, 'actionId', 'action.actionPlan'),
+    kind: requireBoundedString(record, 'kind', 'action.actionPlan'),
+    strategy: requireBoundedString(record, 'strategy', 'action.actionPlan'),
+    contractId: requireBoundedString(record, 'contractId', 'action.actionPlan'),
+    beforeSequence,
+    afterSequence,
+    operations,
+    requirements,
+    ...(physicalEvidence === undefined ? {} : { physicalEvidence }),
+  };
+}
+
+function parseEvidence(value: unknown, context: string): EvidenceProvenance {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new UiProtocolError(`${context}: evidence must be an object`);
+  }
+  const record = value as Record<string, unknown>;
+  const source = requireBoundedString(record, 'source', context);
+  const method = requireBoundedString(record, 'method', context);
+  const strength = requireBoundedString(record, 'strength', context);
+  if (!EVIDENCE_SOURCES.has(source) || !EVIDENCE_METHODS.has(method) || !EVIDENCE_STRENGTHS.has(strength)) {
+    throw new UiProtocolError(`${context}: invalid evidence provenance`);
+  }
+  return {
+    source: source as EvidenceProvenance['source'],
+    method: method as EvidenceProvenance['method'],
+    strength: strength as EvidenceProvenance['strength'],
+    providerId: requireBoundedString(record, 'providerId', context),
+  };
+}
+
+function validateUiRequirementEvidence(
+  observation: UiActionRequirement['observation'],
+  evidence: EvidenceProvenance | undefined,
+  context: string,
+): void {
+  if ((observation === 'known' || observation === 'absent') && evidence === undefined) {
+    throw new UiProtocolError(`${context}: settled observation requires evidence`);
+  }
+  if (observation === 'absent' && evidence?.strength !== 'authoritative') {
+    throw new UiProtocolError(`${context}: absent observation requires authoritative evidence`);
+  }
+  if ((observation === 'unknown' || observation === 'unsupported') && evidence !== undefined) {
+    throw new UiProtocolError(`${context}: unsettled/unsupported observation must not claim evidence`);
+  }
+}
+
+function parseEffectiveSessionContract(value: unknown): EffectiveSessionContract {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new UiProtocolError('session.contract must be an object');
+  }
+  const record = value as Record<string, unknown>;
+  if (record['protocol'] !== 'termwright/2') throw new UiProtocolError('session.contract protocol must be termwright/2');
+  const epoch = requireNumber(record, 'epoch', 'session.contract');
+  if (!Number.isInteger(epoch) || epoch < 0) throw new UiProtocolError('session.contract epoch must be a non-negative integer');
+
+  const frameworkValue = record['framework'];
+  let framework: EffectiveSessionContract['framework'] = null;
+  if (frameworkValue !== null) {
+    if (typeof frameworkValue !== 'object' || frameworkValue === null || Array.isArray(frameworkValue)) {
+      throw new UiProtocolError('session.contract framework must be an object or null');
+    }
+    const candidate = frameworkValue as Record<string, unknown>;
+    framework = {
+      name: requireBoundedString(candidate, 'name', 'session.contract.framework'),
+      version: requireBoundedString(candidate, 'version', 'session.contract.framework'),
+      adapterVersion: requireBoundedString(candidate, 'adapterVersion', 'session.contract.framework'),
+      certificationId: requireBoundedString(candidate, 'certificationId', 'session.contract.framework'),
+    };
+  }
+
+  const providersValue = record['providers'];
+  if (!Array.isArray(providersValue) || providersValue.length > 32) {
+    throw new UiProtocolError('session.contract providers must be a bounded array');
+  }
+  const providers: EffectiveSessionContract['providers'][number][] = providersValue.map((providerValue, index) => {
+    if (typeof providerValue !== 'object' || providerValue === null || Array.isArray(providerValue)) {
+      throw new UiProtocolError(`session.contract.providers[${index}] must be an object`);
+    }
+    const provider = providerValue as Record<string, unknown>;
+    const kind = provider['kind'];
+    const base = {
+      id: requireBoundedString(provider, 'id', `session.contract.providers[${index}]`),
+      version: requireBoundedString(provider, 'version', `session.contract.providers[${index}]`),
+    };
+    if (kind === 'framework' || kind === 'terminal') return { ...base, kind };
+    if (kind !== 'application') throw new UiProtocolError(`session.contract.providers[${index}] has invalid kind`);
+    const method = provider['method'];
+    if (method !== 'native' && method !== 'declared') throw new UiProtocolError(`session.contract.providers[${index}] has invalid method`);
+    const capabilities = provider['capabilities'];
+    if (!Array.isArray(capabilities) || capabilities.length > 2 || new Set(capabilities).size !== capabilities.length ||
+        !capabilities.every((item) => item === 'pointer-regions' || item === 'hit-test') ||
+        (capabilities.includes('hit-test') && !capabilities.includes('pointer-regions'))) {
+      throw new UiProtocolError(`session.contract.providers[${index}] has invalid capabilities`);
+    }
+    return { ...base, kind, method, capabilities };
+  });
+  const providerIds = new Set(providers.map((provider) => provider.id));
+  if (providerIds.size !== providers.length) throw new UiProtocolError('session.contract providers contain duplicate ids');
+
+  const capabilitiesValue = record['capabilities'];
+  if (typeof capabilitiesValue !== 'object' || capabilitiesValue === null || Array.isArray(capabilitiesValue)) {
+    throw new UiProtocolError('session.contract capabilities must be an object');
+  }
+  const capabilityRecord = capabilitiesValue as Record<string, unknown>;
+  if (Object.keys(capabilityRecord).length !== SESSION_CAPABILITIES.length ||
+      Object.keys(capabilityRecord).some((id) => !SESSION_CAPABILITIES.includes(id as (typeof SESSION_CAPABILITIES)[number]))) {
+    throw new UiProtocolError('session.contract capabilities must contain exactly the closed capability set');
+  }
+  const capabilities = Object.fromEntries(SESSION_CAPABILITIES.map((id) => {
+    const raw = capabilityRecord[id];
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      throw new UiProtocolError(`session.contract capability ${id} must be an object`);
+    }
+    const availability = raw as Record<string, unknown>;
+    if (availability['status'] === 'supported') {
+      return [id, { status: 'supported', evidence: parseEvidence(availability['evidence'], `session.contract.capabilities.${id}`) }];
+    }
+    if (availability['status'] !== 'unsupported' || !UNSUPPORTED_REASONS.has(availability['reason'] as string)) {
+      throw new UiProtocolError(`session.contract capability ${id} has invalid availability`);
+    }
+    return [id, { status: 'unsupported', reason: availability['reason'] }];
+  })) as unknown as EffectiveSessionContract['capabilities'];
+  for (const availability of Object.values(capabilities)) {
+    if (availability.status !== 'supported') continue;
+    const expectedKind = availability.evidence.source === 'framework' || availability.evidence.source === 'terminal' || availability.evidence.source === 'application'
+      ? availability.evidence.source
+      : null;
+    if (expectedKind !== null && !providers.some((provider) => provider.id === availability.evidence.providerId && provider.kind === expectedKind)) {
+      throw new UiProtocolError('session.contract capability evidence names an unknown provider');
+    }
+  }
+
+  const terminalValue = record['terminal'];
+  if (typeof terminalValue !== 'object' || terminalValue === null || Array.isArray(terminalValue)) {
+    throw new UiProtocolError('session.contract terminal must be an object');
+  }
+  const terminal = terminalValue as Record<string, unknown>;
+  if (typeof terminal['mouseModesObservable'] !== 'boolean') {
+    throw new UiProtocolError('session.contract terminal.mouseModesObservable must be boolean');
+  }
+  return Object.freeze({
+    contractId: requireBoundedString(record, 'contractId', 'session.contract'),
+    sessionId: requireBoundedString(record, 'sessionId', 'session.contract'),
+    epoch,
+    protocol: 'termwright/2',
+    framework,
+    providers: Object.freeze(providers),
+    capabilities: Object.freeze(capabilities),
+    terminal: Object.freeze({
+      profile: requireBoundedString(terminal, 'profile', 'session.contract.terminal'),
+      platform: requireBoundedString(terminal, 'platform', 'session.contract.terminal'),
+      mouseModesObservable: terminal['mouseModesObservable'],
+    }),
+  });
 }
 
 function parseProbeInfo(value: unknown): ProbeInfo {

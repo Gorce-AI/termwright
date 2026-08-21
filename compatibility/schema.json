@@ -7,7 +7,7 @@
   "required": ["schemaVersion", "frameworks"],
   "properties": {
     "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 3 },
     "frameworks": {
       "type": "array",
       "minItems": 1,
@@ -54,14 +54,62 @@
         }
       }
     },
-    "module": {
+    "geometryCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "displayed",
+        "intendedRect",
+        "visibleRect",
+        "hitTest",
+        "runtimePreconditions",
+        "reason"
+      ],
+      "properties": {
+        "displayed": { "$ref": "#/$defs/availability" },
+        "intendedRect": { "$ref": "#/$defs/availability" },
+        "visibleRect": { "$ref": "#/$defs/availability" },
+        "hitTest": { "$ref": "#/$defs/availability" },
+        "runtimePreconditions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "displayed": { "$ref": "#/$defs/preconditions" },
+            "intendedRect": { "$ref": "#/$defs/preconditions" },
+            "visibleRect": { "$ref": "#/$defs/preconditions" },
+            "hitTest": { "$ref": "#/$defs/preconditions" },
+            "pointerActions": { "$ref": "#/$defs/preconditions" }
+          }
+        },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "availability": {
+      "enum": ["automatic", "application-integrated", "unsupported"]
+    },
+    "preconditions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "patchSet": {
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "version", "patchSetVersion"],
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "version": { "type": "string", "minLength": 1 },
-        "patchSetVersion": { "type": "integer", "minimum": 1 },
+        "patchSetVersion": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "variantModule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
         "optional": { "type": "boolean" }
       }
     },
@@ -75,7 +123,7 @@
         "modules": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/module" }
+          "items": { "$ref": "#/$defs/variantModule" }
         }
       }
     },
@@ -96,6 +144,50 @@
         "notes": { "type": "string", "minLength": 1 }
       }
     },
+    "certification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ids", "adapterVersion", "strategy", "checksumSources"],
+      "properties": {
+        "ids": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*@[^/]+/[^/]+$" }, "uniqueItems": true },
+        "adapterVersion": { "type": "string", "minLength": 1 },
+        "strategy": { "enum": ["native-hook", "checksummed-instrumentation", "checksummed-replacement"] },
+        "checksumSources": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^(packages|clients)/.+\\.json$" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "applicationProviders": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acceptedTypes", "extendableCapabilities", "sdks"],
+      "properties": {
+        "acceptedTypes": { "type": "array", "items": { "enum": ["pointer-evidence", "scroll-evidence", "focus-evidence"] }, "uniqueItems": true },
+        "extendableCapabilities": { "type": "array", "items": { "enum": ["pointer-geometry", "pointer-hit-testing", "scroll", "focus"] }, "uniqueItems": true },
+        "sdks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "terminalPrerequisite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "requirements"],
+      "properties": {
+        "capability": { "enum": ["keyboard-input", "pointer-input", "hover", "drag", "wheel"] },
+        "requirements": { "$ref": "#/$defs/preconditions" }
+      }
+    },
+    "conformance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite", "areas", "fixtures"],
+      "properties": {
+        "suite": { "const": "@termwright/conformance" },
+        "areas": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "fixtures": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
     "framework": {
       "type": "object",
       "additionalProperties": false,
@@ -106,8 +198,13 @@
         "versions",
         "runtimes",
         "probe",
+        "geometry",
         "instrumentation",
         "annotations",
+        "certification",
+        "applicationProviders",
+        "terminalPrerequisites",
+        "conformance",
         "limitations",
         "documentation"
       ],
@@ -149,12 +246,17 @@
             }
           }
         },
+        "geometry": { "$ref": "#/$defs/geometryCapabilities" },
         "instrumentation": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["strategy", "variants"],
+          "required": ["strategy", "patchSets", "variants"],
           "properties": {
             "strategy": { "type": "string", "minLength": 1 },
+            "patchSets": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/patchSet" }
+            },
             "variants": {
               "type": "array",
               "items": { "$ref": "#/$defs/variant" }
@@ -167,6 +269,14 @@
             { "$ref": "#/$defs/annotations" }
           ]
         },
+        "certification": { "$ref": "#/$defs/certification" },
+        "applicationProviders": { "$ref": "#/$defs/applicationProviders" },
+        "terminalPrerequisites": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/terminalPrerequisite" }
+        },
+        "conformance": { "$ref": "#/$defs/conformance" },
         "limitations": {
           "type": "array",
           "minItems": 1,

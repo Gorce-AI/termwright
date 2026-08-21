@@ -9,7 +9,7 @@ import type {
   SessionEvents,
   TerminalHarness,
 } from '@termwright/driver';
-import type { ProbeInfo, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
+import type { ActionReceipt, ActionabilityExplanation, EffectiveSessionContract, ProbeInfo, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type { UiSessionSource } from '../live.js';
 
 type Listener = (payload: never) => void;
@@ -21,6 +21,7 @@ export class FakeSession implements UiSessionSource {
   #actionCounter = 0;
   #tree: SemanticSnapshot | null = null;
   clock = 0;
+  actionabilityPlanner: ((action: 'click' | 'hover' | 'focus' | 'type', ref: string) => Promise<ActionabilityExplanation>) | undefined;
 
   constructor(sessionId = 's1') {
     this.sessionId = sessionId;
@@ -45,6 +46,11 @@ export class FakeSession implements UiSessionSource {
   adapter: { readonly name: string; readonly version: string } | undefined;
   probe: ProbeInfo | undefined;
   adapterCapabilities: readonly string[] | undefined;
+  negotiatedContract: EffectiveSessionContract | null = null;
+
+  contract(): EffectiveSessionContract | null {
+    return this.negotiatedContract;
+  }
 
   capabilities(): {
     terminalProfile: string;
@@ -70,6 +76,13 @@ export class FakeSession implements UiSessionSource {
     return this.#tree;
   }
 
+  locatorForRef(ref: string): { actionability(action: 'click' | 'hover' | 'focus' | 'type'): Promise<ActionabilityExplanation> } {
+    return { actionability: (action) => {
+      if (this.actionabilityPlanner === undefined) return Promise.reject(new Error('fake planner is not configured'));
+      return this.actionabilityPlanner(action, ref);
+    } };
+  }
+
   output(text: string): void {
     this.#emit('output', { data: new TextEncoder().encode(text), timeMs: this.clock });
   }
@@ -87,6 +100,8 @@ export class FakeSession implements UiSessionSource {
     selector?: string;
     ref?: string;
     error?: string;
+    receipt?: ActionReceipt;
+    actionability?: ActionabilityExplanation;
   }): void {
     this.#emit('action', { actionId: `a${++this.#actionCounter}`, ...event, timeMs: this.clock });
   }
@@ -100,7 +115,7 @@ export class FakeSession implements UiSessionSource {
 
   finishAction(
     actionId: string,
-    event: { api: string; ok: boolean; selector?: string; ref?: string; error?: string },
+    event: { api: string; ok: boolean; selector?: string; ref?: string; error?: string; receipt?: ActionReceipt; actionability?: ActionabilityExplanation },
   ): void {
     this.#emit('action', { actionId, ...event, timeMs: this.clock });
   }
@@ -178,13 +193,15 @@ export function snapshot(
   sessionId = 's1',
 ): SemanticSnapshot {
   return {
-    v: 1,
+    v: 2,
     sessionId,
     revision,
     columns: 80,
     rows: 24,
     rootIds: nodes.filter((item) => item.parentId === undefined).map((item) => item.id),
     nodes,
+    coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 
@@ -192,5 +209,13 @@ export function snapshot(
 export function node(
   partial: Partial<SemanticNode> & Pick<SemanticNode, 'id' | 'role'>,
 ): SemanticNode {
-  return { name: '', ...partial };
+  return {
+    name: '',
+    geometry: {
+      displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    },
+    ...partial,
+  };
 }

@@ -19,6 +19,75 @@ describe('buildCommandLog', () => {
     ]);
   });
 
+  it('projects the exact trace receipt into Runner action diagnostics', () => {
+    const stamp = { sessionId: 's1', contractId: 's1:0', epoch: 0, sequence: 7, screenRevision: 3, semanticRevision: 7, pairedScreenRevision: 3 };
+    const evidence = { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' } as const;
+    const rows = buildCommandLog([{
+      kind: 'action', t: 20, castOffset: 20, api: 'click', ok: true,
+      receipt: {
+        intent: { kind: 'click' },
+        plan: {
+          actionId: 'a1', contractId: 's1:0', intent: { kind: 'click' }, checkpoint: stamp,
+          requirements: [{ condition: { kind: 'receives-pointer', target: 'b1@7' }, checkpoint: stamp, observation: { status: 'known', value: true, evidence }, verdict: 'satisfied' }],
+          strategy: 'authoritative-pointer-region',
+          physicalRegion: { checkpoint: stamp, coordinateSpace: 'viewport-cells', intendedRect: { row: 1, column: 1, width: 2, height: 1 }, spans: [{ row: 1, from: 1, to: 3 }], evidence },
+          operations: [],
+        },
+        before: stamp,
+        after: { ...stamp, sequence: 8 },
+        executed: [
+          { device: 'mouse', kind: 'down', modifiers: ['shift', 'control'] },
+          { device: 'mouse', kind: 'up', modifiers: ['shift', 'control'] },
+        ],
+        outcome: 'completed',
+      },
+    }]);
+    expect(rows[0]?.actionPlan).toEqual({
+      actionId: 'a1', kind: 'click', strategy: 'authoritative-pointer-region', contractId: 's1:0',
+      beforeSequence: 7, afterSequence: 8,
+      operations: [
+        { device: 'mouse', kind: 'down', modifiers: ['shift', 'control'] },
+        { device: 'mouse', kind: 'up', modifiers: ['shift', 'control'] },
+      ],
+      requirements: [{ kind: 'receives-pointer', target: 'b1@7', verdict: 'satisfied', observation: 'known', evidence }],
+      physicalEvidence: evidence,
+    });
+  });
+
+  it('does not display a malformed receipt as authoritative replay evidence', () => {
+    const rows = buildCommandLog([{
+      kind: 'action', t: 20, castOffset: 20, api: 'click', ok: true,
+      receipt: { intent: { kind: 'click' }, plan: { actionId: 'a1', contractId: 's:0', strategy: 'pointer', requirements: 'forged' }, before: { sequence: 1 }, after: { sequence: 2 }, executed: [] },
+    }]);
+    expect(rows[0]?.actionPlan).toBeUndefined();
+  });
+
+  it('projects the exact rejected planner explanation into replay diagnostics', () => {
+    const stamp = { sessionId: 's1', contractId: 's1:0', epoch: 0, sequence: 7, screenRevision: 3, semanticRevision: 7, pairedScreenRevision: 3 };
+    const evidence = { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' } as const;
+    const rows = buildCommandLog([{
+      kind: 'action', t: 20, castOffset: 20, api: 'click', ok: false, error: 'not-actionable',
+      actionability: {
+        actionable: false, intent: { kind: 'click', targetRef: 'save@7' }, checkpoint: stamp,
+        requirements: [{ condition: { kind: 'receives-pointer', target: 'save@7' }, checkpoint: stamp, observation: { status: 'known', value: false, evidence }, verdict: 'unsatisfied' }],
+        reason: { code: 'covered-by', message: 'Target is covered', targetRef: 'overlay@7' },
+      },
+    }]);
+    expect(rows[0]?.actionability).toEqual({
+      actionable: false, kind: 'click', contractId: 's1:0', sequence: 7,
+      requirements: [{ kind: 'receives-pointer', target: 'save@7', verdict: 'unsatisfied', observation: 'known', evidence }],
+      reason: { code: 'covered-by', message: 'Target is covered', targetRef: 'overlay@7' },
+    });
+  });
+
+  it('does not display malformed replay actionability as planner truth', () => {
+    const rows = buildCommandLog([{
+      kind: 'action', t: 20, castOffset: 20, api: 'click', ok: false,
+      actionability: { actionable: false, intent: { kind: 'click' }, checkpoint: { contractId: 's:0', sequence: 1 }, requirements: 'forged' },
+    }]);
+    expect(rows[0]?.actionability).toBeUndefined();
+  });
+
   it('positions rows on the cast timeline', () => {
     expect(log.map((row) => row.t)).toEqual([90, 140, 190, 290]);
   });

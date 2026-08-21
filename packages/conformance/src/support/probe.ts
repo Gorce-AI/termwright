@@ -26,14 +26,11 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import {
   DEFAULT_LIMITS,
   ENV_ENDPOINT,
-  ENV_PROTOCOL,
   ENV_TOKEN,
   MARKER_OSC_CODE,
   MARKER_OSC_PREFIX,
   parseAdapterMessage,
   PROTOCOL_ID,
-  PROTOCOL_VERSION,
-  applyTreeDelta,
   createFrameDecoder,
   encodeFrame,
   generateToken,
@@ -41,8 +38,6 @@ import {
   type AdapterToDriverMessage,
   type HelloAckMessage,
   type LogRecord,
-  type SemanticSnapshot,
-  type TreeDelta,
 } from '@termwright/protocol';
 // `@xterm/headless` is CommonJS: a named ESM import type-checks and passes
 // under vitest's transform, then fails at runtime for anyone importing the
@@ -90,12 +85,6 @@ export interface ProbeOptions {
   readonly rows?: number;
   /** Set `false` to withhold the instrumentation env — the dormant-run case. */
   readonly instrument?: boolean;
-  /**
-   * What the probe asks the adapter to push. `'diffs'` is a preference, not a
-   * prohibition: an adapter may still send a full tree when a delta would not
-   * pay for itself, and the first publication always is one.
-   */
-  readonly subscribe?: 'snapshots' | 'diffs';
 }
 
 /** Everything the probe observed, readable while the child is still running. */
@@ -111,17 +100,6 @@ export interface ProbeObservation {
   readonly screen: string;
   /** Application log records the adapter sent, in arrival order. */
   readonly logs: readonly LogRecord[];
-  /** Deltas the adapter sent, in arrival order. */
-  readonly deltas: readonly TreeDelta[];
-  /**
-   * The tree obtained by composing every snapshot and delta received, in order,
-   * with the protocol's own `applyTreeDelta`. This is the oracle an adapter's
-   * deltas are checked against: a producer that also composed would only prove
-   * it agrees with itself.
-   */
-  readonly composed: SemanticSnapshot | null;
-  /** Why composition stopped, when it did. A conforming adapter produces none. */
-  readonly compositionError: string | null;
 }
 
 /**
@@ -155,17 +133,12 @@ export class AdapterProbe {
   readonly #server: Server | null;
   readonly #directory: string | null;
   readonly #pty: PtyProcess;
-  readonly #subscribe: 'snapshots' | 'diffs';
   readonly #terminal: Terminal;
   readonly #startedAt = performance.now();
   readonly #messages: RecordedMessage[] = [];
   readonly #markers: RecordedMarker[] = [];
   readonly #faults: RecordedFault[] = [];
   readonly #logs: LogRecord[] = [];
-  readonly #deltas: TreeDelta[] = [];
-  #composed: SemanticSnapshot | null = null;
-  #compositionError: string | null = null;
-  #requestId = 0;
   #chunks: Uint8Array[] = [];
   #bytes = 0;
   #text = '';
@@ -183,9 +156,7 @@ export class AdapterProbe {
     directory: string | null,
     pty: PtyProcess,
     size: { readonly columns: number; readonly rows: number },
-    subscribe: 'snapshots' | 'diffs',
   ) {
-    this.#subscribe = subscribe;
     this.sessionId = identity.sessionId;
     this.token = identity.token;
     this.#server = server;
@@ -233,11 +204,9 @@ export class AdapterProbe {
     // from whatever process is running the suite.
     delete env[ENV_ENDPOINT];
     delete env[ENV_TOKEN];
-    delete env[ENV_PROTOCOL];
     if (endpoint !== null) {
       env[ENV_ENDPOINT] = endpoint;
       env[ENV_TOKEN] = token;
-      env[ENV_PROTOCOL] = String(PROTOCOL_VERSION);
     }
 
     // The adapter's own account of why it did or did not attach. The probe can
@@ -266,7 +235,6 @@ export class AdapterProbe {
       directory,
       pty,
       size,
-      options.subscribe ?? 'snapshots',
     );
     probe.#debugFile = debugFile;
 
@@ -289,9 +257,6 @@ export class AdapterProbe {
       text: this.#text,
       screen: this.screenText(),
       logs: this.#logs.map((entry) => entry),
-      deltas: this.#deltas.map((entry) => entry),
-      composed: this.#composed,
-      compositionError: this.#compositionError,
     };
   }
 
@@ -505,8 +470,6 @@ export class AdapterProbe {
     }
     this.#messages.push({ message: parsed.message, stdoutBytes: this.#bytes, atMs: this.#now() });
     if (parsed.message.type === 'log') this.#logs.push(parsed.message.record);
-    if (parsed.message.type === 'snapshot') this.#composed = parsed.message.snapshot;
-    if (parsed.message.type === 'tree-delta') this.#compose(parsed.message);
     if (parsed.message.type !== 'hello') return;
 
     const ack: HelloAckMessage = {
@@ -514,62 +477,13 @@ export class AdapterProbe {
       protocol: PROTOCOL_ID,
       sessionId: this.sessionId,
       limits: DEFAULT_LIMITS,
-      // Deltas are only ever sent to a driver that asked for them.
-      subscribe:
-        this.#subscribe === 'diffs' && parsed.message.capabilities.includes('tree-diffs')
-          ? 'diffs'
-          : 'snapshots',
+      subscribe: 'snapshots',
       marker: { enabled: parsed.message.capabilities.includes('render-revisions') },
       // Granted only to an adapter that asked: an adapter that never announced
       // `logs` must not be handed a budget it can then claim it was given.
       ...(parsed.message.capabilities.includes('logs') ? { logs: LOG_BUDGET } : {}),
     };
     socket.write(encodeFrame(ack, DEFAULT_LIMITS.maxFrameBytes));
-  }
-
-  /** Applies one delta to the held tree, recording the first failure. */
-  #compose(delta: TreeDelta & { readonly type: 'tree-delta' }): void {
-    const { type: _type, ...body } = delta;
-    this.#deltas.push(body);
-    const base = this.#composed;
-    if (base === null) {
-      this.#compositionError ??= `delta ${body.baseRevision}→${body.revision} arrived before any full tree`;
-      return;
-    }
-    const result = applyTreeDelta(base, body, DEFAULT_LIMITS);
-    if (!result.ok) {
-      this.#compositionError ??= `delta ${body.baseRevision}→${body.revision} did not compose (${result.code}): ${result.detail}`;
-      return;
-    }
-    this.#composed = result.snapshot;
-  }
-
-  /**
-   * Asks the adapter for a full tree and resolves with it.
-   *
-   * This is what turns composition into a check rather than a belief: the
-   * locally composed tree is compared against one the adapter built itself.
-   */
-  async requestTree(timeoutMs = 10_000): Promise<SemanticSnapshot | null> {
-    const socket = this.#socket;
-    if (socket === null) return null;
-    this.#requestId += 1;
-    const requestId = this.#requestId;
-    socket.write(encodeFrame({ type: 'get-tree', requestId }, DEFAULT_LIMITS.maxFrameBytes));
-
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-      const reply = this.#messages.find(
-        (entry) =>
-          entry.message.type === 'get-tree-result' &&
-          (entry.message as { requestId: number }).requestId === requestId,
-      );
-      if (reply !== undefined) {
-        return (reply.message as { snapshot?: SemanticSnapshot }).snapshot ?? null;
-      }
-      if (Date.now() >= deadline) return null;
-      await delay(20);
-    }
   }
 
   #now(): number {
