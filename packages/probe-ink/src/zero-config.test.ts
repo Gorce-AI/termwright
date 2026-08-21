@@ -114,14 +114,15 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
   beforeAll(async () => {
     // Process tests execute published JavaScript, not Vitest's source transform.
     const { execFile } = await import('node:child_process');
+    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     await new Promise<void>((resolve, reject) => {
-      execFile('npm', ['run', 'build'], { cwd: annotationSdkRoot }, (error) => {
+      execFile(npm, ['run', 'build'], { cwd: annotationSdkRoot }, (error) => {
         if (error === null) resolve();
         else reject(error);
       });
     });
     await new Promise<void>((resolve, reject) => {
-      execFile('npm', ['run', 'build'], { cwd: packageRoot }, (error) => {
+      execFile(npm, ['run', 'build'], { cwd: packageRoot }, (error) => {
         if (error === null) resolve();
         else reject(error);
       });
