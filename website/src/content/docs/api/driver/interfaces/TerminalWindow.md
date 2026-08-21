@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalWindow
 
-Defined in: [driver/src/api.ts:253](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L253)
+Defined in: [driver/src/api.ts:258](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L258)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > **blur**(): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:255](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L255)
+Defined in: [driver/src/api.ts:260](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L260)
 
 #### Returns
 
@@ -48,7 +48,7 @@ Defined in: [driver/src/api.ts:255](https://github.com/Gorce-AI/termwright/blob/
 
 > **focus**(): `Promise`\<`void`\>
 
-Defined in: [driver/src/api.ts:254](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L254)
+Defined in: [driver/src/api.ts:259](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L259)
 
 #### Returns
 

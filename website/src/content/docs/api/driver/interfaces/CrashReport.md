@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: CrashReport
 
-Defined in: [driver/src/api.ts:754](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L754)
+Defined in: [driver/src/api.ts:759](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L759)
 
 What the session knew at the moment a program died unexpectedly.
 
@@ -25,7 +25,7 @@ without the harness being asked for it: neither `close()` nor an explicit
 
 > `readonly` **diagnosticsTail**: readonly [`SessionDiagnostic`](../sessiondiagnostic/)[]
 
-Defined in: [driver/src/api.ts:770](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L770)
+Defined in: [driver/src/api.ts:775](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L775)
 
 Tail of the session diagnostics log.
 
@@ -35,7 +35,7 @@ Tail of the session diagnostics log.
 
 > `readonly` **exit**: [`ExitStatus`](../exitstatus/)
 
-Defined in: [driver/src/api.ts:755](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L755)
+Defined in: [driver/src/api.ts:760](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L760)
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: [driver/src/api.ts:755](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **lastSemanticTree**: `SemanticSnapshot` \| `null`
 
-Defined in: [driver/src/api.ts:766](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L766)
+Defined in: [driver/src/api.ts:771](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L771)
 
 Last fully paired semantic revision, when the session had one.
 
@@ -53,7 +53,7 @@ Last fully paired semantic revision, when the session had one.
 
 > `readonly` **recentInputs**: readonly [`CrashInput`](../crashinput/)[]
 
-Defined in: [driver/src/api.ts:768](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L768)
+Defined in: [driver/src/api.ts:773](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L773)
 
 The most recent inputs, oldest first — what was sent just before the end.
 
@@ -63,7 +63,7 @@ The most recent inputs, oldest first — what was sent just before the end.
 
 > `readonly` **screenTail**: readonly `string`[]
 
-Defined in: [driver/src/api.ts:764](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L764)
+Defined in: [driver/src/api.ts:769](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L769)
 
 Last lines of scrollback plus the visible grid, oldest first, with trailing
 blank lines trimmed — where a stack trace or a panic message ends up.
@@ -78,6 +78,6 @@ crash report like a screenshot when storing or forwarding it.
 
 > `readonly` **timeMs**: `number`
 
-Defined in: [driver/src/api.ts:772](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L772)
+Defined in: [driver/src/api.ts:777](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L777)
 
 Milliseconds since session start, on the same clock as every event.

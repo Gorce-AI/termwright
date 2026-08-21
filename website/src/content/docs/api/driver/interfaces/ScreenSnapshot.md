@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ScreenSnapshot
 
-Defined in: [driver/src/api.ts:408](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L408)
+Defined in: [driver/src/api.ts:413](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L413)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **buffer**: `"normal"` \| `"alternate"`
 
-Defined in: [driver/src/api.ts:412](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L412)
+Defined in: [driver/src/api.ts:417](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L417)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:412](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **columns**: `number`
 
-Defined in: [driver/src/api.ts:410](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L410)
+Defined in: [driver/src/api.ts:415](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L415)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:410](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **cursor**: `CursorInfo`
 
-Defined in: [driver/src/api.ts:413](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L413)
+Defined in: [driver/src/api.ts:418](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L418)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [driver/src/api.ts:413](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **modes**: [`TerminalModes`](../terminalmodes/)
 
-Defined in: [driver/src/api.ts:414](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L414)
+Defined in: [driver/src/api.ts:419](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L419)
 
 ***
 
@@ -68,7 +68,7 @@ Defined in: [driver/src/api.ts:414](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **revision**: `number`
 
-Defined in: [driver/src/api.ts:409](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L409)
+Defined in: [driver/src/api.ts:414](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L414)
 
 ***
 
@@ -76,7 +76,7 @@ Defined in: [driver/src/api.ts:409](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **rows**: `number`
 
-Defined in: [driver/src/api.ts:411](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L411)
+Defined in: [driver/src/api.ts:416](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L416)
 
 ## Methods
 
@@ -84,7 +84,7 @@ Defined in: [driver/src/api.ts:411](https://github.com/Gorce-AI/termwright/blob/
 
 > **ansi**(): `string`
 
-Defined in: [driver/src/api.ts:420](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L420)
+Defined in: [driver/src/api.ts:425](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L425)
 
 ANSI-styled serialization of the visible grid (addon-serialize).
 
@@ -98,7 +98,7 @@ ANSI-styled serialization of the visible grid (addon-serialize).
 
 > **cell**(`row`, `column`): [`CellSnapshot`](../cellsnapshot/)
 
-Defined in: [driver/src/api.ts:418](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L418)
+Defined in: [driver/src/api.ts:423](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L423)
 
 #### Parameters
 
@@ -120,7 +120,7 @@ Defined in: [driver/src/api.ts:418](https://github.com/Gorce-AI/termwright/blob/
 
 > **html**(): `string`
 
-Defined in: [driver/src/api.ts:421](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L421)
+Defined in: [driver/src/api.ts:426](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L426)
 
 #### Returns
 
@@ -132,7 +132,7 @@ Defined in: [driver/src/api.ts:421](https://github.com/Gorce-AI/termwright/blob/
 
 > **line**(`row`): `string`
 
-Defined in: [driver/src/api.ts:417](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L417)
+Defined in: [driver/src/api.ts:422](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L422)
 
 #### Parameters
 
@@ -150,7 +150,7 @@ Defined in: [driver/src/api.ts:417](https://github.com/Gorce-AI/termwright/blob/
 
 > **text**(): `string`
 
-Defined in: [driver/src/api.ts:416](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L416)
+Defined in: [driver/src/api.ts:421](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L421)
 
 Visible grid text, one string per row (trailing whitespace trimmed).
 

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: CellLink
 
-Defined in: [driver/src/api.ts:347](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L347)
+Defined in: [driver/src/api.ts:352](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L352)
 
 A hyperlink attached to a cell.
 
@@ -26,7 +26,7 @@ one field to carry it in.
 
 > `readonly` `optional` **id?**: `string`
 
-Defined in: [driver/src/api.ts:349](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L349)
+Defined in: [driver/src/api.ts:354](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L354)
 
 ***
 
@@ -34,7 +34,7 @@ Defined in: [driver/src/api.ts:349](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **truncated?**: `true`
 
-Defined in: [driver/src/api.ts:355](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L355)
+Defined in: [driver/src/api.ts:360](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L360)
 
 True when `uri` was cut to the string ceiling and is therefore **not** the
 address the program wrote. Present only when it happened, so an assertion
@@ -46,4 +46,4 @@ against a URI can tell "this is the link" from "this is the front of it".
 
 > `readonly` **uri**: `string`
 
-Defined in: [driver/src/api.ts:348](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L348)
+Defined in: [driver/src/api.ts:353](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L353)

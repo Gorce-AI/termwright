@@ -135,7 +135,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **recording?**: `RecordingOptions`
 
-Defined in: driver/dist/index.d.ts:74
+Defined in: driver/dist/index.d.ts:79
 
 #### Inherited from
 
@@ -147,7 +147,7 @@ Defined in: driver/dist/index.d.ts:74
 
 > `readonly` `optional` **requiredCapabilities?**: readonly (`"focus"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"keyboard-input"` \| `"pointer-input"` \| `"paired-revisions"`)[]
 
-Defined in: driver/dist/index.d.ts:85
+Defined in: driver/dist/index.d.ts:90
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`
@@ -175,7 +175,7 @@ Defined in: driver/dist/index.d.ts:70
 
 > `readonly` `optional` **scrollbackLines?**: `number`
 
-Defined in: driver/dist/index.d.ts:72
+Defined in: driver/dist/index.d.ts:77
 
 #### Inherited from
 
@@ -187,7 +187,11 @@ Defined in: driver/dist/index.d.ts:72
 
 > `readonly` `optional` **semanticNegotiationMs?**: `number`
 
-Defined in: driver/dist/index.d.ts:71
+Defined in: driver/dist/index.d.ts:76
+
+Maximum time to wait for an optional semantic adapter. Defaults to 2,000
+ms for generic auto-detection. When `requiredCapabilities` is non-empty,
+the default is the larger of 2,000 ms and the session `ready` timeout.
 
 #### Inherited from
 
@@ -199,7 +203,7 @@ Defined in: driver/dist/index.d.ts:71
 
 > `readonly` `optional` **shellIntegration?**: `"external"` \| `"termwright-posix"` \| `"termwright-powershell"`
 
-Defined in: driver/dist/index.d.ts:79
+Defined in: driver/dist/index.d.ts:84
 
 Termwright-managed modes instrument an interactive shell with exact
 command markers. Test authors should normally use `terminal.openShell()`.
@@ -244,7 +248,7 @@ pane can count characters exactly as the live session did.
 
 > `readonly` `optional` **timeouts?**: `TimeoutClasses`
 
-Defined in: driver/dist/index.d.ts:73
+Defined in: driver/dist/index.d.ts:78
 
 #### Inherited from
 

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ShellCommandResult
 
-Defined in: [driver/src/api.ts:293](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L293)
+Defined in: [driver/src/api.ts:298](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L298)
 
 One command, bounded by the shell's OSC 133 C and D marks.
 
@@ -21,7 +21,7 @@ One command, bounded by the shell's OSC 133 C and D marks.
 
 > `readonly` **command**: `string`
 
-Defined in: [driver/src/api.ts:294](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L294)
+Defined in: [driver/src/api.ts:299](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L299)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [driver/src/api.ts:294](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **cwd**: `string` \| `null`
 
-Defined in: [driver/src/api.ts:298](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L298)
+Defined in: [driver/src/api.ts:303](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L303)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [driver/src/api.ts:298](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **exitCode**: `number` \| `null`
 
-Defined in: [driver/src/api.ts:297](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L297)
+Defined in: [driver/src/api.ts:302](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L302)
 
 ***
 
@@ -45,7 +45,7 @@ Defined in: [driver/src/api.ts:297](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **output**: `string`
 
-Defined in: [driver/src/api.ts:296](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L296)
+Defined in: [driver/src/api.ts:301](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L301)
 
 Exact terminal bytes emitted between command-start and command-end marks.
 
@@ -55,7 +55,7 @@ Exact terminal bytes emitted between command-start and command-end marks.
 
 > `readonly` **receipt**: [`ActionReceipt`](../actionreceipt/)
 
-Defined in: [driver/src/api.ts:301](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L301)
+Defined in: [driver/src/api.ts:306](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L306)
 
 The exact physical keyboard plan that submitted this command.
 
@@ -65,4 +65,4 @@ The exact physical keyboard plan that submitted this command.
 
 > `readonly` **title**: `string`
 
-Defined in: [driver/src/api.ts:299](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L299)
+Defined in: [driver/src/api.ts:304](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L304)

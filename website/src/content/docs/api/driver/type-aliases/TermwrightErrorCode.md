@@ -13,7 +13,7 @@ editUrl: false
 
 > **TermwrightErrorCode** = `"timeout"` \| `"stale-snapshot"` \| `"ambiguous-locator"` \| `"semantic-capability-unavailable"` \| `"probe-attach-failed"` \| `"capability-unavailable"` \| `"not-actionable"` \| `"input-mode-disabled"` \| `"capability-provider-lost"` \| `"capability-provider-violation"` \| `"adapter-guarantee-violation"` \| `"duplicate-semantic-key"` \| `"history-truncated"` \| `"protocol-violation"` \| `"capacity"` \| `"process-exited"` \| `"session-closed"` \| `"not-found"`
 
-Defined in: [driver/src/api.ts:883](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L883)
+Defined in: [driver/src/api.ts:888](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L888)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 

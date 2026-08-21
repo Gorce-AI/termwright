@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ErrorDiagnostics
 
-Defined in: [driver/src/api.ts:918](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L918)
+Defined in: [driver/src/api.ts:923](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L923)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` `optional` **candidates?**: readonly [`ResolvedTarget`](../resolvedtarget/)[]
 
-Defined in: [driver/src/api.ts:921](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L921)
+Defined in: [driver/src/api.ts:926](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L926)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:921](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **screenExcerpt?**: `string`
 
-Defined in: [driver/src/api.ts:919](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L919)
+Defined in: [driver/src/api.ts:924](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L924)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:919](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **semanticTree**: `boolean`
 
-Defined in: [driver/src/api.ts:920](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L920)
+Defined in: [driver/src/api.ts:925](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L925)
 
 ***
 
@@ -60,4 +60,4 @@ Defined in: [driver/src/api.ts:920](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **suggestion?**: `string`
 
-Defined in: [driver/src/api.ts:922](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L922)
+Defined in: [driver/src/api.ts:927](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L927)

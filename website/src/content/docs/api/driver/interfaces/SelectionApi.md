@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SelectionApi
 
-Defined in: [driver/src/api.ts:433](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L433)
+Defined in: [driver/src/api.ts:438](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L438)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > **clear**(): `void`
 
-Defined in: [driver/src/api.ts:436](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L436)
+Defined in: [driver/src/api.ts:441](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L441)
 
 #### Returns
 
@@ -48,7 +48,7 @@ Defined in: [driver/src/api.ts:436](https://github.com/Gorce-AI/termwright/blob/
 
 > **copy**(): `string`
 
-Defined in: [driver/src/api.ts:435](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L435)
+Defined in: [driver/src/api.ts:440](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L440)
 
 #### Returns
 
@@ -60,7 +60,7 @@ Defined in: [driver/src/api.ts:435](https://github.com/Gorce-AI/termwright/blob/
 
 > **selectCells**(`range`): `void`
 
-Defined in: [driver/src/api.ts:434](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L434)
+Defined in: [driver/src/api.ts:439](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L439)
 
 #### Parameters
 

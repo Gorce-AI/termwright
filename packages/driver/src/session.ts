@@ -507,7 +507,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       await this.#logs.start();
     }
 
-    const negotiationMs = this.#options.semanticNegotiationMs ?? DEFAULT_NEGOTIATION_MS;
+    const negotiationMs = this.#options.semanticNegotiationMs
+      ?? ((this.#options.requiredCapabilities?.length ?? 0) > 0
+        ? Math.max(DEFAULT_NEGOTIATION_MS, this.timeouts.ready)
+        : DEFAULT_NEGOTIATION_MS);
     this.#negotiationTimer = setTimeout(() => {
       if (this.#attachment === null) {
         this.#diagnostic(

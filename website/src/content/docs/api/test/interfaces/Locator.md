@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: Locator
 
-Defined in: driver/dist/index.d.ts:465
+Defined in: driver/dist/index.d.ts:470
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: driver/dist/index.d.ts:465
 
 > `readonly` **description**: `string`
 
-Defined in: driver/dist/index.d.ts:467
+Defined in: driver/dist/index.d.ts:472
 
 Human-readable form of the query, as it appears in error messages.
 
@@ -29,7 +29,7 @@ Human-readable form of the query, as it appears in error messages.
 
 > **actionability**(`action`, `opts?`): `Promise`\<`ActionabilityExplanation`\>
 
-Defined in: driver/dist/index.d.ts:489
+Defined in: driver/dist/index.d.ts:494
 
 #### Parameters
 
@@ -51,7 +51,7 @@ Defined in: driver/dist/index.d.ts:489
 
 > **activate**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:499
+Defined in: driver/dist/index.d.ts:504
 
 Physical activation through the same planned device path as click and keyboard input.
 
@@ -71,7 +71,7 @@ Physical activation through the same planned device path as click and keyboard i
 
 > **and**(`other`): `Locator`
 
-Defined in: driver/dist/index.d.ts:482
+Defined in: driver/dist/index.d.ts:487
 
 #### Parameters
 
@@ -89,7 +89,7 @@ Defined in: driver/dist/index.d.ts:482
 
 > **cellSnapshot**(`opts?`): `Promise`\<`LocatorCellSnapshot`\>
 
-Defined in: driver/dist/index.d.ts:516
+Defined in: driver/dist/index.d.ts:521
 
 Atomic cells inside this locator's qualified rectangle.
 
@@ -109,7 +109,7 @@ Atomic cells inside this locator's qualified rectangle.
 
 > **check**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:500
+Defined in: driver/dist/index.d.ts:505
 
 #### Parameters
 
@@ -127,7 +127,7 @@ Defined in: driver/dist/index.d.ts:500
 
 > **click**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:486
+Defined in: driver/dist/index.d.ts:491
 
 #### Parameters
 
@@ -145,7 +145,7 @@ Defined in: driver/dist/index.d.ts:486
 
 > **count**(): `Promise`\<`number`\>
 
-Defined in: driver/dist/index.d.ts:485
+Defined in: driver/dist/index.d.ts:490
 
 #### Returns
 
@@ -157,7 +157,7 @@ Defined in: driver/dist/index.d.ts:485
 
 > **doubleClick**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:487
+Defined in: driver/dist/index.d.ts:492
 
 #### Parameters
 
@@ -175,7 +175,7 @@ Defined in: driver/dist/index.d.ts:487
 
 > **dragTo**(`target`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:492
+Defined in: driver/dist/index.d.ts:497
 
 #### Parameters
 
@@ -197,7 +197,7 @@ Defined in: driver/dist/index.d.ts:492
 
 > **evaluateCondition**(`condition`): `Promise`\<`ConditionResult`\>
 
-Defined in: driver/dist/index.d.ts:506
+Defined in: driver/dist/index.d.ts:511
 
 Evaluate the same canonical condition model used by waits and ActionPlanner.
 
@@ -217,7 +217,7 @@ Evaluate the same canonical condition model used by waits and ActionPlanner.
 
 > **extendedState**(): `Promise`\<`SemanticExtendedObject` \| `null`\>
 
-Defined in: driver/dist/index.d.ts:522
+Defined in: driver/dist/index.d.ts:527
 
 Application-defined state, separate from portable semantic flags.
 
@@ -231,7 +231,7 @@ Application-defined state, separate from portable semantic flags.
 
 > **fill**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:496
+Defined in: driver/dist/index.d.ts:501
 
 #### Parameters
 
@@ -253,7 +253,7 @@ Defined in: driver/dist/index.d.ts:496
 
 > **filter**(`options`): `Locator`
 
-Defined in: driver/dist/index.d.ts:481
+Defined in: driver/dist/index.d.ts:486
 
 #### Parameters
 
@@ -271,7 +271,7 @@ Defined in: driver/dist/index.d.ts:481
 
 > **first**(): `Locator`
 
-Defined in: driver/dist/index.d.ts:478
+Defined in: driver/dist/index.d.ts:483
 
 #### Returns
 
@@ -283,7 +283,7 @@ Defined in: driver/dist/index.d.ts:478
 
 > **focus**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:497
+Defined in: driver/dist/index.d.ts:502
 
 #### Parameters
 
@@ -301,7 +301,7 @@ Defined in: driver/dist/index.d.ts:497
 
 > **geometry**(): `Promise`\<`LocatorGeometry`\>
 
-Defined in: driver/dist/index.d.ts:508
+Defined in: driver/dist/index.d.ts:513
 
 Atomic, evidence-qualified geometry. Never invents a rectangle.
 
@@ -315,7 +315,7 @@ Atomic, evidence-qualified geometry. Never invents a rectangle.
 
 > **getByLabel**(`text`, `opts?`): `Locator`
 
-Defined in: driver/dist/index.d.ts:471
+Defined in: driver/dist/index.d.ts:476
 
 #### Parameters
 
@@ -339,7 +339,7 @@ Defined in: driver/dist/index.d.ts:471
 
 > **getByRole**(`role`, `opts?`): `Locator`
 
-Defined in: driver/dist/index.d.ts:470
+Defined in: driver/dist/index.d.ts:475
 
 Natural descendant query scoped to this locator.
 
@@ -363,7 +363,7 @@ Natural descendant query scoped to this locator.
 
 > **getByScreenText**(`text`, `opts?`): `Locator`
 
-Defined in: driver/dist/index.d.ts:475
+Defined in: driver/dist/index.d.ts:480
 
 #### Parameters
 
@@ -385,7 +385,7 @@ Defined in: driver/dist/index.d.ts:475
 
 > **getByTestId**(`testId`): `Locator`
 
-Defined in: driver/dist/index.d.ts:476
+Defined in: driver/dist/index.d.ts:481
 
 #### Parameters
 
@@ -403,7 +403,7 @@ Defined in: driver/dist/index.d.ts:476
 
 > **getByText**(`text`, `opts?`): `Locator`
 
-Defined in: driver/dist/index.d.ts:474
+Defined in: driver/dist/index.d.ts:479
 
 #### Parameters
 
@@ -425,7 +425,7 @@ Defined in: driver/dist/index.d.ts:474
 
 > **hitTest**(`opts?`): `Promise`\<`PointerHitTest`\>
 
-Defined in: driver/dist/index.d.ts:512
+Defined in: driver/dist/index.d.ts:517
 
 Whether pointer input at the chosen cell reaches this exact target.
 
@@ -455,7 +455,7 @@ Whether pointer input at the chosen cell reaches this exact target.
 
 > **hover**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:488
+Defined in: driver/dist/index.d.ts:493
 
 #### Parameters
 
@@ -473,7 +473,7 @@ Defined in: driver/dist/index.d.ts:488
 
 > **last**(): `Locator`
 
-Defined in: driver/dist/index.d.ts:479
+Defined in: driver/dist/index.d.ts:484
 
 #### Returns
 
@@ -485,7 +485,7 @@ Defined in: driver/dist/index.d.ts:479
 
 > **locator**(`selector`): `Locator`
 
-Defined in: driver/dist/index.d.ts:477
+Defined in: driver/dist/index.d.ts:482
 
 #### Parameters
 
@@ -503,7 +503,7 @@ Defined in: driver/dist/index.d.ts:477
 
 > **nth**(`index`): `Locator`
 
-Defined in: driver/dist/index.d.ts:480
+Defined in: driver/dist/index.d.ts:485
 
 #### Parameters
 
@@ -521,7 +521,7 @@ Defined in: driver/dist/index.d.ts:480
 
 > **or**(`other`): `Locator`
 
-Defined in: driver/dist/index.d.ts:483
+Defined in: driver/dist/index.d.ts:488
 
 #### Parameters
 
@@ -539,7 +539,7 @@ Defined in: driver/dist/index.d.ts:483
 
 > **press**(`keys`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:494
+Defined in: driver/dist/index.d.ts:499
 
 #### Parameters
 
@@ -561,7 +561,7 @@ Defined in: driver/dist/index.d.ts:494
 
 > **resolve**(`opts?`): `Promise`\<`ResolvedTarget`\>
 
-Defined in: driver/dist/index.d.ts:484
+Defined in: driver/dist/index.d.ts:489
 
 #### Parameters
 
@@ -579,7 +579,7 @@ Defined in: driver/dist/index.d.ts:484
 
 > **semanticState**(): `Promise`\<`SemanticState` \| `null`\>
 
-Defined in: driver/dist/index.d.ts:520
+Defined in: driver/dist/index.d.ts:525
 
 #### Returns
 
@@ -591,7 +591,7 @@ Defined in: driver/dist/index.d.ts:520
 
 > **semanticValue**(): `Promise`\<`string` \| `null`\>
 
-Defined in: driver/dist/index.d.ts:519
+Defined in: driver/dist/index.d.ts:524
 
 Published semantic value, distinct from the accessible name/text.
 
@@ -605,7 +605,7 @@ Published semantic value, distinct from the accessible name/text.
 
 > **textContent**(): `Promise`\<`string`\>
 
-Defined in: driver/dist/index.d.ts:517
+Defined in: driver/dist/index.d.ts:522
 
 #### Returns
 
@@ -617,7 +617,7 @@ Defined in: driver/dist/index.d.ts:517
 
 > **type**(`text`, `opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:495
+Defined in: driver/dist/index.d.ts:500
 
 #### Parameters
 
@@ -639,7 +639,7 @@ Defined in: driver/dist/index.d.ts:495
 
 > **uncheck**(`opts?`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:501
+Defined in: driver/dist/index.d.ts:506
 
 #### Parameters
 
@@ -657,7 +657,7 @@ Defined in: driver/dist/index.d.ts:501
 
 > **visibility**(): `Promise`\<`LocatorVisibility`\>
 
-Defined in: driver/dist/index.d.ts:510
+Defined in: driver/dist/index.d.ts:515
 
 Attached/displayed/viewport facts without collapsing unknown to false.
 
@@ -671,7 +671,7 @@ Attached/displayed/viewport facts without collapsing unknown to false.
 
 > **waitFor**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:502
+Defined in: driver/dist/index.d.ts:507
 
 #### Parameters
 
@@ -689,7 +689,7 @@ Defined in: driver/dist/index.d.ts:502
 
 > **wheel**(`opts`): `Promise`\<`ActionReceipt`\>
 
-Defined in: driver/dist/index.d.ts:493
+Defined in: driver/dist/index.d.ts:498
 
 #### Parameters
 
@@ -707,7 +707,7 @@ Defined in: driver/dist/index.d.ts:493
 
 > **within**(`parent`): `Locator`
 
-Defined in: driver/dist/index.d.ts:468
+Defined in: driver/dist/index.d.ts:473
 
 #### Parameters
 

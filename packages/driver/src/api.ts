@@ -95,7 +95,12 @@ export interface LaunchOptions {
   readonly terminalProfile?: string;
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
-  readonly semanticNegotiationMs?: number; // default 2_000
+  /**
+   * Maximum time to wait for an optional semantic adapter. Defaults to 2,000
+   * ms for generic auto-detection. When `requiredCapabilities` is non-empty,
+   * the default is the larger of 2,000 ms and the session `ready` timeout.
+   */
+  readonly semanticNegotiationMs?: number;
   readonly scrollbackLines?: number; // default 2_000
   readonly timeouts?: TimeoutClasses;
   readonly recording?: RecordingOptions;

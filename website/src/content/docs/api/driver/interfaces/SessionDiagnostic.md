@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SessionDiagnostic
 
-Defined in: [driver/src/api.ts:829](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L829)
+Defined in: [driver/src/api.ts:834](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L834)
 
 One entry of the session diagnostics log.
 
@@ -21,7 +21,7 @@ One entry of the session diagnostics log.
 
 > `readonly` **code**: [`DiagnosticCode`](../../type-aliases/diagnosticcode/)
 
-Defined in: [driver/src/api.ts:830](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L830)
+Defined in: [driver/src/api.ts:835](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L835)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [driver/src/api.ts:830](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **count?**: `number`
 
-Defined in: [driver/src/api.ts:844](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L844)
+Defined in: [driver/src/api.ts:849](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L849)
 
 How many items the entry accounts for, when it stands for several — the
 number that would otherwise be readable only by parsing [detail](#detail).
@@ -46,7 +46,7 @@ entries therefore answers "how many log entries never reached me".
 
 > `readonly` **detail**: `string`
 
-Defined in: [driver/src/api.ts:831](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L831)
+Defined in: [driver/src/api.ts:836](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L836)
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: [driver/src/api.ts:831](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **mode?**: `"mouse"` \| `"focus"`
 
-Defined in: [driver/src/api.ts:855](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L855)
+Defined in: [driver/src/api.ts:860](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L860)
 
 For `mode-unverifiable`: which mode could not be verified. A field rather
 than a code per mode, so a consumer reacting to "the driver is working
@@ -66,7 +66,7 @@ blind" writes one branch instead of a list that grows with the platform.
 
 > `readonly` `optional` **revision?**: `number`
 
-Defined in: [driver/src/api.ts:833](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L833)
+Defined in: [driver/src/api.ts:838](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L838)
 
 The semantic revision the entry is about, when it is about one.
 
@@ -76,7 +76,7 @@ The semantic revision the entry is about, when it is about one.
 
 > `readonly` **timeMs**: `number`
 
-Defined in: [driver/src/api.ts:856](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L856)
+Defined in: [driver/src/api.ts:861](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L861)
 
 ***
 
@@ -84,7 +84,7 @@ Defined in: [driver/src/api.ts:856](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **wireCode?**: `"adapter-guarantee-violation"` \| `"duplicate-semantic-key"` \| `"bad-token"` \| `"bad-version"` \| `"malformed"` \| `"limit-exceeded"` \| `"capability-provider-violation"` \| `"internal"`
 
-Defined in: [driver/src/api.ts:849](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L849)
+Defined in: [driver/src/api.ts:854](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L854)
 
 For `protocol-violation`: the wire error code sent to the adapter, so a
 caller can tell *which* failure closed the channel without parsing prose.

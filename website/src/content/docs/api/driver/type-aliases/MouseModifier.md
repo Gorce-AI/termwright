@@ -13,7 +13,7 @@ editUrl: false
 
 > **MouseModifier** = `"shift"` \| `"alt"` \| `"control"`
 
-Defined in: [driver/src/api.ts:238](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L238)
+Defined in: [driver/src/api.ts:243](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L243)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
