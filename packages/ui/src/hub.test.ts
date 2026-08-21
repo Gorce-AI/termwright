@@ -380,15 +380,46 @@ describe('driver actions', () => {
     ]);
   });
 
+  it('publishes the exact failed planner explanation without replanning', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+    const checkpoint = { sessionId: 's1', contractId: 's1:0', epoch: 0, sequence: 7, screenRevision: 3, semanticRevision: 7, pairedScreenRevision: 3 };
+    const evidence = { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' } as const;
+    session.action({
+      api: 'drag', ok: false, error: 'input-mode-disabled',
+      actionability: {
+        actionable: false, intent: { kind: 'drag', targetRef: 'save@7' }, checkpoint,
+        requirements: [
+          { condition: { kind: 'pointer-input', target: 'save@7' }, checkpoint, observation: { status: 'known', value: true, evidence }, verdict: 'satisfied' },
+          { condition: { kind: 'mouse-input-enabled', target: 'save@7' }, checkpoint, observation: { status: 'known', value: false, evidence }, verdict: 'unsatisfied' },
+        ],
+        reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'save@7' },
+      },
+    });
+
+    expect(afterAnnouncement(hub)[0]).toMatchObject({
+      type: 'action', ok: false,
+      actionability: {
+        actionable: false, kind: 'drag', contractId: 's1:0', sequence: 7,
+        requirements: [
+          { kind: 'pointer-input', target: 'save@7', verdict: 'satisfied', observation: 'known', evidence },
+          { kind: 'mouse-input-enabled', target: 'save@7', verdict: 'unsatisfied', observation: 'known', evidence },
+        ],
+        reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'save@7' },
+      },
+    });
+  });
+
   it('publishes failures too, with the code that grouped them', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
     attachSession(hub, session);
-    session.action({ api: 'click', ok: false, error: 'unsupported-action' });
+    session.action({ api: 'click', ok: false, error: 'not-actionable' });
 
     const message = afterAnnouncement(hub)[0];
     expect(message?.type === 'action' && message.ok).toBe(false);
-    expect(message?.type === 'action' && message.error).toBe('unsupported-action');
+    expect(message?.type === 'action' && message.error).toBe('not-actionable');
     expect(message?.type === 'action' && message.ref).toBeUndefined();
   });
 

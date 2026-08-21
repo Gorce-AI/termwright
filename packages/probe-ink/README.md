@@ -1,6 +1,6 @@
 # @termwright/probe-ink
 
-Zero-config semantics for an Ink 7 application that imports nothing from
+Zero-config semantics for an Ink 7.1.1 application that imports nothing from
 termwright. The application keeps its normal `import {render} from 'ink'` and
 normal `render(<App />)` call; the launcher adds one preload flag.
 
@@ -10,7 +10,9 @@ normal `render(<App />)` call; the launcher adds one preload flag.
 npm install --save-dev @termwright/probe-ink
 ```
 
-Peers: `ink >= 7.1 < 8`, React >= 19.2. Node >= 22, or Bun.
+Peers: Ink 7.1.1, React >= 19.2. Node >= 22, or Bun. The Ink version is exact:
+the preload verifies both instrumented upstream modules by SHA-256 before it
+negotiates semantic capabilities.
 
 ```ts
 import {withProbe} from '@termwright/probe-ink';
@@ -37,10 +39,10 @@ without the probe, and byte parity retains it.
 ## Dormant and failure behaviour
 
 Without both `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN`, the preload installs
-no loader hook and `ink.render` is untouched. If the driver is unavailable or
-the observed Ink internals move, semantics disable themselves and the
-application continues. Process tests assert byte identity for dormant and
-faulted runs under both Node and Bun.
+no loader hook and `ink.render` is untouched. If either Ink artifact does not
+match 7.1.1 exactly, the adapter does not attach or advertise a partial
+contract. An unreachable driver remains isolated from the application. Process
+tests assert byte identity for dormant and faulted runs under Node and Bun.
 
 ## What is observed
 
@@ -68,12 +70,18 @@ marker last. A newer render that arrives during drain suppresses the stale
 marker. Instrumented output is byte-identical to vanilla output after those
 markers are removed.
 
-Bounds are published only when Ink runs interactively in the alternate screen
-buffer and no `<Static>` content shifts the live region. Otherwise coordinates
-are omitted rather than reported as terminal-absolute when they are not.
-With `TERMWRIGHT_PROTOCOL=termwright/2`, those facts use tagged observations:
-display is known, intended bounds are known or explicitly unsupported, and
-visible clipping plus pointer ownership are unsupported rather than inferred.
+The checksummed renderer hook records Yoga rectangles and the same nested
+overflow intersections used by `render-node-to-output`. A paired output tracker
+maps those relative rectangles into the committed normal or alternate VT
+viewport. It handles terminal wrapping, wide cells, resize, fullscreen scroll,
+and `<Static>` output retained above the live region. Hidden nodes publish
+authoritative absence instead of fabricated zero-sized boxes. Every marker is
+written only after the corresponding output bytes drain.
+
+Ink does not expose pointer ownership. Bounds therefore do not enable click,
+hover, or drag by themselves. Those actions require an application evidence
+provider that publishes revision-bound pointer regions and a native hit test;
+device input still travels through the real PTY.
 
 ## Deliberate limits
 

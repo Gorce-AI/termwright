@@ -240,27 +240,7 @@ fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
 }
 
 /// Every field a node may carry, as this client knows them.
-pub const NODE_KEYS: [&str; 18] = [
-    "id",
-    "parentId",
-    "role",
-    "name",
-    "description",
-    "value",
-    "bounds",
-    "state",
-    "extended",
-    "actions",
-    "labelledBy",
-    "describedBy",
-    "textRanges",
-    "testId",
-    "frameworkType",
-    "occlusion",
-    "p",
-    "px",
-];
-const NODE_V2_KEYS: [&str; 17] = [
+pub const NODE_KEYS: [&str; 17] = [
     "id",
     "parentId",
     "role",
@@ -279,6 +259,60 @@ const NODE_V2_KEYS: [&str; 17] = [
     "p",
     "px",
 ];
+fn check_evidence(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
+    let evidence = as_object(value, at)?;
+    strict(
+        evidence,
+        &["source", "method", "strength", "providerId"],
+        at,
+    )?;
+    let source = text(evidence.get("source"), path(at, &["source"]), limits)?;
+    if ![
+        "framework",
+        "application",
+        "terminal",
+        "recognizer",
+        "driver",
+    ]
+    .contains(&source)
+    {
+        return Err(Issue::new(path(at, &["source"]), "invalid evidence source"));
+    }
+    let method = text(evidence.get("method"), path(at, &["method"]), limits)?;
+    if ![
+        "native",
+        "instrumented",
+        "declared",
+        "correlated",
+        "measured",
+        "derived",
+        "heuristic",
+    ]
+    .contains(&method)
+    {
+        return Err(Issue::new(path(at, &["method"]), "invalid evidence method"));
+    }
+    let strength = text(evidence.get("strength"), path(at, &["strength"]), limits)?;
+    if !["authoritative", "diagnostic"].contains(&strength) {
+        return Err(Issue::new(
+            path(at, &["strength"]),
+            "invalid evidence strength",
+        ));
+    }
+    if text(
+        evidence.get("providerId"),
+        path(at, &["providerId"]),
+        limits,
+    )?
+    .is_empty()
+    {
+        return Err(Issue::new(
+            path(at, &["providerId"]),
+            "providerId must not be empty",
+        ));
+    }
+    Ok(())
+}
 
 fn check_observation<F>(
     value: &Value,
@@ -293,15 +327,55 @@ where
     match object.get("status").and_then(Value::as_str) {
         Some("known") => {
             strict(object, &["status", "value", "evidence"], at)?;
-            text(object.get("evidence"), path(at, &["evidence"]), limits)?;
+            let evidence_path = path(at, &["evidence"]);
+            check_evidence(
+                object.get("evidence").unwrap_or(&Value::Null),
+                &evidence_path,
+                limits,
+            )?;
             known(
                 object.get("value").unwrap_or(&Value::Null),
                 &path(at, &["value"]),
             )
         }
-        Some("absent") | Some("unknown") => {
+        Some("absent") => {
+            strict(object, &["status", "reason", "evidence"], at)?;
+            let reason = text(object.get("reason"), path(at, &["reason"]), limits)?;
+            if !["detached", "not-displayed", "not-laid-out"].contains(&reason) {
+                return Err(Issue::new(path(at, &["reason"]), "invalid absent reason"));
+            }
+            let evidence_path = path(at, &["evidence"]);
+            check_evidence(
+                object.get("evidence").unwrap_or(&Value::Null),
+                &evidence_path,
+                limits,
+            )?;
+            if object
+                .get("evidence")
+                .and_then(Value::as_object)
+                .and_then(|value| value.get("strength"))
+                .and_then(Value::as_str)
+                != Some("authoritative")
+            {
+                return Err(Issue::new(
+                    path(&evidence_path, &["strength"]),
+                    "absent observation requires authoritative evidence",
+                ));
+            }
+            Ok(())
+        }
+        Some("unknown") => {
             strict(object, &["status", "reason"], at)?;
-            text(object.get("reason"), path(at, &["reason"]), limits)?;
+            let reason = text(object.get("reason"), path(at, &["reason"]), limits)?;
+            if ![
+                "awaiting-revision-pair",
+                "provider-refresh",
+                "stale-revision",
+            ]
+            .contains(&reason)
+            {
+                return Err(Issue::new(path(at, &["reason"]), "invalid unknown reason"));
+            }
             Ok(())
         }
         Some("unsupported") => {
@@ -394,16 +468,9 @@ fn check_relations(value: &Value, at: &[String], limits: &Limits) -> Result<(), 
     Ok(())
 }
 
-fn check_node_schema(value: &Value, at: &[String], limits: &Limits, v2: bool) -> Result<(), Issue> {
+fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
     let object = as_object(value, at)?;
-    if v2 && object.contains_key("bounds") {
-        return Err(Issue::new(
-            path(at, &["bounds"]),
-            "legacy bounds are forbidden in v2",
-        ));
-    }
-    let node_keys: &[&str] = if v2 { &NODE_V2_KEYS } else { &NODE_KEYS };
-    strict(object, node_keys, at)?;
+    strict(object, &NODE_KEYS, at)?;
 
     if text(object.get("id"), path(at, &["id"]), limits)?.is_empty() {
         return Err(Issue::new(path(at, &["id"]), "node id must not be empty"));
@@ -416,7 +483,7 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits, v2: bool) ->
         _ => {
             return Err(Issue::new(
                 path(at, &["role"]),
-                "expected one of the v1 semantic roles",
+                "expected one of the semantic roles",
             ))
         }
     }
@@ -424,15 +491,6 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits, v2: bool) ->
     for key in ["description", "value", "testId", "frameworkType"] {
         if object.contains_key(key) {
             text(object.get(key), path(at, &[key]), limits)?;
-        }
-    }
-    if let Some(occlusion) = object.get("occlusion") {
-        let known = matches!(occlusion.as_str(), Some("known") | Some("unknown"));
-        if !known {
-            return Err(Issue::new(
-                path(at, &["occlusion"]),
-                "expected 'known' or 'unknown'",
-            ));
         }
     }
     if let Some(source) = object.get("p") {
@@ -485,34 +543,29 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits, v2: bool) ->
             ));
         }
     }
-    if let Some(bounds) = object.get("bounds") {
-        check_rect(bounds, &path(at, &["bounds"]))?;
-    }
-    if v2 {
-        let geometry_path = path(at, &["geometry"]);
-        let geometry = as_object(
-            object.get("geometry").unwrap_or(&Value::Null),
-            &geometry_path,
-        )?;
-        strict(
-            geometry,
-            &["displayed", "intendedRect", "visibleRect"],
-            &geometry_path,
-        )?;
+    let geometry_path = path(at, &["geometry"]);
+    let geometry = as_object(
+        object.get("geometry").unwrap_or(&Value::Null),
+        &geometry_path,
+    )?;
+    strict(
+        geometry,
+        &["displayed", "intendedRect", "visibleRect"],
+        &geometry_path,
+    )?;
+    check_observation(
+        geometry.get("displayed").unwrap_or(&Value::Null),
+        &path(&geometry_path, &["displayed"]),
+        limits,
+        |value, at| boolean(Some(value), at.to_vec()).map(|_| ()),
+    )?;
+    for field in ["intendedRect", "visibleRect"] {
         check_observation(
-            geometry.get("displayed").unwrap_or(&Value::Null),
-            &path(&geometry_path, &["displayed"]),
+            geometry.get(field).unwrap_or(&Value::Null),
+            &path(&geometry_path, &[field]),
             limits,
-            |value, at| boolean(Some(value), at.to_vec()).map(|_| ()),
+            |value, at| check_rect(value, at).map(|_| ()),
         )?;
-        for field in ["intendedRect", "visibleRect"] {
-            check_observation(
-                geometry.get(field).unwrap_or(&Value::Null),
-                &path(&geometry_path, &[field]),
-                limits,
-                |value, at| check_rect(value, at).map(|_| ()),
-            )?;
-        }
     }
     if let Some(state) = object.get("state") {
         check_state(state, &path(at, &["state"]))?;
@@ -551,7 +604,7 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits, v2: bool) ->
                 _ => {
                     return Err(Issue::new(
                         path(at, &["actions", &index.to_string()]),
-                        "expected one of the v1 semantic actions",
+                        "expected one of the semantic actions",
                     ))
                 }
             }
@@ -607,17 +660,7 @@ fn check_cursor(value: &Value, at: &[String]) -> Result<(), Issue> {
     Ok(())
 }
 
-const SNAPSHOT_KEYS: [&str; 8] = [
-    "v",
-    "sessionId",
-    "revision",
-    "columns",
-    "rows",
-    "cursor",
-    "rootIds",
-    "nodes",
-];
-const SNAPSHOT_V2_KEYS: [&str; 10] = [
+const SNAPSHOT_KEYS: [&str; 11] = [
     "v",
     "sessionId",
     "revision",
@@ -628,22 +671,17 @@ const SNAPSHOT_V2_KEYS: [&str; 10] = [
     "nodes",
     "coordinateSpace",
     "hitGrid",
+    "providerEvidence",
 ];
 
 fn check_snapshot_schema(value: &Value, limits: &Limits) -> Result<(), Issue> {
     let root: Vec<String> = Vec::new();
     let object = as_object(value, &root)?;
     let version = object.get("v").and_then(Value::as_i64);
-    let v2 = version == Some(2);
-    let snapshot_keys: &[&str] = if v2 {
-        &SNAPSHOT_V2_KEYS
-    } else {
-        &SNAPSHOT_KEYS
-    };
-    strict(object, snapshot_keys, &root)?;
+    strict(object, &SNAPSHOT_KEYS, &root)?;
 
-    if !matches!(version, Some(1) | Some(2)) {
-        return Err(Issue::new(vec!["v".into()], "expected the literal 1 or 2"));
+    if version != Some(2) {
+        return Err(Issue::new(vec!["v".into()], "expected the literal 2"));
     }
     if text(object.get("sessionId"), vec!["sessionId".into()], limits)?.is_empty() {
         return Err(Issue::new(
@@ -685,76 +723,85 @@ fn check_snapshot_schema(value: &Value, limits: &Limits) -> Result<(), Issue> {
         ));
     }
     for (index, node) in nodes.iter().enumerate() {
-        check_node_schema(node, &["nodes".to_owned(), index.to_string()], limits, v2)?;
+        check_node_schema(node, &["nodes".to_owned(), index.to_string()], limits)?;
     }
-    if v2 {
-        check_observation(
-            object.get("coordinateSpace").unwrap_or(&Value::Null),
-            &["coordinateSpace".into()],
-            limits,
-            |value, at| {
-                if matches!(
-                    value.as_str(),
-                    Some("viewport-cells") | Some("framework-local-cells")
-                ) {
-                    Ok(())
-                } else {
-                    Err(Issue::new(at.to_vec(), "invalid coordinate space"))
-                }
-            },
-        )?;
-        check_observation(
-            object.get("hitGrid").unwrap_or(&Value::Null),
-            &["hitGrid".into()],
-            limits,
-            |value, at| {
-                let grid = as_object(value, at)?;
-                strict(grid, &["regions"], at)?;
-                let regions = grid
-                    .get("regions")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| Issue::new(path(at, &["regions"]), "expected an array"))?;
-                if regions.len() > limits.max_nodes {
-                    return Err(Issue::too_big(
-                        path(at, &["regions"]),
-                        "too many hit regions",
+    check_observation(
+        object.get("coordinateSpace").unwrap_or(&Value::Null),
+        &["coordinateSpace".into()],
+        limits,
+        |value, at| {
+            if matches!(
+                value.as_str(),
+                Some("viewport-cells") | Some("framework-local-cells")
+            ) {
+                Ok(())
+            } else {
+                Err(Issue::new(at.to_vec(), "invalid coordinate space"))
+            }
+        },
+    )?;
+    if let Some(provider_evidence) = object.get("providerEvidence") {
+        let entries = provider_evidence
+            .as_array()
+            .ok_or_else(|| Issue::new(vec!["providerEvidence".into()], "expected an array"))?;
+        if entries.len() > 64 {
+            return Err(Issue::too_big(
+                vec!["providerEvidence".into()],
+                "expected at most 64 items",
+            ));
+        }
+    }
+    check_observation(
+        object.get("hitGrid").unwrap_or(&Value::Null),
+        &["hitGrid".into()],
+        limits,
+        |value, at| {
+            let grid = as_object(value, at)?;
+            strict(grid, &["regions"], at)?;
+            let regions = grid
+                .get("regions")
+                .and_then(Value::as_array)
+                .ok_or_else(|| Issue::new(path(at, &["regions"]), "expected an array"))?;
+            if regions.len() > limits.max_nodes {
+                return Err(Issue::too_big(
+                    path(at, &["regions"]),
+                    "too many hit regions",
+                ));
+            }
+            let mut previous: Option<Rect> = None;
+            for (index, raw) in regions.iter().enumerate() {
+                let rp = path(at, &["regions", &index.to_string()]);
+                let region = as_object(raw, &rp)?;
+                strict(region, &["rect", "recipientId"], &rp)?;
+                let rect = check_rect(
+                    region.get("rect").unwrap_or(&Value::Null),
+                    &path(&rp, &["rect"]),
+                )?;
+                if rect.width <= 0 || rect.height != 1 {
+                    return Err(Issue::new(
+                        path(&rp, &["rect"]),
+                        "hit regions must be non-empty row runs",
                     ));
                 }
-                let mut previous: Option<Rect> = None;
-                for (index, raw) in regions.iter().enumerate() {
-                    let rp = path(at, &["regions", &index.to_string()]);
-                    let region = as_object(raw, &rp)?;
-                    strict(region, &["rect", "recipientId"], &rp)?;
-                    let rect = check_rect(
-                        region.get("rect").unwrap_or(&Value::Null),
-                        &path(&rp, &["rect"]),
-                    )?;
-                    if rect.width <= 0 || rect.height != 1 {
-                        return Err(Issue::new(
-                            path(&rp, &["rect"]),
-                            "hit regions must be non-empty row runs",
-                        ));
-                    }
-                    if previous.as_ref().is_some_and(|last| {
-                        rect.row < last.row
-                            || (rect.row == last.row && rect.column < last.column + last.width)
-                    }) {
-                        return Err(Issue::new(
-                            path(&rp, &["rect"]),
-                            "hit regions must be non-overlapping row-major runs",
-                        ));
-                    }
-                    previous = Some(rect);
-                    text(
-                        region.get("recipientId"),
-                        path(&rp, &["recipientId"]),
-                        limits,
-                    )?;
+                if previous.as_ref().is_some_and(|last| {
+                    rect.row < last.row
+                        || (rect.row == last.row && rect.column < last.column + last.width)
+                }) {
+                    return Err(Issue::new(
+                        path(&rp, &["rect"]),
+                        "hit regions must be non-overlapping row-major runs",
+                    ));
                 }
-                Ok(())
-            },
-        )?;
-    }
+                previous = Some(rect);
+                text(
+                    region.get("recipientId"),
+                    path(&rp, &["recipientId"]),
+                    limits,
+                )?;
+            }
+            Ok(())
+        },
+    )?;
     Ok(())
 }
 
@@ -780,36 +827,12 @@ fn node_id(node: &Map<String, Value>) -> &str {
 
 fn check_node_shape(
     node: &Map<String, Value>,
-    columns: i64,
-    rows: i64,
+    _columns: i64,
+    _rows: i64,
     ids: &HashSet<&str>,
     limits: &Limits,
 ) -> Result<(), ValidationError> {
     let id = node_id(node);
-
-    if let Some(bounds) = node.get("bounds") {
-        let rect = check_rect(bounds, &[]).map_err(Issue::into_error)?;
-        if !is_safe_sum(rect.row, rect.height) || !is_safe_sum(rect.column, rect.width) {
-            return Err(ValidationError::new(
-                "bad-rect",
-                format!("node {id}: bounds overflow the safe-integer range"),
-            ));
-        }
-        let hidden = node
-            .get("state")
-            .and_then(Value::as_object)
-            .and_then(|state| state.get("hidden"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !hidden && !intersects_viewport(&rect, columns, rows) {
-            return Err(ValidationError::new(
-                "bad-rect",
-                format!(
-                    "node {id}: bounds do not intersect the {columns}x{rows} viewport and the node is not hidden"
-                ),
-            ));
-        }
-    }
 
     if let Some(ranges) = node.get("textRanges").and_then(Value::as_array) {
         for item in ranges {
@@ -903,190 +926,6 @@ fn compute_depths<'a>(
     Ok(depths)
 }
 
-const DELTA_KEYS: [&str; 7] = [
-    "type",
-    "baseRevision",
-    "revision",
-    "changed",
-    "removed",
-    "rootIds",
-    "cursor",
-];
-
-/// Validate the SHAPE of a `tree-delta` message.
-///
-/// Only the shape is checkable here. A delta carries no `columns`/`rows`, so
-/// whether a parent exists, whether the tree stays acyclic and inside the
-/// depth ceiling, and whether bounds or the cursor fall within the viewport
-/// can only be judged once the delta is applied to its base — put the
-/// assembled tree through [`validate_snapshot`] for that.
-///
-/// What is checkable without the base: sizes, node shape, unique ids, a
-/// revision that moves forward, and the same id never both upserted and
-/// removed by one delta.
-///
-/// # Errors
-/// Returns a [`ValidationError`] whose `code` matches the reference.
-pub fn validate_tree_delta(value: &Value, limits: &Limits) -> Result<(), ValidationError> {
-    if let Err(violation) = project_dto(value, limits.max_depth) {
-        let code = if violation.code == "dto-depth" {
-            "depth"
-        } else {
-            "schema"
-        };
-        return Err(ValidationError::new(code, violation.to_string()));
-    }
-
-    let serialised = serde_json::to_vec(value)
-        .map_err(|_| ValidationError::new("schema", "delta is not JSON-serialisable"))?;
-    if serialised.len() > limits.max_snapshot_bytes {
-        return Err(ValidationError::new(
-            "bytes",
-            format!(
-                "delta is {} bytes, ceiling is {}",
-                serialised.len(),
-                limits.max_snapshot_bytes
-            ),
-        ));
-    }
-
-    check_tree_delta_schema(value, limits).map_err(Issue::into_error)?;
-    let delta = value.as_object().expect("schema layer checked the shape");
-
-    let mut changed_ids: HashSet<&str> = HashSet::new();
-    for raw in delta["changed"]
-        .as_array()
-        .expect("checked by the schema layer")
-    {
-        let node = raw.as_object().expect("checked by the schema layer");
-        let id = node_id(node);
-        if !changed_ids.insert(id) {
-            return Err(ValidationError::new(
-                "duplicate-id",
-                format!("node id {id} appears twice in changed"),
-            ));
-        }
-        if node.get("parentId").and_then(Value::as_str) == Some(id) {
-            return Err(ValidationError::new(
-                "cycle",
-                format!("node {id} is its own parent"),
-            ));
-        }
-    }
-
-    let mut removed_ids: HashSet<&str> = HashSet::new();
-    for raw in delta["removed"]
-        .as_array()
-        .expect("checked by the schema layer")
-    {
-        let id = raw.as_str().unwrap_or_default();
-        if !removed_ids.insert(id) {
-            return Err(ValidationError::new(
-                "duplicate-id",
-                format!("node id {id} appears twice in removed"),
-            ));
-        }
-    }
-
-    if let Some(id) = changed_ids.intersection(&removed_ids).next() {
-        // Removals apply before upserts, so this would be a delta arguing with
-        // itself about one id rather than moving a node elsewhere.
-        return Err(ValidationError::new(
-            "schema",
-            format!("node id {id} is both changed and removed by one delta"),
-        ));
-    }
-
-    if let Some(root_ids) = delta.get("rootIds").and_then(Value::as_array) {
-        let mut seen: HashSet<&str> = HashSet::new();
-        for raw in root_ids {
-            let id = raw.as_str().unwrap_or_default();
-            if !seen.insert(id) {
-                return Err(ValidationError::new(
-                    "duplicate-id",
-                    format!("root id {id} appears more than once"),
-                ));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn check_tree_delta_schema(value: &Value, limits: &Limits) -> Result<(), Issue> {
-    let root: Vec<String> = Vec::new();
-    let delta = as_object(value, &root)?;
-    strict(delta, &DELTA_KEYS, &root)?;
-
-    let base = positive(delta.get("baseRevision"), vec!["baseRevision".into()])?;
-    let revision = positive(delta.get("revision"), vec!["revision".into()])?;
-    if revision <= base {
-        return Err(Issue::new(
-            vec!["revision".into()],
-            format!("revision {revision} must move forward from base {base}"),
-        ));
-    }
-
-    let Some(changed) = delta.get("changed").and_then(Value::as_array) else {
-        return Err(Issue::new(vec!["changed".into()], "expected an array"));
-    };
-    if changed.len() > limits.max_nodes {
-        return Err(Issue::too_big(
-            vec!["changed".into()],
-            format!("expected at most {} items", limits.max_nodes),
-        ));
-    }
-    for (index, node) in changed.iter().enumerate() {
-        check_node_schema(
-            node,
-            &["changed".to_owned(), index.to_string()],
-            limits,
-            false,
-        )?;
-    }
-
-    let Some(removed) = delta.get("removed").and_then(Value::as_array) else {
-        return Err(Issue::new(vec!["removed".into()], "expected an array"));
-    };
-    if removed.len() > limits.max_nodes {
-        return Err(Issue::too_big(
-            vec!["removed".into()],
-            format!("expected at most {} items", limits.max_nodes),
-        ));
-    }
-    for (index, id) in removed.iter().enumerate() {
-        let at = vec!["removed".to_owned(), index.to_string()];
-        if text(Some(id), at.clone(), limits)?.is_empty() {
-            return Err(Issue::new(at, "node id must not be empty"));
-        }
-    }
-
-    if let Some(root_ids) = delta.get("rootIds") {
-        let Some(items) = root_ids.as_array() else {
-            return Err(Issue::new(vec!["rootIds".into()], "expected an array"));
-        };
-        if items.len() > limits.max_nodes {
-            return Err(Issue::too_big(
-                vec!["rootIds".into()],
-                format!("expected at most {} items", limits.max_nodes),
-            ));
-        }
-        for (index, id) in items.iter().enumerate() {
-            text(
-                Some(id),
-                vec!["rootIds".to_owned(), index.to_string()],
-                limits,
-            )?;
-        }
-    }
-
-    if let Some(cursor) = delta.get("cursor") {
-        check_cursor(cursor, &["cursor".to_owned()])?;
-    }
-    Ok(())
-}
-
-/// Validate an untrusted snapshot against `limits`.
 ///
 /// Checks unique ids, existing and acyclic parents, the closed role, action
 /// and state vocabularies, bounded strings and counts, and rects that
@@ -1278,175 +1117,4 @@ pub fn validate_snapshot(value: &Value, limits: &Limits) -> Result<(), Validatio
     }
 
     Ok(())
-}
-
-/// Compose a delta onto the snapshot it names, then validate the result.
-///
-/// The four composition rules, in the order they are applied:
-///
-/// 1. `removed` takes each id **with its whole subtree**. The cascade is what
-///    keeps a delta small — dropping a dialog is one id, not one per
-///    descendant — and it is the only rule that leaves no orphans behind.
-/// 2. Removals happen **before** upserts, so one delta can move a node out of
-///    a subtree it is deleting.
-/// 3. `changed` upserts by id, **replacing a node wholesale**. Merging would
-///    need a third state meaning "clear this optional field", which the wire
-///    cannot express.
-/// 4. `rootIds` present replaces the list; absent inherits the base's minus
-///    whatever the removals took. Adding a new root therefore *requires*
-///    sending `rootIds` — otherwise the parentless node is missing from the
-///    root list and validation says so, loudly.
-///
-/// An absent `cursor` is inherited; there is no way to remove one, and none is
-/// needed, because hiding it is `visible: false`.
-///
-/// A base that disagrees is reported rather than patched around: the caller
-/// asks for a full snapshot instead of guessing (§8.3). The composed tree then
-/// goes through [`validate_snapshot`], because a delta is trusted to
-/// *describe* a valid tree, never to produce one.
-///
-/// The order of the composed `nodes` is not normative; this implementation
-/// keeps base order with new nodes appended, which makes output deterministic.
-///
-/// # Errors
-/// Returns a [`ValidationError`] whose `code` matches the reference.
-pub fn apply_tree_delta(
-    base: &Value,
-    delta: &Value,
-    limits: &Limits,
-) -> Result<Value, ValidationError> {
-    let base_revision = delta
-        .get("baseRevision")
-        .and_then(Value::as_i64)
-        .unwrap_or(-1);
-    let held = base.get("revision").and_then(Value::as_i64).unwrap_or(-2);
-    if base_revision != held {
-        return Err(ValidationError::new(
-            "revision",
-            format!(
-                "delta is based on revision {base_revision} but the held snapshot is revision \
-                 {held}; request a full snapshot instead of patching"
-            ),
-        ));
-    }
-
-    let empty = Vec::new();
-    let base_nodes = base
-        .get("nodes")
-        .and_then(Value::as_array)
-        .unwrap_or(&empty);
-
-    let mut order: Vec<String> = Vec::with_capacity(base_nodes.len());
-    let mut by_id: HashMap<String, Value> = HashMap::with_capacity(base_nodes.len());
-    let mut children_of: HashMap<String, Vec<String>> = HashMap::new();
-    for node in base_nodes {
-        let id = node
-            .get("id")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        if let Some(parent) = node.get("parentId").and_then(Value::as_str) {
-            children_of
-                .entry(parent.to_owned())
-                .or_default()
-                .push(id.clone());
-        }
-        order.push(id.clone());
-        by_id.insert(id, node.clone());
-    }
-
-    for raw in delta
-        .get("removed")
-        .and_then(Value::as_array)
-        .unwrap_or(&empty)
-    {
-        let id = raw.as_str().unwrap_or_default();
-        if !by_id.contains_key(id) {
-            return Err(ValidationError::new(
-                "missing-parent",
-                format!(
-                    "delta removes unknown node {id}; the producer's base disagrees with ours, \
-                     so the tree must be resynchronised rather than patched"
-                ),
-            ));
-        }
-        // Iterative descent: a hostile delta must not be able to blow the stack.
-        let mut pending = vec![id.to_owned()];
-        while let Some(current) = pending.pop() {
-            if by_id.remove(&current).is_none() {
-                continue;
-            }
-            if let Some(children) = children_of.get(&current) {
-                pending.extend(children.iter().cloned());
-            }
-        }
-    }
-
-    for node in delta
-        .get("changed")
-        .and_then(Value::as_array)
-        .unwrap_or(&empty)
-    {
-        let id = node
-            .get("id")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        if !by_id.contains_key(&id) {
-            order.push(id.clone());
-        }
-        by_id.insert(id, node.clone());
-    }
-
-    let root_ids: Vec<Value> = match delta.get("rootIds").and_then(Value::as_array) {
-        Some(explicit) => explicit.clone(),
-        None => base
-            .get("rootIds")
-            .and_then(Value::as_array)
-            .unwrap_or(&empty)
-            .iter()
-            .filter(|raw| by_id.contains_key(raw.as_str().unwrap_or_default()))
-            .cloned()
-            .collect(),
-    };
-
-    let mut nodes: Vec<Value> = Vec::with_capacity(by_id.len());
-    let mut seen: HashSet<&str> = HashSet::new();
-    for id in &order {
-        if !seen.insert(id.as_str()) {
-            continue;
-        }
-        if let Some(node) = by_id.get(id) {
-            nodes.push(node.clone());
-        }
-    }
-
-    let mut composed = serde_json::Map::new();
-    composed.insert("v".into(), Value::from(1));
-    composed.insert(
-        "sessionId".into(),
-        base.get("sessionId").cloned().unwrap_or(Value::Null),
-    );
-    composed.insert(
-        "revision".into(),
-        delta.get("revision").cloned().unwrap_or(Value::Null),
-    );
-    composed.insert(
-        "columns".into(),
-        base.get("columns").cloned().unwrap_or(Value::Null),
-    );
-    composed.insert(
-        "rows".into(),
-        base.get("rows").cloned().unwrap_or(Value::Null),
-    );
-    // Absent cursor means unchanged, so the base's carries over.
-    if let Some(cursor) = delta.get("cursor").or_else(|| base.get("cursor")) {
-        composed.insert("cursor".into(), cursor.clone());
-    }
-    composed.insert("rootIds".into(), Value::Array(root_ids));
-    composed.insert("nodes".into(), Value::Array(nodes));
-
-    let composed = Value::Object(composed);
-    validate_snapshot(&composed, limits)?;
-    Ok(composed)
 }

@@ -45,12 +45,14 @@ pub enum Observation<T> {
         /// Observed value.
         value: T,
         /// Provenance of the observation.
-        evidence: String,
+        evidence: EvidenceProvenance,
     },
     /// The fact has no value for the named lifecycle/layout reason.
     Absent {
         /// Why no value exists.
         reason: String,
+        /// Authoritative provenance proving that no value exists.
+        evidence: EvidenceProvenance,
     },
     /// The fact may become observable on a later revision.
     Unknown {
@@ -64,6 +66,66 @@ pub enum Observation<T> {
         /// Why the capability is unavailable.
         reason: String,
     },
+}
+
+/// Provenance carried by every known physical observation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EvidenceProvenance {
+    /// Layer that supplied the fact.
+    pub source: EvidenceSource,
+    /// How that layer obtained the fact.
+    pub method: EvidenceMethod,
+    /// Whether the fact is safe for behavior or diagnostic only.
+    pub strength: EvidenceStrength,
+    /// Stable identity of the provider that made the observation.
+    pub provider_id: String,
+}
+
+/// Layer that supplied a known observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EvidenceSource {
+    /// The UI framework itself.
+    Framework,
+    /// Application-authored information.
+    Application,
+    /// The terminal emulator or terminal grid.
+    Terminal,
+    /// A recognizer derived the fact from another representation.
+    Recognizer,
+    /// The Termwright driver measured the fact.
+    Driver,
+}
+
+/// Method used to produce a known observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EvidenceMethod {
+    /// Native framework/runtime observation.
+    Native,
+    /// Observation made by installed instrumentation.
+    Instrumented,
+    /// Explicit application declaration.
+    Declared,
+    /// Correlation across independently identified facts.
+    Correlated,
+    /// Direct measurement.
+    Measured,
+    /// Deterministic derivation from stronger facts.
+    Derived,
+    /// Best-effort heuristic; never behavioral authority.
+    Heuristic,
+}
+
+/// Authority of a known observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EvidenceStrength {
+    /// May be used to decide behavior.
+    Authoritative,
+    /// May be shown for diagnosis but not used as behavioral proof.
+    Diagnostic,
 }
 
 /// Display and layout facts for one protocol-v2 semantic node.
@@ -94,6 +156,56 @@ pub struct PointerHitRegion {
 pub struct PointerHitGrid {
     /// Non-overlapping recipient rectangles.
     pub regions: Vec<PointerHitRegion>,
+}
+
+/// One canonical half-open pointer row run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderPointerSpan {
+    /// Viewport row containing the run.
+    pub row: i64,
+    /// Inclusive starting column.
+    pub from: i64,
+    /// Exclusive ending column.
+    pub to: i64,
+}
+
+/// Pointer-only application region; never layout or clipping geometry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderPointerRegion {
+    /// Semantic node that the production router associates with the region.
+    pub recipient_id: String,
+    /// Bounding rectangle used only as pointer-region metadata.
+    pub region_bounds: Rect,
+    /// Exact possibly disjoint owned cells as canonical row spans.
+    pub spans: Vec<ProviderPointerSpan>,
+}
+
+/// Revision-bound application evidence. `status` is available, lost, or violation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderRevisionEvidence {
+    /// Stable negotiated provider identity.
+    pub provider_id: String,
+    /// Session this evidence belongs to.
+    pub session_id: String,
+    /// Semantic revision described by the evidence.
+    pub revision: i64,
+    /// `available`, `lost`, or `violation`.
+    pub status: String,
+    /// Provenance present for available evidence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<EvidenceProvenance>,
+    /// Exact pointer regions when the provider supplies them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pointer_regions: Option<Vec<ProviderPointerRegion>>,
+    /// Complete verified production hit grid when negotiated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hit_grid: Option<PointerHitGrid>,
+    /// Diagnostic explanation for lost or violating providers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 /// Whether a tri-state control is on, off, or partially selected.
@@ -214,7 +326,7 @@ pub struct TextRange {
     pub rect: Rect,
 }
 
-/// One accessible node. `bounds`, when present, are absolute viewport cells.
+/// One accessible node with evidence-qualified geometry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Node {
@@ -223,7 +335,7 @@ pub struct Node {
     /// Parent node, or `None` for a root.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
-    /// Semantic role from the closed v1 set.
+    /// Semantic role from the current closed set.
     pub role: Role,
     /// Accessible name; empty when the node has none.
     pub name: String,
@@ -233,9 +345,6 @@ pub struct Node {
     /// Current value of a value-bearing node.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
-    /// Absolute viewport cells, when the node is painted.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bounds: Option<Rect>,
     /// Asserted state flags; unset members are not claims.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<State>,
@@ -262,30 +371,14 @@ pub struct Node {
     /// type, so a reader can tell one unknown thing from another.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub framework_type: Option<String>,
-    /// Whether the producer can say if these cells are covered by something
-    /// painted later. Only a producer that observes paint order may say
-    /// `Known`; the driver refuses pointer actions on anything else.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub occlusion: Option<Occlusion>,
     /// Where this node's facts came from, as a whole.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub p: Option<Provenance>,
     /// Where individual fields came from, when they differ from `p`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub px: Option<BTreeMap<String, Provenance>>,
-    /// Protocol v2 qualified layout facts; omitted by strict v1 snapshots.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub geometry: Option<NodeGeometryObservations>,
-}
-
-/// Whether covered cells are answerable for a node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Occlusion {
-    /// The producer observes paint order and can answer.
-    Known,
-    /// It cannot; the driver refuses pointer actions on this node.
-    Unknown,
+    /// Qualified layout facts for this committed observation.
+    pub geometry: NodeGeometryObservations,
 }
 
 /// Where a semantic fact came from. Closed set.
@@ -314,7 +407,6 @@ impl Node {
             name: name.into(),
             description: None,
             value: None,
-            bounds: None,
             state: None,
             extended: None,
             actions: None,
@@ -323,10 +415,22 @@ impl Node {
             text_ranges: None,
             test_id: None,
             framework_type: None,
-            occlusion: None,
             p: None,
             px: None,
-            geometry: None,
+            geometry: NodeGeometryObservations {
+                displayed: Observation::Unsupported {
+                    capability: "displayed".into(),
+                    reason: "framework-unobservable".into(),
+                },
+                intended_rect: Observation::Unsupported {
+                    capability: "intended-geometry".into(),
+                    reason: "framework-unobservable".into(),
+                },
+                visible_rect: Observation::Unsupported {
+                    capability: "clipped-geometry".into(),
+                    reason: "framework-unobservable".into(),
+                },
+            },
         }
     }
 
@@ -343,9 +447,9 @@ impl Node {
         self
     }
 
-    /// Set absolute viewport bounds.
-    pub fn with_bounds(mut self, bounds: Rect) -> Self {
-        self.bounds = Some(bounds);
+    /// Set evidence-qualified layout facts.
+    pub fn with_geometry(mut self, geometry: NodeGeometryObservations) -> Self {
+        self.geometry = geometry;
         self
     }
 
@@ -393,7 +497,7 @@ pub struct Cursor {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Snapshot {
-    /// Snapshot format version; always 1.
+    /// Snapshot format version; always 2.
     pub v: u8,
     /// Session this snapshot belongs to.
     pub session_id: String,
@@ -410,12 +514,13 @@ pub struct Snapshot {
     pub root_ids: Vec<String>,
     /// Every node in the tree.
     pub nodes: Vec<Node>,
-    /// Qualified coordinate space for all known geometry in protocol v2.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub coordinate_space: Option<Observation<String>>,
-    /// Exact fresh-pointer ownership map for protocol v2, when supported.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hit_grid: Option<Observation<PointerHitGrid>>,
+    /// Qualified coordinate space for all known geometry.
+    pub coordinate_space: Observation<String>,
+    /// Exact fresh-pointer ownership map, or an explicit non-known result.
+    pub hit_grid: Observation<PointerHitGrid>,
+    /// Application evidence collected atomically for this semantic revision.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provider_evidence: Vec<ProviderRevisionEvidence>,
 }
 
 impl Snapshot {
@@ -423,7 +528,7 @@ impl Snapshot {
     /// filled in by [`crate::Client::publish`].
     pub fn new(columns: i64, rows: i64) -> Self {
         Self {
-            v: 1,
+            v: 2,
             session_id: String::new(),
             revision: 0,
             columns,
@@ -431,24 +536,20 @@ impl Snapshot {
             cursor: None,
             root_ids: Vec::new(),
             nodes: Vec::new(),
-            coordinate_space: None,
-            hit_grid: None,
-        }
-    }
-
-    /// Empty qualified v2 snapshot. Every appended node still needs Geometry.
-    pub fn new_v2(columns: i64, rows: i64) -> Self {
-        Self {
-            v: 2,
-            coordinate_space: Some(Observation::Known {
+            coordinate_space: Observation::Known {
                 value: "viewport-cells".into(),
-                evidence: "adapter".into(),
-            }),
-            hit_grid: Some(Observation::Unsupported {
+                evidence: EvidenceProvenance {
+                    source: EvidenceSource::Framework,
+                    method: EvidenceMethod::Instrumented,
+                    strength: EvidenceStrength::Authoritative,
+                    provider_id: "termwright-rust-client".into(),
+                },
+            },
+            hit_grid: Observation::Unsupported {
                 capability: "pointer-hit-grid".into(),
                 reason: "framework-unobservable".into(),
-            }),
-            ..Self::new(columns, rows)
+            },
+            provider_evidence: Vec::new(),
         }
     }
 

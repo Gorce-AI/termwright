@@ -79,6 +79,19 @@ The inspector has three views:
 - **Semantic** presents readable properties for the selected node.
 - **Logs** presents application logs up to the current replay time.
 
+For a live semantic node, **Semantic** also asks the worker's production
+`ActionPlanner` four questions: **Can click?**, **Can hover?**, **Can focus?**,
+and **Can type?**. Each answer carries the exact committed contract/revision,
+strategy, requirements and evidence provider used by the corresponding
+Locator action. Runner rejects a batch spanning different checkpoints; it does
+not reconstruct actionability from node fields in the browser.
+
+The Effective Session Contract card shows the certified adapter ID,
+application providers, terminal mouse observability, authoritative capability
+provenance, and the resulting contract-level input API. Current mouse mode,
+coverage, disabled state and occlusion remain runtime actionability results,
+not capability labels.
+
 Selecting a node highlights it only when the trace contains exact geometry for
 that recorded state. Runner does not infer a rectangle from rendered text or
 paint order.

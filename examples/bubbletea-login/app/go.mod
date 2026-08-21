@@ -5,7 +5,10 @@ go 1.25.0
 require (
 	charm.land/bubbles/v2 v2.1.1
 	charm.land/bubbletea/v2 v2.0.8
+	github.com/gorce-ai/termwright/clients/go v0.0.0
 )
+
+replace github.com/gorce-ai/termwright/clients/go => ../../../clients/go
 
 require (
 	charm.land/lipgloss/v2 v2.0.4 // indirect

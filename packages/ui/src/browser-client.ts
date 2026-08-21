@@ -12,6 +12,7 @@ import {
   toBase64,
   type ClientMessage,
   type ServerMessage,
+  type UiActionability,
 } from './events.js';
 import type { TraceOverview, TraceStatePayload } from './trace-source.js';
 import type { DataSource, DataSourceFeatures, ViewerState } from './data-source.js';
@@ -44,6 +45,12 @@ export class RunnerClient implements DataSource {
   #onStatus: (connected: boolean) => void = () => undefined;
   /** Archive selected by this browser tab, never shared through the hub. */
   #archivePath: string | undefined;
+  #nextInspection = 0;
+  readonly #inspections = new Map<string, {
+    readonly resolve: (results: readonly UiActionability[]) => void;
+    readonly reject: (error: Error) => void;
+    readonly timer: ReturnType<typeof setTimeout>;
+  }>();
 
   constructor(token: string = new URLSearchParams(location.search).get('token') ?? '') {
     this.#token = token;
@@ -65,7 +72,17 @@ export class RunnerClient implements DataSource {
     socket.addEventListener('open', () => this.#onStatus(true));
     socket.addEventListener('message', (event: MessageEvent<string>) => {
       try {
-        this.#onMessage(parseServerMessage(event.data));
+        const message = parseServerMessage(event.data);
+        if (message.type === 'actionability-inspection') {
+          const pending = this.#inspections.get(message.requestId);
+          if (pending === undefined) return;
+          clearTimeout(pending.timer);
+          this.#inspections.delete(message.requestId);
+          if (message.results !== undefined) pending.resolve(message.results);
+          else pending.reject(new Error(message.error ?? 'actionability inspection failed'));
+          return;
+        }
+        this.#onMessage(message);
       } catch {
         // A frame this build does not understand is dropped, not fatal: the
         // server may be newer than the page a browser tab kept open.
@@ -86,6 +103,25 @@ export class RunnerClient implements DataSource {
   /** Forwards raw terminal bytes (recorder mode). */
   sendInput(sessionId: string, data: string): void {
     this.send({ v: 1, type: 'input', sessionId, dataB64: toBase64(new TextEncoder().encode(data)) });
+  }
+
+  /** Reads the live production ActionPlanner without executing an action. */
+  inspectActionability(sessionId: string, nodeId: string): Promise<readonly UiActionability[]> {
+    const requestId = `inspect:${++this.#nextInspection}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.#inspections.delete(requestId);
+        reject(new Error('live actionability inspection timed out'));
+      }, 5_000);
+      this.#inspections.set(requestId, { resolve, reject, timer });
+      if (this.#socket?.readyState !== WebSocket.OPEN) {
+        clearTimeout(timer);
+        this.#inspections.delete(requestId);
+        reject(new Error('the Runner is disconnected'));
+        return;
+      }
+      this.send({ v: 1, type: 'inspect-actionability', requestId, sessionId, nodeId });
+    });
   }
 
   async state(): Promise<ServerState> {

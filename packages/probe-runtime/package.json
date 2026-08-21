@@ -27,6 +27,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@termwright/evidence-provider": "workspace:*",
     "@termwright/protocol": "workspace:*"
   }
 }

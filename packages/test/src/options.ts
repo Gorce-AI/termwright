@@ -9,7 +9,7 @@
  */
 
 import type { LogLevel } from '@termwright/protocol';
-import type { TimeoutClasses } from '@termwright/driver';
+import type { SessionCapabilityId, TimeoutClasses } from '@termwright/driver';
 import type { ResolvedTermwrightConfig, TestTimeoutClasses, TraceMode } from './config.js';
 
 /** Options a file or suite may override with `test.scoped`. */
@@ -19,6 +19,8 @@ export interface TermwrightOptions {
   readonly columns?: number;
   readonly rows?: number;
   readonly terminalProfile?: string;
+  /** Replaces the project capability requirements for this scope. */
+  readonly requiredCapabilities?: readonly SessionCapabilityId[];
   /**
    * Merged key by key over the project's `env` — scoping one variable keeps
    * the rest, which is the only behaviour that makes scoping usable here.
@@ -38,6 +40,7 @@ export interface LaunchOverrides {
   readonly columns?: number;
   readonly rows?: number;
   readonly terminalProfile?: string;
+  readonly requiredCapabilities?: readonly SessionCapabilityId[];
   readonly env?: Readonly<Record<string, string>>;
   readonly timeouts?: TimeoutClasses;
   readonly trace?: TraceMode;
@@ -49,6 +52,7 @@ export interface MergedOptions {
   readonly columns: number;
   readonly rows: number;
   readonly terminalProfile: string | undefined;
+  readonly requiredCapabilities: readonly SessionCapabilityId[];
   readonly env: Readonly<Record<string, string>>;
   /** Driver timeout classes only; the `expect` class never reaches the driver. */
   readonly timeouts: TimeoutClasses;
@@ -75,6 +79,7 @@ export function mergeOptions(
     columns: call.columns ?? scoped.columns ?? config.columns,
     rows: call.rows ?? scoped.rows ?? config.rows,
     terminalProfile: call.terminalProfile ?? scoped.terminalProfile ?? config.terminalProfile,
+    requiredCapabilities: call.requiredCapabilities ?? scoped.requiredCapabilities ?? config.requiredCapabilities,
     env: { ...baseEnv, ...config.env, ...(scoped.env ?? {}), ...(call.env ?? {}) },
     timeouts: { ...configTimeouts, ...strip(scopedTimeouts), ...strip(call.timeouts ?? {}) },
     trace: call.trace ?? scoped.trace ?? config.trace,

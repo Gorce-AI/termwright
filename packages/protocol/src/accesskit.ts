@@ -290,7 +290,10 @@ export function toAccessKitTreeUpdate(
     const id = idOf.get(node.id)!;
     const state = node.state;
     if (state?.focused === true && focus === undefined) focus = id;
-    if (node.bounds !== undefined) cellBounds[String(id)] = node.bounds;
+    const visibleRect = node.geometry.visibleRect.status === 'known'
+      ? node.geometry.visibleRect.value
+      : undefined;
+    if (visibleRect !== undefined) cellBounds[String(id)] = visibleRect;
 
     const accessKitNode: AccessKitNode = {
       role: accessKitRoleFor(node),
@@ -298,8 +301,8 @@ export function toAccessKitTreeUpdate(
       ...(node.description === undefined ? {} : { description: node.description }),
       ...(node.value === undefined ? {} : { value: node.value }),
       ...(childrenOf.has(node.id) ? { children: childrenOf.get(node.id)! } : {}),
-      ...(node.bounds !== undefined && options.cellSize !== undefined
-        ? { bounds: boundsFor(node.bounds, options.cellSize) }
+      ...(visibleRect !== undefined && options.cellSize !== undefined
+        ? { bounds: boundsFor(visibleRect, options.cellSize) }
         : {}),
       ...(actionsFor(node.actions) === undefined ? {} : { actions: actionsFor(node.actions)! }),
       ...(relation(node.labelledBy) === undefined ? {} : { labelledBy: relation(node.labelledBy)! }),

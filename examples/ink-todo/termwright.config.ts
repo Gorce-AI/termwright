@@ -10,6 +10,7 @@ export default defineTermwrightConfig({
   columns: 72,
   rows: 18,
   command: withProbe('node', [process.execPath, cli]).command,
+  requiredCapabilities: ['semantic-tree', 'paired-revisions'],
   trace: 'retain-on-failure',
   outputDir: 'termwright-report',
   timeouts: { expect: 5_000, action: 5_000 },

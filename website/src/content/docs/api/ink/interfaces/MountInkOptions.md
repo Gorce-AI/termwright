@@ -3,15 +3,15 @@ title: "Interface: MountInkOptions"
 editUrl: false
 ---
 
-[**@termwright/ink-testing**](../../)
+[**@termwright/ink**](../../)
 
 ***
 
-[@termwright/ink-testing](../../) / MountInkOptions
+[@termwright/ink](../../) / MountInkOptions
 
 # Interface: MountInkOptions
 
-Defined in: [ink-testing/src/mount.tsx:45](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L45)
+Defined in: [ink/src/mount.tsx:45](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L45)
 
 Options for [mountInk](../../functions/mountink/).
 
@@ -21,7 +21,7 @@ Options for [mountInk](../../functions/mountink/).
 
 > `readonly` `optional` **columns?**: `number`
 
-Defined in: [ink-testing/src/mount.tsx:47](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L47)
+Defined in: [ink/src/mount.tsx:47](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L47)
 
 Terminal width in cells. Default 80.
 
@@ -31,7 +31,7 @@ Terminal width in cells. Default 80.
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: [ink-testing/src/mount.tsx:57](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L57)
+Defined in: [ink/src/mount.tsx:57](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L57)
 
 Extra variables for the in-process probe session, never written to `process.env`.
 
@@ -41,7 +41,7 @@ Extra variables for the in-process probe session, never written to `process.env`
 
 > `readonly` `optional` **envMode?**: `EnvMode`
 
-Defined in: [ink-testing/src/mount.tsx:71](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L71)
+Defined in: [ink/src/mount.tsx:71](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L71)
 
 How the session environment is built, as in `launchTerminal`. Default
 `'replace'`.
@@ -61,7 +61,7 @@ separate process can have — use `launchInkFixture` for that.
 
 > `readonly` `optional` **ink?**: [`MountInkRenderOptions`](../../type-aliases/mountinkrenderoptions/)
 
-Defined in: [ink-testing/src/mount.tsx:86](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L86)
+Defined in: [ink/src/mount.tsx:86](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L86)
 
 Ink render options this mount overrides.
 
@@ -71,7 +71,7 @@ Ink render options this mount overrides.
 
 > `readonly` `optional` **logs?**: readonly `AppLogSource`[]
 
-Defined in: [ink-testing/src/mount.tsx:80](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L80)
+Defined in: [ink/src/mount.tsx:80](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L80)
 
 Log files to follow for the lifetime of the mount, as in `launchTerminal`.
 
@@ -86,7 +86,7 @@ reads them straight off the harness.
 
 > `readonly` `optional` **rows?**: `number`
 
-Defined in: [ink-testing/src/mount.tsx:49](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L49)
+Defined in: [ink/src/mount.tsx:49](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L49)
 
 Terminal height in cells. Default 24.
 
@@ -96,7 +96,7 @@ Terminal height in cells. Default 24.
 
 > `readonly` `optional` **settleTimeout?**: `number`
 
-Defined in: [ink-testing/src/mount.tsx:84](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L84)
+Defined in: [ink/src/mount.tsx:84](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L84)
 
 How long the initial mount and each `rerender` may take to commit.
 
@@ -106,7 +106,7 @@ How long the initial mount and each `rerender` may take to commit.
 
 > `readonly` `optional` **timeouts?**: `TimeoutClasses`
 
-Defined in: [ink-testing/src/mount.tsx:82](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L82)
+Defined in: [ink/src/mount.tsx:82](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L82)
 
 Driver timeout classes, as in `launchTerminal`.
 
@@ -116,7 +116,7 @@ Driver timeout classes, as in `launchTerminal`.
 
 > `readonly` `optional` **wrapper?**: `ComponentType`\<\{ `children`: `ReactNode`; \}\>
 
-Defined in: [ink-testing/src/mount.tsx:55](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L55)
+Defined in: [ink/src/mount.tsx:55](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L55)
 
 Providers the component needs — a theme, a store, a router. Applied inside
 the error boundary, so a wrapper that throws is reported like any other

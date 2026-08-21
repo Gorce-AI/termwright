@@ -54,14 +54,19 @@ describe.skipIf(!pty)('the todo app', () => {
     const app = await terminal.launch();
     await app.waitForReady();
 
-    await app.press('Tab');
-    await app.waitForStable();
-    await app.press('ArrowDown');
-    await app.waitForStable();
-    await app.press('Tab');
-    await app.waitForStable();
-    await app.press('Tab');
-    await app.waitForStable();
+    async function pressAndWaitForRender(key: string): Promise<void> {
+      // Arm the causal boundary before input. Calling waitForStable() after the
+      // write can observe the old screen as already quiet on a loaded runner
+      // and let the next key overtake the React render caused by this one.
+      const before = app.checkpoint();
+      await app.press(key);
+      await app.waitForRender({ after: before.screenRevision });
+    }
+
+    await pressAndWaitForRender('Tab');
+    await pressAndWaitForRender('ArrowDown');
+    await pressAndWaitForRender('Tab');
+    await pressAndWaitForRender('Tab');
 
     await step('open the dialog', async () => {
       await app.press('Enter');
@@ -85,12 +90,32 @@ describe.skipIf(!pty)('the todo app', () => {
     await step('open it again and confirm', async () => {
       await app.press('Enter');
       await expect(app.getByRole('dialog')).toBeAttached();
-      await app.press('Tab');
-      await app.waitForStable();
+      await pressAndWaitForRender('Tab');
       await app.press('Enter');
     });
 
     await expect(app.getByRole('listitem', { name: 'record a demo' })).toBeDetached();
     await expect(app).toHaveText('status: removed record a demo');
+  });
+
+  test('uses the production pointer router but delivers clicks through the PTY', async ({ terminal }) => {
+    const app = await terminal.launch();
+    await app.waitForReady();
+
+    const remove = await app.getByRole('button', { name: 'Remove' }).click();
+    await expect(app.getByRole('dialog', { name: 'Confirm' })).toBeAttached();
+    const confirm = await app.getByRole('button', { name: 'Delete' }).click();
+
+    await expect(app.getByRole('listitem', { name: 'write the README' })).toBeDetached();
+    await expect(app).toHaveText('status: removed write the README');
+    expect(remove.executed.map((step) => `${step.device}:${step.kind}`)).toEqual([
+      'mouse:down',
+      'mouse:up',
+    ]);
+    expect(confirm.plan.strategy).toBe('authoritative-pointer-region');
+    expect(app.contract()?.capabilities['pointer-hit-testing']).toMatchObject({
+      status: 'supported',
+      evidence: { providerId: 'ink-todo-production-router' },
+    });
   });
 });

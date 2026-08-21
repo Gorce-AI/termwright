@@ -13,7 +13,7 @@ editUrl: false
 
 > **PtyUnsubscribe** = () => `void`
 
-Defined in: [pty.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L22)
+Defined in: [driver/src/pty.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L22)
 
 Unsubscribe handle returned by the `on*` registrations.
 

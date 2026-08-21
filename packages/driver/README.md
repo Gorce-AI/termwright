@@ -54,7 +54,7 @@ if (terminal.capabilities().semanticTree) {
   console.log(await approve.hitTest());
   console.log(await approve.extendedState()); // application-domain JSON, if published
   const receipt = await approve.activate(); // 'click' | 'focus-enter' | 'focus-space'
-  console.log(receipt.strategy);
+  console.log(receipt.plan.strategy);
 
   await terminal.locator('dialog button#reject').click();
 }
@@ -93,17 +93,18 @@ await terminal.close();
   revisions only when the probe provides stable identity. Frame-local semantic
   refs are refused, grid refs remain revision-bound, and a removed stable node
   raises `stale-snapshot`.
-- **Typed failures.** `timeout`, `stale-snapshot`, `ambiguous-locator`,
-  `unsupported-action`, `history-truncated`, `protocol-violation`, `capacity`,
-  `process-exited`, `session-closed` — each with a screen excerpt, candidates
-  and a suggestion.
+- **Typed failures.** Capability absence, semantic/probe attachment, current
+  actionability, terminal input mode, provider loss/violation, adapter guarantee
+  violation, stale observations, strict locator failures, process exit, and
+  protocol failures have distinct machine-readable codes and actionable
+  diagnostics.
 - **Honest degradation.** No mouse tracking means `click()` fails with
-  `unsupported-action` instead of sending bytes nobody reads. Semantic pointer
-  actions also require negotiated `absolute-bounds` and proof of the exact
-  pointer recipient. Legacy paint-order knowledge is not that proof. No
-  semantic tree means no invented roles.
+  `input-mode-disabled` instead of sending bytes nobody reads. Semantic pointer
+  actions require known terminal-cell geometry and proof of the exact pointer
+  recipient. Paint order is not that proof. No semantic tree means no invented
+  roles.
 - **Dormant by default.** The endpoint and token are injected as
-  `TERMWRIGHT_ENDPOINT` / `TERMWRIGHT_TOKEN` / `TERMWRIGHT_PROTOCOL`; without
+  `TERMWRIGHT_ENDPOINT` / `TERMWRIGHT_TOKEN`; without
   them a conforming probe or adapter opens nothing and the run is byte-identical.
 
 ## Terminal profiles
@@ -162,29 +163,17 @@ Categories are `api` (calls), `wait` (what was awaited, how long, how it ended),
 `paste`/`write` payloads are logged by size only. Switched off, nothing is
 wrapped and no listener is registered.
 
-## Incremental trees
+## Semantic snapshots
 
-An adapter that offers deltas gets them by default: a semantic tree changes on
-nearly every keystroke, and sending the whole thing each time is what makes the
-semantic channel expensive. The driver composes each delta onto the tree it
-holds and pairs the result with its render marker exactly as it would a full
-snapshot.
+The semantic channel uses `termwright/2` and complete evidence-qualified
+snapshots. Each semantic revision is validated independently, retained, and
+paired with its authenticated render marker.
 
-When a delta cannot be composed — a base revision the driver never held, a node
-it does not know — the driver asks for a full tree (`get-tree`) and ignores
-further deltas until it arrives. That is reported as `delta-resync`, not as a
-dropped revision: nothing was lost, and a repair should not read like damage.
-The last good tree stays observable throughout.
-
-`treeUpdates: 'snapshots'` declines deltas from an adapter that offers them —
-the switch to reach for when a replay and a live session disagree and the delta
-path is a suspect.
-
-Evidence-qualified geometry, visibility and exact pointer ownership use
-`termwright/2`, which is the default. `semanticProtocol: 'termwright/1'` is an
-explicit compatibility mode for an older producer. V1 never enables pointer
-actions from unqualified bounds. V2 always uses full snapshots; the driver
-never applies v1 delta semantics to qualified observations.
+`displayed`, `intendedRect`, `visibleRect`, coordinate space, and pointer
+ownership remain separate observations. Missing framework evidence is
+`unsupported`. `unknown` is reserved for a temporary unsettled revision or
+provider refresh; a settled guaranteed fact must be `known` or `absent`,
+otherwise the provider or adapter fails closed.
 
 ## Knowing when the verdict is final
 

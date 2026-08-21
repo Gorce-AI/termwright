@@ -15,6 +15,7 @@
 
 import {
   DEFAULT_LIMITS,
+  evidence,
   type ProbeInfo,
   type ProtocolLimits,
   type SemanticSnapshot,
@@ -23,19 +24,22 @@ import { recognize } from '@termwright/recognizers';
 import { observeTree, type ObservableNode } from './observe.js';
 import type { MarkerSink } from './sink.js';
 import { PACKAGE_VERSION } from './version.js';
+import { geometryProvider, type CommittedFrameGeometry } from './instrumentation.js';
 
 /** The renderer surface the session uses. Structural, so tests need no framework. */
 export interface ObservableRenderer {
   readonly root: ObservableNode;
-  on(event: string, handler: () => void): void;
+  on(event: string, handler: (event?: { readonly frameId?: number }) => void): void;
   readonly width?: number;
   readonly height?: number;
+  readonly terminalWidth?: number;
+  readonly terminalHeight?: number;
+  readonly frameId?: number;
   hitTest?(x: number, y: number): number;
 }
 
 /** Where a finished snapshot goes. */
 export interface Publisher {
-  readonly protocol?: 'termwright/1' | 'termwright/2';
   /** Send the tree for a revision. Returns the marker to write, if any. */
   publish(snapshot: SemanticSnapshot, metrics?: { readonly probeEvents: number }): string | undefined;
 }
@@ -58,6 +62,8 @@ export interface SessionOptions {
   readonly rows?: number;
   /** Negotiated limits, resolved lazily when the handshake finishes late. */
   readonly limits?: ProtocolLimits | (() => ProtocolLimits);
+  /** Called once when a negotiated authoritative observation cannot be supplied. */
+  readonly onGuaranteeViolation?: (error: Error) => void;
 }
 
 /** A running session. */
@@ -83,12 +89,12 @@ export function probeInfo(frameworkVersion?: string): ProbeInfo {
     // `paint-order` earns occlusion reasoning, which is what lets a driver
     // gate a click on "is my target the thing at this cell". OpenTUI exposes a
     // z-order child list and builds its hit grid from the same coordinates, so
-    // the probe can generally report it — and omits it per object on any tree
-    // where the list turned out to be unreadable, rather than passing off
-    // document order as paint order.
+    // the certified probe guarantees it. If an exact-version invariant breaks,
+    // the session emits adapter-guarantee-violation instead of making the
+    // capability structural or passing off document order as paint order.
     // The optional @termwright/opentui SDK publishes developer intent through
     // a Symbol.for + WeakMap channel consumed by every observation.
-    capabilities: ['stable-identity', 'paint-order', 'annotations'],
+    capabilities: ['stable-identity', 'intended-rect', 'visible-rect', 'paint-order', 'annotations'],
   };
 }
 
@@ -112,35 +118,48 @@ export function startSession(options: SessionOptions): ProbeSession {
   let frames = 0;
   let stopped = false;
 
-  const capture = (): void => {
+  const captureCommitted = (requestedFrameId?: number): void => {
     if (stopped) return;
     frames += 1;
 
     let snapshot: SemanticSnapshot;
     let marker: string | undefined;
     try {
+      const provider = geometryProvider(renderer);
+      const frameId = requestedFrameId ?? renderer.frameId;
+      if (provider === undefined || frameId === undefined) {
+        throw new Error('certified OpenTUI frame geometry provider is unavailable');
+      }
+      const geometry = provider.getCommitted(frameId);
+      if (geometry === undefined) {
+        throw new Error(`OpenTUI frame ${frameId} has no committed geometry observation`);
+      }
       const limits = limitsOf();
       const observation = observeTree(renderer.root, { frame: frames, limits });
+      if (!observation.paintOrderKnown) {
+        throw new Error('certified OpenTUI adapter lost authoritative render order for a committed frame');
+      }
+      const qualifiedFrame = qualifyFrame(observation.frame, geometry);
       revision += 1;
-      snapshot = recognize(observation.frame, {
+      snapshot = recognize(qualifiedFrame, {
         sessionId: sessionIdOf(),
         revision,
-        columns: options.columns ?? renderer.width ?? 80,
-        rows: options.rows ?? renderer.height ?? 24,
+        columns: options.columns ?? geometry.columns,
+        rows: options.rows ?? geometry.rows,
         framework: 'opentui',
         paintOrderKnown: observation.paintOrderKnown,
         maxStringBytes: limits.maxStringBytes,
       });
-      if (publisher.protocol === 'termwright/2') {
-        snapshot = qualifySnapshot(snapshot, observation.frame, renderer);
-      }
+      snapshot = qualifySnapshot(snapshot, qualifiedFrame, renderer, geometry);
       marker = publisher.publish(snapshot, {
         probeEvents: observation.frame.objects.length + (observation.frame.operations?.length ?? 0),
       });
-    } catch {
+    } catch (error) {
       // Observation must never take the application down. A failed frame is a
       // frame the driver does not hear about, which the protocol already
       // tolerates — revisions are strictly increasing, not contiguous.
+      stopped = true;
+      options.onGuaranteeViolation?.(error instanceof Error ? error : new Error(String(error)));
       return;
     }
 
@@ -149,7 +168,7 @@ export function startSession(options: SessionOptions): ProbeSession {
     if (marker !== undefined) sink?.writeMarker(marker);
   };
 
-  renderer.on('frame', capture);
+  renderer.on('frame', (event) => captureCommitted(event?.frameId));
 
   return {
     get revision() {
@@ -158,71 +177,109 @@ export function startSession(options: SessionOptions): ProbeSession {
     get frames() {
       return frames;
     },
-    capture,
+    capture: () => captureCommitted(),
     stop() {
       stopped = true;
     },
   };
 }
 
+function qualifyFrame(
+  frame: import('@termwright/protocol').ProbeFrame,
+  geometry: CommittedFrameGeometry,
+): import('@termwright/protocol').ProbeFrame {
+  return {
+    ...frame,
+    objects: frame.objects.map((object) => {
+      const intendedRect = geometry.intended.get(object.identity.value);
+      const visibleRect = geometry.visible.get(object.identity.value);
+      const displayed = object.state?.displayed;
+      if (displayed !== false && (intendedRect === undefined || visibleRect === undefined)) {
+        throw new Error(`OpenTUI frame ${geometry.frameId} omitted geometry for displayed object ${object.identity.value}`);
+      }
+      const unobservable = object.unobservable?.filter(
+        (field) => field !== 'intendedRect' && field !== 'visibleRect',
+      );
+      return {
+        ...object,
+        ...(displayed === false
+          ? {}
+          : { geometry: { intendedRect: intendedRect!, visibleRect: visibleRect! } }),
+        ...(unobservable === undefined ? {} : { unobservable }),
+      };
+    }),
+  };
+}
+
 function qualifySnapshot(
-  legacy: SemanticSnapshot,
+  base: SemanticSnapshot,
   frame: import('@termwright/protocol').ProbeFrame,
   renderer: ObservableRenderer,
+  committed: CommittedFrameGeometry,
 ): SemanticSnapshot {
   const byIdentity = new Map(frame.objects.map((object) => [object.identity.value, object]));
-  const nodes = legacy.nodes.map((node) => {
+  const nodes = base.nodes.map((node) => {
     const identity = node.id.startsWith('n') ? node.id.slice(1) : '';
     const object = byIdentity.get(identity);
     const displayed = object?.state?.displayed;
     const intended = object?.geometry?.intendedRect;
-    const { bounds: _bounds, occlusion: _occlusion, ...semantic } = node;
+    const visible = object?.geometry?.visibleRect;
+    const geometryEvidence = () => ({
+      ...evidence('framework', 'instrumented', 'authoritative', 'opentui'),
+      strength: 'authoritative' as const,
+    });
+    if (object === undefined || typeof displayed !== 'boolean') {
+      throw new Error(`certified OpenTUI instrumentation omitted display evidence for ${node.id}`);
+    }
     return {
-      ...semantic,
+      ...node,
       geometry: {
-        displayed: typeof displayed === 'boolean'
-          ? { status: 'known' as const, value: displayed, evidence: 'probe' as const }
-          : { status: 'unknown' as const, reason: 'not-reported' as const },
+        displayed: { status: 'known' as const, value: displayed, evidence: geometryEvidence() },
         intendedRect: intended !== undefined
-          ? { status: 'known' as const, value: intended, evidence: 'probe' as const }
-          : { status: 'absent' as const, reason: 'not-laid-out' as const },
-        visibleRect: { status: 'unsupported' as const, capability: 'visible-rect', reason: 'framework-unobservable' as const },
+          ? { status: 'known' as const, value: intended, evidence: geometryEvidence() }
+          : { status: 'absent' as const, reason: 'not-laid-out' as const, evidence: geometryEvidence() },
+        visibleRect: displayed === false
+          ? { status: 'absent' as const, reason: 'not-displayed' as const, evidence: geometryEvidence() }
+          : visible !== undefined
+            ? { status: 'known' as const, value: visible, evidence: geometryEvidence() }
+            : { status: 'absent' as const, reason: 'not-laid-out' as const, evidence: geometryEvidence() },
       },
     };
   });
   const ids = new Set(nodes.map((node) => node.id));
-  let hitGrid: SemanticSnapshot['hitGrid'] = {
-    status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable',
-  };
-  if (typeof renderer.hitTest === 'function') {
-    const regions: { rect: { row: number; column: number; width: number; height: number }; recipientId: string }[] = [];
-    let complete = true;
-    try {
-      for (let row = 0; row < legacy.rows && complete; row += 1) {
-        let owner: string | null = null;
-        let start = 0;
-        for (let column = 0; column <= legacy.columns; column += 1) {
-          const hit = column < legacy.columns ? renderer.hitTest(column, row) : 0;
-          const next = hit === 0 ? null : `n${hit}`;
-          if (next !== null && !ids.has(next)) { complete = false; break; }
-          if (next === owner) continue;
-          if (owner !== null) regions.push({ rect: { row, column: start, width: column - start, height: 1 }, recipientId: owner });
-          owner = next;
-          start = column;
-        }
+  if (typeof renderer.hitTest !== 'function') {
+    throw new Error('certified OpenTUI renderer does not expose native hitTest');
+  }
+  const regions: { rect: { row: number; column: number; width: number; height: number }; recipientId: string }[] = [];
+  for (let row = 0; row < base.rows; row += 1) {
+    let owner: string | null = null;
+    let start = 0;
+    for (let column = 0; column <= base.columns; column += 1) {
+      const surfaceColumn = column - committed.surfaceOrigin.column;
+      const surfaceRow = row - committed.surfaceOrigin.row;
+      const onSurface = surfaceColumn >= 0 && surfaceColumn < committed.surfaceColumns
+        && surfaceRow >= 0 && surfaceRow < committed.surfaceRows;
+      const hit = column < base.columns && onSurface ? renderer.hitTest(surfaceColumn, surfaceRow) : 0;
+      const next = hit === 0 ? null : `n${hit}`;
+      if (next !== null && !ids.has(next)) {
+        throw new Error(`native OpenTUI hit grid returned unknown renderable ${hit}`);
       }
-      hitGrid = complete
-        ? { status: 'known', value: { regions }, evidence: 'hit-grid' }
-        : { status: 'unknown', reason: 'temporary' };
-    } catch {
-      hitGrid = { status: 'unknown', reason: 'temporary' };
+      if (next === owner) continue;
+      if (owner !== null) regions.push({ rect: { row, column: start, width: column - start, height: 1 }, recipientId: owner });
+      owner = next;
+      start = column;
     }
   }
+  const hitGrid: SemanticSnapshot['hitGrid'] = {
+    status: 'known',
+    value: { regions },
+    evidence: evidence('framework', 'native', 'authoritative', 'opentui'),
+  };
   return {
-    ...legacy,
+    ...base,
     v: 2,
     nodes,
-    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence('framework', 'instrumented', 'authoritative', 'opentui') },
     hitGrid,
   };
 }

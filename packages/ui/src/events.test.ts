@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { EffectiveSessionContract } from '@termwright/protocol';
+import { ADAPTER_CAPABILITIES, SESSION_CAPABILITIES } from '@termwright/protocol/contract';
+import { CONDITION_KINDS } from '@termwright/protocol/action-model';
 import {
   encodeMessage,
   fromBase64,
@@ -11,6 +14,14 @@ import {
 
 describe('server messages', () => {
   it('round-trips every message the contract lists', () => {
+    const contract: EffectiveSessionContract = {
+      contractId: 's1:0', sessionId: 's1', epoch: 0, protocol: 'termwright/2', framework: null,
+      providers: [{ id: 'terminal', kind: 'terminal', version: '1' }],
+      capabilities: Object.fromEntries(SESSION_CAPABILITIES.map((id) => [id, id === 'keyboard-input'
+        ? { status: 'supported', evidence: { source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'terminal' } }
+        : { status: 'unsupported', reason: 'not-negotiated' }])) as EffectiveSessionContract['capabilities'],
+      terminal: { profile: 'default', platform: 'darwin', mouseModesObservable: true },
+    };
     const messages: ServerMessage[] = [
       {
         v: 1,
@@ -41,6 +52,7 @@ describe('server messages', () => {
           capabilities: ['stable-identity'],
         },
         capabilities: ['tree', 'states'],
+        contract,
         adapterStatus: 'attached',
         columns: 80,
         rows: 24,
@@ -72,7 +84,34 @@ describe('server messages', () => {
         type: 'semantic',
         sessionId: 's1',
         revision: 7,
-        snapshot: { v: 1, sessionId: 's1', revision: 7, columns: 80, rows: 24, rootIds: [], nodes: [] },
+        snapshot: {
+          v: 2,
+          sessionId: 's1',
+          revision: 7,
+          columns: 80,
+          rows: 24,
+          rootIds: [],
+          nodes: [],
+          coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+          hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+        },
+      },
+      {
+        v: 1,
+        type: 'action',
+        kind: 'action',
+        actionId: 'a1',
+        api: 'click',
+        t: 122,
+        ok: true,
+        sessionId: 's1',
+        ref: 'n1@7',
+        actionPlan: {
+          actionId: 'a1', kind: 'click', strategy: 'authoritative-pointer-region', contractId: 's1:0',
+          beforeSequence: 7, afterSequence: 8,
+          operations: [{ device: 'mouse', kind: 'down' }, { device: 'mouse', kind: 'up' }],
+          requirements: [],
+        },
       },
       {
         v: 1,
@@ -274,13 +313,62 @@ describe('server messages', () => {
     expect(() => parseServerMessage('[1,2]')).toThrow(/not an object/);
   });
 
+  it('rejects action diagnostics with forged evidence provenance', () => {
+    expect(() => parseServerMessage(JSON.stringify({
+      v: 1, type: 'action', kind: 'action', api: 'click', t: 1, ok: true,
+      actionPlan: {
+        actionId: 'a1', kind: 'click', strategy: 'pointer', contractId: 's:0',
+        beforeSequence: 1, afterSequence: 2, operations: [], requirements: [],
+        physicalEvidence: { source: 'guess', method: 'heuristic', strength: 'authoritative', providerId: 'fake' },
+      },
+    }))).toThrow(/evidence/);
+  });
+
+  it('round-trips the exact failed actionability explanation', () => {
+    const message = {
+      v: 1, type: 'action', kind: 'action', api: 'click', t: 1, ok: false, error: 'not-actionable',
+      actionability: {
+        actionable: false, kind: 'click', contractId: 's:0', sequence: 9,
+        requirements: [{
+          kind: 'receives-pointer', target: 'save@9', verdict: 'unsatisfied', observation: 'known',
+          evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' },
+        }],
+        reason: { code: 'covered-by', message: 'Target is covered', targetRef: 'overlay@9' },
+      },
+    } as const;
+    expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
+  });
+
+  it('rejects forged actionability attached to a successful action', () => {
+    expect(() => parseServerMessage(JSON.stringify({
+      v: 1, type: 'action', kind: 'action', api: 'click', t: 1, ok: true,
+      actionability: {
+        actionable: false, kind: 'click', contractId: 's:0', sequence: 9, requirements: [],
+        reason: { code: 'covered-by', message: 'forged' },
+      },
+    }))).toThrow(/only valid for a rejected/);
+  });
+
+  it('accepts every canonical Condition and adapter capability from browser-safe protocol exports', () => {
+    const action = parseServerMessage(JSON.stringify({
+      v: 1, type: 'action', kind: 'action', api: 'drag', t: 1, ok: false,
+      actionability: {
+        actionable: false, kind: 'drag', contractId: 's:0', sequence: 9,
+        requirements: CONDITION_KINDS.map((kind) => ({ kind, verdict: 'inconclusive', observation: 'unknown' })),
+        reason: { code: 'input-mode-disabled', message: 'disabled' },
+      },
+    }));
+    expect(action.type === 'action' ? action.actionability?.requirements.map(({ kind }) => kind) : []).toEqual(CONDITION_KINDS);
+    expect(ADAPTER_CAPABILITIES).toContain('pointer-hit-grid');
+  });
+
   it('does not accept a client message in the server direction', () => {
     expect(() => parseServerMessage('{"v":1,"type":"stop"}')).toThrow(UiProtocolError);
   });
 });
 
 describe('client messages', () => {
-  it('parses the four client types', () => {
+  it('parses every client type', () => {
     expect(parseClientMessage('{"v":1,"type":"stop"}')).toEqual({ v: 1, type: 'stop' });
     expect(parseClientMessage('{"v":1,"type":"rerun"}')).toEqual({ v: 1, type: 'rerun' });
     expect(parseClientMessage('{"v":1,"type":"rerun","testIds":["t1"]}')).toEqual({
@@ -298,6 +386,13 @@ describe('client messages', () => {
       type: 'input',
       sessionId: 's1',
       dataB64: 'DQ==',
+    });
+    expect(parseClientMessage('{"v":1,"type":"inspect-actionability","requestId":"r1","sessionId":"s1","nodeId":"save"}')).toEqual({
+      v: 1,
+      type: 'inspect-actionability',
+      requestId: 'r1',
+      sessionId: 's1',
+      nodeId: 'save',
     });
   });
 

@@ -148,8 +148,9 @@ Unknown roles and actions are dropped rather than guessed.
 
 Provider methods are evaluated once into candidates. A second pass counts
 `SemanticKey` values, gives unique keys stable ids, resolves `LabelledBy` and
-`DescribedBy`, and refuses ambiguity: duplicate keys fall back to distinct
-structural frame-local ids and cannot resolve. Relations are bounded by the
+`DescribedBy`, and refuses ambiguity: duplicate non-empty keys terminate the
+semantic session with `duplicate-semantic-key`; no weakened frame escapes.
+Relations are bounded by the
 negotiated session limit. Primary provenance stays `framework`, with role,
 author fields, relationships and key-stabilized ids recorded in `px`.
 

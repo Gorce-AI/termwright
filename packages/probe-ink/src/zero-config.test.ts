@@ -7,11 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   ENV_ENDPOINT,
-  ENV_PROTOCOL,
   ENV_TOKEN,
   MARKER_OSC_CODE,
   MARKER_OSC_PREFIX,
-  PROTOCOL_V2_ID,
+  PROTOCOL_ID,
   verifyMarkerPayload,
 } from '@termwright/protocol';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
@@ -47,7 +46,6 @@ function launch(options: {
   readonly driver?: FakeDriver;
   readonly steps?: number;
   readonly appPath?: string;
-  readonly protocol?: typeof PROTOCOL_V2_ID;
 }): Promise<Run> {
   const interpreter = options.runtime === 'bun' ? 'bun' : process.execPath;
   const base = [interpreter, options.appPath ?? app];
@@ -63,7 +61,6 @@ function launch(options: {
       env: {
         ...process.env,
         TW_APP_STEPS: String(options.steps ?? 2),
-        [ENV_PROTOCOL]: options.protocol ?? '',
         ...(options.mode === 'instrumented'
           ? {
               [ENV_ENDPOINT]: options.driver?.endpoint as string,
@@ -144,16 +141,17 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     async (runtime) => {
       const driver = await startFakeDriver();
       open.push(driver);
-      await launch({ runtime, mode: 'instrumented', driver, protocol: PROTOCOL_V2_ID });
+      await launch({ runtime, mode: 'instrumented', driver });
       const hello = await driver.waitForHandshake();
       const [snapshot] = await driver.waitForSnapshots(1);
-      expect(hello.protocol).toBe(PROTOCOL_V2_ID);
-      expect(hello.capabilities).toContain('qualified-observations');
+      expect(hello.protocol).toBe(PROTOCOL_ID);
       expect(snapshot?.v).toBe(2);
       expect(snapshot?.coordinateSpace).toMatchObject({ status: 'known', value: 'viewport-cells' });
       expect(snapshot?.hitGrid).toMatchObject({ status: 'unsupported' });
       expect(snapshot?.nodes.every((node) => node.geometry !== undefined)).toBe(true);
-      expect(snapshot?.nodes.some((node) => node.geometry?.visibleRect.status === 'unsupported')).toBe(true);
+      expect(snapshot?.nodes.every((node) =>
+        node.geometry.visibleRect.status === 'known'
+        || node.geometry.visibleRect.status === 'unsupported')).toBe(true);
     },
     60_000,
   );
@@ -201,9 +199,9 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
         probeVersion: PACKAGE_VERSION,
         identityKind: 'stable',
       });
-      // No guessed frameworkVersion and no source-component claim: Ink's host
-      // tree contains neither after reconciliation.
-      expect(hello.probe?.frameworkVersion).toBeUndefined();
+      // The framework version is certified from both checksummed artifacts,
+      // not guessed from the retained host tree.
+      expect(hello.probe?.frameworkVersion).toBe('7.1.1');
 
       const [snapshot] = await driver.waitForSnapshots(1);
       expect(snapshot?.nodes.map((node) => node.role)).toEqual(expect.arrayContaining([

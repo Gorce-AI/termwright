@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { WebSocket } from 'ws';
 import { FakeSession, node, snapshot } from './__fixtures__/fake-session.js';
 import { connectLiveSession } from './live-client.js';
 import { startUiServer, type UiServer } from './server.js';
+import { encodeMessage, parseServerMessage, type ServerMessage } from './events.js';
 
 const servers: UiServer[] = [];
 const connections: { close(): Promise<void> }[] = [];
@@ -105,6 +107,44 @@ describe('connectLiveSession', () => {
     const first = connection.close();
     expect(connection.close()).toBe(first);
     await expect(first).resolves.toBeUndefined();
+  });
+
+  it('routes live Inspector questions to the worker production planner at one checkpoint', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const session = new FakeSession('planned-session');
+    const tree = snapshot(7, [node({ id: 'save', role: 'button', name: 'Save' })], session.sessionId);
+    session.semantic(tree);
+    const calls: string[] = [];
+    session.actionabilityPlanner = async (action, ref) => {
+      calls.push(`${action}:${ref}`);
+      return {
+        actionable: true,
+        intent: { kind: action, targetRef: ref },
+        checkpoint: { sessionId: session.sessionId, contractId: 'planned-session:0', epoch: 0, sequence: 9, screenRevision: 8, semanticRevision: 7, pairedScreenRevision: 8 },
+        requirements: [],
+        strategy: action === 'type' ? 'focused-keyboard-type' : 'production-plan',
+      };
+    };
+    const connection = connectLiveSession(session, { url: server.url });
+    connections.push(connection);
+    await until(() => server.hub.backlog.some((message) => message.type === 'session' && message.sessionId === session.sessionId), 'producer session');
+
+    const url = new URL(server.url);
+    url.protocol = 'ws:';
+    url.pathname = '/ws';
+    const socket = new WebSocket(url);
+    const received: ServerMessage[] = [];
+    socket.on('message', (raw: Buffer) => received.push(parseServerMessage(raw)));
+    await new Promise<void>((done, fail) => { socket.once('open', done); socket.once('error', fail); });
+    socket.send(encodeMessage({ v: 1, type: 'inspect-actionability', requestId: 'inspect-1', sessionId: session.sessionId, nodeId: 'save' }));
+    await until(() => received.some((message) => message.type === 'actionability-inspection'), 'planner response');
+    const response = received.find((message) => message.type === 'actionability-inspection');
+    expect(response).toMatchObject({ requestId: 'inspect-1', nodeId: 'save' });
+    expect(response?.type === 'actionability-inspection' ? response.results?.map((entry) => entry.kind) : []).toEqual(['click', 'hover', 'focus', 'type']);
+    expect(response?.type === 'actionability-inspection' ? new Set(response.results?.map((entry) => `${entry.contractId}:${entry.sequence}`)).size : 0).toBe(1);
+    expect(calls).toEqual(['click:save@7', 'hover:save@7', 'focus:save@7', 'type:save@7']);
+    socket.close();
   });
 });
 

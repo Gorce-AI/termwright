@@ -34,7 +34,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm run check:boundary && tsup src/index.ts src/reporter.ts src/live-client.ts src/provider.ts --format esm --dts --sourcemap && vite build",
+    "build": "pnpm run check:boundary && tsup src/index.ts src/reporter.ts src/live-client.ts src/provider.ts --format esm --dts --sourcemap --clean && vite build",
     "build:app": "vite build",
     "check:boundary": "node scripts/check-boundary.mjs",
     "screenshots:docs": "node scripts/capture-docs-screenshots.mjs",
@@ -44,12 +44,12 @@
   },
   "dependencies": {
     "@termwright/driver": "workspace:*",
+    "@termwright/protocol": "workspace:*",
     "@termwright/trace": "workspace:*",
     "chokidar": "^4.0.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@termwright/protocol": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",

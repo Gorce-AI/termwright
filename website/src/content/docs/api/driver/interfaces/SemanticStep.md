@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticStep
 
-Defined in: [selectors.ts:23](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L23)
+Defined in: [driver/src/selectors.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L21)
 
 One compound selector in a descendant chain.
 
@@ -21,7 +21,7 @@ One compound selector in a descendant chain.
 
 > `readonly` **classes**: readonly `string`[]
 
-Defined in: [selectors.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L26)
+Defined in: [driver/src/selectors.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L24)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [selectors.ts:26](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` `optional` **frameworkType?**: [`TextMatcher`](../../type-aliases/textmatcher/)
 
-Defined in: [selectors.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L33)
+Defined in: [driver/src/selectors.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L31)
 
 Matches the framework's own widget type, the only way to tell generics apart.
 
@@ -39,7 +39,7 @@ Matches the framework's own widget type, the only way to tell generics apart.
 
 > `readonly` `optional` **label?**: [`TextMatcher`](../../type-aliases/textmatcher/)
 
-Defined in: [selectors.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L31)
+Defined in: [driver/src/selectors.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L29)
 
 Matches against the node's computed label (`labelledBy`, else `name`).
 
@@ -49,7 +49,7 @@ Matches against the node's computed label (`labelledBy`, else `name`).
 
 > `readonly` `optional` **name?**: [`TextMatcher`](../../type-aliases/textmatcher/)
 
-Defined in: [selectors.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L27)
+Defined in: [driver/src/selectors.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L25)
 
 ***
 
@@ -57,7 +57,7 @@ Defined in: [selectors.ts:27](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` `optional` **role?**: `"application"` \| `"region"` \| `"dialog"` \| `"alert"` \| `"status"` \| `"list"` \| `"listitem"` \| `"menu"` \| `"menuitem"` \| `"button"` \| `"checkbox"` \| `"radio"` \| `"tab"` \| `"textbox"` \| `"heading"` \| `"text"` \| `"progressbar"` \| `"separator"` \| `"scrollbar"` \| `"table"` \| `"row"` \| `"cell"` \| `"generic"`
 
-Defined in: [selectors.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L24)
+Defined in: [driver/src/selectors.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L22)
 
 ***
 
@@ -65,7 +65,7 @@ Defined in: [selectors.ts:24](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` **state**: `Readonly`\<`Partial`\<`SemanticState`\>\>
 
-Defined in: [selectors.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L34)
+Defined in: [driver/src/selectors.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L32)
 
 ***
 
@@ -73,7 +73,7 @@ Defined in: [selectors.ts:34](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` `optional` **testId?**: `string`
 
-Defined in: [selectors.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L25)
+Defined in: [driver/src/selectors.ts:23](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L23)
 
 ***
 
@@ -81,6 +81,6 @@ Defined in: [selectors.ts:25](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` `optional` **text?**: [`TextMatcher`](../../type-aliases/textmatcher/)
 
-Defined in: [selectors.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L29)
+Defined in: [driver/src/selectors.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L27)
 
 Matches against `name`, `value` and the labels a node is labelled by.

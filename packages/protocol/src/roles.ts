@@ -1,5 +1,5 @@
 /**
- * v1 semantic roles. ARIA-aligned; closed set. Unknown roles must be rejected
+ * Semantic roles for the current protocol. ARIA-aligned; closed set. Unknown roles must be rejected
  * during validation — they never silently acquire behavior.
  */
 export const SEMANTIC_ROLES = [

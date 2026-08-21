@@ -114,7 +114,8 @@ JSON output, CI, and non-interactive stdout suppress automatic window opening.
 
 Machine-readable errors include a `kind`, message, and applicable suggestion or
 candidates. Library errors include stable kinds such as `timeout`,
-`ambiguous-locator`, `unsupported-action`, `protocol-violation`,
+`ambiguous-locator`, `probe-attach-failed`, `capability-unavailable`, `not-actionable`,
+`input-mode-disabled`, `protocol-violation`,
 `process-exited`, and `session-closed`.
 
 See [Runner UI](../../tools/runner-ui/), [Traces and reports](../../tools/traces-reports/),

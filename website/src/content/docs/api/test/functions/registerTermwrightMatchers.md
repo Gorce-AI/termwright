@@ -13,7 +13,7 @@ editUrl: false
 
 > **registerTermwrightMatchers**(): `void`
 
-Defined in: [test/src/matchers.ts:1074](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L1074)
+Defined in: [test/src/matchers.ts:1120](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L1120)
 
 Registers the matchers with Vitest's `expect`. Importing `@termwright/test`
 calls this for you; it is exported for setups that build their own entry

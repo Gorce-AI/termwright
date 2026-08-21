@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: PtyProcess
 
-Defined in: [pty.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L25)
+Defined in: [driver/src/pty.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L25)
 
 A live pseudo-terminal hosting one child process.
 
@@ -21,7 +21,7 @@ A live pseudo-terminal hosting one child process.
 
 > `readonly` **pid**: `number`
 
-Defined in: [pty.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L26)
+Defined in: [driver/src/pty.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L26)
 
 ## Methods
 
@@ -29,7 +29,7 @@ Defined in: [pty.ts:26](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **dispose**(): `void`
 
-Defined in: [pty.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L35)
+Defined in: [driver/src/pty.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L35)
 
 Idempotent; releases the pty without signalling the child.
 
@@ -43,7 +43,7 @@ Idempotent; releases the pty without signalling the child.
 
 > **onData**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L32)
+Defined in: [driver/src/pty.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L32)
 
 #### Parameters
 
@@ -61,7 +61,7 @@ Defined in: [pty.ts:32](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **onExit**(`cb`): [`PtyUnsubscribe`](../../type-aliases/ptyunsubscribe/)
 
-Defined in: [pty.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L33)
+Defined in: [driver/src/pty.ts:33](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L33)
 
 #### Parameters
 
@@ -79,7 +79,7 @@ Defined in: [pty.ts:33](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **resize**(`columns`, `rows`): `void`
 
-Defined in: [pty.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L29)
+Defined in: [driver/src/pty.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L29)
 
 #### Parameters
 
@@ -101,7 +101,7 @@ Defined in: [pty.ts:29](https://github.com/Gorce-AI/termwright/blob/main/package
 
 > **signal**(`sig`): `void`
 
-Defined in: [pty.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L31)
+Defined in: [driver/src/pty.ts:31](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L31)
 
 Delivers a POSIX signal. On Windows only `KILL` is honored (TerminateProcess).
 
@@ -121,7 +121,7 @@ Delivers a POSIX signal. On Windows only `KILL` is honored (TerminateProcess).
 
 > **write**(`data`): `void`
 
-Defined in: [pty.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L28)
+Defined in: [driver/src/pty.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L28)
 
 Writes raw bytes to the child's stdin. Never appends a newline.
 

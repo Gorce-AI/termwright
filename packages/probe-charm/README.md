@@ -142,8 +142,9 @@ execution path.
 Relationships are explicit `SemanticKey` strings. The probe evaluates each
 provider once, collects the whole component set, then resolves keys in a second
 pass. A unique key gives that annotated component a stable id even if its Go
-field path changes. Missing keys emit no relationship; duplicate keys keep
-distinct frame-local structural ids and cannot resolve. Nodes use
+field path changes. Missing targets emit no relationship; duplicate non-empty
+keys fail the session with `duplicate-semantic-key` and publish no weakened
+frame. Nodes use
 `p: framework`, with recognised and annotated fields identified in `px`.
 
 ## Current surface

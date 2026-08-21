@@ -12,20 +12,16 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from collections import OrderedDict
-from typing import Any, Dict, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from .debug import DebugLog, describe_endpoint
 from .errors import ProtocolViolation, TermwrightError
 from .framing import FrameDecoder, encode_frame
 from .limits import DEFAULT_LIMITS, ProtocolLimits
 from .marker import encode_marker
-from .diffing import build_delta
 from .logs import LogRecord, flatten_attrs, validate_log_record
 from .messages import (
     PROTOCOL_ID,
-    PROTOCOL_V2_ID,
-    get_tree_result,
     hello,
     log_message,
     parse_driver_message,
@@ -38,12 +34,9 @@ from .validate import validate_snapshot
 
 ENV_ENDPOINT = "TERMWRIGHT_ENDPOINT"
 ENV_TOKEN = "TERMWRIGHT_TOKEN"
-ENV_PROTOCOL = "TERMWRIGHT_PROTOCOL"
 
 DEFAULT_CAPABILITIES = (
     "tree",
-    "bounds",
-    "absolute-bounds",
     "states",
     "actions",
     "render-revisions",
@@ -53,9 +46,6 @@ DEFAULT_CAPABILITIES = (
 #: `logs` is what makes the driver send a budget back; without it the driver
 #: sends none and the adapter must stay silent.
 CAPABILITIES_WITH_LOGS = DEFAULT_CAPABILITIES + ("logs",)
-
-#: How many recent snapshots stay answerable by a ``get-tree`` for a past revision.
-_SNAPSHOT_HISTORY = 8
 
 #: Seconds a single frame write may wait for the driver to read.
 #:
@@ -154,7 +144,6 @@ class SemanticClient:
         debug: Optional[DebugLog] = None,
         probe: Optional[Mapping[str, Any]] = None,
         write_timeout: float = DEFAULT_WRITE_TIMEOUT,
-        protocol: str = PROTOCOL_ID,
     ) -> None:
         self._endpoint = endpoint
         self._token = token
@@ -171,20 +160,12 @@ class SemanticClient:
         #: Seconds one frame write may wait. Non-positive disables the bound,
         #: which is only sane for a caller that publishes off the render path.
         self._write_timeout = write_timeout
-        self.protocol = protocol
-        #: Set when the producer lost something and owes a whole tree.
-        self._force_full = False
-
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
         self._decoder = FrameDecoder(limits.maxFrameBytes, limits.maxDepth)
         self._reader_task: Optional[asyncio.Task] = None
         self._ready: Optional[asyncio.Future] = None
-        self._history: MutableMapping[int, Dict[str, Any]] = OrderedDict()
-        #: The last tree the driver has, which every delta is based on.
-        self._published: Optional[Dict[str, Any]] = None
-        #: Counters a test or a diagnostic can read.
-        self.deltas_sent = 0
+        #: Counter a test or diagnostic can read.
         self.snapshots_sent = 0
 
         self.session_id: Optional[str] = None
@@ -238,7 +219,6 @@ class SemanticClient:
                     self._adapter_version,
                     self._capabilities,
                     self._probe,
-                    protocol=self.protocol,
                 )
             )
             self._log(
@@ -261,7 +241,7 @@ class SemanticClient:
             self._log(
                 "sem",
                 f"close r{self.revision} snapshots={self.snapshots_sent} "
-                f"deltas={self.deltas_sent} logs_dropped={self.logs_dropped}",
+                f"logs_dropped={self.logs_dropped}",
             )
         self.closed = True
         if self._reader_task is not None:
@@ -315,14 +295,14 @@ class SemanticClient:
         if wire is None:
             return None
         try:
-            frames, tree_kind, forced = self._encode_snapshot(wire)
+            frames, sent_snapshot = self._encode_snapshot(wire)
         except ProtocolViolation:
             self._reject_snapshot(wire)
             raise
         if not await self._send_snapshot(frames):
             self._reject_snapshot(wire)
             return None
-        self._accept_snapshot(wire, tree_kind, forced)
+        self._accept_snapshot(wire, sent_snapshot)
         return self.marker(wire["revision"])
 
     def publish_nowait(self, snapshot: SemanticSnapshot) -> Optional[str]:
@@ -336,7 +316,7 @@ class SemanticClient:
         if wire is None:
             return None
         try:
-            frames, tree_kind, forced = self._encode_snapshot(wire)
+            frames, sent_snapshot = self._encode_snapshot(wire)
         except ProtocolViolation:
             self._reject_snapshot(wire)
             return None
@@ -353,32 +333,28 @@ class SemanticClient:
             asyncio.ensure_future(self.close())
             return None
 
-        self._accept_snapshot(wire, tree_kind, forced)
+        self._accept_snapshot(wire, sent_snapshot)
         asyncio.ensure_future(self._drain(writer))
         return self.marker(wire["revision"])
 
     def _encode_snapshot(
         self, wire: Dict[str, Any]
-    ) -> Tuple[Tuple[bytes, ...], Optional[str], bool]:
+    ) -> Tuple[Tuple[bytes, ...], bool]:
         """Build and encode a whole publication before writing any of it.
 
         ``maxFrameBytes`` may be tighter than ``maxSnapshotBytes``. Encoding
         every message first keeps that local refusal atomic: no tree, commit or
-        marker escapes, and the last tree the driver actually received remains
-        the only legal delta base.
+        marker escapes.
         """
-
-        forced = self._force_full
         messages = []
-        tree_kind: Optional[str] = None
+        sent_snapshot = self.subscribe != "revisions"
         if self.subscribe != "revisions":
-            tree, tree_kind = self._tree_message(wire, forced)
-            messages.append(tree)
+            self._log("io", f"r{wire['revision']} snapshot nodes={len(wire.get('nodes', ()))}")
+            messages.append(snapshot_message(wire))
         messages.append(revision_commit(wire["revision"]))
         return (
             tuple(encode_frame(message, self._limits.maxFrameBytes) for message in messages),
-            tree_kind,
-            forced,
+            sent_snapshot,
         )
 
     async def _send_snapshot(self, frames: Sequence[bytes]) -> bool:
@@ -393,57 +369,18 @@ class SemanticClient:
             return False
         return await self._drain(writer)
 
-    def _accept_snapshot(
-        self, wire: Dict[str, Any], tree_kind: Optional[str], forced: bool
-    ) -> None:
+    def _accept_snapshot(self, wire: Dict[str, Any], sent_snapshot: bool) -> None:
         """Commit bookkeeping only after every frame was accepted for writing."""
 
-        self._remember(wire["revision"], wire)
-        if tree_kind is not None:
-            self._published = wire
-        if tree_kind == "snapshot":
+        if sent_snapshot:
             self.snapshots_sent += 1
-        elif tree_kind == "delta":
-            self.deltas_sent += 1
-        if forced:
-            self._force_full = False
 
     def _reject_snapshot(self, wire: Dict[str, Any]) -> None:
-        """Undo a locally refused revision and require a full recovery tree."""
+        """Undo a locally refused revision."""
 
         revision = wire["revision"]
         if self.revision == revision:
             self.revision -= 1
-        self._history.pop(revision, None)
-        self._force_full = True
-
-    def _tree_message(
-        self, wire: Dict[str, Any], forced: bool
-    ) -> Tuple[Dict[str, Any], str]:
-        """A delta when the driver asked for one and it is worth sending.
-
-        Falls back to the whole tree on the first publish, when the driver
-        wants snapshots, and whenever the delta would carry more than about
-        half the tree — past that a patch costs more than the thing it
-        replaces. The base is only advanced once a message is built from it,
-        so a skipped publish cannot leave the driver applying a delta onto a
-        tree it never received.
-        """
-        delta = None
-        if self.subscribe == "diffs" and self._published is not None and not forced:
-            delta = build_delta(self._published, wire)
-        if forced:
-            self._log("io", f"r{wire['revision']} full snapshot: the producer reported a gap")
-
-        if delta is None:
-            self._log("io", f"r{wire['revision']} snapshot nodes={len(wire.get('nodes', ()))}")
-            return snapshot_message(wire), "snapshot"
-        self._log(
-            "io",
-            f"r{wire['revision']} delta changed={len(delta.get('changed', ()))} "
-            f"removed={len(delta.get('removed', ()))}",
-        )
-        return delta, "delta"
 
     def log(
         self,
@@ -499,31 +436,27 @@ class SemanticClient:
             return None
         return encode_marker(self._token, self.session_id, revision)
 
-    def require_full_snapshot(self) -> None:
-        """Make the next publish send a whole tree.
+    def fail_nowait(self, code: str, message: str) -> None:
+        """Send one typed fatal producer error, then close the semantic channel."""
+        writer = self._writer
+        if writer is None or not self.connected:
+            return
+        try:
+            writer.write(encode_frame(protocol_error(code, message[:1024]), self._limits.maxFrameBytes))
+        except (OSError, ConnectionResetError, ValueError):
+            asyncio.ensure_future(self.close())
+            return
 
-        The producer's obligation from D5: a probe that lost anything from its
-        own stream of facts — a dropped frame, a coalesced burst, a write that
-        failed — must not follow it with a patch. The driver would apply that
-        patch to a tree that never accounted for what was lost, and the
-        divergence would be silent.
-        """
-        self._force_full = True
+        async def finish() -> None:
+            await self._drain(writer)
+            await self.close()
 
-    @property
-    def full_snapshot_required(self) -> bool:
-        """Whether the obligation is outstanding."""
-        return self._force_full
+        asyncio.ensure_future(finish())
 
     def _log(self, category: str, message: str) -> None:
         """Write one diagnostic line, when diagnostics are on."""
         if self._debug is not None:
             self._debug.line(category, message)
-
-    def _remember(self, revision: int, wire: Dict[str, Any]) -> None:
-        self._history[revision] = wire
-        while len(self._history) > _SNAPSHOT_HISTORY:
-            self._history.pop(next(iter(self._history)))
 
     async def _send(self, message: Mapping[str, Any]) -> None:
         writer = self._writer
@@ -592,8 +525,8 @@ class SemanticClient:
         assert message is not None
 
         if message["type"] == "hello-ack":
-            if message["protocol"] != self.protocol:
-                self._log("diag", f"driver acknowledged {message['protocol']} after requesting {self.protocol}")
+            if message["protocol"] != PROTOCOL_ID:
+                self._log("diag", f"driver acknowledged {message['protocol']} after requesting {PROTOCOL_ID}")
                 await self.close()
                 return
             self.session_id = message["sessionId"]
@@ -617,15 +550,6 @@ class SemanticClient:
                 )
             if self._ready is not None and not self._ready.done():
                 self._ready.set_result(True)
-        elif message["type"] == "get-tree":
-            requested = message.get("revision", self.revision)
-            held = self._history.get(requested)
-            if held is None:
-                await self._send(
-                    get_tree_result(message["requestId"], error=f"revision {requested} is not retained")
-                )
-            else:
-                await self._send(get_tree_result(message["requestId"], snapshot=held))
         elif message["type"] == "error":
             self._log("diag", f"driver ended the session: {message.get('code')}")
             await self.close()
@@ -640,7 +564,6 @@ def client_from_env(
     limits: ProtocolLimits = DEFAULT_LIMITS,
     debug: Optional[DebugLog] = None,
     probe: Optional[Mapping[str, Any]] = None,
-    qualified_capabilities: Sequence[str] = (),
 ) -> Optional[SemanticClient]:
     """Build a client from ``TERMWRIGHT_*``, or ``None`` when not instrumented.
 
@@ -665,32 +588,15 @@ def client_from_env(
             ]
             log.line("diag", f"dormant: {' and '.join(missing)} not set")
         return None
-    protocol = source.get(ENV_PROTOCOL)
-    if protocol is not None and protocol not in ("", PROTOCOL_ID, PROTOCOL_V2_ID, "1", "2"):
-        if log is not None:
-            log.line(
-                "diag",
-                f"dormant: {ENV_PROTOCOL}={protocol!r} is not {PROTOCOL_ID!r}",
-            )
-        return None
-    selected_protocol = PROTOCOL_V2_ID if protocol in (PROTOCOL_V2_ID, "2") else PROTOCOL_ID
-    selected_capabilities = tuple(capabilities)
-    if selected_protocol == PROTOCOL_V2_ID and "qualified-observations" not in selected_capabilities:
-        selected_capabilities += ("qualified-observations",)
-    if selected_protocol == PROTOCOL_V2_ID:
-        selected_capabilities += tuple(
-            item for item in qualified_capabilities if item not in selected_capabilities
-        )
     return SemanticClient(
         endpoint,
         token,
         adapter_name=adapter_name,
         adapter_version=adapter_version,
-        capabilities=selected_capabilities,
+        capabilities=capabilities,
         limits=limits,
         debug=log,
         probe=probe,
-        protocol=selected_protocol,
     )
 
 

@@ -1,9 +1,14 @@
 /**
  * NORMATIVE public driver API. Every other package (test preset, MCP, UI,
- * ink-testing) programs against these types. Changes here require updating
+ * Ink component testing) programs against these types. Changes here require updating
  * CONTRACTS.md and notifying all package owners.
  */
 import type {
+  EffectiveSessionContract,
+  ActionReceipt,
+  ActionabilityExplanation,
+  Condition,
+  ConditionResult,
   LogRecord,
   ProbeInfo,
   ProtocolErrorMessage,
@@ -20,6 +25,7 @@ import type {
   ObservationStamp,
   PointerHitTest,
   SpatialRelation,
+  SessionCapabilityId,
 } from '@termwright/protocol';
 
 // ---------------------------------------------------------------------------
@@ -87,24 +93,14 @@ export interface LaunchOptions {
    * pane can count characters exactly as the live session did.
    */
   readonly terminalProfile?: string;
-  /**
-   * How an instrumented application should push its semantic tree.
-   *
-   * `'auto'` (default) takes deltas from any adapter that offers them, which
-   * is far cheaper for a tree that changes on every keystroke. `'snapshots'`
-   * forces full trees — the switch to reach for when a replay and a live
-   * session disagree and the delta path is a suspect.
-   */
-  readonly treeUpdates?: 'auto' | 'snapshots';
-  /**
-   * Semantic wire major. V2 is the default and requires evidence-qualified
-   * geometry, visibility and exact hit grids. V1 is an explicit compatibility
-   * mode for older producers; it never enables unqualified pointer actions.
-   */
-  readonly semanticProtocol?: 'termwright/1' | 'termwright/2';
   readonly columns?: number; // default 100
   readonly rows?: number; // default 30
-  readonly semanticNegotiationMs?: number; // default 250
+  /**
+   * Maximum time to wait for an optional semantic adapter. Defaults to 2,000
+   * ms for generic auto-detection. When `requiredCapabilities` is non-empty,
+   * the default is the larger of 2,000 ms and the session `ready` timeout.
+   */
+  readonly semanticNegotiationMs?: number;
   readonly scrollbackLines?: number; // default 2_000
   readonly timeouts?: TimeoutClasses;
   readonly recording?: RecordingOptions;
@@ -113,6 +109,12 @@ export interface LaunchOptions {
    * command markers. Test authors should normally use `terminal.openShell()`.
    */
   readonly shellIntegration?: 'external' | 'termwright-posix' | 'termwright-powershell';
+  /**
+   * Capabilities that must be present in the frozen session contract.
+   * Launch waits for negotiation and throws `CapabilityUnavailableError`
+   * before returning a harness when any requirement is missing.
+   */
+  readonly requiredCapabilities?: readonly SessionCapabilityId[];
 }
 
 export declare function launchTerminal(options: LaunchOptions): Promise<TerminalHarness>;
@@ -124,18 +126,31 @@ export interface TerminalHarness {
   readonly sessionId: string;
   /** Shell command boundaries and prompt state when the child emits OSC 133. */
   readonly shell: ShellApi;
+  /** One physical keyboard implementation. Convenience methods delegate here. */
+  readonly keyboard: Keyboard;
+  /** One physical mouse implementation. Locator actions delegate here after planning. */
+  readonly mouse: Mouse;
+  /** Terminal-window focus reports, distinct from semantic element focus. */
+  readonly window: TerminalWindow;
+  /** Emulator facts captured together at the current screen revision. */
+  readonly terminalState: TerminalState;
 
   capabilities(): SessionCapabilities;
+  /** Frozen negotiated contract, or null until negotiation has completed. */
+  contract(): EffectiveSessionContract | null;
+  /** Atomic identity of the currently committed terminal/semantic observation. */
+  checkpoint(): ObservationStamp;
+  /** Wait until a committed observation newer than `after` is available. */
+  waitForCheckpointChange(options: { readonly after: ObservationStamp } & WaitOptions): Promise<ObservationStamp>;
   /**
    * The capabilities, once they are final.
    *
    * `capabilities()` answers immediately with what is known so far, which is
    * what a synchronous caller needs. This waits for the negotiation to reach
-   * its verdict — including the grace an adapter gets to attach late — and, for
-   * a semantic session, for the first tree to be published. After it resolves,
+   * its verdict and, for a semantic session, for the first tree to be published. After it resolves,
    * `semanticTree` will not change again.
    */
-  settled(opts?: WaitOptions): Promise<SessionCapabilities>;
+  settled(opts?: WaitOptions): Promise<EffectiveSessionContract>;
   screen(): ScreenSnapshot;
   semanticTree(): SemanticSnapshot | null;
   cell(pos: { row: number; column: number }): CellSnapshot;
@@ -143,9 +158,12 @@ export interface TerminalHarness {
   // Locators (lazy handles, re-resolved per action)
   getByRole(role: SemanticRole, opts?: RoleLocatorOptions): Locator;
   getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator;
+  /** Semantic text only. Never falls back to the terminal grid. */
   getByText(text: string | RegExp, opts?: TextLocatorOptions): Locator;
+  /** Physical terminal-grid text, optionally narrowed by occurrence or style. */
+  getByScreenText(text: string | RegExp, opts?: ScreenTextLocatorOptions): Locator;
   getByTestId(testId: string): Locator;
-  /** Textual-style CSS dialect: 'dialog button.primary:focused', '#id'. */
+  /** Advanced Termwright semantic selector: 'dialog button.primary:focused', '#id'. */
   locator(selector: string): Locator;
   /**
    * Rebuilds a locator from a ref returned by a resolved target.
@@ -161,8 +179,6 @@ export interface TerminalHarness {
   paste(text: string): Promise<void>;
   write(bytes: Uint8Array | string): Promise<void>; // raw, no newline
   resize(size: { columns: number; rows: number }): Promise<ResizeReceipt>;
-  focus(): Promise<void>;
-  blur(): Promise<void>;
   signal(sig: 'INT' | 'TERM' | 'KILL' | 'HUP'): Promise<void>;
 
   // Waits (revision/event based; never sleeps)
@@ -195,6 +211,13 @@ export interface TerminalHarness {
   diagnostics(): readonly SessionDiagnostic[];
 
   /**
+   * Bounded, oldest-first application-log history, including entries emitted
+   * while `launchTerminal()` was still starting. Consumers should subscribe to
+   * `app-log` first and then seed from this snapshot to avoid a startup gap.
+   */
+  appLogs(): readonly AppLogEvent[];
+
+  /**
    * What the session knew when the program died unexpectedly, or `null` — for a
    * live session, a clean exit, or one the harness asked for via `close()` or
    * `signal()`. Available as soon as the `exit` event fires.
@@ -204,6 +227,53 @@ export interface TerminalHarness {
   /** Idempotent; bounded physical cleanup. Never sends signals implicitly. */
   close(): Promise<void>;
   readonly exit: Promise<ExitStatus>;
+}
+
+export interface Keyboard {
+  press(keys: string): Promise<void>;
+  type(text: string): Promise<void>;
+  paste(text: string): Promise<void>;
+}
+
+export interface MousePoint {
+  readonly row: number;
+  readonly column: number;
+}
+
+export type MouseModifier = 'shift' | 'alt' | 'control';
+
+export interface MouseModifierOptions {
+  readonly modifiers?: readonly MouseModifier[];
+}
+
+export interface Mouse {
+  move(point: MousePoint & MouseModifierOptions): Promise<void>;
+  down(point: MousePoint & MouseModifierOptions & { readonly button?: 'left' | 'middle' | 'right' }): Promise<void>;
+  up(point: MousePoint & MouseModifierOptions & { readonly button?: 'left' | 'middle' | 'right' }): Promise<void>;
+  click(point: MousePoint & MouseModifierOptions & { readonly button?: 'left' | 'middle' | 'right'; readonly clickCount?: 1 | 2 }): Promise<void>;
+  wheel(options: MousePoint & MouseModifierOptions & { readonly deltaY?: number; readonly deltaX?: number }): Promise<void>;
+  drag(options: MouseModifierOptions & { readonly from: MousePoint; readonly to: MousePoint; readonly steps?: number; readonly path?: readonly MousePoint[] }): Promise<void>;
+}
+
+export interface TerminalWindow {
+  focus(): Promise<void>;
+  blur(): Promise<void>;
+}
+
+/** One authoritative snapshot of terminal-emulator state. */
+export interface TerminalStateSnapshot {
+  readonly screenRevision: number;
+  readonly dimensions: { readonly columns: number; readonly rows: number };
+  readonly buffer: 'normal' | 'alternate';
+  readonly title: string;
+  readonly cursor: CursorInfo;
+  readonly bellCount: number;
+  readonly modes: TerminalModes;
+}
+
+/** Coherent terminal state for tests and diagnostics. */
+export interface TerminalState {
+  snapshot(): TerminalStateSnapshot;
 }
 
 /** Observable shell-integration state; fields are never inferred from prompt text. */
@@ -232,6 +302,8 @@ export interface ShellCommandResult {
   readonly exitCode: number | null;
   readonly cwd: string | null;
   readonly title: string;
+  /** The exact physical keyboard plan that submitted this command. */
+  readonly receipt: ActionReceipt;
 }
 
 export interface ShellApi {
@@ -310,14 +382,15 @@ export interface TerminalModes {
    * the platform makes the mode unobservable: ConPTY is an emulator, so it
    * consumes the child's `CSI ? 1000/1002/1006 h` instead of forwarding it, and
    * the driver never learns what was asked for. The distinction is load-bearing
-   * for pointer actions: `'none'` is a reason to refuse, `'unknown'` is not,
-   * because the child still has tracking on and still decodes reports.
+   * for pointer actions: `'none'` is authoritatively off, while `'unknown'`
+   * means Termwright cannot select a protocol without guessing. Both fail
+   * before input is written, with distinct diagnostics.
    */
   readonly mouseTracking: 'none' | 'x10' | 'vt200' | 'drag' | 'any' | 'unknown';
   /**
    * Mouse report encoding, or `'unknown'` when the platform hides it (see
-   * {@link TerminalModes.mouseTracking}). Input sent under `'unknown'` uses
-   * SGR, the encoding every program that enables mouse reporting understands.
+   * {@link TerminalModes.mouseTracking}). Pointer actions fail closed under
+   * `'unknown'`; Termwright never guesses SGR.
    */
   readonly mouseEncoding: 'default' | 'sgr' | 'urxvt' | 'utf8' | 'unknown';
   readonly bracketedPaste: boolean;
@@ -388,8 +461,11 @@ export interface RoleLocatorOptions {
 
 export interface TextLocatorOptions {
   readonly exact?: boolean;
+}
+
+export interface ScreenTextLocatorOptions extends TextLocatorOptions {
   readonly occurrence?: number;
-  /** Style predicates for generic (non-semantic) matching. */
+  /** Style predicates evaluated against terminal cells. */
   readonly fg?: string;
   readonly bg?: string;
   readonly attributes?: Partial<CellAttributes>;
@@ -399,32 +475,65 @@ export interface WaitOptions {
   readonly timeout?: number;
 }
 
+export interface LocatorDragOptions extends WaitOptions, MouseModifierOptions {
+  /** Number of interpolated pointer moves. Defaults to the cell distance. */
+  readonly steps?: number;
+  /** Explicit viewport-cell path. The resolved destination is appended. */
+  readonly path?: readonly MousePoint[];
+}
+
+export interface LocatorWheelOptions extends WaitOptions, MouseModifierOptions {
+  readonly position?: { readonly rowOffset: number; readonly columnOffset: number };
+  readonly deltaY?: number;
+  readonly deltaX?: number;
+}
+
 export interface Locator {
   /** Human-readable form of the query, as it appears in error messages. */
   readonly description: string;
 
   within(parent: Locator): Locator;
+  /** Natural descendant query scoped to this locator. */
+  getByRole(role: SemanticRole, opts?: RoleLocatorOptions): Locator;
+  getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator;
+  getByText(text: string | RegExp, opts?: TextLocatorOptions): Locator;
+  getByScreenText(text: string | RegExp, opts?: ScreenTextLocatorOptions): Locator;
+  getByTestId(testId: string): Locator;
+  locator(selector: string): Locator;
   first(): Locator;
+  last(): Locator;
   nth(index: number): Locator;
+  filter(options: LocatorFilterOptions): Locator;
+  and(other: Locator): Locator;
+  or(other: Locator): Locator;
 
   // Resolution (strict: 0 matches waits, >1 fails with candidates)
   resolve(opts?: WaitOptions): Promise<ResolvedTarget>;
   count(): Promise<number>;
 
   // Actions (through PTY; pre-flight: visible, enabled, in-viewport, mouse mode)
-  click(opts?: PointerOptions): Promise<void>;
-  doubleClick(opts?: PointerOptions): Promise<void>;
-  dragTo(target: Locator, opts?: WaitOptions): Promise<void>;
-  drag(opts: { from: { row: number; column: number }; to: { row: number; column: number } }): Promise<void>;
-  wheel(opts: { deltaY: number; deltaX?: number }): Promise<void>;
-  press(keys: string, opts?: WaitOptions): Promise<void>;
-  type(text: string, opts?: WaitOptions): Promise<void>;
-  focusNode(opts?: WaitOptions): Promise<void>;
-  /** Documented physical strategy (click, or focus+Enter); receipt says which. */
-  activate(opts?: WaitOptions): Promise<ActivateReceipt>;
+  click(opts?: PointerOptions): Promise<ActionReceipt>;
+  doubleClick(opts?: PointerOptions): Promise<ActionReceipt>;
+  hover(opts?: PointerOptions): Promise<ActionReceipt>;
+  actionability(
+    action: 'click' | 'double-click' | 'hover' | 'focus' | 'activate' | 'press' | 'type' | 'fill' | 'check' | 'uncheck',
+    opts?: PointerOptions & { readonly value?: string },
+  ): Promise<ActionabilityExplanation>;
+  dragTo(target: Locator, opts?: LocatorDragOptions): Promise<ActionReceipt>;
+  wheel(opts: LocatorWheelOptions): Promise<ActionReceipt>;
+  press(keys: string, opts?: WaitOptions): Promise<ActionReceipt>;
+  type(text: string, opts?: WaitOptions): Promise<ActionReceipt>;
+  fill(text: string, opts?: WaitOptions): Promise<ActionReceipt>;
+  focus(opts?: WaitOptions): Promise<ActionReceipt>;
+  /** Physical activation through the same planned device path as click and keyboard input. */
+  activate(opts?: WaitOptions): Promise<ActionReceipt>;
+  check(opts?: WaitOptions): Promise<ActionReceipt>;
+  uncheck(opts?: WaitOptions): Promise<ActionReceipt>;
 
   // State reads
-  waitFor(opts?: { state?: 'visible' | 'hidden' | 'attached' } & WaitOptions): Promise<void>;
+  waitFor(opts?: { state?: 'visible' | 'hidden' | 'attached' | 'detached' | 'displayed' | 'offscreen' | 'focused' | 'enabled' | 'disabled' | 'checked' | 'selected' | 'expanded' | 'collapsed' } & WaitOptions): Promise<void>;
+  /** Evaluate the same canonical condition model used by waits and ActionPlanner. */
+  evaluateCondition(condition: Condition): Promise<ConditionResult>;
   /** Atomic, evidence-qualified geometry. Never invents a rectangle. */
   geometry(): Promise<LocatorGeometry>;
   /** Attached/displayed/viewport facts without collapsing unknown to false. */
@@ -434,9 +543,17 @@ export interface Locator {
   /** Atomic cells inside this locator's qualified rectangle. */
   cellSnapshot(opts?: LocatorCellSnapshotOptions): Promise<LocatorCellSnapshot>;
   textContent(): Promise<string>;
+  /** Published semantic value, distinct from the accessible name/text. */
+  semanticValue(): Promise<string | null>;
   semanticState(): Promise<SemanticState | null>;
   /** Application-defined state, separate from portable semantic flags. */
   extendedState(): Promise<SemanticExtendedState | null>;
+}
+
+export interface LocatorFilterOptions {
+  readonly hasText?: string | RegExp;
+  readonly has?: Locator;
+  readonly hasNot?: Locator;
 }
 
 export interface LocatorCellSnapshotOptions {
@@ -474,7 +591,7 @@ export interface SpatialRelationExpectation {
   readonly target: Locator;
 }
 
-export interface PointerOptions extends WaitOptions {
+export interface PointerOptions extends WaitOptions, MouseModifierOptions {
   readonly button?: 'left' | 'middle' | 'right';
   readonly position?: { readonly rowOffset: number; readonly columnOffset: number };
 }
@@ -485,9 +602,9 @@ export interface ResolvedTarget {
   readonly revision: number;
   readonly semantic: boolean;
   /**
-   * Rectangle used by the resolution/action pipeline. For semantic v1 this is
-   * the explicit compatibility projection and is not evidence of visibility
-   * or pointer ownership. Use {@link Locator.geometry},
+   * Rectangle used by the resolution/action pipeline. A semantic target only
+   * exposes an evidence-qualified visible rectangle here; intended geometry is
+   * never promoted to pointer ownership. Use {@link Locator.geometry},
    * {@link Locator.visibility}, or {@link Locator.hitTest} for assertions.
    */
   readonly rect: Rect | null;
@@ -527,11 +644,6 @@ export interface ResolvedTarget {
   readonly occlusion?: 'known' | 'unknown';
 }
 
-export interface ActivateReceipt {
-  readonly strategy: 'click' | 'focus-enter' | 'focus-space';
-  readonly ref: string;
-}
-
 // ---------------------------------------------------------------------------
 // Events (trace/UI backbone)
 
@@ -552,6 +664,9 @@ export type DiagnosticCode =
   | 'adapter-disconnected'
   /** The adapter cannot do something the driver would have used. */
   | 'adapter-capability'
+  /** A committed observation violated a capability frozen at negotiation. */
+  | 'adapter-guarantee-violation'
+  | 'duplicate-semantic-key'
   /** An advisory `revision-commit` arrived (pairing still needs the marker). */
   | 'revision-commit'
   /** An incomplete revision was dropped because a newer one was published. */
@@ -568,15 +683,6 @@ export type DiagnosticCode =
   | 'endpoint-error'
   /** A `SessionEvents` listener threw; the session continued. */
   | 'listener-error'
-  /**
-   * A delta could not be composed, so the driver asked for a full tree.
-   *
-   * Deliberately not `revision-dropped`: nothing was lost. A resync is the
-   * driver noticing a divergence and repairing it, which is the opposite of
-   * dropping data, and conflating the two would make a healthy recovery read
-   * like damage.
-   */
-  | 'delta-resync'
   /** Lines the driver did not deliver: a log source outran its rate limit. */
   | 'log-dropped'
   /** A followed log source changed state: attached, rotated, truncated, unreadable. */
@@ -585,6 +691,8 @@ export type DiagnosticCode =
   | 'ready-shell-integration'
   /** `waitForReady` fell back to "the screen settled": a heuristic. */
   | 'ready-settled-screen'
+  /** The terminal emulator answered an application query through PTY stdin. */
+  | 'terminal-response'
   /**
    * Input was sent while the mode governing it was unverifiable — recorded
    * once per session and mode, since it describes the platform rather than the
@@ -693,8 +801,16 @@ export interface ActionEvent {
    * message belongs to the thrown error, this field is for grouping.
    */
   readonly error?: string;
+  /** Exact failed planner evaluation, bound to the checkpoint that rejected the action. */
+  readonly actionability?: ActionabilityExplanation;
   /** Atomic screen/tree identity at completion; trace consumers must not guess. */
   readonly observation?: ObservationStamp;
+  /**
+   * The exact plan and physical operations executed for a successful semantic
+   * action. This is the same receipt returned to the caller, not a diagnostic
+   * reconstruction performed after the action.
+   */
+  readonly receipt?: ActionReceipt;
   readonly timeMs: number;
 }
 
@@ -773,7 +889,15 @@ export type TermwrightErrorCode =
   | 'timeout'
   | 'stale-snapshot'
   | 'ambiguous-locator'
-  | 'unsupported-action'
+  | 'semantic-capability-unavailable'
+  | 'probe-attach-failed'
+  | 'capability-unavailable'
+  | 'not-actionable'
+  | 'input-mode-disabled'
+  | 'capability-provider-lost'
+  | 'capability-provider-violation'
+  | 'adapter-guarantee-violation'
+  | 'duplicate-semantic-key'
   | 'history-truncated'
   | 'protocol-violation'
   | 'capacity'
@@ -792,6 +916,8 @@ export declare class TermwrightError extends Error {
   readonly code: TermwrightErrorCode;
   /** Last observed screen excerpt + bounded semantic candidates. */
   readonly diagnostics: ErrorDiagnostics;
+  /** Exact failed planner evaluation when this error originated in ActionPlanner. */
+  readonly actionability?: ActionabilityExplanation;
 }
 
 export interface ErrorDiagnostics {

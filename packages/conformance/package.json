@@ -23,7 +23,7 @@
     "src/fixtures"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:hostile": "vitest run --config vitest.hostile.config.ts src/suites/adversarial.test.ts src/suites/mcp-sessions.test.ts",

@@ -173,9 +173,14 @@ export class TerminalStore {
     };
     // Buffered from launch, so a log written before the first capture is not
     // lost: the driver only publishes each line once.
-    harness.events.on('app-log', (event) => {
+    const seenLogs = new Set<object>();
+    const appendLog = (event: Parameters<typeof entry.logs.append>[0]): void => {
+      if (seenLogs.has(event)) return;
+      seenLogs.add(event);
       entry.logs.append(event);
-    });
+    };
+    harness.events.on('app-log', appendLog);
+    for (const event of harness.appLogs()) appendLog(event);
     // The exit promise is observed here so `terminal.close` can report a status
     // without racing, and so an exited child never leaves an unhandled rejection.
     void harness.exit.then(
@@ -216,18 +221,23 @@ export class TerminalStore {
    */
   record(entry: TerminalEntry): RevisionRecord {
     const screen = entry.harness.screen();
+    const existing = entry.history.find((item) => item.revision === screen.revision);
+    // A screen revision is an immutable cursor. Re-reading it must not move its
+    // log baseline forward merely because a file-tail poll completed between
+    // two snapshots.
+    if (existing !== undefined) return existing;
     const semantic = entry.harness.semanticTree();
     const record: RevisionRecord = {
       revision: screen.revision,
       semanticRevision: semantic?.revision ?? null,
       rows: screen.text().split('\n'),
       semantic,
-      logSeq: entry.logs.sequence,
+      // The first cursor covers startup too. Logs can arrive while launch waits
+      // for capability negotiation, before an MCP caller can obtain a cursor.
+      logSeq: entry.history.length === 0 ? 0 : entry.logs.sequence,
       capturedAt: this.#now(),
     };
-    entry.history = [...entry.history.filter((item) => item.revision !== record.revision), record].slice(
-      -MCP_LIMITS.maxHistory,
-    );
+    entry.history = [...entry.history, record].slice(-MCP_LIMITS.maxHistory);
     return record;
   }
 

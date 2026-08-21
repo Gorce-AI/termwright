@@ -52,11 +52,9 @@ separate.
   </tbody>
 </table>
 
-The capability column is the probe vocabulary inside `hello.probe`. The
-adapter message capabilities in the same handshake can vary with the launch —
-Ink, for example, only claims absolute bounds when it owns an interactive
-alternate screen. Every variant is listed in the registry and in the detail
-below.
+The capability column is the probe vocabulary inside `hello.probe`.
+`clipped-geometry` and `pointer-hit-grid` remain separate claims. Every
+executable exact-version combination is listed in the registry and below.
 
 ## Details and limits
 
@@ -66,13 +64,21 @@ below.
     <p>
       <strong>Instrumentation:</strong> {entry.instrumentation.strategy}
     </p>
+    {entry.instrumentation.patchSets.length > 0 && (
+      <p>
+        <strong>Certified patch sets:</strong>{' '}
+        {entry.instrumentation.patchSets.map((patch) => (
+          <span>
+            <code>{patch.name} {patch.version} (patch {patch.patchSetVersion})</code>{' '}
+          </span>
+        ))}
+      </p>
+    )}
     {entry.instrumentation.variants.length > 0 && (
       <p>
-        <strong>Exact patched modules:</strong>{' '}
+        <strong>Behaviorally certified executable combinations:</strong>{' '}
         {entry.instrumentation.variants.map((variant) => (
-          <span>
-            <code>{variant.modules.map((module) => `${module.name} ${module.version} (patch ${module.patchSetVersion})`).join('; ')}</code>{' '}
-          </span>
+          <span><code>{variant.frameworkVersion}: {variant.modules.map((module) => `${module.name} ${module.version}`).join('; ')}</code>{' '}</span>
         ))}
       </p>
     )}

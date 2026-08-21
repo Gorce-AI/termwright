@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalModes
 
-Defined in: [api.ts:305](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L305)
+Defined in: [driver/src/api.ts:377](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L377)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **applicationCursorKeys**: `boolean`
 
-Defined in: [api.ts:324](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L324)
+Defined in: [driver/src/api.ts:397](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L397)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [api.ts:324](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **applicationKeypad**: `boolean`
 
-Defined in: [api.ts:325](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L325)
+Defined in: [driver/src/api.ts:398](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L398)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [api.ts:325](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **bracketedPaste**: `boolean`
 
-Defined in: [api.ts:323](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L323)
+Defined in: [driver/src/api.ts:396](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L396)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [api.ts:323](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **focusReporting**: `"unknown"` \| `"on"` \| `"off"`
 
-Defined in: [api.ts:336](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L336)
+Defined in: [driver/src/api.ts:409](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L409)
 
 Whether the child asked for focus in/out reports, or `'unknown'`.
 
@@ -77,11 +77,11 @@ print it.
 
 > `readonly` **mouseEncoding**: `"default"` \| `"unknown"` \| `"sgr"` \| `"urxvt"` \| `"utf8"`
 
-Defined in: [api.ts:322](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L322)
+Defined in: [driver/src/api.ts:395](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L395)
 
 Mouse report encoding, or `'unknown'` when the platform hides it (see
-[TerminalModes.mouseTracking](#mousetracking)). Input sent under `'unknown'` uses
-SGR, the encoding every program that enables mouse reporting understands.
+[TerminalModes.mouseTracking](#mousetracking)). Pointer actions fail closed under
+`'unknown'`; Termwright never guesses SGR.
 
 ***
 
@@ -89,7 +89,7 @@ SGR, the encoding every program that enables mouse reporting understands.
 
 > `readonly` **mouseTracking**: `"unknown"` \| `"none"` \| `"x10"` \| `"vt200"` \| `"drag"` \| `"any"`
 
-Defined in: [api.ts:316](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L316)
+Defined in: [driver/src/api.ts:389](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L389)
 
 Mouse tracking level the child asked for, or `'unknown'`.
 
@@ -97,8 +97,9 @@ Mouse tracking level the child asked for, or `'unknown'`.
 the platform makes the mode unobservable: ConPTY is an emulator, so it
 consumes the child's `CSI ? 1000/1002/1006 h` instead of forwarding it, and
 the driver never learns what was asked for. The distinction is load-bearing
-for pointer actions: `'none'` is a reason to refuse, `'unknown'` is not,
-because the child still has tracking on and still decodes reports.
+for pointer actions: `'none'` is authoritatively off, while `'unknown'`
+means Termwright cannot select a protocol without guessing. Both fail
+before input is written, with distinct diagnostics.
 
 ***
 
@@ -106,4 +107,4 @@ because the child still has tracking on and still decodes reports.
 
 > `readonly` **synchronizedOutput**: `boolean`
 
-Defined in: [api.ts:337](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L337)
+Defined in: [driver/src/api.ts:410](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L410)

@@ -9,15 +9,26 @@
     {
       "status": "known",
       "value": true,
-      "evidence": "probe"
+      "evidence": {
+        "source": "framework",
+        "method": "native",
+        "strength": "authoritative",
+        "providerId": "vector-provider"
+      }
     },
     {
       "status": "absent",
-      "reason": "detached"
+      "reason": "detached",
+      "evidence": {
+        "source": "framework",
+        "method": "native",
+        "strength": "authoritative",
+        "providerId": "vector-provider"
+      }
     },
     {
       "status": "unknown",
-      "reason": "legacy-unqualified"
+      "reason": "awaiting-revision-pair"
     },
     {
       "status": "unsupported",
@@ -96,78 +107,6 @@
       }
     }
   ],
-  "frameworks": [
-    {
-      "framework": "generic",
-      "identity": "none",
-      "attached": "supported",
-      "displayed": "supported",
-      "intendedRect": "supported",
-      "visibleRect": "supported",
-      "hitTest": "conditional",
-      "reason": "Grid matches are physical cells; pointer delivery still requires terminal mouse mode."
-    },
-    {
-      "framework": "textual",
-      "identity": "stable",
-      "attached": "supported",
-      "displayed": "supported",
-      "intendedRect": "supported",
-      "visibleRect": "supported",
-      "hitTest": "supported",
-      "reason": "The compositor exposes intended/clipped regions and Screen.get_widget_at(), the same fresh-pointer routing lookup."
-    },
-    {
-      "framework": "opentui",
-      "identity": "stable",
-      "attached": "supported",
-      "displayed": "supported",
-      "intendedRect": "supported",
-      "visibleRect": "unsupported",
-      "hitTest": "supported",
-      "reason": "The committed native hit grid proves fresh-pointer ownership; the renderer exposes no per-node visual clip rectangle."
-    },
-    {
-      "framework": "ink",
-      "identity": "stable",
-      "attached": "supported",
-      "displayed": "supported",
-      "intendedRect": "conditional",
-      "visibleRect": "unsupported",
-      "hitTest": "unsupported",
-      "reason": "Intended bounds are conditional on a viewport-stable live region; Ink exposes neither clipping nor pointer ownership."
-    },
-    {
-      "framework": "tview",
-      "identity": "stable",
-      "attached": "supported",
-      "displayed": "supported",
-      "intendedRect": "supported",
-      "visibleRect": "conditional",
-      "hitTest": "unsupported",
-      "reason": "Primitive rectangles do not identify the recipient after overlap."
-    },
-    {
-      "framework": "ratatui",
-      "identity": "frame-local",
-      "attached": "supported",
-      "displayed": "conditional",
-      "intendedRect": "supported",
-      "visibleRect": "conditional",
-      "hitTest": "unsupported",
-      "reason": "Render areas are frame-local and buffer writes do not preserve widget ownership."
-    },
-    {
-      "framework": "charm",
-      "identity": "frame-local",
-      "attached": "supported",
-      "displayed": "conditional",
-      "intendedRect": "unsupported",
-      "visibleRect": "unsupported",
-      "hitTest": "unsupported",
-      "reason": "Bubble Tea hands over a rendered string without attributable widget geometry."
-    }
-  ],
   "qualifiedSnapshot": {
     "v": 2,
     "sessionId": "observation-vector",
@@ -187,7 +126,12 @@
           "displayed": {
             "status": "known",
             "value": true,
-            "evidence": "probe"
+            "evidence": {
+              "source": "framework",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "vector-provider"
+            }
           },
           "intendedRect": {
             "status": "known",
@@ -197,7 +141,12 @@
               "width": 6,
               "height": 2
             },
-            "evidence": "probe"
+            "evidence": {
+              "source": "framework",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "vector-provider"
+            }
           },
           "visibleRect": {
             "status": "known",
@@ -207,7 +156,12 @@
               "width": 6,
               "height": 2
             },
-            "evidence": "viewport-clip"
+            "evidence": {
+              "source": "framework",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "vector-provider"
+            }
           }
         }
       },
@@ -219,7 +173,12 @@
           "displayed": {
             "status": "known",
             "value": true,
-            "evidence": "probe"
+            "evidence": {
+              "source": "framework",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "vector-provider"
+            }
           },
           "intendedRect": {
             "status": "known",
@@ -229,7 +188,12 @@
               "width": 4,
               "height": 2
             },
-            "evidence": "probe"
+            "evidence": {
+              "source": "framework",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "vector-provider"
+            }
           },
           "visibleRect": {
             "status": "known",
@@ -239,7 +203,12 @@
               "width": 4,
               "height": 2
             },
-            "evidence": "viewport-clip"
+            "evidence": {
+              "source": "framework",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "vector-provider"
+            }
           }
         }
       }
@@ -247,11 +216,21 @@
     "coordinateSpace": {
       "status": "known",
       "value": "viewport-cells",
-      "evidence": "probe"
+      "evidence": {
+        "source": "framework",
+        "method": "native",
+        "strength": "authoritative",
+        "providerId": "vector-provider"
+      }
     },
     "hitGrid": {
       "status": "known",
-      "evidence": "hit-grid",
+      "evidence": {
+        "source": "framework",
+        "method": "native",
+        "strength": "authoritative",
+        "providerId": "hit-grid"
+      },
       "value": {
         "regions": [
           {

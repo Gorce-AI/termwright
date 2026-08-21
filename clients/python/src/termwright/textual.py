@@ -201,7 +201,7 @@ def _semantic_actions(value: Any) -> Optional[Tuple[str, ...]]:
         raise TypeError("actions must resolve to a sequence of semantic actions")
     actions = tuple(value)
     if any(not isinstance(action, str) or action not in ACTION_SET for action in actions):
-        raise ValueError("actions must contain only v1 semantic actions")
+        raise ValueError("actions must contain only supported semantic actions")
     if len(set(actions)) != len(actions):
         raise ValueError("actions must not contain duplicates")
     return actions

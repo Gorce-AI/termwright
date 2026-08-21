@@ -1,14 +1,13 @@
 {
-  "protocolId": "termwright/1",
-  "protocolVersion": 1,
+  "protocolId": "termwright/2",
+  "protocolVersion": 2,
   "frameHeaderBytes": 4,
   "markerOscCode": 8487,
   "markerOscPrefix": "twm;",
   "markerMacBytes": 16,
   "env": {
     "endpoint": "TERMWRIGHT_ENDPOINT",
-    "token": "TERMWRIGHT_TOKEN",
-    "protocol": "TERMWRIGHT_PROTOCOL"
+    "token": "TERMWRIGHT_TOKEN"
   },
   "logLevels": [
     "trace",
@@ -63,15 +62,13 @@
   ],
   "capabilities": [
     "tree",
-    "bounds",
-    "absolute-bounds",
+    "intended-geometry",
+    "clipped-geometry",
     "states",
     "actions",
     "text-ranges",
     "render-revisions",
-    "tree-diffs",
     "logs",
-    "qualified-observations",
     "pointer-hit-grid"
   ],
   "provenanceSources": [
@@ -83,6 +80,7 @@
   ],
   "probeCapabilities": [
     "stable-identity",
+    "intended-rect",
     "visible-rect",
     "operations",
     "annotations",
@@ -114,10 +112,6 @@
     "stable",
     "frame-local"
   ],
-  "occlusionValues": [
-    "known",
-    "unknown"
-  ],
   "nodeKeys": [
     "id",
     "parentId",
@@ -125,7 +119,6 @@
     "name",
     "description",
     "value",
-    "bounds",
     "state",
     "extended",
     "actions",
@@ -134,9 +127,9 @@
     "textRanges",
     "testId",
     "frameworkType",
-    "occlusion",
     "p",
-    "px"
+    "px",
+    "geometry"
   ],
   "stateKeys": [
     "disabled",

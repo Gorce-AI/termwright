@@ -14,7 +14,11 @@ from textual.widgets import Label  # noqa: E402
 
 from termwright import DEFAULT_LIMITS, validate_snapshot  # noqa: E402
 from termwright.textual import annotate, remove_annotation, semantic  # noqa: E402
-from termwright_probe.textual_tree import Identities, build_snapshot  # noqa: E402
+from termwright_probe.textual_tree import (  # noqa: E402
+    DuplicateSemanticKeyError,
+    Identities,
+    build_snapshot,
+)
 
 
 @semantic(
@@ -63,7 +67,7 @@ async def test_custom_widget_merges_intent_with_observed_geometry_and_focus():
     assert node["labelledBy"] == [label["id"]]
     assert node["describedBy"] == [label["id"]]
     assert node["state"]["focused"] is True
-    assert node["bounds"]["width"] > 0
+    assert node["geometry"]["visibleRect"]["value"]["width"] > 0
     assert node["actions"] == ["focus", "activate"]
     assert node["p"] == "framework"
     assert node["px"] == {
@@ -92,7 +96,7 @@ async def test_semantic_key_survives_widget_recreation():
     assert ids == ["k:deployment:production", "k:deployment:production"]
 
 
-async def test_duplicate_semantic_keys_degrade_to_distinct_object_ids():
+async def test_duplicate_semantic_keys_fail_closed():
     @semantic(role="status", key="duplicate")
     class Duplicate(Label):
         pass
@@ -104,15 +108,8 @@ async def test_duplicate_semantic_keys_degrade_to_distinct_object_ids():
 
     async with DuplicateApp().run_test() as pilot:
         await pilot.pause()
-        snapshot = build_snapshot(
-            pilot.app, Identities(), session_id="sdk", revision=1
-        ).to_wire()
-
-    nodes = [item for item in snapshot["nodes"] if item.get("testId") in {"one", "two"}]
-    assert len({item["id"] for item in nodes}) == 2
-    assert all(not item["id"].startswith("k:") for item in nodes)
-    assert all(item.get("px", {}).get("id") is None for item in nodes)
-    assert validate_snapshot(snapshot, DEFAULT_LIMITS).ok
+        with pytest.raises(DuplicateSemanticKeyError, match="duplicate SemanticKey"):
+            build_snapshot(pilot.app, Identities(), session_id="sdk", revision=1)
 
 
 async def test_instance_annotation_supports_a_third_party_widget():

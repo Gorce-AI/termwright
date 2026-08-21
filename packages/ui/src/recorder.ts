@@ -17,7 +17,7 @@
 
 import { writeFile } from 'node:fs/promises';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
-import type { SemanticSnapshot } from '@termwright/protocol';
+import type { EffectiveSessionContract, PointerHitGrid, SemanticSnapshot } from '@termwright/protocol';
 import { generateTestSource, type CodegenOptions, type RecordedEvent } from './codegen.js';
 import { coalesceInput, InputDecoder } from './input-decode.js';
 import { generateSelector, type GeneratedSelector } from './selector.js';
@@ -53,7 +53,10 @@ export interface RecorderSession {
   /** Enters or leaves pick mode. */
   setPickMode(enabled: boolean): void;
 
-  /** Records a click on a node, addressed by the narrowest selector. */
+  /**
+   * Records a semantic click only when the frozen contract and the committed
+   * frame both prove that real pointer input can be routed to this node.
+   */
   recordClick(nodeId: string): GeneratedSelector | undefined;
   /** Records a visibility assertion on a node. */
   recordAssertVisible(nodeId: string): GeneratedSelector | undefined;
@@ -158,6 +161,11 @@ class Recorder implements RecorderSession {
   }
 
   recordClick(nodeId: string): GeneratedSelector | undefined {
+    const snapshot = this.harness.semanticTree();
+    const contract = this.harness.contract();
+    if (snapshot === null || contract === null || !ownsPointerCell(contract, snapshot, nodeId)) {
+      return undefined;
+    }
     const selector = this.#selectorFor(nodeId);
     if (selector === undefined) return undefined;
     this.#push({ kind: 'click', selector, t: this.#now() });
@@ -236,4 +244,45 @@ class Recorder implements RecorderSession {
     }
     this.#push({ kind: 'type', text, t });
   }
+}
+
+/**
+ * Semantic code generation is an executable promise: a later `.click()` must
+ * be able to use the same authoritative ownership model that justified the
+ * recording. Bounds, paint provenance and a node picked in the inspector are
+ * deliberately insufficient.
+ */
+function ownsPointerCell(
+  contract: EffectiveSessionContract,
+  snapshot: SemanticSnapshot,
+  nodeId: string,
+): boolean {
+  if (contract.sessionId !== snapshot.sessionId) return false;
+  const capability = contract.capabilities['pointer-hit-testing'];
+  if (capability.status !== 'supported' || capability.evidence.strength !== 'authoritative') return false;
+  if (!snapshot.nodes.some((node) => node.id === nodeId)) return false;
+
+  if (
+    snapshot.hitGrid.status === 'known' &&
+    snapshot.hitGrid.evidence.strength === 'authoritative' &&
+    snapshot.hitGrid.evidence.providerId === capability.evidence.providerId
+  ) {
+    return gridOwns(snapshot.hitGrid.value, nodeId);
+  }
+
+  return (snapshot.providerEvidence ?? []).some((provider) =>
+    provider.status === 'available' &&
+    provider.sessionId === snapshot.sessionId &&
+    provider.revision === snapshot.revision &&
+    provider.providerId === capability.evidence.providerId &&
+    provider.evidence.strength === 'authoritative' &&
+    provider.hitGrid !== undefined &&
+    gridOwns(provider.hitGrid, nodeId),
+  );
+}
+
+function gridOwns(grid: PointerHitGrid, nodeId: string): boolean {
+  return grid.regions.some(({ recipientId, rect }) =>
+    recipientId === nodeId && rect.width > 0 && rect.height > 0,
+  );
 }

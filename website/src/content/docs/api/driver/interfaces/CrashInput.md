@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: CrashInput
 
-Defined in: [api.ts:633](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L633)
+Defined in: [driver/src/api.ts:741](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L741)
 
 One remembered input, as it appears in a [CrashReport](../crashreport/).
 
@@ -21,7 +21,7 @@ One remembered input, as it appears in a [CrashReport](../crashreport/).
 
 > `readonly` **bytes**: `number`
 
-Defined in: [api.ts:636](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L636)
+Defined in: [driver/src/api.ts:744](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L744)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [api.ts:636](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **kind**: `"key"` \| `"mouse"` \| `"paste"` \| `"raw"`
 
-Defined in: [api.ts:635](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L635)
+Defined in: [driver/src/api.ts:743](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L743)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [api.ts:635](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` `optional` **preview?**: `string`
 
-Defined in: [api.ts:641](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L641)
+Defined in: [driver/src/api.ts:749](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L749)
 
 Escaped, truncated preview of what was sent. Omitted for pastes, which
 routinely carry secrets — their size is reported instead.
@@ -48,4 +48,4 @@ routinely carry secrets — their size is reported instead.
 
 > `readonly` **timeMs**: `number`
 
-Defined in: [api.ts:634](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L634)
+Defined in: [driver/src/api.ts:742](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L742)

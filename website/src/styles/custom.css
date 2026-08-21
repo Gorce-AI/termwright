@@ -10,6 +10,15 @@
 	--sl-color-accent-high: #063c2e;
 }
 
+/* The brand must remain legible independently of the accent text token. */
+:root[data-theme='dark'] .site-title {
+	color: #f8fafc;
+}
+
+:root[data-theme='light'] .site-title {
+	color: #11152b;
+}
+
 /* Terminal transcripts in the docs: keep them monospaced and unwrapped so the
    grid a reader sees matches the grid a test asserts on. */
 .terminal-frame {

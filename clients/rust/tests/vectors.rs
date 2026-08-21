@@ -48,7 +48,12 @@ fn observation_vectors_preserve_unknown_and_half_open_geometry() {
         serde_json::json!(["known", "absent", "unknown", "unsupported"])
     );
     assert_eq!(vectors["examples"][2]["status"], "unknown");
-    assert_eq!(vectors["examples"][2]["reason"], "legacy-unqualified");
+    assert_eq!(vectors["examples"][2]["reason"], "awaiting-revision-pair");
+    assert_eq!(vectors["examples"][1]["status"], "absent");
+    assert_eq!(
+        vectors["examples"][1]["evidence"]["strength"],
+        "authoritative"
+    );
     assert_eq!(vectors["halfOpenTouch"]["width"], 0);
     let ratios: std::collections::HashMap<_, _> = vectors["geometryCases"]
         .as_array()
@@ -64,21 +69,14 @@ fn observation_vectors_preserve_unknown_and_half_open_geometry() {
     assert_eq!(ratios["fully-inside"], 1.0);
     assert_eq!(ratios["partially-clipped"], 0.25);
     assert_eq!(ratios["touching-outside-edge"], 0.0);
-    assert!(vectors["frameworks"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|row| row["reason"]
-            .as_str()
-            .is_some_and(|reason| !reason.is_empty())));
     let qualified: termwright_protocol::Snapshot =
         serde_json::from_value(vectors["qualifiedSnapshot"].clone())
             .expect("Rust wire types decode the qualified v2 vector");
     assert_eq!(qualified.v, 2);
-    assert!(qualified.nodes.iter().all(|node| node.geometry.is_some()));
+    assert!(!qualified.nodes.is_empty());
     assert!(matches!(
         qualified.hit_grid,
-        Some(termwright_protocol::Observation::Known { .. })
+        termwright_protocol::Observation::Known { .. }
     ));
     validate_snapshot(&vectors["qualifiedSnapshot"], &DEFAULT_LIMITS)
         .expect("qualified v2 vector validates structurally");
@@ -138,10 +136,6 @@ fn constants_match_the_reference() {
         termwright_protocol::ENV_ENDPOINT
     );
     assert_eq!(vectors["env"]["token"], termwright_protocol::ENV_TOKEN);
-    assert_eq!(
-        vectors["env"]["protocol"],
-        termwright_protocol::ENV_PROTOCOL
-    );
 }
 
 // -- framing ---------------------------------------------------------------
@@ -368,7 +362,7 @@ fn snapshot_vectors() {
 
 #[test]
 fn snapshots_built_from_the_types_validate() {
-    use termwright_protocol::{Action, Node, Rect, Role, Snapshot, State};
+    use termwright_protocol::{Action, Node, Role, Snapshot, State};
 
     let mut snapshot = Snapshot::new(80, 24);
     snapshot.session_id = "s-1".into();
@@ -377,7 +371,6 @@ fn snapshots_built_from_the_types_validate() {
     snapshot.push(
         Node::new("ok", Role::Button, "OK")
             .with_parent("root")
-            .with_bounds(Rect::new(1, 1, 4, 1))
             .with_state(State {
                 focused: Some(true),
                 ..State::default()
@@ -595,18 +588,12 @@ fn node_and_state_keys_are_exactly_the_protocols() {
 fn the_node_struct_can_carry_every_field() {
     use std::collections::{BTreeMap, BTreeSet};
 
-    use termwright_protocol::{Node, Occlusion, Provenance, Rect, Role, State};
+    use termwright_protocol::{Node, Provenance, Role, State};
 
     let mut node = Node::new("n1", Role::Generic, "name");
     node.parent_id = Some("root".into());
     node.description = Some("described".into());
     node.value = Some(String::new());
-    node.bounds = Some(Rect {
-        row: 0,
-        column: 0,
-        width: 1,
-        height: 1,
-    });
     node.state = Some(State::default());
     node.extended = Some(BTreeMap::from([(
         "domain".to_owned(),
@@ -618,7 +605,6 @@ fn the_node_struct_can_carry_every_field() {
     node.text_ranges = Some(vec![]);
     node.test_id = Some("t".into());
     node.framework_type = Some("Widget".into());
-    node.occlusion = Some(Occlusion::Known);
     node.p = Some(Provenance::Framework);
     node.px = Some(BTreeMap::from([(
         "name".to_owned(),

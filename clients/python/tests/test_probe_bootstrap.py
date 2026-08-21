@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -111,6 +112,70 @@ def test_the_probe_is_installed_before_the_script_runs(tmp_path):
     observed = json.loads(result.stdout)
     assert observed["probe_imported"] is True, "sitecustomize did not reach the probe"
     assert "_Waiter" in observed["watching"], "nothing is waiting for textual"
+
+
+def _assert_injected(command: list[str], env: dict, *, cwd: Path | None = None) -> None:
+    result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert result.stdout.strip().splitlines()[-1] == "True", result.stdout
+
+
+def test_injection_reaches_python_module_and_console_entrypoint(tmp_path):
+    module = tmp_path / "probe_entry.py"
+    module.write_text("import sys; print('termwright_probe' in sys.modules)\n")
+    console = tmp_path / "probe-console"
+    console.write_text(f"#!{sys.executable}\nimport sys\nprint('termwright_probe' in sys.modules)\n")
+    console.chmod(0o755)
+    with write_bootstrap(package_root=SRC) as bootstrap:
+        env = bootstrap.env(instrumented_env(tmp_path))
+        env["PYTHONPATH"] = os.pathsep.join([bootstrap.directory, str(tmp_path), SRC])
+        _assert_injected([sys.executable, "-m", "probe_entry"], env, cwd=tmp_path)
+        _assert_injected([str(console)], env, cwd=tmp_path)
+
+
+@pytest.mark.parametrize("bypass", ["-S", "-E"])
+def test_python_bootstrap_bypass_is_detectable_and_never_fakes_attachment(tmp_path, bypass):
+    """These interpreter flags intentionally bypass the sitecustomize hook.
+
+    The driver turns a required semantic contract that never attaches into
+    TW_PROBE_ATTACH_FAILED; this process-side regression proves the reason is
+    real and deterministic instead of allowing a generic-mode fallback.
+    """
+    with write_bootstrap(package_root=SRC) as bootstrap:
+        env = bootstrap.env(instrumented_env(tmp_path))
+        result = subprocess.run(
+            [sys.executable, bypass, "-c", "import sys; print('termwright_probe' in sys.modules)"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False"
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is not installed")
+def test_injection_reaches_uv_run(tmp_path):
+    with write_bootstrap(package_root=SRC) as bootstrap:
+        env = bootstrap.env(instrumented_env(tmp_path))
+        _assert_injected([
+            "uv", "run", "--no-project", "--python", sys.executable,
+            "python", "-c", "import sys; print('termwright_probe' in sys.modules)",
+        ], env, cwd=tmp_path)
+
+
+@pytest.mark.skipif(shutil.which("poetry") is None, reason="Poetry is not installed")
+def test_injection_reaches_poetry_run(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='termwright-injection-fixture'\nversion='0.0.0'\nrequires-python='>=3.9'\n"
+    )
+    with write_bootstrap(package_root=SRC) as bootstrap:
+        env = bootstrap.env(instrumented_env(tmp_path, POETRY_VIRTUALENVS_CREATE="false"))
+        _assert_injected([
+            "poetry", "run", "python", "-c",
+            "import sys; print('termwright_probe' in sys.modules)",
+        ], env, cwd=tmp_path)
 
 
 def test_the_script_directory_does_not_shadow_us(tmp_path):

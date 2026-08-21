@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@termwright/evidence-provider": "workspace:*",
     "@termwright/ink": "workspace:*",
     "ink": "^7.1.1",
     "react": "^19.2.8"

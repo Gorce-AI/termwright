@@ -16,6 +16,7 @@ func main() {
 	app := tview.NewApplication()
 
 	status := tview.NewTextView().SetText("status: ready")
+	redraws := 0
 	list := tview.NewList().ShowSecondaryText(false)
 	list.SetTitle("Files").SetBorder(true)
 	for _, name := range []string{"readme.md", "main.go", "LICENSE"} {
@@ -47,6 +48,7 @@ func main() {
 		if event.Key() == tcell.KeyTab {
 			focused = (focused + 1) % len(focusOrder)
 			app.SetFocus(focusOrder[focused])
+			status.SetText(fmt.Sprintf("status: ready redraw:%d focus:%d", redraws, focused))
 			return nil
 		}
 		// Shortcuts only while the main page is in front. Without this the
@@ -56,6 +58,14 @@ func main() {
 			return event
 		}
 		switch event.Rune() {
+		case 'r':
+			// The visible counter is an application-owned causal boundary: a
+			// test observing it knows this exact input reached the event loop and
+			// the requested redraw was painted, independently of PTY revisions.
+			redraws++
+			status.SetText(fmt.Sprintf("status: ready redraw:%d", redraws))
+			app.Sync()
+			return nil
 		case 'q':
 			app.Stop()
 			return nil

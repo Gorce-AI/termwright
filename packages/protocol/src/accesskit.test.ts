@@ -11,10 +11,22 @@ import {
   type AccessKitNode,
 } from './accesskit.js';
 
+const evidence = () => ({ source: 'framework', method: 'native', strength: 'authoritative', providerId: 'test' } as const);
+const unknownGeometry = () => ({
+  displayed: { status: 'unknown', reason: 'awaiting-revision-pair' } as const,
+  intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' } as const,
+  visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } as const,
+});
+const geometry = (rect: { row: number; column: number; width: number; height: number }) => ({
+  displayed: { status: 'known', value: true, evidence: evidence() } as const,
+  intendedRect: { status: 'known', value: { ...rect }, evidence: evidence() } as const,
+  visibleRect: { status: 'known', value: { ...rect }, evidence: evidence() } as const,
+});
+
 /** A dialog fixture exercising roles, states, relations and geometry. */
 function fixture(): SemanticSnapshot {
   const snapshot = {
-    v: 1,
+    v: 2,
     sessionId: 's1',
     revision: 7,
     columns: 80,
@@ -22,16 +34,16 @@ function fixture(): SemanticSnapshot {
     cursor: { row: 3, column: 5, visible: true },
     rootIds: ['app'],
     nodes: [
-      { id: 'app', role: 'application', name: 'installer' },
+      { id: 'app', role: 'application', name: 'installer', geometry: unknownGeometry() },
       {
         id: 'dialog',
         parentId: 'app',
         role: 'dialog',
         name: 'Permission',
         state: { modal: true },
-        bounds: { row: 8, column: 20, width: 40, height: 9 },
+        geometry: geometry({ row: 8, column: 20, width: 40, height: 9 }),
       },
-      { id: 'prompt', parentId: 'dialog', role: 'text', name: 'Allow bash to run?' },
+      { id: 'prompt', parentId: 'dialog', role: 'text', name: 'Allow bash to run?', geometry: unknownGeometry() },
       {
         id: 'approve',
         parentId: 'dialog',
@@ -39,7 +51,7 @@ function fixture(): SemanticSnapshot {
         name: 'Approve',
         state: { focused: true },
         actions: ['focus', 'activate'],
-        bounds: { row: 14, column: 23, width: 11, height: 1 },
+        geometry: geometry({ row: 14, column: 23, width: 11, height: 1 }),
         describedBy: ['prompt'],
       },
       {
@@ -48,8 +60,11 @@ function fixture(): SemanticSnapshot {
         role: 'checkbox',
         name: 'Remember',
         state: { checked: 'mixed', disabled: true },
+        geometry: unknownGeometry(),
       },
     ],
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
   const result = validateSnapshot(snapshot, DEFAULT_LIMITS);
   if (!result.ok) throw new Error(`fixture invalid: ${result.code} ${result.detail}`);
@@ -167,6 +182,7 @@ describe('toAccessKitTreeUpdate — mapping', () => {
           role: 'textbox' as SemanticRole,
           name: 'Notes',
           state: { multiline: true },
+          geometry: unknownGeometry(),
         },
       ],
     };
@@ -276,11 +292,11 @@ describe('toAccessKitTreeUpdate — geometry', () => {
     expect(exported.cellBounds[String(accessKitNodeId('prompt'))]).toBeUndefined();
   });
 
-  it('handles a snapshot with no bounds at all', () => {
+  it('handles a snapshot with no known visible geometry', () => {
     const base = fixture();
     const snapshot: SemanticSnapshot = {
       ...base,
-      nodes: base.nodes.map(({ bounds: _bounds, ...rest }) => rest),
+      nodes: base.nodes.map((node) => ({ ...node, geometry: unknownGeometry() })),
     };
     const exported = toAccessKitTreeUpdate(snapshot);
     expect(exported.cellBounds).toEqual({});
@@ -291,7 +307,7 @@ describe('toAccessKitTreeUpdate — geometry', () => {
 describe('toAccessKitTreeUpdate — edges', () => {
   it('exports a single-node tree', () => {
     const snapshot = validateSnapshot(
-      { v: 1, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['only'], nodes: [{ id: 'only', role: 'application', name: 'app' }] },
+      { v: 2, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['only'], nodes: [{ id: 'only', role: 'application', name: 'app', geometry: unknownGeometry() }], coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() }, hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' } },
       DEFAULT_LIMITS,
     );
     if (!snapshot.ok) throw new Error(snapshot.detail);
@@ -302,7 +318,7 @@ describe('toAccessKitTreeUpdate — edges', () => {
 
   it('omits an empty label rather than exporting an empty string', () => {
     const snapshot = validateSnapshot(
-      { v: 1, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['r'], nodes: [{ id: 'r', role: 'generic', frameworkType: 'Fixture', name: '' }] },
+      { v: 2, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['r'], nodes: [{ id: 'r', role: 'generic', frameworkType: 'Fixture', name: '', geometry: unknownGeometry() }], coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() }, hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' } },
       DEFAULT_LIMITS,
     );
     if (!snapshot.ok) throw new Error(snapshot.detail);
@@ -310,12 +326,12 @@ describe('toAccessKitTreeUpdate — edges', () => {
   });
 
   it('scales to the node ceiling without collisions', () => {
-    const nodes = [{ id: 'root', role: 'region', name: 'main' }];
+    const nodes = [{ id: 'root', role: 'region', name: 'main', geometry: unknownGeometry() }];
     for (let i = 0; i < DEFAULT_LIMITS.maxNodes - 1; i += 1) {
-      nodes.push({ id: `n${i}`, parentId: 'root', role: 'text', name: `row ${i}` } as never);
+      nodes.push({ id: `n${i}`, parentId: 'root', role: 'text', name: `row ${i}`, geometry: unknownGeometry() } as never);
     }
     const snapshot = validateSnapshot(
-      { v: 1, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['root'], nodes },
+      { v: 2, sessionId: 's', revision: 1, columns: 80, rows: 24, rootIds: ['root'], nodes, coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() }, hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' } },
       DEFAULT_LIMITS,
     );
     if (!snapshot.ok) throw new Error(snapshot.detail);

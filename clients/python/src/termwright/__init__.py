@@ -20,7 +20,6 @@ from .client import (
     CAPABILITIES_WITH_LOGS,
     DEFAULT_CAPABILITIES,
     ENV_ENDPOINT,
-    ENV_PROTOCOL,
     ENV_TOKEN,
     SemanticClient,
     client_from_env,
@@ -55,16 +54,18 @@ from .messages import (
 )
 from .roles import ADAPTER_CAPABILITIES, SEMANTIC_ACTIONS, SEMANTIC_ROLES
 from .tree import (
+    EvidenceProvenance,
     CursorInfo,
     NodeGeometryObservations,
     Observation,
+    framework_evidence,
     Rect,
     SemanticNode,
     SemanticSnapshot,
     SemanticState,
     SemanticTextRange,
 )
-from .validate import ValidationResult, apply_tree_delta, validate_snapshot, validate_tree_delta
+from .validate import ValidationResult, validate_snapshot
 
 __version__ = "0.2.0"
 
@@ -85,7 +86,6 @@ __all__ = [
     "ENV_DEBUG",
     "ENV_DEBUG_FILE",
     "ENV_ENDPOINT",
-    "ENV_PROTOCOL",
     "ENV_TOKEN",
     "FRAME_HEADER_BYTES",
     "FrameDecoder",
@@ -99,8 +99,10 @@ __all__ = [
     "ProtocolViolation",
     "RenderMarker",
     "CursorInfo",
+    "EvidenceProvenance",
     "NodeGeometryObservations",
     "Observation",
+    "framework_evidence",
     "Rect",
     "SEMANTIC_ACTIONS",
     "SEMANTIC_ROLES",
@@ -118,8 +120,6 @@ __all__ = [
     "parse_adapter_message",
     "parse_driver_message",
     "project_dto",
-    "apply_tree_delta",
     "validate_snapshot",
-    "validate_tree_delta",
     "verify_marker_payload",
 ]

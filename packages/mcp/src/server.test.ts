@@ -101,7 +101,7 @@ afterEach(async () => {
 });
 
 describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout: 30_000 }, () => {
-  it('walks launch -> snapshot -> click -> wait_for -> capture_since -> close', async () => {
+  it.skipIf(process.platform === 'win32')('walks launch -> snapshot -> click -> wait_for -> capture_since -> close', async () => {
     const { call } = await connectSession();
     const terminal = await launchSemantic(call);
 
@@ -112,9 +112,8 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(snapshot.data['semanticTree']).toBe('available');
     expect(snapshot.text).toMatch(/^Terminal t1 60x10 revision \d+$/mu);
     expect(snapshot.text).toContain('semanticTree: available');
-    expect(snapshot.text).toMatch(/dialog "Permission" ref=n1@\d+ modal/u);
-    expect(snapshot.text).toMatch(/ {2}button "Approve" ref=n2@\d+ focused/u);
-    expect(snapshot.text).not.toContain('bounds=');
+    expect(snapshot.text).toMatch(/dialog "Permission" ref=n1@\d+ bounds=\(0,0,40,2\) modal/u);
+    expect(snapshot.text).toMatch(/ {2}button "Approve" ref=n2@\d+ bounds=\(1,2,9,1\) focused/u);
     expect(snapshot.text).toContain('visible text:');
 
     const refs = snapshot.data['refs'] as { ref: string; name: string }[];
@@ -122,9 +121,48 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(reject).toBeDefined();
     const cursor = snapshot.data['revision'] as number;
 
-    const clicked = await call('terminal.click', { terminal, ref: reject?.ref });
+    const checkpoint = await call('terminal.checkpoint', { terminal });
+    expect(checkpoint.isError, checkpoint.text).toBe(false);
+    expect(checkpoint.data).toMatchObject({ terminal, contractId: expect.any(String), sequence: expect.any(Number) });
+
+    const explanation = await call('terminal.actionability', {
+      terminal,
+      ref: reject?.ref,
+      action: 'click',
+    });
+    expect(explanation.isError, explanation.text).toBe(false);
+    expect(explanation.data).toMatchObject({
+      actionable: true,
+      strategy: 'authoritative-pointer-region',
+      contractId: expect.any(String),
+      requirements: expect.arrayContaining([
+        expect.objectContaining({ kind: 'pointer-input', verdict: 'satisfied', observation: 'known' }),
+        expect.objectContaining({ kind: 'mouse-input-enabled', verdict: 'satisfied', observation: 'known' }),
+        expect.objectContaining({
+          kind: 'receives-pointer', verdict: 'satisfied', observation: 'known',
+          evidence: expect.objectContaining({ strength: 'authoritative', providerId: expect.any(String) }),
+        }),
+      ]),
+    });
+
+    const clicked = await call('terminal.click', {
+      terminal,
+      ref: reject?.ref,
+      modifiers: ['control', 'shift', 'alt'],
+    });
     expect(clicked.isError, clicked.text).toBe(false);
     expect(clicked.data['ok']).toBe(true);
+    expect(clicked.data['action']).toMatchObject({
+      kind: 'click',
+      strategy: 'authoritative-pointer-region',
+      contractId: expect.any(String),
+      operations: [
+        { device: 'mouse', kind: 'down', modifiers: ['shift', 'alt', 'control'] },
+        { device: 'mouse', kind: 'up', modifiers: ['shift', 'alt', 'control'] },
+      ],
+      requirements: expect.any(Array),
+      physicalEvidence: expect.objectContaining({ strength: 'authoritative', providerId: expect.any(String) }),
+    });
 
     const waited = await call('terminal.wait_for', {
       terminal,
@@ -158,6 +196,39 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(closed.data['ok']).toBe(true);
   });
 
+  it.runIf(process.platform === 'win32')('reports unavailable pointer actionability through MCP without emitting input', async () => {
+    const { call } = await connectSession();
+    const terminal = await launchSemantic(call);
+    await call('terminal.wait_for', { terminal, wait: 'text', text: 'Permission required' });
+
+    const before = await call('terminal.snapshot', { terminal });
+    const reject = (before.data['refs'] as { ref: string; name: string }[])
+      .find((entry) => entry.name === 'Reject');
+    expect(reject).toBeDefined();
+
+    const explanation = await call('terminal.actionability', {
+      terminal,
+      ref: reject?.ref,
+      action: 'click',
+    });
+    expect(explanation.isError, explanation.text).toBe(false);
+    expect(explanation.data).toMatchObject({
+      actionable: false,
+      reason: { code: 'capability-unavailable' },
+      requirements: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'pointer-input', verdict: 'inconclusive', observation: 'unsupported',
+        }),
+      ]),
+    });
+
+    const clicked = await call('terminal.click', { terminal, ref: reject?.ref });
+    expect(clicked.isError).toBe(true);
+    expect(clicked.error?.kind).toBe('capability-unavailable');
+    const after = await call('terminal.snapshot', { terminal });
+    expect(after.data['revision']).toBe(before.data['revision']);
+  });
+
   it('targets by role and by testId, and reports candidates when a locator is ambiguous', async () => {
     const { call } = await connectSession();
     const terminal = await launchSemantic(call);
@@ -184,8 +255,8 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
 
     const snapshot = await call('terminal.snapshot', { terminal });
     const refs = snapshot.data['refs'] as { ref: string; name: string }[];
-    const approve = refs.find((entry) => entry.name === 'Approve');
-    expect(approve).toBeDefined();
+    const reject = refs.find((entry) => entry.name === 'Reject');
+    expect(reject).toBeDefined();
     const mintedAt = snapshot.data['semanticRevision'] as number;
     expect(mintedAt).toBeGreaterThan(0);
 
@@ -204,9 +275,14 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
       { timeout: 15_000, interval: 50 },
     );
 
-    const clicked = await call('terminal.click', { terminal, ref: approve?.ref });
-    expect(clicked.isError, clicked.text).toBe(false);
-    expect(clicked.data['ok']).toBe(true);
+    // Reject was unfocused when this ref was minted and becomes focused in the
+    // next revision. A targeted keyboard action proves stable re-resolution
+    // without depending on platform-specific pointer-mode visibility.
+    const pressed = await call('terminal.press', { terminal, ref: reject?.ref, keys: 'Enter' });
+    expect(pressed.isError, pressed.text).toBe(false);
+    expect(pressed.data['ref']).toMatch(/^n3@\d+$/u);
+    expect(pressed.data['ref']).not.toBe(reject?.ref);
+    await call('terminal.wait_for', { terminal, wait: 'text', text: 'ACTIVATED reject' });
   });
 
   it('writes the full dump to disk and returns only refs plus the path', async () => {

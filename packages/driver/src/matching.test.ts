@@ -5,13 +5,15 @@ import { parseSelector, roleQuery, textMatcher } from './selectors.js';
 
 function tree(nodes: readonly Partial<SemanticNode>[]): SemanticIndex {
   const snapshot: SemanticSnapshot = {
-    v: 1,
+    v: 2,
     sessionId: 's',
     revision: 3,
     columns: 80,
     rows: 24,
     rootIds: ['root'],
     nodes: nodes.map((node) => ({ role: 'generic', name: '', ...node }) as SemanticNode),
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
   return new SemanticIndex(snapshot);
 }

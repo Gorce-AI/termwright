@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SessionCapabilities
 
-Defined in: [api.ts:243](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L243)
+Defined in: [driver/src/api.ts:315](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L315)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` `optional` **adapter?**: `object`
 
-Defined in: [api.ts:247](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L247)
+Defined in: [driver/src/api.ts:319](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L319)
 
 #### name
 
@@ -52,7 +52,7 @@ Defined in: [api.ts:247](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **capabilities**: readonly `string`[]
 
-Defined in: [api.ts:250](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L250)
+Defined in: [driver/src/api.ts:322](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L322)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [api.ts:250](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **platform**: `Platform`
 
-Defined in: [api.ts:251](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L251)
+Defined in: [driver/src/api.ts:323](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L323)
 
 ***
 
@@ -68,7 +68,7 @@ Defined in: [api.ts:251](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` `optional` **probe?**: `ProbeInfo`
 
-Defined in: [api.ts:249](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L249)
+Defined in: [driver/src/api.ts:321](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L321)
 
 Self-description supplied by an instrumented framework probe.
 
@@ -78,7 +78,7 @@ Self-description supplied by an instrumented framework probe.
 
 > `readonly` **semanticTree**: `boolean`
 
-Defined in: [api.ts:244](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L244)
+Defined in: [driver/src/api.ts:316](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L316)
 
 ***
 
@@ -86,6 +86,6 @@ Defined in: [api.ts:244](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **terminalProfile**: `string`
 
-Defined in: [api.ts:246](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L246)
+Defined in: [driver/src/api.ts:318](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L318)
 
 Id of the terminal profile this session counts characters with.

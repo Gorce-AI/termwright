@@ -12,7 +12,7 @@ import { recognize } from '@termwright/recognizers';
 import { PERFORMANCE_SCENARIOS, type RenderingMode } from './fixtures.js';
 
 export const PERFORMANCE_REPORT_KIND = 'termwright-performance-report' as const;
-export const PERFORMANCE_REPORT_VERSION = 1 as const;
+export const PERFORMANCE_REPORT_VERSION = 2 as const;
 
 export type MetricUnit =
   | 'count'
@@ -44,7 +44,6 @@ export interface ScenarioMetrics {
   readonly probeEventsPerFrame: PerformanceMetric;
   readonly bytesPerFrame: PerformanceMetric;
   readonly fullSnapshots: PerformanceMetric;
-  readonly deltas: PerformanceMetric;
   readonly droppedEvents: PerformanceMetric;
   readonly coalescedEvents: PerformanceMetric;
   readonly semanticNodesPerFrame: PerformanceMetric;
@@ -255,11 +254,6 @@ export function runPerformanceBenchmark(options: BenchmarkOptions = {}): Perform
           iterations,
           'The current TypeScript probe transport sends one full snapshot per benchmark frame.',
         ),
-        deltas: exact(
-          'count',
-          0,
-          'The current TypeScript probe transport does not advertise or emit tree-diffs.',
-        ),
         droppedEvents: unavailable(
           'count',
           'The synchronous semantic pipeline has no bounded producer queue; only a live transport can observe backpressure drops.',
@@ -353,7 +347,6 @@ export function validatePerformanceReport(value: unknown): asserts value is Perf
     'probeEventsPerFrame',
     'bytesPerFrame',
     'fullSnapshots',
-    'deltas',
     'droppedEvents',
     'coalescedEvents',
     'semanticNodesPerFrame',
@@ -369,7 +362,6 @@ export function validatePerformanceReport(value: unknown): asserts value is Perf
     probeEventsPerFrame: 'events/frame',
     bytesPerFrame: 'bytes/frame',
     fullSnapshots: 'count',
-    deltas: 'count',
     droppedEvents: 'count',
     coalescedEvents: 'count',
     semanticNodesPerFrame: 'nodes/frame',

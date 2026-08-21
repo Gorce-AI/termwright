@@ -33,17 +33,18 @@ A probe must remain dormant unless both `TERMWRIGHT_ENDPOINT` and
 `TERMWRIGHT_TOKEN` are present. Outside a test it must open no connection and
 must not change terminal output.
 
-## Negotiate the protocol
+## Open the semantic session
 
 Send one `hello` with:
 
 - protocol `termwright/2`;
 - a non-empty adapter name and version;
 - the capabilities the probe can actually provide;
-- `qualified-observations` for evidence-qualified geometry and visibility;
+- `intended-geometry` only for authoritative layout rectangles;
+- `clipped-geometry` only for authoritative visible rectangles;
 - `pointer-hit-grid` only when the framework exposes exact fresh-pointer routing.
 
-Wait for the selected protocol and session limits before publishing snapshots.
+Wait for the acknowledgement and session limits before publishing snapshots.
 A malformed or late handshake does not upgrade an already generic session.
 
 ## Build semantic nodes

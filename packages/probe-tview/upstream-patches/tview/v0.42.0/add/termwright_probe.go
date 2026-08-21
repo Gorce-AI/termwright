@@ -31,6 +31,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +41,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"github.com/gorce-ai/termwright/clients/go/annotate"
+	"github.com/gorce-ai/termwright/clients/go/evidence"
 	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
@@ -55,6 +57,7 @@ const (
 // that does not carry the handshake variables.
 type termwrightProbeState struct {
 	client *protocol.Client
+	start  sync.Once
 
 	mu            sync.Mutex
 	ids           map[Primitive]string
@@ -70,10 +73,9 @@ type termwrightProbeState struct {
 // Exported because the conformance fixture asserts on it: a drop counter no
 // test can read is a drop counter nobody notices.
 type TermwrightProbeStats struct {
-	Frames              uint64
-	Dropped             uint64
-	TimedOut            uint64
-	FullSnapshotPending bool
+	Frames   uint64
+	Dropped  uint64
+	TimedOut uint64
 }
 
 // TermwrightProbeStatistics returns the counters, or zeroes when dormant.
@@ -83,10 +85,9 @@ func TermwrightProbeStatistics() TermwrightProbeStats {
 		return TermwrightProbeStats{}
 	}
 	return TermwrightProbeStats{
-		Frames:              p.frames.Load(),
-		Dropped:             p.dropped.Load(),
-		TimedOut:            p.timedOut.Load(),
-		FullSnapshotPending: p.client.FullSnapshotRequired(),
+		Frames:   p.frames.Load(),
+		Dropped:  p.dropped.Load(),
+		TimedOut: p.timedOut.Load(),
 	}
 }
 
@@ -110,22 +111,36 @@ func newTermwrightProbe() *termwrightProbeState {
 				protocol.ProbeCapAnnotations,
 			},
 		},
-		// Bounds one frame write. The publish below happens under the
+		Capabilities: []protocol.Capability{
+			protocol.CapTree,
+			protocol.CapStates,
+			protocol.CapActions,
+			protocol.CapRenderRevisions,
+		},
+		// Limit one frame write. The publish below happens under the
 		// application's write lock, so an unbounded write would freeze
 		// rendering whenever the driver stops reading — a frozen debugger, a
 		// slow consumer, a transport torn down mid-frame. A quarter of a
 		// second of not being read means the driver is not keeping up, and
 		// the next frame carries newer state anyway.
 		WriteTimeout: protocol.DefaultWriteTimeout,
+		// Freeze the application's production evidence providers into the same
+		// hello as the certified tview adapter. Providers only contribute facts;
+		// all actions still enter through tcell's real terminal input path.
+		EvidenceProviders: evidence.DefaultRegistry(),
 	})
 	if client == nil {
 		return nil
 	}
-	p := &termwrightProbeState{client: client, ids: make(map[Primitive]string)}
-	// The handshake must not block the first frame; publishing is a no-op
-	// until it completes.
-	go func() { _ = client.Start(protocol.DialTimeout) }()
-	return p
+	// Do not freeze providers during package initialization: application main
+	// has not had a chance to register its production router yet. The first
+	// post-flush hook starts synchronously, then publishes that same frame.
+	return &termwrightProbeState{client: client, ids: make(map[Primitive]string)}
+}
+
+func (p *termwrightProbeState) ensureStarted() bool {
+	p.start.Do(func() { _ = p.client.Start(protocol.DialTimeout) })
+	return p.client.Connected()
 }
 
 // termwrightAfterFrame is called from draw(), after screen.Show() has flushed
@@ -142,7 +157,7 @@ func (p *termwrightProbeState) afterFrame(a *Application, screen tcell.Screen) {
 	if screen == nil || a == nil {
 		return
 	}
-	if !p.client.Connected() {
+	if !p.ensureStarted() {
 		p.redrawAfterHandshake(a)
 		return
 	}
@@ -152,7 +167,11 @@ func (p *termwrightProbeState) afterFrame(a *Application, screen tcell.Screen) {
 		return
 	}
 
-	snapshot := p.snapshot(a, columns, rows, p.client.QualifiedObservations())
+	snapshot, duplicateKey := p.snapshot(a, columns, rows)
+	if duplicateKey != "" {
+		_ = p.client.Fail("duplicate-semantic-key", "duplicate SemanticKey: "+string(duplicateKey))
+		return
+	}
 	marker, err := p.client.Publish(snapshot)
 	if err != nil || marker == "" {
 		p.onPublishFailed(err)
@@ -186,22 +205,17 @@ func (p *termwrightProbeState) redrawAfterHandshake(a *Application) {
 
 // onPublishFailed records a frame the driver will never see.
 //
-// Three things have to happen together, and leaving out any one of them
+// Two things have to happen together, and leaving out either one
 // produces a worse failure than dropping the frame did:
 //
 //  1. **No marker.** A marker names a revision; writing one for a tree that
 //     never arrived makes the driver wait for it and then report
 //     revision-expired — a diagnosis pointing at the adapter's timing rather
 //     than at the driver that stopped reading.
-//  2. **A full snapshot next.** This probe has now lost part of its own fact
-//     stream, and a later delta would be based on a revision the driver never
-//     received. The producer obligation is to re-send the whole tree, and the
-//     client keeps the flag until a full tree is actually built.
-//  3. **Keep rendering.** The application is mid-frame under its own lock;
+//  2. **Keep rendering.** The application is mid-frame under its own lock;
 //     instrumentation failing is not the application failing.
 func (p *termwrightProbeState) onPublishFailed(err error) {
 	p.dropped.Add(1)
-	p.client.RequireFullSnapshot()
 
 	if errors.Is(err, protocol.ErrWriteTimeout) {
 		// The stream now holds part of a frame and has no resynchronisation
@@ -229,27 +243,30 @@ func (p *termwrightProbeState) identity(primitive Primitive) string {
 }
 
 // snapshot walks the retained tree into the wire form.
-func (p *termwrightProbeState) snapshot(a *Application, columns, rows int, qualified bool) *protocol.Snapshot {
-	var snapshot *protocol.Snapshot
-	if qualified {
-		snapshot = protocol.NewSnapshotV2("", 0, columns, rows)
-		snapshot.HitGrid = termwrightUnsupportedHitGrid()
-	} else {
-		snapshot = protocol.NewSnapshot("", 0, columns, rows)
-	}
+func (p *termwrightProbeState) snapshot(a *Application, columns, rows int) (*protocol.Snapshot, annotate.SemanticKey) {
+	snapshot := protocol.NewSnapshot("", 0, columns, rows)
+	snapshot.HitGrid = termwrightUnsupportedHitGrid()
 	if a.root == nil {
-		return snapshot
+		return snapshot, ""
 	}
 	keys := make(map[annotate.SemanticKey]string)
 	duplicates := make(map[annotate.SemanticKey]struct{})
 	pending := make([]termwrightRelations, 0)
-	p.walk(a.root, "", false, columns, rows, qualified, snapshot, keys, duplicates, &pending)
+	p.walk(a.root, "", false, columns, rows, snapshot, keys, duplicates, &pending)
+	if len(duplicates) > 0 {
+		ordered := make([]string, 0, len(duplicates))
+		for key := range duplicates {
+			ordered = append(ordered, string(key))
+		}
+		sort.Strings(ordered)
+		return snapshot, annotate.SemanticKey(ordered[0])
+	}
 	maxRelations := protocol.DefaultLimits.MaxRelationTargets
 	if p.client != nil {
 		maxRelations = p.client.Limits().MaxRelationTargets
 	}
 	termwrightResolveRelations(snapshot, keys, duplicates, pending, maxRelations)
-	return snapshot
+	return snapshot, ""
 }
 
 // termwrightRelations holds author references until every node has been
@@ -270,7 +287,6 @@ func (p *termwrightProbeState) walk(
 	parentID string,
 	hidden bool,
 	columns, rows int,
-	qualified bool,
 	snapshot *protocol.Snapshot,
 	keys map[annotate.SemanticKey]string,
 	duplicates map[annotate.SemanticKey]struct{},
@@ -300,11 +316,7 @@ func (p *termwrightProbeState) walk(
 			"role": protocol.ProvenanceRecognizer,
 		},
 	}
-	if qualified {
-		node.Geometry = termwrightGeometry(primitive, hidden, columns, rows)
-	} else {
-		node.Bounds = termwrightBounds(primitive, columns, rows)
-	}
+	node.Geometry = termwrightGeometry(primitive, hidden)
 	// Required for a generic node, and useful on every other one: it is what
 	// keeps a widget this probe does not know about alive and identifiable
 	// rather than flattened into an anonymous region.
@@ -330,9 +342,9 @@ func (p *termwrightProbeState) walk(
 	}
 
 	for _, child := range children {
-		p.walk(child.primitive, id, hidden || child.hidden, columns, rows, qualified, snapshot, keys, duplicates, pending)
+		p.walk(child.primitive, id, hidden || child.hidden, columns, rows, snapshot, keys, duplicates, pending)
 	}
-	p.appendSynthetic(primitive, id, hidden, qualified, snapshot)
+	p.appendSynthetic(primitive, id, hidden, snapshot)
 }
 
 func termwrightRegisterKey(
@@ -547,7 +559,7 @@ func termwrightRole(p Primitive) protocol.Role {
 	case *Form, *Flex, *Grid, *Pages, *Frame, *Box:
 		return protocol.RoleRegion
 	}
-	// Never dropped: an unrecognised widget keeps its bounds, its children and
+	// Never dropped: an unrecognised widget keeps its geometry, its children and
 	// its own type name, which is what makes a new tview release degrade
 	// rather than disappear.
 	return protocol.RoleGeneric
@@ -610,75 +622,41 @@ func termwrightTypeName(p Primitive) string {
 	return name
 }
 
-// termwrightBounds reports where the widget was drawn.
-//
-// This is the IR's `intendedRect`: what the parent assigned, not a claim on
-// cells. tview computes no clip, so `visibleRect` is genuinely unobservable
-// here and is not invented — a widget scrolled out of a Grid still reports the
-// rectangle it was given.
-func termwrightBounds(p Primitive, columns, rows int) *protocol.Rect {
-	x, y, width, height := p.GetRect()
-	if width <= 0 || height <= 0 {
-		return nil
-	}
-	if x >= columns || y >= rows {
-		return nil
-	}
-	return &protocol.Rect{Row: y, Column: x, Width: width, Height: height}
-}
-
 // termwrightGeometry qualifies only facts the retained tview tree exposes.
 // GetRect is the parent's intended allocation. The framework exposes no
-// general nested clipping or paint ownership, so visibleRect is limited to the
-// exact viewport intersection and pointer hit testing remains unsupported.
-func termwrightGeometry(p Primitive, hidden bool, columns, rows int) *protocol.NodeGeometryObservations {
+// general nested clipping or paint ownership, so visibleRect and pointer hit
+// testing remain unavailable.
+func termwrightGeometry(p Primitive, hidden bool) protocol.NodeGeometryObservations {
 	displayed := !hidden
-	geometry := &protocol.NodeGeometryObservations{
-		Displayed: protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: "probe"},
+	geometry := protocol.NodeGeometryObservations{
+		Displayed: protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: termwrightEvidence("instrumented")},
 	}
 	if hidden {
-		geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-displayed"}
-		geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-displayed"}
+		geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-displayed", Evidence: termwrightEvidence("instrumented")}
+		geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-displayed", Evidence: termwrightEvidence("instrumented")}
 		return geometry
 	}
 
 	x, y, width, height := p.GetRect()
 	if width <= 0 || height <= 0 {
-		geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-laid-out"}
-		geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-laid-out"}
+		geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-laid-out", Evidence: termwrightEvidence("measured")}
+		geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "absent", Reason: "not-laid-out", Evidence: termwrightEvidence("measured")}
 		return geometry
 	}
 	intended := protocol.Rect{Row: y, Column: x, Width: width, Height: height}
-	visible := termwrightViewportIntersection(intended, columns, rows)
-	geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "known", Value: &intended, Evidence: "probe"}
-	geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "known", Value: &visible, Evidence: "viewport-clip"}
+	geometry.IntendedRect = protocol.Observation[protocol.Rect]{Status: "known", Value: &intended, Evidence: termwrightEvidence("measured")}
+	geometry.VisibleRect = protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapClippedGeometry), Reason: "framework-unobservable"}
 	return geometry
 }
 
-func termwrightViewportIntersection(rect protocol.Rect, columns, rows int) protocol.Rect {
-	left := termwrightMax(0, termwrightMin(rect.Column, columns))
-	top := termwrightMax(0, termwrightMin(rect.Row, rows))
-	right := termwrightMax(left, termwrightMin(rect.Column+rect.Width, columns))
-	bottom := termwrightMax(top, termwrightMin(rect.Row+rect.Height, rows))
-	return protocol.Rect{Row: top, Column: left, Width: right - left, Height: bottom - top}
-}
-
-func termwrightMin(left, right int) int {
-	if left < right {
-		return left
+func termwrightEvidence(method string) *protocol.EvidenceProvenance {
+	return &protocol.EvidenceProvenance{
+		Source: "framework", Method: method, Strength: "authoritative", ProviderID: probeName,
 	}
-	return right
 }
 
-func termwrightMax(left, right int) int {
-	if left > right {
-		return left
-	}
-	return right
-}
-
-func termwrightUnsupportedHitGrid() *protocol.Observation[protocol.PointerHitGrid] {
-	return &protocol.Observation[protocol.PointerHitGrid]{
+func termwrightUnsupportedHitGrid() protocol.Observation[protocol.PointerHitGrid] {
+	return protocol.Observation[protocol.PointerHitGrid]{
 		Status: "unsupported", Capability: "pointer-hit-grid", Reason: "framework-unobservable",
 	}
 }
@@ -780,12 +758,12 @@ func termwrightState(p Primitive, focused, hidden bool) *protocol.State {
 
 // appendSynthetic emits nodes for entries that are not primitives of their own
 // — list items and dropdown options — so they are addressable by role and name.
-// They carry no bounds, which the schema allows.
+// Their geometry observations stay explicitly unknown because entries are not
+// primitives with framework-owned rectangles.
 func (p *termwrightProbeState) appendSynthetic(
 	primitive Primitive,
 	parentID string,
 	hidden bool,
-	qualified bool,
 	snapshot *protocol.Snapshot,
 ) {
 	switch widget := primitive.(type) {
@@ -805,7 +783,7 @@ func (p *termwrightProbeState) appendSynthetic(
 					"role": protocol.ProvenanceRecognizer,
 				},
 			}
-			termwrightSyntheticGeometry(&node, qualified)
+			termwrightSyntheticGeometry(&node)
 			snapshot.Nodes = append(snapshot.Nodes, node)
 		}
 	case *DropDown:
@@ -823,20 +801,17 @@ func (p *termwrightProbeState) appendSynthetic(
 					"role": protocol.ProvenanceRecognizer,
 				},
 			}
-			termwrightSyntheticGeometry(&node, qualified)
+			termwrightSyntheticGeometry(&node)
 			snapshot.Nodes = append(snapshot.Nodes, node)
 		}
 	}
 }
 
-func termwrightSyntheticGeometry(node *protocol.Node, qualified bool) {
-	if !qualified {
-		return
-	}
-	node.Geometry = &protocol.NodeGeometryObservations{
-		Displayed:    protocol.Observation[bool]{Status: "unknown", Reason: "not-reported"},
-		IntendedRect: protocol.Observation[protocol.Rect]{Status: "unknown", Reason: "not-reported"},
-		VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unknown", Reason: "clip-unobservable"},
+func termwrightSyntheticGeometry(node *protocol.Node) {
+	node.Geometry = protocol.NodeGeometryObservations{
+		Displayed:    protocol.Observation[bool]{Status: "unsupported", Capability: "displayed", Reason: "framework-unobservable"},
+		IntendedRect: protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapIntendedGeometry), Reason: "framework-unobservable"},
+		VisibleRect:  protocol.Observation[protocol.Rect]{Status: "unsupported", Capability: string(protocol.CapClippedGeometry), Reason: "framework-unobservable"},
 	}
 }
 

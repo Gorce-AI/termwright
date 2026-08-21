@@ -199,7 +199,7 @@ Two properties of the event worth remembering:
   read backwards. There is a test asserting the `input`-then-`action` order so
   nobody "fixes" it into the intuitive one.
 - **Failed actions are emitted too**, which is the valuable half. `error`
-  carries a code (`unsupported-action`, `timeout`), not prose — the message
+  carries a code (`not-actionable`, `timeout`), not prose — the message
   belongs to the thrown error, the code is for grouping. The report puts failed
   actions on the timeline beside the steps; successful ones stay out, since the
   timeline is for what went wrong.

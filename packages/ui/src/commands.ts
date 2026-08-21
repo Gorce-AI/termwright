@@ -12,6 +12,11 @@
  * @packageDocumentation
  */
 
+import type { UiActionability, UiActionPlan } from './events.js';
+import { CONDITION_KINDS } from '@termwright/protocol/action-model';
+
+const CONDITION_KIND_SET: ReadonlySet<string> = new Set(CONDITION_KINDS);
+
 /** What a row is. */
 export type CommandKind = 'step' | 'action' | 'assert' | 'input';
 
@@ -32,6 +37,8 @@ export interface CommandRow {
   /** Absent for steps that never closed, and for inputs. */
   readonly ok?: boolean;
   readonly error?: string;
+  readonly actionPlan?: UiActionPlan;
+  readonly actionability?: UiActionability;
   /** The step this row belongs to, when the producer reported one. */
   readonly stepId?: string;
   /** Test that produced a live row. Archive rows already belong to one trace. */
@@ -115,6 +122,8 @@ export function buildCommandLog(events: Iterable<unknown>): readonly CommandRow[
         // action; truly raw writes with no following action stay visible.
         const consumed =
           kind === 'action' ? consumeTrailingInputs(rows, rawInputs, depth, stepId) : undefined;
+        const actionPlan = kind === 'action' ? planFromReceipt(event['receipt']) : undefined;
+        const actionability = kind === 'action' ? actionabilityFromTrace(event['actionability']) : undefined;
         rows.push({
           id: `r${index}`,
           kind: kind === 'assert' ? 'assert' : 'action',
@@ -125,6 +134,8 @@ export function buildCommandLog(events: Iterable<unknown>): readonly CommandRow[
           ...optional('ref', text(event['ref'])),
           ...(typeof event['ok'] === 'boolean' ? { ok: event['ok'] } : {}),
           ...optional('error', text(event['error'])),
+          ...(actionPlan === undefined ? {} : { actionPlan }),
+          ...(actionability === undefined ? {} : { actionability }),
           ...optional('stepId', stepId),
         });
         break;
@@ -150,6 +161,107 @@ export function buildCommandLog(events: Iterable<unknown>): readonly CommandRow[
   }
 
   return rows;
+}
+
+function actionabilityFromTrace(value: unknown): UiActionability | undefined {
+  const explanation = asObject(value);
+  const intent = asObject(explanation?.['intent']);
+  const checkpoint = asObject(explanation?.['checkpoint']);
+  const kind = text(intent?.['kind']);
+  const contractId = text(checkpoint?.['contractId']);
+  const sequence = finiteInteger(checkpoint?.['sequence']);
+  const actionable = explanation?.['actionable'];
+  const rawRequirements = explanation?.['requirements'];
+  if (kind === undefined || contractId === undefined || sequence === undefined || typeof actionable !== 'boolean' || !Array.isArray(rawRequirements)) return undefined;
+  const requirements: UiActionPlan['requirements'][number][] = [];
+  for (const raw of rawRequirements.slice(0, 128)) {
+    const requirement = asObject(raw);
+    const condition = asObject(requirement?.['condition']);
+    const observationValue = asObject(requirement?.['observation']);
+    const requirementKind = text(condition?.['kind']);
+    const target = text(condition?.['target']);
+    const verdict = requirement?.['verdict'];
+    const observation = observationValue?.['status'];
+    if (requirementKind === undefined || !CONDITION_KIND_SET.has(requirementKind) || (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') ||
+        (observation !== 'known' && observation !== 'absent' && observation !== 'unknown' && observation !== 'unsupported')) return undefined;
+    const evidence = evidenceFrom(observationValue?.['evidence']);
+    requirements.push({ kind: requirementKind, ...(target === undefined ? {} : { target }), verdict, observation, ...(evidence === undefined ? {} : { evidence }) });
+  }
+  const strategy = text(explanation?.['strategy']);
+  const rawReason = asObject(explanation?.['reason']);
+  const reasonCode = text(rawReason?.['code']);
+  const reasonMessage = text(rawReason?.['message']);
+  const targetRef = text(rawReason?.['targetRef']);
+  const reason = reasonCode === undefined || reasonMessage === undefined ? undefined : { code: reasonCode, message: reasonMessage, ...(targetRef === undefined ? {} : { targetRef }) };
+  return { actionable, kind, contractId, sequence, requirements, ...(strategy === undefined ? {} : { strategy }), ...(reason === undefined ? {} : { reason }) };
+}
+
+function planFromReceipt(value: unknown): UiActionPlan | undefined {
+  const receipt = asObject(value);
+  const plan = asObject(receipt?.['plan']);
+  const intent = asObject(receipt?.['intent']);
+  const before = asObject(receipt?.['before']);
+  const after = asObject(receipt?.['after']);
+  const executed = receipt?.['executed'];
+  const rawRequirements = plan?.['requirements'];
+  const actionId = text(plan?.['actionId']);
+  const kind = text(intent?.['kind']);
+  const strategy = text(plan?.['strategy']);
+  const contractId = text(plan?.['contractId']);
+  const beforeSequence = finiteInteger(before?.['sequence']);
+  const afterSequence = finiteInteger(after?.['sequence']);
+  if (actionId === undefined || kind === undefined || strategy === undefined || contractId === undefined ||
+      beforeSequence === undefined || afterSequence === undefined || !Array.isArray(executed) || !Array.isArray(rawRequirements)) return undefined;
+  const operations: { device: 'keyboard' | 'mouse'; kind: string; modifiers?: readonly ('shift' | 'alt' | 'control')[] }[] = [];
+  for (const raw of executed) {
+    const operation = asObject(raw);
+    const device = operation?.['device'];
+    const operationKind = text(operation?.['kind']);
+    if ((device !== 'keyboard' && device !== 'mouse') || operationKind === undefined) return undefined;
+    const rawModifiers = operation?.['modifiers'];
+    if (rawModifiers !== undefined && (device !== 'mouse' || !Array.isArray(rawModifiers) ||
+        rawModifiers.some((modifier) => modifier !== 'shift' && modifier !== 'alt' && modifier !== 'control'))) return undefined;
+    operations.push({
+      device,
+      kind: operationKind,
+      ...(rawModifiers === undefined ? {} : { modifiers: rawModifiers as ('shift' | 'alt' | 'control')[] }),
+    });
+  }
+  const requirements: UiActionPlan['requirements'][number][] = [];
+  for (const raw of rawRequirements.slice(0, 128)) {
+    const requirement = asObject(raw);
+    const condition = asObject(requirement?.['condition']);
+    const observationValue = asObject(requirement?.['observation']);
+    const requirementKind = text(condition?.['kind']);
+    const target = text(condition?.['target']);
+    const verdict = requirement?.['verdict'];
+    const observation = observationValue?.['status'];
+    if (requirementKind === undefined || !CONDITION_KIND_SET.has(requirementKind) ||
+        (verdict !== 'satisfied' && verdict !== 'unsatisfied' && verdict !== 'inconclusive') ||
+        (observation !== 'known' && observation !== 'absent' && observation !== 'unknown' && observation !== 'unsupported')) return undefined;
+    const requirementEvidence = evidenceFrom(observationValue?.['evidence']);
+    requirements.push({ kind: requirementKind, ...(target === undefined ? {} : { target }), verdict, observation, ...(requirementEvidence === undefined ? {} : { evidence: requirementEvidence }) });
+  }
+  const physicalRegion = asObject(plan?.['physicalRegion']);
+  const physicalEvidence = evidenceFrom(physicalRegion?.['evidence']);
+  return { actionId, kind, strategy, contractId, beforeSequence, afterSequence, operations, requirements, ...(physicalEvidence === undefined ? {} : { physicalEvidence }) };
+}
+
+function evidenceFrom(value: unknown): UiActionPlan['physicalEvidence'] | undefined {
+  const record = asObject(value);
+  if (record === undefined || record === null) return undefined;
+  const source = record['source'];
+  const method = record['method'];
+  const strength = record['strength'];
+  const providerId = text(record['providerId']);
+  if ((source !== 'framework' && source !== 'application' && source !== 'terminal' && source !== 'recognizer' && source !== 'driver') ||
+      (method !== 'native' && method !== 'instrumented' && method !== 'declared' && method !== 'correlated' && method !== 'measured' && method !== 'derived' && method !== 'heuristic') ||
+      (strength !== 'authoritative' && strength !== 'diagnostic') || providerId === undefined) return undefined;
+  return { source, method, strength, providerId };
+}
+
+function finiteInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) ? value : undefined;
 }
 
 /** Preserve semantic event order even when two producer clocks differ by a

@@ -247,7 +247,8 @@ def test_installing_without_a_client_is_a_no_op(monkeypatch):
 
 
 def _snapshot():
-    from termwright.tree import Rect, SemanticNode, SemanticSnapshot
+    from conftest import geometry
+    from termwright.tree import Observation, Rect, SemanticNode, SemanticSnapshot, framework_evidence
 
     return SemanticSnapshot(
         sessionId="ignored",
@@ -255,7 +256,9 @@ def _snapshot():
         columns=80,
         rows=24,
         rootIds=["root"],
-        nodes=[SemanticNode(id="root", role="application", name="app", bounds=Rect(0, 0, 10, 1))],
+        nodes=[SemanticNode(id="root", role="application", name="app", geometry=geometry(Rect(0, 0, 10, 1)))],
+        coordinateSpace=Observation("known", "viewport-cells", evidence=framework_evidence("python-test")),
+        hitGrid=Observation("unsupported", capability="pointer-hit-grid", reason="framework-unobservable"),
     )
 
 

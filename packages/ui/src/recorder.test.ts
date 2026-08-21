@@ -5,6 +5,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FakeHarness, node, snapshot } from './__fixtures__/fake-session.js';
 import { startRecorder, type RecorderSession } from './recorder.js';
+import type { EffectiveSessionContract, EvidenceProvenance } from '@termwright/protocol';
+
+const pointerEvidence: EvidenceProvenance = {
+  source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router',
+};
 
 const tree = snapshot(3, [
   node({ id: 'd1', role: 'dialog', name: 'Permission' }),
@@ -18,6 +23,30 @@ async function record(): Promise<{ harness: FakeHarness; recorder: RecorderSessi
     launch: async () => harness.asHarness(),
   });
   return { harness, recorder };
+}
+
+function enableAuthoritativePointer(harness: FakeHarness, target = 'b1'): void {
+  const unsupported = { status: 'unsupported', reason: 'framework-unobservable' } as const;
+  harness.negotiatedContract = {
+    contractId: 'rec:0', sessionId: 's1', epoch: 0, protocol: 'termwright/2', framework: null,
+    providers: [{ id: 'app.router', kind: 'application', version: '1', method: 'native', capabilities: ['pointer-regions', 'hit-test'] }],
+    capabilities: {
+      'semantic-tree': { status: 'supported', evidence: pointerEvidence },
+      'stable-identity': unsupported, 'intended-geometry': unsupported, 'clipped-geometry': unsupported,
+      'painted-region': unsupported, 'pointer-geometry': { status: 'supported', evidence: pointerEvidence },
+      'pointer-hit-testing': { status: 'supported', evidence: pointerEvidence }, focus: unsupported,
+      scroll: unsupported, 'render-order': unsupported, 'keyboard-input': { status: 'supported', evidence: pointerEvidence },
+      'pointer-input': { status: 'supported', evidence: pointerEvidence }, 'paired-revisions': { status: 'supported', evidence: pointerEvidence },
+    },
+    terminal: { profile: 'default', platform: 'linux', mouseModesObservable: true },
+  } satisfies EffectiveSessionContract;
+  harness.semantic({
+    ...tree,
+    hitGrid: {
+      status: 'known', evidence: pointerEvidence,
+      value: { regions: [{ recipientId: target, rect: { row: 2, column: 4, width: 8, height: 1 } }] },
+    },
+  });
 }
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
@@ -50,7 +79,7 @@ describe('recorder', () => {
 
   it('records a click as the narrowest selector for the node', async () => {
     const { harness, recorder } = await record();
-    harness.semantic(tree);
+    enableAuthoritativePointer(harness);
     const selector = recorder.recordClick('b1');
     expect(selector?.expression).toBe("app.getByRole('button', { name: 'Approve' })");
     expect(recorder.source()).toContain("await app.getByRole('button', { name: 'Approve' }).click();");
@@ -60,6 +89,45 @@ describe('recorder', () => {
     const { recorder } = await record();
     expect(recorder.recordClick('b1')).toBeUndefined();
     expect(recorder.events).toHaveLength(1);
+  });
+
+  it('refuses semantic codegen for inspector-only nodes without authoritative hit ownership', async () => {
+    const { harness, recorder } = await record();
+    harness.semantic(tree);
+    expect(recorder.recordClick('b1')).toBeUndefined();
+
+    enableAuthoritativePointer(harness, 'd1');
+    expect(recorder.recordClick('b1')).toBeUndefined();
+    expect(recorder.events).toHaveLength(1);
+  });
+
+  it('rejects a hit grid whose provider differs from the frozen contract', async () => {
+    const { harness, recorder } = await record();
+    enableAuthoritativePointer(harness);
+    harness.semantic({
+      ...tree,
+      hitGrid: {
+        status: 'known',
+        evidence: { ...pointerEvidence, providerId: 'forged.router' },
+        value: { regions: [{ recipientId: 'b1', rect: { row: 2, column: 4, width: 8, height: 1 } }] },
+      },
+    });
+    expect(recorder.recordClick('b1')).toBeUndefined();
+  });
+
+  it('accepts a negotiated application provider hit grid bound to the current revision', async () => {
+    const { harness, recorder } = await record();
+    enableAuthoritativePointer(harness);
+    harness.semantic({
+      ...tree,
+      hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+      providerEvidence: [{
+        providerId: 'app.router', sessionId: 's1', revision: tree.revision,
+        status: 'available', evidence: pointerEvidence, pointerRegions: [],
+        hitGrid: { regions: [{ recipientId: 'b1', rect: { row: 3, column: 5, width: 3, height: 1 } }] },
+      }],
+    });
+    expect(recorder.recordClick('b1')?.expression).toContain("getByRole('button'");
   });
 
   it('records assertions on demand', async () => {

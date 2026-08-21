@@ -9,12 +9,12 @@ example, then choose the framework closest to your application.
 | Example | What it demonstrates |
 | --- | --- |
 | [Getting started](https://github.com/gorce-ai/termwright/tree/main/examples/getting-started) | Generic Node CLI, real keyboard input, text assertions, and no semantic integration. |
-| [Ink todo](https://github.com/gorce-ai/termwright/tree/main/examples/ink-todo) | End-to-end and component tests, semantic locators, fixtures, and cell and semantic snapshots. |
+| [Ink todo](https://github.com/gorce-ai/termwright/tree/main/examples/ink-todo) | End-to-end and component tests, semantic locators, snapshots, and production-router mouse evidence. |
 | [OpenTUI form](https://github.com/gorce-ai/termwright/tree/main/examples/opentui-form) | Focused input, semantic values, intended geometry, and exact pointer ownership. |
 | [Textual notes](https://github.com/gorce-ai/termwright/tree/main/examples/textual-notes) | Python application launched through the Textual integration with semantic assertions. |
 | [tview menu](https://github.com/gorce-ai/termwright/tree/main/examples/tview-menu) | Instrumented Go build, semantic navigation, and snapshots. |
-| [Bubble Tea login](https://github.com/gorce-ai/termwright/tree/main/examples/bubbletea-login) | Instrumented Go build, component focus and values, and secret withholding. |
-| [Ratatui list](https://github.com/gorce-ai/termwright/tree/main/examples/ratatui-list) | Instrumented Cargo build, keyboard navigation, and selected list state. |
+| [Bubble Tea login](https://github.com/gorce-ai/termwright/tree/main/examples/bubbletea-login) | Instrumented Go build, secret withholding, and a provider-backed Locator click handled as `tea.MouseClickMsg`. |
+| [Ratatui list](https://github.com/gorce-ai/termwright/tree/main/examples/ratatui-list) | Instrumented Cargo build and a provider-backed Locator click handled as `crossterm::Event::Mouse`. |
 
 ## Run an example
 
@@ -37,7 +37,7 @@ each integration can provide.
 | --- | --- |
 | Run a command and assert its exit code | [Shell commands](../shell-commands/) |
 | Test keyboard navigation | [tview menu](https://github.com/gorce-ai/termwright/blob/main/examples/tview-menu/tests/app.e2e.test.ts) or [Ratatui list](https://github.com/gorce-ai/termwright/blob/main/examples/ratatui-list/tests/app.e2e.test.ts) |
-| Test exact mouse targeting | [Textual notes](https://github.com/gorce-ai/termwright/blob/main/examples/textual-notes/tests/app.e2e.test.ts) or [OpenTUI form](https://github.com/gorce-ai/termwright/blob/main/examples/opentui-form/tests/app.e2e.test.ts) |
+| Test exact mouse targeting | [Textual notes](https://github.com/gorce-ai/termwright/blob/main/examples/textual-notes/tests/app.e2e.test.ts), [OpenTUI form](https://github.com/gorce-ai/termwright/blob/main/examples/opentui-form/tests/app.e2e.test.ts), or the application-provider tests in [Ink](https://github.com/gorce-ai/termwright/blob/main/examples/ink-todo/tests/app.e2e.test.ts), [Ratatui](https://github.com/gorce-ai/termwright/blob/main/examples/ratatui-list/tests/app.e2e.test.ts), and [Bubble Tea](https://github.com/gorce-ai/termwright/blob/main/examples/bubbletea-login/tests/app.e2e.test.ts) |
 | Test terminal resize behavior | [Actions and input](../actions/) |
 | Test a component without the complete application | [Test Ink components](../component-testing/) |
 | Keep secrets out of semantics and traces | [Bubble Tea login](https://github.com/gorce-ai/termwright/blob/main/examples/bubbletea-login/tests/app.e2e.test.ts) and [Security](../../reference/security/) |

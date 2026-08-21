@@ -43,6 +43,14 @@ use ratatui::widgets::{StatefulWidget, Widget};
 
 pub use serde_json::{json, Value};
 pub use termwright_probe_ratatui::{Action, Annotation as Semantics, Role};
+pub use termwright_protocol::evidence::{
+    register_pointer_evidence_provider, Context as EvidenceContext, HitTest as PointerHitTest,
+    Provider as PointerEvidenceProvider, ProviderObservation as PointerEvidenceObservation,
+    Registration as EvidenceRegistration,
+};
+pub use termwright_protocol::{
+    EvidenceMethod, ProviderPointerRegion, ProviderPointerSpan, Rect as ProviderRect,
+};
 
 /// Exact Ratatui release whose traits this SDK implements.
 ///

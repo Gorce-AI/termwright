@@ -13,6 +13,6 @@ editUrl: false
 
 > **MouseButton** = `"left"` \| `"middle"` \| `"right"`
 
-Defined in: [mouse.ts:25](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/mouse.ts#L25)
+Defined in: [driver/src/mouse.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/mouse.ts#L21)
 
 Mouse buttons the driver can deliver.

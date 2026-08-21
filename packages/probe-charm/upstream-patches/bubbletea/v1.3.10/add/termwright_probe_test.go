@@ -73,7 +73,7 @@ func TestTermwrightSemanticKeysStabiliseIDsAndResolveRelations(t *testing.T) {
 	}
 }
 
-func TestTermwrightDuplicateSemanticKeysStayFrameLocalAndUnresolved(t *testing.T) {
+func TestTermwrightDuplicateSemanticKeysFailClosed(t *testing.T) {
 	probe := &termwrightProbeState{ids: make(map[string]string)}
 	rootID := probe.identity("root")
 	candidates := []termwrightCandidate{
@@ -94,25 +94,21 @@ func TestTermwrightDuplicateSemanticKeysStayFrameLocalAndUnresolved(t *testing.T
 		},
 	}
 	snapshot := &protocol.Snapshot{RootIDs: []string{rootID}}
-	probe.appendCandidates(snapshot, rootID, candidates)
-
-	if len(snapshot.Nodes[0].LabelledBy) != 0 {
-		t.Fatalf("duplicate key resolved arbitrarily: %v", snapshot.Nodes[0].LabelledBy)
+	duplicate := probe.appendCandidates(snapshot, rootID, candidates)
+	if duplicate != "duplicate" {
+		t.Fatalf("duplicate semantic key was not rejected: %q", duplicate)
 	}
-	if snapshot.Nodes[1].ID == snapshot.Nodes[2].ID {
-		t.Fatalf("duplicate semantic keys produced duplicate ids: %q", snapshot.Nodes[1].ID)
-	}
-	if _, annotatedID := snapshot.Nodes[1].PX["id"]; annotatedID {
-		t.Fatalf("ambiguous semantic key claimed id provenance: %v", snapshot.Nodes[1].PX)
+	if len(snapshot.Nodes) != 0 {
+		t.Fatalf("partial weakened snapshot escaped before fatal error: %v", snapshot.Nodes)
 	}
 }
 
-func TestTermwrightQualifiedGeometryDoesNotInventComponentLayout(t *testing.T) {
+func TestTermwrightGeometryDoesNotInventComponentLayout(t *testing.T) {
 	probe := &termwrightProbeState{ids: make(map[string]string)}
-	snapshot := termwrightNewSnapshot(80, 24, true)
+	snapshot := termwrightNewSnapshot(80, 24)
 	rootID := probe.identity("root")
 	root := protocol.Node{ID: rootID, Role: protocol.RoleApplication, Name: "app"}
-	termwrightCharmGeometry(&root, true, true)
+	termwrightCharmGeometry(&root, true)
 	snapshot.RootIDs = append(snapshot.RootIDs, rootID)
 	snapshot.Nodes = append(snapshot.Nodes, root)
 	probe.appendCandidates(snapshot, rootID, []termwrightCandidate{{
@@ -120,18 +116,15 @@ func TestTermwrightQualifiedGeometryDoesNotInventComponentLayout(t *testing.T) {
 		node:        protocol.Node{Role: protocol.RoleTextbox, Name: "Host", P: protocol.ProvenanceFramework},
 	}})
 
-	if snapshot.V != 2 || snapshot.HitGrid == nil || snapshot.HitGrid.Status != "unsupported" {
-		t.Fatalf("snapshot is not honestly qualified: %+v", snapshot)
+	if snapshot.V != 2 || snapshot.HitGrid.Status != "unsupported" {
+		t.Fatalf("snapshot does not carry required v2 observations: %+v", snapshot)
 	}
-	if root.Geometry == nil || root.Geometry.Displayed.Status != "known" {
+	if root.Geometry.Displayed.Status != "known" {
 		t.Fatalf("root frame production was not retained: %+v", root.Geometry)
 	}
 	component := snapshot.Nodes[1]
-	if component.Geometry == nil || component.Geometry.Displayed.Status != "unknown" ||
+	if component.Geometry.Displayed.Status != "unsupported" ||
 		component.Geometry.IntendedRect.Status != "unsupported" || component.Geometry.VisibleRect.Status != "unsupported" {
 		t.Fatalf("component layout was overclaimed: %+v", component.Geometry)
-	}
-	if component.Bounds != nil || component.Occlusion != "" {
-		t.Fatalf("v2 component retained legacy geometry: %+v", component)
 	}
 }

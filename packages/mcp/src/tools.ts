@@ -12,6 +12,8 @@
  * is generated from the same objects.
  */
 import { z } from 'zod';
+import { TimeoutError } from '@termwright/driver';
+import { CONDITION_KINDS } from '@termwright/protocol';
 import { defineTool } from './tool-kit.js';
 import { renderScreenshot } from './screenshots.js';
 import { describeImage, screenshotSchema } from './screenshot-schema.js';
@@ -26,6 +28,7 @@ import {
   buttonSchema,
   cellPosition,
   cursorSchema,
+  evidenceProvenanceSchema,
   exitSchema,
   modesSchema,
   refEntrySchema,
@@ -41,6 +44,9 @@ import {
 import type { TerminalEntry } from './sessions.js';
 import { buildLocator, hasTarget, textOrRegExp } from './targets.js';
 import type { TargetInput } from './targets.js';
+import type { ActionReceipt } from '@termwright/protocol';
+
+const mouseModifiersSchema = z.array(z.enum(['shift', 'alt', 'control'])).max(3).optional();
 
 // ---------------------------------------------------------------------------
 // Shared projections
@@ -76,11 +82,12 @@ function optionalTimeout(timeout: number | undefined): { timeout?: number } {
  * timeout is not an error — whatever is on screen is reported honestly.
  */
 async function settleSemantics(entry: TerminalEntry): Promise<void> {
-  if (!entry.harness.capabilities().semanticTree) return;
-  const budget = entry.harness.semanticTree() === null ? FIRST_TREE_SETTLE_MS : PAIRING_SETTLE_MS;
+  const contract = await entry.harness.settled({ timeout: FIRST_TREE_SETTLE_MS });
+  if (contract.capabilities['semantic-tree'].status !== 'supported') return;
   try {
-    await entry.harness.waitForStable({ timeout: budget });
-  } catch {
+    await entry.harness.waitForStable({ timeout: PAIRING_SETTLE_MS });
+  } catch (error) {
+    if (!(error instanceof TimeoutError)) throw error;
     // Report the session as it is; the compact snapshot says what it found.
   }
 }
@@ -144,6 +151,51 @@ const receiptFields = {
   terminal: z.string(),
   revision: z.number().int(),
 };
+
+const plannedActionSchema = z.object({
+  actionId: z.string(),
+  kind: z.string(),
+  strategy: z.string(),
+  contractId: z.string(),
+  beforeSequence: z.number().int(),
+  afterSequence: z.number().int(),
+  operations: z.array(z.object({
+    device: z.enum(['keyboard', 'mouse']), kind: z.string(),
+    modifiers: z.array(z.enum(['shift', 'alt', 'control'])).optional(),
+  })),
+  requirements: z.array(z.object({
+    kind: z.enum(CONDITION_KINDS),
+    target: z.string().optional(),
+    verdict: z.enum(['satisfied', 'unsatisfied', 'inconclusive']),
+    observation: z.enum(['known', 'absent', 'unknown', 'unsupported']),
+    evidence: evidenceProvenanceSchema.optional(),
+  })),
+  physicalEvidence: evidenceProvenanceSchema.optional(),
+});
+
+function plannedAction(value: ActionReceipt) {
+  return {
+    actionId: value.plan.actionId,
+    kind: value.intent.kind,
+    strategy: value.plan.strategy,
+    contractId: value.plan.contractId,
+    beforeSequence: value.before.sequence,
+    afterSequence: value.after.sequence,
+    operations: value.executed.map((operation) => ({
+      device: operation.device,
+      kind: operation.kind,
+      ...(operation.device === 'mouse' && operation.modifiers !== undefined ? { modifiers: [...operation.modifiers] } : {}),
+    })),
+    requirements: value.plan.requirements.map((requirement) => ({
+      kind: requirement.condition.kind,
+      ...('target' in requirement.condition ? { target: requirement.condition.target } : {}),
+      verdict: requirement.verdict,
+      observation: requirement.observation.status,
+      ...('evidence' in requirement.observation ? { evidence: requirement.observation.evidence } : {}),
+    })),
+    ...(value.plan.physicalRegion === undefined ? {} : { physicalEvidence: value.plan.physicalRegion.evidence }),
+  };
+}
 
 function receipt(entry: TerminalEntry): { ok: true; terminal: string; revision: number } {
   return { ok: true, terminal: entry.id, revision: entry.harness.screen().revision };
@@ -561,27 +613,27 @@ const query = defineTool({
   },
 });
 
-function pointerTool(name: 'terminal.click' | 'terminal.double_click'): ToolDefinition {
+function pointerTool(name: 'terminal.click' | 'terminal.double_click' | 'terminal.hover'): ToolDefinition {
   const double = name === 'terminal.double_click';
+  const hover = name === 'terminal.hover';
   return defineTool({
     name,
-    title: double ? 'Double-click a target' : 'Click a target',
+    title: hover ? 'Hover a target' : double ? 'Double-click a target' : 'Click a target',
     description:
-      `Sends a real ${double ? 'double ' : ''}mouse report through the pseudo-terminal. Fails with ` +
-      'unsupported-action when the program never enabled mouse tracking. Where the platform hides ' +
-      'the mode (modes.mouseTracking "unknown", e.g. Windows ConPTY) the click is sent anyway, ' +
-      'encoded as SGR.',
+      `Sends a real ${hover ? 'motion' : double ? 'double-click' : 'click'} mouse report through the pseudo-terminal. ` +
+      'Fails closed with input-mode-disabled when the required tracking mode or encoding is disabled or unobservable.',
     inputSchema: {
       terminal: terminalId,
       ...targetShape,
       button: buttonSchema.optional(),
+      modifiers: mouseModifiersSchema,
       position: z
         .object({ rowOffset: z.number().int(), columnOffset: z.number().int() })
         .optional()
         .describe('offset inside the target rectangle'),
       timeout: timeoutMs.optional(),
     },
-    outputSchema: { ...receiptFields, ref: z.string() },
+    outputSchema: { ...receiptFields, ref: z.string(), action: plannedActionSchema },
     handler: async (context, args) => {
       const entry = context.terminals.get(args.terminal);
       const locator = locatorFor(entry, args);
@@ -589,13 +641,17 @@ function pointerTool(name: 'terminal.click' | 'terminal.double_click'): ToolDefi
       const options = {
         ...optionalTimeout(args.timeout),
         ...(args.button === undefined ? {} : { button: args.button }),
+        ...(args.modifiers === undefined ? {} : { modifiers: args.modifiers }),
         ...(args.position === undefined ? {} : { position: args.position }),
       };
-      if (double) await locator.doubleClick(options);
-      else await locator.click(options);
+      const action = hover
+        ? await locator.hover(options)
+        : double
+          ? await locator.doubleClick(options)
+          : await locator.click(options);
       return {
-        text: `${double ? 'double-clicked' : 'clicked'} ref=${target.ref}`,
-        data: { ...receipt(entry), ref: target.ref },
+        text: `${hover ? 'hovered' : double ? 'double-clicked' : 'clicked'} ref=${target.ref}`,
+        data: { ...receipt(entry), ref: target.ref, action: plannedAction(action) },
       };
     },
   });
@@ -606,8 +662,7 @@ const press = defineTool({
   title: 'Press keys',
   description:
     'Sends key chords as real bytes, honouring the modes the program enabled (application cursor ' +
-    'keys, keypad). Examples: "Enter", "Escape", "Control+K Control+U". With a target, the node is ' +
-    'focused first.',
+    'keys, keypad). Examples: "Enter", "Escape", "Control+K Control+U". With a target, the node must already be focused.',
   inputSchema: {
     terminal: terminalId,
     keys: z.string().min(1).describe('space-separated chords, e.g. "Control+A Home"'),
@@ -632,7 +687,7 @@ const type = defineTool({
   name: 'terminal.type',
   title: 'Type text',
   description:
-    'Types text as individual keystrokes (not a paste). With a target, the node is focused first.',
+    'Types text as individual keystrokes (not a paste). With a target, the node must already be focused; use terminal.fill for focus + replacement.',
   inputSchema: {
     terminal: terminalId,
     text: z.string(),
@@ -650,6 +705,129 @@ const type = defineTool({
     }
     await entry.harness.type(args.text);
     return { text: `typed ${args.text.length} characters`, data: receipt(entry) };
+  },
+});
+
+const fill = defineTool({
+  name: 'terminal.fill',
+  title: 'Fill a semantic control',
+  description:
+    'Ensures the semantic control receives focus through the real input path, selects its current value, and types the replacement.',
+  inputSchema: {
+    terminal: terminalId,
+    text: z.string(),
+    ...targetShapeWithoutText,
+    timeout: timeoutMs.optional(),
+  },
+  outputSchema: { ...receiptFields, ref: z.string(), action: plannedActionSchema },
+  handler: async (context, args) => {
+    const entry = context.terminals.get(args.terminal);
+    const locator = locatorFor(entry, args);
+    const target = await locator.resolve(optionalTimeout(args.timeout));
+    const action = await locator.fill(args.text, optionalTimeout(args.timeout));
+    return {
+      text: `filled ref=${target.ref}`,
+      data: { ...receipt(entry), ref: target.ref, action: plannedAction(action) },
+    };
+  },
+});
+
+function checkedTool(kind: 'check' | 'uncheck'): ToolDefinition {
+  return defineTool({
+    name: `terminal.${kind}`,
+    title: kind === 'check' ? 'Check a semantic control' : 'Uncheck a semantic control',
+    description: `Uses the central action planner and real terminal input to ${kind} a checkbox or radio, then verifies semantic state.`,
+    inputSchema: { terminal: terminalId, ...targetShapeWithoutText, timeout: timeoutMs.optional() },
+    outputSchema: { ...receiptFields, ref: z.string(), action: plannedActionSchema },
+    handler: async (context, args) => {
+      const entry = context.terminals.get(args.terminal);
+      const locator = locatorFor(entry, args);
+      const target = await locator.resolve(optionalTimeout(args.timeout));
+      const action = kind === 'check'
+        ? await locator.check(optionalTimeout(args.timeout))
+        : await locator.uncheck(optionalTimeout(args.timeout));
+      return {
+        text: `${kind === 'check' ? 'checked' : 'unchecked'} ref=${target.ref}`,
+        data: { ...receipt(entry), ref: target.ref, action: plannedAction(action) },
+      };
+    },
+  });
+}
+
+const actionability = defineTool({
+  name: 'terminal.actionability',
+  title: 'Explain a semantic action',
+  description: 'Runs the same ActionPlanner used by execution, but sends no input. Reports every authoritative requirement and the chosen strategy or typed rejection.',
+  inputSchema: {
+    terminal: terminalId,
+    ...targetShapeWithoutText,
+    action: z.enum(['click', 'double-click', 'hover', 'focus', 'activate', 'press', 'type', 'fill', 'check', 'uncheck']),
+    value: z.string().optional(),
+    timeout: timeoutMs.optional(),
+  },
+  outputSchema: {
+    terminal: z.string(),
+    ref: z.string(),
+    actionable: z.boolean(),
+    strategy: z.string().optional(),
+    reason: z.object({ code: z.string(), message: z.string(), targetRef: z.string().optional() }).optional(),
+    requirements: z.array(z.object({
+      kind: z.enum(CONDITION_KINDS), target: z.string().optional(),
+      verdict: z.enum(['satisfied', 'unsatisfied', 'inconclusive']),
+      observation: z.enum(['known', 'absent', 'unknown', 'unsupported']),
+      evidence: evidenceProvenanceSchema.optional(),
+    })),
+    contractId: z.string(),
+    sequence: z.number().int(),
+  },
+  annotations: { readOnlyHint: true },
+  handler: async (context, args) => {
+    const entry = context.terminals.get(args.terminal);
+    const locator = locatorFor(entry, args);
+    const target = await locator.resolve(optionalTimeout(args.timeout));
+    const explanation = await locator.actionability(args.action, {
+      ...optionalTimeout(args.timeout),
+      ...(args.value === undefined ? {} : { value: args.value }),
+    });
+    const requirements = explanation.requirements.map((requirement) => ({
+      kind: requirement.condition.kind,
+      ...('target' in requirement.condition ? { target: requirement.condition.target } : {}),
+      verdict: requirement.verdict,
+      observation: requirement.observation.status,
+      ...('evidence' in requirement.observation ? { evidence: requirement.observation.evidence } : {}),
+    }));
+    return {
+      text: explanation.actionable
+        ? `${args.action} is actionable via ${explanation.strategy ?? 'planned input'}`
+        : `${args.action} is not actionable: ${explanation.reason?.message ?? 'inconclusive requirements'}`,
+      data: {
+        terminal: entry.id,
+        ref: target.ref,
+        actionable: explanation.actionable,
+        ...(explanation.strategy === undefined ? {} : { strategy: explanation.strategy }),
+        ...(explanation.reason === undefined ? {} : { reason: explanation.reason }),
+        requirements,
+        contractId: explanation.checkpoint.contractId,
+        sequence: explanation.checkpoint.sequence,
+      },
+    };
+  },
+});
+
+const checkpoint = defineTool({
+  name: 'terminal.checkpoint',
+  title: 'Capture an observation checkpoint',
+  description: 'Returns the atomic session/contract/screen/semantic identity used by revision-safe actions and waits.',
+  inputSchema: { terminal: terminalId },
+  outputSchema: {
+    terminal: z.string(), sessionId: z.string(), contractId: z.string(), epoch: z.number().int(), sequence: z.number().int(),
+    screenRevision: z.number().int(), semanticRevision: z.number().int().nullable(), pairedScreenRevision: z.number().int().nullable(),
+  },
+  annotations: { readOnlyHint: true },
+  handler: async (context, args) => {
+    const entry = context.terminals.get(args.terminal);
+    const value = entry.harness.checkpoint();
+    return { text: `checkpoint ${value.sequence}`, data: { terminal: entry.id, ...value } };
   },
 });
 
@@ -703,19 +881,23 @@ const drag = defineTool({
     from: cellPosition.optional(),
     to: cellPosition.optional(),
     timeout: timeoutMs.optional(),
+    modifiers: mouseModifiersSchema,
   },
   outputSchema: receiptFields,
   handler: async (context, args) => {
     const entry = context.terminals.get(args.terminal);
     const source = locatorFor(entry, args);
     if (args.toTarget !== undefined) {
-      await source.dragTo(locatorFor(entry, args.toTarget), optionalTimeout(args.timeout));
+      await source.dragTo(locatorFor(entry, args.toTarget), {
+        ...optionalTimeout(args.timeout),
+        ...(args.modifiers === undefined ? {} : { modifiers: args.modifiers }),
+      });
       return { text: 'dragged to target', data: receipt(entry) };
     }
     if (args.from === undefined || args.to === undefined) {
       throw usageError('drag needs either toTarget, or both from and to');
     }
-    await source.drag({ from: args.from, to: args.to });
+    await entry.harness.mouse.drag({ from: args.from, to: args.to, ...(args.modifiers === undefined ? {} : { modifiers: args.modifiers }) });
     return {
       text: `dragged (${args.from.row},${args.from.column}) -> (${args.to.row},${args.to.column})`,
       data: receipt(entry),
@@ -732,6 +914,7 @@ const wheel = defineTool({
     ...targetShape,
     deltaY: z.number().int(),
     deltaX: z.number().int().optional(),
+    modifiers: mouseModifiersSchema,
   },
   outputSchema: receiptFields,
   handler: async (context, args) => {
@@ -739,6 +922,7 @@ const wheel = defineTool({
     await locatorFor(entry, args).wheel({
       deltaY: args.deltaY,
       ...(args.deltaX === undefined ? {} : { deltaX: args.deltaX }),
+      ...(args.modifiers === undefined ? {} : { modifiers: args.modifiers }),
     });
     return { text: `wheel deltaY=${args.deltaY}`, data: receipt(entry) };
   },
@@ -965,10 +1149,16 @@ export const TERMINAL_TOOLS: readonly ToolDefinition[] = Object.freeze([
   snapshot,
   captureSince,
   query,
+  checkpoint,
+  actionability,
   pointerTool('terminal.click'),
   pointerTool('terminal.double_click'),
+  pointerTool('terminal.hover'),
   press,
   type,
+  fill,
+  checkedTool('check'),
+  checkedTool('uncheck'),
   paste,
   writeRaw,
   drag,

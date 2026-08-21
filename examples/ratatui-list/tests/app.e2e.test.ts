@@ -16,8 +16,18 @@ describe.skipIf(!runnable)('the Ratatui release list', () => {
     await app.press('ArrowDown');
     await expect(app.getByRole('listitem', {name: 'Ready'})).toHaveState({selected: true});
 
-    const list = app.getByRole('list');
+    const list = app.getByRole('list', {name: 'Release status'});
     expect((await list.geometry()).intendedRect.status).toBe('known');
-    await expect(list.click({timeout: 0})).rejects.toThrow(/unsupported|pointer/iu);
+    const receipt = await list.click({position: {rowOffset: 3, columnOffset: 4}});
+    await expect(app.getByRole('listitem', {name: 'Shipped'})).toHaveState({selected: true});
+    expect(receipt.plan?.strategy).toBe('authoritative-pointer-region');
+    expect(receipt.executed.map((step) => `${step.device}:${step.kind}`)).toEqual([
+      'mouse:down',
+      'mouse:up',
+    ]);
+    expect(app.contract()?.capabilities['pointer-hit-testing']).toMatchObject({
+      status: 'supported',
+      evidence: {providerId: 'ratatui-list-production-router'},
+    });
   });
 });

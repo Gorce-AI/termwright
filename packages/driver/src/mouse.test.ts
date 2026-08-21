@@ -20,8 +20,6 @@ function modes(overrides: Partial<TerminalModes> = {}): TerminalModes {
   });
 }
 
-const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
-
 function refusalFor(event: Parameters<typeof encodeMouse>[0], m: TerminalModes): TermwrightError {
   try {
     encodeMouse(event, m);
@@ -41,35 +39,10 @@ describe('a mouse mode the platform hides', () => {
     );
   });
 
-  it('sends the report in SGR rather than refusing', () => {
-    // Measured, not assumed: a child whose DECSET ConPTY swallowed still
-    // decodes this (see the mouse probe in escapes.pty.test.ts).
-    expect(decode(encodeMouse({ kind: 'press', row: 2, column: 4, button: 'left' }, unknown))).toBe(
-      '\x1b[<0;5;3M',
-    );
-    expect(
-      decode(encodeMouse({ kind: 'release', row: 2, column: 4, button: 'right' }, unknown)),
-    ).toBe('\x1b[<2;5;3m');
-  });
-
-  it('does not refuse events whose tracking level it cannot check', () => {
-    // 'x10 has no release' and 'vt200 has no motion' are statements about a
-    // level; under 'unknown' the level is exactly what is missing, so refusing
-    // would deny input that works.
-    expect(decode(encodeMouse({ kind: 'move', row: 0, column: 0, dragging: true }, unknown))).toBe(
-      '\x1b[<35;1;1M',
-    );
-    expect(decode(encodeMouse({ kind: 'wheel', row: 1, column: 1, wheelDelta: 1 }, unknown))).toBe(
-      '\x1b[<65;2;2M',
-    );
-  });
-
-  it('escapes the legacy coordinate ceiling that would refuse a far cell', () => {
-    // The default encoding cannot express past column 223; SGR can, and under
-    // 'unknown' SGR is what gets sent.
-    expect(decode(encodeMouse({ kind: 'press', row: 5, column: 400 }, unknown))).toBe(
-      '\x1b[<0;401;6M',
-    );
+  it('fails closed instead of guessing an SGR encoding', () => {
+    const error = refusalFor({ kind: 'press', row: 2, column: 4, button: 'left' }, unknown);
+    expect(error.code).toBe('input-mode-disabled');
+    expect(error.message).toContain('not observable');
   });
 });
 
@@ -79,18 +52,46 @@ describe('a mouse mode known to be off or limited', () => {
       { kind: 'press', row: 0, column: 0 },
       modes({ mouseTracking: 'none', mouseEncoding: 'default' }),
     );
-    expect(error.code).toBe('unsupported-action');
+    expect(error.code).toBe('input-mode-disabled');
     expect(error.message).toContain('has not enabled mouse tracking');
   });
 
   it('still refuses a release the level does not report', () => {
     const error = refusalFor({ kind: 'release', row: 0, column: 0 }, modes({ mouseTracking: 'x10' }));
-    expect(error.code).toBe('unsupported-action');
+    expect(error.code).toBe('input-mode-disabled');
   });
 
   it('still refuses motion the level does not report', () => {
     const error = refusalFor({ kind: 'move', row: 0, column: 0 }, modes({ mouseTracking: 'vt200' }));
-    expect(error.code).toBe('unsupported-action');
+    expect(error.code).toBe('input-mode-disabled');
     expect(error.diagnostics.suggestion).toContain('1002');
+  });
+});
+
+describe('mouse modifiers', () => {
+  it('encodes shift, alt and control in the terminal Cb bitfield', () => {
+    const encoded = new TextDecoder().decode(encodeMouse({
+      kind: 'press', row: 2, column: 4, button: 'right',
+      modifiers: ['control', 'shift', 'alt', 'shift'],
+    }, modes()));
+    expect(encoded).toBe('\x1b[<30;5;3M');
+  });
+
+  it('preserves modifier bits for release, motion and wheel reports', () => {
+    expect(new TextDecoder().decode(encodeMouse({
+      kind: 'release', row: 0, column: 0, button: 'left', modifiers: ['control'],
+    }, modes()))).toBe('\x1b[<16;1;1m');
+    expect(new TextDecoder().decode(encodeMouse({
+      kind: 'move', row: 0, column: 0, modifiers: ['shift'],
+    }, modes({ mouseTracking: 'any' })))).toBe('\x1b[<39;1;1M');
+    expect(new TextDecoder().decode(encodeMouse({
+      kind: 'wheel', wheelDelta: 1, row: 0, column: 0, modifiers: ['alt'],
+    }, modes()))).toBe('\x1b[<73;1;1M');
+  });
+
+  it('rejects unknown modifier names rather than dropping them', () => {
+    expect(() => encodeMouse({
+      kind: 'press', row: 0, column: 0, modifiers: ['super' as never],
+    }, modes())).toThrow(/unknown mouse modifier/u);
   });
 });

@@ -347,6 +347,7 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
           columns: merged.columns,
           rows: merged.rows,
           ...(merged.terminalProfile === undefined ? {} : { terminalProfile: merged.terminalProfile }),
+          requiredCapabilities: merged.requiredCapabilities,
           cwd,
           env: merged.env,
           timeouts: merged.timeouts,

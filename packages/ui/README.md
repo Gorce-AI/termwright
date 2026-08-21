@@ -139,8 +139,12 @@ send complete messages.
 The socket speaks `§UI events` from [`/CONTRACTS.md`](../../CONTRACTS.md), and
 only that: `tests-discovered`, `run-start`, `session`, `test-start`, `step`,
 `output`, `semantic`, `app-log`, `action-start`, `action`, `test-end`, `run-end`,
-`run-cancelled`, `run-cancel-failed` from the server; `rerun`, `stop`, `pick`,
-`input` from the browser.
+`run-cancelled`, `run-cancel-failed`, `actionability-inspection` from the
+server; `rerun`, `stop`, `pick`, `input`, `inspect-actionability` from the
+browser. Actionability inspection is a request-scoped live RPC: the session
+owner evaluates click/hover/focus/type with the same production ActionPlanner
+and committed checkpoint used by real actions. The browser never infers an
+answer from geometry, semantic fields, or an earlier trace event.
 Everything that is state rather than an event — the session list, a moment on a
 trace's timeline, the recorder's generated source — is an HTTP call under
 `/api/`, so the normative protocol stays exactly the size the contract says it

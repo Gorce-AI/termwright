@@ -48,15 +48,6 @@ func startFakeDriver(t *testing.T) *fakeDriver {
 	return startFakeDriverWithLogs(t, nil)
 }
 
-// startFakeDriverWithSubscribe asks the adapter for diffs rather than whole
-// trees, which is the only mode in which the full-snapshot obligation means
-// anything.
-func startFakeDriverWithSubscribe(t *testing.T, subscribe string) *fakeDriver {
-	driver := startFakeDriverWithLogs(t, nil)
-	driver.subscribe = subscribe
-	return driver
-}
-
 // startFakeDriverWithLogs grants a log budget in the handshake. A nil budget
 // means the ack carries no `logs` field at all, which is what tells an adapter
 // that logs are disabled.
@@ -181,38 +172,46 @@ func sampleSnapshot() *Snapshot {
 	snapshot := NewSnapshot("ignored", 999, 80, 24)
 	snapshot.RootIDs = []string{"root"}
 	snapshot.Nodes = []Node{
-		{ID: "root", Role: RoleDialog, Name: "Permission", Bounds: &Rect{Row: 0, Column: 0, Width: 40, Height: 2}},
-		{ID: "ok", ParentID: "root", Role: RoleButton, Name: "Approve", Bounds: &Rect{Row: 1, Column: 2, Width: 9, Height: 1}},
+		{ID: "root", Role: RoleDialog, Name: "Permission", Geometry: testGeometry(Rect{Row: 0, Column: 0, Width: 40, Height: 2})},
+		{ID: "ok", ParentID: "root", Role: RoleButton, Name: "Approve", Geometry: testGeometry(Rect{Row: 1, Column: 2, Width: 9, Height: 1})},
 	}
 	return snapshot
+}
+
+func testGeometry(rect Rect) NodeGeometryObservations {
+	displayed := true
+	return NodeGeometryObservations{
+		Displayed:    Observation[bool]{Status: "known", Value: &displayed, Evidence: DefaultEvidence("go-test")},
+		IntendedRect: Observation[Rect]{Status: "known", Value: &rect, Evidence: DefaultEvidence("go-test")},
+		VisibleRect:  Observation[Rect]{Status: "known", Value: &rect, Evidence: DefaultEvidence("go-test")},
+	}
 }
 
 // -- dormant rule ----------------------------------------------------------
 
 func TestNoClientWithoutACompleteEnvironment(t *testing.T) {
-	cases := []struct{ endpoint, token, protocol string }{
-		{"", "", ""},
-		{"/tmp/nope.sock", "", ""},
-		{"", testToken, ""},
-		{"/tmp/nope.sock", testToken, "termwright/9"},
+	cases := []struct{ endpoint, token string }{
+		{"", ""},
+		{"/tmp/nope.sock", ""},
+		{"", testToken},
 	}
 	for _, testCase := range cases {
-		if client := fromEnvValues(testCase.endpoint, testCase.token, testCase.protocol, Options{}); client != nil {
-			t.Errorf("endpoint=%q token=%q protocol=%q produced a client", testCase.endpoint, testCase.token, testCase.protocol)
+		if client := fromEnvValues(testCase.endpoint, testCase.token, Options{}); client != nil {
+			t.Errorf("endpoint=%q token=%q produced a client", testCase.endpoint, testCase.token)
 		}
 	}
-	if client := fromEnvValues("/tmp/tw.sock", testToken, ProtocolID, Options{}); client == nil {
+	if client := fromEnvValues("/tmp/tw.sock", testToken, Options{}); client == nil {
 		t.Error("a fully instrumented environment produced no client")
 	}
-	qualified := fromEnvValues("/tmp/tw.sock", testToken, ProtocolV2ID, Options{})
-	if qualified == nil || !qualified.QualifiedObservations() || !containsCapability(qualified.options.Capabilities, CapQualifiedObservations) {
-		t.Errorf("termwright/2 did not select qualified production: %+v", qualified)
+	client := fromEnvValues("/tmp/tw.sock", testToken, Options{})
+	if client == nil {
+		t.Error("termwright/2 did not create a client")
 	}
 
 	// A Windows pipe path is a real endpoint, not a reason to stay dormant:
 	// the driver hands one out on win32, and which transport can open it is
 	// the dialer's business, not the constructor's.
-	if client := fromEnvValues(`\\.\pipe\termwright-abc`, testToken, "", Options{}); client == nil {
+	if client := fromEnvValues(`\\.\pipe\termwright-abc`, testToken, Options{}); client == nil {
 		t.Error("a named-pipe endpoint produced no client")
 	}
 }
@@ -288,6 +287,27 @@ func TestHandshakeAndPublish(t *testing.T) {
 	}
 }
 
+func TestFailSendsTypedTerminalErrorAndCloses(t *testing.T) {
+	driver := startFakeDriver(t)
+	client := New(driver.endpoint(), testToken, Options{AdapterName: "go-test", AdapterVersion: "0.1.0"})
+	if err := client.Start(2 * time.Second); err != nil {
+		t.Fatalf("handshake failed: %v", err)
+	}
+	if err := client.Fail("duplicate-semantic-key", "duplicate SemanticKey: save"); err != nil {
+		t.Fatalf("fail: %v", err)
+	}
+	frames := driver.waitFor(t, 2)
+	if frames[1]["type"] != "error" || frames[1]["code"] != "duplicate-semantic-key" {
+		t.Fatalf("typed terminal error = %#v", frames[1])
+	}
+	if client.Connected() {
+		t.Fatal("client remained connected after fatal producer violation")
+	}
+	if marker, err := client.Publish(sampleSnapshot()); err != nil || marker != "" {
+		t.Fatalf("closed client published weakened evidence: marker=%q err=%v", marker, err)
+	}
+}
+
 func TestDebugPerformanceMetricsDescribeOnlyObservedFacts(t *testing.T) {
 	driver := startFakeDriver(t)
 	client := New(driver.endpoint(), testToken, Options{
@@ -305,7 +325,7 @@ func TestDebugPerformanceMetricsDescribeOnlyObservedFacts(t *testing.T) {
 	snapshot := sampleSnapshot()
 	snapshot.Nodes = append(snapshot.Nodes, Node{
 		ID: "custom", ParentID: "root", Role: RoleGeneric, Name: "",
-		FrameworkType: "ApplicationWidget",
+		FrameworkType: "ApplicationWidget", Geometry: testGeometry(Rect{Row: 3, Column: 0, Width: 10, Height: 1}),
 	})
 	if _, err := client.Publish(snapshot); err != nil {
 		t.Fatalf("publish failed: %v", err)
@@ -313,7 +333,7 @@ func TestDebugPerformanceMetricsDescribeOnlyObservedFacts(t *testing.T) {
 	driver.waitFor(t, 3)
 
 	metrics := client.PerformanceMetrics()
-	if !metrics.Enabled || metrics.FullSnapshots != 1 || metrics.Deltas != 0 {
+	if !metrics.Enabled || metrics.FullSnapshots != 1 {
 		t.Fatalf("wrong publication counters: %+v", metrics)
 	}
 	if metrics.SemanticBytes <= FrameHeaderBytes || metrics.SemanticNodes != 3 || metrics.UnknownFrameworkNodes != 1 {
@@ -369,38 +389,6 @@ func TestRevisionsIncreaseByOnePerPublish(t *testing.T) {
 	}
 }
 
-func TestGetTreeIsAnsweredFromRetainedSnapshots(t *testing.T) {
-	driver := startFakeDriver(t)
-	client := New(driver.endpoint(), testToken, Options{AdapterName: "go-test", AdapterVersion: "0.1.0"})
-	if err := client.Start(2 * time.Second); err != nil {
-		t.Fatalf("handshake failed: %v", err)
-	}
-	defer client.Close()
-
-	if _, err := client.Publish(sampleSnapshot()); err != nil {
-		t.Fatal(err)
-	}
-	driver.waitFor(t, 3)
-
-	revision := int64(1)
-	driver.send(GetTree{Type: "get-tree", RequestID: 7, Revision: &revision})
-	frames := driver.waitFor(t, 4)
-	answer := frames[3]
-	if answer["type"] != "get-tree-result" || answer["requestId"].(float64) != 7 {
-		t.Fatalf("unexpected answer %v", answer)
-	}
-	if _, ok := answer["snapshot"]; !ok {
-		t.Errorf("a retained revision was answered with %v", answer)
-	}
-
-	missing := int64(99)
-	driver.send(GetTree{Type: "get-tree", RequestID: 8, Revision: &missing})
-	frames = driver.waitFor(t, 5)
-	if _, ok := frames[4]["error"]; !ok {
-		t.Errorf("an unretained revision was answered with %v", frames[4])
-	}
-}
-
 func TestPublishRefusesAnInvalidSnapshot(t *testing.T) {
 	driver := startFakeDriver(t)
 	client := New(driver.endpoint(), testToken, Options{AdapterName: "go-test", AdapterVersion: "0.1.0"})
@@ -451,7 +439,7 @@ func TestSnapshotMessageMarshalsAsAnEnvelope(t *testing.T) {
 func paddedSnapshot(seed int) *Snapshot {
 	snapshot := NewSnapshot("ignored", 999, 80, 24)
 	snapshot.RootIDs = []string{"root"}
-	snapshot.Nodes = []Node{{ID: "root", Role: RoleDialog, Name: "Permission"}}
+	snapshot.Nodes = []Node{{ID: "root", Role: RoleDialog, Name: "Permission", Geometry: testGeometry(Rect{Row: 0, Column: 0, Width: 80, Height: 24})}}
 	padding := strings.Repeat("x", 4000)
 	for index := 0; index < 60; index++ {
 		name := padding
@@ -463,6 +451,7 @@ func paddedSnapshot(seed int) *Snapshot {
 			ParentID: "root",
 			Role:     RoleText,
 			Name:     name,
+			Geometry: testGeometry(Rect{Row: index % 24, Column: 0, Width: 1, Height: 1}),
 		})
 	}
 	return snapshot
@@ -503,7 +492,7 @@ func startStalledDriver(t *testing.T, path string) *stalledDriver {
 		}
 		ack, _ := EncodeFrame(map[string]any{
 			"type": "hello-ack", "protocol": ProtocolID, "sessionId": "s-1",
-			"limits": DefaultLimits, "subscribe": "diffs",
+			"limits": DefaultLimits, "subscribe": "snapshots",
 			"marker": map[string]any{"enabled": true},
 		}, DefaultLimits.MaxFrameBytes)
 		_, _ = conn.Write(ack)
@@ -600,51 +589,5 @@ func TestAnOversizedFrameIsNotAWriteTimeout(t *testing.T) {
 	}
 	if code := ValidationCode(err); code == "" {
 		t.Fatalf("expected a validation error carrying a code, got %T %v", err, err)
-	}
-}
-
-// -- the producer's obligation after a gap ---------------------------------
-
-func TestRequireFullSnapshotForcesAWholeTree(t *testing.T) {
-	driver := startFakeDriverWithSubscribe(t, "diffs")
-	client := New(driver.endpoint(), "token", Options{AdapterName: "test", AdapterVersion: "0.0.0"})
-	if err := client.Start(2 * time.Second); err != nil {
-		t.Fatalf("handshake: %v", err)
-	}
-	defer client.Close()
-
-	if _, err := client.Publish(paddedSnapshot(1)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := client.Publish(paddedSnapshot(2)); err != nil {
-		t.Fatal(err)
-	}
-	if client.DeltasSent() == 0 {
-		t.Fatal("the second publish was not a delta, so this test proves nothing")
-	}
-
-	// The probe lost a frame: the next tree must be whole.
-	client.RequireFullSnapshot()
-	if !client.FullSnapshotRequired() {
-		t.Error("the obligation was not recorded")
-	}
-	before := client.SnapshotsSent()
-	if _, err := client.Publish(paddedSnapshot(3)); err != nil {
-		t.Fatal(err)
-	}
-	if client.SnapshotsSent() != before+1 {
-		t.Error("the obligation did not produce a full snapshot")
-	}
-	if client.FullSnapshotRequired() {
-		t.Error("the obligation was not cleared once honoured")
-	}
-
-	// And the one after it is a delta again.
-	deltas := client.DeltasSent()
-	if _, err := client.Publish(paddedSnapshot(4)); err != nil {
-		t.Fatal(err)
-	}
-	if client.DeltasSent() != deltas+1 {
-		t.Error("the client stopped sending deltas after honouring the obligation")
 	}
 }

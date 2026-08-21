@@ -54,7 +54,7 @@ await runAdapterConformance({
   quit: { input: '\u0011', exitCode: 0 },
   columns: 80,
   rows: 24,
-  expectAbsoluteBounds: true,
+  expectIntendedGeometry: true,
 });
 
 await runAdapterConformance({
@@ -88,5 +88,5 @@ await runAdapterConformance({
   quit: { input: '\u0003', exitCode: 0 },
   columns: 80,
   rows: 24,
-  expectAbsoluteBounds: true,
+  expectIntendedGeometry: true,
 });

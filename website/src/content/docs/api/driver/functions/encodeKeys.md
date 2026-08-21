@@ -13,7 +13,7 @@ editUrl: false
 
 > **encodeKeys**(`keys`, `modes`): `Uint8Array`
 
-Defined in: [keys.ts:193](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L193)
+Defined in: [driver/src/keys.ts:189](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L189)
 
 Encodes a key description into the bytes a terminal would send.
 

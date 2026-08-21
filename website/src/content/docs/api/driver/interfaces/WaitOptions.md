@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: WaitOptions
 
-Defined in: [api.ts:398](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L398)
+Defined in: [driver/src/api.ts:474](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L474)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -32,6 +32,8 @@ await terminal.close();
 
 ## Extended by
 
+- [`LocatorDragOptions`](../locatordragoptions/)
+- [`LocatorWheelOptions`](../locatorwheeloptions/)
 - [`PointerOptions`](../pointeroptions/)
 - [`ShellRunOptions`](../shellrunoptions/)
 
@@ -41,4 +43,4 @@ await terminal.close();
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [api.ts:399](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L399)
+Defined in: [driver/src/api.ts:475](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L475)

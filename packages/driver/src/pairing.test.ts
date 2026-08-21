@@ -4,13 +4,15 @@ import { RevisionPairing, type PairedRevision } from './pairing.js';
 
 function snapshot(revision: number): SemanticSnapshot {
   return {
-    v: 1,
+    v: 2,
     sessionId: 's',
     revision,
     columns: 80,
     rows: 24,
     rootIds: ['n1'],
-    nodes: [{ id: 'n1', role: 'application', name: 'app' }],
+    nodes: [{ id: 'n1', role: 'application', name: 'app', geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } } }],
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 

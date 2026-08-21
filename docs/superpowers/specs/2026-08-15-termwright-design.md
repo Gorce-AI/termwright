@@ -3,7 +3,7 @@
 Date: 2026-08-15 (as-built addendum: 2026-08-16)
 Status: IMPLEMENTED — 1.0 scope delivered; this document is the design of
 record, `CONTRACTS.md` + `CHANGELOG-contracts.md` record every contract
-decision made during implementation (tree deltas, app logs, crash reports,
+decision made during implementation (full semantic snapshots, app logs, crash reports,
 terminal profiles, ARIA/AccessKit a11y, TTL, tolerant-reader evolution rules).
 Windows/ConPTY and the release pipelines are code-complete but first verified
 by the initial GitHub Actions runs.
@@ -66,7 +66,7 @@ npm (TypeScript, pnpm monorepo, changesets):
                           semantic YAML snapshots, cell snapshots, trace reporter,
                           retries/flaky classification, termwright.config.ts
 @termwright/ink           production adapter for Ink 7 (aria-props + useSemantic)
-@termwright/ink-testing   mountInk (in-process) + launchInkFixture (real PTY)
+@termwright/ink           annotations + mountInk (in-process) + launchInkFixture (real PTY)
 @termwright/opentui       adapter for OpenTUI (screenX/screenY, lifecycle hooks)
 @termwright/mcp           thin MCP server over the public driver API
 @termwright/trace         trace format: asciicast + events.jsonl + semantics.jsonl,
@@ -89,14 +89,14 @@ Dependency rules (from origin spec §5, unchanged): `protocol` depends on nothin
 framework-specific; `driver` never depends on Ink; `mcp` consumes only the public
 driver; adapters depend on protocol + their framework, never on the driver.
 
-## 4. Semantic protocol v1
+## 4. Semantic protocol v2
 
 ### 4.1 Transport and lifecycle
 
 - Driver creates a private endpoint before spawn: unix socket in a 0700 tmpdir
   (macOS/Linux) or named pipe with unguessable name (Windows). Never TCP.
 - Env injected into the child: `TERMWRIGHT_ENDPOINT`, `TERMWRIGHT_TOKEN`
-  (256-bit random), `TERMWRIGHT_PROTOCOL=1`.
+  (256-bit random), `TERMWRIGHT_PROTOCOL=2`.
 - **Dormant rule**: without these env vars an adapter opens nothing, allocates
   nothing, emits nothing; output is byte-for-byte identical to an uninstrumented
   run. Conformance enforces this.
@@ -111,17 +111,12 @@ driver; adapters depend on protocol + their framework, never on the driver.
 
 ### 4.2 Message model (CDP-like)
 
-Three traffic kinds on one channel:
-1. adapter push: `revision-commit { revision }` after each committed render;
-   optionally changed subtrees when the diff capability is negotiated;
-2. driver request/response: `getTree { revision? }`, `getNode { id }`;
-3. subscriptions: driver declares whether it wants full snapshots, diffs, or
-   bare revision numbers.
-
-v1 ships full snapshots after each commit (origin spec §8.3); the
-request/response frame is in the protocol from day one so 1.x diffs are additive,
-not breaking. Every delta (when introduced) binds an exact base revision; any gap
-forces a full rehydrate.
+The adapter sends immutable full snapshots, lifecycle diagnostics, structured
+logs, and revision commits on one bounded channel. A render marker in the PTY
+stream pairs each semantic revision with the exact terminal frame that committed
+it. Protocol v2 deliberately has no legacy delta/request-response mode: missing,
+duplicate, stale, or out-of-order evidence fails closed rather than being
+heuristically rehydrated.
 
 ### 4.3 Frame↔tree pairing (render marker)
 
@@ -175,28 +170,31 @@ separately from close. Close is idempotent; destructive signals are explicit.
 
 ### 5.2 Locators
 
-Two dialects over one engine, evaluated driver-side on the latest accepted tree:
+Semantic locators are evaluated driver-side on one committed semantic frame:
 - Playwright family: `getByRole(role, {name, exact, state})`, `getByLabel`,
-  `getByText(textOrRegex, {occurrence})`, `getByTestId` (configurable attribute),
-  `locator(sel).within(parent)`;
-- Textual-style CSS dialect: `locator('dialog button.primary:focused')` with
+  `getByText(textOrRegex)`, `getByTestId`, descendant chaining, filters,
+  intersections/unions and positional selection;
+- Termwright Semantic Selector Language: `locator('dialog button.primary:focused')` with
   `#id`, `.class`, `:focused/:disabled/:selected/:checked` pseudo-classes.
 
 Strict by default: zero matches wait until deadline; >1 match fails with bounded
 candidate diagnostics. Locators are lazy handles (re-resolved per action);
 snapshot refs `n8@42` bind their revision and raise a typed stale error.
 
-Generic fallbacks (no semantics): literal/regex over grid text, occurrence
-selection, line/rect/coordinate targets, style predicates (fg/bg/attribute
-match — "expect text ERROR with fg red"), region scoping, scrollback search.
+Physical grid queries never masquerade as semantic locators: `getByScreenText`
+provides literal/regex matching, occurrence selection and style predicates
+(fg/bg/attribute match — "expect text ERROR with fg red"), region scoping and
+scrollback search.
 Generic matches yield rectangles, never invented roles; diagnostics always say
 `semanticTree: false`.
 
 ### 5.3 Actions and waits
 
-All input goes through the PTY (never a callback): click/dblclick/drag/wheel via
-negotiated mouse encoding (SGR etc.) with pre-flight checks (visible, enabled,
-in-viewport, mouse mode on — else typed `unsupported`); keyboard honoring
+All input goes through the PTY (never a callback). ActionPlanner binds semantic
+evidence, pointer ownership and terminal state to one checkpoint before
+click/double-click/hover/drag/wheel. Device plans are fully preflighted before
+the first byte; unsupported capabilities and disabled input modes are distinct
+typed failures. Keyboard input honors
 application cursor/keypad modes; `paste` bracketed only when the child enabled
 it; `resize` waits for PTY resize + a subsequent stable render. Optional
 `activate()` reports which physical strategy it used.
@@ -212,7 +210,7 @@ Scroll/selection stay four distinct APIs (origin spec §14): app scroll (input),
 emulator scrollback (no input), app selection (real drag), emulator cell
 selection/copy.
 
-Typed errors (timeout, stale-snapshot, ambiguous, unsupported-action,
+Typed errors (timeout, stale-snapshot, ambiguous, capability-unavailable, not-actionable,
 history-truncation, protocol-violation, capacity, process-exit, closed) render
 Playwright-grade messages: what was awaited, last observed screen excerpt +
 semantic candidates, and a suggestion.
@@ -246,7 +244,7 @@ semantic candidates, and a suggestion.
   thin adaptation layer (~5% of code), swappable without touching driver or
   protocol.
 
-### 6.2 Component testing (`@termwright/ink-testing`)
+### 6.2 Component testing (`@termwright/ink`)
 
 Two modes, one `TerminalHarness` interface (same locators/actions/matchers as
 `launchTerminal`):

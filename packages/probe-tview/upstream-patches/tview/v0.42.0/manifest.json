@@ -1,7 +1,7 @@
 {
   "framework": "github.com/rivo/tview",
   "frameworkVersion": "v0.42.0",
-  "patchSetVersion": 11,
+  "patchSetVersion": 14,
   "note": "Anchored after screen.Show() in draw(); see docs/architecture/audit/tview.md §1. go.mod gains the protocol client, supplied from disk by the generated workspace.",
   "requires": [
     {
@@ -31,12 +31,12 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:97566d3783f9996c07c087f0e243557f0266a50aaa89e9c2f676abe72c1f9185"
+      "sha256": "sha256:11b5243aa5d5d64ca70a15fde2a10dcd3ee6635b21bf09d6c545fa36e2d2bcee"
     },
     {
       "path": "termwright_probe_test.go",
       "source": "add/termwright_probe_test.go",
-      "sha256": "sha256:1c97fba8f84ad9b646219df06af80d76dc74cf30c408364f20cf2ecf3ea07aec"
+      "sha256": "sha256:a3c5f0c8591d8317aaf2461704468849a7a65a2838d28fb7721ebbe820163d0b"
     }
   ]
 }

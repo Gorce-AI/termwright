@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: RefQuery
 
-Defined in: [selectors.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L71)
+Defined in: [driver/src/selectors.ts:69](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L69)
 
 A query that names one already-identified target. Unlike a re-query by role
 and name, a ref stays unambiguous when two nodes look alike.
@@ -22,7 +22,7 @@ and name, a ref stays unambiguous when two nodes look alike.
 
 > `readonly` **description**: `string`
 
-Defined in: [selectors.ts:74](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L74)
+Defined in: [driver/src/selectors.ts:72](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L72)
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: [selectors.ts:74](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` **kind**: `"ref"`
 
-Defined in: [selectors.ts:72](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L72)
+Defined in: [driver/src/selectors.ts:70](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L70)
 
 ***
 
@@ -38,4 +38,4 @@ Defined in: [selectors.ts:72](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` **ref**: [`ParsedRef`](../../type-aliases/parsedref/)
 
-Defined in: [selectors.ts:73](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L73)
+Defined in: [driver/src/selectors.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L71)

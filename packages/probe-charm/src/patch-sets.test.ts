@@ -22,6 +22,16 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { BUBBLETEA_MODULES, type CharmMajor } from './detect.js';
 
 const run = promisify(execFile);
+
+async function runGo(args: readonly string[], options: Parameters<typeof run>[2]): Promise<{ stdout: string }> {
+  try {
+    const result = await run('go', [...args], options);
+    return { stdout: String(result.stdout) };
+  } catch (error) {
+    const failure = error as Error & { readonly stdout?: string; readonly stderr?: string };
+    throw new Error(`${failure.message}\n${failure.stdout ?? ''}\n${failure.stderr ?? ''}`);
+  }
+}
 const here = dirname(fileURLToPath(import.meta.url));
 const CLIENT = join(here, '..', '..', '..', 'clients', 'go');
 
@@ -123,7 +133,7 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     await expect(
       run('go', ['build', './...'], { cwd: copy, env: { ...process.env, GOWORK: workspace } }),
     ).resolves.toBeDefined();
-    const { stdout } = await run('go', ['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
+    const { stdout } = await runGo(['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
       cwd: copy,
       env: { ...process.env, GOWORK: workspace },
     });
@@ -144,7 +154,7 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     await expect(
       run('go', ['build', './...'], { cwd: copy, env: { ...process.env, GOWORK: workspace } }),
     ).resolves.toBeDefined();
-    const { stdout } = await run('go', ['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
+    const { stdout } = await runGo(['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
       cwd: copy,
       env: { ...process.env, GOWORK: workspace },
     });

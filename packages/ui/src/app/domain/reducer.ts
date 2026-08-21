@@ -432,6 +432,10 @@ function reduceMessage(state: AppState, message: ServerMessage): AppState {
         },
       };
     }
+    case 'actionability-inspection':
+      // RunnerClient consumes request-scoped inspection replies before they
+      // enter the append-only application event reducer.
+      return state;
   }
 }
 
@@ -502,6 +506,7 @@ function addSession(state: AppState, message: Extract<ServerMessage, { type: 'se
     ...(message.adapter === undefined ? {} : { adapter: message.adapter }),
     ...(message.probe === undefined ? {} : { probe: message.probe }),
     ...(message.capabilities === undefined ? {} : { capabilities: message.capabilities }),
+    ...(message.contract === undefined ? {} : { contract: message.contract }),
     ...(message.adapterStatus === undefined ? {} : { adapterStatus: message.adapterStatus }),
     command: [],
     writable: state.run.mode === 'record',
@@ -586,6 +591,8 @@ function settleAction(test: ExecutionCase, message: Extract<ServerMessage, { typ
     ...(message.selector === undefined ? {} : { selector: message.selector }),
     ...(message.ref === undefined ? {} : { targetRef: message.ref }),
     ...(message.error === undefined ? {} : { error: message.error }),
+    ...(message.actionPlan === undefined ? {} : { actionPlan: message.actionPlan }),
+    ...(message.actionability === undefined ? {} : { actionability: message.actionability }),
   };
   if (index === -1) return { ...test, nodes: [...test.nodes, settled] };
   const nodes = [...test.nodes];

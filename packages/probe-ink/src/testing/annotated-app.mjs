@@ -2,7 +2,11 @@
 
 import React, {useEffect, useRef} from 'react';
 import {Box, Text, render, useApp} from 'ink';
-import {useSemantic} from '@termwright/ink';
+// This is an internal cross-package fixture. Import the already-built workspace
+// artifact directly so probe-ink does not need a reverse devDependency on Ink;
+// Ink itself depends on probe-ink for launchInkFixture, and that cycle makes
+// clean parallel declaration builds nondeterministic.
+import {useSemantic} from '../../../ink/dist/index.js';
 
 function App() {
   const {exit} = useApp();

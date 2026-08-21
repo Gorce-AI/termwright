@@ -2,9 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { formatCompactSnapshot, parseRef, refEntries, stateFlags } from './format.js';
 import type { SemanticSnapshot } from './model.js';
 
+const evidence = () => ({ source: 'framework' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'mcp-test' });
+const geometry = (rect: { row: number; column: number; width: number; height: number }) => ({
+  displayed: { status: 'known' as const, value: true, evidence: evidence() },
+  intendedRect: { status: 'known' as const, value: { ...rect }, evidence: evidence() },
+  visibleRect: { status: 'known' as const, value: { ...rect }, evidence: evidence() },
+});
+
 /** The snapshot behind the example in CONTRACTS.md §MCP. */
 const permissionDialog: SemanticSnapshot = {
-  v: 1,
+  v: 2,
   sessionId: 's1',
   revision: 42,
   columns: 100,
@@ -15,7 +22,7 @@ const permissionDialog: SemanticSnapshot = {
       id: 'n7',
       role: 'dialog',
       name: 'Permission',
-      bounds: { row: 8, column: 20, width: 40, height: 9 },
+      geometry: geometry({ row: 8, column: 20, width: 40, height: 9 }),
       state: { modal: true },
     },
     {
@@ -23,10 +30,12 @@ const permissionDialog: SemanticSnapshot = {
       parentId: 'n7',
       role: 'button',
       name: 'Approve',
-      bounds: { row: 14, column: 23, width: 11, height: 1 },
+      geometry: geometry({ row: 14, column: 23, width: 11, height: 1 }),
       state: { focused: true },
     },
   ],
+  coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() },
+  hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
 };
 
 describe('the compact snapshot format', () => {

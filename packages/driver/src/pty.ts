@@ -61,7 +61,7 @@ interface ByteWritablePty {
 }
 
 /**
- * The production backend: `@lydell/node-pty` pinned to 1.1.0 (prebuilds for all
+ * The production backend: `@lydell/node-pty` pinned to 1.2.0-beta.15 (prebuilds for all
  * six platforms). The pty is opened with `encoding: null` so output arrives as
  * bytes; UTF-8 sequences split across reads are reassembled by the VT layer,
  * not here.
@@ -85,10 +85,43 @@ export function createNodePtyBackend(): PtyBackend {
 
       let disposed = false;
       let exited = false;
-      const disposables: { dispose(): void }[] = [];
+      let exitStatus: ExitStatus | null = null;
+      const dataListeners = new Set<(data: Uint8Array) => void>();
+      const exitListeners = new Set<(status: ExitStatus) => void>();
+      const pendingData: Uint8Array[] = [];
+      const disposables: { dispose(): void }[] = [
+        pty.onData((chunk: unknown) => {
+          const data = typeof chunk === 'string'
+            ? Buffer.from(chunk, 'utf8')
+            : Buffer.from(chunk as Uint8Array);
+          if (dataListeners.size === 0) {
+            // ConPTY can deliver a complete first frame before spawn() returns
+            // to TerminalSession. Preserve it until the session subscribes.
+            pendingData.push(data);
+            return;
+          }
+          for (const listener of dataListeners) listener(data);
+        }),
+        pty.onExit(({ exitCode, signal }) => {
+          exited = true;
+          exitStatus = {
+            code: signal === undefined || signal === 0 ? exitCode : null,
+            signal: signal === undefined || signal === 0 ? null : signalName(signal),
+          };
+          for (const listener of exitListeners) listener(exitStatus);
+          if (!disposed) return;
+          for (const disposable of disposables) disposable.dispose();
+          disposables.length = 0;
+        }),
+      ];
 
       const proc: PtyProcess = {
-        pid: pty.pid,
+        // ConPTY connects asynchronously in node-pty 1.2. Reading this lazily
+        // prevents its transient pre-connect value (0) becoming permanent in
+        // Termwright's public wrapper.
+        get pid(): number {
+          return pty.pid;
+        },
         write(data: Uint8Array): void {
           if (disposed || exited) return;
           (pty as unknown as ByteWritablePty).write(Buffer.from(data));
@@ -107,27 +140,19 @@ export function createNodePtyBackend(): PtyBackend {
           pty.kill(SIGNAL_NAMES[sig]);
         },
         onData(cb): PtyUnsubscribe {
-          const sub = pty.onData((chunk: unknown) => {
-            cb(typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : (chunk as Uint8Array));
-          });
-          disposables.push(sub);
-          return () => sub.dispose();
+          dataListeners.add(cb);
+          if (pendingData.length > 0) {
+            const buffered = pendingData.splice(0);
+            for (const data of buffered) cb(data);
+          }
+          return () => dataListeners.delete(cb);
         },
         onExit(cb): PtyUnsubscribe {
-          const sub = pty.onExit(({ exitCode, signal }) => {
-            exited = true;
-            queueMicrotask(() => {
-              if (!disposed) return;
-              for (const d of disposables) d.dispose();
-              disposables.length = 0;
-            });
-            cb({
-              code: signal === undefined || signal === 0 ? exitCode : null,
-              signal: signal === undefined || signal === 0 ? null : signalName(signal),
-            });
+          exitListeners.add(cb);
+          if (exitStatus !== null) queueMicrotask(() => {
+            if (exitListeners.has(cb)) cb(exitStatus!);
           });
-          disposables.push(sub);
-          return () => sub.dispose();
+          return () => exitListeners.delete(cb);
         },
         dispose(): void {
           if (disposed) return;

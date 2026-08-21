@@ -11,11 +11,20 @@ type Rect struct {
 // Observation preserves whether a fact is known, absent, retryably unknown,
 // or unsupported. Value is meaningful only when Status is "known".
 type Observation[T any] struct {
-	Status     string `json:"status"`
-	Value      *T     `json:"value,omitempty"`
-	Evidence   string `json:"evidence,omitempty"`
-	Reason     string `json:"reason,omitempty"`
-	Capability string `json:"capability,omitempty"`
+	Status     string              `json:"status"`
+	Value      *T                  `json:"value,omitempty"`
+	Evidence   *EvidenceProvenance `json:"evidence,omitempty"`
+	Reason     string              `json:"reason,omitempty"`
+	Capability string              `json:"capability,omitempty"`
+}
+
+// EvidenceProvenance identifies how a known or authoritatively absent
+// observation was established.
+type EvidenceProvenance struct {
+	Source     string `json:"source"`
+	Method     string `json:"method"`
+	Strength   string `json:"strength"`
+	ProviderID string `json:"providerId"`
 }
 
 type NodeGeometryObservations struct {
@@ -31,6 +40,34 @@ type PointerHitRegion struct {
 
 type PointerHitGrid struct {
 	Regions []PointerHitRegion `json:"regions"`
+}
+
+// ProviderPointerSpan is one half-open row run owned by a recipient.
+type ProviderPointerSpan struct {
+	Row  int `json:"row"`
+	From int `json:"from"`
+	To   int `json:"to"`
+}
+
+// ProviderPointerRegion is pointer-only evidence. RegionBounds is not layout
+// geometry or visual clipping.
+type ProviderPointerRegion struct {
+	RecipientID  string                `json:"recipientId"`
+	RegionBounds Rect                  `json:"regionBounds"`
+	Spans        []ProviderPointerSpan `json:"spans"`
+}
+
+// ProviderRevisionEvidence binds one frozen application provider to a session
+// and semantic revision. Status is available, lost, or violation.
+type ProviderRevisionEvidence struct {
+	ProviderID     string                   `json:"providerId"`
+	SessionID      string                   `json:"sessionId"`
+	Revision       int64                    `json:"revision"`
+	Status         string                   `json:"status"`
+	Evidence       *EvidenceProvenance      `json:"evidence,omitempty"`
+	PointerRegions *[]ProviderPointerRegion `json:"pointerRegions,omitempty"`
+	HitGrid        *PointerHitGrid          `json:"hitGrid,omitempty"`
+	Reason         string                   `json:"reason,omitempty"`
 }
 
 // State is the closed state set. Pointers distinguish "unset" from "false":
@@ -64,8 +101,7 @@ type TextRange struct {
 	Rect        Rect `json:"rect"`
 }
 
-// Node is one accessible element. Bounds, when present, are absolute viewport
-// cells — never parent-relative.
+// Node is one accessible element.
 type Node struct {
 	ID          string `json:"id"`
 	ParentID    string `json:"parentId,omitempty"`
@@ -77,9 +113,8 @@ type Node struct {
 	// field is empty, absent says this is not a value-bearing widget at all.
 	// `omitempty` on a plain string collapses the first into the second and
 	// makes toHaveValue('') unassertable.
-	Value  *string `json:"value,omitempty"`
-	Bounds *Rect   `json:"bounds,omitempty"`
-	State  *State  `json:"state,omitempty"`
+	Value *string `json:"value,omitempty"`
+	State *State  `json:"state,omitempty"`
 	// Extended is application-defined JSON state. It is deliberately separate
 	// from State, whose portable vocabulary remains closed.
 	Extended    map[string]any `json:"extended,omitempty"`
@@ -92,15 +127,11 @@ type Node struct {
 	// Role is RoleGeneric: an unrecognised widget must at least name its own
 	// type, so a reader can tell one unknown thing from another.
 	FrameworkType string `json:"frameworkType,omitempty"`
-	// Occlusion says whether the producer can tell if these cells are covered
-	// by something painted later. Only a producer that observes paint order may
-	// say "known"; the driver refuses pointer actions on anything else.
-	Occlusion string `json:"occlusion,omitempty"`
 	// P is where this node's facts came from, as a whole.
 	P string `json:"p,omitempty"`
 	// PX is where individual fields came from, when they differ from P.
-	PX       map[string]string         `json:"px,omitempty"`
-	Geometry *NodeGeometryObservations `json:"geometry,omitempty"`
+	PX       map[string]string        `json:"px,omitempty"`
+	Geometry NodeGeometryObservations `json:"geometry"`
 }
 
 // Provenance sources: where a semantic fact came from. Closed set.
@@ -118,12 +149,6 @@ var ProvenanceSources = []string{
 	ProvenanceCorrelation, ProvenanceHeuristic,
 }
 
-// Occlusion knowledge: whether covered cells are answerable for this node.
-const (
-	OcclusionKnown   = "known"
-	OcclusionUnknown = "unknown"
-)
-
 // Cursor is the terminal cursor position in viewport cells.
 type Cursor struct {
 	Row     int    `json:"row"`
@@ -134,41 +159,34 @@ type Cursor struct {
 
 // Snapshot is the whole tree for one committed render.
 type Snapshot struct {
-	V               int                          `json:"v"`
-	SessionID       string                       `json:"sessionId"`
-	Revision        int64                        `json:"revision"`
-	Columns         int                          `json:"columns"`
-	Rows            int                          `json:"rows"`
-	Cursor          *Cursor                      `json:"cursor,omitempty"`
-	RootIDs         []string                     `json:"rootIds"`
-	Nodes           []Node                       `json:"nodes"`
-	CoordinateSpace *Observation[string]         `json:"coordinateSpace,omitempty"`
-	HitGrid         *Observation[PointerHitGrid] `json:"hitGrid,omitempty"`
+	V                int                         `json:"v"`
+	SessionID        string                      `json:"sessionId"`
+	Revision         int64                       `json:"revision"`
+	Columns          int                         `json:"columns"`
+	Rows             int                         `json:"rows"`
+	Cursor           *Cursor                     `json:"cursor,omitempty"`
+	RootIDs          []string                    `json:"rootIds"`
+	Nodes            []Node                      `json:"nodes"`
+	CoordinateSpace  Observation[string]         `json:"coordinateSpace"`
+	HitGrid          Observation[PointerHitGrid] `json:"hitGrid"`
+	ProviderEvidence []ProviderRevisionEvidence  `json:"providerEvidence,omitempty"`
 }
 
-// NewSnapshotV2 returns a qualified snapshot. Callers must populate every
-// node's Geometry and explicitly qualify HitGrid, including unsupported.
-func NewSnapshotV2(sessionID string, revision int64, columns, rows int) *Snapshot {
+// NewSnapshot returns an evidence-qualified snapshot. Callers must populate
+// every node's Geometry and explicitly qualify all observable facts.
+func NewSnapshot(sessionID string, revision int64, columns, rows int) *Snapshot {
 	space := "viewport-cells"
 	return &Snapshot{
 		V: 2, SessionID: sessionID, Revision: revision, Columns: columns, Rows: rows,
 		RootIDs: []string{}, Nodes: []Node{},
-		CoordinateSpace: &Observation[string]{Status: "known", Value: &space, Evidence: "adapter"},
+		CoordinateSpace: Observation[string]{Status: "known", Value: &space, Evidence: DefaultEvidence("semantic-adapter")},
+		HitGrid:         Observation[PointerHitGrid]{Status: "unsupported", Capability: string(CapPointerHitGrid), Reason: "not-negotiated"},
 	}
 }
 
-// NewSnapshot returns a snapshot with v set and non-nil slices, so it marshals
-// as [] rather than null.
-func NewSnapshot(sessionID string, revision int64, columns, rows int) *Snapshot {
-	return &Snapshot{
-		V:         1,
-		SessionID: sessionID,
-		Revision:  revision,
-		Columns:   columns,
-		Rows:      rows,
-		RootIDs:   []string{},
-		Nodes:     []Node{},
-	}
+// DefaultEvidence describes an authoritative fact declared by an adapter.
+func DefaultEvidence(providerID string) *EvidenceProvenance {
+	return &EvidenceProvenance{Source: "application", Method: "declared", Strength: "authoritative", ProviderID: providerID}
 }
 
 // Bool returns a pointer to v, for the optional State fields.

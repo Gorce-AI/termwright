@@ -28,7 +28,7 @@ exact name — which made two same-named buttons ambiguous and could not express
 grid ref at all. Grid refs (`grid:1,2,9,1@7`) now work for free.
 
 The malformed-ref and superseded-ref failures are the driver's, verbatim: kinds
-`unsupported-action` and `stale-snapshot` with the driver's own suggestion. The
+`capability-unavailable`, `not-actionable` and `stale-snapshot` with the driver's own suggestion. The
 suggestion is phrased for a library caller ("re-resolve the locator"); the
 MCP-flavoured advice ("call terminal.snapshot again") lives in the server
 instructions and in `SKILL.md`, per error kind, rather than by rewriting what the

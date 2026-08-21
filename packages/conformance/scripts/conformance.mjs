@@ -43,11 +43,12 @@ function vitestEntry() {
 }
 
 const VITEST = vitestEntry();
+const REQUIRE_NO_SKIPPED_AREAS = process.argv.includes('--require-no-skipped-areas');
 
 /** Suite file → what it certifies, in the order the matrix prints them. */
 const SUITES = [
   ['src/suites/driver-generic.test.ts', 'generic fallback', '§20.1'],
-  ['src/suites/adversarial.test.ts', 'hostile peer + deltas', '§20.3'],
+  ['src/suites/adversarial.test.ts', 'hostile peer + full snapshots', '§20.3'],
   ['src/suites/interaction.test.ts', 'interaction', '§20.4'],
   ['src/suites/ready.test.ts', 'readiness + env', '§5.3'],
   ['src/suites/language-adapters.test.ts', 'adapter contract (py/go)', '§7'],
@@ -302,6 +303,10 @@ for (const [label, run] of crashed) {
   for (const line of tail) process.stdout.write(`  ${line}\n`);
 }
 
-const broken = failed || crashed.length > 0;
+const missingRequiredArea = REQUIRE_NO_SKIPPED_AREAS && rows.some((row) => row.verdict === 'skipped');
+if (missingRequiredArea) {
+  process.stdout.write('required conformance area skipped: toolchain/setup coverage is incomplete\n');
+}
+const broken = failed || crashed.length > 0 || missingRequiredArea;
 process.stdout.write(broken ? '\nconformance: FAILED\n\n' : 'conformance: passed\n\n');
 process.exit(broken ? 1 : 0);

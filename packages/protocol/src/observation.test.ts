@@ -3,22 +3,48 @@ import { DEFAULT_LIMITS } from './limits.js';
 import { validateSnapshot } from './validate.js';
 import { intersectRects, rectArea, spatialRelation, viewportIntersection, type Rect } from './index.js';
 
+const ev = (providerId: string) => ({ source: 'framework', method: 'instrumented', strength: 'authoritative', providerId });
+
 describe('qualified geometry', () => {
+  it('requires authoritative provenance for absent and revision-scoped reasons for unknown', () => {
+    const base = {
+      v: 2, sessionId: 's', revision: 1, columns: 10, rows: 5,
+      rootIds: ['n1'],
+      nodes: [{ id: 'n1', role: 'button', name: 'Approve', geometry: {
+        displayed: { status: 'known', value: false, evidence: ev('probe') },
+        intendedRect: { status: 'absent', reason: 'not-displayed', evidence: ev('probe') },
+        visibleRect: { status: 'absent', reason: 'not-displayed', evidence: ev('probe') },
+      } }],
+      coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: ev('probe') },
+      hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    };
+    expect(validateSnapshot(base, DEFAULT_LIMITS).ok).toBe(true);
+    const missing = structuredClone(base) as any;
+    delete missing.nodes[0].geometry.visibleRect.evidence;
+    expect(validateSnapshot(missing, DEFAULT_LIMITS)).toMatchObject({ ok: false, detail: expect.stringContaining('evidence') });
+    const diagnostic = structuredClone(base) as any;
+    diagnostic.nodes[0].geometry.visibleRect.evidence.strength = 'diagnostic';
+    expect(validateSnapshot(diagnostic, DEFAULT_LIMITS)).toMatchObject({ ok: false, detail: expect.stringContaining('evidence') });
+    const permanentUnknown = structuredClone(base) as any;
+    permanentUnknown.nodes[0].geometry.visibleRect = { status: 'unknown', reason: 'not-reported' };
+    expect(validateSnapshot(permanentUnknown, DEFAULT_LIMITS)).toMatchObject({ ok: false, detail: expect.stringContaining('reason') });
+  });
+
   it('accepts a fully qualified v2 snapshot and rejects legacy geometry in v2', () => {
     const geometry = {
-      displayed: { status: 'known', value: true, evidence: 'probe' },
-      intendedRect: { status: 'known', value: { row: -1, column: 2, width: 5, height: 3 }, evidence: 'probe' },
-      visibleRect: { status: 'known', value: { row: 0, column: 2, width: 5, height: 2 }, evidence: 'viewport-clip' },
+      displayed: { status: 'known', value: true, evidence: ev('probe') },
+      intendedRect: { status: 'known', value: { row: -1, column: 2, width: 5, height: 3 }, evidence: ev('probe') },
+      visibleRect: { status: 'known', value: { row: 0, column: 2, width: 5, height: 2 }, evidence: ev('viewport-clip') },
     };
     const snapshot = {
       v: 2, sessionId: 's', revision: 1, columns: 10, rows: 5,
       rootIds: ['n1'],
       nodes: [{ id: 'n1', role: 'button', name: 'Approve', geometry }],
-      coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+      coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: ev('probe') },
       hitGrid: { status: 'known', value: { regions: [
         { rect: { row: 0, column: 2, width: 5, height: 1 }, recipientId: 'n1' },
         { rect: { row: 1, column: 2, width: 5, height: 1 }, recipientId: 'n1' },
-      ] }, evidence: 'hit-grid' },
+      ] }, evidence: ev('hit-grid') },
     };
     expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
     expect(validateSnapshot({ ...snapshot, nodes: [{ ...snapshot.nodes[0], bounds: geometry.visibleRect.value }] }, DEFAULT_LIMITS)).toMatchObject({ ok: false, code: 'schema' });
@@ -29,9 +55,9 @@ describe('qualified geometry', () => {
     const snapshot = {
       v: 2, sessionId: 's', revision: 1, columns: 10, rows: 5,
       rootIds: ['n1'],
-      nodes: [{ id: 'n1', role: 'button', name: 'Approve', geometry: { displayed: { status: 'known', value: true, evidence: 'probe' }, intendedRect: unsupported, visibleRect: { ...unsupported } } }],
-      coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
-      hitGrid: { status: 'known', value: { regions: [{ rect: { row: 0, column: 0, width: 1, height: 1 }, recipientId: 'ghost' }] }, evidence: 'hit-grid' },
+      nodes: [{ id: 'n1', role: 'button', name: 'Approve', geometry: { displayed: { status: 'known', value: true, evidence: ev('probe') }, intendedRect: unsupported, visibleRect: { ...unsupported } } }],
+      coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: ev('probe') },
+      hitGrid: { status: 'known', value: { regions: [{ rect: { row: 0, column: 0, width: 1, height: 1 }, recipientId: 'ghost' }] }, evidence: ev('hit-grid') },
     };
     expect(validateSnapshot(snapshot, DEFAULT_LIMITS)).toMatchObject({ ok: false, code: 'missing-parent' });
   });
@@ -41,10 +67,10 @@ describe('qualified geometry', () => {
     const base = {
       v: 2, sessionId: 's', revision: 1, columns: 10, rows: 5,
       rootIds: ['n1'],
-      nodes: [{ id: 'n1', role: 'button', name: 'Approve', geometry: { displayed: { status: 'known', value: true, evidence: 'probe' }, intendedRect: unsupported, visibleRect: { ...unsupported } } }],
-      coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+      nodes: [{ id: 'n1', role: 'button', name: 'Approve', geometry: { displayed: { status: 'known', value: true, evidence: ev('probe') }, intendedRect: unsupported, visibleRect: { ...unsupported } } }],
+      coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: ev('probe') },
     };
-    const hitGrid = { status: 'known', evidence: 'hit-grid', value: { regions: [
+    const hitGrid = { status: 'known', evidence: ev('hit-grid'), value: { regions: [
       { rect: { row: 0, column: 1, width: 3, height: 1 }, recipientId: 'n1' },
       { rect: { row: 0, column: 3, width: 2, height: 1 }, recipientId: 'n1' },
     ] } };

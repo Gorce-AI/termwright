@@ -1,7 +1,7 @@
 {
   "framework": "github.com/charmbracelet/bubbletea",
   "frameworkVersion": "v1.3.10",
-  "patchSetVersion": 10,
+  "patchSetVersion": 13,
   "note": "Three anchors, because v1 only has the model in scope where View() is called; renderer.write receives a string and would give the probe nothing to read.",
   "patched": [
     {
@@ -21,12 +21,12 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:e6d0ef0269d7a756ab21859af5dc9d0bf7d83e33d009d5723e26434a1401ebe4"
+      "sha256": "sha256:f9653add565e2c33ec1447e7ae5e5def20d1074a3433a779894c84f39f32d865"
     },
     {
       "path": "termwright_probe_test.go",
       "source": "add/termwright_probe_test.go",
-      "sha256": "sha256:ee779fff3ba0eef7a60f30f31c179763d7072753f5acb49dd9f7998201f8319e"
+      "sha256": "sha256:8c14c0a8fb7485a6f6be39e8fda47401fbbad0dbc5499c5356c488121861d785"
     }
   ]
 }

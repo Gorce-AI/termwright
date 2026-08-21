@@ -268,8 +268,8 @@ pub(crate) fn error_label(error: &std::io::Error) -> String {
 
 /// The announced capability set as one log field, comma separated.
 ///
-/// Rendered through serde so the log shows the wire names (`absolute-bounds`)
-/// rather than the Rust variant names (`AbsoluteBounds`), and so this line
+/// Rendered through serde so the log shows wire names (`intended-geometry`)
+/// rather than Rust variant names (`IntendedGeometry`), and so this line
 /// reads the same in all three clients.
 pub(crate) fn join_capabilities(capabilities: &[crate::roles::Capability]) -> String {
     capabilities

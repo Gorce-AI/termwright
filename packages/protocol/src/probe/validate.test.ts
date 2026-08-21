@@ -75,6 +75,7 @@ describe('validateProbeInfo', () => {
     // arrived, which is what the reader needs when this fails.
     expect([...PROBE_CAPABILITIES]).toEqual([
       'stable-identity',
+      'intended-rect',
       'visible-rect',
       'operations',
       'annotations',

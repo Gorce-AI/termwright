@@ -1,11 +1,16 @@
 import type { Rect } from './tree.js';
+import type { EvidenceProvenance } from './contract.js';
 
-/** Why a fact could not be observed. Unknown is retryable; unsupported is not. */
+/**
+ * Why a fact is temporarily unsettled.
+ *
+ * Every value names a revision-domain retry boundary. Permanent inability to
+ * observe a fact is `unsupported`, never `unknown`.
+ */
 export type ObservationUnknownReason =
-  | 'not-reported'
-  | 'temporary'
-  | 'clip-unobservable'
-  | 'legacy-unqualified';
+  | 'awaiting-revision-pair'
+  | 'provider-refresh'
+  | 'stale-revision';
 
 export type ObservationAbsentReason = 'detached' | 'not-displayed' | 'not-laid-out';
 
@@ -14,14 +19,10 @@ export type ObservationUnsupportedReason =
   | 'framework-unobservable'
   | 'not-negotiated';
 
-export type ObservationEvidence =
-  | 'adapter'
-  | 'probe'
-  | 'terminal-grid'
-  | 'viewport-clip'
-  | 'paint-order'
-  | 'hit-grid'
-  | 'legacy-v1';
+export type ObservationEvidence = EvidenceProvenance;
+export type AuthoritativeObservationEvidence = ObservationEvidence & {
+  readonly strength: 'authoritative';
+};
 
 /**
  * A fact with its epistemic state preserved.
@@ -32,7 +33,11 @@ export type ObservationEvidence =
  */
 export type Observation<T> =
   | { readonly status: 'known'; readonly value: T; readonly evidence: ObservationEvidence }
-  | { readonly status: 'absent'; readonly reason: ObservationAbsentReason }
+  | {
+      readonly status: 'absent';
+      readonly reason: ObservationAbsentReason;
+      readonly evidence: AuthoritativeObservationEvidence;
+    }
   | { readonly status: 'unknown'; readonly reason: ObservationUnknownReason }
   | {
       readonly status: 'unsupported';
@@ -43,8 +48,14 @@ export type Observation<T> =
 /** Atomic identity of the screen/tree pair used for an observation. */
 export interface ObservationStamp {
   readonly sessionId: string;
+  readonly contractId: string;
+  readonly epoch: number;
+  /** Monotonic publication order across both screen and semantic revisions. */
+  readonly sequence: number;
   readonly screenRevision: number;
   readonly semanticRevision: number | null;
+  /** Screen revision paired to semanticRevision, or null when no pair exists. */
+  readonly pairedScreenRevision: number | null;
 }
 
 export type CoordinateSpace = 'viewport-cells' | 'framework-local-cells';

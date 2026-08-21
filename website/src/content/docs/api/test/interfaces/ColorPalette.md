@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ColorPalette
 
-Defined in: [test/src/config.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L40)
+Defined in: [test/src/config.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L45)
 
 A deterministic 16-entry ANSI palette.
 
@@ -25,7 +25,7 @@ a developer machine and CI.
 
 > `readonly` **colors**: readonly `string`[]
 
-Defined in: [test/src/config.ts:43](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L43)
+Defined in: [test/src/config.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L48)
 
 `#rrggbb` for palette indices 0…15, in ANSI order.
 
@@ -35,7 +35,7 @@ Defined in: [test/src/config.ts:43](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: [test/src/config.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L45)
+Defined in: [test/src/config.ts:50](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L50)
 
 Extra environment handed to launched programs, e.g. `TERM`.
 
@@ -45,4 +45,4 @@ Extra environment handed to launched programs, e.g. `TERM`.
 
 > `readonly` **name**: `string`
 
-Defined in: [test/src/config.ts:41](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L41)
+Defined in: [test/src/config.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L46)

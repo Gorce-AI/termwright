@@ -66,7 +66,7 @@ pub const ABSOLUTE_LIMITS: Limits = Limits {
 
 /// Milliseconds a driver waits for a `hello` before settling the session as
 /// generic (non-semantic).
-pub const DEFAULT_NEGOTIATION_MS: u64 = 250;
+pub const DEFAULT_NEGOTIATION_MS: u64 = 2_000;
 
 impl Default for Limits {
     fn default() -> Self {

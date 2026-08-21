@@ -19,28 +19,29 @@ Windows environment names are case-insensitive and the OS chooses the casing, so
 the allowlist is matched against the real keys rather than read by an assumed
 spelling.
 
-## Windows: the AttachConsole noise is teardown, not spawn
+## Windows: ConPTY teardown must not stall on AttachConsole
 
-`Error: AttachConsole failed` is thrown at `conpty_console_list_agent.js:11`,
-inside a process `@lydell/node-pty` **forks** from `kill()` to enumerate the
-console process list. A GitHub Actions runner's session has no console to
-attach to, so it throws there every time a session closes.
+`@lydell/node-pty` forks a helper from `kill()` to enumerate the console process
+list. On a loaded GitHub Actions runner, several helpers can race and Win32's
+`AttachConsole` may temporarily fail. Version 1.1.0 let that helper die without
+an IPC reply; every parent then retained its ConPTY handles for a five-second
+fallback timer. Parallel sessions amplified this into missing frames and
+timeouts elsewhere in the suite.
 
 Worth recording because the obvious diagnosis is wrong twice over:
 
-- **There is no winpty fallback to escape.** `WindowsPtyAgent` in
-  `@lydell/node-pty` 1.1.0 unconditionally `require`s `conpty.node` and calls
-  `conptyNative.startProcess`. The package is ConPTY-only; nothing chooses
-  between backends.
+- **There is no backend fallback to escape.** The supported Windows path is
+  ConPTY; Termwright does not switch terminal implementations after a failure.
 - **There is no `useConpty` to force.** Neither the typings nor the JavaScript
   mention it — the only Windows option is `conptyInheritCursor`. Passing
   `useConpty: true` would be a no-op that looks like a fix.
 
-The parent tolerates the throw: it waits for the agent's message and falls back
-to the shell pid after a 5 s timeout. That makes it a slowness risk on Windows
-rather than a correctness one — if teardown turns out to cost seconds per
-session there, the fix is to stop routing Windows teardown through
-`pty.kill()`, and that needs a Windows run to justify rather than a guess.
+Termwright pins `@lydell/node-pty` 1.2.0-beta.15. Its helper catches this exact
+race, sends an empty process list immediately and lets the parent close ConPTY
+without the five-second stall. A Windows-only stress regression closes several
+live PTYs concurrently and requires every exit promptly. The version also
+connects ConPTY asynchronously, so `PtyProcess.pid` is a live getter rather
+than a snapshot of the transient pre-connect value `0`.
 
 ## Windows: the mouse mode is hidden, not absent
 
@@ -199,7 +200,7 @@ identity that re-resolution is **not** "did this node change?" but "does the
 number 8 mean anything in this frame?", and the honest answer is no.
 
 Proposed: `ResolvedTarget` gains `identity: 'stable' | 'frame-local'`, and
-`locatorForRef` refuses with `unsupported-action` for a frame-local ref,
+`locatorForRef` refuses with `capability-unavailable` for a frame-local ref,
 suggesting role/name/testId instead. The failure this prevents is the worst
 kind: a ref that silently resolves to a *different widget* between frames, so
 a passing test asserts about something it never targeted.

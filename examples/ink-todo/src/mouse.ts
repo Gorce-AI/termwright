@@ -3,12 +3,13 @@
  * reporting turned on, and a way to tell which widget a report landed in.
  *
  * Neither is termwright's job. A driver that finds mouse reporting disabled
- * refuses `click()` with `unsupported-action` instead of sending bytes nothing
+ * refuses `click()` with `input-mode-disabled` instead of sending bytes nothing
  * will read, so this file is the application half of that contract.
  */
 
 import { useEffect } from 'react';
 import { measureElement, useStdout, type DOMElement } from 'ink';
+import { registerEvidenceProvider } from '@termwright/evidence-provider';
 
 /** Zero-based viewport coordinates of a mouse report. */
 export interface Point {
@@ -53,6 +54,83 @@ export function hits(element: DOMElement | null, point: Point): boolean {
     point.row >= box.y &&
     point.row < box.y + box.height
   );
+}
+
+interface PointerTarget {
+  readonly testId: string;
+  readonly element: { readonly current: DOMElement | null };
+}
+
+/**
+ * The application's production pointer router. Its `hitTest` result is used
+ * by the application's normal Ink input handler and observed by Termwright;
+ * the provider never dispatches an action.
+ */
+class PointerRouter {
+  readonly #targets: PointerTarget[] = [];
+
+  register(target: PointerTarget): () => void {
+    this.#targets.push(target);
+    return () => {
+      const index = this.#targets.indexOf(target);
+      if (index >= 0) this.#targets.splice(index, 1);
+    };
+  }
+
+  hitTest(point: Point): string | null {
+    // Later-mounted targets (for example a modal) own overlapping cells.
+    return this.#targets.findLast((target) => hits(target.element.current, point))?.testId ?? null;
+  }
+
+  regions(columns: number, rows: number) {
+    return this.#targets.flatMap(({ testId, element }) => {
+      if (element.current === null) return [];
+      const box = measureElement(element.current);
+      const top = Math.max(0, box.y);
+      const bottom = Math.min(rows, box.y + box.height);
+      const left = Math.max(0, box.x);
+      const right = Math.min(columns, box.x + box.width);
+      if (bottom <= top || right <= left) return [];
+      return [{
+        recipient: { testId },
+        regionBounds: { row: top, column: left, width: right - left, height: bottom - top },
+        spans: Array.from({ length: bottom - top }, (_, offset) => ({
+          row: top + offset,
+          from: left,
+          to: right,
+        })),
+      }];
+    });
+  }
+}
+
+const pointerRouter = new PointerRouter();
+
+registerEvidenceProvider({
+  id: 'ink-todo-production-router',
+  version: '1.0.0',
+  method: 'native',
+  capabilities: ['pointer-regions', 'hit-test'],
+  observe: ({ columns, rows }) => ({
+    pointerRegions: pointerRouter.regions(columns, rows),
+    hitTest: (column, row) => {
+      const testId = pointerRouter.hitTest({ column, row });
+      return testId === null ? null : { testId };
+    },
+  }),
+});
+
+/** Register a mounted Ink element with the production pointer router. */
+export function usePointerTarget(
+  testId: string,
+  element: { readonly current: DOMElement | null },
+): void {
+  useEffect(() => pointerRouter.register({ testId, element }), [testId, element]);
+}
+
+/** Resolve a normal terminal mouse report through the production router. */
+export function routePointer(point: Point): string | null {
+  return pointerRouter.hitTest(point);
 }
 
 /**

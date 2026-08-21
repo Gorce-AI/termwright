@@ -8,6 +8,7 @@ import { buildCrashedFixtureTrace, buildFixtureTrace } from './__fixtures__/buil
 import { FakeHarness, node, snapshot } from './__fixtures__/fake-session.js';
 import { encodeMessage, parseServerMessage, toBase64, type ClientMessage, type ServerMessage } from './events.js';
 import { startUiServer, type UiServer } from './server.js';
+import type { EffectiveSessionContract, EvidenceProvenance } from '@termwright/protocol';
 
 const servers: UiServer[] = [];
 const tempDirectories: string[] = [];
@@ -572,6 +573,7 @@ describe('post-mortem mode', () => {
     await viewer.until((messages) => messages.some((m) => m.type === 'run-end'), 'the replayed run');
     expect(viewer.received.map((message) => message.type)).toEqual([
       'run-start',
+      'session',
       'test-start',
       'step',
       'step',
@@ -963,7 +965,30 @@ describe('record mode', () => {
     }
     expect(harness.writtenText()).toBe('ls\r');
 
-    harness.semantic(snapshot(1, [node({ id: 'b1', role: 'button', name: 'Approve' })], 'rec'));
+    const pointerEvidence: EvidenceProvenance = {
+      source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router',
+    };
+    const unsupported = { status: 'unsupported', reason: 'framework-unobservable' } as const;
+    harness.negotiatedContract = {
+      contractId: 'rec:0', sessionId: 'rec', epoch: 0, protocol: 'termwright/2', framework: null,
+      providers: [{ id: 'app.router', kind: 'application', version: '1', method: 'native', capabilities: ['pointer-regions', 'hit-test'] }],
+      capabilities: {
+        'semantic-tree': { status: 'supported', evidence: pointerEvidence },
+        'stable-identity': unsupported, 'intended-geometry': unsupported, 'clipped-geometry': unsupported,
+        'painted-region': unsupported, 'pointer-geometry': { status: 'supported', evidence: pointerEvidence },
+        'pointer-hit-testing': { status: 'supported', evidence: pointerEvidence }, focus: unsupported,
+        scroll: unsupported, 'render-order': unsupported, 'keyboard-input': { status: 'supported', evidence: pointerEvidence },
+        'pointer-input': { status: 'supported', evidence: pointerEvidence }, 'paired-revisions': { status: 'supported', evidence: pointerEvidence },
+      },
+      terminal: { profile: 'default', platform: 'linux', mouseModesObservable: true },
+    } satisfies EffectiveSessionContract;
+    harness.semantic({
+      ...snapshot(1, [node({ id: 'b1', role: 'button', name: 'Approve' })], 'rec'),
+      hitGrid: {
+        status: 'known', evidence: pointerEvidence,
+        value: { regions: [{ recipientId: 'b1', rect: { row: 1, column: 1, width: 8, height: 1 } }] },
+      },
+    });
     const action = await api(server, '/api/record/action', {
       method: 'POST',
       body: JSON.stringify({ kind: 'click', nodeId: 'b1' }),
@@ -1003,6 +1028,18 @@ describe('record mode', () => {
     const body = (await response.json()) as { source: string };
     expect(body.source).toContain("await step('approve', async () => {");
     expect(body.source).toContain('await expect(app).toMatchSemanticSnapshot();');
+  });
+
+  it('does not reinterpret an unknown recorder action kind as click', async () => {
+    const harness = new FakeHarness('rec');
+    const server = await start({
+      record: { command: ['node', 'agent.js'], launch: async () => harness.asHarness() },
+    });
+    const response = await api(server, '/api/record/action', {
+      method: 'POST', body: JSON.stringify({ kind: 'teleport', nodeId: 'b1' }),
+    });
+    expect(response.status).toBe(400);
+    expect(server.recorder?.events).toHaveLength(1);
   });
 
   it('rejects recorder routes when not recording', async () => {

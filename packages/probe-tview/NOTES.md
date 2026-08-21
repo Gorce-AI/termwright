@@ -68,10 +68,6 @@ and there is nothing to share with the probes that have a seam.
   one for a tree that never arrived makes the driver wait and then report
   `revision-expired`, which points the blame at the adapter's timing rather
   than at the driver that stopped reading.
-- **A dropped frame demands a full snapshot next.** The probe has lost part of
-  its own fact stream, so a later delta would be based on a revision the driver
-  never received. That is the producer obligation from D5, and the client keeps
-  the flag until a whole tree is actually built.
 - **The role mapping mirrors the hand-written adapter's.** Two instrumentations
   of the same application must describe it the same way, or every conformance
   snapshot forks.
@@ -83,11 +79,10 @@ internals, and the TypeScript suite runs them against a freshly patched copy.
 Two of them are worth understanding before changing:
 
 - `TestAStalledDriverCostsFramesAndNotTheApplication` only means something if
-  the driver really stalls. Two ways it silently stops testing anything: a tree
-  too small to fill a socket buffer, and a tree that does not change between
-  frames — the session subscribes to diffs, and an unchanged tree produces a
-  delta of nearly nothing. The fixture therefore rewrites every label each
-  round. Confirmed by sabotage: with the write deadline disabled the test hangs
+  the driver really stalls. A tree too small to fill a socket buffer silently
+  stops testing the intended path. The fixture therefore publishes a large
+  tree and rewrites every label each round. Confirmed by sabotage: with the
+  write deadline disabled the test hangs
   and fails on the Go test timeout.
 - The TypeScript wrapper asserts the Go tests did not **skip**. A skipped stall
   test looks identical to a passing one in a summary line.
@@ -177,8 +172,9 @@ Two properties are worth stating because they are easy to get wrong:
   actions are dropped, not guessed.
 - **Relations are a bounded second pass.** `LabelledBy` and `DescribedBy` hold
   framework-neutral `SemanticKey` strings rather than target pointers. That
-  avoids both an import cycle and retaining another primitive. Missing and
-  duplicate keys do not emit references; declaration order is irrelevant.
+  avoids both an import cycle and retaining another primitive. Missing targets
+  emit no reference; a duplicate non-empty key terminates the semantic session
+  with `duplicate-semantic-key`. Declaration order is irrelevant.
 - **Provenance remains mixed honestly.** Retained widget facts use
   `p: framework`; recognised roles and author-supplied fields are per-field
   `px` exceptions.

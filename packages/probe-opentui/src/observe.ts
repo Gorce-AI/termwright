@@ -187,9 +187,9 @@ function unobservableFor(node: ObservableNode): readonly ProbeUnobservableField[
  * Children are visited in **z-order** where the framework exposes it, because
  * that is paint order: later means on top, which is the only fact that makes
  * "is my target the thing at this cell" answerable. Where the list is not
- * readable the walk falls back to document order and
- * {@link Observation.paintOrderKnown} goes false, so the caller can decline to
- * announce a capability it cannot honour.
+ * readable the diagnostic walk falls back to document order and
+ * {@link Observation.paintOrderKnown} goes false. A certified session treats
+ * that as an adapter-guarantee violation and publishes no weakened frame.
  *
  * @param root - The renderer's root renderable.
  * @param options - Frame number and ceilings.
@@ -246,10 +246,9 @@ export function observeTree(root: ObservableNode, options: ObserveOptions): Obse
 
   visit(root, undefined, true);
 
-  // Announced as a capability, but a tree whose z-order list was unreadable
-  // cannot honour it. Reporting document order as paint order would be a
-  // silent lie — the receiver would gate clicks on an ordering nobody
-  // computed. Absent, and listed as unobservable, is the honest report.
+  // Useful to diagnostic callers even when certification cannot be honoured.
+  // Reporting document order as paint order would be a silent lie, so the
+  // diagnostic frame marks it unobservable; startSession then fails closed.
   const published = paintOrderKnown
     ? objects
     : objects.map(({ paintOrder: _dropped, ...rest }) => ({

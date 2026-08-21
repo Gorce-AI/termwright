@@ -38,12 +38,14 @@ annotate.Tag(unreadBadge, annotate.Semantics{
 ```
 
 Use annotations for domain names, relationships, actions, and state that tview
-cannot provide. Geometry remains probe-owned.
+cannot provide.
 
 ## Supported behavior
 
-tview 0.42.0 with Go 1.24+ is verified. Primitive identity and intended
-rectangles are known. Viewport clipping is conditional for synthetic list and
-table rows. Exact hit testing is unsupported; use keyboard input.
+tview 0.42.0 with Go 1.24+ is verified. Stable primitive identity is automatic.
+Primitive rectangles can appear as diagnostic observations, but the framework
+does not guarantee intended geometry because synthetic List and DropDown items
+do not own authoritative rectangles. Viewport clipping and exact hit testing
+are unsupported; use keyboard input.
 
 See [Framework compatibility](../../reference/compatibility/) for the matrix.

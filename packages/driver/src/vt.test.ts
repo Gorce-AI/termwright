@@ -3,7 +3,7 @@ import { encodeMarker, verifyMarkerPayload } from '@termwright/protocol';
 import { captureScreen, captureRows } from './screen.js';
 import { matchGrid } from './matching.js';
 import { textMatcher } from './selectors.js';
-import { VtScreen, type MarkerSighting } from './vt.js';
+import { VtScreen, type MarkerSighting, type TerminalResponse } from './vt.js';
 
 let vt: VtScreen | null = null;
 
@@ -21,12 +21,29 @@ afterEach(() => {
 });
 
 describe('VtScreen', () => {
-  it('increments a revision per parsed write', async () => {
+  it('answers DSR and deterministic colour queries without painting query bytes', async () => {
+    const screen = createVt();
+    const responses: TerminalResponse[] = [];
+    screen.onResponse((response) => responses.push(response));
+
+    await screen.write('\x1b[3;7H\x1b[6n\x1b]11;?\x1b\\');
+
+    expect(responses).toEqual([
+      { data: '\x1b[3;7R', kind: 'emulator' },
+      { data: '\x1b]11;rgb:0000/0000/0000\x1b\\', kind: 'background-color' },
+    ]);
+    expect(captureRows(screen).every((row) => row.text === '')).toBe(true);
+    expect(screen.cursor()).toMatchObject({ row: 2, column: 6 });
+  });
+
+  it('increments a revision per observable state change, not per transport chunk', async () => {
     const screen = createVt();
     expect(screen.revision).toBe(0);
     await screen.write('hello');
     expect(screen.revision).toBe(1);
     await screen.write(' world');
+    expect(screen.revision).toBe(2);
+    await screen.write('\x1b]11;?\x1b\\');
     expect(screen.revision).toBe(2);
   });
 
@@ -36,6 +53,72 @@ describe('VtScreen', () => {
     await Promise.all(writes);
     expect(screen.revision).toBe(3);
     expect(captureRows(screen)[0]?.text).toBe('abc');
+  });
+
+  it('reports parser backlog synchronously for the complete queued write lifecycle', async () => {
+    const screen = createVt();
+    expect(screen.hasPendingWrite).toBe(false);
+    expect(screen.isCaughtUp).toBe(true);
+
+    const first = screen.write('a');
+    const second = screen.write('b');
+    expect(screen.hasPendingWrite).toBe(true);
+    expect(screen.isCaughtUp).toBe(false);
+
+    await first;
+    expect(screen.hasPendingWrite).toBe(true);
+    expect(screen.isCaughtUp).toBe(false);
+
+    await second;
+    expect(screen.hasPendingWrite).toBe(false);
+    expect(screen.isCaughtUp).toBe(true);
+  });
+
+  it('tracks target-local damage independently from an animating status row', async () => {
+    const screen = createVt(20, 6);
+    await screen.write('\x1b[1;1HTARGET\x1b[6;1Hspin 0');
+    const targetRevision = screen.revision;
+
+    await screen.write('\x1b[6;1Hspin 1');
+    expect(screen.regionUnchangedSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(true);
+    expect(screen.regionUnchangedSince(targetRevision, [{ row: 5, from: 0, to: 6 }])).toBe(false);
+
+    await screen.write('\x1b[1;1HCHANGED');
+    expect(screen.regionUnchangedSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(false);
+  });
+
+  it('keeps target-local proof across more status revisions than the former bounded history', async () => {
+    const screen = createVt(20, 6);
+    await screen.write('\x1b[1;1HTARGET');
+    const targetRevision = screen.revision;
+
+    for (let index = 0; index < 300; index += 1) {
+      await screen.write(`\x1b[6;1Hspin ${String(index).padStart(3, '0')}`);
+    }
+
+    expect(screen.revision).toBeGreaterThan(targetRevision + 256);
+    expect(screen.regionUnchangedSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(true);
+    expect(screen.regionUnchangedSince(targetRevision, [{ row: 5, from: 0, to: 8 }])).toBe(false);
+  });
+
+  it('fails target-local stability closed across a coordinate-system change', async () => {
+    const screen = createVt(20, 6);
+    await screen.write('TARGET');
+    const targetRevision = screen.revision;
+    await screen.write('\x1b[?1049h');
+    expect(screen.regionUnchangedSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(false);
+  });
+
+  it('publishes resize as a global coordinate-system revision without waiting for output', async () => {
+    const screen = createVt(20, 6);
+    await screen.write('TARGET');
+    const targetRevision = screen.revision;
+
+    screen.resize(10, 5);
+
+    expect(screen.revision).toBe(targetRevision + 1);
+    expect(screen.regionUnchangedSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(false);
+    expect(screen.regionUnchangedSince(screen.revision, [{ row: 0, from: 0, to: 6 }])).toBe(true);
   });
 
   it('applies Unicode 11 widths', async () => {
@@ -60,8 +143,33 @@ describe('VtScreen', () => {
     // The payload is handed on verbatim: what the handler receives must be
     // exactly what the verifier expects, with no reassembly in between.
     expect(verifyMarkerPayload(seen[0]?.payload ?? '', 'token', 'session')?.revision).toBe(3);
-    expect(seen[0]?.screenRevision).toBe(2);
+    expect(seen[0]?.screenRevision).toBe(1);
+    expect(screen.revision).toBe(2);
     expect(captureRows(screen)[0]?.text).toBe('beforeafter');
+  });
+
+  it('binds a marker-only transport chunk to the last observable screen revision', async () => {
+    const screen = createVt();
+    const seen: MarkerSighting[] = [];
+    screen.onMarker((marker) => seen.push(marker));
+
+    await screen.write('frame');
+    await screen.write(encodeMarker('token', 'session', 4));
+
+    expect(screen.revision).toBe(1);
+    expect(seen).toEqual([expect.objectContaining({ screenRevision: 1 })]);
+  });
+
+  it('treats a marker in the middle of one transport chunk as an exact observation boundary', async () => {
+    const screen = createVt();
+    const seen: MarkerSighting[] = [];
+    screen.onMarker((marker) => seen.push(marker));
+
+    await screen.write(`\x1b[1;1HTARGET${encodeMarker('token', 'session', 4)}\x1b[1;1HCHANGED`);
+
+    expect(screen.revision).toBe(2);
+    expect(seen).toEqual([expect.objectContaining({ screenRevision: 1 })]);
+    expect(screen.regionUnchangedSince(1, [{ row: 0, from: 0, to: 6 }])).toBe(false);
   });
 
   it('sights a marker terminated by ST as well as by BEL', async () => {

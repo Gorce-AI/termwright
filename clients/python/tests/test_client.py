@@ -7,15 +7,20 @@ from dataclasses import replace
 from typing import Any, Dict, List, Optional
 
 import pytest
+from conftest import geometry
 
 from termwright import (
     DEFAULT_LIMITS,
     MARKER_OSC_CODE,
+    NodeGeometryObservations,
+    Observation,
+    PROTOCOL_ID,
     SemanticClient,
     client_from_env,
     verify_marker_payload,
+    framework_evidence,
 )
-from termwright.client import ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN
+from termwright.client import ENV_ENDPOINT, ENV_TOKEN
 from termwright.framing import FrameDecoder, encode_frame
 from termwright.tree import Rect, SemanticNode, SemanticSnapshot
 
@@ -44,16 +49,18 @@ def sample_snapshot() -> SemanticSnapshot:
         rows=24,
         rootIds=["root"],
         nodes=[
-            SemanticNode(id="root", role="dialog", name="Permission", bounds=Rect(0, 0, 40, 2)),
+            SemanticNode(id="root", role="dialog", name="Permission", geometry=geometry(Rect(0, 0, 40, 2))),
             SemanticNode(
                 id="ok",
                 parentId="root",
                 role="button",
                 name="Approve",
-                bounds=Rect(1, 2, 9, 1),
+                geometry=geometry(Rect(1, 2, 9, 1)),
                 actions=("focus", "activate"),
             ),
         ],
+        coordinateSpace=Observation("known", "viewport-cells", evidence=framework_evidence("python-test")),
+        hitGrid=Observation("unsupported", capability="pointer-hit-grid", reason="framework-unobservable"),
     )
 
 
@@ -91,7 +98,7 @@ class FakeDriver:
                         self.hello = message
                         ack: Dict[str, Any] = {
                             "type": "hello-ack",
-                            "protocol": "termwright/1",
+                            "protocol": PROTOCOL_ID,
                             "sessionId": SESSION,
                             "limits": DEFAULT_LIMITS.to_wire(),
                             "subscribe": self.subscribe,
@@ -139,7 +146,6 @@ class FakeDriver:
         {ENV_TOKEN: TOKEN},
         {ENV_ENDPOINT: "", ENV_TOKEN: TOKEN},
         {ENV_ENDPOINT: "/tmp/nope.sock", ENV_TOKEN: ""},
-        {ENV_ENDPOINT: "/tmp/nope.sock", ENV_TOKEN: TOKEN, ENV_PROTOCOL: "termwright/9"},
     ],
 )
 def test_no_client_without_a_complete_environment(env):
@@ -194,30 +200,6 @@ async def test_handshake_and_publish(endpoint):
     await driver.close()
 
 
-async def test_get_tree_is_answered_from_the_retained_snapshots(endpoint):
-    driver = FakeDriver(endpoint)
-    await driver.start()
-    client = SemanticClient(endpoint, TOKEN, adapter_name="pytest", adapter_version="0.1.0")
-    assert await client.start(timeout=2.0) is True
-
-    await client.publish(sample_snapshot())
-    await driver.wait_for(2)
-
-    await driver.send({"type": "get-tree", "requestId": 7, "revision": 1})
-    await driver.wait_for(3)
-    answer = driver.received[2]
-    assert answer["type"] == "get-tree-result"
-    assert answer["requestId"] == 7
-    assert answer["snapshot"]["revision"] == 1
-
-    await driver.send({"type": "get-tree", "requestId": 8, "revision": 99})
-    await driver.wait_for(4)
-    assert "error" in driver.received[3]
-
-    await client.close()
-    await driver.close()
-
-
 async def test_revisions_increase_by_one_per_publish(endpoint):
     driver = FakeDriver(endpoint)
     await driver.start()
@@ -237,8 +219,8 @@ async def test_revisions_increase_by_one_per_publish(endpoint):
     await driver.close()
 
 
-async def test_nowait_oversize_has_no_marker_or_phantom_delta_and_recovers():
-    """A locally unframeable tree never becomes a marker or delta base."""
+async def test_nowait_oversize_has_no_marker_and_recovers():
+    """A locally unframeable tree emits no marker and rolls back its revision."""
 
     class RecordingWriter:
         def __init__(self) -> None:
@@ -250,7 +232,7 @@ async def test_nowait_oversize_has_no_marker_or_phantom_delta_and_recovers():
         async def drain(self) -> None:
             pass
 
-    limits = replace(DEFAULT_LIMITS, maxFrameBytes=600)
+    limits = replace(DEFAULT_LIMITS, maxFrameBytes=1024)
     client = SemanticClient(
         "unused",
         TOKEN,
@@ -262,12 +244,10 @@ async def test_nowait_oversize_has_no_marker_or_phantom_delta_and_recovers():
     client._writer = writer
     client.session_id = SESSION
     client.marker_enabled = True
-    client.subscribe = "diffs"
-
     many_nodes = [
-        SemanticNode(id="n0", role="text", name="x" * 1000, p="framework")
+        SemanticNode(id="n0", role="text", name="x" * 1000, p="framework", geometry=geometry())
     ] + [
-        SemanticNode(id=f"n{index}", role="text", name=str(index), p="framework")
+        SemanticNode(id=f"n{index}", role="text", name=str(index), p="framework", geometry=geometry())
         for index in range(1, 21)
     ]
     oversized = SemanticSnapshot(
@@ -277,29 +257,14 @@ async def test_nowait_oversize_has_no_marker_or_phantom_delta_and_recovers():
         rows=24,
         rootIds=[node.id for node in many_nodes],
         nodes=many_nodes,
+        coordinateSpace=Observation("known", "viewport-cells", evidence=framework_evidence("python-test")),
+        hitGrid=Observation("unsupported", capability="pointer-hit-grid", reason="framework-unobservable"),
     )
 
     assert client.publish_nowait(oversized) is None
     assert writer.frames == []
     assert client.connected
     assert client.revision == 0
-    assert client.full_snapshot_required
-
-    # Without the recovery obligation this fits as a delta against the phantom
-    # r1 base, while its required full tree still exceeds 600 bytes.
-    many_nodes[0] = SemanticNode(id="n0", role="text", name="x", p="framework")
-    would_be_delta = SemanticSnapshot(
-        sessionId="ignored",
-        revision=0,
-        columns=80,
-        rows=24,
-        rootIds=[node.id for node in many_nodes],
-        nodes=many_nodes,
-    )
-    assert client.publish_nowait(would_be_delta) is None
-    assert writer.frames == []
-    assert client.revision == 0
-    assert client.full_snapshot_required
 
     recovered = SemanticSnapshot(
         sessionId="ignored",
@@ -307,7 +272,9 @@ async def test_nowait_oversize_has_no_marker_or_phantom_delta_and_recovers():
         columns=80,
         rows=24,
         rootIds=["n0"],
-        nodes=[SemanticNode(id="n0", role="text", name="x", p="framework")],
+        nodes=[SemanticNode(id="n0", role="text", name="x", p="framework", geometry=geometry())],
+        coordinateSpace=Observation("known", "viewport-cells", evidence=framework_evidence("python-test")),
+        hitGrid=Observation("unsupported", capability="pointer-hit-grid", reason="framework-unobservable"),
     )
     marker = client.publish_nowait(recovered)
     assert marker is not None
@@ -320,32 +287,6 @@ async def test_nowait_oversize_has_no_marker_or_phantom_delta_and_recovers():
     assert messages[0]["snapshot"]["revision"] == 1
     assert messages[1]["revision"] == 1
     assert client.connected
-    assert not client.full_snapshot_required
-
-
-async def test_a_driver_asking_for_diffs_still_gets_a_tree(endpoint):
-    """This client cannot produce deltas, so it answers with whole trees.
-
-    It never announces `tree-diffs`, so a conforming driver will not ask; if
-    one does anyway, a full tree is a superset of what a delta would carry.
-    Publishing nothing would leave the driver with `semanticTree: true` and no
-    tree — the failure mode that is hardest to diagnose from the outside.
-    """
-    driver = FakeDriver(endpoint, subscribe="diffs")
-    await driver.start()
-    client = SemanticClient(endpoint, TOKEN, adapter_name="pytest", adapter_version="0.1.0")
-    assert await client.start(timeout=2.0) is True
-    assert client.subscribe == "diffs"
-
-    await client.publish(sample_snapshot())
-    await driver.wait_for(2)
-
-    kinds = [frame["type"] for frame in driver.received]
-    assert "snapshot" in kinds, f"a diffs subscription produced no tree: {kinds}"
-    assert "revision-commit" in kinds
-
-    await client.close()
-    await driver.close()
 
 
 async def test_a_revisions_subscription_gets_commits_only(endpoint):
@@ -420,7 +361,7 @@ async def test_a_write_to_a_stalled_driver_is_bounded(endpoint):
         await reader.read(65536)
         ack = {
             "type": "hello-ack",
-            "protocol": "termwright/1",
+            "protocol": PROTOCOL_ID,
             "sessionId": SESSION,
             "limits": DEFAULT_LIMITS.to_wire(),
             "subscribe": "snapshots",
@@ -452,11 +393,13 @@ async def test_a_write_to_a_stalled_driver_is_bounded(endpoint):
             columns=80,
             rows=24,
             rootIds=["root"],
-            nodes=[SemanticNode(id="root", role="dialog", name="Permission")]
+            nodes=[SemanticNode(id="root", role="dialog", name="Permission", geometry=geometry())]
             + [
-                SemanticNode(id=f"n{index}", parentId="root", role="text", name=padding)
+                SemanticNode(id=f"n{index}", parentId="root", role="text", name=padding, geometry=geometry())
                 for index in range(60)
             ],
+            coordinateSpace=Observation("known", "viewport-cells", evidence=framework_evidence("python-test")),
+            hitGrid=Observation("unsupported", capability="pointer-hit-grid", reason="framework-unobservable"),
         )
         await client.publish(snapshot)
     elapsed = asyncio.get_event_loop().time() - started
@@ -468,40 +411,4 @@ async def test_a_write_to_a_stalled_driver_is_bounded(endpoint):
     # A partially written frame cannot be resynchronised, so the session ends
     # rather than retrying into a stream the driver can no longer parse.
     assert not client.connected, "the session survived a stalled driver"
-    await client.close()
-
-
-async def test_require_full_snapshot_forces_a_whole_tree(endpoint):
-    driver = FakeDriver(endpoint, subscribe="diffs")
-    await driver.start()
-    client = SemanticClient(endpoint, TOKEN, adapter_name="test", adapter_version="0.1.0")
-    assert await client.start()
-
-    def tree(revision: int) -> SemanticSnapshot:
-        return SemanticSnapshot(
-            sessionId="s",
-            revision=revision,
-            columns=80,
-            rows=24,
-            rootIds=["root"],
-            nodes=[
-                SemanticNode(id="root", role="dialog", name="Permission"),
-                SemanticNode(id="n1", parentId="root", role="text", name=f"row {revision}"),
-            ],
-        )
-
-    await client.publish(tree(1))
-    await client.publish(tree(2))
-    assert client.deltas_sent > 0, "the second publish was not a delta; this proves nothing"
-
-    client.require_full_snapshot()
-    assert client.full_snapshot_required
-    before = client.snapshots_sent
-    await client.publish(tree(3))
-    assert client.snapshots_sent == before + 1, "the obligation produced no full snapshot"
-    assert not client.full_snapshot_required, "the obligation was not cleared"
-
-    deltas = client.deltas_sent
-    await client.publish(tree(4))
-    assert client.deltas_sent == deltas + 1, "deltas stopped after the obligation"
     await client.close()

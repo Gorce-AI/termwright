@@ -3,6 +3,7 @@
  * classes; the class names and {@link TermwrightErrorCode} values are normative
  * (see `api.ts` and CONTRACTS.md).
  */
+import type { ActionabilityExplanation } from '@termwright/protocol';
 import type { ErrorDiagnostics, ResolvedTarget, TermwrightErrorCode } from './api.js';
 
 /** Diagnostics with all optional parts omitted rather than set to `undefined`. */
@@ -18,12 +19,19 @@ function freezeDiagnostics(diagnostics: ErrorDiagnostics): ErrorDiagnostics {
 export class TermwrightError extends Error {
   readonly code: TermwrightErrorCode;
   readonly diagnostics: ErrorDiagnostics;
+  actionability?: ActionabilityExplanation;
 
   constructor(code: TermwrightErrorCode, message: string, diagnostics: ErrorDiagnostics) {
     super(message);
     this.name = new.target.name;
     this.code = code;
     this.diagnostics = freezeDiagnostics(diagnostics);
+  }
+
+  /** Attach the exact failed planner evaluation; never recomputed after state changes. */
+  withActionability(explanation: ActionabilityExplanation): this {
+    this.actionability = explanation;
+    return this;
   }
 
   /** Renders message + diagnostics the way test runners print failures. */
@@ -67,17 +75,79 @@ export class AmbiguousLocatorError extends TermwrightError {
   }
 }
 
+/** A semantic query was requested in a session with no semantic integration. */
+export class SemanticCapabilityUnavailableError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('semantic-capability-unavailable', message, diagnostics);
+  }
+}
+
+/** A semantic integration was explicitly required, but no probe completed negotiation. */
+export class ProbeAttachFailedError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('probe-attach-failed', message, diagnostics);
+  }
+}
+
+/** The negotiated session contract does not include a required capability. */
+export class CapabilityUnavailableError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('capability-unavailable', message, diagnostics);
+  }
+}
+
+/** The capability exists, but the target cannot currently satisfy the action. */
+export class NotActionableError extends TermwrightError {
+  /** Only these planner facts may become actionable on a later committed observation. */
+  readonly transient: 'target-state' | 'pointer-region' | 'covered' | null;
+
+  constructor(
+    message: string,
+    diagnostics: ErrorDiagnostics,
+    transient: 'target-state' | 'pointer-region' | 'covered' | null = null,
+  ) {
+    super('not-actionable', message, diagnostics);
+    this.transient = transient;
+  }
+}
+
+/** The physical device exists, but the application has not enabled the required terminal mode. */
+export class InputModeDisabledError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('input-mode-disabled', message, diagnostics);
+  }
+}
+
+export class CapabilityProviderLostError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('capability-provider-lost', message, diagnostics);
+  }
+}
+
+export class CapabilityProviderViolationError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('capability-provider-violation', message, diagnostics);
+  }
+}
+
+export class AdapterGuaranteeViolationError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('adapter-guarantee-violation', message, diagnostics);
+  }
+}
+
+/** An application-authored stable identity was not unique in one committed tree. */
+export class DuplicateSemanticKeyError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('duplicate-semantic-key', message, diagnostics);
+  }
+}
+
 /**
  * The requested physical action is impossible in the current session, e.g. a
  * click while the child never enabled mouse tracking, or a semantic query
  * without a semantic tree.
  */
-export class UnsupportedActionError extends TermwrightError {
-  constructor(message: string, diagnostics: ErrorDiagnostics) {
-    super('unsupported-action', message, diagnostics);
-  }
-}
-
 /** Scrollback data was requested below the retained floor. */
 export class HistoryTruncatedError extends TermwrightError {
   constructor(message: string, diagnostics: ErrorDiagnostics) {

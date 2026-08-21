@@ -37,7 +37,7 @@ Use `toBeAttached()` or `toBeDisplayed()` when that is the behavior you need.
 ## Gherkin
 
 Termwright provides scenario-scoped hooks and Cucumber tag-expression
-filtering, but not a dedicated Gherkin language server. Use an editor Cucumber
+filtering, but not a Termwright-specific Gherkin language server. Use the official Cucumber
 extension for syntax and definition navigation. `.feature` files run through
 the same Vitest scheduler and Runner catalog as provider-owned TypeScript tests.
 

@@ -35,7 +35,6 @@ await runAdapterConformance({
   quit: { input: '', exitCode: 0 },
   columns: 80,
   rows: 24,
-  expectAbsoluteBounds: true,
 });
 ```
 
@@ -108,11 +107,10 @@ It checks the five obligations an adapter has:
 | Dormant rule | Without `TERMWRIGHT_ENDPOINT` it opens no channel and writes no marker; with `baseline`, byte-for-byte identical startup output |
 | Tree before input | Once the handshake completes and *before any input*, the tree is non-empty and has at least one node a locator could address. Opt out with `treeBeforeInput: {required: false, reason}` |
 | Handshake | `hello` first and once, correct protocol id, non-empty adapter identity, capabilities from the closed set |
-| Snapshot validity | Every snapshot passes `validateSnapshot`, carries this session's id, has resolvable parents and monotonic revisions |
+| Snapshot validity | Every publication is a complete v2 snapshot that passes `validateSnapshot`, carries this session's id, has resolvable parents and monotonic revisions |
 | Revision ordering | For each revision: snapshot → `revision-commit` → a marker that verifies against the session token, markers strictly increasing |
 | Channel loss | Cutting the socket leaves the application rendering and alive, and the adapter does not reconnect |
 | Logs | An adapter that did not announce `logs` sends none. One that declares them in the registration must deliver a record whose `seq` is unique and increasing and whose message never appears on the terminal |
-| Deltas (when announced) | With `subscribe: 'diffs'`, the deltas an adapter emits compose — through the protocol's own `applyTreeDelta` — to the same tree it reports when asked with `get-tree` |
 | Conventions | The machine-checkable half of the protocol README's "Adapter semantics conventions": containers are not named from their content (rule 2), an annotated test id reaches the wire (rule 3), an empty textbox publishes `value: ''` and no value is derived outside `{textbox, progressbar}` or from a boolean (rule 5) |
 
 `await` it at the top level: `vitest` is imported dynamically so the package can

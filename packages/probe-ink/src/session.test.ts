@@ -2,8 +2,11 @@ import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_LIMITS, type SemanticSnapshot } from '@termwright/protocol';
 import type { ProbeChannel } from '@termwright/probe-runtime';
+import type { InkFrameCapture } from './frame-capture.js';
 import { createInkSession, probeInfo } from './session.js';
 import type { InkDomElement } from './observe.js';
+import type { InkTerminalTracker, TerminalPosition } from './terminal-tracker.js';
+import { INK_VERSION } from './instrumentation.js';
 import { PACKAGE_VERSION } from './version.js';
 
 function root(): InkDomElement {
@@ -15,214 +18,247 @@ function root(): InkDomElement {
   return { nodeName: 'ink-root', style: {}, childNodes: [label] };
 }
 
-function channel(
-  events: string[],
-  snapshots: SemanticSnapshot[] = [],
-  coalesced?: { count: number },
-): ProbeChannel {
+function capture(tree: InkDomElement, overrides: Partial<InkFrameCapture['context']> = {}): InkFrameCapture {
+  const geometry = new Map<InkDomElement, { intended: { row: number; column: number; width: number; height: number }; visible: { row: number; column: number; width: number; height: number }; region: 'live' }>();
+  geometry.set(tree, { intended: { row: 0, column: 0, width: 20, height: 2 }, visible: { row: 0, column: 0, width: 20, height: 2 }, region: 'live' });
+  geometry.set(tree.childNodes[0] as InkDomElement, { intended: { row: 0, column: 0, width: 5, height: 1 }, visible: { row: 0, column: 0, width: 5, height: 1 }, region: 'live' });
+  return {
+    root: tree,
+    staticRoots: [],
+    staticChildren: new Map(),
+    rendered: { output: 'Ready\n', outputHeight: 2, staticOutput: '' },
+    screenReader: false,
+    geometry,
+    liveRows: 2,
+    staticRows: 0,
+    context: {
+      interactive: true,
+      alternateScreen: false,
+      debug: false,
+      stdoutIsTTY: true,
+      rows: 8,
+      ...overrides,
+    },
+  };
+}
+
+function fakeTracker(initial: TerminalPosition = { row: 2, column: 0, buffer: 'normal' }): InkTerminalTracker & { set(value: TerminalPosition): void } {
+  let position = initial;
+  return {
+    drain: async () => undefined,
+    position: () => position,
+    resize: () => undefined,
+    stop: () => undefined,
+    set(value) { position = value; },
+  };
+}
+
+function channel(snapshots: SemanticSnapshot[], writes: string[], coalesced = { count: 0 }): ProbeChannel {
   const fake = {
     isOpen: true,
     session: { sessionId: 's1', limits: DEFAULT_LIMITS, markerEnabled: true },
     publish(snapshot: SemanticSnapshot) {
       snapshots.push(snapshot);
-      events.push(`snapshot:${snapshot.revision}`);
       return `MARK:${snapshot.revision}`;
     },
-    recordCoalescedEvent() {
-      if (coalesced !== undefined) coalesced.count += 1;
-    },
-    close() {
-      fake.isOpen = false;
-    },
+    recordCoalescedEvent() { coalesced.count += 1; },
+    close() { fake.isOpen = false; },
   };
+  void writes;
   return fake as unknown as ProbeChannel;
 }
 
-function nextTurn(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
-}
-
-async function waitForDrain(drains: readonly (() => void)[]): Promise<void> {
-  for (let turn = 0; turn < 5 && drains.length === 0; turn += 1) await nextTurn();
+function stream(writes: string[]): NodeJS.WriteStream {
+  const target = new PassThrough() as unknown as NodeJS.WriteStream;
+  Object.defineProperties(target, { columns: { value: 20 }, rows: { value: 8 } });
+  (target as unknown as PassThrough).on('data', (chunk: Buffer) => writes.push(chunk.toString()));
+  return target;
 }
 
 describe('Ink probe session', () => {
-  it('describes stable host identity and the optional annotation channel', () => {
+  it('advertises the exact certified geometry contract', () => {
     expect(probeInfo()).toEqual({
       framework: 'ink',
+      frameworkVersion: INK_VERSION,
       probeVersion: PACKAGE_VERSION,
       identityKind: 'stable',
-      capabilities: ['stable-identity', 'annotations'],
+      capabilities: ['stable-identity', 'intended-rect', 'visible-rect', 'annotations'],
     });
   });
 
-  it('writes the marker only after queued frame bytes drain', async () => {
-    const stream = new PassThrough() as unknown as NodeJS.WriteStream;
-    let output = '';
-    (stream as unknown as PassThrough).on('data', (chunk: Buffer) => {
-      output += chunk.toString('utf8');
-    });
-    const events: string[] = [];
-    const session = createInkSession({
-      channel: channel(events),
-      resolveRoot: root,
-      measureElement: () => ({ x: 0, y: 0, width: 1, height: 1 }),
-      stdout: stream,
-      includeGeometry: false,
-    });
-
-    session.notifyRender();
-    // Ink writes only after onRender (and therefore notifyRender) returns.
-    stream.write('FRAME');
-    await session.flush();
-
-    expect(events).toEqual(['snapshot:1']);
-    expect(output).toBe('FRAMEMARK:1');
-  });
-
-  it('freezes the tree synchronously, before a later mutation', () => {
-    const text = { nodeName: '#text' as const, nodeValue: 'Before' };
-    const label = { nodeName: 'ink-text' as const, style: {}, childNodes: [text] };
-    const liveRoot = { nodeName: 'ink-root' as const, style: {}, childNodes: [label] };
-    const events: string[] = [];
+  it('publishes viewport geometry and writes its marker after the frame', async () => {
+    const tree = root();
     const snapshots: SemanticSnapshot[] = [];
-    const stream = new PassThrough() as unknown as NodeJS.WriteStream;
-    stream.resume();
-    const session = createInkSession({
-      channel: channel(events, snapshots),
-      resolveRoot: () => liveRoot,
-      measureElement: () => ({ x: 0, y: 0, width: 1, height: 1 }),
-      stdout: stream,
-      includeGeometry: false,
-    });
-
-    session.notifyRender();
-    text.nodeValue = 'After';
-
-    expect(snapshots[0]?.nodes.find((node) => node.role === 'text')?.name).toBe('Before');
-  });
-
-  it('publishes frozen snapshots but marks only the latest superseding commit', async () => {
-    const stream = new PassThrough() as unknown as NodeJS.WriteStream;
-    let output = '';
-    (stream as unknown as PassThrough).on('data', (chunk: Buffer) => {
-      output += chunk.toString('utf8');
-    });
-    const events: string[] = [];
-    const coalesced = { count: 0 };
-    const session = createInkSession({
-      channel: channel(events, [], coalesced),
-      resolveRoot: root,
-      measureElement: () => ({ x: 0, y: 0, width: 1, height: 1 }),
-      stdout: stream,
-      includeGeometry: false,
-    });
-
-    session.notifyRender();
-    session.notifyRender();
-    await session.flush();
-
-    expect(events).toEqual(['snapshot:1', 'snapshot:2']);
-    expect(output).toBe('MARK:2');
-    expect(session.frames).toBe(2);
-    expect(session.revision).toBe(2);
-    expect(coalesced.count).toBe(1);
-  });
-
-  it('drops an old marker when a newer frame arrives during drain', async () => {
     const writes: string[] = [];
-    const drains: (() => void)[] = [];
-    const stream = {
-      columns: 80,
-      rows: 24,
-      writableEnded: false,
-      destroyed: false,
-      write(chunk: string, encodingOrCallback?: unknown, callback?: () => void) {
-        const done = typeof encodingOrCallback === 'function'
-          ? encodingOrCallback as () => void
-          : callback;
-        if (chunk === '' && done !== undefined) drains.push(done);
-        else {
-          writes.push(chunk);
-          done?.();
-        }
-        return true;
-      },
-    } as unknown as NodeJS.WriteStream;
-    const events: string[] = [];
-    const coalesced = { count: 0 };
+    const output = stream(writes);
     const session = createInkSession({
-      channel: channel(events, [], coalesced),
-      resolveRoot: root,
-      measureElement: () => ({ x: 0, y: 0, width: 1, height: 1 }),
-      stdout: stream,
-      includeGeometry: false,
+      channel: channel(snapshots, writes),
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      stdout: output,
+      tracker: fakeTracker(),
     });
-
     session.notifyRender();
-    stream.write('FRAME1');
-    await waitForDrain(drains);
-    expect(drains).toHaveLength(1);
-
-    session.notifyRender();
-    stream.write('FRAME2');
-    drains.shift()?.();
-    await waitForDrain(drains);
-    expect(drains).toHaveLength(1);
-    drains.shift()?.();
+    output.write('FRAME');
     await session.flush();
 
-    expect(events).toEqual(['snapshot:1', 'snapshot:2']);
-    expect(writes).toEqual(['FRAME1', 'FRAME2', 'MARK:2']);
-    expect(coalesced.count).toBe(1);
-  });
-
-  it('keeps geometry disabled after Static content has shifted the live region', () => {
-    const staticRoot = root() as InkDomElement & { internal_static?: boolean };
-    staticRoot.internal_static = true;
-    const snapshots: SemanticSnapshot[] = [];
-    const stream = new PassThrough() as unknown as NodeJS.WriteStream;
-    stream.resume();
-    const session = createInkSession({
-      channel: channel([], snapshots),
-      resolveRoot: () => staticRoot,
-      measureElement: () => ({ x: 4, y: 3, width: 8, height: 1 }),
-      stdout: stream,
-      includeGeometry: true,
+    expect(writes.join('')).toBe('FRAMEMARK:1');
+    expect(snapshots[0]?.nodes.find((node) => node.role === 'text')?.geometry).toMatchObject({
+      intendedRect: { status: 'known', value: { row: 0, column: 0, width: 5, height: 1 } },
+      visibleRect: { status: 'known', value: { row: 0, column: 0, width: 5, height: 1 } },
     });
-
-    session.notifyRender();
-    staticRoot.internal_static = false;
-    session.notifyRender();
-
-    expect(snapshots).toHaveLength(2);
-    expect(snapshots[0]?.nodes.every((node) => node.bounds === undefined)).toBe(true);
-    expect(snapshots[1]?.nodes.every((node) => node.bounds === undefined)).toBe(true);
   });
 
-  it('contains observer faults instead of throwing into the application', () => {
-    const events: string[] = [];
-    const fakeChannel = channel(events);
-    const close = vi.spyOn(fakeChannel, 'close');
-    const broken = {
-      nodeName: 'ink-root' as const,
-      style: {},
-      get childNodes(): readonly never[] {
-        throw new Error('upstream internals changed');
-      },
-    };
-    const stream = new PassThrough() as unknown as NodeJS.WriteStream;
-    stream.resume();
+  it('maps Static above the live origin without disabling later geometry', async () => {
+    const tree = root();
+    const staticNode = { nodeName: 'ink-text' as const, style: {}, childNodes: [{ nodeName: '#text' as const, nodeValue: 'Done' }] };
+    const captures = capture(tree);
+    const geometry = new Map(captures.geometry);
+    geometry.set(staticNode, { intended: { row: 0, column: 0, width: 4, height: 1 }, visible: { row: 0, column: 0, width: 4, height: 1 }, region: 'static' });
+    (tree.childNodes as InkDomElement[]).push(staticNode);
+    const withStatic: InkFrameCapture = { ...captures, geometry, staticRows: 1 };
+    const snapshots: SemanticSnapshot[] = [];
+    const session = createInkSession({
+      channel: channel(snapshots, []),
+      resolveRoot: () => tree,
+      resolveCapture: () => withStatic,
+      stdout: stream([]),
+      tracker: fakeTracker({ row: 3, column: 0, buffer: 'normal' }),
+    });
+    session.notifyRender();
+    await session.flush();
+    const done = snapshots[0]?.nodes.find((node) => node.name === 'Done');
+    const ready = snapshots[0]?.nodes.find((node) => node.name === 'Ready');
+    expect(done?.geometry.intendedRect).toMatchObject({ status: 'known', value: { row: 0 } });
+    expect(ready?.geometry.intendedRect).toMatchObject({ status: 'known', value: { row: 1 } });
+  });
+
+  it('fails closed on a missing capture, screen-reader frame or buffer mismatch', async () => {
+    for (const mode of ['missing', 'screen-reader', 'buffer'] as const) {
+      const tree = root();
+      const violation = vi.fn();
+      const base = capture(tree, mode === 'buffer' ? { alternateScreen: true } : {});
+      const session = createInkSession({
+        channel: channel([], []),
+        resolveRoot: () => tree,
+        resolveCapture: () => mode === 'missing' ? undefined : mode === 'screen-reader' ? { ...base, screenReader: true } : base,
+        stdout: stream([]),
+        tracker: fakeTracker(),
+        onGuaranteeViolation: violation,
+      });
+      session.notifyRender();
+      await session.flush();
+      expect(violation).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('coalesces rapid rerenders and never publishes stale geometry', async () => {
+    const tree = root();
+    const snapshots: SemanticSnapshot[] = [];
+    const coalesced = { count: 0 };
+    const fakeChannel = channel(snapshots, [], coalesced);
     const session = createInkSession({
       channel: fakeChannel,
-      resolveRoot: () => broken,
-      measureElement: () => ({ x: 0, y: 0, width: 1, height: 1 }),
-      stdout: stream,
-      includeGeometry: false,
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      stdout: stream([]),
+      tracker: fakeTracker(),
+    });
+    session.notifyRender();
+    session.notifyRender();
+    await session.flush();
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]?.revision).toBe(1);
+    expect(coalesced.count).toBe(1);
+  });
+
+  it('carries a causal publication boundary forward to a later superseding frame', async () => {
+    const tree = root();
+    const snapshots: SemanticSnapshot[] = [];
+    const coalesced = { count: 0 };
+    const session = createInkSession({
+      channel: channel(snapshots, [], coalesced),
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      stdout: stream([]),
+      tracker: fakeTracker(),
     });
 
-    expect(() => session.notifyRender()).not.toThrow();
-    expect(close).toHaveBeenCalledOnce();
-    expect(events).toHaveLength(0);
+    const causal = session.notifyRender({ awaitPublication: true });
+    session.notifyRender();
+
+    await expect(causal).resolves.toBe(1);
+    await session.flush();
+    expect(snapshots.map(({ revision }) => revision)).toEqual([1]);
+    expect(coalesced.count).toBe(1);
+  });
+
+  it('rejects a causal publication boundary when the session stops', async () => {
+    const tree = root();
+    const session = createInkSession({
+      channel: channel([], []),
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      stdout: stream([]),
+      tracker: fakeTracker(),
+    });
+
+    const causal = session.notifyRender({ awaitPublication: true });
+    session.stop();
+
+    await expect(causal).rejects.toThrow('Ink probe stopped');
+  });
+
+  it('rejects a causal publication boundary when the semantic channel closes', async () => {
+    const tree = root();
+    const fakeChannel = channel([], []);
+    const session = createInkSession({
+      channel: fakeChannel,
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      stdout: stream([]),
+      tracker: fakeTracker(),
+    });
+
+    const causal = session.notifyRender({ awaitPublication: true });
+    fakeChannel.close();
+
+    await expect(causal).rejects.toThrow('semantic channel closed');
+  });
+
+  it('waits when an annotation refresh sees a host tree ahead of the renderer capture', async () => {
+    const tree = root();
+    let currentCapture = capture(tree);
+    const snapshots: SemanticSnapshot[] = [];
+    const session = createInkSession({
+      channel: channel(snapshots, []),
+      resolveRoot: () => tree,
+      resolveCapture: () => currentCapture,
+      stdout: stream([]),
+      tracker: fakeTracker(),
+    });
+    const dialog = {
+      nodeName: 'ink-box' as const,
+      style: {},
+      childNodes: [] as InkDomElement[],
+    };
+    (tree.childNodes as InkDomElement[]).push(dialog);
+
+    session.notifyRender({ allowUnsettled: true });
+    await session.flush();
+    expect(session.frames).toBe(0);
+    expect(snapshots).toHaveLength(0);
+
+    const geometry = new Map(currentCapture.geometry);
+    geometry.set(dialog, {
+      intended: { row: 1, column: 0, width: 10, height: 1 },
+      visible: { row: 1, column: 0, width: 10, height: 1 },
+      region: 'live',
+    });
+    currentCapture = { ...currentCapture, geometry };
+    session.notifyRender();
+    await session.flush();
+    expect(session.frames).toBe(1);
+    expect(snapshots).toHaveLength(1);
   });
 });

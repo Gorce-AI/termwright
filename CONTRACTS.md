@@ -22,15 +22,16 @@ Changing a normative file requires: update it first, note the change in
 
 - `protocol` depends on `zod` only. Never on React, Ink, MCP, PTY, driver.
 - `driver` depends on `protocol` + PTY/VT libs. Never on Ink, Vitest, MCP.
-- `ink`, `opentui` are annotation-only SDKs. They depend on `protocol` and
-  declare their framework as a peer; they never depend on driver or own a
-  semantic transport. Process-local weak registries are the boundary probes
-  read when the SDK is present.
+- `opentui` is an annotation-only SDK. It depends on `protocol`, declares its
+  framework as a peer, and never depends on driver or owns a semantic
+  transport. Its process-local weak registry is the boundary probes read when
+  the SDK is present.
 - `test` depends on `driver`, `trace`, `protocol` constants/types and UI's
   Node-only `live-client`; it declares `vitest` as a peer. The live client is
   fail-open and dormant unless `TERMWRIGHT_UI_URL` is set.
-- `ink-testing` depends on `driver`, the Ink annotation SDK, `probe-ink` and
-  `protocol`; its in-process testing entry is not a public manual adapter.
+- `ink` contains both the annotation SDK and component-test harnesses. It
+  depends on `driver`, `probe-ink` and `protocol`; its in-process testing entry
+  is not a public manual adapter.
 - `mcp` depends on `driver` + MCP SDK behind `src/sdk-facade.ts` (may also import constants/types from `protocol`). No session logic of its own.
 - `trace` depends on `driver` types only (consumes `SessionEvents`) and may
   type-import from `protocol` (it stores `SemanticSnapshot` verbatim).
@@ -171,7 +172,12 @@ WebSocket, JSON messages `{ v: 1, type, ... }`:
   `run-cancelled {stoppedAt}` (emitted after the stopped test process exits;
   unfinished rows become cancelled, never silently skipped),
   `run-cancel-failed {error}` (the process could not be stopped; the run stays
-  active).
+  active),
+  `actionability-inspection {requestId, sessionId, nodeId, results|error}`
+  (request-scoped reply; `results` contains exactly the live worker's four
+  ActionPlanner explanations for click, hover, focus and type, all bound to the
+  same committed checkpoint; the server neither reconstructs nor caches these
+  answers, and sends them only to the requesting browser).
   Optional fields are exactly those marked `?` above. In particular,
   `test-start.sessionId` may be absent because a Vitest reporter genuinely
   cannot know a worker's sessions; a worker-side live bridge sends the binding
@@ -202,7 +208,10 @@ frame-local semantic refs are refused and grid refs expire with their screen
 revision. Receivers build a command log identical to what replay reads from the
 archive.
 - client→server: `rerun {testIds?}`, `stop`, `pick {sessionId}` (inspector
-  pick-mode), `input {sessionId, dataB64}` (recorder mode only).
+  pick-mode), `input {sessionId, dataB64}` (recorder mode only),
+  `inspect-actionability {requestId, sessionId, nodeId}` (live mode only; routed
+  to the owning worker's production ActionPlanner, never answered from replay
+  or browser-side geometry).
 The Vitest bridge is a reporter translating Vitest lifecycle into these
 messages; the browser app never imports Vitest.
 
@@ -220,8 +229,9 @@ instead of offering a replay.
 `terminal.launch`, `terminal.capabilities`, `terminal.snapshot` (compact ref
 format + visible text; `full` variant writes to disk and returns refs),
 `terminal.capture_since {cursor}` (changed rows + changed semantic subtrees),
-`terminal.query {selector|role/name}`, `terminal.click`, `terminal.double_click`,
-`terminal.press`, `terminal.type`, `terminal.paste`, `terminal.write_raw`,
+`terminal.query {selector|role/name}`, `terminal.checkpoint`, `terminal.actionability`,
+`terminal.click`, `terminal.double_click`, `terminal.hover`, `terminal.press`,
+`terminal.type`, `terminal.fill`, `terminal.check`, `terminal.uncheck`, `terminal.paste`, `terminal.write_raw`,
 `terminal.drag`, `terminal.wheel`, `terminal.resize`, `terminal.signal`,
 `terminal.scrollback`, `terminal.select_cells`, `terminal.copy_selection`,
 `terminal.wait_for`, `terminal.close`.

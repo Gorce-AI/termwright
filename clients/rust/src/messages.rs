@@ -15,24 +15,24 @@ use crate::logs::{validate_log_record, LogRecord};
 use crate::marker::MAX_SAFE_INTEGER;
 use crate::roles::{valid_capability, Capability, ADAPTER_CAPABILITIES};
 use crate::tree::Snapshot;
-use crate::validate::{validate_snapshot, validate_tree_delta};
+use crate::validate::validate_snapshot;
 
 /// The wire protocol identifier both sides must agree on.
-pub const PROTOCOL_ID: &str = "termwright/1";
-/// Qualified observation protocol identifier.
-pub const PROTOCOL_V2_ID: &str = "termwright/2";
+pub const PROTOCOL_ID: &str = "termwright/2";
 
 /// The current major version.
-pub const PROTOCOL_VERSION: u8 = 1;
+pub const PROTOCOL_VERSION: u8 = 2;
 
 /// Longest token, identifier or free-text message accepted.
 const MAX_IDENTIFIER_LENGTH: usize = 1024;
 
-const ERROR_CODES: [&str; 5] = [
+const ERROR_CODES: [&str; 7] = [
     "bad-token",
     "bad-version",
     "malformed",
     "limit-exceeded",
+    "duplicate-semantic-key",
+    "adapter-guarantee-violation",
     "internal",
 ];
 
@@ -65,7 +65,7 @@ pub struct Hello {
     /// Wire discriminator (`type` on the wire).
     #[serde(rename = "type")]
     pub kind: String,
-    /// Protocol identifier; must be `termwright/1`.
+    /// Protocol identifier; must be `termwright/2`.
     pub protocol: String,
     /// Per-launch session token from the environment.
     pub token: String,
@@ -80,6 +80,23 @@ pub struct Hello {
     /// driver negotiates against measured capability rather than a floor.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub probe: Option<ProbeInfo>,
+    /// Application providers frozen before this handshake.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub providers: Vec<EvidenceProviderRegistration>,
+}
+
+/// Application evidence producer frozen into hello negotiation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EvidenceProviderRegistration {
+    /// Stable provider identity.
+    pub id: String,
+    /// Provider implementation version.
+    pub version: String,
+    /// `native` or `declared`.
+    pub method: String,
+    /// Closed provider capability names frozen into the handshake.
+    pub capabilities: Vec<String>,
 }
 
 /// How an object's identity behaves across frames.
@@ -126,28 +143,21 @@ impl Hello {
             },
             capabilities,
             probe: None,
+            providers: Vec::new(),
         }
-    }
-
-    /// Build a protocol v2 handshake, adding its required capability.
-    pub fn new_v2(
-        token: &str,
-        name: &str,
-        version: &str,
-        mut capabilities: Vec<Capability>,
-    ) -> Self {
-        if !capabilities.contains(&Capability::QualifiedObservations) {
-            capabilities.push(Capability::QualifiedObservations);
-        }
-        let mut hello = Self::new(token, name, version, capabilities);
-        hello.protocol = PROTOCOL_V2_ID.into();
-        hello
     }
 
     /// Attach a probe's declaration to this handshake.
     #[must_use]
     pub fn with_probe(mut self, probe: ProbeInfo) -> Self {
         self.probe = Some(probe);
+        self
+    }
+
+    /// Attach application evidence declarations before the hello is sent.
+    #[must_use]
+    pub fn with_providers(mut self, providers: Vec<EvidenceProviderRegistration>) -> Self {
+        self.providers = providers;
         self
     }
 }
@@ -180,7 +190,7 @@ pub struct HelloAck {
     /// Wire discriminator (`type` on the wire).
     #[serde(rename = "type")]
     pub kind: String,
-    /// Protocol identifier; must be `termwright/1`.
+    /// Protocol identifier; must be `termwright/2`.
     pub protocol: String,
     /// Session this snapshot belongs to.
     pub session_id: String,
@@ -235,59 +245,6 @@ impl<'a> SnapshotMessage<'a> {
     }
 }
 
-/// The driver asking for a tree: the latest, or a held revision.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetTree {
-    /// Wire discriminator (`type` on the wire).
-    #[serde(rename = "type")]
-    pub kind: String,
-    /// Correlates a request with its answer.
-    pub request_id: i64,
-    /// Render revision, strictly increasing per session.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revision: Option<i64>,
-}
-
-/// Answers a [`GetTree`] with exactly one of a snapshot or an error.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetTreeResult {
-    /// Wire discriminator (`type` on the wire).
-    #[serde(rename = "type")]
-    pub kind: &'static str,
-    /// Correlates a request with its answer.
-    pub request_id: i64,
-    /// The tree being carried.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub snapshot: Option<Box<serde_json::value::RawValue>>,
-    /// Why the request could not be answered.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-impl GetTreeResult {
-    /// Answer with a retained snapshot body.
-    pub fn found(request_id: i64, snapshot: Box<serde_json::value::RawValue>) -> Self {
-        Self {
-            kind: "get-tree-result",
-            request_id,
-            snapshot: Some(snapshot),
-            error: None,
-        }
-    }
-
-    /// Answer that the requested revision is not available.
-    pub fn missing(request_id: i64, detail: impl Into<String>) -> Self {
-        Self {
-            kind: "get-tree-result",
-            request_id,
-            snapshot: None,
-            error: Some(detail.into()),
-        }
-    }
-}
-
 /// Carries one application log record to the driver.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct LogMessage<'a> {
@@ -331,12 +288,12 @@ impl ProtocolErrorMessage {
     }
 }
 
-/// Every capability a tree-publishing adapter with real bounds announces.
+/// Capabilities for a tree-publishing adapter with qualified geometry.
 pub fn default_capabilities() -> Vec<Capability> {
     vec![
         Capability::Tree,
-        Capability::Bounds,
-        Capability::AbsoluteBounds,
+        Capability::IntendedGeometry,
+        Capability::ClippedGeometry,
         Capability::States,
         Capability::Actions,
         Capability::RenderRevisions,
@@ -472,9 +429,10 @@ fn check_error_message(object: &Map<String, Value>, strict: bool) -> Result<(), 
 
 fn check_protocol_field(object: &Map<String, Value>) -> Result<(), ParseError> {
     match object.get("protocol").and_then(Value::as_str) {
-        Some(protocol) if protocol != PROTOCOL_ID && protocol != PROTOCOL_V2_ID => Err(
-            ParseError::new("bad-version", format!("unsupported protocol {protocol}")),
-        ),
+        Some(protocol) if protocol != PROTOCOL_ID => Err(ParseError::new(
+            "bad-version",
+            format!("unsupported protocol {protocol}"),
+        )),
         _ => Ok(()),
     }
 }
@@ -497,7 +455,7 @@ pub fn parse_adapter_message(value: &Value, limits: &Limits) -> Result<(), Parse
             require_keys(
                 object,
                 &["type", "protocol", "token", "adapter", "capabilities"],
-                &[],
+                &["probe", "providers"],
             )?;
             identifier(object, "token", false)?;
             let adapter = object
@@ -520,26 +478,6 @@ pub fn parse_adapter_message(value: &Value, limits: &Limits) -> Result<(), Parse
                     _ => return Err(ParseError::malformed("capabilities: unknown capability")),
                 }
             }
-            let protocol = object
-                .get("protocol")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            let qualified = capabilities
-                .iter()
-                .any(|item| item.as_str() == Some("qualified-observations"));
-            let pointer_grid = capabilities
-                .iter()
-                .any(|item| item.as_str() == Some("pointer-hit-grid"));
-            if (protocol == PROTOCOL_V2_ID) != qualified {
-                return Err(ParseError::malformed(
-                    "termwright/2 and qualified-observations must be negotiated together",
-                ));
-            }
-            if pointer_grid && !qualified {
-                return Err(ParseError::malformed(
-                    "pointer-hit-grid requires qualified-observations",
-                ));
-            }
             Ok(())
         }
         "revision-commit" => {
@@ -550,31 +488,6 @@ pub fn parse_adapter_message(value: &Value, limits: &Limits) -> Result<(), Parse
             require_keys(object, &["type", "snapshot"], &[])?;
             check_embedded_snapshot(&object["snapshot"], limits)
         }
-        "get-tree-result" => {
-            require_keys(object, &["type", "requestId"], &["snapshot", "error"])?;
-            whole_number(object, "requestId", false)?;
-            let has_snapshot = object.contains_key("snapshot");
-            let has_error = object.contains_key("error");
-            if has_snapshot == has_error {
-                return Err(ParseError::malformed(
-                    "exactly one of snapshot or error must be present",
-                ));
-            }
-            if has_error {
-                return identifier(object, "error", true);
-            }
-            check_embedded_snapshot(&object["snapshot"], limits)
-        }
-        "tree-delta" => match validate_tree_delta(value, limits) {
-            Ok(()) => Ok(()),
-            Err(error) => {
-                let code = match error.code {
-                    "bytes" | "count" | "depth" | "string-bytes" => "limit-exceeded",
-                    _ => "malformed",
-                };
-                Err(ParseError::new(code, format!("tree-delta {error}")))
-            }
-        },
         "log" => {
             require_keys(object, &["type", "record"], &[])?;
             check_embedded_log_record(&object["record"], limits)
@@ -645,10 +558,10 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
                 whole_number(limits_object, field, true)?;
             }
             match object.get("subscribe").and_then(Value::as_str) {
-                Some("snapshots") | Some("revisions") | Some("diffs") => {}
+                Some("snapshots") | Some("revisions") => {}
                 _ => {
                     return Err(ParseError::malformed(
-                        "subscribe: expected 'snapshots', 'revisions' or 'diffs'",
+                        "subscribe: expected 'snapshots' or 'revisions'",
                     ))
                 }
             }
@@ -662,14 +575,6 @@ pub fn parse_driver_message(value: &Value, limits: &Limits) -> Result<(), ParseE
             }
             if let Some(logs) = object.get("logs") {
                 check_log_budget(logs)?;
-            }
-            Ok(())
-        }
-        "get-tree" => {
-            required_keys(object, &["type", "requestId"])?;
-            whole_number(object, "requestId", false)?;
-            if object.contains_key("revision") {
-                whole_number(object, "revision", true)?;
             }
             Ok(())
         }

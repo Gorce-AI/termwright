@@ -22,7 +22,6 @@ describe('semantic pipeline performance report', () => {
 
     for (const scenario of report.scenarios) {
       expect(measured(scenario.metrics.fullSnapshots)).toBe(5);
-      expect(measured(scenario.metrics.deltas)).toBe(0);
       expect(measured(scenario.metrics.semanticNodesPerFrame)).toBe(24);
       expect(measured(scenario.metrics.bytesPerFrame)).toBeLessThan(DEFAULT_LIMITS.maxFrameBytes);
       expect(measured(scenario.metrics.probeEventsPerFrame)).toBeGreaterThanOrEqual(24);
@@ -68,11 +67,10 @@ describe('semantic pipeline performance report', () => {
     const metrics = parseCharmDebug([
       '  tw:io   [s1]   0.010s performance r1 bytes=401 nodes=3 unknown=1 serialization_us=12.500',
       '  tw:io   [s1]   0.020s performance r2 bytes=187 nodes=3 unknown=1 serialization_us=8.250',
-      '  tw:sem  [s1]   0.030s close r2 snapshots=1 deltas=1 logs_dropped=0 performance_dropped=0',
+      '  tw:sem  [s1]   0.030s close r2 snapshots=2 logs_dropped=0 performance_dropped=0',
     ].join('\n'));
     expect(metrics).toEqual({
-      fullSnapshots: 1,
-      deltas: 1,
+      fullSnapshots: 2,
       droppedEvents: 0,
       bytes: [401, 187],
       nodes: [3, 3],

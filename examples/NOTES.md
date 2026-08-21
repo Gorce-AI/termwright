@@ -126,6 +126,6 @@ is gone, not that the selector is wrong.
 
 - Windows. Nothing in this directory has run on ConPTY.
 - `launchInkFixture`. The component tests use `mountInk`; the process-mode half
-  of that API is covered by `@termwright/ink-testing`'s own suite.
+  of that API is covered by `@termwright/ink`'s own suite.
 - The Rust client, which is protocol-only and has no framework adapter to
   demonstrate.

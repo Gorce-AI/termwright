@@ -324,6 +324,7 @@ function overview(path: string, sessionId: string): TraceOverview {
     startedAt: 1,
     durationMs: 100,
     semanticTree: false,
+    contract: null,
     terminalProfile: 'default',
     exit: { code: 0, signal: null },
     lostLogRecords: 0,

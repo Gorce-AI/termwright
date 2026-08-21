@@ -19,6 +19,7 @@ test('builds the workspace', async ({terminal}) => {
   expect(build.exitCode).toBe(0);
   expect(build.output).toContain('built successfully');
   expect(build.cwd).toBe('/workspace/project');
+  expect(build.receipt.outcome).toBe('completed');
 });
 ```
 
@@ -58,7 +59,7 @@ expect(status.bellCount).toBe(0);
 Missing facts remain `null` or unsupported. A session created with
 `terminal.launch()` can also use this API when its child publishes OSC 133 and
 OSC 7 itself. Otherwise `waitForPrompt()` and `run()` throw
-`UnsupportedActionError`.
+`CapabilityUnavailableError`.
 
 ## Command output
 
@@ -75,3 +76,8 @@ const result = await shell.shell.run('npm test', {
 
 Only one `run()` may be active per terminal session. Use separate sessions for
 concurrent commands.
+
+The returned `receipt` uses the same action model as locator and raw-device
+actions. It records the committed observation before and after submission, the
+`shell-keyboard-submit` plan, and the keyboard operations actually sent through
+the PTY. Session action events and traces consume that same receipt.

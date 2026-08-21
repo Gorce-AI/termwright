@@ -59,7 +59,15 @@ const DRIVER_ERROR_KINDS = [
   'timeout',
   'stale-snapshot',
   'ambiguous-locator',
-  'unsupported-action',
+  'semantic-capability-unavailable',
+  'probe-attach-failed',
+  'capability-unavailable',
+  'not-actionable',
+  'input-mode-disabled',
+  'capability-provider-lost',
+  'capability-provider-violation',
+  'adapter-guarantee-violation',
+  'duplicate-semantic-key',
   'history-truncated',
   'protocol-violation',
   'capacity',
@@ -85,11 +93,11 @@ const CONVENTIONS = [
   'terminal.snapshot returns a screen revision; pass it to terminal.capture_since as cursor to get ' +
     'only the rows and semantic subtrees that changed.',
   'Any name or text argument may be written as "/pattern/flags" to match as a regular expression.',
-  'Targeting precedence is ref, selector, testId, role (+name), label, text.',
+  'Targeting precedence is ref, selector, testId, role (+name), label, text, screenText.',
   'Locators are strict: more than one match fails with kind "ambiguous-locator" unless nth is given.',
-  'semanticTree "unavailable" means the program ships no adapter — target by text, never by role.',
-  'Errors are returned as tool results with isError set; structuredContent.error.kind is the value to ' +
-    'branch on, and structuredContent.error.suggestion says what to try next.',
+  'semanticTree "unavailable" means the program ships no integration — target physical output with screenText, never semantic text or role.',
+  'Errors are returned as tool results with isError set; _meta["io.termwright/error"].kind is the value to ' +
+    'branch on, and that payload\'s suggestion says what to try next. Error results intentionally omit structuredContent because it is success-schema validated.',
 ] as const;
 
 function toJsonSchema(shape: Record<string, z.ZodType>): JsonSchema {

@@ -53,4 +53,4 @@ var AbsoluteLimits = Limits{
 
 // DefaultNegotiationMillis is the window a driver waits for a hello before it
 // settles the session as generic (non-semantic).
-const DefaultNegotiationMillis = 250
+const DefaultNegotiationMillis = 2_000

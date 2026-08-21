@@ -88,6 +88,7 @@ describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, ()
     // Same clock as every other event on the session timeline.
     expect(lines[0]?.timeMs).toBeGreaterThan(0);
     expect(lines[1]?.timeMs).toBeGreaterThanOrEqual(lines[0]?.timeMs ?? 0);
+    expect(terminal.appLogs()).toEqual(lines);
   });
 
   it('delivers each line once when appends are spread over several polls', async () => {

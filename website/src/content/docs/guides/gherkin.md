@@ -181,11 +181,27 @@ Termwright fixtures for reusable application setup across feature files.
 ## Editor support and step diagnostics
 
 The source of every case and step remains the physical `.feature` line, so
-Vitest output and Runner's Open source action return to authored prose. Use an
-editor Cucumber extension for `.feature` syntax and navigation to the paired
-`Given`/`When`/`Then` calls. Termwright reports undefined steps and same-tier
-ambiguities with the step text and candidate glue files during the normal test
-run; it does not currently ship a separate language server.
+Vitest output and Runner's Open source action return to authored prose. Install
+the official [Cucumber for VS Code](https://github.com/cucumber/vscode)
+extension (`CucumberOpen.cucumber-official`) and align its source globs with
+Termwright:
+
+```json title=".vscode/settings.json"
+{
+  "cucumber.features": ["**/*.feature"],
+  "cucumber.glue": [
+    "**/*.steps.{ts,tsx,mts}",
+    "**/*.feature.{ts,tsx,mts}",
+    "**/step_definitions/**/*.{ts,tsx,mts}"
+  ]
+}
+```
+
+The Cucumber language server then provides completion, undefined-step
+diagnostics, and navigation from a physical feature step to the matching
+`Given`/`When`/`Then` call. Termwright independently validates undefined and
+same-tier ambiguous definitions during collection, before a scenario body can
+run, so editor feedback is not the test suite's correctness boundary.
 
 For expressions, step pairing, ambiguity, Scenario Outline identity, and the
 transform contract, see [Gherkin reference](../../reference/gherkin/).

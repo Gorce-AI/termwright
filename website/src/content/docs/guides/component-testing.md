@@ -64,11 +64,14 @@ await harness.waitForStable();
 await harness.press('Enter');
 ```
 
-Ink does not expose clipping or exact pointer ownership. Tests should verify
-painted output for those behaviors and use physical keyboard input. Semantic
-pointer actions are unsupported even when intended geometry is available.
+The certified Ink 7.1.1 renderer exposes intended and clipped geometry.
+Ink itself does not own a universal pointer router: without an application
+evidence provider, semantic pointer actions fail deterministically. A component
+that registers its real production router may use high-level Locator pointer
+actions; Termwright reads its evidence and still sends the input through the
+component harness's terminal input path.
 
-`@termwright/ink-testing` is the focused package behind `termwright/ink`.
+`@termwright/ink` is the focused package behind `termwright/ink`.
 Install it directly when a component-only project deliberately wants the
 focused harness without the Termwright CLI and Runner dependencies.
 

@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import type {
   ActionEvent,
+  AppLogEvent,
   AppLogSource,
   CellSnapshot,
   CrashInput,
@@ -20,6 +21,9 @@ import type {
   ErrorDiagnostics,
   LaunchOptions,
   Locator,
+  Keyboard,
+  Mouse,
+  MousePoint,
   ResolvedTarget,
   RoleLocatorOptions,
   ScreenSnapshot,
@@ -31,30 +35,37 @@ import type {
   SessionEvents,
   TerminalHarness,
   TerminalModes,
+  TerminalState,
+  TerminalWindow,
   TextLocatorOptions,
+  ScreenTextLocatorOptions,
   TimeoutClasses,
   WaitOptions,
 } from './api.js';
-import type { LogRecord, SemanticRole, SemanticSnapshot } from '@termwright/protocol';
+import type { ActionIntent, ActionPlan, ActionReceipt, DeviceOperation, EffectiveSessionContract, EvidenceProvenance, LogRecord, Observation, ObservationStamp, PointerHitGrid, SemanticNode, SemanticRole, SemanticSnapshot, SessionCapabilityId } from '@termwright/protocol';
 import {
   DEFAULT_LIMITS,
   DEFAULT_NEGOTIATION_MS,
   ENV_ENDPOINT,
-  ENV_PROTOCOL,
   ENV_TOKEN,
-  PROTOCOL_ID,
-  PROTOCOL_V2_ID,
   generateToken,
   verifyMarkerPayload,
 } from '@termwright/protocol';
 import {
   TermwrightError,
+  AdapterGuaranteeViolationError,
+  DuplicateSemanticKeyError,
+  CapabilityProviderLostError,
+  CapabilityProviderViolationError,
+  CapabilityUnavailableError,
   HistoryTruncatedError,
+  InputModeDisabledError,
+  ProbeAttachFailedError,
   ProtocolViolationError,
   ProcessExitedError,
   SessionClosedError,
+  StaleSnapshotError,
   TimeoutError,
-  UnsupportedActionError,
   NotFoundError,
 } from './errors.js';
 import { DebugLog, debugMode, formatBytes, instrument } from './debug.js';
@@ -62,13 +73,15 @@ import { SessionEventEmitter } from './events.js';
 import { LogTailer } from './logs.js';
 import { encodeFocus, encodeKeys, encodePaste, encodeText } from './keys.js';
 import { LocatorImpl, type LocatorContext } from './locator.js';
+import { assertBeforeActionInput } from './internal/action-retry.js';
 import { waitForQuiet } from './internal/quiet.js';
-import { mouseModeUnverifiable } from './mouse.js';
+import { encodeMouse, normalizeMouseModifiers, type MouseEvent } from './mouse.js';
 import { SemanticIndex, textInRect } from './matching.js';
 import { RevisionPairing } from './pairing.js';
 import { createNodePtyBackend, type PtyBackend, type PtyProcess } from './pty.js';
 import { captureRows, captureScreen, screenExcerpt, type CapturedRow } from './screen.js';
 import { SemanticChannel, type SemanticAttachment } from './semantic.js';
+import { composeProviderEvidence } from './provider-evidence.js';
 import { ShellCommandTracker } from './shell.js';
 import {
   posixShellBootstrap,
@@ -119,17 +132,6 @@ const IDLE_QUIET_MS = 100;
 
 /** How long a half-paired semantic revision is kept before it is dropped. */
 const PAIRING_TIMEOUT_MS = 1_000;
-
-/**
- * How long after the negotiation window a late adapter is still accepted.
- *
- * The window bounds when a session starts *behaving* generically; this grace
- * bounds when that becomes *final*. Without it, a child that needs longer than
- * the window to boot — routine under a loaded machine running suites in
- * parallel — is locked out of its own session while the caller still has
- * seconds of budget left.
- */
-const LATE_ATTACH_GRACE_MS = 2_000;
 
 /** Bounds on a crash report: enough to explain a death, never unbounded. */
 const CRASH_TAIL_LINES = 50;
@@ -211,6 +213,40 @@ export async function launchTerminal(options: LaunchTerminalOptions): Promise<Te
   }
   const session = new TerminalSession(options);
   await session.start();
+  if ((options.requiredCapabilities?.length ?? 0) > 0) {
+    await session.negotiationSettled();
+    const contract = session.contract();
+    if (contract === null) throw new Error('session negotiation settled without a contract');
+    const required = [...new Set(options.requiredCapabilities)];
+    const available = Object.entries(contract.capabilities)
+      .filter(([, value]) => value.status === 'supported')
+      .map(([id]) => id);
+    const missing = required.filter((id) => contract.capabilities[id].status !== 'supported');
+    if (missing.length > 0) {
+      const framework = contract.framework === null
+        ? 'generic terminal session'
+        : `${contract.framework.name}@${contract.framework.version}`;
+      const providerHint = missing.some((id) =>
+        id === 'pointer-geometry' || id === 'pointer-hit-testing' || id === 'painted-region')
+        ? 'register an application evidence provider before the adapter handshake'
+        : 'use an adapter that negotiates the required capability';
+      const attachFailed = contract.framework === null && missing.includes('semantic-tree');
+      const failure = attachFailed ? new ProbeAttachFailedError(
+        `semantic integration was required, but no probe attached before negotiation settled; ` +
+          `required=[${required.join(', ')}] available=[${available.join(', ')}]`,
+        session.errorDiagnostics({
+          suggestion: 'launch through the certified framework integration; for Python do not use -S/-E and verify the sitecustomize bootstrap can attach',
+        }),
+      ) : new CapabilityUnavailableError(
+        `launch requirements were not met; required=[${required.join(', ')}] ` +
+          `available=[${available.join(', ')}] missing=[${missing.join(', ')}] ` +
+          `framework=${framework}`,
+        session.errorDiagnostics({ suggestion: providerHint }),
+      );
+      await session.close();
+      throw failure;
+    }
+  }
   const log = session.debugLog;
   return log === null ? session : instrument<TerminalHarness>(session, log, 'harness');
 }
@@ -231,6 +267,10 @@ interface ChangeWaiter {
 class TerminalSession implements TerminalHarness, LocatorContext {
   readonly sessionId = randomUUID();
   readonly shell: ShellApi;
+  readonly keyboard: Keyboard;
+  readonly mouse: Mouse;
+  readonly window: TerminalWindow;
+  readonly terminalState: TerminalState;
   readonly timeouts: Required<TimeoutClasses>;
   readonly events: SessionEvents;
   readonly scrollback: ScrollbackApi;
@@ -244,6 +284,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   readonly #token = generateToken();
   readonly #pairing: RevisionPairing;
   readonly #diagnosticsLog: SessionDiagnostic[] = [];
+  readonly #appLogHistory: AppLogEvent[] = [];
   readonly #changeWaiters = new Set<ChangeWaiter>();
   readonly #startedAt = performance.now();
 
@@ -251,6 +292,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #pty: PtyProcess | null = null;
   #attachment: SemanticAttachment | null = null;
   #index: SemanticIndex | null = null;
+  #contract: EffectiveSessionContract | null = null;
   #settled = false;
   #settleWaiters: (() => void)[] = [];
   #negotiationTimer: NodeJS.Timeout | null = null;
@@ -259,6 +301,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #resolveExit: ((status: ExitStatus) => void) | null = null;
   #lastOutputAt = Date.now();
   #violation: ProtocolViolationError | null = null;
+  #providerFailure: TermwrightError | null = null;
   #crash: CrashReport | null = null;
   /** The in-flight evidence wait, shared by every pending pairing half. */
   #settling: Promise<void> | null = null;
@@ -277,11 +320,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #logDroppedInWindow = 0;
   #logDropTimer: NodeJS.Timeout | null = null;
   #lastLogSeq: number | null = null;
-  /** When the generic verdict becomes final; null while semantics are still possible. */
-  #genericDefiniteAt: number | null = null;
-  #graceTimer: NodeJS.Timeout | null = null;
   #selectionRange: { start: { row: number; column: number }; end: { row: number; column: number } } | null = null;
   #actionCounter = 0;
+  #observationSequence = 0;
   readonly #pendingActions = new Map<string, { api: string; selector?: string }>();
   readonly #shellTracker = new ShellCommandTracker();
 
@@ -319,6 +360,26 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       waitForPrompt: (opts) => this.#waitForShellPrompt(opts),
       run: (command, opts) => this.#runShellCommand(command, opts),
     });
+    this.keyboard = Object.freeze<Keyboard>({
+      press: (keys) => this.#keyboardPress(keys),
+      type: (text) => this.#keyboardType(text),
+      paste: (text) => this.#keyboardPaste(text),
+    });
+    this.mouse = Object.freeze<Mouse>({
+      move: (point) => this.#mouseEvents('mouse.move', [{ kind: 'move', ...this.#mousePoint(point) }]),
+      down: (point) => this.#mouseEvents('mouse.down', [{ kind: 'press', button: point.button ?? 'left', ...this.#mousePoint(point) }]),
+      up: (point) => this.#mouseEvents('mouse.up', [{ kind: 'release', button: point.button ?? 'left', ...this.#mousePoint(point) }]),
+      click: (point) => this.#mouseClick(point),
+      wheel: (options) => this.#mouseWheel(options),
+      drag: (options) => this.#mouseDrag(options),
+    });
+    this.window = Object.freeze<TerminalWindow>({
+      focus: () => this.#windowFocus(true),
+      blur: () => this.#windowFocus(false),
+    });
+    this.terminalState = Object.freeze<TerminalState>({
+      snapshot: () => this.#terminalState(),
+    });
 
     const mode = debugMode(options.debug);
     if (mode !== 'off') {
@@ -340,9 +401,16 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       limits: DEFAULT_LIMITS,
       acceptHello: () => this.semanticPossible(),
       logBudget: { maxRecordsPerSecond: LOG_RECORDS_PER_SECOND, burst: LOG_BURST },
-      acceptDeltas: (this.#options.treeUpdates ?? 'auto') === 'auto',
       hooks: {
         onAttach: (attachment) => this.#onAttach(attachment),
+        onDisconnect: () => {
+          if (this.#closed || this.#teardownRequested || this.#attachment === null) return;
+          this.#providerFailure = new CapabilityProviderLostError(
+            `semantic capability provider ${this.#attachment.adapter.name} disconnected after negotiation`,
+            this.errorDiagnostics({ suggestion: 'restart the application; a frozen session contract cannot silently downgrade' }),
+          );
+          this.#notifyChange();
+        },
         onSnapshot: (snapshot) => this.#pairing.offerSnapshot(snapshot),
         onLogRecord: (record) => this.#publishLogRecord(record),
         onCommit: (revision) => {
@@ -358,7 +426,19 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         onFrameBegin: (revision) => this.#pairing.frameOpened(revision),
         onDiagnostic: (code, detail, about) => this.#diagnostic(code, detail, about),
         onProtocolViolation: (error, wireCode) => {
-          this.#violation = error;
+          this.#violation = wireCode === 'duplicate-semantic-key'
+            ? new DuplicateSemanticKeyError(error.message, this.errorDiagnostics({
+                suggestion: 'make every explicit SemanticKey unique in the committed application tree',
+              }))
+            : wireCode === 'adapter-guarantee-violation'
+              ? new AdapterGuaranteeViolationError(error.message, this.errorDiagnostics({
+                  suggestion: 'use the exact certified framework build or repair its authoritative instrumentation',
+                }))
+            : wireCode === 'capability-provider-violation'
+              ? new CapabilityProviderViolationError(error.message, this.errorDiagnostics({
+                  suggestion: 'publish provider evidence for the exact committed session revision',
+                }))
+            : error;
           this.#diagnostic('protocol-violation', error.message, { wireCode });
           this.#settle();
         },
@@ -366,6 +446,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
 
     this.#vt.onRevision((revision) => {
+      this.#observationSequence += 1;
       this.#emitter.emit('screen-revision', { revision, timeMs: this.#now() });
       this.#notifyChange();
     });
@@ -380,15 +461,22 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       }
       this.#pairing.offerMarker(verified.revision, marker.screenRevision);
     });
+    this.#vt.onResponse((response) => {
+      // A terminal response is generated by the emulator, not a keyboard or
+      // mouse action. Send it through PTY stdin but deliberately do not emit
+      // the public `input` event or create an ActionReceipt.
+      this.#pty?.write(Buffer.from(response.data, 'utf8'));
+      this.#diagnostic(
+        'terminal-response',
+        `answered application terminal query (${response.kind}, ${Buffer.byteLength(response.data, 'utf8')} bytes)`,
+      );
+    });
 
     assertLaunchPathsExist(this.#options.command, this.#options.cwd);
 
     const env = buildChildEnv(this.#options.envMode ?? 'replace', this.#options.env);
     env[ENV_ENDPOINT] = this.#channel.endpoint;
     env[ENV_TOKEN] = this.#token;
-    env[ENV_PROTOCOL] = this.#options.semanticProtocol === 'termwright/1'
-      ? PROTOCOL_ID
-      : PROTOCOL_V2_ID;
 
     this.#pty = this.#backend.spawn({
       command: this.#options.command,
@@ -405,7 +493,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       this.#lastOutputAt = Date.now();
       this.#shellTracker.feed(data);
       this.#emitter.emit('output', { data, timeMs: this.#now() });
-      void this.#vt.write(data);
+      void this.#vt.write(data).finally(() => {
+        // Parsing can settle without changing a visible cell (for example a
+        // semantic marker or an idempotent control sequence). Action retries
+        // still need to wake when that evidence boundary closes.
+        this.#notifyChange();
+      });
     });
     this.#pty.onExit((status) => {
       void this.#finishExit(status);
@@ -420,15 +513,16 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       await this.#logs.start();
     }
 
-    const negotiationMs = this.#options.semanticNegotiationMs ?? DEFAULT_NEGOTIATION_MS;
+    const negotiationMs = this.#options.semanticNegotiationMs
+      ?? ((this.#options.requiredCapabilities?.length ?? 0) > 0
+        ? Math.max(DEFAULT_NEGOTIATION_MS, this.timeouts.ready)
+        : DEFAULT_NEGOTIATION_MS);
     this.#negotiationTimer = setTimeout(() => {
       if (this.#attachment === null) {
         this.#diagnostic(
           'negotiation-timeout',
-          `no adapter completed the handshake within ${negotiationMs} ms; continuing as a generic session, ` +
-            `but still accepting a late adapter for ${LATE_ATTACH_GRACE_MS} ms`,
+          `no adapter completed the handshake within ${negotiationMs} ms; the frozen session contract is generic`,
         );
-        this.#startLateAttachGrace();
       }
       this.#settle();
     }, negotiationMs);
@@ -464,6 +558,44 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
   }
 
+  contract(): EffectiveSessionContract | null {
+    return this.#contract;
+  }
+
+  checkpoint(): ObservationStamp {
+    this.assertOpen();
+    const paired = this.#pairing.published;
+    const contractId = this.#contract?.contractId ?? `${this.sessionId}:0`;
+    const epoch = this.#contract?.epoch ?? 0;
+    return Object.freeze({
+      sessionId: this.sessionId,
+      contractId,
+      epoch,
+      sequence: this.#observationSequence,
+      screenRevision: this.screenRevision(),
+      semanticRevision: paired?.snapshot.revision ?? null,
+      pairedScreenRevision: paired?.screenRevision ?? null,
+    });
+  }
+
+  async waitForCheckpointChange(options: { readonly after: ObservationStamp } & WaitOptions): Promise<ObservationStamp> {
+    const { after } = options;
+    const contract = this.#contract;
+    if (after.sessionId !== this.sessionId ||
+        (contract !== null && (after.contractId !== contract.contractId || after.epoch !== contract.epoch))) {
+      throw new StaleSnapshotError('checkpoint belongs to a different session contract', this.errorDiagnostics());
+    }
+    const deadline = Date.now() + (options.timeout ?? this.timeouts.action);
+    for (;;) {
+      const current = this.checkpoint();
+      if (current.sequence > after.sequence) return current;
+      if (Date.now() >= deadline) {
+        throw new TimeoutError(`the session did not advance beyond checkpoint ${after.sequence}`, this.errorDiagnostics());
+      }
+      await this.waitForChange(deadline);
+    }
+  }
+
   screen(): ScreenSnapshot {
     this.assertOpen();
     return captureScreen(this.#vt);
@@ -479,6 +611,20 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   title(): string {
     return this.#vt.title;
+  }
+
+  #terminalState(): import('./api.js').TerminalStateSnapshot {
+    this.assertOpen();
+    const integration = this.#vt.shellIntegration();
+    return Object.freeze({
+      screenRevision: this.#vt.revision,
+      dimensions: Object.freeze({ columns: this.#vt.terminal.cols, rows: this.#vt.terminal.rows }),
+      buffer: this.#vt.activeBuffer(),
+      title: this.#vt.title,
+      cursor: this.#vt.cursor(),
+      bellCount: integration.bellCount,
+      modes: this.#vt.modes(),
+    });
   }
 
   #shellStatus(): import('./api.js').ShellStatus {
@@ -506,7 +652,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       if (integration.supported && integration.lastMark === 'B') return;
       if (Date.now() >= deadline) {
         if (!integration.supported) {
-          throw new UnsupportedActionError(
+          throw new CapabilityUnavailableError(
             'shell commands require OSC 133 prompt and command markers; this program did not publish them',
             this.errorDiagnostics({ suggestion: 'enable shell integration, or drive the program with press(), type() and terminal assertions' }),
           );
@@ -522,35 +668,57 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   async #runShellCommand(command: string, opts?: import('./api.js').ShellRunOptions): Promise<ShellCommandResult> {
     if (command.length === 0 || /[\r\n\0]/u.test(command)) {
-      throw new UnsupportedActionError(
-        'shell.run() requires one non-empty command without newline or NUL characters',
-        this.errorDiagnostics({ suggestion: 'run one command at a time; use a shell script for a multi-line program' }),
-      );
+      throw new TypeError('shell.run() requires one non-empty command without newline or NUL characters');
     }
     const timeout = opts?.timeout ?? 30_000;
     await this.#waitForShellPrompt({ timeout });
     const tracked = this.#shellTracker.arm(command, timeout, opts?.maxOutputBytes);
+    const actionId = this.beginAction('shell.run');
+    const before = this.checkpoint();
+    const submitted = this.#options.shellIntegration === 'termwright-posix'
+      ? wrapPosixShellCommand(command)
+      : this.#options.shellIntegration === 'termwright-powershell'
+        ? wrapPowerShellCommand(command)
+        : command;
+    const intent: ActionIntent = Object.freeze({ kind: 'shell-command' });
+    const operations: readonly DeviceOperation[] = Object.freeze([
+      { device: 'keyboard', kind: 'type', value: submitted },
+      { device: 'keyboard', kind: 'press', value: 'Enter' },
+    ]);
+    const plan: ActionPlan = Object.freeze({
+      actionId,
+      contractId: before.contractId,
+      intent,
+      checkpoint: before,
+      requirements: Object.freeze([]),
+      strategy: 'shell-keyboard-submit',
+      operations,
+    });
     try {
-      await this.type(
-        this.#options.shellIntegration === 'termwright-posix'
-          ? wrapPosixShellCommand(command)
-          : this.#options.shellIntegration === 'termwright-powershell'
-            ? wrapPowerShellCommand(command)
-            : command,
-      );
-      await this.press('Enter');
+      const executed = await this.executeDeviceOperations(plan.operations, before);
       const result = await tracked;
       await this.#vt.drain();
       await this.#waitForShellPrompt({ timeout: Math.max(1, timeout) });
       const integration = this.#vt.shellIntegration();
+      const receipt: ActionReceipt = Object.freeze({
+        intent,
+        plan,
+        before,
+        after: this.checkpoint(),
+        executed,
+        outcome: 'completed',
+      });
+      this.endAction(actionId, 'shell.run', true, { receipt });
       return Object.freeze({
         command: result.command,
         output: result.output,
         exitCode: result.exitCode,
         cwd: normalizeShellCwd(integration.cwd),
         title: this.#vt.title,
+        receipt,
       });
     } catch (error) {
+      this.endAction(actionId, 'shell.run', false, { error: actionErrorCode(error) });
       this.#shellTracker.close(error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
@@ -574,6 +742,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   getByText(text: string | RegExp, opts?: TextLocatorOptions): Locator {
     const matcher = textMatcher(text, opts?.exact ?? false);
+    return new LocatorImpl(this, textQuery(matcher));
+  }
+
+  getByScreenText(text: string | RegExp, opts?: ScreenTextLocatorOptions): Locator {
+    const matcher = textMatcher(text, opts?.exact ?? false);
     const style: StylePredicates | undefined =
       opts?.fg !== undefined || opts?.bg !== undefined || opts?.attributes !== undefined
         ? {
@@ -582,11 +755,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
             ...(opts.attributes !== undefined ? { attributes: opts.attributes } : {}),
           }
         : undefined;
-    // Style predicates and occurrence selection are grid concepts: they force
-    // generic matching even in a semantic session.
-    const generic = style !== undefined || opts?.occurrence !== undefined || this.#index === null;
-    if (generic) return new LocatorImpl(this, gridQuery(matcher, opts?.occurrence, style));
-    return new LocatorImpl(this, textQuery(matcher));
+    return new LocatorImpl(this, gridQuery(matcher, opts?.occurrence, style));
   }
 
   getByTestId(testId: string): Locator {
@@ -610,12 +779,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   semanticBoundsAreAbsolute(): boolean {
-    return this.#attachment?.capabilities.includes('absolute-bounds') === true;
+    return this.#attachment?.capabilities.includes('intended-geometry') === true;
   }
 
   locatorForRef(ref: string): Locator {
     if (this.identityKind() === 'frame-local') {
-      throw new UnsupportedActionError(
+      throw new CapabilityUnavailableError(
         `this session's producer has frame-local identity, so ref ${JSON.stringify(ref)} cannot be re-resolved`,
         this.errorDiagnostics({
           suggestion:
@@ -625,11 +794,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     }
     const parsed = parseRef(ref);
     if (parsed === null) {
-      throw new UnsupportedActionError(
-        `ref ${JSON.stringify(ref)} is not a termwright ref`,
-        this.errorDiagnostics({
-          suggestion: "refs look like 'n8@42' (semantic node) or 'grid:1,2,9,1@7' (grid match)",
-        }),
+      throw new TypeError(
+        `ref ${JSON.stringify(ref)} is not a termwright ref; refs look like ` +
+        "'n8@42' (semantic node) or 'grid:1,2,9,1@7' (grid match)",
       );
     }
     // A ref identifies one node, so it is resolved by identity rather than by
@@ -641,21 +808,15 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   // Input
 
   async press(keys: string): Promise<void> {
-    await this.#act('press', async () => {
-      await this.sendInput(encodeKeys(keys, this.modes()), 'key');
-    });
+    await this.#rawDeviceAction('press', { kind: 'press' }, [{ device: 'keyboard', kind: 'press', value: keys }]);
   }
 
   async type(text: string): Promise<void> {
-    await this.#act('type', async () => {
-      await this.sendInput(encodeText(text), 'key');
-    });
+    await this.#rawDeviceAction('type', { kind: 'type' }, [{ device: 'keyboard', kind: 'type', value: text }]);
   }
 
   async paste(text: string): Promise<void> {
-    await this.#act('paste', async () => {
-      await this.sendInput(encodePaste(text, this.modes().bracketedPaste), 'paste');
-    });
+    await this.#rawDeviceAction('paste', { kind: 'paste' }, [{ device: 'keyboard', kind: 'paste', value: text }]);
   }
 
   async write(bytes: Uint8Array | string): Promise<void> {
@@ -665,12 +826,99 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
   }
 
-  async focus(): Promise<void> {
-    await this.#act('focus', () => this.#sendFocus(true));
+  async #keyboardPress(keys: string): Promise<void> {
+    await this.#rawDeviceAction('keyboard.press', { kind: 'press' }, [{ device: 'keyboard', kind: 'press', value: keys }]);
   }
 
-  async blur(): Promise<void> {
-    await this.#act('blur', () => this.#sendFocus(false));
+  async #keyboardType(text: string): Promise<void> {
+    await this.#rawDeviceAction('keyboard.type', { kind: 'type' }, [{ device: 'keyboard', kind: 'type', value: text }]);
+  }
+
+  async #keyboardPaste(text: string): Promise<void> {
+    await this.#rawDeviceAction('keyboard.paste', { kind: 'paste' }, [{ device: 'keyboard', kind: 'paste', value: text }]);
+  }
+
+  async #windowFocus(focused: boolean): Promise<void> {
+    await this.#act(focused ? 'window.focus' : 'window.blur', () => this.#sendFocus(focused));
+  }
+
+  #point(point: MousePoint): MousePoint {
+    if (!Number.isSafeInteger(point.row) || point.row < 0 || !Number.isSafeInteger(point.column) || point.column < 0) {
+      throw new TypeError(`mouse coordinates must be non-negative safe integers, received (${point.row}, ${point.column})`);
+    }
+    return Object.freeze({ row: point.row, column: point.column });
+  }
+
+  #mousePoint(point: MousePoint & { readonly modifiers?: readonly string[] }): MousePoint & { readonly modifiers: readonly ('shift' | 'alt' | 'control')[] } {
+    return Object.freeze({ ...this.#point(point), modifiers: normalizeMouseModifiers(point.modifiers) });
+  }
+
+  async #mouseEvents(api: string, events: readonly MouseEvent[]): Promise<void> {
+    const operations = events.map((event): DeviceOperation => event.kind === 'press'
+      ? { device: 'mouse', kind: 'down', row: event.row, column: event.column, button: event.button ?? 'left', modifiers: normalizeMouseModifiers(event.modifiers) }
+      : event.kind === 'release'
+        ? { device: 'mouse', kind: 'up', row: event.row, column: event.column, button: event.button ?? 'left', modifiers: normalizeMouseModifiers(event.modifiers) }
+        : event.kind === 'move'
+          ? { device: 'mouse', kind: 'move', row: event.row, column: event.column, modifiers: normalizeMouseModifiers(event.modifiers), ...(event.dragging === true ? { button: event.button ?? 'left' } : {}) }
+          : { device: 'mouse', kind: 'wheel', row: event.row, column: event.column, modifiers: normalizeMouseModifiers(event.modifiers), ...(event.wheelAxis === 'horizontal' ? { deltaX: Math.sign(event.wheelDelta ?? 0) } : { deltaY: Math.sign(event.wheelDelta ?? 0) }) });
+    const intentKind = api === 'mouse.doubleClick' ? 'double-click' : api === 'mouse.move' ? 'hover' : api === 'mouse.drag' ? 'drag' : api === 'mouse.wheel' ? 'wheel' : 'click';
+    await this.#rawDeviceAction(api, { kind: intentKind }, operations);
+  }
+
+  async #mouseClick(point: MousePoint & { readonly modifiers?: readonly string[]; readonly button?: 'left' | 'middle' | 'right'; readonly clickCount?: 1 | 2 }): Promise<void> {
+    const at = this.#mousePoint(point);
+    const button = point.button ?? 'left';
+    const count = point.clickCount ?? 1;
+    const modes = this.modes();
+    const events: MouseEvent[] = [];
+    for (let index = 0; index < count; index += 1) {
+      events.push({ kind: 'press', button, ...at });
+      if (modes.mouseTracking !== 'x10') events.push({ kind: 'release', button, ...at });
+    }
+    await this.#mouseEvents(count === 2 ? 'mouse.doubleClick' : 'mouse.click', events);
+  }
+
+  async #mouseWheel(options: MousePoint & { readonly modifiers?: readonly string[]; readonly deltaY?: number; readonly deltaX?: number }): Promise<void> {
+    const at = this.#mousePoint(options);
+    const vertical = options.deltaY ?? 0;
+    const horizontal = options.deltaX ?? 0;
+    if (!Number.isSafeInteger(vertical) || !Number.isSafeInteger(horizontal)) {
+      throw new TypeError(`mouse.wheel() deltas must be safe integers, received (${String(horizontal)}, ${String(vertical)})`);
+    }
+    if (vertical === 0 && horizontal === 0) throw new TypeError('mouse.wheel() requires a non-zero deltaY or deltaX');
+    if (Math.abs(vertical) > 100 || Math.abs(horizontal) > 100) {
+      throw new RangeError('mouse.wheel() accepts at most 100 steps per axis');
+    }
+    const events: MouseEvent[] = [
+      ...Array.from({ length: Math.abs(vertical) }, (): MouseEvent => ({ kind: 'wheel', wheelAxis: 'vertical', wheelDelta: vertical, ...at })),
+      ...Array.from({ length: Math.abs(horizontal) }, (): MouseEvent => ({ kind: 'wheel', wheelAxis: 'horizontal', wheelDelta: horizontal, ...at })),
+    ];
+    await this.#mouseEvents('mouse.wheel', events);
+  }
+
+  async #mouseDrag(options: { readonly modifiers?: readonly string[]; readonly from: MousePoint; readonly to: MousePoint; readonly steps?: number; readonly path?: readonly MousePoint[] }): Promise<void> {
+    const from = this.#point(options.from);
+    const to = this.#point(options.to);
+    const steps = options.steps ?? Math.max(Math.abs(to.row - from.row), Math.abs(to.column - from.column), 1);
+    if (!Number.isSafeInteger(steps) || steps < 1 || steps > 1_000) {
+      throw new RangeError(`mouse.drag() steps must be an integer from 1 to 1000, received ${String(steps)}`);
+    }
+    const path = options.path === undefined
+      ? Array.from({ length: steps }, (_, index) => {
+          const ratio = (index + 1) / steps;
+          return this.#point({
+            row: Math.round(from.row + (to.row - from.row) * ratio),
+            column: Math.round(from.column + (to.column - from.column) * ratio),
+          });
+        })
+      : [...options.path.map((point) => this.#point(point)), to];
+    const unique = path.filter((point, index) => index === 0 || point.row !== path[index - 1]?.row || point.column !== path[index - 1]?.column);
+    const modifiers = normalizeMouseModifiers(options.modifiers);
+    await this.#mouseEvents('mouse.drag', [
+      { kind: 'press', button: 'left', modifiers, ...from },
+      ...unique.map((point): MouseEvent => ({ kind: 'move', button: 'left', dragging: true, modifiers, ...point })),
+      { kind: 'release', button: 'left', modifiers, ...to },
+    ]);
   }
 
   async signal(sig: 'INT' | 'TERM' | 'KILL' | 'HUP'): Promise<void> {
@@ -687,31 +935,21 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#act('resize', async () => {
       this.assertOpen();
       if (size.columns <= 0 || size.rows <= 0) {
-        throw new UnsupportedActionError(`resize() needs positive dimensions, received ${size.columns}x${size.rows}`, {
-          semanticTree: this.#attachment !== null,
-        });
+        throw new TypeError(`resize() needs positive dimensions, received ${size.columns}x${size.rows}`);
       }
-      const before = Object.freeze({
-        sessionId: this.sessionId,
-        screenRevision: this.screenRevision(),
-        semanticRevision: this.semanticRevision() > 0 ? this.semanticRevision() : null,
-      });
+      const before = this.checkpoint();
       this.#pty?.resize(size.columns, size.rows);
       this.#vt.resize(size.columns, size.rows);
       this.#emitter.emit('resize', { columns: size.columns, rows: size.rows, timeMs: this.#now() });
       // A resize is only observable once the child has repainted.
       await this.waitForRender({ after: before.screenRevision, timeout: this.timeouts.action });
       await this.waitForStable({ frames: 2, timeout: this.timeouts.action });
-      const after = Object.freeze({
-        sessionId: this.sessionId,
-        screenRevision: this.screenRevision(),
-        semanticRevision: this.semanticRevision() > 0 ? this.semanticRevision() : null,
-      });
+      const after = this.checkpoint();
       return Object.freeze({
         requested: Object.freeze({ columns: size.columns, rows: size.rows }),
         before,
         after,
-        pairedRender: Object.freeze({ status: 'known', value: after.screenRevision, evidence: 'terminal-grid' } as const),
+        pairedRender: Object.freeze({ status: 'known', value: after.screenRevision, evidence: Object.freeze({ source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'termwright-vt' }) } as const),
       });
     });
   }
@@ -874,6 +1112,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   // -------------------------------------------------------------------------
   // LocatorContext
 
+  negotiationPending(): boolean {
+    return !this.#settled;
+  }
+
   negotiationSettled(): Promise<void> {
     if (this.#settled) return Promise.resolve();
     return new Promise<void>((resolve) => this.#settleWaiters.push(resolve));
@@ -882,23 +1124,24 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   /**
    * Waits until the capabilities stop changing.
    *
-   * Three things can still be pending after `launchTerminal` resolves: the
-   * negotiation window, the grace a slow adapter gets to attach after it, and
-   * the first tree of an adapter that did attach. Callers that branch on
+   * Two things can still be pending after `launchTerminal` resolves: the
+   * negotiation window and the first tree of an adapter that did attach. Callers that branch on
    * `semanticTree` need all three settled, and polling `capabilities()` for
    * them is exactly the workaround this replaces.
    */
-  async settled(opts?: WaitOptions): Promise<SessionCapabilities> {
+  async settled(opts?: WaitOptions): Promise<EffectiveSessionContract> {
     this.assertOpen();
     const deadline = Date.now() + (opts?.timeout ?? this.timeouts.action);
     await this.negotiationSettled();
 
     for (;;) {
+      const semanticFailure = this.semanticViolation();
+      if (semanticFailure !== null) throw semanticFailure;
       const attached = this.#attachment !== null;
-      if (!attached && !this.semanticPossible()) return this.capabilities();
-      if (attached && this.#index !== null) return this.capabilities();
+      if (!attached && !this.semanticPossible()) return this.#requireContract();
+      if (attached && this.#index !== null) return this.#requireContract();
       if (Date.now() >= deadline) {
-        if (!attached) return this.capabilities();
+        if (!attached) return this.#requireContract();
         // Attached but silent: reporting a semantic session whose tree never
         // arrived would be a lie the caller cannot act on.
         throw new TimeoutError(
@@ -916,23 +1159,130 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#index;
   }
 
+  semanticNode(id: string): SemanticNode | undefined {
+    return this.#index?.node(id);
+  }
+
+  pointerRegion(id: string): { readonly regionBounds: import('@termwright/protocol').Rect; readonly spans: import('@termwright/protocol').PhysicalRegion['spans']; readonly evidence: EvidenceProvenance } | undefined {
+    const snapshot = this.#index?.snapshot;
+    const contract = this.#contract;
+    if (snapshot === undefined || contract === null) return undefined;
+    const availability = contract.capabilities['pointer-geometry'];
+    if (availability.status !== 'supported') return undefined;
+    if (availability.evidence.source === 'application') {
+      const frame = snapshot.providerEvidence?.find((entry) =>
+        entry.providerId === availability.evidence.providerId && entry.status === 'available');
+      if (frame?.status !== 'available') return undefined;
+      const region = frame.pointerRegions.find((entry) => entry.recipientId === id);
+      return region === undefined ? undefined : Object.freeze({ ...region, evidence: frame.evidence });
+    }
+    const node = this.#index?.node(id);
+    const grid = snapshot.hitGrid;
+    if (node?.geometry.intendedRect.status !== 'known' ||
+        node.geometry.visibleRect.status !== 'known' || grid.status !== 'known') return undefined;
+    const visible = node.geometry.visibleRect.value;
+    const spans = grid.value.regions.filter((entry) => entry.recipientId === id).flatMap((entry) => {
+      const row = Math.max(entry.rect.row, visible.row);
+      const bottom = Math.min(entry.rect.row + entry.rect.height, visible.row + visible.height);
+      const from = Math.max(entry.rect.column, visible.column);
+      const to = Math.min(entry.rect.column + entry.rect.width, visible.column + visible.width);
+      return from >= to || row >= bottom ? [] : Array.from({ length: bottom - row }, (_, offset) => Object.freeze({ row: row + offset, from, to }));
+    });
+    return Object.freeze({ regionBounds: node.geometry.intendedRect.value, spans: Object.freeze(spans), evidence: availability.evidence });
+  }
+
+  screenRegionUnchangedSince(
+    revision: number,
+    spans: import('@termwright/protocol').PhysicalRegion['spans'],
+  ): boolean {
+    return this.#vt.regionUnchangedSince(revision, spans);
+  }
+
+  hitGrid(): Observation<PointerHitGrid> | undefined {
+    return this.#index?.snapshot.hitGrid;
+  }
+
+  async executeDeviceOperations(
+    operations: readonly DeviceOperation[],
+    expected: ObservationStamp,
+    deadline?: number,
+  ): Promise<readonly DeviceOperation[]> {
+    const deadlineDiagnostics = this.errorDiagnostics({ suggestion: 'increase the action timeout or wait for the target state explicitly' });
+    if (deadline !== undefined) assertBeforeActionInput(deadline, deadlineDiagnostics);
+    const current = this.checkpoint();
+    if (current.contractId !== expected.contractId || current.sequence !== expected.sequence) {
+      throw new StaleSnapshotError(
+        `action plan at checkpoint ${expected.sequence} became stale before input (current ${current.sequence})`,
+        this.errorDiagnostics({ suggestion: 'retry the action so Termwright can re-resolve and re-plan without stale coordinates' }),
+      );
+    }
+    const modes = this.modes();
+    const encoded = operations.map((operation) => {
+      if (operation.device === 'keyboard') {
+        const bytes = operation.kind === 'press'
+          ? encodeKeys(operation.value, modes)
+          : operation.kind === 'paste'
+            ? encodePaste(operation.value, modes.bracketedPaste)
+            : encodeText(operation.value);
+        return Object.freeze({ operation, bytes, inputKind: operation.kind === 'paste' ? 'paste' as const : 'key' as const });
+      }
+      const modifierFields = operation.modifiers === undefined ? {} : { modifiers: operation.modifiers };
+      const event: MouseEvent = operation.kind === 'move'
+        ? { kind: 'move', ...(operation.button !== undefined ? { button: operation.button, dragging: true } : {}), ...modifierFields, row: operation.row, column: operation.column }
+        : operation.kind === 'down'
+          ? { kind: 'press', button: operation.button ?? 'left', ...modifierFields, row: operation.row, column: operation.column }
+          : operation.kind === 'up'
+            ? { kind: 'release', button: operation.button ?? 'left', ...modifierFields, row: operation.row, column: operation.column }
+            : { kind: 'wheel', ...modifierFields, row: operation.row, column: operation.column, wheelDelta: operation.deltaY ?? operation.deltaX ?? 0, wheelAxis: operation.deltaX !== undefined ? 'horizontal' : 'vertical' };
+      return Object.freeze({ operation, bytes: encodeMouse(event, modes), inputKind: 'mouse' as const });
+    });
+    const executed: DeviceOperation[] = [];
+    let held: { button: 'left' | 'middle' | 'right'; row: number; column: number } | null = null;
+    try {
+      for (const { operation, bytes, inputKind } of encoded) {
+        if (executed.length === 0 && deadline !== undefined) assertBeforeActionInput(deadline, deadlineDiagnostics);
+        await this.sendInput(bytes, inputKind);
+        executed.push(operation);
+        if (operation.device === 'keyboard') continue;
+        if (operation.kind === 'down') {
+          held = { button: operation.button ?? 'left', row: operation.row, column: operation.column };
+        } else if (operation.kind === 'move' && held !== null) {
+          const active = held as { button: 'left' | 'middle' | 'right'; row: number; column: number };
+          held = { button: active.button, row: operation.row, column: operation.column };
+        } else if (operation.kind === 'up') {
+          held = null;
+        }
+      }
+    } catch (error) {
+      if (held !== null) {
+        try {
+          await this.sendInput(encodeMouse({ kind: 'release', ...held }, modes), 'mouse');
+        } catch {
+          // Preserve the original failure. The session may already be closed,
+          // in which case no further PTY write can release the button.
+        }
+      }
+      throw error;
+    }
+    return Object.freeze([...executed]);
+  }
+
   semanticAttached(): boolean {
     return this.#attachment !== null;
   }
 
   /**
-   * True while a semantic tree may still arrive: an adapter is attached, the
-   * negotiation window is open, or the late-attach grace has not expired.
+   * True while a semantic tree may still arrive: an adapter is attached or the
+   * negotiation window remains open.
    * Semantic locators wait while this holds and only fail once it does not.
    */
   semanticPossible(): boolean {
     if (this.#attachment !== null) return true;
-    if (this.#genericDefiniteAt === null) return true;
-    return Date.now() < this.#genericDefiniteAt;
+    return !this.#settled;
   }
 
-  semanticViolation(): ProtocolViolationError | null {
-    return this.#violation;
+  semanticViolation(): TermwrightError | null {
+    return this.#providerFailure ?? this.#violation;
   }
 
   semanticRevision(): number {
@@ -949,6 +1299,13 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   modes(): TerminalModes {
     return this.#vt.modes();
+  }
+
+  actionObservationState(): 'settled' | 'parser-in-flight' | 'semantic-frame-open' | 'pairing-pending' {
+    if (this.#vt.hasPendingWrite) return 'parser-in-flight';
+    if (this.#pairing.hasOpenFrame) return 'semantic-frame-open';
+    if (this.#pairing.hasPendingRender) return 'pairing-pending';
+    return 'settled';
   }
 
   waitForChange(deadline: number): Promise<void> {
@@ -976,12 +1333,6 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       throw new ProcessExitedError(
         `cannot send input: the program exited with code ${String(this.#exitStatus.code)}`,
         this.errorDiagnostics(),
-      );
-    }
-    if (kind === 'mouse' && mouseModeUnverifiable(this.modes())) {
-      this.#noteUnverifiable(
-        'mouse',
-        'this platform hides the mouse mode the child asked for, so pointer input is sent in SGR without confirming the child enabled tracking',
       );
     }
     this.#pty?.write(data);
@@ -1076,13 +1427,41 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       ...(about?.ref !== undefined ? { ref: about.ref } : {}),
       ok,
       ...(about?.error !== undefined ? { error: about.error } : {}),
-      observation: Object.freeze({
-        sessionId: this.sessionId,
-        screenRevision: this.screenRevision(),
-        semanticRevision: this.semanticRevision() > 0 ? this.semanticRevision() : null,
-      }),
+      ...(about?.actionability !== undefined ? { actionability: about.actionability } : {}),
+      ...(about?.receipt !== undefined ? { receipt: about.receipt } : {}),
+      observation: this.checkpoint(),
       timeMs: this.#now(),
     });
+  }
+
+  /** Runs a harness-level action and reports it, whichever way it ends. */
+  async #rawDeviceAction(api: string, intent: ActionIntent, operations: readonly DeviceOperation[]): Promise<void> {
+    const actionId = this.beginAction(api);
+    const before = this.checkpoint();
+    const plan: ActionPlan = Object.freeze({
+      actionId,
+      contractId: before.contractId,
+      intent,
+      checkpoint: before,
+      requirements: Object.freeze([]),
+      strategy: 'raw-physical-input',
+      operations: Object.freeze([...operations]),
+    });
+    try {
+      const executed = await this.executeDeviceOperations(plan.operations, before);
+      const receipt: ActionReceipt = Object.freeze({
+        intent,
+        plan,
+        before,
+        after: this.checkpoint(),
+        executed,
+        outcome: 'completed',
+      });
+      this.endAction(actionId, api, true, { receipt });
+    } catch (error) {
+      this.endAction(actionId, api, false, { error: actionErrorCode(error) });
+      throw error;
+    }
   }
 
   /** Runs a harness-level action and reports it, whichever way it ends. */
@@ -1101,6 +1480,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   /** Public, bounded diagnostics log (oldest first). */
   diagnostics(): readonly SessionDiagnostic[] {
     return Object.freeze([...this.#diagnosticsLog]);
+  }
+
+  appLogs(): readonly AppLogEvent[] {
+    return Object.freeze([...this.#appLogHistory]);
   }
 
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics {
@@ -1136,7 +1519,6 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#shellTracker.close(new SessionClosedError('the shell session was closed', { semanticTree: this.#attachment !== null }));
     this.#notifyChange();
     if (this.#negotiationTimer !== null) clearTimeout(this.#negotiationTimer);
-    if (this.#graceTimer !== null) clearTimeout(this.#graceTimer);
     this.#settle();
     this.#pairing.dispose();
     // Releasing the pty hangs the terminal up, exactly like closing a terminal
@@ -1214,36 +1596,18 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     this.#emitter.emit('diagnostic', entry);
   }
 
-  #startLateAttachGrace(): void {
-    this.#genericDefiniteAt = Date.now() + LATE_ATTACH_GRACE_MS;
-    this.#graceTimer = setTimeout(() => {
-      this.#graceTimer = null;
-      if (this.#attachment !== null) return;
-      this.#diagnostic(
-        'negotiation-timeout',
-        'the late-attach grace expired: this session is generic for good, and semantic locators now fail immediately',
-      );
-      // Wake the waiters so a pending locator reports the verdict at once.
-      this.#notifyChange();
-    }, LATE_ATTACH_GRACE_MS);
-    this.#graceTimer.unref?.();
-  }
-
   #onAttach(attachment: SemanticAttachment): void {
-    const late = this.#settled;
+    if (this.#settled) {
+      this.#diagnostic('protocol-violation', 'an adapter attempted to attach after the session contract was frozen');
+      return;
+    }
     // Anchor the two clocks against each other once, while both are being read
     // in the same instant.
     this.#clockAnchor = { epochMs: Date.now(), sessionMs: this.#now() };
     this.#attachment = attachment;
-    this.#genericDefiniteAt = null;
-    if (this.#graceTimer !== null) {
-      clearTimeout(this.#graceTimer);
-      this.#graceTimer = null;
-    }
     this.#diagnostic(
       'adapter-attached',
-      `adapter ${attachment.adapter.name}@${attachment.adapter.version} attached with capabilities [${attachment.capabilities.join(', ')}]` +
-        (late ? ' (after the negotiation window, inside the late-attach grace)' : ''),
+      `adapter ${attachment.adapter.name}@${attachment.adapter.version} attached with capabilities [${attachment.capabilities.join(', ')}]`,
     );
     this.#pairing.setMarkerEnabled(attachment.markerEnabled);
     this.#settle();
@@ -1255,7 +1619,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
    */
   #publishLogLine(source: AppLogSource, line: string): void {
     if (this.#closed) return;
-    this.#emitter.emit('app-log', {
+    this.#publishAppLog({
       source: 'file',
       ...(source.label !== undefined ? { label: source.label } : {}),
       path: source.path,
@@ -1327,12 +1691,19 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     }
     this.#logWindowRecords += 1;
 
-    this.#emitter.emit('app-log', {
+    this.#publishAppLog({
       source: 'adapter',
       ...(record.logger !== undefined ? { label: record.logger } : {}),
       record,
       timeMs: this.#sessionTimeOf(record.ts),
     });
+  }
+
+  #publishAppLog(event: AppLogEvent): void {
+    const retained = Object.freeze(event);
+    this.#appLogHistory.push(retained);
+    if (this.#appLogHistory.length > 1_000) this.#appLogHistory.shift();
+    this.#emitter.emit('app-log', retained);
   }
 
   /** Rebases an adapter's epoch timestamp onto the session timeline. */
@@ -1362,13 +1733,93 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   #publishSemantic(snapshot: SemanticSnapshot): void {
+    const composed = composeProviderEvidence(snapshot, this.#attachment?.providers ?? []);
+    if (!composed.ok) {
+      const failure = composed.problem.kind === 'lost'
+        ? new CapabilityProviderLostError(
+            composed.problem.message,
+            this.errorDiagnostics({ suggestion: 'restart the application and register the provider before launch' }),
+          )
+        : new CapabilityProviderViolationError(
+            composed.problem.message,
+            this.errorDiagnostics({ suggestion: 'make provider evidence agree with the production router and framework observations' }),
+          );
+      this.#providerFailure = failure;
+      this.#diagnostic('adapter-guarantee-violation', failure.message, { revision: snapshot.revision });
+      this.#notifyChange();
+      return;
+    }
+    snapshot = composed.snapshot;
+    const guaranteeFailure = this.#guaranteeFailure(snapshot);
+    if (guaranteeFailure !== null) {
+      this.#providerFailure = guaranteeFailure;
+      this.#diagnostic('adapter-guarantee-violation', guaranteeFailure.message, { revision: snapshot.revision });
+      this.#notifyChange();
+      return;
+    }
     this.#index = new SemanticIndex(snapshot);
+    this.#observationSequence += 1;
     this.#emitter.emit('semantic-revision', { revision: snapshot.revision, timeMs: this.#now() });
     this.#notifyChange();
   }
 
+  /** A frozen guarantee may resolve to known/absent, never unknown/unsupported. */
+  #guaranteeFailure(snapshot: SemanticSnapshot): AdapterGuaranteeViolationError | null {
+    const contract = this.#contract;
+    const committedUnknown = (status: string, fact: string, nodeId?: string): AdapterGuaranteeViolationError | null => {
+      if (status !== 'unknown') return null;
+      const subject = nodeId === undefined ? 'snapshot' : `node ${JSON.stringify(nodeId)}`;
+      return new AdapterGuaranteeViolationError(
+        `${subject} published transient unknown evidence for ${fact} into committed revision ${snapshot.revision}`,
+        this.errorDiagnostics({
+          suggestion: 'publish only after revision evidence settles; use unsupported for facts outside the frozen contract',
+        }),
+      );
+    };
+    const coordinateUnknown = committedUnknown(snapshot.coordinateSpace.status, 'coordinate-space');
+    if (coordinateUnknown !== null) return coordinateUnknown;
+    const hitGridUnknown = committedUnknown(snapshot.hitGrid.status, 'pointer-hit-testing');
+    if (hitGridUnknown !== null) return hitGridUnknown;
+    for (const node of snapshot.nodes) {
+      const displayedUnknown = committedUnknown(node.geometry.displayed.status, 'displayed', node.id);
+      if (displayedUnknown !== null) return displayedUnknown;
+      const intendedUnknown = committedUnknown(node.geometry.intendedRect.status, 'intended-geometry', node.id);
+      if (intendedUnknown !== null) return intendedUnknown;
+      const clippedUnknown = committedUnknown(node.geometry.visibleRect.status, 'clipped-geometry', node.id);
+      if (clippedUnknown !== null) return clippedUnknown;
+    }
+    if (contract === null) return null;
+    const broken = (status: string, capability: SessionCapabilityId, nodeId?: string): AdapterGuaranteeViolationError | null => {
+      if (contract.capabilities[capability].status !== 'supported') return null;
+      if (status === 'known' || status === 'absent') return null;
+      const subject = nodeId === undefined ? 'snapshot' : `node ${JSON.stringify(nodeId)}`;
+      return new AdapterGuaranteeViolationError(
+        `${subject} published ${status} for guaranteed capability ${capability}`,
+        this.errorDiagnostics({
+          suggestion: 'use a certified adapter that supplies the negotiated evidence for every committed revision',
+        }),
+      );
+    };
+    for (const node of snapshot.nodes) {
+      const intended = broken(node.geometry.intendedRect.status, 'intended-geometry', node.id);
+      if (intended !== null) return intended;
+      const clipped = broken(node.geometry.visibleRect.status, 'clipped-geometry', node.id);
+      if (clipped !== null) return clipped;
+    }
+    return broken(snapshot.hitGrid.status, 'pointer-hit-testing');
+  }
+
   #settle(): void {
     if (this.#settled) return;
+    this.#contract = this.#buildContract();
+    if (this.#index !== null) {
+      const guaranteeFailure = this.#guaranteeFailure(this.#index.snapshot);
+      if (guaranteeFailure !== null) {
+        this.#providerFailure = guaranteeFailure;
+        this.#index = null;
+        this.#diagnostic('adapter-guarantee-violation', guaranteeFailure.message);
+      }
+    }
     this.#settled = true;
     if (this.#negotiationTimer !== null) {
       clearTimeout(this.#negotiationTimer);
@@ -1377,6 +1828,92 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     const waiters = this.#settleWaiters;
     this.#settleWaiters = [];
     for (const resolve of waiters) resolve();
+  }
+
+  #requireContract(): EffectiveSessionContract {
+    if (this.#contract === null) throw new Error('session contract has not settled');
+    return this.#contract;
+  }
+
+  #buildContract(): EffectiveSessionContract {
+    const attachment = this.#attachment;
+    const terminalEvidence: EvidenceProvenance = Object.freeze({
+      source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'termwright-vt',
+    });
+    const frameworkId = attachment?.probe?.framework ?? attachment?.adapter.name ?? 'generic';
+    const frameworkEvidence: EvidenceProvenance = Object.freeze({
+      source: 'framework',
+      method: attachment?.probe === null || attachment?.probe === undefined ? 'declared' : 'instrumented',
+      strength: 'authoritative',
+      providerId: frameworkId,
+    });
+    const applicationEvidence = (providerId: string, method: 'native' | 'declared'): EvidenceProvenance =>
+      Object.freeze({ source: 'application', method, strength: 'authoritative', providerId });
+    const supported = (evidence: EvidenceProvenance) => Object.freeze({ status: 'supported' as const, evidence });
+    const unsupported = (reason: 'not-negotiated' | 'framework-unobservable' | 'terminal-unobservable' | 'provider-required') =>
+      Object.freeze({ status: 'unsupported' as const, reason });
+    const advertised = new Set(attachment?.capabilities ?? []);
+    const probe = new Set(attachment?.probe?.capabilities ?? []);
+    const semantic = attachment !== null;
+    const pointerProvider = attachment?.providers.find((provider) =>
+      provider.capabilities.includes('pointer-regions'));
+    const hitTestProvider = attachment?.providers.find((provider) =>
+      provider.capabilities.includes('hit-test'));
+    const observations: Record<SessionCapabilityId, ReturnType<typeof supported> | ReturnType<typeof unsupported>> = {
+      'semantic-tree': semantic ? supported(frameworkEvidence) : unsupported('not-negotiated'),
+      'stable-identity': semantic && (attachment?.probe === null || attachment?.probe?.identityKind === 'stable') ? supported(frameworkEvidence) : unsupported('framework-unobservable'),
+      'intended-geometry': advertised.has('intended-geometry') ? supported(frameworkEvidence) : unsupported('framework-unobservable'),
+      'clipped-geometry': advertised.has('clipped-geometry') ? supported(frameworkEvidence) : unsupported('framework-unobservable'),
+      'painted-region': unsupported('framework-unobservable'),
+      'pointer-geometry': advertised.has('pointer-hit-grid')
+        ? supported(frameworkEvidence)
+        : pointerProvider !== undefined
+          ? supported(applicationEvidence(pointerProvider.id, pointerProvider.method))
+          : unsupported('provider-required'),
+      'pointer-hit-testing': advertised.has('pointer-hit-grid')
+        ? supported(frameworkEvidence)
+        : hitTestProvider !== undefined
+          ? supported(applicationEvidence(hitTestProvider.id, hitTestProvider.method))
+          : unsupported('provider-required'),
+      focus: advertised.has('states') ? supported(frameworkEvidence) : unsupported('framework-unobservable'),
+      scroll: advertised.has('states') ? supported(frameworkEvidence) : unsupported('framework-unobservable'),
+      'render-order': probe.has('paint-order') ? supported(frameworkEvidence) : unsupported('framework-unobservable'),
+      'keyboard-input': supported(terminalEvidence),
+      'pointer-input': (this.#options.modesObservable ?? process.platform !== 'win32') ? supported(terminalEvidence) : unsupported('terminal-unobservable'),
+      'paired-revisions': advertised.has('render-revisions') ? supported(frameworkEvidence) : unsupported('not-negotiated'),
+    };
+    const providers = attachment === null
+      ? [Object.freeze({ id: 'termwright-vt', kind: 'terminal' as const, version: '1' })]
+      : [
+          Object.freeze({ id: frameworkId, kind: 'framework' as const, version: attachment.probe?.frameworkVersion ?? attachment.adapter.version }),
+          ...attachment.providers.map((provider) => Object.freeze({
+            id: provider.id,
+            kind: 'application' as const,
+            version: provider.version,
+            method: provider.method,
+            capabilities: Object.freeze([...provider.capabilities]),
+          })),
+          Object.freeze({ id: 'termwright-vt', kind: 'terminal' as const, version: '1' }),
+        ];
+    return Object.freeze({
+      contractId: `${this.sessionId}:0`,
+      sessionId: this.sessionId,
+      epoch: 0,
+      protocol: 'termwright/2' as const,
+      framework: attachment === null ? null : Object.freeze({
+        name: frameworkId,
+        version: attachment.probe?.frameworkVersion ?? attachment.adapter.version,
+        adapterVersion: attachment.adapter.version,
+        certificationId: `${frameworkId}@${attachment.probe?.frameworkVersion ?? attachment.adapter.version}/${attachment.adapter.version}`,
+      }),
+      providers: Object.freeze(providers),
+      capabilities: Object.freeze(observations),
+      terminal: Object.freeze({
+        profile: this.#vt.profile.id,
+        platform: process.platform,
+        mouseModesObservable: this.#options.modesObservable ?? process.platform !== 'win32',
+      }),
+    });
   }
 
   /**
@@ -1465,15 +2002,16 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   async #sendFocus(focused: boolean): Promise<void> {
     const reporting = this.modes().focusReporting;
     if (reporting === 'off') {
-      throw new UnsupportedActionError(
+      throw new InputModeDisabledError(
         `the program has not enabled focus reporting, so ${focused ? 'focus' : 'blur'}() has nothing to deliver`,
         this.errorDiagnostics({ suggestion: 'the application under test must enable CSI ? 1004 h' }),
       );
     }
     if (reporting === 'unknown') {
-      // Sent rather than refused: this is what the driver already did when it
-      // believed the host's 'true'. The difference is that it now says so.
-      this.#noteUnverifiable('focus', 'this platform reports focus reporting as the host has it, not as the child asked for it, so a focus report is sent without knowing the program wants one');
+      throw new InputModeDisabledError(
+        `the terminal focus-reporting mode is not observable, so ${focused ? 'focus' : 'blur'}() cannot be encoded authoritatively`,
+        this.errorDiagnostics({ suggestion: 'use a PTY backend that exposes CSI ? 1004 state; Termwright does not guess input modes' }),
+      );
     }
     await this.sendInput(encodeFocus(focused), 'raw');
   }

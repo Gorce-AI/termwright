@@ -11,6 +11,7 @@ const config = resolveTermwrightConfig(
     timeouts: { action: 5_000, expect: 5_000 },
     trace: 'retain-on-failure',
     failOnLogLevel: 'error',
+    requiredCapabilities: ['semantic-tree'],
   },
   {},
 );
@@ -22,6 +23,7 @@ describe('mergeOptions', () => {
     expect(merged.command).toEqual(['node', 'app.js']);
     expect(merged.trace).toBe('retain-on-failure');
     expect(merged.failOnLogLevel).toBe('error');
+    expect(merged.requiredCapabilities).toEqual(['semantic-tree']);
   });
 
   it('scoping one option keeps every other one', () => {
@@ -39,9 +41,14 @@ describe('mergeOptions', () => {
   });
 
   it('applies the layers in order: config, then scope, then the call', () => {
-    const merged = mergeOptions(config, { columns: 120, rows: 40 }, { columns: 200 });
+    const merged = mergeOptions(
+      config,
+      { columns: 120, rows: 40, requiredCapabilities: ['paired-revisions'] },
+      { columns: 200, requiredCapabilities: ['pointer-input'] },
+    );
     expect(merged.columns).toBe(200);
     expect(merged.rows).toBe(40);
+    expect(merged.requiredCapabilities).toEqual(['pointer-input']);
   });
 
   it('merges env key by key across all three layers', () => {

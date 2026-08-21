@@ -1,17 +1,15 @@
 /**
- * Locator queries and the Textual-style CSS dialect that produces them.
+ * Locator queries and the Termwright Semantic Selector Language that produces them.
  *
  * Two query kinds share one engine:
  *
  * - {@link SemanticQuery} — evaluated against the latest accepted semantic
  *   tree: a descendant chain of compound steps (`dialog button.primary:focused`);
- * - {@link GenericQuery} — evaluated against the grid when no semantic tree
- *   exists (or when style predicates are requested), yielding rectangles and
- *   never inventing roles.
+ * - {@link GenericQuery} — explicitly evaluated against the terminal grid,
+ *   yielding rectangles and never inventing roles.
  */
 import type { Rect, SemanticRole, SemanticState } from '@termwright/protocol';
 import type { CellAttributes } from './api.js';
-import { UnsupportedActionError } from './errors.js';
 
 /** How a piece of text is compared. */
 export type TextMatcher =
@@ -144,7 +142,7 @@ const ROLES: ReadonlySet<string> = new Set<SemanticRole>([
   'generic',
 ]);
 
-/** Pseudo-classes recognized by the CSS dialect, mapped to state flags. */
+/** Pseudo-classes recognized by the Termwright semantic selector language. */
 const PSEUDO_STATES: Readonly<Record<string, keyof SemanticState>> = Object.freeze({
   focused: 'focused',
   disabled: 'disabled',
@@ -158,12 +156,11 @@ const PSEUDO_STATES: Readonly<Record<string, keyof SemanticState>> = Object.free
 });
 
 function syntaxError(selector: string, detail: string): never {
-  throw new UnsupportedActionError(`cannot parse selector ${JSON.stringify(selector)}: ${detail}`, {
-    semanticTree: true,
-    suggestion:
-      "the CSS dialect supports 'role', '#testId', '.class', ':focused', ':disabled', ':selected', " +
-      "':checked', ':expanded', ':modal', ':busy', ':hidden', ':readonly' and descendant combinators",
-  });
+  throw new TypeError(
+    `cannot parse selector ${JSON.stringify(selector)}: ${detail}; Termwright semantic selectors support ` +
+    "'role', '#testId', '.class', ':focused', ':disabled', ':selected', ':checked', ':expanded', " +
+    "':modal', ':busy', ':hidden', ':readonly' and descendant combinators",
+  );
 }
 
 /** Builds a {@link TextMatcher} from the `string | RegExp` public API shape. */
@@ -201,7 +198,7 @@ export function describeMatcher(matcher: TextMatcher): string {
 }
 
 /**
- * Parses the Textual-style CSS dialect into a {@link SemanticQuery}.
+ * Parses the Termwright Semantic Selector Language into a {@link SemanticQuery}.
  *
  * @example
  * ```ts
@@ -309,7 +306,7 @@ export function textQuery(text: TextMatcher): SemanticQuery {
   };
 }
 
-/** Builds the grid query behind `getByText` in generic sessions. */
+/** Builds the explicit terminal-grid query behind `getByScreenText`. */
 export function gridQuery(
   text: TextMatcher,
   occurrence: number | undefined,
@@ -320,6 +317,6 @@ export function gridQuery(
     text,
     ...(occurrence !== undefined ? { occurrence } : {}),
     ...(style !== undefined ? { style } : {}),
-    description: `getByText(${describeMatcher(text)})`,
+    description: `getByScreenText(${describeMatcher(text)})`,
   };
 }

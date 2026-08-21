@@ -19,4 +19,4 @@
  * @packageDocumentation
  */
 
-export * from '@termwright/ink-testing';
+export * from '@termwright/ink';
