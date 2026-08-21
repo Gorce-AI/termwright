@@ -105,7 +105,7 @@ describe.skipIf(!runnable)('the notes app', () => {
 
     await step('dismiss it with Escape', async () => {
       await app.press('Escape');
-      await expect(app.getByRole('dialog')).not.toBeVisible();
+      await expect(app.getByRole('dialog')).toBeDetached();
     });
 
     await expect(app).toHaveText('status: cancelled');
@@ -123,7 +123,7 @@ describe.skipIf(!runnable)('the notes app', () => {
       await confirm.activate();
     });
 
-    await expect(app.getByRole('listitem', { name: 'buy milk' })).not.toBeVisible();
+    await expect(app.getByRole('listitem', { name: 'buy milk' })).toBeDetached();
     await expect(app).toHaveText('status: deleted buy milk');
   });
 });

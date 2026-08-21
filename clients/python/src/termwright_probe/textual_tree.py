@@ -384,10 +384,11 @@ def build_snapshot(
                 visibleRect=absent,
             )
         elif item.geometry is None:
+            absent = WireObservation(status="absent", reason="not-laid-out", evidence=framework_evidence("textual-compositor"))
             geometry = NodeGeometryObservations(
                 displayed=WireObservation(status="known", value=True, evidence=framework_evidence("textual-probe")),
-                intendedRect=WireObservation(status="unsupported", capability="intended-geometry", reason="framework-unobservable"),
-                visibleRect=WireObservation(status="unsupported", capability="clipped-geometry", reason="framework-unobservable"),
+                intendedRect=absent,
+                visibleRect=absent,
             )
         else:
             geometry = NodeGeometryObservations(

@@ -18,6 +18,7 @@ from textual.widgets import Button, Input, Label, Static  # noqa: E402
 
 from termwright import DEFAULT_LIMITS, validate_snapshot  # noqa: E402
 from termwright.textual import semantic  # noqa: E402
+import termwright_probe.textual_tree as textual_tree  # noqa: E402
 from termwright_probe.textual_tree import (  # noqa: E402
     Identities,
     build_snapshot,
@@ -159,6 +160,30 @@ async def test_visible_rect_is_clipped_to_the_viewport():
         rect = visible["value"]
         if rect["height"] > 0:
             assert rect["row"] + rect["height"] <= 10 + 1, node
+    assert validate_snapshot(snapshot, DEFAULT_LIMITS).ok
+
+
+async def test_a_mounted_widget_missing_from_the_committed_layout_is_authoritatively_absent(monkeypatch):
+    app = DemoApp()
+    async with app.run_test(size=(40, 10)) as pilot:
+        await pilot.pause()
+        original_observe = textual_tree.observe
+
+        def without_input_layout(current_app):
+            observations = original_observe(current_app)
+            for item in observations:
+                if getattr(item.widget, "id", None) == "reason":
+                    item.geometry = None
+            return observations
+
+        monkeypatch.setattr(textual_tree, "observe", without_input_layout)
+        snapshot = build_snapshot(app, Identities(), session_id="s", revision=1).to_wire()
+
+    reason = by_test_id(snapshot)["reason"]
+    assert reason["geometry"]["intendedRect"]["status"] == "absent"
+    assert reason["geometry"]["intendedRect"]["reason"] == "not-laid-out"
+    assert reason["geometry"]["visibleRect"]["status"] == "absent"
+    assert reason["geometry"]["visibleRect"]["reason"] == "not-laid-out"
     assert validate_snapshot(snapshot, DEFAULT_LIMITS).ok
 
 
