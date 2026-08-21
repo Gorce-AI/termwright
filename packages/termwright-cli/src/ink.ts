@@ -10,7 +10,9 @@
  * import { mountInk } from 'termwright/ink';
  *
  * const harness = await mountInk(<Approve onApprove={spy} />, { columns: 40, rows: 8 });
- * await harness.getByRole('button', { name: 'Approve' }).click();
+ * await harness.press('Tab');
+ * await harness.waitForStable();
+ * await harness.press('Enter');
  * await harness.close();
  * ```
  *

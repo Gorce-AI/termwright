@@ -3,9 +3,13 @@ title: Component testing
 description: mountInk and launchInkFixture through the same injected probe path.
 ---
 
-`@termwright/ink-testing` runs an Ink component behind the standard terminal
-harness. It uses normal `ink.render` and the same `@termwright/probe-ink`
-observation path as a launched application.
+`termwright/ink` runs an Ink component behind the standard terminal harness.
+It uses normal `ink.render` and the same `@termwright/probe-ink` observation
+path as a launched application.
+
+```ts
+import {mountInk} from 'termwright/ink';
+```
 
 ```tsx
 const harness = await mountInk(<Approve onApprove={spy} />);
@@ -19,7 +23,7 @@ await harness.close();
 Input is terminal bytes. No helper invokes component callbacks directly.
 
 ```sh
-npm install --save-dev @termwright/ink-testing
+npm install --save-dev termwright vitest
 ```
 
 Peer dependencies are Ink >= 7.1 and React >= 19.2. A vanilla component is
@@ -54,6 +58,10 @@ await harness.press('Enter');
 Ink does not expose clipping or exact pointer ownership. Tests should verify
 painted output for those behaviors and use physical keyboard input. Semantic
 pointer actions are unsupported even when intended geometry is available.
+
+`@termwright/ink-testing` is the focused package behind `termwright/ink`.
+Install it directly only when building component-testing infrastructure that
+deliberately does not use the Termwright umbrella package.
 
 ## Fixtures and isolation
 

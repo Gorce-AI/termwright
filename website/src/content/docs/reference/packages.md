@@ -40,13 +40,31 @@ instrument the application:
 
 See [Framework integrations](../../adapters/) before adding one.
 
-## Specialist packages
+### Ink package names
 
-The monorepo also publishes focused packages for the driver, protocol, VT
-emulator, traces, screenshots, logs, UI server, MCP server, and conformance.
-Use them when building an integration or embedding one subsystem. Their package
-READMEs and exported TypeScript types are the reference for that specialist
-surface.
+The three Ink-related names serve different processes:
+
+| Package | Where it runs | Install when |
+| --- | --- | --- |
+| `termwright/ink` | test process | Writing Ink component tests. This is the recommended test import. |
+| `@termwright/probe-ink` | launched Ink application | Adding semantic observation to an end-to-end Ink test. |
+| `@termwright/ink` | Ink application | Adding optional roles, names, or domain annotations that Ink does not retain itself. |
+
+`termwright/ink` re-exports the focused `@termwright/ink-testing` package. Most
+projects should not add both dependencies.
+
+## Specialist and supporting packages
+
+The monorepo also publishes focused packages for the driver, protocol, traces,
+screenshots, logs, MCP, and conformance. Use them when building an integration
+or embedding one subsystem.
+
+Some published packages are shared implementation dependencies: the desktop
+host, VT core, probe runtime, Go probe tooling, recognizers, and UI server.
+They must be accessible from npm because other published packages depend on
+them, but ordinary test suites should use `termwright` and the framework table
+above. A package being present on npm does not make it an additional setup
+choice.
 
 Do not import internal `src/` or `dist/` paths. Only package `exports` entries
 are public.
