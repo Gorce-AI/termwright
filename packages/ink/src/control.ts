@@ -201,17 +201,7 @@ export class ControlChannel {
     if (socket === null || this.#closed || this.#fixtureGone) throw this.#sessionClosed();
 
     const reply = await new Promise<CommandReply>((resolve, reject) => {
-      let pending: { readonly resolve: (reply: CommandReply) => void; readonly reject: (error: Error) => void };
-      const timer = setTimeout(() => {
-        if (this.#pending === pending) this.#pending = null;
-        reject(
-          new TimeoutError(`the fixture did not acknowledge the rerender within ${timeoutMs} ms`, {
-            semanticTree: false,
-          }),
-        );
-      }, timeoutMs);
-      timer.unref?.();
-      pending = {
+      const pending = {
         resolve: (value: CommandReply): void => {
           clearTimeout(timer);
           if (this.#pending === pending) this.#pending = null;
@@ -223,6 +213,15 @@ export class ControlChannel {
           reject(error);
         },
       };
+      const timer = setTimeout(() => {
+        if (this.#pending === pending) this.#pending = null;
+        reject(
+          new TimeoutError(`the fixture did not acknowledge the rerender within ${timeoutMs} ms`, {
+            semanticTree: false,
+          }),
+        );
+      }, timeoutMs);
+      timer.unref?.();
       this.#pending = pending;
       socket.write(line, (error) => {
         if (error === undefined || error === null) return;
