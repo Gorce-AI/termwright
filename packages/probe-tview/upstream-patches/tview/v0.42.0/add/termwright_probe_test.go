@@ -8,7 +8,9 @@ package tview
 // and never the application's ability to draw.
 
 import (
+	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -53,8 +55,19 @@ func startStalledDriver(t *testing.T, path string) *stalledDriver {
 			}
 		}
 
-		buffer := make([]byte, 64*1024)
-		if _, err := conn.Read(buffer); err != nil {
+		// Read exactly the hello frame. A broad Read may also consume the first
+		// snapshot when the client writes it immediately after the handshake.
+		// That accidentally frees the receive buffer and makes this test depend
+		// on scheduler timing instead of exercising the stalled-writer path.
+		header := make([]byte, protocol.FrameHeaderBytes)
+		if _, err := io.ReadFull(conn, header); err != nil {
+			return
+		}
+		bodyLength := int(binary.BigEndian.Uint32(header))
+		if bodyLength <= 0 || bodyLength > protocol.DefaultLimits.MaxFrameBytes {
+			return
+		}
+		if _, err := io.ReadFull(conn, make([]byte, bodyLength)); err != nil {
 			return
 		}
 		ack, _ := protocol.EncodeFrame(map[string]any{
@@ -65,6 +78,7 @@ func startStalledDriver(t *testing.T, path string) *stalledDriver {
 		_, _ = conn.Write(ack)
 
 		<-driver.resume
+		buffer := make([]byte, 64*1024)
 		for {
 			if _, err := conn.Read(buffer); err != nil {
 				return

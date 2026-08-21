@@ -11,7 +11,7 @@
     "check:package-metadata": "node scripts/check-package-metadata.mjs",
     "docs:screenshots": "pnpm --filter @termwright/ui run screenshots:docs",
     "test": "vitest run",
-    "pretest:compatibility": "pnpm --filter @termwright/protocol --filter @termwright/recognizers --filter @termwright/probe-runtime build",
+    "pretest:compatibility": "pnpm --filter @termwright/protocol --filter @termwright/recognizers --filter @termwright/probe-runtime --filter @termwright/probe-go build",
     "test:compatibility": "vitest run compatibility/registry.test.ts",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --filter './packages/*' run typecheck",

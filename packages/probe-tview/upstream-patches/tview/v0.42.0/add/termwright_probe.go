@@ -35,6 +35,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 
@@ -55,12 +56,13 @@ const (
 type termwrightProbeState struct {
 	client *protocol.Client
 
-	mu       sync.Mutex
-	ids      map[Primitive]string
-	nextID   int
-	dropped  atomic.Uint64
-	timedOut atomic.Uint64
-	frames   atomic.Uint64
+	mu            sync.Mutex
+	ids           map[Primitive]string
+	nextID        int
+	dropped       atomic.Uint64
+	timedOut      atomic.Uint64
+	frames        atomic.Uint64
+	redrawPending atomic.Bool
 }
 
 // TermwrightProbeStats reports what the probe did and failed to do.
@@ -137,7 +139,11 @@ func termwrightAfterFrame(a *Application, screen tcell.Screen) {
 // afterFrame is the method form, so a test can drive an instance of its own
 // rather than the package-level probe a real run installs.
 func (p *termwrightProbeState) afterFrame(a *Application, screen tcell.Screen) {
-	if screen == nil || a == nil || !p.client.Connected() {
+	if screen == nil || a == nil {
+		return
+	}
+	if !p.client.Connected() {
+		p.redrawAfterHandshake(a)
 		return
 	}
 
@@ -155,6 +161,27 @@ func (p *termwrightProbeState) afterFrame(a *Application, screen tcell.Screen) {
 	// After the bytes, which is the whole reason this call site exists.
 	_, _ = os.Stdout.WriteString(marker)
 	p.frames.Add(1)
+}
+
+// redrawAfterHandshake closes the startup race for applications whose first
+// frame is also their last frame until input arrives. The initial draw must not
+// block on the driver, so the handshake remains asynchronous; once connected,
+// one queued draw publishes the current tree without requiring synthetic user
+// input. QueueUpdateDraw is the framework's supported cross-goroutine path.
+func (p *termwrightProbeState) redrawAfterHandshake(a *Application) {
+	if !p.redrawPending.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer p.redrawPending.Store(false)
+		deadline := time.Now().Add(2 * time.Second)
+		for !p.client.Connected() && time.Now().Before(deadline) {
+			time.Sleep(5 * time.Millisecond)
+		}
+		if p.client.Connected() {
+			a.QueueUpdateDraw(func() {})
+		}
+	}()
 }
 
 // onPublishFailed records a frame the driver will never see.

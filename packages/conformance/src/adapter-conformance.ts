@@ -368,12 +368,15 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           // timing, not the adapter's output. Measured on the Ink fixture: 3
           // mismatches in 30 pairs with input (always a stray 0x09, the tab the
           // suite itself sent), 0 in 40 pairs without.
-          const startup = async (command: AdapterCommand): Promise<Uint8Array> => {
+          const startup = async (
+            command: AdapterCommand,
+          ): Promise<{ readonly stdout: Uint8Array; readonly screen: string }> => {
             const probe = await AdapterProbe.start(command, { ...probeOptions, instrument: false });
             try {
               await probe.waitForText(options.ready, timeout);
               await settle(probe);
-              return probe.observe().stdout;
+              const observation = probe.observe();
+              return { stdout: observation.stdout, screen: observation.screen };
             } finally {
               await probe.stop();
             }
@@ -381,9 +384,22 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
 
           const instrumented = await startup(options.spawn());
           const plain = await startup((options.baseline as () => AdapterCommand)());
-          // Byte-for-byte: an instrumented build that is one escape sequence
-          // different from a plain one is not shippable to production.
-          expect(Buffer.from(instrumented).toString('binary')).toBe(Buffer.from(plain).toString('binary'));
+          if (process.platform === 'win32') {
+            // ConPTY itself emits process-lifecycle control sequences. Their
+            // chunking/order can differ between two identical child binaries,
+            // so the raw host stream is not an application-byte oracle on
+            // Windows. Feed both streams through the same terminal emulator
+            // and require the complete visible grids to be identical. The
+            // adjacent dormant test separately proves zero connections,
+            // messages and Termwright markers.
+            expect(instrumented.screen).toBe(plain.screen);
+          } else {
+            // POSIX PTYs expose the child stream directly: one extra escape
+            // sequence from instrumentation is a real dormant-rule failure.
+            expect(Buffer.from(instrumented.stdout).toString('binary')).toBe(
+              Buffer.from(plain.stdout).toString('binary'),
+            );
+          }
         },
       );
     });

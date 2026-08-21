@@ -100,7 +100,8 @@ async function tally(configArgs, files) {
   const failures = [];
   for (const file of report.testResults ?? []) {
     const key = basename(file.name ?? '');
-    const entry = results.get(key) ?? { passed: 0, failed: 0, skipped: 0, ms: 0 };
+    const entry = results.get(key) ?? { passed: 0, failed: 0, skipped: 0, suiteFailed: false, ms: 0 };
+    const failedAssertionsBefore = failures.length;
     for (const assertion of file.assertionResults ?? []) {
       if (assertion.status === 'passed') entry.passed += 1;
       else if (assertion.status === 'failed') {
@@ -112,6 +113,20 @@ async function tally(configArgs, files) {
         });
       } else entry.skipped += 1;
       entry.ms += assertion.duration ?? 0;
+    }
+    // Vitest can report a file-level failure from setup/teardown or an
+    // unhandled worker error while every individual assertion is green. The
+    // previous tally discarded that status and reduced CI to an unexplained
+    // non-zero exit. Keep it separate from the test count, but make it a real
+    // failing verdict with the reporter's own message.
+    if (file.status === 'failed' && failures.length === failedAssertionsBefore) {
+      entry.suiteFailed = true;
+      failures.push({
+        file: key,
+        name: '(suite setup or teardown)',
+        message: String(file.message ?? file.failureMessage ?? 'Vitest reported a file-level failure')
+          .split('\n')[0],
+      });
     }
     results.set(key, entry);
   }
@@ -133,7 +148,7 @@ async function tally(configArgs, files) {
 
 function verdict(entry) {
   if (entry === undefined) return 'not run';
-  if (entry.failed > 0) return `FAIL (${entry.failed})`;
+  if (entry.failed > 0 || entry.suiteFailed) return `FAIL (${entry.failed + (entry.suiteFailed ? 1 : 0)})`;
   if (entry.passed === 0) return 'skipped';
   // A partly-skipped area is not a clean pass: the language adapters skip
   // whole registrations when their toolchain is absent, and a matrix that
