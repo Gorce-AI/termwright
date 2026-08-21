@@ -38,8 +38,13 @@ function inkCoverage(svg: string): number {
  */
 const GEOMETRY = { fontSize: 10, cellWidth: 6, lineHeight: 12, padding: 4 } as const;
 
-/** Budget for the one test that must pay font enumeration. See above. */
-const FONT_SCAN_TIMEOUT_MS = 30_000;
+/**
+ * Budget for the one test that must pay font enumeration. A complete Windows
+ * font scan takes about 37 seconds on a GitHub-hosted Node 24 runner while the
+ * same work is sub-second on macOS. Keep the real end-to-end render, but give
+ * the platform operation enough room to finish under normal CI contention.
+ */
+const FONT_SCAN_TIMEOUT_MS = 90_000;
 
 describe('renderPng', () => {
   it('produces a decodable PNG whose header matches the SVG size', () => {
