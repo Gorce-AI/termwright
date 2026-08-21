@@ -114,14 +114,16 @@ describe.skipIf(!runnable)('the notes app', () => {
       // unscoped locator would fail as ambiguous rather than pick one.
       const confirm = app.locator('dialog button#confirm');
       await expect(confirm).toBeVisible();
-      // Textual fades a modal in, so the button exists at coordinates that are
-      // still moving. A click needs the frame to hold still; a matcher, which
-      // only reads the tree, does not.
-      await app.waitForStable();
-      await confirm.activate();
+      // Textual fades a modal in. The production click runner waits for the
+      // target itself to become stable and re-plans before the first PTY byte;
+      // a global quiet-screen wait would unnecessarily include unrelated UI.
+      await confirm.click();
     });
 
-    await expect(app.getByRole('listitem', { name: 'buy milk' })).toBeDetached();
+    // The modal temporarily omits the covered list from Textual's exposed
+    // tree, so detachment alone is not proof that deletion happened. Wait for
+    // the application-domain outcome first, then assert the resulting tree.
     await expect(app).toHaveText('status: deleted buy milk');
+    await expect(app.getByRole('listitem', { name: 'buy milk' })).toBeDetached();
   });
 });
