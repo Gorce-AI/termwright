@@ -125,6 +125,24 @@ describe('launchInkFixture', () => {
     ).rejects.toThrowError();
   });
 
+  it('waits for an instrumented fixture whose imports exceed the generic negotiation window', async () => {
+    const slowStart = new URL('./testing/slow-start.mjs', import.meta.url);
+    const harness = await launchInkFixture({
+      component: COMPONENT,
+      nodeArgs: ['--import', slowStart.href],
+      columns: 20,
+      rows: 5,
+    });
+
+    try {
+      expect(harness.capabilities().semanticTree).toBe(true);
+      expect(harness.semanticTree()).not.toBeNull();
+      expect(harness.screen().text()).not.toBe('');
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('refuses props that cannot cross a process boundary', async () => {
     await expect(
       launchInkFixture({

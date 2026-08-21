@@ -120,7 +120,7 @@ const RUNNER_ENTRY = new URL('../runner/runner-entry.mjs', import.meta.url);
  *   columns: 40,
  *   rows: 10,
  * });
- * await harness.getByRole('button', { name: 'Approve' }).click();
+ * await harness.press('Enter');
  * await harness.waitForText('pressed 1');
  * await harness.close();
  * ```
@@ -156,6 +156,10 @@ export async function launchInkFixture(options: LaunchInkFixtureOptions): Promis
     ...(options.envMode === undefined ? {} : { envMode: options.envMode }),
     ...(options.logs === undefined ? {} : { logs: options.logs }),
     ...(options.timeouts === undefined ? {} : { timeouts: options.timeouts }),
+    // Unlike launchTerminal's generic API, this helper always injects the Ink
+    // integration. Do not let the generic 250-ms negotiation window classify
+    // a loaded Windows child as uninstrumented before its imports complete.
+    semanticNegotiationMs: options.settleTimeout ?? CONTROL_ATTACH_TIMEOUT_MS,
   });
 
   // A fixture that fails to start — a missing export, a module that throws on
