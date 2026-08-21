@@ -1,0 +1,20 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["packages/driver/src/index.ts"],
+  "entryPointStrategy": "resolve",
+  "tsconfig": "packages/driver/tsconfig.json",
+  "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter"],
+  "out": "website/src/content/docs/api/driver",
+  "readme": "none",
+  "entryFileName": "index.md",
+  "cleanOutputDir": true,
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "skipErrorChecking": true,
+  "githubPages": false,
+  "gitRevision": "main",
+  "router": "member",
+  "frontmatterGlobals": {"editUrl": false}
+}

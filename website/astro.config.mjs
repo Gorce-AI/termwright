@@ -113,6 +113,7 @@ export default defineConfig({
 					collapsed: true,
 					items: [
 						{label: 'Test API overview', slug: 'reference/test-api'},
+						{label: 'Generated TypeScript API', slug: 'api'},
 						{label: 'CLI and exit codes', slug: 'reference/cli'},
 						{label: 'Gherkin reference', slug: 'reference/gherkin'},
 						{label: 'MCP tools', slug: 'reference/mcp'},

@@ -70,6 +70,12 @@ import { createNodePtyBackend, type PtyBackend, type PtyProcess } from './pty.js
 import { captureRows, captureScreen, screenExcerpt, type CapturedRow } from './screen.js';
 import { SemanticChannel, type SemanticAttachment } from './semantic.js';
 import { ShellCommandTracker } from './shell.js';
+import {
+  posixShellBootstrap,
+  powershellBootstrap,
+  wrapPosixShellCommand,
+  wrapPowerShellCommand,
+} from './shell-integration.js';
 
 import {
   gridQuery,
@@ -428,9 +434,16 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     }, negotiationMs);
     this.#negotiationTimer.unref?.();
 
-    if (this.#options.shellIntegration === 'termwright-posix') {
+    if (this.#options.shellIntegration === 'termwright-posix' || this.#options.shellIntegration === 'termwright-powershell') {
       await this.waitForReady();
-      await this.sendInput(encodeText(posixShellBootstrap()), 'raw');
+      await this.sendInput(
+        encodeText(
+          this.#options.shellIntegration === 'termwright-powershell'
+            ? powershellBootstrap()
+            : posixShellBootstrap(),
+        ),
+        'raw',
+      );
       await this.#waitForShellPrompt({ timeout: this.timeouts.ready });
     }
   }
@@ -476,7 +489,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       ready: integration.lastMark === 'B',
       lastMark: integration.lastMark as 'A' | 'B' | 'C' | 'D' | null,
       lastExitCode: integration.lastExitCode,
-      cwd: integration.cwd,
+      cwd: normalizeShellCwd(integration.cwd),
       title: this.#vt.title,
       cursor: this.#vt.cursor(),
       bellCount: integration.bellCount,
@@ -521,7 +534,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       await this.type(
         this.#options.shellIntegration === 'termwright-posix'
           ? wrapPosixShellCommand(command)
-          : command,
+          : this.#options.shellIntegration === 'termwright-powershell'
+            ? wrapPowerShellCommand(command)
+            : command,
       );
       await this.press('Enter');
       const result = await tracked;
@@ -532,7 +547,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         command: result.command,
         output: result.output,
         exitCode: result.exitCode,
-        cwd: integration.cwd,
+        cwd: normalizeShellCwd(integration.cwd),
         title: this.#vt.title,
       });
     } catch (error) {
@@ -1708,26 +1723,16 @@ function actionErrorCode(error: unknown): string {
   return error instanceof Error ? error.name : 'unknown';
 }
 
-/** Establishes an exact initial prompt for a shell opened by Termwright. */
-function posixShellBootstrap(): string {
-  return "printf '\\033]133;A\\007\\033]133;B\\007'\r";
-}
-
-/** Wraps one user command without parsing its output or its prompt text. */
-function wrapPosixShellCommand(command: string): string {
-  const quoted = command.replaceAll("'", "'\\''");
-  return (
-    "printf '\\033]133;C\\007'; " +
-    `eval '${quoted}'; ` +
-    "__termwright_status=$?; " +
-    "printf '\\033]133;D;%s\\007\\033]7;file://localhost%s\\007\\033]133;A\\007\\033]133;B\\007' " +
-    '"$__termwright_status" "$PWD"; unset __termwright_status'
-  );
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, ms);
     timer.unref?.();
   });
+}
+
+/** Converts a Windows file-URI pathname back to the native path exposed by the fixture. */
+function normalizeShellCwd(cwd: string | null): string | null {
+  if (cwd === null || process.platform !== 'win32') return cwd;
+  const withoutUriRoot = /^\/[A-Za-z]:\//u.test(cwd) ? cwd.slice(1) : cwd;
+  return withoutUriRoot.replaceAll('/', '\\');
 }

@@ -77,9 +77,9 @@ export interface AttachFixtureOptions {
   readonly command?: readonly string[];
 }
 
-/** Options for a Termwright-integrated interactive POSIX shell. */
+/** Options for a Termwright-integrated interactive shell. */
 export interface OpenShellFixtureOptions extends Omit<LaunchFixtureOptions, 'command' | 'shellIntegration'> {
-  /** Shell executable and arguments. Defaults to `$SHELL -i`, then `/bin/sh -i`. */
+  /** Shell executable and arguments. Defaults to PowerShell on Windows and `$SHELL -i` or `/bin/sh -i` elsewhere. */
   readonly shell?: readonly string[];
 }
 
@@ -103,14 +103,14 @@ export interface TermwrightScopeFixture {
 /** Launches terminals that close themselves when the test ends. */
 export interface TerminalFactory {
   launch(options?: LaunchFixtureOptions): Promise<TerminalHarness>;
-  /** Opens an interactive POSIX shell with exact command boundaries. */
+  /** Opens an interactive shell with exact command boundaries. */
   openShell(options?: OpenShellFixtureOptions): Promise<TerminalHarness>;
   /**
    * Adopts an existing harness for this test.
    *
    * The fixture collects its logs, publishes it to the Runner, records its
    * trace, and closes it during teardown. This works with every component
-   * helper that returns the shared {@link TerminalHarness} contract.
+   * helper that returns the shared `TerminalHarness` contract.
    */
   attach<T extends TerminalHarness>(harness: T, options?: AttachFixtureOptions): Promise<T>;
   /** Sessions launched by this test, in launch order. */
@@ -311,15 +311,15 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
         return attachHarness(harness, options);
       },
       async openShell(options: OpenShellFixtureOptions = {}): Promise<TerminalHarness> {
-        if (process.platform === 'win32') {
-          throw new TypeError('terminal.openShell() currently supports POSIX shells; launch PowerShell directly for terminal-level tests');
-        }
-        const { shell = [process.env['SHELL'] ?? '/bin/sh', '-i'], ...launchOptions } = options;
+        const defaultShell = process.platform === 'win32'
+          ? ['pwsh.exe', '-NoLogo', '-NoProfile', '-NoExit']
+          : [process.env['SHELL'] ?? '/bin/sh', '-i'];
+        const { shell = defaultShell, ...launchOptions } = options;
         if (shell.length === 0) throw new TypeError('terminal.openShell() needs a non-empty shell command');
         return factory.launch({
           ...launchOptions,
           command: shell,
-          shellIntegration: 'termwright-posix',
+          shellIntegration: process.platform === 'win32' ? 'termwright-powershell' : 'termwright-posix',
         });
       },
       async launch(options: LaunchFixtureOptions = {}): Promise<TerminalHarness> {

@@ -29,21 +29,5 @@ export type { InkHarness, MountInkOptions, MountInkRenderOptions } from './mount
 export { launchInkFixture } from './fixture.js';
 export type { InkFixtureHarness, LaunchInkFixtureOptions } from './fixture.js';
 
-export { ForwardingHarness } from './forwarding.js';
-
-export { commitFrame, waitForFirstFrame } from './settle.js';
+export type { JsonProps, JsonValue } from './payload.js';
 export type { SettleOptions } from './settle.js';
-
-export {
-  assertJsonProps,
-  encodeFixturePayload,
-  MAX_PAYLOAD_BYTES,
-  MAX_PROPS_DEPTH,
-} from './payload.js';
-export type { FixturePayload, JsonProps, JsonValue } from './payload.js';
-
-export { createInProcessBackend } from './backend.js';
-export type { InProcessApp, InProcessIo, InProcessStart } from './backend.js';
-
-export { applyOnlcr, createHarnessStdin, createHarnessStdout } from './streams.js';
-export type { HarnessStdin, HarnessStdout } from './streams.js';

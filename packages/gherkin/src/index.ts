@@ -36,12 +36,6 @@ export {
 
 export {
   gherkinPlugin,
-  resolvePairing,
-  transformFeature,
-  type GherkinPluginOptions,
   type GeneratedGherkinImports,
-  type PairedGlue,
-  type PairingInput,
-  type TransformFeatureInput,
-  type TransformFeatureResult,
+  type GherkinPluginOptions,
 } from './plugin.js';

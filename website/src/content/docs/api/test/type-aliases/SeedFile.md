@@ -1,0 +1,18 @@
+---
+title: "Type Alias: SeedFile"
+editUrl: false
+---
+
+[**@termwright/test**](../../)
+
+***
+
+[@termwright/test](../../) / SeedFile
+
+# Type Alias: SeedFile
+
+> **SeedFile** = `string` \| `Uint8Array`
+
+Defined in: [test/src/seed.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/seed.ts#L16)
+
+File contents to write. A string is written as UTF-8.

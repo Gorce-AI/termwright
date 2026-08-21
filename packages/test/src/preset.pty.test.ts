@@ -12,7 +12,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect } from 'vitest';
-import { collectCrashes, configureTermwright, formatCrashSection, ptyAvailable, test } from './index.js';
+import { collectCrashes, formatCrashSection } from './crash.js';
+import { configureTermwright, ptyAvailable, test } from './index.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'driver', 'test-fixtures');
 const RUNNING_IN_UI = process.env['TERMWRIGHT_UI_URL'] !== undefined;
@@ -45,13 +46,15 @@ afterAll(() => {
 
 describe.skipIf(!available)('the preset against a real PTY', () => {
   test('opens an integrated shell and returns each command result', { timeout: 30_000 }, async ({ terminal }) => {
-    const shell = await terminal.openShell({ shell: ['/bin/sh', '-i'] });
-    const printed = await shell.shell.run("printf 'hello from shell\\n'");
+    const shell = await terminal.openShell();
+    const printed = await shell.shell.run(
+      process.platform === 'win32' ? "Write-Output 'hello from shell'" : "printf 'hello from shell\\n'",
+    );
     expect(printed.exitCode).toBe(0);
     expect(printed.output).toContain('hello from shell');
     expect(printed.cwd).toBe(terminal.tmpdir);
 
-    const failed = await shell.shell.run('false');
+    const failed = await shell.shell.run(process.platform === 'win32' ? 'cmd /c exit 1' : 'false');
     expect(failed.exitCode).toBe(1);
     expect(shell.shell.status()).toMatchObject({ supported: true, ready: true });
   });

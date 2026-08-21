@@ -22,9 +22,10 @@ test('builds the workspace', async ({terminal}) => {
 });
 ```
 
-`openShell()` starts `$SHELL -i` on POSIX systems and adds exact OSC 133 command
-boundaries. Pass `shell: ['/bin/bash', '--noprofile', '-i']` to choose another
-POSIX shell. Termwright does not identify prompts by matching their text.
+`openShell()` starts PowerShell on Windows and `$SHELL -i` (or `/bin/sh -i`) on
+POSIX systems. It adds exact OSC 133 command boundaries in both modes. Pass
+`shell` to choose another compatible shell command. Termwright does not identify
+prompts by matching their text.
 
 ## Choose the command API
 

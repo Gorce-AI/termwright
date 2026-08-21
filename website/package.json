@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "prebuild": "pnpm --filter @termwright/protocol build",
+    "prebuild": "pnpm --filter @termwright/protocol build && pnpm --dir .. docs:api",
     "build": "pnpm run check:brand && pnpm run check:geometry && pnpm run check:runner-assets && astro build",
     "preview": "astro preview",
     "check": "astro check",

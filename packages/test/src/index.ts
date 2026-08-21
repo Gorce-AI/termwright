@@ -7,10 +7,12 @@
  *
  * @example
  * ```ts
- * import { test, expect } from '@termwright/test';
+ * import {fileURLToPath} from 'node:url';
+ * import {test, expect} from 'termwright/test';
  *
  * test('asks before running a command', async ({ terminal }) => {
- *   const app = await terminal.launch({ command: ['node', 'app.js'] });
+ *   const appFile = fileURLToPath(new URL('../app.js', import.meta.url));
+ *   const app = await terminal.launch({ command: [process.execPath, appFile] });
  *   await app.waitForText('Permission required');
  *
  *   await expect(app).toMatchSemanticSnapshot(`
@@ -38,8 +40,6 @@ export {
   configureTermwright,
   defineTermwrightConfig,
   getTermwrightConfig,
-  resetTermwrightConfig,
-  resolveTermwrightConfig,
   termwrightRetry,
   termwrightProjects,
   ANSI_COLOR_NAMES,
@@ -61,6 +61,7 @@ export {
   type AttachFixtureOptions,
   type LaunchFixtureOptions,
   type OpenShellFixtureOptions,
+  type StepOptions,
   type StepRunner,
   type TerminalFactory,
   type TermwrightFixtures,
@@ -70,7 +71,6 @@ export {
 
 export {
   registerTermwrightMatchers,
-  termwrightMatchers,
   type CellSnapshotMatcherOptions,
   type PollOptions,
   type SemanticSnapshotMatcherOptions,
@@ -80,40 +80,16 @@ export {
 
 export {
   serializeSemanticSnapshot,
-  childIndex,
-  describeNode,
-  describeState,
-  normalizeName,
-  topLevel,
-  ALL_STATE_KEYS,
-  STABLE_STATE_KEYS,
   type SerializeOptions,
   type StateSelection,
 } from './yaml-serialize.js';
 
-export {
-  parseNodeHead,
-  parseSemanticSnapshot,
-  type FlagAssertion,
-  type NameMatcher,
-  type NodePattern,
-} from './yaml-pattern.js';
-
-export {
-  matchSemanticSnapshot,
-  type MatchOptions,
-  type SnapshotMatchResult,
-  type SnapshotMismatch,
-} from './yaml-match.js';
-
 export { serializeScreen, type CellSnapshotOptions } from './cells.js';
 
-export { ptyAvailable, resetPtyProbe } from './pty-available.js';
+export { ptyAvailable } from './pty-available.js';
 
 export {
-  mergeOptions,
   type LaunchOverrides,
-  type MergedOptions,
   type TermwrightOptions,
 } from './options.js';
 
@@ -126,61 +102,12 @@ export {
 } from './seed.js';
 
 export {
-  atLeast,
   collectLogs,
-  createLogCollection,
-  describeLogThresholdFailure,
-  formatLogEntry,
-  formatLogFailure,
-  logThresholdFailure,
-  logsFailingThreshold,
-  logsOf,
-  matchesLog,
-  MAX_CAPTURED_LOGS,
   type CapturedLog,
   type LogCollection,
   type LogQuery,
   type LogSource,
 } from './logs.js';
-
-export {
-  collectCrashes,
-  describeExit,
-  formatCrashSection,
-  toReportCrash,
-  MESSAGE_TAIL_LINES,
-  REPORT_TAIL_LINES,
-  type CrashSource,
-  type CrashedSession,
-  type ReportCrash,
-} from './crash.js';
-
-export { collectTestNames, type DeclaredTask } from './declared-tests.js';
-
-export {
-  beginSnapshotScope,
-  nextSnapshotKey,
-  pruneObsoleteSnapshots,
-  type ObsoleteSnapshots,
-  readSnapshot,
-  resetSnapshotCache,
-  resolveUpdateMode,
-  snapshotFilePath,
-  writeSnapshot,
-  type SnapshotKind,
-} from './snapshot-store.js';
-
-export {
-  currentScope,
-  enterScope,
-  openStep,
-  recordAssert,
-  scopeKey,
-  type AssertRecord,
-  type TermwrightScope,
-} from './trace-context.js';
-
-export { buildTaskMeta, type TermwrightTaskMeta } from './task-meta.js';
 
 // The reporter is deliberately NOT re-exported here: `vitest.config.ts` runs
 // before the test runner exists, and this module registers matchers on import.

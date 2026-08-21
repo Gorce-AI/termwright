@@ -51,7 +51,7 @@ export interface LogCollection {
   text(query?: LogQuery): string;
   /** Forgets everything captured so far. */
   clear(): void;
-  /** Entries dropped because {@link MAX_CAPTURED_LOGS} was reached. */
+  /** Entries dropped after this collection reached its bounded capacity. */
   dropped(): number;
   /**
    * Log entries that never reached this test: the sum of `count` over the

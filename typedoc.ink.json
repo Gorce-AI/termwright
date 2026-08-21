@@ -1,0 +1,26 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["packages/ink-testing/src/index.ts"],
+  "entryPointStrategy": "resolve",
+  "tsconfig": "packages/ink-testing/tsconfig.json",
+  "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter"],
+  "out": "website/src/content/docs/api/ink",
+  "readme": "none",
+  "entryFileName": "index.md",
+  "cleanOutputDir": true,
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "skipErrorChecking": true,
+  "githubPages": false,
+  "gitRevision": "main",
+  "router": "member",
+  "externalSymbolLinkMappings": {
+    "@termwright/driver": {
+      "TerminalHarness": "https://gorce-ai.github.io/termwright/api/driver/interfaces/terminalharness/",
+      "ResolvedTarget.ref": "https://gorce-ai.github.io/termwright/api/driver/interfaces/resolvedtarget/#ref"
+    }
+  },
+  "frontmatterGlobals": {"editUrl": false}
+}

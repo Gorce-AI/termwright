@@ -109,10 +109,10 @@ export interface LaunchOptions {
   readonly timeouts?: TimeoutClasses;
   readonly recording?: RecordingOptions;
   /**
-   * `'termwright-posix'` instruments an interactive POSIX shell with exact
+   * Termwright-managed modes instrument an interactive shell with exact
    * command markers. Test authors should normally use `terminal.openShell()`.
    */
-  readonly shellIntegration?: 'external' | 'termwright-posix';
+  readonly shellIntegration?: 'external' | 'termwright-posix' | 'termwright-powershell';
 }
 
 export declare function launchTerminal(options: LaunchOptions): Promise<TerminalHarness>;

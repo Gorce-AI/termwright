@@ -273,6 +273,20 @@ Before merging example changes:
 Do not create a custom documentation framework solely to validate prose. Prefer
 existing TypeScript, fixture, browser, and package test infrastructure.
 
+### Generated TypeScript API
+
+`pnpm docs:api` regenerates the exact TypeScript reference under
+`website/src/content/docs/api/` from the public test, driver, Ink component,
+and Gherkin entry points. The website build runs this command automatically.
+Do not edit generated pages by hand.
+
+Keep the generated surface intentional. If a helper appears in this reference,
+developers can reasonably treat it as public API. Export types used by public
+signatures, but do not export caches, transports, code generators, or test-runner
+wiring only to make TypeDoc warnings disappear. The generator must finish with
+zero errors and zero warnings, and the site link checker must pass after a
+public API change.
+
 ## Runner UI and screenshots
 
 Runner UI documentation is visual documentation. Show the actual current UI next

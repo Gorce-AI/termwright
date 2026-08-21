@@ -1,0 +1,50 @@
+import {readdir, readFile, writeFile} from 'node:fs/promises';
+import {dirname, join, posix, relative} from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const root = fileURLToPath(new URL('../website/src/content/docs/api/', import.meta.url));
+
+async function markdownFiles(directory) {
+  const entries = await readdir(directory, {withFileTypes: true});
+  const nested = await Promise.all(
+    entries.map((entry) => {
+      const path = join(directory, entry.name);
+      return entry.isDirectory() ? markdownFiles(path) : entry.name.endsWith('.md') ? [path] : [];
+    }),
+  );
+  return nested.flat();
+}
+
+function routeFor(markdownPath) {
+  const withoutExtension = markdownPath.replace(/\.md$/u, '');
+  return (withoutExtension === 'index'
+    ? ''
+    : withoutExtension.endsWith('/index')
+      ? withoutExtension.slice(0, -'/index'.length)
+      : withoutExtension
+  )
+    .toLowerCase();
+}
+
+for (const path of await markdownFiles(root)) {
+  const source = await readFile(path, 'utf8');
+  const sourcePath = path.slice(root.length).replaceAll('\\', '/');
+  if (sourcePath === 'index.md') continue;
+  const heading = source.match(/^# (.+)$/mu)?.[1]?.replaceAll('\\_', '_');
+  if (heading === undefined) throw new Error(`Generated API page has no H1: ${path}`);
+  if (!source.startsWith('---\neditUrl: false\n---\n')) {
+    throw new Error(`Unexpected generated frontmatter: ${path}`);
+  }
+  const title = JSON.stringify(heading);
+  const sourceRoute = routeFor(sourcePath);
+  const withRoutes = source.replace(/\]\(([^)#]+\.md)(#[^)]+)?\)/gu, (_match, target, hash = '') => {
+    const targetPath = posix.normalize(posix.join(dirname(sourcePath), target));
+    const targetRoute = routeFor(targetPath);
+    const destination = (sourceRoute === '' ? targetRoute : relative(sourceRoute, targetRoute)).replaceAll('\\', '/');
+    return `](${destination === '' ? './' : `${destination}/`}${hash})`;
+  });
+  await writeFile(
+    path,
+    withRoutes.replace('---\neditUrl: false\n---\n', `---\ntitle: ${title}\neditUrl: false\n---\n`),
+  );
+}

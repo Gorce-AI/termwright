@@ -1,0 +1,19 @@
+---
+title: "Variable: test"
+editUrl: false
+---
+
+[**@termwright/test**](../../)
+
+***
+
+[@termwright/test](../../) / test
+
+# Variable: test
+
+> `const` **test**: `TestAPI`\<\{ `step`: [`StepRunner`](../../type-aliases/steprunner/); `terminal`: [`TerminalFactory`](../../interfaces/terminalfactory/); `termwright`: [`TermwrightScopeFixture`](../../interfaces/termwrightscopefixture/); `termwrightOptions`: [`TermwrightOptions`](../../interfaces/termwrightoptions/); \}\>
+
+Defined in: [test/src/fixtures.ts:168](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L168)
+
+`test` with termwright's fixtures. Use it exactly like Vitest's `test`;
+`test.step()` is available inside any of its tests.

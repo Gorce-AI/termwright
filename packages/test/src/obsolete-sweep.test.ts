@@ -11,14 +11,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect } from 'vitest';
-import {
-  configureTermwright,
-  readSnapshot,
-  resetSnapshotCache,
-  snapshotFilePath,
-  test,
-  writeSnapshot,
-} from './index.js';
+import { configureTermwright, test } from './index.js';
+import { readSnapshot, resetSnapshotCache, snapshotFilePath, writeSnapshot } from './snapshot-store.js';
 
 const DIR = mkdtempSync(join(tmpdir(), 'tw-sweep-'));
 const FILE = snapshotFilePath(fileURLToPath(import.meta.url), 'semantic', DIR);

@@ -12,6 +12,8 @@ import {test, expect} from 'termwright/test';
 This page is a searchable map of the public API. Task-oriented examples live in
 [Writing tests](../../writing-tests/), [Locators](../../guides/locators/),
 [Actions and input](../../guides/actions/), and [Assertions](../../guides/assertions/).
+Exact signatures, option types, and return values are generated from the
+published surface in the [TypeScript API reference](../../api/).
 
 ## Test fixtures
 
@@ -46,9 +48,9 @@ observability and lifecycle.
 
 ### `terminal.openShell(options?)`
 
-Opens a test-scoped interactive POSIX shell and enables exact command
-boundaries. It uses `$SHELL -i` by default. Set `shell` to choose another shell
-command. Windows shells are not yet supported by this helper.
+Opens a test-scoped interactive shell and enables exact command boundaries. It
+uses PowerShell on Windows and `$SHELL -i` or `/bin/sh -i` on POSIX systems. Set
+`shell` to choose another compatible shell command.
 
 ### `step(name, callback)`
 
@@ -156,8 +158,6 @@ See [Configuration](../configuration/) for defaults and precedence.
 
 - `serializeSemanticSnapshot(tree, options?)`
 - `serializeScreen(cells, options?)`
-- `matchSemanticSnapshot(actual, expected, options?)`
-
 Most tests should use the matchers rather than these lower-level helpers.
 
 ## Reporter

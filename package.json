@@ -10,6 +10,7 @@
     "build": "pnpm -r --filter './packages/*' run build",
     "check:package-metadata": "node scripts/check-package-metadata.mjs",
     "docs:screenshots": "pnpm --filter @termwright/ui run screenshots:docs",
+    "docs:api": "typedoc && typedoc --options typedoc.driver.json && typedoc --options typedoc.ink.json && typedoc --options typedoc.gherkin.json && node scripts/prepare-api-docs.mjs",
     "test": "vitest run",
     "pretest:compatibility": "pnpm --filter @termwright/protocol --filter @termwright/recognizers --filter @termwright/probe-runtime --filter @termwright/probe-go build",
     "test:compatibility": "vitest run compatibility/registry.test.ts",
@@ -23,6 +24,9 @@
     "@types/node": "^22.15.0",
     "eslint": "^9.10.0",
     "tsup": "^8.3.0",
+    "typedoc": "^0.28.20",
+    "typedoc-plugin-frontmatter": "^1.3.1",
+    "typedoc-plugin-markdown": "^4.12.0",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.67.0",
     "vitest": "^3.2.0"
