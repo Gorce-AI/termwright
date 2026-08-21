@@ -314,8 +314,10 @@ describe.skipIf(!runnable)('a plain tview application under the probe', () => {
     await app.waitForText('readme.md');
 
     // The claim of the whole phase: semantics from an application that was
-    // never told about us.
-    expect(app.capabilities().semanticTree).toBe(true);
+    // never told about us. Terminal output and the side-channel handshake are
+    // independent streams, so rendered text is not a semantic readiness
+    // barrier on a busy runner.
+    await expect.poll(() => app.capabilities().semanticTree).toBe(true);
     expect(app.capabilities().adapter?.name).toBe('termwright-probe-tview');
     expect(app.capabilities().probe).toEqual({
       framework: 'tview',
