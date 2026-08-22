@@ -26,6 +26,11 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
     hosts.push(host);
 
     const first = await host.requestRun().completed;
+    // Assert the reason before the verdict. A nested host that fails on
+    // infrastructure carries why in `error`, and checking only the state
+    // reports "expected infrastructure-failed to be passed" — a rare failure
+    // that then cannot be diagnosed from the CI log it appeared in.
+    expect(first.error ?? null).toBeNull();
     expect(first.state).toBe('passed');
     expect(first.catalog?.tests).toHaveLength(2);
     expect(first.catalog?.tests.map((test) => test.fullName)).toEqual(['duplicate title', 'duplicate title']);

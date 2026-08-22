@@ -190,14 +190,29 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     const physicalInputs: string[] = [];
     terminal.events.on('input', ({ kind }) => physicalInputs.push(kind));
 
+    // A terminal that hides its input modes cannot support the pointer and
+    // focus capabilities at all, so the contract leaves them out and every
+    // attempt is refused for that reason. `input-mode-disabled` would claim
+    // knowledge of a mode this terminal never revealed; the refusal has to
+    // name what is actually known, which is that the terminal is unobservable.
+    const contract = await terminal.settled();
+    expect(contract.capabilities['pointer-input']).toMatchObject({
+      status: 'unsupported',
+      reason: 'terminal-unobservable',
+    });
+    expect(contract.capabilities['focus-input']).toMatchObject({
+      status: 'unsupported',
+      reason: 'terminal-unobservable',
+    });
+
     expect(((await rejection(terminal.getByScreenText('Alpha').click())) as TermwrightError).code)
       .toBe('capability-unavailable');
     expect(((await rejection(terminal.mouse.drag({
       from: { row: 1, column: 2 },
       to: { row: 3, column: 2 },
-    }))) as TermwrightError).code).toBe('input-mode-disabled');
+    }))) as TermwrightError).code).toBe('capability-unavailable');
     expect(((await rejection(terminal.window.focus())) as TermwrightError).code)
-      .toBe('input-mode-disabled');
+      .toBe('capability-unavailable');
     expect(physicalInputs).toEqual([]);
   });
 

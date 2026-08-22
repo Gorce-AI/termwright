@@ -65,14 +65,30 @@ let writeFailure;
 proc.onData((data) => { output += Buffer.from(data).toString('utf8'); });
 proc.onWriteError?.((error) => { writeFailure = error; });
 proc.write(Buffer.from('x'));
+// ConPTY starts a console host alongside the child, and a cold Node start on
+// a Windows runner is seconds rather than milliseconds. The limit exists to
+// turn a hang into a reported failure, not to measure startup, so give the
+// slower platform room while keeping the fast one tight.
+const smokeTimeoutMs = process.platform === 'win32' ? 30_000 : 5_000;
 let timeout;
-const status = await Promise.race([
-  new Promise((resolve) => proc.onExit(resolve)),
-  new Promise((_, reject) => {
-    timeout = setTimeout(() => reject(new Error('certified PTY smoke timed out')), 5_000);
-  }),
-]).finally(() => clearTimeout(timeout));
-proc.dispose();
+let status;
+try {
+  status = await Promise.race([
+    new Promise((resolve) => proc.onExit(resolve)),
+    new Promise((_, reject) => {
+      timeout = setTimeout(
+        () => reject(new Error(`certified PTY smoke timed out after ${smokeTimeoutMs}ms; output so far: ${JSON.stringify(output)}`)),
+        smokeTimeoutMs,
+      );
+    }),
+  ]);
+} finally {
+  // Release the pty on every path. A timeout that skipped this left the pty
+  // open, so the script kept the event loop alive and the job hung until the
+  // CI runner's own limit instead of failing in five seconds with a reason.
+  clearTimeout(timeout);
+  proc.dispose();
+}
 if (writeFailure !== undefined) throw writeFailure;
 if (status.code !== 0 || !output.includes('tw-write-ok')) {
   throw new Error(`Termwright-owned PTY write boundary failed: ${JSON.stringify({ status, output })}`);
