@@ -67,6 +67,31 @@ if (lock.includes('@lydell/node-pty-darwin-arm64@1.2.0-beta.15(patch_hash=')) {
 // Node child started on Windows without SystemRoot aborts inside CSPRNG
 // initialization with exit code 134 before running a line of script, which
 // reads here as a broken PTY write boundary rather than a bare environment.
+// The child prints nothing until it is written to, which is the exact shape
+// that deadlocks when writes are gated on output. Keep the limit short: it
+// exists to report a stuck write barrier quickly, and a longer one only hides
+// the bug for longer.
+//
+// Releasing the pty is not always enough to end this process — the ConPTY path
+// keeps a conout worker thread alive and its console-process-list kill is
+// asynchronous — so a watchdog reports how far the smoke got and leaves. A
+// certification script must fail, never hang. The stage markers make "where
+// did it stop" answerable from the CI log instead of by guessing.
+const smokeTimeoutMs = 10_000;
+let output = '';
+const stages = [];
+const stage = (name) => {
+  stages.push(`${name}@${Math.round(performance.now())}ms`);
+  process.stderr.write(`node-pty certification: ${name}\n`);
+};
+const watchdog = setTimeout(() => {
+  process.stderr.write(
+    `node-pty certification watchdog fired; stages=${stages.join(',')} output=${JSON.stringify(output)}\n`,
+  );
+  process.exit(1);
+}, smokeTimeoutMs * 3);
+
+stage('spawning');
 const backend = createNodePtyBackend();
 const proc = backend.spawn({
   command: [process.execPath, '-e', "process.stdin.setRawMode?.(true);process.stdin.once('data',()=>{process.stdout.write('tw-write-ok');process.exit(0)});process.stdin.resume()"],
@@ -74,16 +99,16 @@ const proc = backend.spawn({
   columns: 40,
   rows: 4,
 });
-let output = '';
 let writeFailure;
-proc.onData((data) => { output += Buffer.from(data).toString('utf8'); });
+let sawOutput = false;
+proc.onData((data) => {
+  output += Buffer.from(data).toString('utf8');
+  if (!sawOutput) { sawOutput = true; stage('first-output'); }
+});
 proc.onWriteError?.((error) => { writeFailure = error; });
+stage('spawned');
 proc.write(Buffer.from('x'));
-// The child here prints nothing until it is written to, which is the exact
-// shape that used to deadlock on ConPTY. Keep the limit short on every
-// platform: it exists to report a stuck write barrier quickly, and a longer
-// one would only have hidden that bug for longer.
-const smokeTimeoutMs = 10_000;
+stage('write-queued');
 let timeout;
 let status;
 try {
@@ -97,10 +122,12 @@ try {
     }),
   ]);
 } finally {
+  stage('settled');
   // Release the pty on every path. A timeout that skipped this left the pty
   // open, so the script kept the event loop alive and the job hung until the
-  // CI runner's own limit instead of failing in five seconds with a reason.
+  // CI runner's own limit instead of failing in ten seconds with a reason.
   clearTimeout(timeout);
+  clearTimeout(watchdog);
   proc.dispose();
 }
 if (writeFailure !== undefined) throw writeFailure;
