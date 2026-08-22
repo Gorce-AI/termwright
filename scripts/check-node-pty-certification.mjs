@@ -20,10 +20,18 @@ const implementation = await readFile(
 if (process.platform === 'win32') {
   if (!implementation.includes('_this._agent = new windowsPtyAgent_1.WindowsPtyAgent') ||
       !implementation.includes('this._agent.inSocket.write(data)') ||
-      !implementation.includes('WindowsTerminal.prototype._defer = function') ||
       !implementation.includes("_this._socket.on('close', function ()") ||
       !implementation.includes("_this.emit('exit', _this._agent.exitCode)")) {
-    throw new Error(`${platformName}: certified ConPTY agent/input/defer/output-EOF boundary changed`);
+    throw new Error(`${platformName}: certified ConPTY agent/input/output-EOF boundary changed`);
+  }
+  // Termwright deliberately does NOT use WindowsTerminal's deferral. Both its
+  // writes and its kill wait for `_isReady`, which is only set after the first
+  // `data` event, so a child that prints nothing until written to can neither
+  // be written to nor killed. Pin the shape of that gate so the day upstream
+  // fixes it is a visible event rather than a silent divergence.
+  if (!implementation.includes('WindowsTerminal.prototype._defer = function') ||
+      !implementation.includes('if (this._isReady)')) {
+    throw new Error(`${platformName}: certified ConPTY deferral gate changed; re-check the write/kill barrier`);
   }
   const agentImplementation = await readFile(join(root, 'lib', 'windowsPtyAgent.js'), 'utf8');
   if (!agentImplementation.includes('WindowsPtyAgent.prototype._getConsoleProcessList = function') ||
@@ -31,6 +39,12 @@ if (process.platform === 'win32') {
       !agentImplementation.includes('this._closeTimeout = setTimeout(function ()') ||
       !agentImplementation.includes('this._outSocket.destroy()')) {
     throw new Error(`${platformName}: certified ConPTY process-tree/timer-degraded output boundary changed`);
+  }
+  // The barriers Termwright owns instead: an immediate agent-level kill, and
+  // the output pipe's connect signal as the point writes become deliverable.
+  if (!agentImplementation.includes('WindowsPtyAgent.prototype.kill = function') ||
+      !agentImplementation.includes("_this._outSocket.emit('ready_datapipe')")) {
+    throw new Error(`${platformName}: certified ConPTY readiness/kill boundary changed`);
   }
 } else if (!implementation.includes('_this._fd = term.fd') ||
            !implementation.includes('Object.defineProperty(UnixTerminal.prototype, "fd"') ||
@@ -65,11 +79,11 @@ let writeFailure;
 proc.onData((data) => { output += Buffer.from(data).toString('utf8'); });
 proc.onWriteError?.((error) => { writeFailure = error; });
 proc.write(Buffer.from('x'));
-// ConPTY starts a console host alongside the child, and a cold Node start on
-// a Windows runner is seconds rather than milliseconds. The limit exists to
-// turn a hang into a reported failure, not to measure startup, so give the
-// slower platform room while keeping the fast one tight.
-const smokeTimeoutMs = process.platform === 'win32' ? 30_000 : 5_000;
+// The child here prints nothing until it is written to, which is the exact
+// shape that used to deadlock on ConPTY. Keep the limit short on every
+// platform: it exists to report a stuck write barrier quickly, and a longer
+// one would only have hidden that bug for longer.
+const smokeTimeoutMs = 10_000;
 let timeout;
 let status;
 try {

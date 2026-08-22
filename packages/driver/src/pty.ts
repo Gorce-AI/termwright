@@ -290,7 +290,12 @@ export function createNodePtyBackend(): PtyBackend {
           // terminal window. Listeners stay attached until the exit is
           // observed, so the session still learns the final status.
           try {
-            if (process.platform === 'win32') pty.kill();
+            // WindowsTerminal.kill() is deferred behind the same `_isReady`
+            // gate as its writes, so a child that never produced output could
+            // not be killed at all — the hang-up simply queued forever. The
+            // agent's kill runs immediately and is what actually releases the
+            // ConPTY handles and the console process list.
+            if (process.platform === 'win32') exactWindowsAgent(pty).kill();
             else process.kill(-pty.pid, 'SIGHUP');
           } catch {
             // The child is already gone; nothing to hang up.
@@ -326,17 +331,28 @@ interface ExactWindowsSocket {
 
 interface ExactWindowsPty {
   readonly _agent: ExactWindowsAgent;
-  _defer(callback: (value: undefined) => void, value: undefined): void;
 }
 
 interface ExactWindowsAgent {
   readonly inSocket: ExactWindowsSocket;
+  /** Emits `ready_datapipe` once ConPTY is connected to the output pipe. */
+  readonly outSocket: ExactWindowsReadySocket;
+  /** Immediate teardown; unlike WindowsTerminal.kill it is never deferred. */
+  kill(): void;
   _getConsoleProcessList(): Promise<readonly number[]>;
+}
+
+interface ExactWindowsReadySocket {
+  readonly connecting: boolean;
+  readonly readyState: string;
+  once(event: 'ready_datapipe', listener: () => void): void;
+  removeListener(event: 'ready_datapipe', listener: () => void): void;
 }
 
 function exactWindowsAgent(value: unknown): ExactWindowsAgent {
   const agent = (value as Partial<ExactWindowsPty>)._agent;
-  if (agent === undefined || typeof agent._getConsoleProcessList !== 'function') {
+  if (agent === undefined || typeof agent._getConsoleProcessList !== 'function' ||
+      typeof agent.kill !== 'function') {
     throw new Error('certified @lydell/node-pty ConPTY process-list boundary changed');
   }
   return agent;
@@ -371,7 +387,7 @@ function observeExactNodePtyOutputBoundary(value: unknown): { readonly eof: bool
  * Own the async write boundary instead of relying on beta.15's private
  * CustomWriteStream, which prints EBADF/EIO to global stderr and exposes no
  * error/drain API. The only private facts used here are exact-version checked
- * (`fd` on Unix, `_agent.inSocket` + `_defer` on ConPTY); all queue semantics
+ * (`fd` on Unix, `_agent.inSocket` + `_agent.outSocket` on ConPTY); all queue semantics
  * and failures belong to Termwright and therefore survive package install.
  */
 function createExactNodePtyWriteChannel(
@@ -449,8 +465,11 @@ function createWindowsWriteChannel(
   onDrain: () => void,
 ): PtyWriteChannel {
   const pty = value as Partial<ExactWindowsPty>;
-  const socket = pty._agent?.inSocket;
-  if (socket === undefined || typeof socket.write !== 'function' || typeof pty._defer !== 'function') {
+  const agent = pty._agent;
+  const socket = agent?.inSocket;
+  const ready = agent?.outSocket;
+  if (socket === undefined || typeof socket.write !== 'function' ||
+      ready === undefined || typeof ready.once !== 'function') {
     throw new Error('certified @lydell/node-pty ConPTY private input boundary changed');
   }
   const queue: Buffer[] = [];
@@ -480,20 +499,38 @@ function createWindowsWriteChannel(
     backpressured = false;
     flush();
   };
+  // Gate the first write on the output pipe being connected, not on the child
+  // having produced output.
+  //
+  // beta.15 defers every write — and its own kill — until `_isReady`, which it
+  // only sets after the first `data` event. A program that prints nothing until
+  // it is written to therefore deadlocks: the write waits for output, the
+  // output waits for the write, and because kill is deferred the same way, the
+  // session cannot even be torn down. `ready_datapipe` is the honest barrier:
+  // conin is opened synchronously in the agent's constructor, and this event
+  // fires once ConPTY is attached to conout, so from here on bytes are
+  // deliverable regardless of whether the child has said anything.
+  let piped = !ready.connecting && ready.readyState === 'open';
+  const onReady = (): void => {
+    piped = true;
+    if (!disposed && queue.length > 0) flush();
+  };
+  if (!piped) ready.once('ready_datapipe', onReady);
   socket.on('error', fail);
   socket.on('drain', drain);
   return {
     write(data): void {
       if (disposed) return;
       queue.push(Buffer.from(data));
-      if (scheduled || backpressured) return;
+      if (scheduled || backpressured || !piped) return;
       scheduled = true;
-      pty._defer!(flush, undefined);
+      setImmediate(flush);
     },
     dispose(): void {
       if (disposed) return;
       disposed = true;
       queue.length = 0;
+      ready.removeListener('ready_datapipe', onReady);
       socket.removeListener('error', fail);
       socket.removeListener('drain', drain);
     },
