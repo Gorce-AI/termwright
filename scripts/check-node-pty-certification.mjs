@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { createNodePtyBackend } from '../packages/driver/dist/index.js';
+import { createNodePtyBackend, inheritedSpawnEnv } from '../packages/driver/dist/index.js';
 
 const requireFromDriver = createRequire(new URL('../packages/driver/src/pty.ts', import.meta.url));
 const platformName = `@lydell/node-pty-${process.platform}-${process.arch}`;
@@ -48,25 +48,15 @@ if (lock.includes('@lydell/node-pty-darwin-arm64@1.2.0-beta.15(patch_hash=')) {
   throw new Error('node-pty certification must not depend on root-only package-manager patches');
 }
 
-// This smoke test spawns the backend directly, below the driver's environment
-// allowlist, so it has to honour the same platform floor itself. A Node
-// process started on Windows without SystemRoot does not fail — it aborts
-// inside CSPRNG initialization with exit code 134 before running a line of
-// script, which reads here as a broken PTY write boundary rather than a
-// malformed environment. See WINDOWS_ENV_KEYS in packages/driver/src/session.ts.
-const environmentFloor = process.platform === 'win32'
-  ? ['PATH', 'PATHEXT', 'SystemRoot', 'SystemDrive', 'windir', 'TEMP', 'TMP', 'COMSPEC']
-  : ['PATH'];
-const environment = {};
-for (const key of environmentFloor) {
-  const value = process.env[key];
-  if (typeof value === 'string') environment[key] = value;
-}
-
+// This smoke spawns the backend directly, below the environment allowlist a
+// launch would apply, so it asks the driver for the same platform floor. A
+// Node child started on Windows without SystemRoot aborts inside CSPRNG
+// initialization with exit code 134 before running a line of script, which
+// reads here as a broken PTY write boundary rather than a bare environment.
 const backend = createNodePtyBackend();
 const proc = backend.spawn({
   command: [process.execPath, '-e', "process.stdin.setRawMode?.(true);process.stdin.once('data',()=>{process.stdout.write('tw-write-ok');process.exit(0)});process.stdin.resume()"],
-  env: environment,
+  env: inheritedSpawnEnv(),
   columns: 40,
   rows: 4,
 });

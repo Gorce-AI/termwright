@@ -8,7 +8,7 @@
  * probe again, the preset ships it.
  */
 
-import { createNodePtyBackend } from '@termwright/driver';
+import { createNodePtyBackend, inheritedSpawnEnv } from '@termwright/driver';
 
 let probe: Promise<boolean> | undefined;
 
@@ -52,7 +52,7 @@ async function detect(): Promise<boolean> {
   try {
     const pty = createNodePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
-      env: { PATH: process.env['PATH'] ?? '' },
+      env: inheritedSpawnEnv(),
       columns: 20,
       rows: 4,
     });

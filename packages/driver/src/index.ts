@@ -113,7 +113,7 @@ export type {
   ScreenCondition,
 } from '@termwright/protocol';
 
-export { launchTerminal, type LaunchTerminalOptions } from './session.js';
+export { inheritedSpawnEnv, launchTerminal, type LaunchTerminalOptions } from './session.js';
 export { installTerminalLaunchResourceProvider } from './launch-resources.js';
 export type {
   TerminalLaunchResourceLease,

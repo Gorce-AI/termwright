@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
+import { createNodePtyBackend, inheritedSpawnEnv, launchTerminal, type TerminalHarness } from '@termwright/driver';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { prepareInstrumentedBuild, PROBE_VERSION } from './launch.js';
 
@@ -40,7 +40,7 @@ function ptyAvailable(): boolean {
   try {
     const pty = createNodePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
-      env: { PATH: process.env['PATH'] ?? '' },
+      env: inheritedSpawnEnv(),
       columns: 20,
       rows: 4,
     });

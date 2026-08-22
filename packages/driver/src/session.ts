@@ -3347,6 +3347,24 @@ function safeEnvKeys(): readonly string[] {
 }
 
 /**
+ * The smallest environment a child can actually start in on this platform.
+ *
+ * Spawning with just `PATH` reads as admirably minimal and is fine on POSIX,
+ * but on Windows a Node child without `SystemRoot` aborts inside CSPRNG
+ * initialization with exit code 134 before running a line of code — no error,
+ * no output, just a number that looks like the program failed. Anywhere that
+ * spawns a helper process should take this instead of writing its own list.
+ */
+export function inheritedSpawnEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of safeEnvKeys()) {
+    const value = process.env[key];
+    if (typeof value === "string") env[key] = value;
+  }
+  return env;
+}
+
+/**
  * Rejects a launch whose paths do not exist, before a pty is opened.
  *
  * `node-pty` does not fail on either mistake: it hands back a live pty whose

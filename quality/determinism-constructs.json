@@ -1166,7 +1166,7 @@
     },
     {
       "path": "packages/driver/src/pty-upstream-boundary.test.ts",
-      "line": 21,
+      "line": 22,
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "timer = setTimeout(() => reject(new Error('PTY write boundary test timed out')), 5_000);"
@@ -1691,14 +1691,14 @@
     },
     {
       "path": "packages/driver/src/session.ts",
-      "line": 3456,
+      "line": 3474,
       "kind": "delay-helper",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "function delay(ms: number): Promise<void> {"
     },
     {
       "path": "packages/driver/src/session.ts",
-      "line": 3458,
+      "line": 3476,
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "const timer = setTimeout(resolve, ms);"
@@ -2664,210 +2664,210 @@
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 51,
+      "line": 52,
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
       "excerpt": "if (process.env[\"TERMWRIGHT_SKIP_GO\"] === \"1\") return false;"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 61,
+      "line": 62,
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
       "excerpt": "if (process.env[\"TERMWRIGHT_SKIP_PTY\"] === \"1\") return false;"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 203,
+      "line": 204,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!runnable)(\"developer annotations\", () => {"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 255,
+      "line": 256,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => session.contract(), { timeout: 10_000 })"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 268,
+      "line": 269,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => session.semanticTree()?.v, { timeout: 10_000 })"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 275,
+      "line": 276,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => session.getByTestId(\"unread-badge\").count())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 278,
+      "line": 279,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() =>"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 285,
+      "line": 286,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => session.getByTestId(\"unread-badge\").extendedState())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 291,
+      "line": 292,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => session.getByRole(\"button\", { name: \"Save changes\" }).count())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 323,
+      "line": 324,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll("
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 333,
+      "line": 334,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!runnable)(\"the launcher call\", () => {"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 411,
+      "line": 412,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!runnable)(\"a plain tview application under the probe\", () => {"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 421,
+      "line": 422,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => app.semanticTree()?.v).toBe(2);"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 459,
+      "line": 460,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => app.contract()?.capabilities['semantic-tree'].status).toBe('supported');"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 468,
+      "line": 469,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => app.getByRole(\"list\", { name: \"Files\" }).count())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 471,
+      "line": 472,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => app.getByRole(\"listitem\", { name: \"readme.md\" }).count())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 474,
+      "line": 475,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => app.getByRole(\"button\", { name: \"Save\" }).count())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 480,
+      "line": 481,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll("
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 492,
+      "line": 493,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => app.getByRole(\"textbox\", { name: \"Name\" }).count())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 495,
+      "line": 496,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => app.getByRole(\"region\", { name: \"Settings\" }).count())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 519,
+      "line": 520,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () => (await state(\"list\", \"Files\"))?.focused)"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 523,
+      "line": 524,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () => (await state(\"button\", \"Save\"))?.focused)"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 526,
+      "line": 527,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () => (await state(\"list\", \"Files\"))?.focused)"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 533,
+      "line": 534,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () => (await state(\"listitem\", \"readme.md\"))?.selected)"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 537,
+      "line": 538,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () => (await state(\"listitem\", \"main.go\"))?.selected)"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 540,
+      "line": 541,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () => (await state(\"listitem\", \"readme.md\"))?.selected)"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 546,
+      "line": 547,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => app.getByRole(\"textbox\", { name: \"Name\" }).count())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 550,
+      "line": 551,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => app.getByRole(\"textbox\", { name: \"Name\" }).textContent())"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 557,
+      "line": 558,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll("
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "line": 627,
+      "line": 628,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(runnable)(\"the zero-config arms\", () => {"

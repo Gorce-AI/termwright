@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AppLogEvent, SessionDiagnostic, TerminalHarness } from './api.js';
 import { createNodePtyBackend } from './pty.js';
-import { launchTerminal } from './session.js';
+import { inheritedSpawnEnv, launchTerminal } from './session.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-fixtures');
 
@@ -18,7 +18,7 @@ function ptyAvailable(): boolean {
   try {
     const pty = createNodePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
-      env: { PATH: process.env['PATH'] ?? '' },
+      env: inheritedSpawnEnv(),
       columns: 20,
       rows: 4,
     });

@@ -20,7 +20,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir as osTmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test as base } from 'vitest';
-import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
+import {
+  launchTerminal,
+  type LaunchOptions,
+  type SessionEventRecord,
+  type TerminalHarness,
+} from '@termwright/driver';
 import {
   createRunId,
   parseRunId,
@@ -260,6 +265,11 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
     const attached = new WeakSet<TerminalHarness>();
     const logs = createLogCollection();
     const detachers: (() => void)[] = [];
+    // Records this sink refused. The emitter would otherwise downgrade the
+    // loss to a session diagnostic, and a dropped authoritative event only
+    // surfaces later as a hole in the run manifest, naming the missing id
+    // rather than the reason it never arrived.
+    const journalLosses: { readonly record: SessionEventRecord; readonly error: unknown }[] = [];
     let threshold: LogLevel | false =
       mergeOptions(config, termwrightOptions, {}).failOnLogLevel;
     const crashed: ReportCrash[] = [];
@@ -368,6 +378,16 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
           sessionId: runSessionId,
           payload: { ...gap },
         }),
+        onError: (error, record) => {
+          journalLosses.push({ record, error });
+          // Also say it immediately. A record refused after teardown has
+          // already collected its failures would otherwise reach nobody, and
+          // this is the exact moment the reason still exists.
+          process.stderr.write(
+            `termwright: the run journal refused a ${record.type} record: ` +
+            `${error instanceof Error ? error.message : String(error)}\n`,
+          );
+        },
       }, (record) => {
         if (record.type === 'action-start') {
           const actionId = canonicalActionId(record.payload.actionId, actionIds);
@@ -568,6 +588,18 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
     }
 
     attemptContext.budget.mark('teardown');
+    // Report a refused record here, where the cause is still attached to it.
+    // Left alone it becomes a missing id in manifest validation long after the
+    // worker that could explain it is gone.
+    for (const loss of journalLosses) {
+      teardownFailures.push(
+        new Error(
+          `the run journal refused a ${loss.record.type} record for this attempt: ` +
+          `${loss.error instanceof Error ? loss.error.message : String(loss.error)}`,
+          { cause: loss.error },
+        ),
+      );
+    }
     if (logFailure !== undefined && teardownFailures.length > 0) {
       throw new AggregateError([new Error(logFailure), ...teardownFailures], 'log policy and terminal teardown failed');
     }

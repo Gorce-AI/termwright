@@ -22,6 +22,11 @@ const MAX_JOURNAL_BYTES = 8 * 1024 * 1024;
 export class SessionEventEmitter implements SessionEvents {
   readonly #listeners = new Map<keyof SessionEventMap, Set<Listener<never>>>();
   readonly #journalListeners = new Set<JournalListener>();
+  /** Subscribers that report their own delivery failures instead of the emitter. */
+  readonly #journalListenerErrors = new WeakMap<
+    JournalListener,
+    (error: unknown, record: SessionEventRecord) => void
+  >();
   readonly #journal: { readonly record: SessionEventRecord; readonly bytes: number }[] = [];
   readonly #onListenerError: (error: unknown) => void;
   #sequence = 0;
@@ -86,6 +91,7 @@ export class SessionEventEmitter implements SessionEvents {
       else cb(record);
     };
     this.#journalListeners.add(listener);
+    if (options.onError !== undefined) this.#journalListenerErrors.set(listener, options.onError);
     try {
       for (const entry of this.#journal) {
         if (entry.record.sequence < options.fromSequence || entry.record.sequence > highWater) continue;
@@ -121,7 +127,9 @@ export class SessionEventEmitter implements SessionEvents {
       try {
         listener(record);
       } catch (error) {
-        this.#onListenerError(error);
+        const owned = this.#journalListenerErrors.get(listener);
+        if (owned === undefined) this.#onListenerError(error);
+        else owned(error, record);
       }
     }
     const set = this.#listeners.get(event);

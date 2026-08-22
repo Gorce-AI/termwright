@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createNodePtyBackend } from './pty.js';
+import { inheritedSpawnEnv } from './session.js';
 
 describe('pinned node-pty write boundary', () => {
   it('uses the Termwright-owned byte queue in an installed-package-equivalent runtime', async () => {
     const proc = createNodePtyBackend().spawn({
       command: [process.execPath, '-e', "process.stdin.setRawMode?.(true);process.stdin.once('data',()=>{process.stdout.write('accepted');process.exit(0)});process.stdin.resume()"],
-      env: { PATH: process.env['PATH'] ?? '' },
+      env: inheritedSpawnEnv(),
       columns: 40,
       rows: 4,
     });

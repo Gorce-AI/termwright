@@ -19,6 +19,7 @@ import { promisify } from "node:util";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import {
   createNodePtyBackend,
+  inheritedSpawnEnv,
   launchTerminal,
   type SemanticLocator,
   type PtyBackend,
@@ -62,7 +63,7 @@ function ptyAvailable(): boolean {
   try {
     const pty = createNodePtyBackend().spawn({
       command: [process.execPath, "-e", "process.exit(0)"],
-      env: { PATH: process.env["PATH"] ?? "" },
+      env: inheritedSpawnEnv(),
       columns: 20,
       rows: 4,
     });
