@@ -693,11 +693,15 @@ describe('fresh React runner', () => {
     await alpha.click();
     expect(await alpha.getAttribute('aria-expanded')).toBe('false');
     server.hub.publish({ v: 1, type: 'action-start', actionId: 'live-a1', api: 'press', t: 20, testId: 'alpha' });
-    await expect.poll(() => page.locator('.tw-command-row').count()).toBe(1);
-    expect(await alpha.getAttribute('aria-expanded')).toBe('false');
 
+    // A collapsed case renders no command rows, so alpha's own update is not
+    // observable while it stays collapsed — waiting on one would wait forever.
+    // Beta is expanded and the stream is ordered, so beta's row is proof that
+    // alpha's update was applied before it, and alpha is still collapsed.
     await beta.click();
     expect(await beta.getAttribute('aria-expanded')).toBe('true');
+    server.hub.publish({ v: 1, type: 'action-start', actionId: 'live-b1', api: 'press', t: 21, testId: 'beta' });
+    await expect.poll(() => page.locator('.tw-command-row').count()).toBe(1);
     expect(await alpha.getAttribute('aria-expanded')).toBe('false');
     await alpha.click();
     expect(await alpha.getAttribute('aria-expanded')).toBe('true');

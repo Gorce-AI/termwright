@@ -3952,133 +3952,133 @@
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 696,
+      "line": 704,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-command-row').count()).toBe(1);"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 713,
+      "line": 717,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 714,
+      "line": 718,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const startedAt = Date.now();"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 740,
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "line": 744,
-      "kind": "wall-clock",
-      "classification": "display-or-persisted-wall-time-not-correctness-order",
-      "excerpt": "const startedAt = Date.now();"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 779,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 784,
+      "line": 748,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const startedAt = Date.now();"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 800,
+      "line": 783,
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "line": 788,
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "const startedAt = Date.now();"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "line": 804,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-command-row').count()).toBe(23);"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 820,
+      "line": 824,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.evaluate(() => {"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 851,
+      "line": 855,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.getByText('attempt 3', { exact: true }).count()).toBe(1);"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 875,
+      "line": 879,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const startedAt = Date.now();"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 893,
+      "line": 897,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
-    },
-    {
-      "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 906,
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => mutableRequests.length).toBe(1);"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "line": 910,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count()).toBe(0);"
+      "excerpt": "await expect.poll(() => mutableRequests.length).toBe(1);"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 921,
+      "line": 914,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => mutableRequests.length).toBe(2);"
+      "excerpt": "await expect.poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count()).toBe(0);"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "line": 925,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => mutableRequests.length).toBe(2);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "line": 929,
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count()).toBe(0);"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 951,
+      "line": 955,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => scroller.evaluate((element) => Math.round(element.scrollTop))).toBe("
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 968,
+      "line": 972,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');"
     },
     {
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
-      "line": 978,
+      "line": 982,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-toast').innerText()).toContain(`Copied ${sourceFile}`);"
