@@ -58,14 +58,11 @@ describe('serializeSemanticSnapshot', () => {
   });
 
   it('keeps volatile states out of the stable selection', () => {
-    const state = { focused: true, scrollOffset: 12, positionInSet: 3 };
+    const state = { focused: true, positionInSet: 3 };
     expect(describeState(state)).toEqual(['focused']);
     const tree = snapshot([node('n1', 'listitem', 'Item', { state })]);
     expect(serializeSemanticSnapshot(tree, { states: 'all' })).toBe(
-      '- listitem "Item" [focused,positionInSet=3,scrollOffset=12]\n',
-    );
-    expect(serializeSemanticSnapshot(tree, { states: ['scrollOffset'] })).toBe(
-      '- listitem "Item" [scrollOffset=12]\n',
+      '- listitem "Item" [focused,positionInSet=3]\n',
     );
   });
 

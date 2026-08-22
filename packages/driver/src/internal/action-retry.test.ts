@@ -12,7 +12,7 @@ const stamp = (sequence: number): ObservationStamp => Object.freeze({
 function transient(reason: 'target-state' | 'pointer-region' | 'covered', sequence: number): NotActionableError {
   return new NotActionableError('not yet', diagnostics, reason).withActionability(Object.freeze({
     actionable: false,
-    intent: Object.freeze({ kind: 'click', targetRef: `save@${sequence}` }),
+    intent: Object.freeze({ kind: 'click', targetRef: `semantic:save@${sequence}` as const }),
     checkpoint: stamp(sequence),
     requirements: Object.freeze([]),
     reason: Object.freeze({ code: 'not-actionable', message: 'not yet' }),
@@ -101,7 +101,7 @@ describe('locator action retry policy', () => {
   it.each([
     new CapabilityUnavailableError('unsupported', diagnostics),
     new AmbiguousLocatorError('ambiguous', Object.freeze([Object.freeze({
-      ref: 'n1@1', revision: 1, identity: 'stable' as const, semantic: true, rect: null,
+      ref: 'semantic:n1@1', revision: 1, identity: 'stable' as const, semantic: true, rect: null,
     })]), diagnostics),
     new NotActionableError('wrong role', diagnostics),
     new TypeError('bad options'),

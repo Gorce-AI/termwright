@@ -72,6 +72,17 @@ async function launchWithLog(options: Record<string, unknown> = {}): Promise<Har
 }
 
 describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, () => {
+  it('final-drains a record written immediately before process exit', async () => {
+    const { terminal, lines } = await launchWithLog();
+
+    await terminal.press('e');
+    expect(await terminal.waitForExit()).toMatchObject({ code: 1 });
+    await terminal.close();
+    open.splice(open.indexOf(terminal), 1);
+
+    expect(lines.map((entry) => entry.line)).toContain('ERROR immediately before exit');
+  });
+
   it('picks up a file the program creates after it started', async () => {
     const { terminal, lines, path } = await launchWithLog();
 
@@ -250,7 +261,7 @@ describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout:
 
   it('negotiates the channel and publishes records on the session timeline', async () => {
     const { terminal, lines } = await launchSemantic();
-    expect(terminal.capabilities().capabilities).toContain('logs');
+    expect(terminal.contract()?.providers.some((provider) => provider.kind === 'framework')).toBe(true);
 
     await terminal.press('g');
     await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(1);
@@ -310,7 +321,7 @@ describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout:
     // The channel is untouched: a miscounting adapter is a bug, not an attack.
     await terminal.press('g');
     await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(2);
-    expect(terminal.capabilities().semanticTree).toBe(true);
+    expect(terminal.contract()?.capabilities['semantic-tree'].status).toBe('supported');
     expect(await terminal.getByTestId('approve').textContent()).toBe('Approve');
   });
 

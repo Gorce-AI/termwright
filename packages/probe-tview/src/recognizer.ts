@@ -113,7 +113,12 @@ function recognizeObject(object: ProbeObject): SemanticNode {
         : { status: 'known', value: object.geometry.intendedRect, evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
       visibleRect: { status: 'unsupported', capability: 'visible-rect', reason: 'framework-unobservable' },
     },
-    ...(object.state?.value === undefined ? {} : { value: object.state.value }),
+    ...(object.state?.value === undefined ? {} : { value: {
+      status: 'known' as const,
+      value: object.state.value,
+      sensitivity: object.state?.valueSensitivity ?? 'sensitive',
+      evidence: evidence('framework', 'instrumented', 'authoritative', 'tview'),
+    } }),
     ...(state === undefined ? {} : { state }),
   } as SemanticNode;
 }
@@ -132,15 +137,5 @@ function recognizeState(object: ProbeObject): SemanticNode['state'] {
   // wire calls that `hidden`, and the inversion is the whole translation.
   if (observed.displayed === false) state['hidden'] = true;
   if (observed.selectedIndex !== undefined) state['positionInSet'] = observed.selectedIndex + 1;
-  // A negative scroll offset is a pre-layout artefact, not a position. The Go
-  // probe drops it at the source; this is the same rule, restated where a test
-  // can reach it in one line.
-  if (observed.scroll !== undefined && observed.scroll.row >= 0) {
-    state['scrollOffset'] = observed.scroll.row;
-  }
-  if (observed.scrollExtent !== undefined && observed.scrollExtent.rows >= 0) {
-    state['scrollExtent'] = observed.scrollExtent.rows;
-  }
-
   return Object.keys(state).length === 0 ? undefined : (state as SemanticNode['state']);
 }

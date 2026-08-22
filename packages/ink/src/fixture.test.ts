@@ -3,8 +3,9 @@
  * line discipline, real raw mode.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TerminalHarness } from '@termwright/driver';
+import { ControlChannel } from './control.js';
 import { launchInkFixture } from './fixture.js';
 import type { JsonProps } from './payload.js';
 
@@ -26,8 +27,8 @@ describe('launchInkFixture', () => {
   it('renders the component in a child process and publishes a tree', async () => {
     const harness = await launch({ label: 'Approve' });
 
-    expect(harness.capabilities().semanticTree).toBe(true);
-    expect(harness.capabilities().adapter?.name).toBe('@termwright/probe-ink');
+    expect(harness.contract()?.capabilities['semantic-tree'].status).toBe('supported');
+    expect(harness.contract()?.framework?.name).toBe('ink');
     expect(harness.screen().buffer).toBe('alternate');
     expect(await harness.getByRole('button', { name: 'Approve' }).count()).toBe(1);
   });
@@ -73,7 +74,7 @@ describe('launchInkFixture', () => {
     const harness = await launch();
 
     await harness.press('Tab');
-    await harness.waitForStable();
+    await harness.waitForQuiet();
     await harness.type('ok');
     await harness.waitForText('> ok');
 
@@ -130,6 +131,51 @@ describe('launchInkFixture', () => {
     ).rejects.toThrowError();
   });
 
+  it('rolls the pre-spawn control endpoint back when terminal launch fails', async () => {
+    const listen = ControlChannel.listen.bind(ControlChannel);
+    let close: ReturnType<typeof vi.spyOn> | undefined;
+    const listenSpy = vi.spyOn(ControlChannel, 'listen').mockImplementation(async () => {
+      const channel = await listen();
+      close = vi.spyOn(channel, 'close');
+      return channel;
+    });
+    try {
+      await expect(launchInkFixture({
+        component: COMPONENT,
+        cwd: `/termwright-does-not-exist-${process.pid}`,
+        columns: 20,
+        rows: 5,
+      })).rejects.toThrow();
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      listenSpy.mockRestore();
+    }
+  });
+
+  it('closes the PTY even when control-channel cleanup fails', async () => {
+    const listen = ControlChannel.listen.bind(ControlChannel);
+    let channel: ControlChannel | undefined;
+    const listenSpy = vi.spyOn(ControlChannel, 'listen').mockImplementation(async () => {
+      channel = await listen();
+      return channel;
+    });
+    try {
+      const harness = await launchInkFixture({ component: COMPONENT, columns: 20, rows: 5 });
+      if (channel === undefined) throw new Error('fixture did not acquire its control channel');
+      vi.spyOn(channel, 'close').mockRejectedValueOnce(new Error('injected control cleanup failure'));
+
+      const first = harness.close();
+      const second = harness.close();
+      expect(second).toBe(first);
+      await expect(first).rejects.toThrow('failed to close all Ink fixture resources');
+      const status = await harness.waitForExit();
+      expect(status.code !== null || status.signal !== null).toBe(true);
+    } finally {
+      await channel?.close().catch(() => undefined);
+      listenSpy.mockRestore();
+    }
+  });
+
   it('waits for an instrumented fixture whose imports exceed the generic negotiation window', async () => {
     const slowStart = new URL('./testing/slow-start.mjs', import.meta.url);
     const harness = await launchInkFixture({
@@ -140,7 +186,7 @@ describe('launchInkFixture', () => {
     });
 
     try {
-      expect(harness.capabilities().semanticTree).toBe(true);
+      expect(harness.contract()?.capabilities['semantic-tree'].status).toBe('supported');
       expect(harness.semanticTree()).not.toBeNull();
       expect(harness.screen().text()).not.toBe('');
     } finally {

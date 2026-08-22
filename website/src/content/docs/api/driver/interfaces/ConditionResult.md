@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ConditionResult
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:623
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:774
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:623
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:625
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:776
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:625
 
 > `readonly` **condition**: [`Condition`](../../type-aliases/condition/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:624
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:775
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:624
 
 > `readonly` **observation**: [`Observation`](../../type-aliases/observation/)\<`boolean`\>
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:626
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:777
 
 ***
 
@@ -43,4 +43,4 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:626
 
 > `readonly` **verdict**: `"satisfied"` \| `"unsatisfied"` \| `"inconclusive"`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:627
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:778

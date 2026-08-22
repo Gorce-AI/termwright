@@ -43,6 +43,7 @@ import {
 } from '@termwright/protocol';
 import type { DiagnosticCode } from './api.js';
 import { ProtocolViolationError } from './errors.js';
+import { ResourceScope } from './internal/resource-scope.js';
 import { endAfterFlush } from './internal/socket.js';
 import { tokenMatches } from './internal/token.js';
 
@@ -136,7 +137,16 @@ export interface SemanticChannelOptions {
   acceptHello(): boolean;
   /** Budget offered to an adapter that announced the `logs` capability. */
   readonly logBudget: LogBudget;
+  /** Absolute budget for an accepted socket to authenticate with hello. */
+  readonly handshakeTimeoutMs?: number;
   readonly hooks: SemanticChannelHooks;
+}
+
+/** Fault-injection seam used by transport lifecycle tests. */
+export interface SemanticChannelListenDependencies {
+  readonly createServer?: () => Server;
+  readonly makeDirectory?: (prefix: string) => Promise<string>;
+  readonly listen?: (server: Server, endpoint: string) => Promise<void>;
 }
 
 /** Capability that makes render markers — and therefore pairing — meaningful. */
@@ -149,6 +159,9 @@ const LOGS_CAPABILITY: AdapterCapability = 'logs';
 const FRAME_BEGIN_CAPABILITY: ProbeCapability = 'frame-begin';
 
 const CAPABILITY_SET: ReadonlySet<string> = new Set(ADAPTER_CAPABILITIES);
+
+/** A connected but unauthenticated peer may not occupy a session indefinitely. */
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
 
 type ErrorCode = ProtocolErrorMessage['code'];
 
@@ -181,23 +194,25 @@ function wireCodeFor(error: unknown): ErrorCode {
 export class SemanticChannel {
   readonly endpoint: string;
 
-  readonly #server: Server;
   readonly #options: SemanticChannelOptions;
-  readonly #directory: string | null;
+  readonly #resources: ResourceScope;
+  readonly #sockets = new Set<Socket>();
+  readonly #handshakeTimers = new Map<Socket, NodeJS.Timeout>();
   #attached: Socket | null = null;
   #attachment: SemanticAttachment | null = null;
   #closed = false;
+  #closePromise: Promise<void> | null = null;
 
   private constructor(
     server: Server,
     endpoint: string,
-    directory: string | null,
     options: SemanticChannelOptions,
+    resources: ResourceScope,
   ) {
-    this.#server = server;
     this.endpoint = endpoint;
-    this.#directory = directory;
     this.#options = options;
+    this.#resources = resources;
+    resources.defer('accepted semantic sockets', () => this.#destroySockets());
     server.on('connection', (socket) => this.#handleConnection(socket));
     server.on('error', (error) => {
       options.hooks.onDiagnostic('endpoint-error', `semantic endpoint error: ${String(error)}`);
@@ -205,24 +220,37 @@ export class SemanticChannel {
   }
 
   /** Creates the private endpoint and starts listening. */
-  static async listen(options: SemanticChannelOptions): Promise<SemanticChannel> {
-    const server = createServer();
+  static async listen(
+    options: SemanticChannelOptions,
+    dependencies: SemanticChannelListenDependencies = {},
+  ): Promise<SemanticChannel> {
+    const resources = new ResourceScope('semantic channel');
+    const server = (dependencies.createServer ?? createServer)();
     let endpoint: string;
     let directory: string | null = null;
-    if (process.platform === 'win32') {
-      endpoint = `\\\\.\\pipe\\termwright-${randomBytes(16).toString('hex')}`;
-    } else {
-      directory = await mkdtemp(join(tmpdir(), 'termwright-'));
-      endpoint = join(directory, 'semantic.sock');
+    try {
+      if (process.platform === 'win32') {
+        endpoint = `\\\\.\\pipe\\termwright-${randomBytes(16).toString('hex')}`;
+      } else {
+        directory = await (dependencies.makeDirectory ?? mkdtemp)(join(tmpdir(), 'termwright-'));
+        endpoint = join(directory, 'semantic.sock');
+        resources.defer('semantic socket directory', () => rm(directory!, { recursive: true, force: true }));
+      }
+      resources.defer('semantic listener', () => closeServer(server));
+      await (dependencies.listen ?? listenServer)(server, endpoint);
+      return new SemanticChannel(server, endpoint, options, resources);
+    } catch (error) {
+      try {
+        await resources.close();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'semantic channel startup and rollback failed',
+          { cause: error },
+        );
+      }
+      throw error;
     }
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(endpoint, () => {
-        server.removeListener('error', reject);
-        resolve();
-      });
-    });
-    return new SemanticChannel(server, endpoint, directory, options);
   }
 
   /** The negotiated adapter, or `null` while no adapter has attached. */
@@ -231,15 +259,15 @@ export class SemanticChannel {
   }
 
   /** Closes the endpoint and removes the socket directory. Idempotent. */
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    this.#closePromise ??= this.#close();
+    return this.#closePromise;
+  }
+
+  async #close(): Promise<void> {
     this.#closed = true;
-    this.#attached?.destroy();
     this.#attached = null;
-    await new Promise<void>((resolve) => this.#server.close(() => resolve()));
-    if (this.#directory !== null) {
-      await rm(this.#directory, { recursive: true, force: true }).catch(() => {});
-    }
+    await this.#resources.close();
   }
 
   #handleConnection(socket: Socket): void {
@@ -247,6 +275,18 @@ export class SemanticChannel {
       socket.destroy();
       return;
     }
+    this.#sockets.add(socket);
+    const handshakeTimer = setTimeout(() => {
+      if (!this.#sockets.has(socket) || this.#attached === socket) return;
+      this.#options.hooks.onDiagnostic(
+        'endpoint-error',
+        `semantic peer did not authenticate within ${this.#options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS} ms`,
+      );
+      this.#refuse(socket, 'internal', 'semantic hello deadline exceeded');
+    }, this.#options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
+    handshakeTimer.unref?.();
+    this.#handshakeTimers.set(socket, handshakeTimer);
+
     if (this.#attached !== null) {
       // One adapter per session; a second connection is refused, not raced.
       this.#refuse(socket, 'internal', 'a semantic adapter is already attached');
@@ -293,15 +333,30 @@ export class SemanticChannel {
     });
     socket.on('error', () => socket.destroy());
     socket.on('close', () => {
+      this.#sockets.delete(socket);
+      this.#clearHandshakeTimer(socket);
       if (this.#attached === socket) {
         this.#attached = null;
-        this.#options.hooks.onDiagnostic('adapter-disconnected', 'the semantic adapter disconnected');
-        this.#options.hooks.onDisconnect();
+        if (!this.#closed) {
+          this.#options.hooks.onDiagnostic('adapter-disconnected', 'the semantic adapter disconnected');
+          this.#options.hooks.onDisconnect();
+        }
       }
     });
   }
 
   #handleHello(socket: Socket, hello: HelloMessage): boolean {
+    // Connections are admitted before they authenticate. Re-check at the
+    // claim itself so two sockets accepted in the same turn cannot both win.
+    if (this.#attached !== null && this.#attached !== socket) {
+      this.#refuse(socket, 'internal', 'a semantic adapter is already attached');
+      this.#options.hooks.onDiagnostic(
+        'adapter-capability',
+        'refused a concurrent adapter hello: this session already has one attached',
+        { wireCode: 'internal' },
+      );
+      return false;
+    }
     if (!this.#options.acceptHello()) {
       this.#refuse(
         socket,
@@ -324,6 +379,7 @@ export class SemanticChannel {
     );
 
     this.#attached = socket;
+    this.#clearHandshakeTimer(socket);
     const markerEnabled = capabilities.includes(MARKER_CAPABILITY);
     const logsEnabled = capabilities.includes(LOGS_CAPABILITY);
     const ack: HelloAckMessage = {
@@ -462,11 +518,17 @@ export class SemanticChannel {
       if (node.state !== undefined && !has('states')) {
         return reject("contains state without the 'states' capability");
       }
+      if (node.state?.focused !== undefined && !has('focus-state')) {
+        return reject("contains focused state without the 'focus-state' capability");
+      }
       if (node.extended !== undefined && !has('states')) {
         return reject("contains extended state without the 'states' capability");
       }
       if (node.actions !== undefined && !has('actions')) {
         return reject("contains actions without the 'actions' capability");
+      }
+      if (node.inputRecipes !== undefined && !has('action-recipes')) {
+        return reject("contains input recipes without the 'action-recipes' capability");
       }
       if (node.textRanges !== undefined && !has('text-ranges')) {
         return reject("contains text ranges without the 'text-ranges' capability");
@@ -517,6 +579,45 @@ export class SemanticChannel {
       wireCode,
     );
   }
+
+  #clearHandshakeTimer(socket: Socket): void {
+    const timer = this.#handshakeTimers.get(socket);
+    if (timer !== undefined) clearTimeout(timer);
+    this.#handshakeTimers.delete(socket);
+  }
+
+  #destroySockets(): void {
+    for (const timer of this.#handshakeTimers.values()) clearTimeout(timer);
+    this.#handshakeTimers.clear();
+    for (const socket of this.#sockets) socket.destroy();
+    this.#sockets.clear();
+  }
+}
+
+function listenServer(server: Server, endpoint: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => {
+      server.removeListener('listening', onListening);
+      reject(error);
+    };
+    const onListening = (): void => {
+      server.removeListener('error', onError);
+      resolve();
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(endpoint);
+  });
+}
+
+async function closeServer(server: Server): Promise<void> {
+  if (!server.listening) return;
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error === undefined) resolve();
+      else reject(error);
+    });
+  });
 }
 
 function errorDetail(error: unknown): string {

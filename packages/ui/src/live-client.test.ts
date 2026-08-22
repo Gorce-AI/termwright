@@ -65,6 +65,24 @@ describe('connectLiveSession', () => {
     expect(server.hub.backlog).toHaveLength(count);
   });
 
+  it('reports an explicit diagnostic gap when the pre-connect queue overflows', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const session = new FakeSession('flooded-worker-session');
+    const connection = connectLiveSession(session, { url: server.url });
+    connections.push(connection);
+
+    for (let index = 0; index < 4_200; index += 1) session.output(`line ${index}`);
+
+    await until(
+      () => server.hub.backlog.some((message) => message.type === 'diagnostic-gap'),
+      'the producer diagnostic gap',
+    );
+    expect(server.hub.backlog.find((message) => message.type === 'diagnostic-gap')).toMatchObject({
+      source: 'live-session-producer',
+    });
+  });
+
   it('is a true no-op when no URL or an invalid URL is configured', async () => {
     const previous = process.env['TERMWRIGHT_UI_URL'];
     delete process.env['TERMWRIGHT_UI_URL'];
@@ -143,7 +161,12 @@ describe('connectLiveSession', () => {
     expect(response).toMatchObject({ requestId: 'inspect-1', nodeId: 'save' });
     expect(response?.type === 'actionability-inspection' ? response.results?.map((entry) => entry.kind) : []).toEqual(['click', 'hover', 'focus', 'type']);
     expect(response?.type === 'actionability-inspection' ? new Set(response.results?.map((entry) => `${entry.contractId}:${entry.sequence}`)).size : 0).toBe(1);
-    expect(calls).toEqual(['click:save@7', 'hover:save@7', 'focus:save@7', 'type:save@7']);
+    expect(calls).toEqual([
+      'click:semantic:save@7',
+      'hover:semantic:save@7',
+      'focus:semantic:save@7',
+      'type:semantic:save@7',
+    ]);
     socket.close();
   });
 });

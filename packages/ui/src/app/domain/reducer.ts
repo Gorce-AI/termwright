@@ -1,6 +1,5 @@
 import type { ViewerState } from '../../data-source.js';
 import type { ServerMessage } from '../../events.js';
-import { discoveredId } from '../../test-model.js';
 import type { TraceLogs } from '../../trace-logs.js';
 import type { TraceCommands, TraceFrames } from '../../trace-playback.js';
 import type { TraceOverview, TraceStatePayload } from '../../trace-source.js';
@@ -205,6 +204,7 @@ function bootReady(state: AppState, viewer: ViewerState): AppState {
         durationMs: viewer.trace.durationMs,
       },
       stopError: null,
+      diagnosticGaps: 0,
       requestedTargets: null,
     },
     executions: traceExecution === null ? state.executions : [traceExecution],
@@ -226,7 +226,7 @@ function executionFromTrace(trace: NonNullable<ViewerState['trace']>): Execution
   const runId = `trace:${trace.startedAt}`;
   const title = trace.command.length === 0 ? trace.sessionId : trace.command.join(' ');
   return {
-    caseKey: discoveredId(trace.path, title),
+    caseKey: `trace:${trace.sessionId}`,
     runId,
     executionId: `${runId}:${trace.sessionId}:1`,
     runtimeId: trace.sessionId,
@@ -296,6 +296,11 @@ function reduceMessage(state: AppState, message: ServerMessage): AppState {
         catalog,
       };
     }
+    case 'collection-failed':
+      return {
+        ...state,
+        toast: { tone: 'failure', text: `Collection failed: ${message.error}` },
+      };
     case 'run-start': {
       const redundantTraceBacklog = message.mode === 'post-mortem'
         && state.run.mode === 'post-mortem'
@@ -307,12 +312,13 @@ function reduceMessage(state: AppState, message: ServerMessage): AppState {
       return {
         ...state,
         run: {
-          runId: `run:${message.startedAt}`,
+          runId: message.runId,
           mode: message.mode,
           status: leavingRecorder ? 'idle' : 'running',
           startedAt: message.startedAt,
           summary: null,
           stopError: null,
+          diagnosticGaps: 0,
           requestedTargets: state.pendingRunTargets,
         },
         selectedExecutionId: pinnedReplay ? state.selectedExecutionId : null,
@@ -419,6 +425,24 @@ function reduceMessage(state: AppState, message: ServerMessage): AppState {
         run: { ...state.run, status: 'running', stopError: message.error },
         toast: { tone: 'failure', text: `Could not stop: ${message.error}` },
       };
+    case 'run-infrastructure-failed':
+      return {
+        ...state,
+        run: { ...state.run, status: 'finished' },
+        toast: { tone: 'failure', text: `Infrastructure failure: ${message.error}` },
+      };
+    case 'diagnostic-gap':
+      return {
+        ...state,
+        run: {
+          ...state.run,
+          diagnosticGaps: state.run.diagnosticGaps + message.droppedMessages,
+        },
+        toast: {
+          tone: 'failure',
+          text: `Runner diagnostics incomplete: ${message.droppedMessages} projected messages were dropped`,
+        },
+      };
     case 'app-log': {
       const key = sessionKey(state.run.runId, message.sessionId);
       const current = state.sessions[key];
@@ -443,7 +467,9 @@ function startTest(state: AppState, message: Extract<ServerMessage, { type: 'tes
   if (state.run.mode === 'post-mortem' && state.executions.some((test) => test.runtimeId === message.id)) {
     return state;
   }
-  const caseKey = discoveredId(message.file, message.title);
+  // Native host identity is the join key. Recorder pseudo-cases have no
+  // catalogue identity and remain scoped to their explicit recorder id.
+  const caseKey = message.runnerTaskId ?? `record:${message.id}`;
   const explicitlyRequested = state.pendingRunTargets !== null && (
     state.pendingRunTargets.length === 0
       || state.pendingRunTargets.includes(caseKey)
@@ -452,8 +478,8 @@ function startTest(state: AppState, message: Extract<ServerMessage, { type: 'tes
   const priorAttempts = state.executions.filter(
     (test) => test.runId === state.run.runId && test.caseKey === caseKey,
   );
-  const attempt = priorAttempts.length + 1;
-  const executionId = `${state.run.runId ?? 'run:unknown'}:${message.id}:${attempt}`;
+  const attempt = message.attempt ?? priorAttempts.length + 1;
+  const executionId = message.executionId ?? `${state.run.runId ?? 'run:unknown'}:${message.id}:${attempt}`;
   const entry: ExecutionCase = {
     caseKey,
     runId: state.run.runId,
@@ -503,9 +529,6 @@ function addSession(state: AppState, message: Extract<ServerMessage, { type: 'se
     columns: message.columns,
     rows: message.rows,
     terminalProfile: message.terminalProfile,
-    ...(message.adapter === undefined ? {} : { adapter: message.adapter }),
-    ...(message.probe === undefined ? {} : { probe: message.probe }),
-    ...(message.capabilities === undefined ? {} : { capabilities: message.capabilities }),
     ...(message.contract === undefined ? {} : { contract: message.contract }),
     ...(message.adapterStatus === undefined ? {} : { adapterStatus: message.adapterStatus }),
     command: [],

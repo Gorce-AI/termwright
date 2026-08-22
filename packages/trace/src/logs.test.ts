@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -7,6 +7,7 @@ import { FakeSession } from './__fixtures__/fake-session.js';
 import { openTrace } from './reader.js';
 import { generateHtmlReport } from './report.js';
 import { TRACE_FILES, type TraceLogEntry } from './types.js';
+import { rewriteCommittedMember } from './__fixtures__/committed.js';
 import { createTraceWriter } from './writer.js';
 
 const temporaries: string[] = [];
@@ -481,7 +482,7 @@ describe('the summary and the file disagreeing', () => {
       unknown
     >;
     delete meta['logs'];
-    await writeFile(join(dir, TRACE_FILES.meta), JSON.stringify(meta), 'utf8');
+    await rewriteCommittedMember(dir, TRACE_FILES.meta, JSON.stringify(meta));
 
     const trace = await openTrace(dir);
     try {

@@ -276,6 +276,7 @@ const SCENARIOS = {
   flood: () => {
     const noise = `${'x'.repeat(4096)}\r\n`;
     for (let chunk = 0; chunk < 512; chunk += 1) process.stdout.write(noise);
+    say('PEER FLOOD OUTPUT COMPLETE');
     for (let revision = 2; revision <= 100; revision += 1) {
       socket.write(frame({ type: 'snapshot', snapshot: tree(revision, validNodes(`Flood${revision}`)) }));
     }

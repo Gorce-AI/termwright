@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -6,8 +6,9 @@ import { FakeSession } from './__fixtures__/fake-session.js';
 import { openTrace } from './reader.js';
 import { generateHtmlReport } from './report.js';
 import { TRACE_FILES, type ActionEvent, type TraceEvent } from './types.js';
+import { rewriteCommittedMember } from './__fixtures__/committed.js';
 import { createTraceWriter } from './writer.js';
-import { SESSION_CAPABILITIES, type EffectiveSessionContract } from '@termwright/protocol';
+import { SESSION_CAPABILITIES, type ActionabilityExplanation, type EffectiveSessionContract } from '@termwright/protocol';
 
 const stamp = { sessionId: 't1', contractId: 't1:0', epoch: 0, sequence: 42, screenRevision: 7, semanticRevision: 42, pairedScreenRevision: 7 } as const;
 
@@ -64,13 +65,13 @@ describe('actions from the driver', () => {
     session.tick(50);
     session.action('click', {
       selector: "getByRole('button', { name: 'Submit' })",
-      ref: 'n8@42',
+      ref: 'semantic:n8@42',
       observation: stamp,
       receipt: {
-        intent: { kind: 'click', selector: "getByRole('button', { name: 'Submit' })", targetRef: 'n8@42' },
+        intent: { kind: 'click', selector: "getByRole('button', { name: 'Submit' })", targetRef: 'semantic:n8@42' },
         plan: {
-          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click', targetRef: 'n8@42' },
-          checkpoint: stamp, requirements: [], strategy: 'authoritative-pointer-region',
+          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click', targetRef: 'semantic:n8@42' },
+          checkpoint: stamp, requirements: [], strategy: 'authoritative-pointer-region', valuePolicy: 'redacted',
           operations: [{ device: 'mouse', kind: 'down', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }, { device: 'mouse', kind: 'up', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }],
         },
         before: stamp, after: { ...stamp, sequence: 43, screenRevision: 8, pairedScreenRevision: 8 },
@@ -86,7 +87,7 @@ describe('actions from the driver', () => {
       kind: 'action',
       api: 'click',
       selector: "getByRole('button', { name: 'Submit' })",
-      ref: 'n8@42',
+      ref: 'semantic:n8@42',
       ok: true,
       t: 50,
       castOffset: 50,
@@ -112,7 +113,7 @@ describe('actions from the driver', () => {
         intent: { kind: 'click' },
         plan: {
           actionId: 'a1', contractId: 't1:0', intent: { kind: 'click' }, checkpoint: stamp,
-          requirements: [], strategy: 'authoritative-pointer-region',
+          requirements: [], strategy: 'authoritative-pointer-region', valuePolicy: 'redacted',
           operations: [{ device: 'mouse', kind: 'down', row: 3, column: 9, button: 'left' }],
         },
         before: stamp, after: { ...stamp, sequence: 43 },
@@ -145,7 +146,7 @@ describe('actions from the driver', () => {
         intent: { kind: 'click' },
         plan: {
           actionId: 'a1', contractId: 't1:0', intent: { kind: 'click' }, checkpoint: stamp,
-          requirements: [], strategy: 'authoritative-pointer-region', operations: [operation],
+          requirements: [], strategy: 'authoritative-pointer-region', valuePolicy: 'redacted', operations: [operation],
         },
         before: stamp, after: stamp, executed: [operation], outcome: 'completed',
       },
@@ -170,7 +171,7 @@ describe('actions from the driver', () => {
         intent: { kind: 'click' },
         plan: {
           actionId: 'a1', contractId: 't1:0', intent: { kind: 'click' },
-          checkpoint: { ...stamp, sequence: 41 }, requirements: [], strategy: 'pointer', operations: [],
+          checkpoint: { ...stamp, sequence: 41 }, requirements: [], strategy: 'pointer', valuePolicy: 'redacted', operations: [],
         },
         before: stamp, after: stamp, executed: [], outcome: 'completed',
       },
@@ -207,15 +208,15 @@ describe('actions from the driver', () => {
     const session = new FakeSession();
     const writer = createTraceWriter(session, { dir, now: session.now });
     const evidence = { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' } as const;
-    const actionability = {
+    const actionability: ActionabilityExplanation = {
       actionable: false,
-      intent: { kind: 'drag' as const, selector: 'button', targetRef: 'save@42' },
+      intent: { kind: 'drag' as const, selector: 'button', targetRef: 'semantic:save@42' },
       checkpoint: stamp,
       requirements: [
         { condition: { kind: 'pointer-input' as const, target: 'save@42' }, checkpoint: stamp, observation: { status: 'known' as const, value: true, evidence }, verdict: 'satisfied' as const },
         { condition: { kind: 'mouse-input-enabled' as const, target: 'save@42' }, checkpoint: stamp, observation: { status: 'known' as const, value: false, evidence }, verdict: 'unsatisfied' as const },
       ],
-      reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'save@42' },
+      reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'semantic:save@42' },
     };
     session.action('drag', { ok: false, error: 'input-mode-disabled', actionability });
     await writer.finalize();
@@ -253,7 +254,7 @@ describe('actions from the driver', () => {
     const event = JSON.parse((await readFile(eventsPath, 'utf8')).trim()) as Record<string, unknown>;
     const explanation = event['actionability'] as { requirements: Array<{ observation: { evidence: { strength: string } } }> };
     explanation.requirements[0]!.observation.evidence.strength = 'guessed';
-    await writeFile(eventsPath, `${JSON.stringify(event)}\n`);
+    await rewriteCommittedMember(dir, TRACE_FILES.events, `${JSON.stringify(event)}\n`);
 
     const trace = await openTrace(dir);
     const drain = async (): Promise<void> => { for await (const _event of trace.events()) { /* consume */ } };

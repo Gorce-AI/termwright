@@ -66,12 +66,14 @@ const DRIVER_ERROR_KINDS = [
   'input-mode-disabled',
   'capability-provider-lost',
   'capability-provider-violation',
+  'evidence-conflict',
   'adapter-guarantee-violation',
   'duplicate-semantic-key',
   'history-truncated',
   'protocol-violation',
   'capacity',
   'process-exited',
+  'pty-backend-failed',
   'session-closed',
   'not-found',
 ] as const satisfies readonly TermwrightErrorCode[];
@@ -88,7 +90,7 @@ export const ERROR_KINDS_ARE_COMPLETE: [MissingKind] extends [never]
 const ERROR_KINDS: readonly ErrorKind[] = [...DRIVER_ERROR_KINDS, ...MCP_ERROR_KINDS];
 
 const CONVENTIONS = [
-  'A ref looks like n8@42: node id minted at semantic revision 42. A stable semantic identity may ' +
+  'A semantic ref looks like semantic:n8@42: node id minted at semantic revision 42. A stable semantic identity may ' +
     'be re-resolved in later revisions; frame-local identities and grid refs must be refreshed.',
   'terminal.snapshot returns a screen revision; pass it to terminal.capture_since as cursor to get ' +
     'only the rows and semantic subtrees that changed.',
@@ -144,8 +146,8 @@ export function buildUsage(): string {
     '',
     'typical loop',
     '  terminal.launch {command:["node","app.js"]}   -> terminal "t1" + first snapshot',
-    '  terminal.snapshot {terminal:"t1"}             -> refs n8@42 + visible text + revision',
-    '  terminal.click {terminal:"t1", ref:"n8@42"}   -> real mouse report through the PTY',
+    '  terminal.snapshot {terminal:"t1"}             -> refs semantic:n8@42 + visible text + revision',
+    '  terminal.click {terminal:"t1", ref:"semantic:n8@42"} -> real mouse report through the PTY',
     '  terminal.wait_for {terminal:"t1", wait:"text", text:"Approved"}',
     '  terminal.capture_since {terminal:"t1", cursor:42} -> only what changed',
     '  terminal.close {terminal:"t1"}',

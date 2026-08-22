@@ -114,7 +114,9 @@ func newTermwrightProbe() *termwrightProbeState {
 		Capabilities: []protocol.Capability{
 			protocol.CapTree,
 			protocol.CapStates,
+			protocol.CapFocusState,
 			protocol.CapActions,
+			protocol.CapActionRecipes,
 			protocol.CapRenderRevisions,
 		},
 		// Limit one frame write. The publish below happens under the
@@ -316,6 +318,13 @@ func (p *termwrightProbeState) walk(
 			"role": protocol.ProvenanceRecognizer,
 		},
 	}
+	node.Actions, node.InputRecipes = termwrightPhysicalSemantics(primitive)
+	if len(node.Actions) > 0 {
+		termwrightProvenance(&node, "actions", protocol.ProvenanceFramework)
+	}
+	if len(node.InputRecipes) > 0 {
+		termwrightProvenance(&node, "inputRecipes", protocol.ProvenanceFramework)
+	}
 	node.Geometry = termwrightGeometry(primitive, hidden)
 	// Required for a generic node, and useful on every other one: it is what
 	// keeps a widget this probe does not know about alive and identifiable
@@ -327,6 +336,7 @@ func (p *termwrightProbeState) walk(
 	meta, annotated := annotate.Lookup(primitive)
 	if annotated {
 		termwrightApplyAnnotation(meta, &node)
+		termwrightSortActions(node.Actions)
 		termwrightRegisterKey(meta.Key, id, keys, duplicates)
 	}
 	if parentID == "" {
@@ -453,7 +463,11 @@ func termwrightApplyAnnotation(meta annotate.Semantics, node *protocol.Node) {
 		}
 		termwrightProvenance(node, "extended", protocol.ProvenanceAnnotation)
 	}
-	seenActions := make(map[protocol.Action]struct{}, len(meta.Actions))
+	seenActions := make(map[protocol.Action]struct{}, len(node.Actions)+len(meta.Actions))
+	for _, action := range node.Actions {
+		seenActions[action] = struct{}{}
+	}
+	annotationAddedAction := false
 	for _, action := range meta.Actions {
 		if !protocol.ValidAction(action) {
 			continue
@@ -463,10 +477,40 @@ func termwrightApplyAnnotation(meta annotate.Semantics, node *protocol.Node) {
 		}
 		seenActions[action] = struct{}{}
 		node.Actions = append(node.Actions, action)
+		annotationAddedAction = true
 	}
-	if len(node.Actions) > 0 {
+	if annotationAddedAction {
 		termwrightProvenance(node, "actions", protocol.ProvenanceAnnotation)
 	}
+}
+
+// termwrightPhysicalSemantics publishes only keybindings proven by the exact
+// v0.42.0 InputHandler implementations. They are data recipes executed later
+// through the real PTY; this instrumentation never invokes a handler.
+func termwrightPhysicalSemantics(p Primitive) ([]protocol.Action, []protocol.PhysicalInputRecipe) {
+	press := func(action protocol.Action, key string) ([]protocol.Action, []protocol.PhysicalInputRecipe) {
+		return []protocol.Action{action}, []protocol.PhysicalInputRecipe{{
+			Action: string(action), RequiresFocus: true,
+			Steps: []protocol.PhysicalInputRecipeStep{{Kind: "press", Key: key}},
+		}}
+	}
+	switch p.(type) {
+	case *Button:
+		return press(protocol.ActionActivate, "Enter")
+	case *Checkbox:
+		return press(protocol.ActionToggle, "Space")
+	default:
+		return nil, nil
+	}
+}
+
+func termwrightSortActions(actions []protocol.Action) {
+	order := map[protocol.Action]int{
+		protocol.ActionFocus: 0, protocol.ActionActivate: 1, protocol.ActionToggle: 2,
+		protocol.ActionSetValue: 3, protocol.ActionScroll: 4, protocol.ActionSelect: 5,
+		protocol.ActionExpand: 6,
+	}
+	sort.SliceStable(actions, func(left, right int) bool { return order[actions[left]] < order[actions[right]] })
 }
 
 // termwrightChild is a child plus whether its container is showing it.
@@ -594,20 +638,25 @@ func termwrightName(p Primitive) string {
 
 // termwrightValue reports the current value of a value-bearing widget.
 //
-// A pointer because the empty string is a fact: `""` says the field is empty,
-// absent says this widget carries no value at all. Collapsing the two would
-// make an assertion on an emptied input box unwritable.
-func termwrightValue(p Primitive) *string {
+// The observation keeps an empty public value distinct from no value. A text
+// transform is production evidence that the displayed widget intentionally
+// withholds its source text (InputField passwords use this exact mechanism),
+// so the probe never exports that plaintext.
+func termwrightValue(p Primitive) *protocol.SemanticValueObservation {
 	switch widget := p.(type) {
 	case *InputField:
-		text := widget.GetText()
-		return &text
+		if widget.textArea != nil && widget.textArea.transform != nil {
+			return protocol.WithheldSensitiveValue()
+		}
+		return protocol.PublicValue(widget.GetText(), termwrightEvidence("native"))
 	case *TextArea:
-		text := widget.GetText()
-		return &text
+		if widget.transform != nil {
+			return protocol.WithheldSensitiveValue()
+		}
+		return protocol.PublicValue(widget.GetText(), termwrightEvidence("native"))
 	case *DropDown:
 		_, text := widget.GetCurrentOption()
-		return &text
+		return protocol.PublicValue(text, termwrightEvidence("native"))
 	}
 	return nil
 }
@@ -661,21 +710,6 @@ func termwrightUnsupportedHitGrid() protocol.Observation[protocol.PointerHitGrid
 	}
 }
 
-// termwrightScroll reports a scroll offset only when it is a fact.
-//
-// Several of these fields are meaningless until the widget has been drawn once
-// (the audit lists them: TextView.pageSize, TreeView.nodes, Table.visibleRows
-// and friends), and tview leaves some of them negative until then. A negative
-// offset is not "scrolled backwards", it is "not decided yet" — publishing it
-// asserts something false and, since the schema requires a non-negative
-// integer, gets the whole snapshot refused.
-func termwrightScroll(offset int) *int {
-	if offset < 0 {
-		return nil
-	}
-	return protocol.Int(offset)
-}
-
 // termwrightCount is the same guard for set sizes.
 func termwrightCount(count int) *int {
 	if count < 0 {
@@ -721,28 +755,15 @@ func termwrightState(p Primitive, focused, hidden bool) *protocol.State {
 	case *TextArea:
 		if widget.GetDisabled() {
 			state.Disabled = protocol.Bool(true)
+			empty = false
 		}
-		row, _ := widget.GetOffset()
-		state.ScrollOffset = termwrightScroll(row)
-		empty = false
 	case *List:
 		state.SetSize = termwrightCount(widget.GetItemCount())
-		// Named `itemOffset` here and `lineOffset`, `rowOffset` or `offsetY`
-		// on the other four scrollables; there is no single field to reach for.
-		offset, _ := widget.GetOffset()
-		state.ScrollOffset = termwrightScroll(offset)
 		empty = false
 	case *Table:
 		state.SetSize = termwrightCount(widget.GetRowCount())
-		row, _ := widget.GetOffset()
-		state.ScrollOffset = termwrightScroll(row)
-		empty = false
-	case *TextView:
-		row, _ := widget.GetScrollOffset()
-		state.ScrollOffset = termwrightScroll(row)
 		empty = false
 	case *TreeView:
-		state.ScrollOffset = termwrightScroll(widget.GetScrollOffset())
 		state.SetSize = termwrightCount(widget.GetRowCount())
 		empty = false
 	case *Modal:

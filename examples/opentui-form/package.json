@@ -4,11 +4,11 @@
   "private": true,
   "description": "An OpenTUI form driven through its observed Renderable tree",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "^22.0.0 || ^24.0.0" },
   "scripts": {
     "start": "bun app/form.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "termwright test"
   },
   "dependencies": {
     "@opentui/core": "^0.5.3"
@@ -18,6 +18,6 @@
     "@types/node": "^22.15.0",
     "termwright": "workspace:*",
     "typescript": "^5.6.0",
-    "vitest": "^3.2.0"
+    "vitest": "3.2.7"
   }
 }

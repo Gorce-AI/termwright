@@ -26,12 +26,12 @@ const snapshot: SemanticSnapshot = {
   coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() },
   hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
 };
-const command: ExecutionNode = { nodeId: 'a1', kind: 'action', label: 'click', status: 'passed', startMs: 10, targetRef: 'approve@7' };
+const command: ExecutionNode = { nodeId: 'a1', kind: 'action', label: 'click', status: 'passed', startMs: 10, targetRef: 'semantic:approve@7' };
 
 describe('terminal highlights', () => {
   it('uses only the node from the exact referenced semantic revision', () => {
     expect(highlightExecutionTarget(command, snapshot, false)).toMatchObject({
-      targetRef: 'approve@7',
+      targetRef: 'semantic:approve@7',
       revision: 7,
       role: 'button',
       name: 'Approve',

@@ -61,7 +61,15 @@ export class TimeoutError extends TermwrightError {
   }
 }
 
-/** A ref (`n8@42`) was used after its revision was superseded or evicted. */
+/** The certified PTY backend accepted work and later reported a fatal failure. */
+export class PtyBackendError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics, options?: ErrorOptions) {
+    super('pty-backend-failed', message, diagnostics);
+    if (options?.cause !== undefined) this.cause = options.cause;
+  }
+}
+
+/** A revision-bound locator ref was used after its observation was superseded or evicted. */
 export class StaleSnapshotError extends TermwrightError {
   constructor(message: string, diagnostics: ErrorDiagnostics) {
     super('stale-snapshot', message, diagnostics);
@@ -127,6 +135,13 @@ export class CapabilityProviderLostError extends TermwrightError {
 export class CapabilityProviderViolationError extends TermwrightError {
   constructor(message: string, diagnostics: ErrorDiagnostics) {
     super('capability-provider-violation', message, diagnostics);
+  }
+}
+
+/** Two authoritative producers supplied incompatible facts for one revision. */
+export class EvidenceConflictError extends TermwrightError {
+  constructor(message: string, diagnostics: ErrorDiagnostics) {
+    super('evidence-conflict', message, diagnostics);
   }
 }
 

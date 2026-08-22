@@ -3,7 +3,7 @@ import { buildCommandLog, currentCommand, parseRef, stepCommand } from './comman
 
 const log = buildCommandLog([
   { kind: 'step-start', t: 100, castOffset: 90, stepId: 's1', title: 'approve' },
-  { kind: 'action', t: 150, castOffset: 140, api: 'locator.click', selector: 'button', ref: 'n8@42', ok: true, stepId: 's1' },
+  { kind: 'action', t: 150, castOffset: 140, api: 'locator.click', selector: 'button', ref: 'semantic:n8@42', ok: true, stepId: 's1' },
   { kind: 'assert', t: 200, castOffset: 190, api: 'toBeVisible', selector: 'dialog', ok: false, error: 'still hidden', stepId: 's1' },
   { kind: 'step-end', t: 250, castOffset: 240, stepId: 's1', status: 'failed' },
   { kind: 'input', t: 300, castOffset: 290, dataB64: 'DQ==', inputKind: 'key' },
@@ -68,15 +68,15 @@ describe('buildCommandLog', () => {
     const rows = buildCommandLog([{
       kind: 'action', t: 20, castOffset: 20, api: 'click', ok: false, error: 'not-actionable',
       actionability: {
-        actionable: false, intent: { kind: 'click', targetRef: 'save@7' }, checkpoint: stamp,
+        actionable: false, intent: { kind: 'click', targetRef: 'semantic:save@7' }, checkpoint: stamp,
         requirements: [{ condition: { kind: 'receives-pointer', target: 'save@7' }, checkpoint: stamp, observation: { status: 'known', value: false, evidence }, verdict: 'unsatisfied' }],
-        reason: { code: 'covered-by', message: 'Target is covered', targetRef: 'overlay@7' },
+        reason: { code: 'covered-by', message: 'Target is covered', targetRef: 'semantic:overlay@7' },
       },
     }]);
     expect(rows[0]?.actionability).toEqual({
       actionable: false, kind: 'click', contractId: 's1:0', sequence: 7,
       requirements: [{ kind: 'receives-pointer', target: 'save@7', verdict: 'unsatisfied', observation: 'known', evidence }],
-      reason: { code: 'covered-by', message: 'Target is covered', targetRef: 'overlay@7' },
+      reason: { code: 'covered-by', message: 'Target is covered', targetRef: 'semantic:overlay@7' },
     });
   });
 
@@ -143,7 +143,7 @@ describe('buildCommandLog', () => {
 
   it('keeps the selector, ref and failure of each row', () => {
     expect(log[1]?.selector).toBe('button');
-    expect(log[1]?.ref).toBe('n8@42');
+    expect(log[1]?.ref).toBe('semantic:n8@42');
     expect(log[2]?.ok).toBe(false);
     expect(log[2]?.error).toBe('still hidden');
   });
@@ -220,13 +220,13 @@ describe('stepCommand', () => {
 
 describe('parseRef', () => {
   it('splits a ref into node and revision', () => {
-    expect(parseRef('n8@42')).toEqual({ nodeId: 'n8', revision: 42 });
+    expect(parseRef('semantic:n8@42')).toEqual({ nodeId: 'n8', revision: 42 });
   });
 
   it('rejects anything else', () => {
     expect(parseRef('n8')).toBeNull();
     expect(parseRef('cells(1,2)')).toBeNull();
-    expect(parseRef('n8@rev')).toBeNull();
+    expect(parseRef('semantic:n8@rev')).toBeNull();
   });
 });
 

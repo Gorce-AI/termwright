@@ -72,14 +72,14 @@ export interface RefQuery {
   readonly description: string;
 }
 
-/** Anything a {@link Locator} can be built from. */
+/** Internal query union behind the distinct semantic and screen locator domains. */
 export type LocatorQuery = SemanticQuery | GenericQuery | RefQuery;
 
-/** Matches `grid:{row},{column},{width},{height}@{screenRevision}`. */
-const GRID_REF = /^grid:(\d+),(\d+),(\d+),(\d+)@(\d+)$/u;
+/** Matches `screen:{row},{column},{width},{height}@{screenRevision}`. */
+const GRID_REF = /^screen:(\d+),(\d+),(\d+),(\d+)@(\d+)$/u;
 
-/** Matches `{nodeId}@{semanticRevision}`; node ids never contain '@'. */
-const NODE_REF = /^([^@\s]+)@(\d+)$/u;
+/** Matches `semantic:{nodeId}@{semanticRevision}`; node ids never contain '@'. */
+const NODE_REF = /^semantic:([^@\s]+)@(\d+)$/u;
 
 /**
  * Parses a ref minted by `ResolvedTarget.ref`. Returns `null` for anything
@@ -103,16 +103,22 @@ export function parseRef(ref: string): ParsedRef | null {
   const node = NODE_REF.exec(ref);
   if (node === null) return null;
   const [, nodeId, revision] = node;
-  if (nodeId === undefined || nodeId.startsWith('grid:')) return null;
+  if (nodeId === undefined) return null;
   return { kind: 'node', nodeId, revision: Number(revision) };
+}
+
+/** Extracts a node id only from an explicitly semantic ref. */
+export function semanticNodeId(ref: string): string | null {
+  const parsed = parseRef(ref);
+  return parsed?.kind === 'node' ? parsed.nodeId : null;
 }
 
 /** Builds the query behind `locatorForRef`. */
 export function refQuery(ref: ParsedRef): RefQuery {
   const description =
     ref.kind === 'node'
-      ? `locatorForRef(${JSON.stringify(`${ref.nodeId}@${ref.revision}`)})`
-      : `locatorForRef(${JSON.stringify(`grid:${ref.rect.row},${ref.rect.column},${ref.rect.width},${ref.rect.height}@${ref.revision}`)})`;
+      ? `locatorForRef(${JSON.stringify(`semantic:${ref.nodeId}@${ref.revision}`)})`
+      : `locatorForRef(${JSON.stringify(`screen:${ref.rect.row},${ref.rect.column},${ref.rect.width},${ref.rect.height}@${ref.revision}`)})`;
   return { kind: 'ref', ref, description };
 }
 

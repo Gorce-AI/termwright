@@ -75,6 +75,8 @@ export interface AccessKitNode {
   readonly modal?: boolean;
   readonly hidden?: boolean;
   readonly readOnly?: boolean;
+  readonly required?: boolean;
+  readonly multiselectable?: boolean;
   readonly toggled?: AccessKitToggled;
 }
 
@@ -299,7 +301,7 @@ export function toAccessKitTreeUpdate(
       role: accessKitRoleFor(node),
       ...(node.name === '' ? {} : { label: node.name }),
       ...(node.description === undefined ? {} : { description: node.description }),
-      ...(node.value === undefined ? {} : { value: node.value }),
+      ...(node.value?.status === 'known' && node.value.sensitivity === 'public' ? { value: node.value.value } : {}),
       ...(childrenOf.has(node.id) ? { children: childrenOf.get(node.id)! } : {}),
       ...(visibleRect !== undefined && options.cellSize !== undefined
         ? { bounds: boundsFor(visibleRect, options.cellSize) }
@@ -316,6 +318,10 @@ export function toAccessKitTreeUpdate(
       ...(state?.modal === undefined ? {} : { modal: state.modal }),
       ...(state?.hidden === undefined ? {} : { hidden: state.hidden }),
       ...(state?.readonly === undefined ? {} : { readOnly: state.readonly }),
+      ...(state?.required === undefined ? {} : { required: state.required }),
+      ...(state?.multiselectable === undefined
+        ? {}
+        : { multiselectable: state.multiselectable }),
       ...(toggledFor(state?.checked) === undefined
         ? {}
         : { toggled: toggledFor(state?.checked)! }),

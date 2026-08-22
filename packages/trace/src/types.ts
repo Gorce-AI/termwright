@@ -15,8 +15,25 @@
  * TypeScript.
  */
 
-import type { CrashInput, SessionDiagnostic } from '@termwright/driver';
-import type { ActionReceipt, ActionabilityExplanation, EffectiveSessionContract, LogAttrValue, LogLevel, ObservationStamp, SemanticSnapshot } from '@termwright/protocol';
+import type { CrashInput, LocatorRef, SessionDiagnostic } from '@termwright/driver';
+import type {
+  ActionReceipt,
+  ActionabilityExplanation,
+  AttemptId,
+  EffectiveSessionContract,
+  ExecutionId,
+  InvocationId,
+  LogAttrValue,
+  LogLevel,
+  ObservationStamp,
+  ProjectId,
+  RunId,
+  RunnerTaskId,
+  SessionId,
+  ShardId,
+  SpecId,
+  SemanticSnapshot,
+} from '@termwright/protocol';
 
 /** Current archive version. Readers reject anything else. */
 export const TRACE_VERSION = 1 as const;
@@ -28,7 +45,11 @@ export const TRACE_FILES = {
   events: 'events.jsonl',
   semantics: 'semantics.jsonl',
   logs: 'logs.jsonl',
+  commit: 'COMMITTED',
 } as const;
+
+/** Marker present only in a staging directory before atomic commit. */
+export const TRACE_INCOMPLETE_FILE = 'INCOMPLETE.json' as const;
 
 /** Process exit as recorded in `meta.json`. */
 export interface TraceExit {
@@ -40,6 +61,8 @@ export interface TraceExit {
 export interface TraceMeta {
   readonly v: typeof TRACE_VERSION;
   readonly sessionId: string;
+  /** Exact native-host attempt that owned this session, when test-created. */
+  readonly runIdentity?: TraceRunIdentity;
   /** argv of the recorded session, as passed to `launchTerminal`. */
   readonly command: readonly string[];
   /** Initial viewport width; later changes appear as cast `r` events. */
@@ -51,7 +74,7 @@ export interface TraceMeta {
   readonly platform: NodeJS.Platform;
   /**
    * Terminal profile the session was measured with, from
-   * `capabilities().terminalProfile`. Absent means `'default'`.
+   * `TerminalHarness.terminalProfile`. Absent means `'default'`.
    *
    * It lives here rather than in the asciicast header because it describes the
    * session, like `columns` and `platform` next to it, and because `meta.json`
@@ -78,6 +101,18 @@ export interface TraceMeta {
   readonly crash?: TraceCrash;
   /** Present when the session produced application logs. */
   readonly logs?: TraceLogSummary;
+}
+
+export interface TraceRunIdentity {
+  readonly invocationId: InvocationId;
+  readonly runId: RunId;
+  readonly projectId: ProjectId;
+  readonly shardId?: ShardId;
+  readonly specId: SpecId;
+  readonly runnerTaskId: RunnerTaskId;
+  readonly executionId: ExecutionId;
+  readonly attemptId: AttemptId;
+  readonly sessionId: SessionId;
 }
 
 /**
@@ -233,12 +268,15 @@ interface TraceEventBase {
 }
 
 /** Raw bytes written into the PTY by the harness. */
-export interface InputEvent extends TraceEventBase {
+interface InputEventBase extends TraceEventBase {
   readonly kind: 'input';
-  /** Base64 of the exact bytes — lossless, unlike the cast's UTF-8 text. */
-  readonly dataB64: string;
   readonly inputKind: 'key' | 'mouse' | 'paste' | 'raw';
 }
+
+export type InputEvent = InputEventBase & (
+  | { readonly dataB64: string; readonly recording: 'raw' }
+  | { readonly recording: 'withheld'; readonly withheldReason: 'artifact-policy' }
+);
 
 /** Viewport resize. */
 export interface ResizeEvent extends TraceEventBase {
@@ -292,8 +330,8 @@ export interface ActionEvent extends TraceEventBase {
   /** Driver API name, e.g. `'click'`, `'press'`, `'resize'`. */
   readonly api: string;
   readonly selector?: string;
-  /** Resolved target ref, e.g. `'n8@42'`. */
-  readonly ref?: string;
+  /** Domain-tagged resolved target ref, e.g. `'semantic:n8@42'`. */
+  readonly ref?: LocatorRef;
   readonly ok: boolean;
   /**
    * Failure reason as a **code** (`'not-actionable'`, `'timeout'`), not
@@ -318,7 +356,7 @@ export interface AssertEvent extends TraceEventBase {
   readonly kind: 'assert';
   readonly api: string;
   readonly selector?: string;
-  readonly ref?: string;
+  readonly ref?: LocatorRef;
   readonly ok: boolean;
   readonly error?: string;
   /** Exact screen/tree pair used to diagnose this assertion, when available. */

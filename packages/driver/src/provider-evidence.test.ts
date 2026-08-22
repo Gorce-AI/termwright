@@ -86,6 +86,291 @@ function snapshot(overrides: Partial<SemanticSnapshot> = {}): SemanticSnapshot {
 }
 
 describe("provider evidence composition", () => {
+  it("co-proves equivalent terminal input modes and rejects disagreement", () => {
+    const inputRegistration = (id: string): EvidenceProviderRegistration => ({
+      id,
+      version: "1",
+      method: "native",
+      capabilities: ["terminal-input-modes"],
+    });
+    const inputFrame = (id: string, mouseTracking: "drag" | "any") => ({
+      providerId: id,
+      sessionId: "s1",
+      revision: 3,
+      status: "available" as const,
+      evidence: {
+        source: "application" as const,
+        method: "native" as const,
+        strength: "authoritative" as const,
+        providerId: id,
+      },
+      pointerRegions: [],
+      inputModes: {
+        mouseTracking,
+        mouseEncoding: "sgr" as const,
+        focusReporting: "on" as const,
+      },
+    });
+    expect(
+      composeProviderEvidence(
+        snapshot({ providerEvidence: [inputFrame("app.input", "drag")] }),
+        [inputRegistration("app.input")],
+      ),
+    ).toMatchObject({
+      ok: true,
+      inputModes: {
+        value: { mouseTracking: "drag", mouseEncoding: "sgr" },
+        providerId: "app.input",
+      },
+    });
+    expect(
+      composeProviderEvidence(
+        snapshot({
+          providerEvidence: [
+            inputFrame("first", "drag"),
+            inputFrame("second", "any"),
+          ],
+        }),
+        [inputRegistration("first"), inputRegistration("second")],
+      ),
+    ).toMatchObject({
+      ok: false,
+      problem: { kind: "conflict", message: expect.stringContaining("input modes") },
+    });
+  });
+  it("composes authoritative focus state and rejects provider conflicts", () => {
+    const focus = (id: string, focusedRecipientId: string | null) => ({
+      providerId: id,
+      sessionId: "s1",
+      revision: 3,
+      status: "available" as const,
+      evidence: {
+        source: "application" as const,
+        method: "native" as const,
+        strength: "authoritative" as const,
+        providerId: id,
+      },
+      pointerRegions: [],
+      focusState:
+        focusedRecipientId === null
+          ? ({ status: "none" as const })
+          : ({ status: "focused" as const, recipientId: focusedRecipientId }),
+    });
+    const focusRegistration = (id: string): EvidenceProviderRegistration => ({
+      id,
+      version: "1",
+      method: "native",
+      capabilities: ["focus-state"],
+    });
+    const result = composeProviderEvidence(
+      snapshot({ providerEvidence: [focus("app.focus", "root")] }),
+      [focusRegistration("app.focus")],
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      snapshot: {
+        nodes: [{ state: { focused: true }, px: { "state.focused": "application" } }],
+      },
+    });
+    expect(
+      composeProviderEvidence(
+        snapshot({
+          providerEvidence: [focus("first", "root"), focus("second", null)],
+        }),
+        [focusRegistration("first"), focusRegistration("second")],
+      ),
+    ).toMatchObject({
+      ok: false,
+      problem: { kind: "conflict", message: expect.stringContaining("disagree") },
+    });
+    expect(
+      composeProviderEvidence(
+        snapshot({
+          nodes: [{ ...snapshot().nodes[0]!, state: { focused: false } }],
+          providerEvidence: [focus("app.focus", "root")],
+        }),
+        [focusRegistration("app.focus")],
+      ),
+    ).toMatchObject({
+      ok: false,
+      problem: { kind: "conflict", message: expect.stringContaining("framework") },
+    });
+  });
+
+  it("composes application scroll state and rejects conflicting producers", () => {
+    const scrollRegistration = (id: string): EvidenceProviderRegistration => ({
+      id,
+      version: "1",
+      method: "native",
+      capabilities: ["scroll-state"],
+    });
+    const scrollFrame = (id: string, offset: number) => ({
+      providerId: id,
+      sessionId: "s1",
+      revision: 3,
+      status: "available" as const,
+      evidence: {
+        source: "application" as const,
+        method: "native" as const,
+        strength: "authoritative" as const,
+        providerId: id,
+      },
+      pointerRegions: [],
+      scrollStates: [{
+        recipientId: "root",
+        axis: "vertical" as const,
+        offset,
+        viewport: 4,
+        extent: 20,
+      }],
+    });
+    expect(composeProviderEvidence(
+      snapshot({ providerEvidence: [scrollFrame("app.scroll", 3)] }),
+      [scrollRegistration("app.scroll")],
+    )).toMatchObject({
+      ok: true,
+      snapshot: {
+        nodes: [{
+          scroll: {
+            status: "known",
+            value: { axis: "vertical", offset: 3, viewport: 4, extent: 20 },
+            evidence: { providerId: "app.scroll" },
+          },
+        }],
+      },
+    });
+    expect(composeProviderEvidence(
+      snapshot({ providerEvidence: [scrollFrame("first", 3), scrollFrame("second", 4)] }),
+      [scrollRegistration("first"), scrollRegistration("second")],
+    )).toMatchObject({
+      ok: false,
+      problem: { kind: "conflict", message: expect.stringContaining("disagree") },
+    });
+  });
+
+  it("composes authoritative paint attribution and rejects competing painters", () => {
+    const registrationFor = (id: string): EvidenceProviderRegistration => ({
+      id,
+      version: "1",
+      method: "native",
+      capabilities: ["painted-regions"],
+    });
+    const frame = (id: string, from: number) => ({
+      providerId: id,
+      sessionId: "s1",
+      revision: 3,
+      status: "available" as const,
+      evidence: {
+        source: "application" as const,
+        method: "native" as const,
+        strength: "authoritative" as const,
+        providerId: id,
+      },
+      pointerRegions: [],
+      paintedRegions: [{
+        recipientId: "root",
+        regionBounds: { row: 1, column: from, width: 2, height: 1 },
+        spans: [{ row: 1, from, to: from + 2 }],
+      }],
+    });
+    expect(composeProviderEvidence(
+      snapshot({ providerEvidence: [frame("app.paint", 2)] }),
+      [registrationFor("app.paint")],
+    )).toMatchObject({
+      ok: true,
+      snapshot: {
+        nodes: [{
+          paintedRegion: {
+            status: "known",
+            value: {
+              regionBounds: { row: 1, column: 2, width: 2, height: 1 },
+              spans: [{ row: 1, from: 2, to: 4 }],
+            },
+            evidence: { providerId: "app.paint" },
+          },
+        }],
+      },
+    });
+    expect(composeProviderEvidence(
+      snapshot({ providerEvidence: [frame("first", 2), frame("second", 3)] }),
+      [registrationFor("first"), registrationFor("second")],
+    )).toMatchObject({
+      ok: false,
+      problem: { kind: "conflict", message: expect.stringContaining("painted region") },
+    });
+  });
+
+  it("merges equivalent application recipes and rejects authoritative conflicts", () => {
+    const recipeRegistration: EvidenceProviderRegistration = {
+      id: "app.keys",
+      version: "1",
+      method: "native",
+      capabilities: ["action-recipes"],
+    };
+    const activate = {
+      action: "activate" as const,
+      requiresFocus: true,
+      steps: [{ kind: "press" as const, key: "Enter" }],
+    };
+    const base = snapshot({
+      nodes: [
+        {
+          ...snapshot().nodes[0]!,
+          actions: ["activate"],
+          inputRecipes: [activate],
+        },
+      ],
+      providerEvidence: [
+        {
+          providerId: "app.keys",
+          sessionId: "s1",
+          revision: 3,
+          status: "available",
+          evidence: {
+            source: "application",
+            method: "native",
+            strength: "authoritative",
+            providerId: "app.keys",
+          },
+          pointerRegions: [],
+          actionRecipes: [{ recipientId: "root", recipes: [activate] }],
+        },
+      ],
+    });
+    expect(composeProviderEvidence(base, [recipeRegistration])).toMatchObject({
+      ok: true,
+      snapshot: { nodes: [{ inputRecipes: [activate] }] },
+    });
+    const conflicting = {
+      ...base,
+      providerEvidence: [
+        {
+          ...base.providerEvidence![0]!,
+          actionRecipes: [
+            {
+              recipientId: "root",
+              recipes: [
+                {
+                  ...activate,
+                  steps: [{ kind: "press" as const, key: "Space" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(
+      composeProviderEvidence(conflicting, [recipeRegistration]),
+    ).toMatchObject({
+      ok: false,
+      problem: {
+        kind: "conflict",
+        message: expect.stringContaining("disagrees"),
+      },
+    });
+  });
+
   it("qualifies hit-grid observations without rewriting layout or clipping", () => {
     const result = composeProviderEvidence(snapshot(), [registration]);
     expect(result.ok).toBe(true);
@@ -196,7 +481,7 @@ describe("provider evidence composition", () => {
       {
         ok: false,
         problem: {
-          kind: "violation",
+          kind: "conflict",
           message: expect.stringContaining("disagrees"),
         },
       },
@@ -278,7 +563,7 @@ describe("provider evidence composition", () => {
     ).toMatchObject({
       ok: false,
       problem: {
-        kind: "violation",
+        kind: "conflict",
         message: expect.stringContaining("disagrees"),
       },
     });

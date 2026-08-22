@@ -128,6 +128,7 @@ export interface AdapterConformanceOptions {
     readonly label: string;
     readonly cwd?: string;
     readonly timeoutMs?: number;
+    readonly env?: Readonly<Record<string, string>>;
   };
 }
 
@@ -183,13 +184,13 @@ function writeConventionSummary(
  * makes the comparison fail loudly rather than pass by accident.
  */
 async function settle(probe: AdapterProbe, quietMs = 250, budgetMs = 5_000): Promise<void> {
-  const deadline = Date.now() + budgetMs;
+  const deadline = performance.now() + budgetMs;
   let seen = -1;
   for (;;) {
     const length = probe.observe().stdout.length;
     if (length === seen) return;
     seen = length;
-    if (Date.now() >= deadline) return;
+    if (performance.now() >= deadline) return;
     await new Promise((resolve) => {
       setTimeout(resolve, quietMs);
     });
@@ -295,6 +296,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
     commandAvailable(options.requires.probe, {
       ...(options.requires.cwd === undefined ? {} : { cwd: options.requires.cwd }),
       ...(options.requires.timeoutMs === undefined ? {} : { timeoutMs: options.requires.timeoutMs }),
+      ...(options.requires.env === undefined ? {} : { env: options.requires.env }),
     });
   const probeOptions = {
     ...(options.columns === undefined ? {} : { columns: options.columns }),
@@ -645,7 +647,9 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           // `''` means the field is empty; absent means "not a value-bearing
           // widget". A wire format that drops empty strings turns the first
           // into the second and makes `toHaveValue('')` unassertable.
-          return node.value === '' ? null : `the value is ${JSON.stringify(node.value)}, not an empty string`;
+          return node.value?.status === 'known' && node.value.value === ''
+            ? null
+            : `the value is ${JSON.stringify(node.value)}, not an empty known value`;
         });
       });
 
@@ -667,7 +671,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           }
           // A boolean is a state, not contents: publishing `value: "true"`
           // makes a checkbox look like a textbox containing that word.
-          const booleans = nodes.filter((node) => node.value === 'true' || node.value === 'false');
+          const booleans = nodes.filter((node) => node.value?.status === 'known' && (node.value.value === 'true' || node.value.value === 'false'));
           return booleans.length === 0
             ? null
             : `published a boolean as a value on ${booleans.map((node) => node.role).join(', ')}`;

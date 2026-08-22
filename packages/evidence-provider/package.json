@@ -9,7 +9,7 @@
     "directory": "packages/evidence-provider"
   },
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "^22.0.0 || ^24.0.0" },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -20,7 +20,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm --dir ../.. test -- -- --run packages/evidence-provider"
   },
   "dependencies": {
     "@termwright/protocol": "workspace:*"

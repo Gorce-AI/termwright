@@ -3,11 +3,19 @@
  * without a PTY, so both the happy path and the hostile paths are covered where
  * they actually live.
  */
+import { existsSync } from 'node:fs';
+import { mkdtemp } from 'node:fs/promises';
 import { connect, type Socket } from 'node:net';
-import { afterEach, describe, expect, it } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_LIMITS, encodeFrame, type LogRecord, type SemanticSnapshot } from '@termwright/protocol';
 import type { ProtocolViolationError } from './errors.js';
-import { SemanticChannel, type SemanticAttachment } from './semantic.js';
+import {
+  SemanticChannel,
+  type SemanticAttachment,
+  type SemanticChannelListenDependencies,
+} from './semantic.js';
 
 const SESSION_ID = 'session-under-test';
 const TOKEN = 'a-very-secret-token';
@@ -34,7 +42,11 @@ afterEach(async () => {
   }
 });
 
-async function createChannel(accepting = true): Promise<Harness> {
+async function createChannel(
+  accepting = true,
+  handshakeTimeoutMs?: number,
+  dependencies?: SemanticChannelListenDependencies,
+): Promise<Harness> {
   const snapshots: SemanticSnapshot[] = [];
   const records: LogRecord[] = [];
   const attachments: SemanticAttachment[] = [];
@@ -49,6 +61,7 @@ async function createChannel(accepting = true): Promise<Harness> {
     limits: DEFAULT_LIMITS,
     acceptHello: () => accepting,
     logBudget: { maxRecordsPerSecond: 200, burst: 500 },
+    ...(handshakeTimeoutMs === undefined ? {} : { handshakeTimeoutMs }),
     hooks: {
       onSnapshot: (snapshot) => snapshots.push(snapshot),
       onLogRecord: (record) => records.push(record),
@@ -65,7 +78,7 @@ async function createChannel(accepting = true): Promise<Harness> {
         wireCodes.push(wireCode);
       },
     },
-  });
+  }, dependencies);
   open.push({ channel, sockets: [] });
   return {
     channel,
@@ -224,6 +237,17 @@ describe('the probe lifecycle', () => {
 });
 
 describe('SemanticChannel', () => {
+  it.skipIf(process.platform === 'win32')('rolls back its private directory when listen fails', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'termwright-listen-fault-'));
+    await expect(createChannel(true, undefined, {
+      makeDirectory: async () => directory,
+      listen: async () => {
+        throw new Error('injected listen failure');
+      },
+    })).rejects.toThrow('injected listen failure');
+    expect(existsSync(directory)).toBe(false);
+  });
+
   it('negotiates termwright/2 and accepts its evidence-qualified snapshot shape', async () => {
     const harness = await createChannel();
     const client = await connectClient(harness.channel);
@@ -376,6 +400,51 @@ describe('SemanticChannel', () => {
     expect(harness.diagnosticWireCodes).toContain('adapter-capability:internal');
   });
 
+  it('makes a single atomic claim when two accepted sockets hello concurrently', async () => {
+    const harness = await createChannel();
+    const first = await connectClient(harness.channel);
+    const second = await connectClient(harness.channel);
+
+    first.send(hello({ adapter: { name: 'first', version: '1.0.0' } }));
+    second.send(hello({ adapter: { name: 'second', version: '1.0.0' } }));
+    const replies = await Promise.all([first.next(), second.next()]);
+
+    expect(replies.map((reply) => reply['type']).sort()).toEqual(['error', 'hello-ack']);
+    expect(harness.attachments).toHaveLength(1);
+    expect(['first', 'second']).toContain(harness.attachments[0]?.adapter.name);
+    expect(harness.diagnosticWireCodes).toContain('adapter-capability:internal');
+  });
+
+  it('closes a peer that never authenticates at the absolute hello deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = await createChannel(true, 50);
+      const client = await connectClient(harness.channel);
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(await client.next()).toMatchObject({
+        type: 'error',
+        code: 'internal',
+        message: 'semantic hello deadline exceeded',
+      });
+      await client.closed;
+      expect(harness.diagnostics.join('\n')).toContain('did not authenticate within 50 ms');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('destroys accepted unauthenticated sockets and shares concurrent close', async () => {
+    const harness = await createChannel();
+    const client = await connectClient(harness.channel);
+
+    const first = harness.channel.close();
+    const second = harness.channel.close();
+    expect(second).toBe(first);
+    await first;
+    await client.closed;
+  });
+
   it('fails closed on an oversized frame before decoding it', async () => {
     const harness = await createChannel();
     const client = await connectClient(harness.channel);
@@ -521,7 +590,6 @@ describe('SemanticChannel', () => {
     const endpoint = harness.channel.endpoint;
     await harness.channel.close();
     if (process.platform === 'win32') return;
-    const { existsSync } = await import('node:fs');
     expect(existsSync(endpoint)).toBe(false);
   });
 });

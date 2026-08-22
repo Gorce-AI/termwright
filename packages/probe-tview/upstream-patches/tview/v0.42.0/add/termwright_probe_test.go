@@ -162,6 +162,17 @@ func suffixOf(label string) string {
 	return label[end:]
 }
 
+func TestTermwrightValuePreservesEmptyAndWithholdsMaskedInput(t *testing.T) {
+	public := termwrightValue(NewInputField().SetText(""))
+	if public == nil || public.Status != "known" || public.Value == nil || *public.Value != "" || public.Sensitivity != "public" {
+		t.Fatalf("empty public value lost its observation semantics: %#v", public)
+	}
+	masked := termwrightValue(NewInputField().SetText("sentinel-secret").SetMaskCharacter('*'))
+	if masked == nil || masked.Status != "withheld" || masked.Value != nil || masked.Sensitivity != "sensitive" {
+		t.Fatalf("masked input leaked or lost withholding evidence: %#v", masked)
+	}
+}
+
 func TestTheProbeIsDormantWithoutTheHandshakeVariables(t *testing.T) {
 	t.Setenv("TERMWRIGHT_ENDPOINT", "")
 	t.Setenv("TERMWRIGHT_TOKEN", "")
@@ -312,6 +323,14 @@ func TestAnnotationsResolveKeysAfterTheWholeRetainedTreeIsKnown(t *testing.T) {
 	}
 	if len(node.Actions) != 1 || node.Actions[0] != protocol.ActionActivate {
 		t.Fatalf("actions were not closed and deduplicated: %v", node.Actions)
+	}
+	if len(node.InputRecipes) != 1 || node.InputRecipes[0].Action != "activate" ||
+		!node.InputRecipes[0].RequiresFocus || len(node.InputRecipes[0].Steps) != 1 ||
+		node.InputRecipes[0].Steps[0].Kind != "press" || node.InputRecipes[0].Steps[0].Key != "Enter" {
+		t.Fatalf("button activation recipe did not match the exact InputHandler: %+v", node.InputRecipes)
+	}
+	if node.PX["inputRecipes"] != protocol.ProvenanceFramework {
+		t.Fatalf("input recipe provenance = %q, want framework", node.PX["inputRecipes"])
 	}
 	if node.P != protocol.ProvenanceFramework {
 		t.Fatalf("node-wide provenance = %q, want framework", node.P)

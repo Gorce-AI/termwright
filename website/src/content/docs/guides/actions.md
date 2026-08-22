@@ -32,6 +32,14 @@ already focused. It does not move focus by guessing a keyboard path. The
 returned receipt identifies the strategy. Prefer it when the intended behavior
 is “activate this control,” not “test mouse input.”
 
+`focus()` follows the same rule. A certified framework may publish an exact
+focus recipe, or an application can register two independent facts: its
+production focus manager as `focus-evidence` and its production keybinding path
+as an `action-strategy`. The recipe is a bounded sequence of real PTY key
+presses, every step appears in the receipt, and success requires a later
+committed revision in which the target is actually focused. Termwright never
+calls the focus manager or guesses a Tab order.
+
 ## Press keys
 
 ```ts
@@ -152,5 +160,5 @@ await save.activate();
 await expect(app).toHaveText('Saved');
 ```
 
-Use `waitForStable()` before a geometry-dependent action when an animation or
+Use `waitForQuiet()` before a geometry-dependent action when an animation or
 layout transition is still moving the target.

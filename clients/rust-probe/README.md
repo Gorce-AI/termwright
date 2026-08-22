@@ -71,9 +71,9 @@ uninstrumented build. Cargo source replacement (vendoring crates.io) works via
 the `manifest_path` reported by Cargo metadata.
 
 The patch preparation and cache code itself uses only portable Rust and no
-external `patch`/Git executable. The semantic transport is currently Unix-only,
-however, because `termwright-protocol` connects over `UnixStream`; Windows
-named-pipe support is not yet implemented and is not advertised as working.
+external `patch`/Git executable. The shared `termwright-protocol` transport
+uses Unix domain sockets on Unix and byte-mode named pipes on Windows; the
+Windows path is exercised by a real named-pipe protocol test in CI.
 
 ## What it can and cannot report
 
@@ -88,7 +88,7 @@ API from outside the crate, and a patch runs inside it.
 | the rectangle a widget was drawn into | yes, as `intendedRect` |
 | its clipped visible rectangle | **no** — `visibleRect` is unsupported |
 | identity across frames | **no** — ids are frame-local and carry the frame number |
-| parent/child structure | **no** — the tree is flat; nesting happens inside `render`, where we cannot see |
+| parent/child structure | **partial, exact** — ordinary calls are flat; nested `Annotated` RAII boundaries preserve hierarchy only when real call nesting proves it |
 | number of items in a list, and their text | **yes, but only from inside** — `List::items` is `pub(crate)`, so this is reachable from the patched `ratatui-widgets` and from nowhere else |
 | which row is selected | yes, read *after* the render, because rendering clamps the state to what was actually drawn |
 | scroll extent | **no** — `ScrollbarState`'s `content_length()` is a setter returning `Self`; only `get_position()` reads |

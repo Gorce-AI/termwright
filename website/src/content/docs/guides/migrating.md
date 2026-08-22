@@ -7,9 +7,6 @@ Use this guide when you already test a CLI or TUI with another harness. If you
 know Playwright or Cypress but are starting a terminal test suite, see
 [Coming from Playwright or Cypress](../../concepts/web-testing/) instead.
 
-If you used an earlier Termwright framework adapter, use the separate
-[version migration](../version-migration/).
-
 ## From `ink-testing-library`
 
 Use `mountInk()` as the in-process replacement for `render()`. It supports

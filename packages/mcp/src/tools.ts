@@ -4,7 +4,7 @@
  * Every tool is a thin projection: validate with zod, call the public driver
  * API, render the result. There is no locator engine, no wait loop and no
  * matching heuristic in this file — those live in `@termwright/driver`, and a
- * behaviour that differs between the MCP server and the test preset would be a
+ * behaviour that differs between the MCP server and the Native Host would be a
  * bug in this layer.
  *
  * Each definition carries both an `inputSchema` and an `outputSchema`; the
@@ -12,7 +12,6 @@
  * is generated from the same objects.
  */
 import { z } from 'zod';
-import { TimeoutError } from '@termwright/driver';
 import { CONDITION_KINDS } from '@termwright/protocol';
 import { defineTool } from './tool-kit.js';
 import { renderScreenshot } from './screenshots.js';
@@ -68,35 +67,28 @@ function optionalTimeout(timeout: number | undefined): { timeout?: number } {
 }
 
 /**
- * Lets renders and their semantic trees pair up before a read tool reports.
+ * Lets parser work and semantic frames commit before a read tool reports.
  *
  * A screen revision lands before the semantic revision that belongs to it (the
  * tree arrives on the socket, the render-commit marker in the byte stream). Two
  * things go wrong without this wait: a snapshot taken right after `wait_for
  * text` reports `semanticTree: unavailable` for a program that does publish one,
  * and `capture_since` reports changed *rows* with no changed *subtrees* because
- * it caught the pair mid-flight. The driver's locators already wait this way
- * internally; this aligns the read tools with them.
- *
- * A session still waiting for its very first tree gets the longer budget. A
- * timeout is not an error — whatever is on screen is reported honestly.
+ * it caught the pair mid-flight. The driver owns this causal boundary. It does
+ * not require global silence, so a spinner elsewhere cannot block a snapshot
+ * of an already committed frame.
  */
 async function settleSemantics(entry: TerminalEntry): Promise<void> {
+  const deadline = performance.now() + FIRST_TREE_SETTLE_MS;
   const contract = await entry.harness.settled({ timeout: FIRST_TREE_SETTLE_MS });
   if (contract.capabilities['semantic-tree'].status !== 'supported') return;
-  try {
-    await entry.harness.waitForStable({ timeout: PAIRING_SETTLE_MS });
-  } catch (error) {
-    if (!(error instanceof TimeoutError)) throw error;
-    // Report the session as it is; the compact snapshot says what it found.
-  }
+  await entry.harness.waitForCommittedObservation({
+    timeout: Math.max(0, deadline - performance.now()),
+  });
 }
 
 /** Budget for a session that has never published a tree. */
 const FIRST_TREE_SETTLE_MS = 2_000;
-
-/** Budget for letting an in-flight render pair with its semantic revision. */
-const PAIRING_SETTLE_MS = 250;
 
 /** Current screen + semantic state of one terminal, recorded for later diffs. */
 function capture(
@@ -137,6 +129,14 @@ function compactFor(
 
 function locatorFor(entry: TerminalEntry, args: TargetInput) {
   return buildLocator(entry.harness, args);
+}
+
+function semanticLocatorFor(entry: TerminalEntry, args: TargetInput) {
+  const locator = locatorFor(entry, args);
+  if (locator.domain !== 'semantic') {
+    throw usageError('this action requires a semantic target; a screen locator was provided', 'use role, selector, testId, label or semantic text');
+  }
+  return locator;
 }
 
 /** The crash the driver recorded for this terminal, if the child died on its own. */
@@ -266,7 +266,7 @@ const launch = defineTool({
   handler: async (context, args) => {
     const entry = await context.terminals.launch(args);
     await settleSemantics(entry);
-    const capabilities = entry.harness.capabilities();
+    const contract = await entry.harness.settled();
     const screen = entry.harness.screen();
     const state = capture(context, entry);
     const compact = compactFor(entry, state.rows);
@@ -277,12 +277,12 @@ const launch = defineTool({
         sessionId: entry.harness.sessionId,
         revision: state.revision,
         semanticRevision: state.semanticRevision,
-        semanticTree: treeState(capabilities.semanticTree),
+        semanticTree: treeState(contract.capabilities['semantic-tree'].status === 'supported'),
         columns: screen.columns,
         rows: screen.rows,
-        ...(capabilities.adapter === undefined ? {} : { adapter: capabilities.adapter }),
-        capabilities: [...capabilities.capabilities],
-        platform: capabilities.platform,
+        ...(contract.framework === null ? {} : { adapter: { name: contract.framework.name, version: contract.framework.adapterVersion } }),
+        capabilities: Object.entries(contract.capabilities).filter(([, value]) => value.status === 'supported').map(([key]) => key),
+        platform: contract.terminal.platform,
         compact,
       },
     };
@@ -309,28 +309,30 @@ const capabilities = defineTool({
   handler: async (context, args) => {
     const entry = context.terminals.get(args.terminal);
     await settleSemantics(entry);
-    const caps = entry.harness.capabilities();
+    const contract = await entry.harness.settled();
+    const semanticTree = contract.capabilities['semantic-tree'].status === 'supported';
+    const supported = Object.entries(contract.capabilities).filter(([, value]) => value.status === 'supported').map(([key]) => key);
     const crash = crashOf(entry);
     const screen = entry.harness.screen();
     const semantic = entry.harness.semanticTree();
     return {
       text:
         `Terminal ${entry.id} ${screen.columns}x${screen.rows} revision ${screen.revision}\n` +
-        `semanticTree: ${caps.semanticTree ? 'available' : 'unavailable'}\n` +
-        `adapter: ${caps.adapter === undefined ? 'none' : `${caps.adapter.name} ${caps.adapter.version}`}\n` +
-        `capabilities: ${caps.capabilities.join(', ') || 'none'}\n` +
-        `platform: ${caps.platform}` +
+        `semanticTree: ${semanticTree ? 'available' : 'unavailable'}\n` +
+        `adapter: ${contract.framework === null ? 'none' : `${contract.framework.name} ${contract.framework.adapterVersion}`}\n` +
+        `capabilities: ${supported.join(', ') || 'none'}\n` +
+        `platform: ${contract.terminal.platform}` +
         (crash === undefined ? '' : `\n${renderCrash(crash)}`),
       data: {
         terminal: entry.id,
         revision: screen.revision,
         semanticRevision: semantic?.revision ?? null,
-        semanticTree: treeState(caps.semanticTree),
+        semanticTree: treeState(semanticTree),
         columns: screen.columns,
         rows: screen.rows,
-        ...(caps.adapter === undefined ? {} : { adapter: caps.adapter }),
-        capabilities: [...caps.capabilities],
-        platform: caps.platform,
+        ...(contract.framework === null ? {} : { adapter: { name: contract.framework.name, version: contract.framework.adapterVersion } }),
+        capabilities: supported,
+        platform: contract.terminal.platform,
         ...(crash === undefined ? {} : { crash }),
       },
     };
@@ -636,7 +638,7 @@ function pointerTool(name: 'terminal.click' | 'terminal.double_click' | 'termina
     outputSchema: { ...receiptFields, ref: z.string(), action: plannedActionSchema },
     handler: async (context, args) => {
       const entry = context.terminals.get(args.terminal);
-      const locator = locatorFor(entry, args);
+      const locator = semanticLocatorFor(entry, args);
       const target = await locator.resolve(optionalTimeout(args.timeout));
       const options = {
         ...optionalTimeout(args.timeout),
@@ -673,7 +675,7 @@ const press = defineTool({
   handler: async (context, args) => {
     const entry = context.terminals.get(args.terminal);
     if (hasTarget(args)) {
-      const locator = locatorFor(entry, args);
+      const locator = semanticLocatorFor(entry, args);
       const target = await locator.resolve(optionalTimeout(args.timeout));
       await locator.press(args.keys, optionalTimeout(args.timeout));
       return { text: `pressed ${args.keys} on ref=${target.ref}`, data: { ...receipt(entry), ref: target.ref } };
@@ -698,7 +700,7 @@ const type = defineTool({
   handler: async (context, args) => {
     const entry = context.terminals.get(args.terminal);
     if (hasTarget(args)) {
-      const locator = locatorFor(entry, args);
+      const locator = semanticLocatorFor(entry, args);
       const target = await locator.resolve(optionalTimeout(args.timeout));
       await locator.type(args.text, optionalTimeout(args.timeout));
       return { text: `typed into ref=${target.ref}`, data: { ...receipt(entry), ref: target.ref } };
@@ -722,7 +724,7 @@ const fill = defineTool({
   outputSchema: { ...receiptFields, ref: z.string(), action: plannedActionSchema },
   handler: async (context, args) => {
     const entry = context.terminals.get(args.terminal);
-    const locator = locatorFor(entry, args);
+    const locator = semanticLocatorFor(entry, args);
     const target = await locator.resolve(optionalTimeout(args.timeout));
     const action = await locator.fill(args.text, optionalTimeout(args.timeout));
     return {
@@ -741,7 +743,7 @@ function checkedTool(kind: 'check' | 'uncheck'): ToolDefinition {
     outputSchema: { ...receiptFields, ref: z.string(), action: plannedActionSchema },
     handler: async (context, args) => {
       const entry = context.terminals.get(args.terminal);
-      const locator = locatorFor(entry, args);
+      const locator = semanticLocatorFor(entry, args);
       const target = await locator.resolve(optionalTimeout(args.timeout));
       const action = kind === 'check'
         ? await locator.check(optionalTimeout(args.timeout))
@@ -785,10 +787,16 @@ const actionability = defineTool({
     const entry = context.terminals.get(args.terminal);
     const locator = locatorFor(entry, args);
     const target = await locator.resolve(optionalTimeout(args.timeout));
-    const explanation = await locator.actionability(args.action, {
-      ...optionalTimeout(args.timeout),
-      ...(args.value === undefined ? {} : { value: args.value }),
-    });
+    const pointerAction = args.action === 'click' || args.action === 'double-click' || args.action === 'hover';
+    if (locator.domain === 'screen' && !pointerAction) {
+      throw usageError(`${args.action} requires a semantic locator; screen locators only support physical pointer actions`);
+    }
+    const explanation = locator.domain === 'screen'
+      ? await locator.actionability(args.action as 'click' | 'double-click' | 'hover', optionalTimeout(args.timeout))
+      : await locator.actionability(args.action, {
+          ...optionalTimeout(args.timeout),
+          ...(args.value === undefined ? {} : { value: args.value }),
+        });
     const requirements = explanation.requirements.map((requirement) => ({
       kind: requirement.condition.kind,
       ...('target' in requirement.condition ? { target: requirement.condition.target } : {}),
@@ -888,7 +896,15 @@ const drag = defineTool({
     const entry = context.terminals.get(args.terminal);
     const source = locatorFor(entry, args);
     if (args.toTarget !== undefined) {
-      await source.dragTo(locatorFor(entry, args.toTarget), {
+      const destination = locatorFor(entry, args.toTarget);
+      if (source.domain !== destination.domain) {
+        throw usageError('drag source and destination belong to different locator domains');
+      }
+      if (source.domain === 'semantic' && destination.domain === 'semantic') await source.dragTo(destination, {
+        ...optionalTimeout(args.timeout),
+        ...(args.modifiers === undefined ? {} : { modifiers: args.modifiers }),
+      });
+      else if (source.domain === 'screen' && destination.domain === 'screen') await source.dragTo(destination, {
         ...optionalTimeout(args.timeout),
         ...(args.modifiers === undefined ? {} : { modifiers: args.modifiers }),
       });
@@ -1058,16 +1074,20 @@ const waitFor = defineTool({
   name: 'terminal.wait_for',
   title: 'Wait for a condition',
   description:
-    'Revision-driven waits — never a sleep. "text"/"title" wait for content, "visible"/"hidden"/' +
-    '"attached" wait on a target, "stable" waits for renders to settle, "idle" for output to stop, ' +
+    'Revision-driven waits — never a sleep. "text"/"title" wait for content, locator states use ' +
+    'the driver\'s canonical Conditions, "quiet" explicitly waits for heuristic silence, ' +
     '"render" for a render after a given revision, "exit" for the child to exit.',
   inputSchema: {
     terminal: terminalId,
-    wait: z.enum(['text', 'title', 'visible', 'hidden', 'attached', 'stable', 'idle', 'render', 'exit']),
+    wait: z.enum([
+      'text', 'title', 'visible', 'hidden', 'attached', 'detached', 'displayed', 'offscreen',
+      'focused', 'enabled', 'disabled', 'checked', 'selected', 'expanded', 'collapsed',
+      'quiet', 'shell-prompt', 'render', 'exit',
+    ]),
     text: z.string().optional().describe('for wait="text"; "/pattern/flags" is a regular expression'),
     title: z.string().optional().describe('for wait="title"'),
     ...targetShapeWithoutText,
-    frames: z.number().int().min(1).optional().describe('for wait="stable"'),
+    quietMs: z.number().int().min(0).optional().describe('for wait="quiet"'),
     after: z.number().int().min(0).optional().describe('for wait="render": the revision to beat'),
     timeout: timeoutMs.optional(),
   },
@@ -1092,19 +1112,32 @@ const waitFor = defineTool({
       }
       case 'visible':
       case 'hidden':
-      case 'attached': {
+      case 'attached':
+      case 'detached':
+      case 'displayed':
+      case 'offscreen': {
         await locatorFor(entry, args).waitFor({ state: args.wait, ...timeout });
         break;
       }
-      case 'stable': {
-        await entry.harness.waitForStable({
-          ...(args.frames === undefined ? {} : { frames: args.frames }),
+      case 'focused':
+      case 'enabled':
+      case 'disabled':
+      case 'checked':
+      case 'selected':
+      case 'expanded':
+      case 'collapsed': {
+        await semanticLocatorFor(entry, args).waitFor({ state: args.wait, ...timeout });
+        break;
+      }
+      case 'quiet': {
+        await entry.harness.waitForQuiet({
+          ...(args.quietMs === undefined ? {} : { quietMs: args.quietMs }),
           ...timeout,
         });
         break;
       }
-      case 'idle': {
-        await entry.harness.waitForIdle(timeout);
+      case 'shell-prompt': {
+        await entry.harness.waitForShellPrompt(timeout);
         break;
       }
       case 'render': {

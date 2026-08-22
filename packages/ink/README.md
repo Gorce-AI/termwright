@@ -70,7 +70,7 @@ import {mountInk} from '@termwright/ink';
 
 const harness = await mountInk(<Approve onApprove={spy} />);
 await harness.press('Tab');
-await harness.waitForStable();
+await harness.waitForQuiet();
 await harness.press('Enter');
 await vi.waitFor(() => expect(spy).toHaveBeenCalledOnce());
 await harness.close();
@@ -88,7 +88,7 @@ environment, signals, or process exit behavior.
 
 Both modes return the standard `TerminalHarness`. Input is terminal input;
 neither mode invokes component callbacks directly. Both resolve after the
-first painted frame and semantic revision. Call `waitForStable()` between
+first painted frame and semantic revision. Call `waitForQuiet()` between
 input events that must be processed in separate commits.
 
 `mountInk(element, options?)` returns an `InkHarness` with

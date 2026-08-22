@@ -66,7 +66,7 @@ describe('autonomous workflow security', () => {
   });
 
   it('pins every external action in the autonomous and release workflows to a full commit SHA', async () => {
-    for (const name of ['ci.yml', 'docs.yml', 'preview-release.yml', 'upstream-candidates.yml', 'autonomous-coordinator.yml', 'release.yml']) {
+    for (const name of ['ci.yml', 'reliability.yml', 'docs.yml', 'preview-release.yml', 'upstream-candidates.yml', 'autonomous-coordinator.yml', 'release.yml']) {
       const workflow = await readWorkflow(name);
       for (const line of workflow.split('\n').filter((value) => /^\s*(?:- )?uses:/u.test(value))) {
         expect(line, `${name}: ${line}`).toMatch(/@[0-9a-f]{40}(?:\s+#.*)?$/u);
@@ -77,7 +77,8 @@ describe('autonomous workflow security', () => {
   it('does not persist checkout credentials in any untrusted-code CI job', async () => {
     const workflow = await readWorkflow('ci.yml');
     expect(workflow).toMatch(/permissions:\n  contents: read/u);
-    expect(workflow.match(/uses: actions\/checkout@/gu)).toHaveLength(13);
-    expect(workflow.match(/persist-credentials: false/gu)).toHaveLength(13);
+    const checkoutSteps = workflow.match(/- uses: actions\/checkout@[^\n]+\n(?: {8}[^\n]*\n){0,8}/gu) ?? [];
+    expect(checkoutSteps.length).toBeGreaterThan(0);
+    for (const step of checkoutSteps) expect(step).toContain('persist-credentials: false');
   });
 });

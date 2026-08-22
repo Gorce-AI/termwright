@@ -123,6 +123,16 @@ pub(crate) fn snapshot_from_with_relation_limit(
         .keys()
         .map(|key| (*key, format!("k:{key}")))
         .collect();
+    let ids_by_ordinal: BTreeMap<u32, String> = calls
+        .iter()
+        .map(|call| {
+            let id = annotation_key(call)
+                .and_then(|key| stable_ids.get(key))
+                .cloned()
+                .unwrap_or_else(|| format!("f{frame}:{}", call.ordinal));
+            (call.ordinal, id)
+        })
+        .collect();
 
     for call in calls {
         let type_path = strip_generics(call.type_name);
@@ -135,6 +145,9 @@ pub(crate) fn snapshot_from_with_relation_limit(
             role.unwrap_or(Role::Generic),
             "",
         );
+        node.parent_id = call
+            .parent_ordinal
+            .and_then(|ordinal| ids_by_ordinal.get(&ordinal).cloned());
         let intended = Rect {
             row: i64::from(call.y),
             column: i64::from(call.x),
@@ -370,6 +383,7 @@ mod tests {
     fn call(ordinal: u32, type_name: &'static str) -> RenderCall {
         RenderCall {
             ordinal,
+            parent_ordinal: None,
             type_name,
             x: 0,
             y: ordinal as u16,
@@ -401,6 +415,18 @@ mod tests {
         // Immediate mode gives no nesting to observe, so every node is a root.
         assert_eq!(snapshot.root_ids.len(), 2);
         assert!(snapshot.nodes.iter().all(|node| node.parent_id.is_none()));
+    }
+
+    #[test]
+    fn actual_annotated_call_nesting_becomes_semantic_hierarchy() {
+        let outer = call(0, "my_app::Outer");
+        let mut inner = call(1, "my_app::Inner");
+        inner.parent_ordinal = Some(0);
+        let mut snapshot = snapshot_from(&[outer, inner], 3, 80, 24);
+        validated(&mut snapshot);
+
+        assert_eq!(snapshot.root_ids, ["f3:0"]);
+        assert_eq!(snapshot.nodes[1].parent_id.as_deref(), Some("f3:0"));
     }
 
     #[test]
@@ -622,6 +648,7 @@ mod tests {
     fn intended_geometry_is_the_rectangle_the_widget_was_drawn_into() {
         let calls = [RenderCall {
             ordinal: 0,
+            parent_ordinal: None,
             type_name: "ratatui_widgets::paragraph::Paragraph<'_>",
             x: 3,
             y: 4,
@@ -661,6 +688,7 @@ mod tests {
     fn frame_preserves_what_ratatui_knows_and_refuses_hit_testing() {
         let calls = [RenderCall {
             ordinal: 0,
+            parent_ordinal: None,
             type_name: "ratatui_widgets::paragraph::Paragraph<'_>",
             x: 75,
             y: 23,

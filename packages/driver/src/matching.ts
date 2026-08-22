@@ -89,7 +89,7 @@ function stepMatches(index: SemanticIndex, node: SemanticNode, step: SemanticSte
   if (step.text !== undefined) {
     const matched =
       matchesText(node.name, step.text) ||
-      matchesText(node.value, step.text) ||
+      matchesText(node.value?.status === 'known' ? node.value.value : undefined, step.text) ||
       matchesText(index.label(node), step.text);
     if (!matched) return false;
   }

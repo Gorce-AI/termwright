@@ -1,6 +1,7 @@
 import type { ObservationStamp } from '@termwright/protocol';
 import type { ErrorDiagnostics } from '../api.js';
 import { NotActionableError, StaleSnapshotError, TimeoutError } from '../errors.js';
+import { Deadline, type MonotonicClock as Clock, systemMonotonicClock } from './deadline.js';
 
 export interface ActionRetryContext {
   checkpoint(): ObservationStamp;
@@ -11,12 +12,10 @@ export interface ActionRetryContext {
 
 export type MonotonicClock = () => number;
 
-const monotonicNow: MonotonicClock = () => performance.now();
-
 export function assertBeforeActionInput(
   deadline: number,
   diagnostics: ErrorDiagnostics,
-  clock: MonotonicClock = monotonicNow,
+  clock: MonotonicClock = () => systemMonotonicClock.now(),
 ): void {
   if (clock() >= deadline) {
     throw new TimeoutError('the action deadline expired before physical input began', diagnostics);
@@ -31,7 +30,7 @@ function relevantObservationChanged(
   if (left.contractId !== right.contractId || left.epoch !== right.epoch) return true;
   if (error instanceof StaleSnapshotError) return left.sequence !== right.sequence;
   const targetRef = error.actionability?.reason?.targetRef ?? error.actionability?.intent.targetRef;
-  return targetRef?.startsWith('grid:') === true
+  return targetRef?.startsWith('screen:') === true
     ? left.screenRevision !== right.screenRevision
     : left.semanticRevision !== right.semanticRevision || left.pairedScreenRevision !== right.pairedScreenRevision;
 }
@@ -45,27 +44,25 @@ function recoverable(error: unknown): error is StaleSnapshotError | NotActionabl
 export class ActionRetryController {
   readonly deadline: number;
   readonly #clock: MonotonicClock;
+  readonly #budget: Deadline;
   #staleRetries = 0;
 
-  constructor(timeoutMs: number, clock: MonotonicClock = monotonicNow) {
+  constructor(timeoutMs: number, clock: MonotonicClock = () => systemMonotonicClock.now()) {
     if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
       throw new RangeError(`action timeout must be a finite non-negative number, received ${String(timeoutMs)}`);
     }
     this.#clock = clock;
-    this.deadline = clock() + timeoutMs;
+    const deadlineClock: Clock = { now: clock };
+    this.#budget = Deadline.after(timeoutMs, deadlineClock);
+    this.deadline = this.#budget.at;
   }
 
   remaining(): number {
-    return Math.max(0, this.deadline - this.#clock());
+    return this.#budget.remaining();
   }
 
   expired(): boolean {
-    return this.#clock() >= this.deadline;
-  }
-
-  /** Convert the remaining monotonic budget only at the wall-clock wait boundary. */
-  waitDeadline(): number {
-    return Date.now() + this.remaining();
+    return this.#budget.expired();
   }
 
   /** Final guard immediately before the executor may emit its first byte. */
@@ -86,7 +83,7 @@ export class ActionRetryController {
     const pendingObservation = observationState !== undefined && observationState !== 'settled';
 
     for (;;) {
-      await ctx.waitForChange(this.waitDeadline());
+      await ctx.waitForChange(this.deadline);
       // Expiry wins immediately after every wait, before another resolution or
       // any device operation can consume time or emit bytes.
       if (this.expired()) throw error;

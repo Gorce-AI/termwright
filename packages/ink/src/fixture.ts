@@ -141,29 +141,43 @@ export async function launchInkFixture(options: LaunchInkFixtureOptions): Promis
   // runner looks for it and no connection can be missed.
   const control = await ControlChannel.listen();
 
-  const harness = await launchTerminal({
-    command: withProbe('node', [
-      process.execPath,
-      ...(options.nodeArgs ?? []),
-      fileURLToPath(RUNNER_ENTRY),
-      payload,
-    ]).command,
-    columns: options.columns ?? 80,
-    rows: options.rows ?? 24,
-    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-    env: {
-      ...options.env,
-      [ENV_CONTROL_ENDPOINT]: control.endpoint,
-      [ENV_CONTROL_TOKEN]: control.token,
-    },
-    ...(options.envMode === undefined ? {} : { envMode: options.envMode }),
-    ...(options.logs === undefined ? {} : { logs: options.logs }),
-    ...(options.timeouts === undefined ? {} : { timeouts: options.timeouts }),
-    // Unlike launchTerminal's generic API, this helper always injects the Ink
-    // integration. Do not let the generic bounded negotiation window classify
-    // a loaded Windows child as uninstrumented before its imports complete.
-    semanticNegotiationMs: options.settleTimeout ?? CONTROL_ATTACH_TIMEOUT_MS,
-  });
+  let harness: TerminalHarness;
+  try {
+    harness = await launchTerminal({
+      command: withProbe('node', [
+        process.execPath,
+        ...(options.nodeArgs ?? []),
+        fileURLToPath(RUNNER_ENTRY),
+        payload,
+      ]).command,
+      columns: options.columns ?? 80,
+      rows: options.rows ?? 24,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      env: {
+        ...options.env,
+        [ENV_CONTROL_ENDPOINT]: control.endpoint,
+        [ENV_CONTROL_TOKEN]: control.token,
+      },
+      ...(options.envMode === undefined ? {} : { envMode: options.envMode }),
+      ...(options.logs === undefined ? {} : { logs: options.logs }),
+      ...(options.timeouts === undefined ? {} : { timeouts: options.timeouts }),
+      // Unlike launchTerminal's generic API, this helper always injects the Ink
+      // integration. Do not let the generic bounded negotiation window classify
+      // a loaded Windows child as uninstrumented before its imports complete.
+      semanticNegotiationMs: options.settleTimeout ?? CONTROL_ATTACH_TIMEOUT_MS,
+    });
+  } catch (error) {
+    try {
+      await control.close();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Ink fixture launch and control-channel rollback both failed',
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 
   // A fixture that fails to start — a missing export, a module that throws on
   // import — still paints the terminal, because the runner's diagnostics go to
@@ -192,8 +206,7 @@ export async function launchInkFixture(options: LaunchInkFixtureOptions): Promis
       died,
     ]);
   } catch (error) {
-    await control.close();
-    await harness.close();
+    await closeFixtureResources(control, harness, error);
     throw error;
   }
 
@@ -217,6 +230,7 @@ class InkFixtureHarnessImpl extends ForwardingHarness implements InkFixtureHarne
   readonly #control: ControlChannel;
   readonly #settle: SettleOptions | undefined;
   #rerenderTail: Promise<void> = Promise.resolve();
+  #closePromise: Promise<void> | null = null;
 
   constructor(session: TerminalHarness, control: ControlChannel, settle: SettleOptions | undefined) {
     super(session);
@@ -250,10 +264,27 @@ class InkFixtureHarnessImpl extends ForwardingHarness implements InkFixtureHarne
     }
   }
 
-  override async close(): Promise<void> {
-    await this.#control.close();
-    await super.close();
+  override close(): Promise<void> {
+    this.#closePromise ??= closeFixtureResources(this.#control, this.session);
+    return this.#closePromise;
   }
+}
+
+async function closeFixtureResources(
+  control: ControlChannel,
+  harness: TerminalHarness,
+  cause?: unknown,
+): Promise<void> {
+  const results = await Promise.allSettled([control.close(), harness.close()]);
+  const failures = results
+    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    .map((result) => result.reason);
+  if (failures.length === 0) return;
+  throw new AggregateError(
+    cause === undefined ? failures : [cause, ...failures],
+    'failed to close all Ink fixture resources',
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 function pairedRevisionObserver(harness: TerminalHarness, deadline: number): {
@@ -317,7 +348,7 @@ function pairedRevisionObserver(harness: TerminalHarness, deadline: number): {
       closed = true;
       for (const waiter of waiters.values()) {
         waiter.reject(new SessionClosedError('the paired revision observer was closed', {
-          semanticTree: harness.capabilities().semanticTree,
+          semanticTree: harness.contract()?.capabilities['semantic-tree'].status === 'supported',
         }));
       }
       for (const unsubscribe of unsubscribes) unsubscribe();
@@ -329,7 +360,7 @@ function remainingRerenderTime(deadline: number, harness: TerminalHarness): numb
   const remaining = deadline - performance.now();
   if (remaining <= 0) {
     throw new TimeoutError('the fixture rerender exceeded its total timeout', {
-      semanticTree: harness.capabilities().semanticTree,
+      semanticTree: harness.contract()?.capabilities['semantic-tree'].status === 'supported',
       screenExcerpt: harness.screen().text(),
     });
   }

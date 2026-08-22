@@ -1,4 +1,4 @@
-//! Blocking unix-socket client for the semantic side-channel.
+//! Bounded local-socket client for the semantic side-channel.
 //!
 //! **Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in
 //! the environment [`Client::from_env`] returns `None`: the application opens
@@ -12,6 +12,7 @@
 //! blocks.
 
 use std::io::{ErrorKind, Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -32,6 +33,17 @@ use crate::messages::{
 use crate::roles::Capability;
 use crate::tree::Snapshot;
 use crate::validate::validate_snapshot;
+
+#[cfg(unix)]
+type TransportStream = UnixStream;
+
+#[cfg(windows)]
+use interprocess::{
+    os::windows::named_pipe::{pipe_mode, DuplexPipeStream},
+    ConnectWaitMode,
+};
+#[cfg(windows)]
+type TransportStream = DuplexPipeStream<pipe_mode::Bytes>;
 
 /// Environment variable naming the driver's socket.
 pub const ENV_ENDPOINT: &str = "TERMWRIGHT_ENDPOINT";
@@ -162,7 +174,7 @@ pub struct Client {
     endpoint: String,
     token: String,
     options: Options,
-    stream: Option<UnixStream>,
+    stream: Option<TransportStream>,
     decoder: FrameDecoder,
     limits: Limits,
     session_id: Option<String>,
@@ -220,7 +232,7 @@ impl Client {
     /// applying the same dormant rule as [`Client::from_env`].
     ///
     /// Use this when the process manages its own environment, or in tests.
-    /// A missing or empty endpoint or token, or a Windows named pipe, yields `None`.
+    /// A missing or empty endpoint or token yields `None`.
     pub fn from_values(
         endpoint: Option<&str>,
         token: Option<&str>,
@@ -244,14 +256,12 @@ impl Client {
             }
             return None;
         };
-        if endpoint.starts_with(r"\\.\pipe\") || endpoint.starts_with(r"\\?\pipe\") {
-            // Named pipes need a Windows-only transport; stay dormant rather
-            // than half-working.
+        if !endpoint_supported(endpoint) {
             if let Some(log) = options.debug.as_ref() {
                 log.line(
                     Category::Diag,
                     &format!(
-                        "dormant: {} needs a Windows transport this client does not have",
+                        "dormant: {} is not a local endpoint for this platform",
                         describe_endpoint(endpoint)
                     ),
                 );
@@ -277,7 +287,7 @@ impl Client {
                 timeout.as_millis()
             ),
         );
-        let stream = match UnixStream::connect(&self.endpoint) {
+        let stream = match connect_transport(&self.endpoint, timeout, self.options.write_timeout) {
             Ok(stream) => stream,
             Err(error) => {
                 self.debug_line(
@@ -287,8 +297,6 @@ impl Client {
                 return Err(error.into());
             }
         };
-        stream.set_read_timeout(Some(Duration::from_millis(50)))?;
-        stream.set_write_timeout(self.options.write_timeout)?;
         self.stream = Some(stream);
 
         let mut hello = Hello::new(
@@ -330,6 +338,7 @@ impl Client {
                 return Err(Error::HandshakeTimeout);
             }
             self.poll()?;
+            std::thread::yield_now();
         }
         Ok(())
     }
@@ -382,7 +391,7 @@ impl Client {
                     self.revision, self.snapshots_sent, self.logs_dropped
                 ),
             );
-            let _ = stream.shutdown(std::net::Shutdown::Both);
+            close_transport(stream);
         }
         self.session_id = None;
         if let Some(mut lease) = self.evidence_lease.take() {
@@ -654,7 +663,7 @@ impl Client {
         let Some(stream) = self.stream.as_mut() else {
             return Ok(());
         };
-        match stream.write_all(frame).and_then(|()| stream.flush()) {
+        match write_transport_frame(stream, frame, self.options.write_timeout) {
             Ok(()) => Ok(()),
             Err(error) => {
                 let timed_out = matches!(
@@ -674,6 +683,102 @@ impl Client {
                 }
                 Err(Error::Io(error))
             }
+        }
+    }
+}
+
+#[cfg(unix)]
+fn endpoint_supported(endpoint: &str) -> bool {
+    !endpoint.starts_with(r"\\.\pipe\") && !endpoint.starts_with(r"\\?\pipe\")
+}
+
+#[cfg(windows)]
+fn endpoint_supported(endpoint: &str) -> bool {
+    endpoint.starts_with(r"\\.\pipe\") || endpoint.starts_with(r"\\?\pipe\")
+}
+
+#[cfg(unix)]
+fn connect_transport(
+    endpoint: &str,
+    _dial_timeout: Duration,
+    write_timeout: Option<Duration>,
+) -> std::io::Result<TransportStream> {
+    let stream = UnixStream::connect(endpoint)?;
+    stream.set_read_timeout(Some(Duration::from_millis(50)))?;
+    stream.set_write_timeout(write_timeout)?;
+    Ok(stream)
+}
+
+#[cfg(windows)]
+fn connect_transport(
+    endpoint: &str,
+    dial_timeout: Duration,
+    _write_timeout: Option<Duration>,
+) -> std::io::Result<TransportStream> {
+    let stream = TransportStream::connect_by_path_with_wait_mode(
+        endpoint,
+        ConnectWaitMode::Timeout(dial_timeout),
+    )?;
+    // Windows named pipes have no reliable socket-style timeout option in the
+    // exact transport. Nonblocking mode lets poll return immediately and lets
+    // write_transport_frame enforce one monotonic whole-frame deadline.
+    stream.set_nonblocking(true)?;
+    Ok(stream)
+}
+
+#[cfg(unix)]
+fn close_transport(stream: TransportStream) {
+    let _ = stream.shutdown(std::net::Shutdown::Both);
+}
+
+#[cfg(windows)]
+fn close_transport(_stream: TransportStream) {
+    // Named pipes do not support half-shutdown. Dropping the unique handle is
+    // the authoritative close operation.
+}
+
+#[cfg(unix)]
+fn write_transport_frame(
+    stream: &mut TransportStream,
+    frame: &[u8],
+    _timeout: Option<Duration>,
+) -> std::io::Result<()> {
+    stream.write_all(frame).and_then(|()| stream.flush())
+}
+
+#[cfg(windows)]
+fn write_transport_frame(
+    stream: &mut TransportStream,
+    frame: &[u8],
+    timeout: Option<Duration>,
+) -> std::io::Result<()> {
+    let deadline = timeout.map(|duration| Instant::now() + duration);
+    let mut offset = 0;
+    while offset < frame.len() {
+        match stream.write(&frame[offset..]) {
+            Ok(0) => return Err(std::io::Error::from(ErrorKind::WriteZero)),
+            Ok(written) => offset += written,
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    return Err(std::io::Error::from(ErrorKind::TimedOut));
+                }
+                std::thread::yield_now();
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    loop {
+        match stream.flush() {
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    return Err(std::io::Error::from(ErrorKind::TimedOut));
+                }
+                std::thread::yield_now();
+            }
+            Err(error) => return Err(error),
         }
     }
 }

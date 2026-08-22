@@ -14,6 +14,7 @@ have run on its own.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from typing import Any, Dict, Optional
 
@@ -40,6 +41,7 @@ TEXTUAL_CAPABILITIES = (
     "intended-geometry",
     "clipped-geometry",
     "states",
+    "focus-state",
     "actions",
     "render-revisions",
     "pointer-hit-grid",
@@ -67,6 +69,7 @@ class ProbeSession:
     def __init__(self, app: Any, client: SemanticClient) -> None:
         self._app = app
         self._client = client
+        self._owner_pid = os.getpid()
         self._identities = Identities()
         self._starting = False
         self._started = False
@@ -88,6 +91,8 @@ class ProbeSession:
 
     def on_frame(self) -> None:
         """Called once per completed frame. Never raises into Textual."""
+        if os.getpid() != self._owner_pid:
+            return
         try:
             self._on_frame()
         except DuplicateSemanticKeyError as error:
@@ -187,10 +192,15 @@ class ProbeSession:
 def session_for(app: Any, framework_version: Optional[str] = None) -> Optional[ProbeSession]:
     """Build a session for `app`, or `None` when the process is not instrumented.
 
-    The dormant rule reaches all the way here: `client_from_env` returns `None`
-    without an endpoint and a token, and then no session exists to publish
-    anything.
+    The bootstrap removes credentials from the live environment before the
+    application starts. Only its process-local captured mapping reaches
+    `client_from_env`; a forked descendant has no mapping and no session.
     """
+    from . import _session_environment
+
+    environment = _session_environment()
+    if environment is None:
+        return None
     client = client_from_env(
         adapter_name="textual-probe",
         adapter_version=__version__,
@@ -199,6 +209,7 @@ def session_for(app: Any, framework_version: Optional[str] = None) -> Optional[P
         # so advertising `logs` would promise traffic this path cannot emit.
         capabilities=TEXTUAL_CAPABILITIES,
         probe=probe_info(framework_version),
+        env=environment,
     )
     if client is None:
         return None

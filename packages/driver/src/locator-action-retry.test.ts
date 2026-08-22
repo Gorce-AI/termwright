@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
-  DeviceOperation,
+  ExecutableDeviceOperation,
   EffectiveSessionContract,
   EvidenceProvenance,
   ObservationStamp,
@@ -26,11 +26,11 @@ const contract: EffectiveSessionContract = Object.freeze({
   terminal: Object.freeze({ profile: 'xterm', platform: 'test', mouseModesObservable: true }),
 });
 
-function fixture(initial: 'disabled' | 'covered') {
+function fixture(initial: 'disabled' | 'covered' | 'ready') {
   let phase: 'disabled' | 'covered' | 'ready' = initial;
   let sequence = 1;
   let statusWakeups = 0;
-  const execute = vi.fn(async (operations: readonly DeviceOperation[]) => Object.freeze([...operations]));
+  const execute = vi.fn(async (operations: readonly ExecutableDeviceOperation[]) => Object.freeze([...operations]));
 
   const node = (): SemanticNode => Object.freeze({
     id: 'save', role: 'button', name: 'Save',
@@ -58,7 +58,7 @@ function fixture(initial: 'disabled' | 'covered') {
     screenRevision: sequence, semanticRevision: sequence, pairedScreenRevision: sequence,
   });
   const ctx: LocatorContext = {
-    sessionId: 'retry', timeouts: { action: 1_000, text: 1_000, idle: 1_000, ready: 1_000, exit: 1_000 },
+    sessionId: 'retry', artifactValuePolicy: 'redacted', timeouts: { action: 1_000, text: 1_000, idle: 1_000, ready: 1_000, exit: 1_000 },
     actionObservationState: () => 'settled', negotiationPending: () => false, negotiationSettled: async () => undefined,
     semanticIndex: () => new SemanticIndex(snapshot()), semanticAttached: () => true,
     semanticPossible: () => true, semanticViolation: () => null,
@@ -110,13 +110,25 @@ describe('Locator action retry execution', () => {
     expect(test.execute).not.toHaveBeenCalled();
   });
 
+  it('does not resolve or emit input when the owning attempt budget expired before planning', async () => {
+    const test = fixture('ready');
+    const expired = Object.assign(new Error('attempt operation budget exhausted'), {
+      code: 'TW_ATTEMPT_BUDGET_EXCEEDED',
+    });
+    test.ctx.operationTimeout = () => { throw expired; };
+    const locator = new LocatorImpl(test.ctx, roleQuery('button', textMatcher('Save', true), {}));
+
+    await expect(locator.click({ timeout: 500 })).rejects.toBe(expired);
+    expect(test.execute).not.toHaveBeenCalled();
+  });
+
   it('bounds delayed negotiation inside the action budget and emits no input', async () => {
     vi.useFakeTimers();
     const test = fixture('disabled');
     test.ctx.negotiationPending = () => true;
     test.ctx.negotiationSettled = () => new Promise<void>(() => undefined);
     test.ctx.waitForChange = (deadline) => new Promise<void>((resolve) => {
-      setTimeout(resolve, Math.max(0, deadline - Date.now()));
+      setTimeout(resolve, Math.max(0, deadline - performance.now()));
     });
     const locator = new LocatorImpl(test.ctx, roleQuery('button', textMatcher('Save', true), {}));
     const started = Date.now();
@@ -136,7 +148,7 @@ describe('Locator action retry execution', () => {
     test.ctx.negotiationPending = () => true;
     test.ctx.negotiationSettled = () => new Promise<void>(() => undefined);
     test.ctx.waitForChange = (deadline) => new Promise<void>((resolve) => {
-      setTimeout(resolve, Math.max(0, deadline - Date.now()));
+      setTimeout(resolve, Math.max(0, deadline - performance.now()));
     });
     const locator = new LocatorImpl(test.ctx, roleQuery('button', textMatcher('Save', true), {}));
     const started = Date.now();

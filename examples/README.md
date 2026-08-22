@@ -121,9 +121,9 @@ as evidence, while all actions still arrive as normal `crossterm` mouse events.
   application publishes the tree for the frame your input caused, so `press()`
   followed straight by `expect(...)` is correct and sleep-free. Actions wait for
   a slow child to attach too, so a test can act right after a screen wait. The
-  one thing that never waits is a plain read — `capabilities()` in a bare
-  `expect`, or a **spy**, which renders nothing and so produces no frame to wait
-  for. Put a polling matcher first, and poll a spy with `vi.waitFor`.
+  a plain **spy** still renders nothing and produces no frame to wait for. Put a
+  locator matcher first, and poll a spy with `vi.waitFor`. Capability branching
+  uses the frozen result of `await app.settled()`.
 - **Scope destructive locators.** `dialog button#confirm` keeps working the day
   someone adds a second Delete button to the toolbar; `getByRole('button',
   {name: 'Delete'})` starts failing as ambiguous.
@@ -139,7 +139,7 @@ as evidence, while all actions still arrive as normal `crossterm` mouse events.
   no suite depends on a shared fixtures directory or on what ran before it.
 - **A click needs the frame to hold still.** Matchers only read the tree, but a
   click aims at coordinates. After anything animated — a modal fading in —
-  `waitForStable()` before clicking.
+  `waitForQuiet()` before clicking.
 
 [`NOTES.md`](NOTES.md) has the rest: why each example is shaped the way it is,
 and the traps that cost time while writing them.

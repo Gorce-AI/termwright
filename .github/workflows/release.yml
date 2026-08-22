@@ -299,13 +299,17 @@ jobs:
           test "$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md | wc -l | tr -d ' ')" = 0
           node scripts/sync-protocol-version.mjs --check
           node scripts/check-package-metadata.mjs
+          node scripts/check-platform-deviations.mjs
+          node scripts/audit-determinism-constructs.mjs
+          node scripts/generate-semantic-completeness.mjs
+          node scripts/generate-mission-completion.mjs
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm check:node-pty
       - run: pnpm -r --filter './packages/*' run typecheck
-      # Keep release verification under the same bounded package-level process
-      # budget as CI; Vitest still parallelizes within each package.
-      - run: pnpm -r --workspace-concurrency=1 --filter './packages/*' run test
+      - name: Run the certified Termwright host
+        run: pnpm test -- --resource-profile ci --json
 
       - name: Pack npm packages
         shell: bash
@@ -328,6 +332,18 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Verify packed driver without workspace patch state
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_dir="$RUNNER_TEMP/termwright-packed-driver"
+          mkdir -p "$install_dir"
+          npm install --prefix "$install_dir" \
+            release/npm/termwright-protocol-*.tgz \
+            release/npm/termwright-vt-*.tgz \
+            release/npm/termwright-driver-*.tgz
+          node scripts/check-installed-driver.mjs "$install_dir"
 
       - name: Build and test the Python distribution
         working-directory: clients/python

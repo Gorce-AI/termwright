@@ -128,7 +128,9 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
       }
 
       if (key.tab) {
-        setFocus((from) => NEXT_FOCUS[from]);
+        const next = NEXT_FOCUS[focus];
+        setFocus(next);
+        setStatus(`focused ${next}`);
         return;
       }
       if (key.return) {

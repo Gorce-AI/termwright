@@ -8,37 +8,18 @@ libraries, pinned exactly to compatible versions in this package:
 `@cucumber/gherkin@42.0.1`, `@cucumber/messages@34.2.1`, and
 `@cucumber/cucumber-expressions@20.1.0`.
 
-## Setup
+## Native host
 
-Add the plugin and include `.feature` files explicitly in the Vitest config:
+Run `termwright test`, `termwright watch` or `termwright ui`. The native host
+installs the Gherkin transform and discovers physical `.feature` files beside
+ordinary test modules automatically. Feature/Rule/Scenario/Example identity,
+tags and physical source locations remain part of the same Vitest collection,
+AttemptContext and resource lifecycle; there is no second scheduler.
 
-```ts
-import { defineConfig } from 'vitest/config';
-import { gherkinPlugin } from '@termwright/gherkin';
-
-export default defineConfig({
-  plugins: [gherkinPlugin({
-    featureRoot: 'tests/features',
-    stepDefinitions: [
-      '[filepath].steps.{ts,tsx,mts}',
-      '[filepart]/step_definitions/**/*.{ts,tsx,mts}',
-      '../step_definitions/**/*.{ts,tsx,mts}',
-    ],
-  })],
-  test: {
-    include: ['tests/**/*.test.ts', 'tests/features/**/*.feature'],
-  },
-});
-```
-
-This explicit config is for ordinary `vitest run` and IDE Vitest integrations.
-It does not alter their normal `.test.ts` discovery unless the project opts in.
-`termwright ui` installs the same plugin in its owned Vitest host and adds
-physical `.feature` files to that host's discovery automatically, alongside
-provider-owned `.test.ts` cases in one catalogue and the existing Termwright
-runner UI; it does not start a separate Gherkin runner or UI. Catalogue entries
-carry an explicit Gherkin kind, Feature/Rule ancestry, tags, and physical source
-line rather than reconstructing structure from a test title.
+The host uses the documented colocated step-definition conventions; no plugin
+registration or duplicate include list is required. Catalogue entries carry an
+explicit Gherkin kind, Feature/Rule ancestry, tags and physical source line
+rather than reconstructing structure from a title.
 
 ## Step definitions
 

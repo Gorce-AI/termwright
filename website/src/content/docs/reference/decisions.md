@@ -117,18 +117,23 @@ false visibility and action results.
 Consumers branch on the observation status rather than treating missing
 evidence as a rectangle or boolean.
 
-## ADR-6 — Vitest as the first-class preset, driver runner-agnostic
+## ADR-6 — Termwright owns the test host; Vitest is the embedded engine
 
-**Decision.** `@termwright/test` targets Vitest specifically. The driver depends
-on no runner.
+**Decision.** `termwright test`, `termwright watch`, and `termwright ui` are the
+only product execution modes. They share one Termwright-owned host and its
+exact-certified Vitest engine. `@termwright/test` supplies the authored DSL,
+fixtures and matchers; the driver remains independently reusable as a library.
 
-**Why.** A preset that feels native beats a lowest-common-denominator API that
-feels foreign everywhere: `test.extend` fixtures, `expect.extend` matchers with
-real typing, reporters, sharding, `--last-failed` and retries all exist already,
-and reimplementing them would be a worse scheduler than the one Vitest has.
+**Why.** Vitest already provides collection, Vite transforms, mocks, assertions
+and the familiar test DSL. It does not understand PTY cost, process trees,
+paired semantic revisions, Attempt identity or terminal artifact durability.
+Termwright therefore embeds Vitest instead of replacing it, while owning every
+terminal-specific execution and certification boundary around it.
 
-Keeping that layer thin — roughly 5% of the code — is what keeps `node:test`,
-Jest and plain scripts first-class rather than theoretical.
+**Consequence.** There is no direct-Vitest compatibility runner, reporter-only
+fallback, file/title execution identity, or migration layer to maintain. The
+exact runner fails closed without its host context. Plain scripts may still use
+the low-level driver, but they are not certified Termwright test runs.
 
 ## ADR-7 — Recording on by default
 

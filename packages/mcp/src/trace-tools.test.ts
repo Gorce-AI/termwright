@@ -5,12 +5,13 @@
  * hand-driven session, so the tests exercise the same archive layout a failing
  * test run produces — no hand-written meta.json, no stubbed reader.
  */
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createTraceWriter, packTrace } from '@termwright/trace';
-import type { SessionEventMap, SessionEvents } from '@termwright/driver';
+import type { SessionEventMap, SessionEventRecord, SessionEvents } from '@termwright/driver';
 import type { SemanticSnapshot } from './model.js';
 import { Client, connectClient } from './sdk-facade.js';
 import { ERROR_META_KEY, serveInMemory } from './server.js';
@@ -30,6 +31,9 @@ class ScriptedSession {
   clock = 0;
   #tree: SemanticSnapshot | null = null;
   readonly #listeners = new Map<keyof SessionEventMap, Set<Listener>>();
+  readonly #journalListeners = new Set<(record: SessionEventRecord) => void>();
+  readonly #journal: SessionEventRecord[] = [];
+  #sequence = 0;
 
   readonly now = (): number => this.clock;
 
@@ -43,6 +47,14 @@ class ScriptedSession {
       this.#listeners.set(event, set);
       return () => set.delete(callback as Listener);
     },
+    checkpoint: () => this.#sequence,
+    subscribe: (options, callback) => {
+      for (const record of this.#journal) {
+        if (record.sequence >= options.fromSequence) callback(record);
+      }
+      this.#journalListeners.add(callback);
+      return () => this.#journalListeners.delete(callback);
+    },
   };
 
   semanticTree(): SemanticSnapshot | null {
@@ -54,6 +66,9 @@ class ScriptedSession {
   }
 
   #emit<E extends keyof SessionEventMap>(event: E, payload: SessionEventMap[E]): void {
+    const record = { sequence: ++this.#sequence, type: event, payload } as SessionEventRecord;
+    this.#journal.push(record);
+    for (const listener of this.#journalListeners) listener(record);
     for (const listener of this.#listeners.get(event) ?? []) {
       (listener as (value: SessionEventMap[E]) => void)(payload);
     }
@@ -65,7 +80,7 @@ class ScriptedSession {
 
   publish(tree: SemanticSnapshot): void {
     this.#tree = tree;
-    this.#emit('semantic-revision', { revision: tree.revision, timeMs: this.clock });
+    this.#emit('semantic-revision', { revision: tree.revision, timeMs: this.clock, snapshot: tree });
   }
 
   exit(code: number): void {
@@ -116,6 +131,14 @@ async function workspace(): Promise<string> {
   return dir;
 }
 
+async function rewriteCommittedMember(path: string, name: string, body: string): Promise<void> {
+  await writeFile(join(path, name), body, 'utf8');
+  const commitPath = join(path, 'COMMITTED');
+  const commit = JSON.parse(await readFile(commitPath, 'utf8')) as { v: 1; checksums: Record<string, string> };
+  commit.checksums[name] = createHash('sha256').update(body).digest('hex');
+  await writeFile(commitPath, `${JSON.stringify(commit)}\n`, 'utf8');
+}
+
 /** Adds a logs.jsonl to a recorded archive, the way the trace writer does. */
 async function withLogs(path: string): Promise<string> {
   const entries = [
@@ -131,11 +154,11 @@ async function withLogs(path: string): Promise<string> {
     },
     { t: 2_600, castOffset: 2_600, source: 'file', label: 'app', message: 'INFO retrying' },
   ];
-  await writeFile(join(path, 'logs.jsonl'), `${entries.map((e) => JSON.stringify(e)).join('\n')}\n`, 'utf8');
+  await rewriteCommittedMember(path, 'logs.jsonl', `${entries.map((e) => JSON.stringify(e)).join('\n')}\n`);
   const metaPath = join(path, 'meta.json');
   const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
   meta['logs'] = { count: entries.length, sources: ['app', 'http'] };
-  await writeFile(metaPath, JSON.stringify(meta), 'utf8');
+  await rewriteCommittedMember(path, 'meta.json', JSON.stringify(meta));
   return path;
 }
 
@@ -243,7 +266,7 @@ describe('replaying a recorded failure', () => {
     expect(frame.isError, frame.text).toBe(false);
     expect(frame.data['semanticTree']).toBe('available');
     expect(frame.text).toContain('semanticTree: available');
-    expect(frame.text).toMatch(/dialog "Permission" ref=n1@\d+ modal/u);
+    expect(frame.text).toMatch(/dialog "Permission" ref=semantic:n1@\d+ modal/u);
     expect(frame.text).toContain('visible text:');
     expect(frame.text).toContain('Permission required');
 
@@ -509,7 +532,7 @@ describe('a crash recorded in the archive', () => {
       ],
       lastSemanticRevision: 2,
     };
-    await writeFile(metaPath, JSON.stringify(meta), 'utf8');
+    await rewriteCommittedMember(path, 'meta.json', JSON.stringify(meta));
     return path;
   }
 
@@ -565,7 +588,7 @@ describe('a crash recorded in the archive', () => {
     const metaPath = join(path, 'meta.json');
     const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
     meta['crash'] = { exit: 'not-an-object' };
-    await writeFile(metaPath, JSON.stringify(meta), 'utf8');
+    await rewriteCommittedMember(path, 'meta.json', JSON.stringify(meta));
 
     const call = await connectSession();
     const { data } = await call('trace.open', { path });

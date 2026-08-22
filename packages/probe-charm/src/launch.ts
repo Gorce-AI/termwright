@@ -83,8 +83,6 @@ export interface PreparedBuild {
   readonly copyDir: string;
   /** Instrumented companion copies, keyed by Go module path. */
   readonly companionCopyDirs: Readonly<Record<string, string>>;
-  /** Detected companions for which this package has no exact patch set. */
-  readonly unpatchedCompanions: Readonly<Record<string, string>>;
   /** Environment to build with: the caller's, plus the generated GOWORK. */
   readonly env: NodeJS.ProcessEnv;
   /** True when at least one copy was materialised rather than reused. */
@@ -125,30 +123,22 @@ export async function prepareInstrumentedBuild(
   });
 
   const companionCopyDirs: Record<string, string> = {};
-  const unpatchedCompanions: Record<string, string> = {};
   const builtModules: string[] = tea.built ? [flavour.module] : [];
   const bubblesModule = BUBBLES_MODULES[flavour.major];
   const bubblesVersion = flavour.companions[bubblesModule];
 
   if (bubblesVersion !== undefined) {
-    const bubblesPatchSet = optionalPatchSet('bubbles', bubblesVersion);
-    if (bubblesPatchSet === undefined) {
-      // Bubble Tea remains fully instrumented. The accessor-only Bubbles
-      // enhancement is deliberately optional and an unknown companion version
-      // therefore degrades to public getters instead of disabling semantics.
-      unpatchedCompanions[bubblesModule] = bubblesVersion;
-    } else {
-      const bubbles = await prepareCopy({
-        module: bubblesModule,
-        version: bubblesVersion,
-        patchSetDir: bubblesPatchSet,
-        probeVersion: PROBE_VERSION,
-        toolchain: toolchainVersion,
-        env,
-      });
-      companionCopyDirs[bubblesModule] = bubbles.dir;
-      if (bubbles.built) builtModules.push(bubblesModule);
-    }
+    const bubblesPatchSet = requirePatchSet('bubbles', bubblesModule, bubblesVersion);
+    const bubbles = await prepareCopy({
+      module: bubblesModule,
+      version: bubblesVersion,
+      patchSetDir: bubblesPatchSet,
+      probeVersion: PROBE_VERSION,
+      toolchain: toolchainVersion,
+      env,
+    });
+    companionCopyDirs[bubblesModule] = bubbles.dir;
+    if (bubbles.built) builtModules.push(bubblesModule);
   }
 
   const clientDir = options.clientDir ?? (await defaultClientDir(env));
@@ -179,7 +169,6 @@ export async function prepareInstrumentedBuild(
     workspaceFile,
     copyDir: tea.dir,
     companionCopyDirs,
-    unpatchedCompanions,
     env: { ...env, GOWORK: workspaceFile },
     built: builtModules.length > 0,
     builtModules,
@@ -260,7 +249,7 @@ async function prepareCopy(options: {
   return { dir, built };
 }
 
-function requirePatchSet(kind: 'bubbletea', module: string, version: string): string {
+function requirePatchSet(kind: 'bubbletea' | 'bubbles', module: string, version: string): string {
   const dir = optionalPatchSet(kind, version);
   if (dir !== undefined) return dir;
   throw new CharmPrepareError(

@@ -99,8 +99,8 @@ absent, which is knowable only from inside the package.
 
 Two things about that test worth keeping:
 
-- It uses the driver's own API, not the Vitest preset's matchers. A probe
-  proving itself through the test preset would invert the dependency.
+- It uses the driver's own API, not the Native Host's matchers. A probe
+  proving itself through the host authoring surface would invert the dependency.
 - It does not assert the status line after showing the settings page. tview
   draws a shown page *over* the one below it, so the text is still in the tree
   and no longer on the grid — asserting on the screen there would be asserting

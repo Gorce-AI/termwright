@@ -1,37 +1,52 @@
 ---
 title: Running tests
-description: Run the full suite, a directory, a file, or one case with Vitest or the Termwright Runner.
+description: Run, watch, select, and diagnose tests through the certified Termwright host.
 ---
 
-Use Vitest for repeatable command-line and CI runs. Use `termwright ui` when you
-want to select tests visually, follow live terminals, or inspect retained
-evidence.
+`termwright test`, `termwright watch`, and `termwright ui` are three surfaces of
+the same certified native host. Vitest remains the embedded engine for
+collection, Vite transforms, mocks, assertions and its familiar test DSL;
+Termwright owns terminal resources, run/attempt identity, event integrity and
+cleanup. Direct `vitest` execution is not a certified Termwright product mode.
 
 ## Run the full suite
 
 ```sh
-npx vitest run
+npx termwright test
 ```
 
-During local development, omit `run` to keep Vitest watching for changes:
+To certify scheduler-independent behavior repeatedly without spawning sibling
+Vitest processes, keep one native host alive for several complete cycles:
 
 ```sh
-npx vitest
+TERMWRIGHT_RETRIES=0 npx termwright test --runs 50 --resource-profile ci
+```
+
+Every cycle receives a new RunId and must independently pass its journal,
+resource, cleanup and transactional-history barriers. The command returns the
+worst cycle result and stops early only if the persistent host loses
+certification through an infrastructure failure. An empty or entirely skipped
+run is recorded as `skipped`, but `termwright test` exits non-zero because it is
+not evidence of a passing suite.
+
+During local development, keep the same host alive across source changes:
+
+```sh
+npx termwright watch
 ```
 
 ## Run a file or test name
 
-Vitest owns normal test selection:
+Pass engine-native filters after `--`; selection is resolved to native collected
+test IDs before execution:
 
 ```sh
-npx vitest run tests/permission.test.ts
-npx vitest run tests/permission.test.ts -t "rejects the command"
+npx termwright test -- tests/permission.test.ts
+npx termwright test -- tests/permission.test.ts -t "rejects the command"
 ```
 
-Physical Gherkin scenarios use the same scheduler after you add the
-[`gherkinPlugin`](../guides/gherkin/#run-with-vitest-and-an-ide). A `.feature` file,
-Scenario, or Scenario Outline row can therefore be selected like another
-Vitest case.
+Physical Gherkin scenarios are transformed into cases in this same host. There
+is no second Gherkin scheduler.
 
 ## Run tests in the desktop Runner
 
@@ -62,21 +77,21 @@ In Runner, rerun a completed case from its execution row. Return to Specs to run
 its file or directory again. While a run is active, overlapping Run controls
 are disabled and Stop is available.
 
-Vitest watch mode reruns affected tests after source changes. Press `r` in its
-terminal to rerun the current selection.
+`termwright watch` coalesces source changes while a run is active and starts a
+new collision-safe RunId in the same persistent engine after it finishes.
 
 ## Retry failed tests
 
-Vitest schedules retries. This example allows two additional attempts:
+The embedded engine can schedule diagnostic retries:
 
 ```sh
-npx vitest run --retry=2
+npx termwright test -- --retry=2
 ```
 
-For CI defaults, use `termwrightRetry({ci: 2, local: 0})`. Reports and Runner
-keep the ordered attempt failures and mark a case flaky when a later attempt
-passes. See [Waiting and retries](../concepts/waiting-retries/) and
-[CI and retries](../guides/ci/).
+Every try receives a unique AttemptId and its own diagnostics. A later green
+attempt does not certify the run: the host returns `flaky` and exits non-zero.
+Retries are evidence for debugging, not a substitute for determinism. See
+[Waiting and retries](../concepts/waiting-retries/) and [CI and retries](../guides/ci/).
 
 ## Run a terminal matrix
 
@@ -84,8 +99,8 @@ Configure named Termwright profiles as Vitest projects when layout or character
 width must work in more than one terminal configuration:
 
 ```sh
-npx vitest run
-npx vitest run --project compact
+npx termwright test
+npx termwright test -- --project compact
 ```
 
 The first command runs every configured project. The second selects one. See
@@ -96,8 +111,9 @@ use the CI operating-system matrix for platform coverage.
 
 | Task | Command |
 | --- | --- |
-| Repeatable local or CI run | `vitest run` |
-| Watch source changes | `vitest` |
+| Repeatable local or CI run | `termwright test` |
+| Determinism certification in one host | `termwright test --runs 50` |
+| Watch source changes | `termwright watch` |
 | Visual selection and debugging | `termwright ui` |
 | Open a retained trace | `termwright ui --trace path/to/run.twtrace` |
 

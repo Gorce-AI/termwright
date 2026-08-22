@@ -45,7 +45,7 @@ func (i *issue) code() string {
 	if contains(i.path, "revision") {
 		return "revision"
 	}
-	if contains(i.path, "bounds") || contains(i.path, "rect") {
+	if contains(i.path, "bounds") || contains(i.path, "rect") || contains(i.path, "regionBounds") || contains(i.path, "paintedRegion") || contains(i.path, "paintedRegions") {
 		return "bad-rect"
 	}
 	if i.tooBig && (contains(i.path, "nodes") || contains(i.path, "rootIds")) {
@@ -194,7 +194,7 @@ var stateBoolKeys = []string{
 }
 
 var stateKeys = append(append([]string{}, stateBoolKeys...),
-	"checked", "orientation", "level", "positionInSet", "setSize", "scrollOffset", "scrollExtent")
+	"checked", "orientation", "level", "positionInSet", "setSize")
 
 func checkState(value any, path []string) *issue {
 	object, problem := checkObject(value, path)
@@ -229,7 +229,7 @@ func checkState(value any, path []string) *issue {
 			}
 		}
 	}
-	for _, key := range []string{"setSize", "scrollOffset", "scrollExtent"} {
+	for _, key := range []string{"setSize"} {
 		if present, ok := object[key]; ok {
 			if _, problem := checkNonNegative(present, at(path, key)); problem != nil {
 				return problem
@@ -241,8 +241,9 @@ func checkState(value any, path []string) *issue {
 
 var nodeKeys = []string{
 	"id", "parentId", "role", "name", "description", "value", "geometry",
-	"state", "extended", "actions", "labelledBy", "describedBy", "textRanges", "testId",
+	"state", "extended", "actions", "inputRecipes", "labelledBy", "describedBy", "textRanges", "testId",
 	"frameworkType", "p", "px",
+	"scroll", "paintedRegion",
 }
 
 var evidenceKeys = []string{"source", "method", "strength", "providerId"}
@@ -273,6 +274,61 @@ func checkEvidence(value any, path []string, limits Limits) *issue {
 	}
 	if provider == "" {
 		return fail(at(path, "providerId"), "providerId must not be empty")
+	}
+	return nil
+}
+
+func checkPaintedRegion(value any, path []string, limits Limits) *issue {
+	object, problem := checkObject(value, path)
+	if problem != nil {
+		return problem
+	}
+	if problem := checkStrict(object, []string{"regionBounds", "spans"}, path); problem != nil {
+		return problem
+	}
+	bounds, problem := checkRect(object["regionBounds"], at(path, "regionBounds"))
+	if problem != nil {
+		return problem
+	}
+	spans, ok := object["spans"].([]any)
+	if !ok {
+		return fail(at(path, "spans"), "expected an array")
+	}
+	if len(spans) > limits.MaxNodes {
+		return failBig(at(path, "spans"), "too many painted spans")
+	}
+	var previousRow, previousTo float64 = -1, -1
+	for index, raw := range spans {
+		spanPath := at(path, "spans", fmt.Sprint(index))
+		span, problem := checkObject(raw, spanPath)
+		if problem != nil {
+			return problem
+		}
+		if problem := checkStrict(span, []string{"row", "from", "to"}, spanPath); problem != nil {
+			return problem
+		}
+		row, problem := checkNonNegative(span["row"], at(spanPath, "row"))
+		if problem != nil {
+			return problem
+		}
+		from, problem := checkNonNegative(span["from"], at(spanPath, "from"))
+		if problem != nil {
+			return problem
+		}
+		to, problem := checkPositive(span["to"], at(spanPath, "to"))
+		if problem != nil {
+			return problem
+		}
+		if to <= from {
+			return fail(spanPath, "region span must be non-empty")
+		}
+		if row < previousRow || (row == previousRow && from < previousTo) {
+			return fail(spanPath, "region spans must be non-overlapping row-major runs")
+		}
+		if row < bounds["row"] || row >= bounds["row"]+bounds["height"] || from < bounds["column"] || to > bounds["column"]+bounds["width"] {
+			return fail(spanPath, "region span lies outside regionBounds")
+		}
+		previousRow, previousTo = row, to
 	}
 	return nil
 }
@@ -328,6 +384,77 @@ func checkObservation(value any, path []string, limits Limits, known func(any, [
 		return nil
 	default:
 		return fail(at(path, "status"), "invalid observation status")
+	}
+}
+
+func checkSemanticValue(value any, path []string, limits Limits) *issue {
+	object, problem := checkObject(value, path)
+	if problem != nil {
+		return problem
+	}
+	status, _ := object["status"].(string)
+	sensitivity := func() *issue {
+		value, _ := object["sensitivity"].(string)
+		if !oneOf(value, []string{"public", "sensitive"}) {
+			return fail(at(path, "sensitivity"), "invalid semantic value sensitivity")
+		}
+		return nil
+	}
+	switch status {
+	case "known":
+		if problem := checkStrict(object, []string{"status", "value", "sensitivity", "evidence"}, path); problem != nil {
+			return problem
+		}
+		if _, problem := checkText(object["value"], at(path, "value"), limits); problem != nil {
+			return problem
+		}
+		if problem := sensitivity(); problem != nil {
+			return problem
+		}
+		return checkEvidence(object["evidence"], at(path, "evidence"), limits)
+	case "absent":
+		if problem := checkStrict(object, []string{"status", "reason", "evidence"}, path); problem != nil {
+			return problem
+		}
+		if reason, _ := object["reason"].(string); !oneOf(reason, []string{"detached", "not-displayed", "not-laid-out", "no-value"}) {
+			return fail(at(path, "reason"), "invalid semantic value absent reason")
+		}
+		if problem := checkEvidence(object["evidence"], at(path, "evidence"), limits); problem != nil {
+			return problem
+		}
+		if object["evidence"].(map[string]any)["strength"] != "authoritative" {
+			return fail(at(path, "evidence", "strength"), "absent semantic value requires authoritative evidence")
+		}
+		return nil
+	case "unknown":
+		if problem := checkStrict(object, []string{"status", "reason"}, path); problem != nil {
+			return problem
+		}
+		if reason, _ := object["reason"].(string); !oneOf(reason, []string{"awaiting-revision-pair", "provider-refresh", "stale-revision"}) {
+			return fail(at(path, "reason"), "invalid semantic value unknown reason")
+		}
+		return nil
+	case "unsupported":
+		if problem := checkStrict(object, []string{"status", "capability", "reason"}, path); problem != nil {
+			return problem
+		}
+		if object["capability"] != "semantic-value" {
+			return fail(at(path, "capability"), "expected semantic-value capability")
+		}
+		if reason, _ := object["reason"].(string); !oneOf(reason, []string{"capability", "framework-unobservable", "not-negotiated"}) {
+			return fail(at(path, "reason"), "invalid semantic value unsupported reason")
+		}
+		return nil
+	case "withheld":
+		if problem := checkStrict(object, []string{"status", "reason", "sensitivity"}, path); problem != nil {
+			return problem
+		}
+		if reason, _ := object["reason"].(string); !oneOf(reason, []string{"sensitive", "artifact-policy", "provider-policy"}) {
+			return fail(at(path, "reason"), "invalid semantic value withheld reason")
+		}
+		return sensitivity()
+	default:
+		return fail(at(path, "status"), "invalid semantic value status")
 	}
 }
 
@@ -396,6 +523,95 @@ func checkRelations(value any, path []string, limits Limits) *issue {
 	return nil
 }
 
+var physicalInputRecipeActions = map[string]struct{}{
+	"focus": {}, "activate": {}, "toggle": {}, "setValue": {},
+}
+
+func checkInputRecipes(value any, path []string, limits Limits) *issue {
+	items, isArray := value.([]any)
+	if !isArray {
+		return fail(path, "expected an array")
+	}
+	if len(items) > len(physicalInputRecipeActions) {
+		return failBig(path, "too many input recipes")
+	}
+	seen := map[string]struct{}{}
+	for index, item := range items {
+		itemPath := at(path, fmt.Sprint(index))
+		recipe, problem := checkObject(item, itemPath)
+		if problem != nil {
+			return problem
+		}
+		if problem := checkStrict(recipe, []string{"action", "requiresFocus", "steps"}, itemPath); problem != nil {
+			return problem
+		}
+		action, problem := checkText(recipe["action"], at(itemPath, "action"), limits)
+		if problem != nil {
+			return problem
+		}
+		if _, ok := physicalInputRecipeActions[action]; !ok {
+			return fail(at(itemPath, "action"), "expected one of the physical input recipe actions")
+		}
+		if _, duplicate := seen[action]; duplicate {
+			return fail(at(itemPath, "action"), "input recipe actions must be unique")
+		}
+		seen[action] = struct{}{}
+		requiresFocus, problem := checkBool(recipe["requiresFocus"], at(itemPath, "requiresFocus"))
+		if problem != nil {
+			return problem
+		}
+		if action == "focus" && requiresFocus {
+			return fail(at(itemPath, "requiresFocus"), "focus recipe cannot require focus")
+		}
+		steps, ok := recipe["steps"].([]any)
+		if !ok {
+			return fail(at(itemPath, "steps"), "expected an array")
+		}
+		if len(steps) == 0 {
+			return fail(at(itemPath, "steps"), "expected at least one step")
+		}
+		if len(steps) > limits.MaxRelationTargets {
+			return failBig(at(itemPath, "steps"), "too many recipe steps")
+		}
+		insertCount := 0
+		for stepIndex, rawStep := range steps {
+			stepPath := at(itemPath, "steps", fmt.Sprint(stepIndex))
+			step, problem := checkObject(rawStep, stepPath)
+			if problem != nil {
+				return problem
+			}
+			kind, problem := checkText(step["kind"], at(stepPath, "kind"), limits)
+			if problem != nil {
+				return problem
+			}
+			switch kind {
+			case "press":
+				if problem := checkStrict(step, []string{"kind", "key"}, stepPath); problem != nil {
+					return problem
+				}
+				key, problem := checkText(step["key"], at(stepPath, "key"), limits)
+				if problem != nil {
+					return problem
+				}
+				if key == "" {
+					return fail(at(stepPath, "key"), "key must not be empty")
+				}
+			case "insert-action-value":
+				if problem := checkStrict(step, []string{"kind"}, stepPath); problem != nil {
+					return problem
+				}
+				insertCount++
+			default:
+				return fail(at(stepPath, "kind"), "expected a physical input recipe step")
+			}
+		}
+		if (action == "setValue" && insertCount != 1) || (action != "setValue" && insertCount != 0) {
+			return fail(at(itemPath, "steps"), "setValue requires exactly one insert-action-value step")
+		}
+	}
+	return nil
+}
+
 func checkNodeSchema(value any, path []string, limits Limits) *issue {
 	object, problem := checkObject(value, path)
 	if problem != nil {
@@ -424,11 +640,16 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 	if _, problem := checkText(object["name"], at(path, "name"), limits); problem != nil {
 		return problem
 	}
-	for _, key := range []string{"description", "value", "testId", "frameworkType"} {
+	for _, key := range []string{"description", "testId", "frameworkType"} {
 		if present, ok := object[key]; ok {
 			if _, problem := checkText(present, at(path, key), limits); problem != nil {
 				return problem
 			}
+		}
+	}
+	if present, ok := object["value"]; ok {
+		if problem := checkSemanticValue(present, at(path, "value"), limits); problem != nil {
+			return problem
 		}
 	}
 	if source, ok := object["p"]; ok {
@@ -482,6 +703,42 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 			return problem
 		}
 	}
+	if rawScroll, ok := object["scroll"]; ok {
+		if problem := checkObservation(rawScroll, at(path, "scroll"), limits, func(v any, p []string) *issue {
+			state, problem := checkObject(v, p)
+			if problem != nil {
+				return problem
+			}
+			if problem := checkStrict(state, []string{"axis", "offset", "viewport", "extent"}, p); problem != nil {
+				return problem
+			}
+			axis, _ := state["axis"].(string)
+			if axis != "vertical" && axis != "horizontal" {
+				return fail(at(p, "axis"), "invalid scroll axis")
+			}
+			values := map[string]float64{}
+			for _, key := range []string{"offset", "viewport", "extent"} {
+				value, problem := checkNonNegative(state[key], at(p, key))
+				if problem != nil {
+					return problem
+				}
+				values[key] = value
+			}
+			if values["offset"]+values["viewport"] > values["extent"] {
+				return fail(p, "scroll state must fit inside its extent")
+			}
+			return nil
+		}); problem != nil {
+			return problem
+		}
+	}
+	if rawPaint, ok := object["paintedRegion"]; ok {
+		if problem := checkObservation(rawPaint, at(path, "paintedRegion"), limits, func(v any, p []string) *issue {
+			return checkPaintedRegion(v, p, limits)
+		}); problem != nil {
+			return problem
+		}
+	}
 	if state, ok := object["state"]; ok {
 		if problem := checkState(state, at(path, "state")); problem != nil {
 			return problem
@@ -508,6 +765,7 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 			return problem
 		}
 	}
+	declaredActions := map[string]struct{}{}
 	if actions, ok := object["actions"]; ok {
 		items, isArray := actions.([]any)
 		if !isArray {
@@ -520,6 +778,20 @@ func checkNodeSchema(value any, path []string, limits Limits) *issue {
 			name, isString := item.(string)
 			if !isString || !ValidAction(Action(name)) {
 				return fail(at(path, "actions", fmt.Sprint(index)), "expected a semantic action")
+			}
+			declaredActions[name] = struct{}{}
+		}
+	}
+	if recipes, ok := object["inputRecipes"]; ok {
+		if problem := checkInputRecipes(recipes, at(path, "inputRecipes"), limits); problem != nil {
+			return problem
+		}
+		for index, rawRecipe := range recipes.([]any) {
+			recipe := rawRecipe.(map[string]any)
+			action := recipe["action"].(string)
+			if _, declared := declaredActions[action]; !declared {
+				return fail(at(path, "inputRecipes", fmt.Sprint(index), "action"),
+					fmt.Sprintf("input recipe %q requires the matching semantic action intent", action))
 			}
 		}
 	}
@@ -652,6 +924,186 @@ func checkSnapshotSchema(value any, limits Limits) *issue {
 		if len(entries) > 64 {
 			return failBig([]string{"providerEvidence"}, "expected at most 64 items")
 		}
+		for index, rawEntry := range entries {
+			entryPath := []string{"providerEvidence", fmt.Sprint(index)}
+			entry, problem := checkObject(rawEntry, entryPath)
+			if problem != nil {
+				return problem
+			}
+			status, problem := checkText(entry["status"], at(entryPath, "status"), limits)
+			if problem != nil {
+				return problem
+			}
+			if status != "available" {
+				if status != "lost" && status != "violation" {
+					return fail(at(entryPath, "status"), "expected available, lost, or violation")
+				}
+				continue
+			}
+			if rawFocus, ok := entry["focusState"]; ok {
+				focus, problem := checkObject(rawFocus, at(entryPath, "focusState"))
+				if problem != nil {
+					return problem
+				}
+				focusStatus, problem := checkText(focus["status"], at(entryPath, "focusState", "status"), limits)
+				if problem != nil {
+					return problem
+				}
+				switch focusStatus {
+				case "focused":
+					if problem := checkStrict(focus, []string{"status", "recipientId"}, at(entryPath, "focusState")); problem != nil {
+						return problem
+					}
+					recipient, problem := checkText(focus["recipientId"], at(entryPath, "focusState", "recipientId"), limits)
+					if problem != nil {
+						return problem
+					}
+					if recipient == "" {
+						return fail(at(entryPath, "focusState", "recipientId"), "recipient id must not be empty")
+					}
+				case "none":
+					if problem := checkStrict(focus, []string{"status"}, at(entryPath, "focusState")); problem != nil {
+						return problem
+					}
+				default:
+					return fail(at(entryPath, "focusState", "status"), "expected focused or none")
+				}
+			}
+			if recipes, ok := entry["actionRecipes"]; ok {
+				targets, ok := recipes.([]any)
+				if !ok {
+					return fail(at(entryPath, "actionRecipes"), "expected an array")
+				}
+				if len(targets) > limits.MaxNodes {
+					return failBig(at(entryPath, "actionRecipes"), "too many action recipe recipients")
+				}
+				seen := map[string]struct{}{}
+				for targetIndex, rawTarget := range targets {
+					targetPath := at(entryPath, "actionRecipes", fmt.Sprint(targetIndex))
+					target, problem := checkObject(rawTarget, targetPath)
+					if problem != nil {
+						return problem
+					}
+					if problem := checkStrict(target, []string{"recipientId", "recipes"}, targetPath); problem != nil {
+						return problem
+					}
+					recipient, problem := checkText(target["recipientId"], at(targetPath, "recipientId"), limits)
+					if problem != nil {
+						return problem
+					}
+					if recipient == "" {
+						return fail(at(targetPath, "recipientId"), "recipient id must not be empty")
+					}
+					if _, duplicate := seen[recipient]; duplicate {
+						return fail(at(targetPath, "recipientId"), "provider action recipe recipients must be unique")
+					}
+					seen[recipient] = struct{}{}
+					if problem := checkInputRecipes(target["recipes"], at(targetPath, "recipes"), limits); problem != nil {
+						return problem
+					}
+				}
+			}
+			if rawStates, ok := entry["scrollStates"]; ok {
+				states, ok := rawStates.([]any)
+				if !ok {
+					return fail(at(entryPath, "scrollStates"), "expected an array")
+				}
+				if len(states) > limits.MaxNodes {
+					return failBig(at(entryPath, "scrollStates"), "too many scroll recipients")
+				}
+				seen := map[string]struct{}{}
+				for stateIndex, rawState := range states {
+					statePath := at(entryPath, "scrollStates", fmt.Sprint(stateIndex))
+					state, problem := checkObject(rawState, statePath)
+					if problem != nil {
+						return problem
+					}
+					if problem := checkStrict(state, []string{"recipientId", "axis", "offset", "viewport", "extent"}, statePath); problem != nil {
+						return problem
+					}
+					recipient, problem := checkText(state["recipientId"], at(statePath, "recipientId"), limits)
+					if problem != nil {
+						return problem
+					}
+					if recipient == "" {
+						return fail(at(statePath, "recipientId"), "recipient id must not be empty")
+					}
+					if _, exists := seen[recipient]; exists {
+						return fail(at(statePath, "recipientId"), "provider scroll recipients must be unique")
+					}
+					seen[recipient] = struct{}{}
+					axis, _ := state["axis"].(string)
+					if axis != "vertical" && axis != "horizontal" {
+						return fail(at(statePath, "axis"), "invalid scroll axis")
+					}
+					values := map[string]float64{}
+					for _, key := range []string{"offset", "viewport", "extent"} {
+						value, problem := checkNonNegative(state[key], at(statePath, key))
+						if problem != nil {
+							return problem
+						}
+						values[key] = value
+					}
+					if values["offset"]+values["viewport"] > values["extent"] {
+						return fail(statePath, "scroll state must fit inside its extent")
+					}
+				}
+			}
+			if rawRegions, ok := entry["paintedRegions"]; ok {
+				regions, ok := rawRegions.([]any)
+				if !ok {
+					return fail(at(entryPath, "paintedRegions"), "expected an array")
+				}
+				if len(regions) > limits.MaxNodes {
+					return failBig(at(entryPath, "paintedRegions"), "too many painted recipients")
+				}
+				seen := map[string]struct{}{}
+				for regionIndex, rawRegion := range regions {
+					regionPath := at(entryPath, "paintedRegions", fmt.Sprint(regionIndex))
+					region, problem := checkObject(rawRegion, regionPath)
+					if problem != nil {
+						return problem
+					}
+					recipient, problem := checkText(region["recipientId"], at(regionPath, "recipientId"), limits)
+					if problem != nil {
+						return problem
+					}
+					if recipient == "" {
+						return fail(at(regionPath, "recipientId"), "recipient id must not be empty")
+					}
+					if _, exists := seen[recipient]; exists {
+						return fail(at(regionPath, "recipientId"), "provider painted recipients must be unique")
+					}
+					seen[recipient] = struct{}{}
+					paint := map[string]any{"regionBounds": region["regionBounds"], "spans": region["spans"]}
+					if problem := checkPaintedRegion(paint, regionPath, limits); problem != nil {
+						return problem
+					}
+				}
+			}
+			if rawModes, ok := entry["inputModes"]; ok {
+				modesPath := at(entryPath, "inputModes")
+				modes, problem := checkObject(rawModes, modesPath)
+				if problem != nil {
+					return problem
+				}
+				if problem := checkStrict(modes, []string{"mouseTracking", "mouseEncoding", "focusReporting"}, modesPath); problem != nil {
+					return problem
+				}
+				tracking, _ := modes["mouseTracking"].(string)
+				encoding, _ := modes["mouseEncoding"].(string)
+				focus, _ := modes["focusReporting"].(string)
+				if !contains([]string{"none", "x10", "vt200", "drag", "any"}, tracking) {
+					return fail(at(modesPath, "mouseTracking"), "invalid mouse tracking mode")
+				}
+				if !contains([]string{"default", "sgr", "urxvt", "utf8"}, encoding) {
+					return fail(at(modesPath, "mouseEncoding"), "invalid mouse encoding")
+				}
+				if focus != "on" && focus != "off" {
+					return fail(at(modesPath, "focusReporting"), "invalid focus reporting mode")
+				}
+			}
+		}
 	}
 	if problem := checkObservation(object["coordinateSpace"], []string{"coordinateSpace"}, limits, func(v any, p []string) *issue {
 		s, ok := v.(string)
@@ -724,6 +1176,19 @@ func stringOr(value any) string {
 
 func checkNodeShape(node map[string]any, columns, rows float64, ids map[string]struct{}, limits Limits) *ValidationError {
 	id := stringOr(node["id"])
+	if painted, ok := node["paintedRegion"].(map[string]any); ok && painted["status"] == "known" {
+		value, _ := painted["value"].(map[string]any)
+		spans, _ := value["spans"].([]any)
+		for _, rawSpan := range spans {
+			span, _ := rawSpan.(map[string]any)
+			row, _ := span["row"].(float64)
+			from, _ := span["from"].(float64)
+			to, _ := span["to"].(float64)
+			if row >= rows || from >= columns || to > columns {
+				return invalid("bad-rect", "node %s painted region span lies outside the viewport", id)
+			}
+		}
+	}
 	geometry := node["geometry"].(map[string]any)
 	for _, field := range []string{"intendedRect", "visibleRect"} {
 		observation := geometry[field].(map[string]any)
@@ -894,6 +1359,55 @@ func ValidateSnapshot(value any, limits Limits) error {
 				rect, _ := checkRect(region["rect"], nil)
 				if !rectIntersectsViewport(rect, columns, rows) {
 					return invalid("bad-rect", "hitGrid region for %s does not intersect the viewport", recipientID)
+				}
+			}
+		}
+	}
+	if providerEvidence, ok := snapshot["providerEvidence"].([]any); ok {
+		for _, rawEntry := range providerEvidence {
+			entry := rawEntry.(map[string]any)
+			if entry["status"] != "available" {
+				continue
+			}
+			providerID := stringOr(entry["providerId"])
+			if focus, ok := entry["focusState"].(map[string]any); ok && focus["status"] == "focused" {
+				recipientID := stringOr(focus["recipientId"])
+				if _, exists := byID[recipientID]; !exists {
+					return invalid("missing-parent", "provider %s focus references unknown recipient %s", providerID, recipientID)
+				}
+			}
+			targets, _ := entry["actionRecipes"].([]any)
+			for _, rawTarget := range targets {
+				target := rawTarget.(map[string]any)
+				recipientID := stringOr(target["recipientId"])
+				if _, exists := byID[recipientID]; !exists {
+					return invalid("missing-parent", "provider %s action recipes reference unknown recipient %s", providerID, recipientID)
+				}
+			}
+			states, _ := entry["scrollStates"].([]any)
+			for _, rawState := range states {
+				state := rawState.(map[string]any)
+				recipientID := stringOr(state["recipientId"])
+				if _, exists := byID[recipientID]; !exists {
+					return invalid("missing-parent", "provider %s scroll state references unknown recipient %s", providerID, recipientID)
+				}
+			}
+			regions, _ := entry["paintedRegions"].([]any)
+			for _, rawRegion := range regions {
+				region := rawRegion.(map[string]any)
+				recipientID := stringOr(region["recipientId"])
+				if _, exists := byID[recipientID]; !exists {
+					return invalid("missing-parent", "provider %s painted region references unknown recipient %s", providerID, recipientID)
+				}
+				spans, _ := region["spans"].([]any)
+				for _, rawSpan := range spans {
+					span := rawSpan.(map[string]any)
+					row, _ := span["row"].(float64)
+					from, _ := span["from"].(float64)
+					to, _ := span["to"].(float64)
+					if row >= rows || from >= columns || to > columns {
+						return invalid("bad-rect", "provider %s painted region for %s lies outside the viewport", providerID, recipientID)
+					}
 				}
 			}
 		}

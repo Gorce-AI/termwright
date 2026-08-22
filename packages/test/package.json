@@ -1,7 +1,7 @@
 {
   "name": "@termwright/test",
   "version": "0.2.0",
-  "description": "Vitest preset: fixtures, matchers, semantic YAML snapshots, trace reporter",
+  "description": "Termwright's exact-certified Vitest runner, fixtures, matchers and semantic snapshots",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -9,34 +9,37 @@
     "directory": "packages/test"
   },
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "^22.0.0 || ^24.0.0" },
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./reporter": { "types": "./dist/reporter.d.ts", "import": "./dist/reporter.js" },
     "./config": { "types": "./dist/config.d.ts", "import": "./dist/config.js" },
-    "./ui-runner": {
-      "types": "./dist/ui-runner.d.ts",
-      "import": "./dist/ui-runner.js",
-      "default": "./dist/ui-runner.js"
+    "./vitest-engine": { "types": "./dist/vitest-engine.d.ts", "import": "./dist/vitest-engine.js" },
+    "./runner": {
+      "types": "./dist/runner.d.ts",
+      "import": "./dist/runner.js",
+      "default": "./dist/runner.js"
     }
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts src/reporter.ts src/config.ts src/ui-runner.ts --format esm --dts --sourcemap --clean",
+    "build": "tsup src/index.ts src/config.ts src/runner.ts src/vitest-engine.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm --dir ../.. test -- -- --run packages/test"
   },
   "dependencies": {
     "@termwright/driver": "workspace:*",
     "@termwright/protocol": "workspace:*",
+    "@termwright/resource-broker": "workspace:*",
+    "@termwright/run-journal-transport": "workspace:*",
     "@termwright/trace": "workspace:*",
     "@termwright/ui": "workspace:*",
     "yaml": "^2.5.0"
   },
   "peerDependencies": {
-    "vitest": "^3.2.0"
+    "vitest": "3.2.7"
   },
   "devDependencies": {
-    "vitest": "^3.2.0"
+    "@vitest/runner": "3.2.7",
+    "vitest": "3.2.7"
   }
 }

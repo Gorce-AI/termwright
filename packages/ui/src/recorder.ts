@@ -17,7 +17,7 @@
 
 import { writeFile } from 'node:fs/promises';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
-import type { EffectiveSessionContract, PointerHitGrid, SemanticSnapshot } from '@termwright/protocol';
+import { DEFAULT_ARTIFACT_VALUE_POLICY, type ArtifactValuePolicy, type EffectiveSessionContract, type PointerHitGrid, type SemanticSnapshot } from '@termwright/protocol';
 import { generateTestSource, type CodegenOptions, type RecordedEvent } from './codegen.js';
 import { coalesceInput, InputDecoder } from './input-decode.js';
 import { generateSelector, type GeneratedSelector } from './selector.js';
@@ -35,6 +35,8 @@ export interface RecorderOptions {
   readonly testName?: string;
   /** Where {@link RecorderSession.save} writes by default. */
   readonly outFile?: string;
+  /** Input captured into generated source. Defaults to secure `redacted`. */
+  readonly artifactValuePolicy?: ArtifactValuePolicy;
   /** Injectable launcher, so tests can record against a fake harness. */
   readonly launch?: (options: LaunchOptions) => Promise<TerminalHarness>;
 }
@@ -105,7 +107,7 @@ class Recorder implements RecorderSession {
   readonly #options: RecorderOptions;
   readonly #events: RecordedEvent[] = [];
   readonly #decoder = new InputDecoder();
-  readonly #startedAt = Date.now();
+  readonly #startedAt = performance.now();
   #picking = false;
 
   constructor(harness: TerminalHarness, options: RecorderOptions) {
@@ -148,13 +150,13 @@ class Recorder implements RecorderSession {
           this.#push({ kind: 'press', keys: input.keys, t });
           break;
         case 'type':
-          this.#pushTyped(input.text, t);
+          this.#recordPayload('type', input.text, t);
           break;
         case 'paste':
-          this.#push({ kind: 'paste', text: input.text, t });
+          this.#recordPayload('paste', input.text, t);
           break;
         case 'raw':
-          this.#push({ kind: 'raw', dataB64: Buffer.from(input.bytes).toString('base64'), t });
+          this.#recordRaw(input.bytes, t);
           break;
       }
     }
@@ -215,7 +217,7 @@ class Recorder implements RecorderSession {
   async close(): Promise<void> {
     for (const input of this.#decoder.flush()) {
       if (input.kind === 'raw') {
-        this.#push({ kind: 'raw', dataB64: Buffer.from(input.bytes).toString('base64'), t: this.#now() });
+        this.#recordRaw(input.bytes, this.#now());
       }
     }
     await this.harness.close();
@@ -228,11 +230,32 @@ class Recorder implements RecorderSession {
   }
 
   #now(): number {
-    return Date.now() - this.#startedAt;
+    return performance.now() - this.#startedAt;
   }
 
   #push(event: RecordedEvent): void {
     this.#events.push(event);
+  }
+
+  #recordPayload(kind: 'type' | 'paste', text: string, t: number): void {
+    const policy = this.#options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+    if (policy === 'none') return;
+    if (policy === 'redacted') {
+      this.#push({ kind: 'withheld-input', inputKind: kind, bytes: Buffer.byteLength(text, 'utf8'), t });
+      return;
+    }
+    if (kind === 'type') this.#pushTyped(text, t);
+    else this.#push({ kind: 'paste', text, t });
+  }
+
+  #recordRaw(bytes: Uint8Array, t: number): void {
+    const policy = this.#options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+    if (policy === 'none') return;
+    if (policy === 'redacted') {
+      this.#push({ kind: 'withheld-input', inputKind: 'raw', bytes: bytes.length, t });
+      return;
+    }
+    this.#push({ kind: 'raw', dataB64: Buffer.from(bytes).toString('base64'), t });
   }
 
   /** Consecutive typing collapses into one `type()` call. */

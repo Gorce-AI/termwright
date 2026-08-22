@@ -47,7 +47,7 @@ immediately.
 const onPress = vi.fn();
 const harness = await mountInk(<Approve onPress={onPress} />, { columns: 40, rows: 10 });
 await harness.press('Tab');
-await harness.waitForStable();
+await harness.waitForQuiet();
 await harness.press('Enter');
 await harness.waitForText('approved');
 await vi.waitFor(() => expect(onPress).toHaveBeenCalledOnce());

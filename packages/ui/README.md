@@ -14,8 +14,8 @@ One app, four views and three data sources:
 | Runs | retained run manifests and per-test trace replay |
 | Settings | local workspace, replay, motion and source-editor preferences plus sanitized diagnostics |
 
-**Live** mode combines Vitest lifecycle from a reporter with terminal events
-from the worker-side live bridge. **Post-mortem** mode opens a `.twtrace`
+**Live** mode combines lifecycle from the Native Host journal with terminal
+events from the worker-side live bridge. **Post-mortem** mode opens a `.twtrace`
 archive from CI and lets you move through it in time. **Record** mode owns the
 PTY itself: you type in the browser, and the server writes the test.
 
@@ -88,26 +88,15 @@ const recorder = await startUiServer({
 });
 ```
 
-`termwright ui` injects the UI reporter into the Vitest process it starts, so
-the CLI path needs no `vitest.config.ts` change. A server started directly as a
-library has no process launcher; pass `server.url` to the test process as
-`TERMWRIGHT_UI_URL` and point a reporter at it yourself:
+`termwright ui` uses the same persistent native host, Run Coordinator, journal
+and Resource Broker as `termwright test` and `termwright watch`; it does not
+spawn a sibling Vitest universe. A server started directly as a library has no
+process launcher and is only an embeddable projection surface.
 
-```ts
-// vitest.config.ts
-import TermwrightUiReporter from '@termwright/ui/reporter';
-
-export default defineConfig({
-  test: { reporters: ['default', new TermwrightUiReporter()] },
-});
-```
-
-It publishes to `process.env.TERMWRIGHT_UI_URL`, which `termwright ui` sets, and
-does nothing at all when that variable is unset — safe to leave configured in a
-repository whose runs are mostly headless. Vitest's `--reporter` option replaces
-configured reporters, so the CLI supplies both `default` and the UI reporter;
-pass any additional reporter explicitly after `--` when the UI-driven run also
-needs it.
+An embedding starts or receives a `TermwrightTestHost` and projects its
+versioned EventJournal into this server. It must not start a second Vitest
+instance or install a worker reporter: that would create an uncorrelated event
+plane without the host's RunId, AttemptId, broker leases and flush barrier.
 
 `@termwright/test` automatically opens the second producer connection for each
 fixture session. It streams the real PTY output, semantic revisions, actions and
@@ -217,18 +206,12 @@ creates a second command that merely looks like a duplicate.
 
 ## The test list
 
-The **Specs** view shows every test the project has, not only the ones a run has
-reached, provided it belongs to a Termwright test provider. The CLI collects
-Vitest's public test model at startup and again when files change, then keeps
-only cases carrying the versioned declaration marker written by
-`@termwright/test`. The UI-owned runner independently skips unmarked cases, so
-a plain Vitest sibling in the same physical file is neither catalogued nor
-executed by Run all, directory, file or case actions. Ordinary Vitest commands
-remain unchanged. Even a foreign `test.only` cannot suppress marked cases in
-the UI-owned process; outside the UI, Vitest keeps its normal `.only` behavior.
-The marker is an extension point for future providers; it is not a claim that
-another provider ships today. Directories nest, search filters titles and
-paths, and a row that has not run yet says so. Directories and files
+The **Specs** view shows every test in the graph collected by the persistent
+Termwright host, not only the ones a run has reached. Vitest remains the embedded
+collection/transform/assertion engine, but it is not a parallel user-facing run
+mode: every collected case receives Termwright identity, lifecycle, event and
+resource semantics. Directories nest, search filters titles and paths, and a
+row that has not run yet says so. Directories and files
 start collapsed; result updates never unfold or refold a branch the user chose.
 Every directory and file shows the same compact passed, failed, running and
 not-run breakdown. Run all and Stop live in the same toolbar.

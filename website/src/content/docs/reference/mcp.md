@@ -41,8 +41,8 @@ Targets resolve in this order:
 Names and text accept `/pattern/flags`. Locators are strict. More than one
 match returns `ambiguous-locator` unless `nth` is explicit.
 
-A semantic ref has the form `n8@42`: node identity at semantic revision 42. A
-grid ref has the form `grid:1,2,9,1@7`. Stable semantic identities may resolve
+A semantic ref has the form `semantic:n8@42`: node identity at semantic revision 42. A
+screen ref has the form `screen:1,2,9,1@7`. Stable semantic identities may resolve
 at a later revision. Frame-local identities and grid refs require a fresh
 snapshot after their revision becomes stale.
 
@@ -65,7 +65,7 @@ candidates, and screen excerpt in `_meta["io.termwright/error"]`. Stack traces,
 the child environment, and session tokens are not returned.
 
 ```text
-error stale-snapshot: ref n8@42 no longer exists at semantic revision 43
+error stale-snapshot: ref semantic:n8@42 no longer exists at semantic revision 43
 suggestion: re-resolve the locator
 ```
 

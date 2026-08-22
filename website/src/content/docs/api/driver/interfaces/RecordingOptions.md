@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: RecordingOptions
 
-Defined in: [driver/src/api.ts:42](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L42)
+Defined in: [driver/src/api.ts:58](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L58)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` `optional` **enabled?**: `boolean`
 
-Defined in: [driver/src/api.ts:44](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L44)
+Defined in: [driver/src/api.ts:60](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L60)
 
 Recording of the raw session to asciicast is ON by default.
 
@@ -46,4 +46,4 @@ Recording of the raw session to asciicast is ON by default.
 
 > `readonly` `optional` **idleTimeLimit?**: `number`
 
-Defined in: [driver/src/api.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L45)
+Defined in: [driver/src/api.ts:61](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L61)

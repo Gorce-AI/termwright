@@ -98,6 +98,11 @@ package exposes through the supported Termwright entry points.
 
 ## Locator actions
 
+`SemanticLocator` and `ScreenLocator` are separate public types. Algebra such
+as `within`, `filter`, `and`, `or`, `first`, and `nth` preserves its input
+domain. Screen locators expose only physical observations and pointer actions;
+semantic input intents are available only on semantic locators.
+
 | Method | Behavior |
 | --- | --- |
 | `press(key)` | Send a key to a focused or exactly targetable node. |
@@ -153,8 +158,11 @@ and unsupported evidence never satisfies either a positive or negated matcher.
 - `toHaveExtendedState(expected)`
 - geometry and spatial matchers such as bounds, alignment, and relative position
 
-Retrying matchers poll until their timeout. Unsupported evidence fails with the
-capability reason instead of waiting for an impossible condition.
+Retrying matchers arm the relevant terminal, semantic, log, or process
+generation before checking, then re-evaluate only when that source changes.
+This prevents lost wakeups without a fixed polling interval. Unsupported
+evidence fails with the capability reason instead of waiting for an impossible
+condition.
 
 ## Test configuration helpers
 
@@ -171,8 +179,9 @@ See [Configuration](../configuration/) for defaults and precedence.
 - `serializeScreen(cells, options?)`
 Most tests should use the matchers rather than these lower-level helpers.
 
-## Reporter
+## Reports
 
-Configure CI reports from `termwright/reporter`. Importing the reporter does not
-register test matchers. See [CI](../../guides/ci/) and
-[Traces and reports](../../tools/traces-reports/).
+The Termwright Native Host owns trace retention and run persistence. Generate a
+standalone projection explicitly with `termwright report --trace …`; no
+Termwright reporter belongs in `vitest.config.ts`. See [CI](../../guides/ci/)
+and [Traces and reports](../../tools/traces-reports/).

@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gorce-ai.github.io/termwright/compatibility/schema.json",
-  "title": "termwright framework compatibility registry",
+  "title": "Termwright exact certification and capability graph bindings",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "frameworks"],
   "properties": {
     "$schema": { "type": "string" },
-    "schemaVersion": { "const": 3 },
+    "schemaVersion": { "const": 5 },
     "frameworks": {
       "type": "array",
       "minItems": 1,
@@ -20,7 +20,7 @@
       "additionalProperties": false,
       "required": ["policy", "declared", "verified"],
       "properties": {
-        "policy": { "enum": ["exact", "range"] },
+        "policy": { "const": "exact" },
         "declared": { "type": "string", "minLength": 1 },
         "verified": {
           "type": "array",
@@ -39,59 +39,6 @@
         "version": { "type": "string", "minLength": 1 },
         "notes": { "type": "string", "minLength": 1 }
       }
-    },
-    "capabilityVariant": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["when", "capabilities"],
-      "properties": {
-        "when": { "type": "string", "minLength": 1 },
-        "capabilities": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 },
-          "uniqueItems": true
-        }
-      }
-    },
-    "geometryCapabilities": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "displayed",
-        "intendedRect",
-        "visibleRect",
-        "hitTest",
-        "runtimePreconditions",
-        "reason"
-      ],
-      "properties": {
-        "displayed": { "$ref": "#/$defs/availability" },
-        "intendedRect": { "$ref": "#/$defs/availability" },
-        "visibleRect": { "$ref": "#/$defs/availability" },
-        "hitTest": { "$ref": "#/$defs/availability" },
-        "runtimePreconditions": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "displayed": { "$ref": "#/$defs/preconditions" },
-            "intendedRect": { "$ref": "#/$defs/preconditions" },
-            "visibleRect": { "$ref": "#/$defs/preconditions" },
-            "hitTest": { "$ref": "#/$defs/preconditions" },
-            "pointerActions": { "$ref": "#/$defs/preconditions" }
-          }
-        },
-        "reason": { "type": "string", "minLength": 1 }
-      }
-    },
-    "availability": {
-      "enum": ["automatic", "application-integrated", "unsupported"]
-    },
-    "preconditions": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "type": "string", "minLength": 1 },
-      "uniqueItems": true
     },
     "patchSet": {
       "type": "object",
@@ -149,43 +96,271 @@
       "additionalProperties": false,
       "required": ["ids", "adapterVersion", "strategy", "checksumSources"],
       "properties": {
-        "ids": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*@[^/]+/[^/]+$" }, "uniqueItems": true },
+        "ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*@[^/]+/[^/]+$"
+          },
+          "uniqueItems": true
+        },
         "adapterVersion": { "type": "string", "minLength": 1 },
-        "strategy": { "enum": ["native-hook", "checksummed-instrumentation", "checksummed-replacement"] },
+        "strategy": {
+          "enum": [
+            "native-hook",
+            "checksummed-instrumentation",
+            "checksummed-replacement"
+          ]
+        },
         "checksumSources": {
           "type": "array",
-          "items": { "type": "string", "pattern": "^(packages|clients)/.+\\.json$" },
+          "items": {
+            "type": "string",
+            "pattern": "^(packages|clients)/.+\\.json$"
+          },
           "uniqueItems": true
         }
       }
     },
-    "applicationProviders": {
+    "sessionCapability": {
+      "enum": [
+        "semantic-tree",
+        "stable-identity",
+        "intended-geometry",
+        "clipped-geometry",
+        "painted-region",
+        "pointer-geometry",
+        "pointer-hit-testing",
+        "focus",
+        "scroll",
+        "render-order",
+        "action-strategies",
+        "keyboard-input",
+        "pointer-input",
+        "focus-input",
+        "paired-revisions"
+      ]
+    },
+    "probeCapability": {
+      "enum": [
+        "stable-identity",
+        "intended-rect",
+        "visible-rect",
+        "operations",
+        "annotations",
+        "frame-begin",
+        "paint-order"
+      ]
+    },
+    "adapterCapability": {
+      "enum": [
+        "tree",
+        "intended-geometry",
+        "clipped-geometry",
+        "states",
+        "focus-state",
+        "actions",
+        "action-recipes",
+        "text-ranges",
+        "render-revisions",
+        "logs",
+        "pointer-hit-grid"
+      ]
+    },
+    "providerCapability": {
+      "enum": [
+        "pointer-regions",
+        "hit-test",
+        "focus-state",
+        "action-recipes",
+        "scroll-state",
+        "painted-regions",
+        "terminal-input-modes"
+      ]
+    },
+    "runtimePrerequisite": {
+      "enum": [
+        "writable-pty",
+        "terminal-input-modes-authoritative",
+        "mouse-reporting-enabled",
+        "mouse-motion-enabled",
+        "focus-reporting-enabled",
+        "committed-observation"
+      ]
+    },
+    "claimId": {
+      "enum": [
+        "claim.semantic-tree-authoritative",
+        "claim.stable-identity-authoritative",
+        "claim.intended-geometry-authoritative",
+        "claim.clipped-geometry-authoritative",
+        "claim.painted-region-authoritative",
+        "claim.pointer-region-authoritative",
+        "claim.pointer-hit-test-authoritative",
+        "claim.focus-authoritative",
+        "claim.scroll-authoritative",
+        "claim.render-order-authoritative",
+        "claim.action-strategy-authoritative",
+        "claim.keyboard-real-pty",
+        "claim.pointer-real-pty",
+        "claim.focus-report-real-pty",
+        "claim.paired-revisions",
+        "claim.logs-diagnostic"
+      ]
+    },
+    "applicationIntegration": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["acceptedTypes", "extendableCapabilities", "sdks"],
+      "required": [
+        "providerType",
+        "providerCapabilities",
+        "capabilities",
+        "sdks"
+      ],
       "properties": {
-        "acceptedTypes": { "type": "array", "items": { "enum": ["pointer-evidence", "scroll-evidence", "focus-evidence"] }, "uniqueItems": true },
-        "extendableCapabilities": { "type": "array", "items": { "enum": ["pointer-geometry", "pointer-hit-testing", "scroll", "focus"] }, "uniqueItems": true },
-        "sdks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+        "providerType": {
+          "enum": [
+            "pointer-evidence",
+            "focus-evidence",
+            "action-strategy",
+            "scroll-evidence",
+            "paint-evidence",
+            "input-mode-evidence"
+          ]
+        },
+        "providerCapabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/providerCapability" },
+          "uniqueItems": true
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sessionCapability" },
+          "uniqueItems": true
+        },
+        "sdks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
       }
     },
-    "terminalPrerequisite": {
+    "inputProviderAlternative": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["capability", "requirements"],
+      "required": ["providerType", "providerCapabilities", "sdks"],
       "properties": {
-        "capability": { "enum": ["keyboard-input", "pointer-input", "hover", "drag", "wheel"] },
-        "requirements": { "$ref": "#/$defs/preconditions" }
+        "providerType": {
+          "enum": [
+            "pointer-evidence",
+            "focus-evidence",
+            "action-strategy",
+            "scroll-evidence",
+            "paint-evidence",
+            "input-mode-evidence"
+          ]
+        },
+        "providerCapabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/providerCapability" },
+          "uniqueItems": true
+        },
+        "sdks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
       }
     },
-    "conformance": {
+    "inputCapability": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["suite", "areas", "fixtures"],
+      "required": [
+        "capability",
+        "producerFacts",
+        "providerAlternatives",
+        "runtimePrerequisites"
+      ],
       "properties": {
-        "suite": { "const": "@termwright/conformance" },
-        "areas": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
-        "fixtures": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+        "capability": { "$ref": "#/$defs/sessionCapability" },
+        "producerFacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": ["terminal.writable-pty", "terminal.input-modes-observable"]
+          },
+          "uniqueItems": true
+        },
+        "providerAlternatives": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/inputProviderAlternative" }
+        },
+        "runtimePrerequisites": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/runtimePrerequisite" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "claimBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "files"],
+      "properties": {
+        "id": { "$ref": "#/$defs/claimId" },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(packages|clients|examples)/.+(?:/tests/|(?:test|spec)[^/]*\\.)[^/]*$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "capabilityGraphBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "automatic",
+        "applicationIntegrated",
+        "input",
+        "unsupported",
+        "claims"
+      ],
+      "properties": {
+        "automatic": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sessionCapability" },
+          "uniqueItems": true
+        },
+        "applicationIntegrated": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/applicationIntegration" }
+        },
+        "input": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/inputCapability" }
+        },
+        "unsupported": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sessionCapability" },
+          "uniqueItems": true
+        },
+        "claims": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/claimBinding" }
+        }
       }
     },
     "framework": {
@@ -198,13 +373,10 @@
         "versions",
         "runtimes",
         "probe",
-        "geometry",
         "instrumentation",
         "annotations",
         "certification",
-        "applicationProviders",
-        "terminalPrerequisites",
-        "conformance",
+        "capabilityGraph",
         "limitations",
         "documentation"
       ],
@@ -227,7 +399,7 @@
             "launch",
             "identityKind",
             "capabilities",
-            "adapterCapabilityVariants"
+            "adapterCapabilities"
           ],
           "properties": {
             "package": { "type": "string", "minLength": 1 },
@@ -236,17 +408,17 @@
             "identityKind": { "enum": ["stable", "frame-local", "correlated"] },
             "capabilities": {
               "type": "array",
-              "items": { "type": "string", "minLength": 1 },
+              "items": { "$ref": "#/$defs/probeCapability" },
               "uniqueItems": true
             },
-            "adapterCapabilityVariants": {
+            "adapterCapabilities": {
               "type": "array",
               "minItems": 1,
-              "items": { "$ref": "#/$defs/capabilityVariant" }
+              "items": { "$ref": "#/$defs/adapterCapability" },
+              "uniqueItems": true
             }
           }
         },
-        "geometry": { "$ref": "#/$defs/geometryCapabilities" },
         "instrumentation": {
           "type": "object",
           "additionalProperties": false,
@@ -264,19 +436,10 @@
           }
         },
         "annotations": {
-          "oneOf": [
-            { "type": "null" },
-            { "$ref": "#/$defs/annotations" }
-          ]
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/annotations" }]
         },
         "certification": { "$ref": "#/$defs/certification" },
-        "applicationProviders": { "$ref": "#/$defs/applicationProviders" },
-        "terminalPrerequisites": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "$ref": "#/$defs/terminalPrerequisite" }
-        },
-        "conformance": { "$ref": "#/$defs/conformance" },
+        "capabilityGraph": { "$ref": "#/$defs/capabilityGraphBinding" },
         "limitations": {
           "type": "array",
           "minItems": 1,

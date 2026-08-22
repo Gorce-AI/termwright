@@ -234,12 +234,13 @@ one; the chain must decide deliberately which it runs, and record what it did.
 `/usr/bin/python3`), so `usercustomize` is not imported at all. `sitecustomize`
 is the only startup hook that fires inside a venv.
 
-**Ephemerality.** Nothing above writes to the project. The directory lives
-wherever the driver puts it and is named only in the child's environment,
-which satisfies "no modification of the project environment" — with the single
-caveat that the child's `PYTHONPATH` is observable to the application and to
-anything it spawns, and grandchildren inherit the probe unless the variable is
-scrubbed.
+**Ephemerality and ownership.** Nothing above writes to the project. The
+directory lives wherever the driver puts it and is named only in the launched
+environment. The implemented bootstrap is atomically one-shot: the owning
+interpreter captures its endpoint and token process-locally, then removes the
+credentials, owner marker, and bootstrap path before application code runs.
+Fork children are explicitly disowned as well. Descendants therefore cannot
+reuse the parent's authenticated semantic session.
 
 ## 7. Version sensitivity
 
@@ -277,5 +278,7 @@ the bundled allowlist.
    two that opt out by flag (`-S`, `-E`), and **must chain to the
    `sitecustomize` it displaces** — Homebrew's Python ships one that does real
    work.
-6. `poetry` remains unverified and should be measured before the mechanism is
-   called complete.
+6. `poetry run` requires a one-hop launcher marker because Poetry is itself a
+   Python console process. The generated startup hook consumes that marker in
+   Poetry and leaves the application interpreter to claim the bootstrap;
+   deterministic fake-launcher coverage runs even where Poetry is absent.

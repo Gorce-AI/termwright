@@ -30,6 +30,8 @@ export interface InkDomElement {
       readonly selected?: boolean;
       readonly busy?: boolean;
       readonly multiline?: boolean;
+      readonly required?: boolean;
+      readonly multiselectable?: boolean;
     };
   };
 }
@@ -188,6 +190,10 @@ function observedState(node: InkDomElement, displayed: boolean): ProbeObservedSt
     ...(accessibility?.selected === undefined ? {} : { selected: accessibility.selected }),
     ...(accessibility?.busy === undefined ? {} : { busy: accessibility.busy }),
     ...(accessibility?.multiline === undefined ? {} : { multiline: accessibility.multiline }),
+    ...(accessibility?.required === undefined ? {} : { required: accessibility.required }),
+    ...(accessibility?.multiselectable === undefined
+      ? {}
+      : { multiselectable: accessibility.multiselectable }),
   };
   return state;
 }

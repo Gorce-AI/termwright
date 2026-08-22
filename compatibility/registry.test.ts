@@ -1,7 +1,21 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ADAPTER_CAPABILITIES, PROBE_CAPABILITIES } from '../packages/protocol/src/index.js';
+import {
+  ADAPTER_CAPABILITIES,
+  CAPABILITY_CONFORMANCE_CLAIMS,
+  CAPABILITY_GRAPH,
+  EVIDENCE_PROVIDER_CAPABILITIES,
+  EVIDENCE_PROVIDER_TYPES,
+  PROBE_CAPABILITIES,
+  RUNTIME_PREREQUISITES,
+  SESSION_CAPABILITIES,
+  capabilityNode,
+  capabilityRemediation,
+  validateCapabilityGraph,
+  type CapabilityConformanceClaimId,
+  type SessionCapabilityId,
+} from '../packages/protocol/src/index.js';
 import { probeInfo as inkProbeInfo } from '../packages/probe-ink/src/session.js';
 import { probeInfo as openTuiProbeInfo } from '../packages/probe-opentui/src/session.js';
 import {
@@ -17,11 +31,6 @@ import {
   PROBE_VERSION as TVIEW_PROBE_VERSION,
 } from '../packages/probe-tview/src/launch.js';
 import { describe, expect, it } from 'vitest';
-
-interface CapabilityVariant {
-  readonly when: string;
-  readonly capabilities: readonly string[];
-}
 
 interface InstrumentedModule {
   readonly name: string;
@@ -53,17 +62,7 @@ interface RegistryFramework {
     readonly packageVersion: string;
     readonly identityKind: 'stable' | 'frame-local' | 'correlated';
     readonly capabilities: readonly string[];
-    readonly adapterCapabilityVariants: readonly CapabilityVariant[];
-  };
-  readonly geometry: {
-    readonly displayed: GeometryAvailability;
-    readonly intendedRect: GeometryAvailability;
-    readonly visibleRect: GeometryAvailability;
-    readonly hitTest: GeometryAvailability;
-    readonly runtimePreconditions: Partial<
-      Readonly<Record<'displayed' | 'intendedRect' | 'visibleRect' | 'hitTest' | 'pointerActions', readonly string[]>>
-    >;
-    readonly reason: string;
+    readonly adapterCapabilities: readonly string[];
   };
   readonly instrumentation: {
     readonly strategy: string;
@@ -85,19 +84,29 @@ interface RegistryFramework {
     readonly strategy: 'native-hook' | 'checksummed-instrumentation' | 'checksummed-replacement';
     readonly checksumSources: readonly string[];
   };
-  readonly applicationProviders: {
-    readonly acceptedTypes: readonly string[];
-    readonly extendableCapabilities: readonly string[];
-    readonly sdks: readonly string[];
-  };
-  readonly terminalPrerequisites: readonly {
-    readonly capability: string;
-    readonly requirements: readonly string[];
-  }[];
-  readonly conformance: {
-    readonly suite: '@termwright/conformance';
-    readonly areas: readonly string[];
-    readonly fixtures: readonly string[];
+  readonly capabilityGraph: {
+    readonly automatic: readonly SessionCapabilityId[];
+    readonly applicationIntegrated: readonly {
+      readonly providerType: string;
+      readonly providerCapabilities: readonly string[];
+      readonly capabilities: readonly SessionCapabilityId[];
+      readonly sdks: readonly string[];
+    }[];
+    readonly input: readonly {
+      readonly capability: SessionCapabilityId;
+      readonly producerFacts: readonly string[];
+      readonly providerAlternatives: readonly {
+        readonly providerType: string;
+        readonly providerCapabilities: readonly string[];
+        readonly sdks: readonly string[];
+      }[];
+      readonly runtimePrerequisites: readonly string[];
+    }[];
+    readonly unsupported: readonly SessionCapabilityId[];
+    readonly claims: readonly {
+      readonly id: CapabilityConformanceClaimId;
+      readonly files: readonly string[];
+    }[];
   };
   readonly limitations: readonly string[];
 }
@@ -123,8 +132,6 @@ describe('certification policy', () => {
     expect(bundled).toEqual(framework('textual').versions.verified);
   });
 });
-
-type GeometryAvailability = 'automatic' | 'application-integrated' | 'unsupported';
 
 interface Registry {
   readonly schemaVersion: number;
@@ -194,7 +201,9 @@ const goCapabilityNames: Readonly<Record<string, string>> = {
   CapIntendedGeometry: 'intended-geometry',
   CapClippedGeometry: 'clipped-geometry',
   CapStates: 'states',
+  CapFocusState: 'focus-state',
   CapActions: 'actions',
+  CapActionRecipes: 'action-recipes',
   CapTextRanges: 'text-ranges',
   CapRenderRevisions: 'render-revisions',
   CapLogs: 'logs',
@@ -244,20 +253,22 @@ function moduleKey(module: CertifiedPatchSet | PatchManifest): string {
 }
 
 describe('machine-readable framework compatibility registry', () => {
-  it('closes geometry availability to the three documented states', () => {
-    const schema = json<{
-      readonly $defs: { readonly availability: { readonly enum: readonly string[] } };
-    }>('compatibility/schema.json');
-    expect(schema.$defs.availability.enum).toEqual([
-      'automatic',
-      'application-integrated',
-      'unsupported',
-    ]);
-    expect(text('compatibility/schema.json')).not.toContain('conditional');
+  it('uses schema v5 and contains no legacy single-producer capability matrices', () => {
+    expect(registry.schemaVersion).toBe(5);
+    for (const legacy of ['geometry', 'applicationProviders', 'terminalPrerequisites', 'adapterCapabilityVariants', 'conformance']) {
+      expect(text('compatibility/registry.json')).not.toContain(`"${legacy}"`);
+    }
+    expect(validateCapabilityGraph()).toEqual({ ok: true, errors: [] });
+    const schema = json<{ readonly $defs: Readonly<Record<string, { readonly enum?: readonly string[] }>> }>('compatibility/schema.json');
+    expect(schema.$defs['sessionCapability']?.enum).toEqual(SESSION_CAPABILITIES);
+    expect(schema.$defs['probeCapability']?.enum).toEqual(PROBE_CAPABILITIES);
+    expect(schema.$defs['adapterCapability']?.enum).toEqual(ADAPTER_CAPABILITIES);
+    expect(schema.$defs['providerCapability']?.enum).toEqual(EVIDENCE_PROVIDER_CAPABILITIES);
+    expect(schema.$defs['runtimePrerequisite']?.enum).toEqual(RUNTIME_PREREQUISITES);
+    expect(schema.$defs['claimId']?.enum).toEqual(CAPABILITY_CONFORMANCE_CLAIMS);
   });
 
-  it('is bounded, unique and uses the protocol closed capability vocabularies', () => {
-    expect(registry.schemaVersion).toBe(3);
+  it('is bounded, unique and partitions every session capability exactly once', () => {
     expect(registry.frameworks.map((entry) => entry.id)).toEqual([
       'ink',
       'opentui',
@@ -277,11 +288,10 @@ describe('machine-readable framework compatibility registry', () => {
       for (const capability of entry.probe.capabilities) {
         expect(PROBE_CAPABILITIES, `${entry.id}: ${capability}`).toContain(capability);
       }
-      for (const variant of entry.probe.adapterCapabilityVariants) {
-        expect(new Set(variant.capabilities).size).toBe(variant.capabilities.length);
-        for (const capability of variant.capabilities) {
-          expect(ADAPTER_CAPABILITIES, `${entry.id}: ${capability}`).toContain(capability);
-        }
+      expect(new Set(entry.probe.adapterCapabilities).size).toBe(entry.probe.adapterCapabilities.length);
+      for (const capability of entry.probe.adapterCapabilities) {
+        expect(ADAPTER_CAPABILITIES, `${entry.id}: ${capability}`).toContain(capability);
+        expect(capabilityNode(`adapter.${capability as (typeof ADAPTER_CAPABILITIES)[number]}`)).toBeDefined();
       }
       if (entry.probe.capabilities.includes('stable-identity')) {
         expect(entry.probe.identityKind, `${entry.id}: stable-identity coherence`).toBe('stable');
@@ -292,26 +302,40 @@ describe('machine-readable framework compatibility registry', () => {
         );
       }
 
-      const availability = ['automatic', 'application-integrated', 'unsupported'];
-      for (const observation of ['displayed', 'intendedRect', 'visibleRect', 'hitTest'] as const) {
-        const value = entry.geometry[observation];
-        expect(availability, `${entry.id}: ${observation}`).toContain(value);
-        const preconditions = entry.geometry.runtimePreconditions[observation] ?? [];
-        if (value === 'application-integrated') {
-          expect(preconditions.length, `${entry.id}: ${observation} preconditions`).toBeGreaterThan(0);
-        } else {
-          expect(preconditions, `${entry.id}: ${observation} preconditions`).toEqual([]);
+      const partitions = [
+        ...entry.capabilityGraph.automatic,
+        ...entry.capabilityGraph.applicationIntegrated.flatMap((integration) => integration.capabilities),
+        ...entry.capabilityGraph.input.map(({ capability }) => capability),
+        ...entry.capabilityGraph.unsupported,
+      ];
+      expect(partitions.slice().sort(), `${entry.id}: complete graph partition`).toEqual([...SESSION_CAPABILITIES].sort());
+      expect(new Set(partitions).size, `${entry.id}: disjoint graph partition`).toBe(partitions.length);
+      for (const capability of partitions) capabilityNode(`session.${capability}`);
+      for (const integration of entry.capabilityGraph.applicationIntegrated) {
+        expect(EVIDENCE_PROVIDER_TYPES).toContain(integration.providerType);
+        expect(integration.sdks.length).toBeGreaterThan(0);
+        for (const producer of integration.providerCapabilities) {
+          expect(EVIDENCE_PROVIDER_CAPABILITIES).toContain(producer);
+          expect(CAPABILITY_GRAPH.edges).toContainEqual({
+            from: `provider.${producer}`, to: `session.${integration.capabilities[integration.providerCapabilities.indexOf(producer)]}`, kind: 'produces',
+          });
         }
       }
-      for (const [operation, preconditions] of Object.entries(
-        entry.geometry.runtimePreconditions,
-      )) {
-        expect(preconditions.length, `${entry.id}: ${operation} preconditions`).toBeGreaterThan(0);
-        expect(new Set(preconditions).size, `${entry.id}: ${operation} preconditions`).toBe(
-          preconditions.length,
-        );
+      for (const input of entry.capabilityGraph.input) {
+        for (const prerequisite of input.runtimePrerequisites) expect(RUNTIME_PREREQUISITES).toContain(prerequisite);
+        for (const alternative of input.providerAlternatives) {
+          expect(EVIDENCE_PROVIDER_TYPES).toContain(alternative.providerType);
+          expect(alternative.sdks.length).toBeGreaterThan(0);
+          for (const producer of alternative.providerCapabilities) {
+            expect(EVIDENCE_PROVIDER_CAPABILITIES).toContain(producer);
+            expect(CAPABILITY_GRAPH.edges).toContainEqual({
+              from: `provider.${producer}`,
+              to: `session.${input.capability}`,
+              kind: 'produces',
+            });
+          }
+        }
       }
-      expect(entry.geometry.reason.length, `${entry.id}: geometry reason`).toBeGreaterThan(20);
       expect(entry.certification.adapterVersion, `${entry.id}: adapter version`).toBe(entry.probe.packageVersion);
       expect(entry.certification.ids, `${entry.id}: certification ids`).toEqual(
         entry.versions.verified.map((version) => `${entry.id}@${version}/${entry.probe.packageVersion}`),
@@ -325,53 +349,77 @@ describe('machine-readable framework compatibility registry', () => {
         expect(existsSync(join(root, source)), `${entry.id}: ${source}`).toBe(true);
         expect(text(source), `${entry.id}: ${source} carries sha256 evidence`).toMatch(/sha256/iu);
       }
-      expect(entry.conformance.suite).toBe('@termwright/conformance');
-      expect(entry.conformance.areas.length, `${entry.id}: conformance areas`).toBeGreaterThan(0);
-      for (const fixture of entry.conformance.fixtures) {
-        expect(existsSync(join(root, fixture)), `${entry.id}: conformance fixture ${fixture}`).toBe(true);
+      const claims = new Map(entry.capabilityGraph.claims.map((claim) => [claim.id, claim.files]));
+      const guaranteed = [
+        ...entry.capabilityGraph.automatic,
+        ...entry.capabilityGraph.applicationIntegrated.flatMap(({ capabilities }) => capabilities),
+        ...entry.capabilityGraph.input.map(({ capability }) => capability),
+      ];
+      for (const capability of guaranteed) {
+        for (const claim of capabilityNode(`session.${capability}`).conformanceClaims ?? []) {
+          expect(claims.has(claim), `${entry.id}: missing executable ${claim}`).toBe(true);
+        }
       }
-      for (const prerequisite of entry.terminalPrerequisites) {
-        expect(prerequisite.requirements.length, `${entry.id}: ${prerequisite.capability}`).toBeGreaterThan(0);
+      for (const [claim, files] of claims) {
+        expect(CAPABILITY_CONFORMANCE_CLAIMS).toContain(claim);
+        expect(files.length, `${entry.id}: ${claim}`).toBeGreaterThan(0);
+        for (const fixture of files) {
+          expect(existsSync(join(root, fixture)), `${entry.id}: claim file ${fixture}`).toBe(true);
+          expect(fixture).toMatch(/(?:\/tests\/|(?:test|spec)[^/]*\.)/u);
+        }
+      }
+      for (const capability of entry.capabilityGraph.unsupported) {
+        const remediation = capabilityRemediation(`session.${capability}`);
+        expect(remediation.message.length, `${entry.id}: remediation ${capability}`).toBeGreaterThan(10);
+        if (remediation.code === 'register-application-provider') {
+          expect(entry.capabilityGraph.applicationIntegrated.some(({ capabilities }) => capabilities.includes(capability)),
+            `${entry.id}: impossible provider remediation ${capability}`).toBe(true);
+        }
       }
     }
   });
 
-  it('derives automatic guarantees from adapter handshakes and keeps integrations explicit', () => {
-    expect(text('compatibility/registry.json')).not.toContain('conditional');
-
-    const capabilityFor = {
-      intendedRect: 'intended-geometry',
-      visibleRect: 'clipped-geometry',
-      hitTest: 'pointer-hit-grid',
-    } as const;
+  it('derives automatic guarantees from exact producer facts and never diagnostic evidence', () => {
+    const producerFor: Partial<Record<SessionCapabilityId, string>> = {
+      'semantic-tree': 'adapter.tree', 'stable-identity': 'probe.stable-identity',
+      'intended-geometry': 'adapter.intended-geometry', 'clipped-geometry': 'adapter.clipped-geometry',
+      'pointer-geometry': 'adapter.pointer-hit-grid', 'pointer-hit-testing': 'adapter.pointer-hit-grid',
+      focus: 'adapter.focus-state',
+      'render-order': 'probe.paint-order', 'paired-revisions': 'adapter.render-revisions',
+    };
     for (const entry of registry.frameworks) {
-      for (const observation of Object.keys(capabilityFor) as (keyof typeof capabilityFor)[]) {
-        const variants = entry.probe.adapterCapabilityVariants;
-        const advertisedBy = variants.filter((variant) =>
-          variant.capabilities.includes(capabilityFor[observation]),
+      for (const capability of entry.capabilityGraph.automatic) {
+        const producer = producerFor[capability];
+        if (producer === undefined) continue;
+        const raw = producer.replace(/^(?:adapter|probe)\./u, '');
+        const announced = producer.startsWith('adapter.') ? entry.probe.adapterCapabilities : entry.probe.capabilities;
+        expect(announced, `${entry.id}: producer for ${capability}`).toContain(raw);
+        expect(CAPABILITY_GRAPH.edges.some((edge) => edge.from === producer && edge.to === `session.${capability}` && edge.kind === 'produces')).toBe(true);
+      }
+      expect(entry.capabilityGraph.applicationIntegrated).toContainEqual(
+        expect.objectContaining({
+          providerType: 'scroll-evidence',
+          providerCapabilities: ['scroll-state'],
+          capabilities: ['scroll'],
+        }),
+      );
+      expect(entry.capabilityGraph.applicationIntegrated).toContainEqual(
+        expect.objectContaining({
+          providerType: 'paint-evidence',
+          providerCapabilities: ['painted-regions'],
+          capabilities: ['painted-region'],
+        }),
+      );
+      if (entry.probe.adapterCapabilities.includes('focus-state')) {
+        expect(entry.capabilityGraph.automatic).toContain('focus');
+      } else {
+        expect(entry.capabilityGraph.applicationIntegrated).toContainEqual(
+          expect.objectContaining({
+            providerType: 'focus-evidence',
+            providerCapabilities: ['focus-state'],
+            capabilities: ['focus'],
+          }),
         );
-        const availability = entry.geometry[observation];
-        if (availability === 'automatic') {
-          expect(
-            advertisedBy,
-            `${entry.id}: automatic ${observation} must be guaranteed by every adapter variant`,
-          ).toHaveLength(variants.length);
-        } else if (availability === 'unsupported') {
-          expect(
-            advertisedBy,
-            `${entry.id}: unsupported ${observation} must not be advertised by an adapter variant`,
-          ).toHaveLength(0);
-        } else {
-          expect(
-            entry.geometry.runtimePreconditions[observation]?.length ?? 0,
-            `${entry.id}: application-integrated ${observation} must name its runtime preconditions`,
-          ).toBeGreaterThan(0);
-          if (observation === 'hitTest') {
-            expect(entry.applicationProviders.acceptedTypes, `${entry.id}: accepted pointer provider`).toContain('pointer-evidence');
-            expect(entry.applicationProviders.extendableCapabilities, `${entry.id}: pointer geometry extension`).toContain('pointer-geometry');
-            expect(entry.applicationProviders.extendableCapabilities, `${entry.id}: pointer hit testing extension`).toContain('pointer-hit-testing');
-          }
-        }
       }
     }
   });
@@ -379,9 +427,9 @@ describe('machine-readable framework compatibility registry', () => {
   it('keeps Ratatui and Bubble Tea production-router support application-integrated', () => {
     for (const id of ['ratatui', 'charm'] as const) {
       const entry = framework(id);
-      expect(entry.geometry.hitTest).toBe('application-integrated');
-      expect(entry.applicationProviders.acceptedTypes).toContain('pointer-evidence');
-      expect(entry.geometry.runtimePreconditions.hitTest?.join(' ')).toMatch(/production pointer router/iu);
+      const integration = entry.capabilityGraph.applicationIntegrated.find(({ providerType }) => providerType === 'pointer-evidence');
+      expect(integration?.capabilities).toEqual(['pointer-geometry', 'pointer-hit-testing']);
+      expect(integration?.providerCapabilities).toEqual(['pointer-regions', 'hit-test']);
       expect(entry.limitations.join(' ')).not.toMatch(/pointer actions are (?:unavailable|refused)/iu);
     }
   });
@@ -393,10 +441,19 @@ describe('machine-readable framework compatibility registry', () => {
     );
     const websiteCheck = text('website/scripts/check-geometry-matrix.mjs');
     expect(websiteCheck).toContain("../../compatibility/registry.json");
-    expect(websiteCheck).not.toContain('packages/protocol');
+    expect(websiteCheck).toContain('capabilityGraph');
     const geometryPage = text('website/src/content/docs/reference/geometry-visibility.md');
     expect(geometryPage).toContain('<!-- geometry-matrices:start -->');
     expect(geometryPage).toContain('<!-- geometry-matrices:end -->');
+  });
+
+  it('keeps generated cross-language graph vectors byte-for-structure aligned', () => {
+    expect(json('clients/test-vectors/capability-graph.json')).toEqual(CAPABILITY_GRAPH);
+    const constants = json<Record<string, unknown>>('clients/test-vectors/constants.json');
+    expect(constants['sessionCapabilities']).toEqual(SESSION_CAPABILITIES);
+    expect(constants['evidenceProviderCapabilities']).toEqual(EVIDENCE_PROVIDER_CAPABILITIES);
+    expect(constants['runtimePrerequisites']).toEqual(RUNTIME_PREREQUISITES);
+    expect(constants['capabilityConformanceClaims']).toEqual(CAPABILITY_CONFORMANCE_CLAIMS);
   });
 
   it('takes every probe package version from its publish manifest', () => {
@@ -482,8 +539,7 @@ describe('machine-readable framework compatibility registry', () => {
     const inkAdapter = /const capabilities:[^=]+?=\s*\[(?<capabilities>[\s\S]*?)\]/u
       .exec(inkInstrument)?.groups?.['capabilities'];
     if (inkAdapter === undefined) throw new Error('could not find Ink adapter capabilities');
-    expect(framework('ink').probe.adapterCapabilityVariants.map((variant) => variant.capabilities))
-      .toEqual([quotedValues(inkAdapter)]);
+    expect(framework('ink').probe.adapterCapabilities).toEqual(quotedValues(inkAdapter));
 
     const opentui = openTuiProbeInfo();
     expect(framework('opentui').probe).toMatchObject({
@@ -498,7 +554,7 @@ describe('machine-readable framework compatibility registry', () => {
     if (certifiedCapabilities === undefined) {
       throw new Error('could not find OpenTUI certified adapter capabilities');
     }
-    expect(framework('opentui').probe.adapterCapabilityVariants[0]?.capabilities).toEqual([
+    expect(framework('opentui').probe.adapterCapabilities).toEqual([
       ...tsArray(openTuiBootstrap, 'BASE_CAPABILITIES'),
       ...quotedValues(certifiedCapabilities),
     ]);
@@ -544,7 +600,7 @@ describe('machine-readable framework compatibility registry', () => {
       pythonTuple(session, 'PROBE_CAPABILITIES'),
     );
     const adapter = pythonTuple(session, 'TEXTUAL_CAPABILITIES');
-    expect(framework('textual').probe.adapterCapabilityVariants[0]?.capabilities).toEqual(adapter);
+    expect(framework('textual').probe.adapterCapabilities).toEqual(adapter);
   });
 
   it('matches tview detection, manifest and Go hello literals', () => {
@@ -556,7 +612,7 @@ describe('machine-readable framework compatibility registry', () => {
       'packages/probe-tview/upstream-patches/tview/v0.42.0/add/termwright_probe.go',
     );
     expect(entry.probe.capabilities).toEqual(goCapabilities(source, 'ProbeCapability'));
-    expect(entry.probe.adapterCapabilityVariants[0]?.capabilities).toEqual(
+    expect(entry.probe.adapterCapabilities).toEqual(
       goCapabilities(source, 'Capability'),
     );
     expect(entry.annotations?.apis).toContain('annotate.SemanticKey');
@@ -568,7 +624,7 @@ describe('machine-readable framework compatibility registry', () => {
   it('matches both Charm detection declarations and Go hello literals', () => {
     const entry = framework('charm');
     expect(entry.probe.packageVersion).toBe(CHARM_PROBE_VERSION);
-    expect(entry.probe.adapterCapabilityVariants[0]?.capabilities).toEqual(
+    expect(entry.probe.adapterCapabilities).toEqual(
       capabilitiesFor('v1'),
     );
     expect(capabilitiesFor('v2')).toEqual(capabilitiesFor('v1'));
@@ -583,7 +639,7 @@ describe('machine-readable framework compatibility registry', () => {
         `packages/probe-charm/upstream-patches/bubbletea/${version}/add/termwright_probe.go`,
       );
       expect(entry.probe.capabilities).toEqual(goCapabilities(source, 'ProbeCapability'));
-      expect(entry.probe.adapterCapabilityVariants[0]?.capabilities).toEqual(
+      expect(entry.probe.adapterCapabilities).toEqual(
         goCapabilities(source, 'Capability'),
       );
       expect(source).toContain('candidate.node.ID = "k:" + string(candidate.meta.Key)');
@@ -663,6 +719,6 @@ describe('machine-readable framework compatibility registry', () => {
       if (capability === undefined) throw new Error(`unknown Rust capability ${name}`);
       return capability;
     });
-    expect(entry.probe.adapterCapabilityVariants[0]?.capabilities).toEqual(adapter);
+    expect(entry.probe.adapterCapabilities).toEqual(adapter);
   });
 });

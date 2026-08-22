@@ -351,7 +351,8 @@ not a bug to fix.
    lives behind `#[cfg(feature = "std")]`.
 
 **Phase 8 amendment:** upstream still has no native annotation storage, but
-the public `termwright-ratatui::Annotated<W>` wrapper can attach author intent
-to the exact `Frame::render_widget` call intercepted by the Phase 6 patch. It
-does not add stable identity or any physical fact, and direct nested
-`Widget::render` calls remain outside the interception surface.
+the public `termwright-ratatui::Annotated<W>` wrapper is itself an exact render
+boundary. It claims a matching `Frame::render_widget` observation without
+duplicating it and also observes direct nested `Widget::render` calls. RAII
+call boundaries preserve hierarchy only for actual nested `Annotated` calls;
+they do not invent a retained tree, stable identity, or any physical fact.

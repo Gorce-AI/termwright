@@ -4,16 +4,16 @@
   "private": true,
   "description": "A Textual notebook, driven end to end from TypeScript",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "^22.0.0 || ^24.0.0" },
   "scripts": {
     "start": "python3 app/notes_app.py",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "termwright test"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "termwright": "workspace:*",
     "typescript": "^5.6.0",
-    "vitest": "^3.2.0"
+    "vitest": "3.2.7"
   }
 }

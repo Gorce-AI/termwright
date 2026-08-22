@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TermwrightFixtures
 
-Defined in: [test/src/fixtures.ts:132](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L132)
+Defined in: [test/src/fixtures.ts:141](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L141)
 
 Fixtures added to Vitest's `test`.
 
@@ -21,7 +21,7 @@ Fixtures added to Vitest's `test`.
 
 > **step**: [`StepRunner`](../../type-aliases/steprunner/)
 
-Defined in: [test/src/fixtures.ts:146](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L146)
+Defined in: [test/src/fixtures.ts:155](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L155)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [test/src/fixtures.ts:146](https://github.com/Gorce-AI/termwright/bl
 
 > **terminal**: [`TerminalFactory`](../terminalfactory/)
 
-Defined in: [test/src/fixtures.ts:145](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L145)
+Defined in: [test/src/fixtures.ts:154](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L154)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [test/src/fixtures.ts:145](https://github.com/Gorce-AI/termwright/bl
 
 > **termwright**: [`TermwrightScopeFixture`](../termwrightscopefixture/)
 
-Defined in: [test/src/fixtures.ts:144](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L144)
+Defined in: [test/src/fixtures.ts:153](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L153)
 
 ***
 
@@ -45,7 +45,7 @@ Defined in: [test/src/fixtures.ts:144](https://github.com/Gorce-AI/termwright/bl
 
 > **termwrightOptions**: [`TermwrightOptions`](../termwrightoptions/)
 
-Defined in: [test/src/fixtures.ts:143](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L143)
+Defined in: [test/src/fixtures.ts:152](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L152)
 
 Options for this file or suite, the equivalent of Playwright's `test.use()`:
 

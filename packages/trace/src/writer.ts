@@ -3,15 +3,18 @@
  * `.twtrace` archive directory.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import type { EffectiveSessionContract, SemanticSnapshot } from '@termwright/protocol';
-import type { SessionCapabilities, SessionEvents } from '@termwright/driver';
+import { createHash } from 'node:crypto';
+import { open } from 'node:fs/promises';
+import { mkdir, mkdtemp, rename, unlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
+import { DEFAULT_ARTIFACT_VALUE_POLICY, projectActionReceiptForArtifact, projectSemanticSnapshotForArtifact, type ArtifactValuePolicy, type EffectiveSessionContract, type SemanticSnapshot } from '@termwright/protocol';
+import type { SessionEventRecord, SessionEvents } from '@termwright/driver';
 import { formatCastEvent, formatCastHeader, type CastEventCode, type CastHeader } from './cast.js';
 import { TraceError } from './errors.js';
 import { buildCastTimeline, type HiddenWindow } from './timeline.js';
 import {
   TRACE_FILES,
+  TRACE_INCOMPLETE_FILE,
   TRACE_VERSION,
   type ActionEvent,
   type AssertEvent,
@@ -24,6 +27,7 @@ import {
   type TraceLogSummary,
   type TraceExit,
   type TraceMeta,
+  type TraceRunIdentity,
   type GherkinStepMetadata,
 } from './types.js';
 
@@ -38,7 +42,7 @@ export interface TraceSource {
   readonly events: SessionEvents;
   /** Called on every `semantic-revision` to capture the tree, when available. */
   semanticTree?(): SemanticSnapshot | null;
-  capabilities?(): SessionCapabilities;
+  readonly terminalProfile?: string;
   contract?(): EffectiveSessionContract | null;
 }
 
@@ -46,6 +50,8 @@ export interface TraceSource {
 export interface TraceWriterOptions {
   /** Destination directory; created recursively. Conventionally `*.twtrace`. */
   readonly dir: string;
+  /** Required for traces owned by a certified native-host attempt. */
+  readonly runIdentity?: TraceRunIdentity;
   /** argv of the recorded session, stored in `meta.json`. */
   readonly command?: readonly string[];
   /** Initial viewport, used for the cast header. Default 100×30. */
@@ -56,7 +62,7 @@ export interface TraceWriterOptions {
   readonly semanticTree?: boolean;
   /**
    * Terminal profile the session measures characters with. Defaults to
-   * `session.capabilities()?.terminalProfile`; a replay that does not match it
+   * `session.terminalProfile`; a replay that does not match it
    * can place wide characters a column out.
    */
   readonly terminalProfile?: string;
@@ -64,9 +70,12 @@ export interface TraceWriterOptions {
   readonly env?: Readonly<Record<string, string>>;
   /**
    * Record PTY input as asciicast `i` events too. Off by default: inputs are
-   * already in `events.jsonl` losslessly, and players ignore them.
+   * represented in `events.jsonl`, and players ignore them. Exact bytes are
+   * only available when `artifactValuePolicy` is explicitly `raw`.
    */
   readonly recordInput?: boolean;
+  /** Semantic value policy. Defaults to `redacted`; `raw` is explicit opt-in. */
+  readonly artifactValuePolicy?: ArtifactValuePolicy;
   /**
    * Byte ceiling for buffered output. On overflow the writer stops recording
    * output and sets `meta.truncated`. Default 32 MiB.
@@ -192,6 +201,7 @@ export function createTraceWriter(
   const now = options.now ?? (() => performance.now());
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
   const maxLogEntries = options.maxLogEntries ?? DEFAULT_MAX_LOG_ENTRIES;
+  const artifactValuePolicy = options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
   const startClock = now();
   const wallStartedAt = Date.now();
   const startedAt = new Date(wallStartedAt).toISOString();
@@ -213,7 +223,10 @@ export function createTraceWriter(
   let outputBytes = 0;
   let truncated = false;
   let hideStart: number | null = null;
-  let finalized = false;
+  let sealed = false;
+  let preparedArchive: WriteArchiveInput | undefined;
+  let finalizePromise: Promise<TraceArchive> | undefined;
+  let finalizedArchive: TraceArchive | undefined;
   let disposed = false;
   let exit: TraceExit | undefined;
   let crash: TraceCrash | undefined;
@@ -259,8 +272,10 @@ export function createTraceWriter(
     return hideStart !== null && wall >= hideStart;
   }
 
-  unsubscribers.push(
-    session.events.on('output', ({ data, timeMs }) => {
+  function consumeSessionEvent(recorded: SessionEventRecord): void {
+    switch (recorded.type) {
+    case 'output': {
+      const { data, timeMs } = recorded.payload;
       const wall = driverTime(timeMs);
       // Decode unconditionally so the streaming decoder keeps its state even
       // across hidden windows; discard the text when hidden.
@@ -272,26 +287,21 @@ export function createTraceWriter(
         return;
       }
       pushOutput(wall, text);
-    }),
-  );
-
-  unsubscribers.push(
-    session.events.on('input', ({ data, timeMs, kind }) => {
+      break;
+    }
+    case 'input': {
+      const { data, timeMs, kind } = recorded.payload;
       const wall = driverTime(timeMs);
-      traceEvents.push({
-        t: wall,
-        kind: 'input',
-        dataB64: Buffer.from(data).toString('base64'),
-        inputKind: kind,
-      });
-      if (options.recordInput === true && !inHiddenWindow(wall)) {
+      traceEvents.push(artifactValuePolicy === 'raw'
+        ? { t: wall, kind: 'input', dataB64: Buffer.from(data).toString('base64'), inputKind: kind, recording: 'raw' }
+        : { t: wall, kind: 'input', inputKind: kind, recording: 'withheld', withheldReason: 'artifact-policy' });
+      if (options.recordInput === true && artifactValuePolicy === 'raw' && !inHiddenWindow(wall)) {
         pushCast(wall, 'i', new TextDecoder('utf-8').decode(data));
       }
-    }),
-  );
-
-  unsubscribers.push(
-    session.events.on('resize', (event) => {
+      break;
+    }
+    case 'resize': {
+      const event = recorded.payload;
       const wall = driverTime(event.timeMs);
       columns = event.columns;
       rows = event.rows;
@@ -303,30 +313,28 @@ export function createTraceWriter(
         rows: event.rows,
       });
       pushCast(wall, 'r', `${event.columns}x${event.rows}`);
-    }),
-  );
-
-  unsubscribers.push(
-    session.events.on('semantic-revision', ({ revision, timeMs }) => {
-      const snapshot = session.semanticTree?.() ?? null;
-      if (snapshot === null) return;
-      semantics.push({ t: driverTime(timeMs), revision, snapshot });
-    }),
-  );
-
-  unsubscribers.push(
-    session.events.on('exit', (status) => {
+      break;
+    }
+    case 'semantic-revision': {
+      const { revision, timeMs, snapshot } = recorded.payload;
+      if (snapshot.revision !== revision) {
+        throw new TraceError('protocol-violation', `semantic event revision ${revision} carried snapshot revision ${snapshot.revision}`);
+      }
+      semantics.push({ t: driverTime(timeMs), revision, snapshot: projectSemanticSnapshotForArtifact(snapshot, artifactValuePolicy) });
+      break;
+    }
+    case 'exit': {
+      const status = recorded.payload;
       const wall = driverTime(status.timeMs);
       exit = { code: status.code, signal: status.signal };
       pushCast(wall, 'x', String(status.code ?? ''));
-    }),
-  );
-
-  unsubscribers.push(
+      break;
+    }
+    case 'crash': {
+      const report = recorded.payload;
     // `crash` arrives just before `exit`, and `exit` only after the emulator
     // has drained — so the screen tail in the report is the screen the archive
     // ends on, and both land at their own timestamps on the same clock.
-    session.events.on('crash', (report) => {
       const wall = driverTime(report.timeMs);
       const lastSemanticRevision = report.lastSemanticTree?.revision ?? null;
       crash = {
@@ -347,13 +355,12 @@ export function createTraceWriter(
         screenTailLines: crash.screenTail.length,
         lastSemanticRevision,
       });
-    }),
-  );
-
-  unsubscribers.push(
+      break;
+    }
+    case 'action': {
+      const event = recorded.payload;
     // Emitted after the action finished, so `t` is its completion — see
     // ActionEvent's TSDoc for what that means for the timeline.
-    session.events.on('action', (event) => {
       const stepId = openSteps[openSteps.length - 1];
       traceEvents.push({
         t: driverTime(event.timeMs),
@@ -364,15 +371,14 @@ export function createTraceWriter(
         ok: event.ok,
         ...(event.error === undefined ? {} : { error: event.error }),
         ...(event.observation === undefined ? {} : { observation: event.observation }),
-        ...(event.receipt === undefined ? {} : { receipt: event.receipt }),
+        ...(event.receipt === undefined ? {} : { receipt: projectActionReceiptForArtifact(event.receipt, artifactValuePolicy) }),
         ...(event.actionability === undefined ? {} : { actionability: event.actionability }),
         ...(stepId === undefined ? {} : { stepId }),
       });
-    }),
-  );
-
-  unsubscribers.push(
-    session.events.on('app-log', (event) => {
+      break;
+    }
+    case 'app-log': {
+      const event = recorded.payload;
       const wall = driverTime(event.timeMs);
       const record = event.record;
       const label = event.label ?? record?.logger;
@@ -410,8 +416,22 @@ export function createTraceWriter(
         logs.shift();
         droppedLogs += 1;
       }
-    }),
-  );
+      break;
+    }
+    // These events are either represented by richer events above or are live
+    // projection concerns rather than trace archive records.
+    case 'action-start':
+    case 'diagnostic':
+    case 'screen-revision':
+      break;
+    }
+  }
+
+  // The source journal is armed before the PTY spawn. Starting at sequence 1
+  // makes startup output/tree/crash part of the trace even though the writer
+  // itself is constructed after launchTerminal() resolves. A gap is fatal by
+  // default: a lossless trace must never silently look complete.
+  unsubscribers.push(session.events.subscribe({ fromSequence: 1 }, consumeSessionEvent));
 
   function detach(): void {
     if (disposed) return;
@@ -512,51 +532,61 @@ export function createTraceWriter(
     },
 
     async finalize(finalizeOptions: FinalizeOptions = {}): Promise<TraceArchive> {
-      if (finalized) {
-        throw new TraceError('session-closed', 'TraceWriter.finalize() was already called');
-      }
-      finalized = true;
-      const endWall = localTime();
-      if (hideStart !== null) {
-        hiddenWindows.push({ start: hideStart, end: endWall });
-        hideStart = null;
-      }
-      for (const stepId of [...openSteps].reverse()) {
-        closeStep(stepId, 'skipped');
-      }
-      detach();
-      decoder.decode();
-      const recordedExit = exit ?? finalizeOptions.exit;
-      const contract = session.contract?.() ?? null;
+      if (finalizedArchive !== undefined) return finalizedArchive;
+      if (finalizePromise !== undefined) return finalizePromise;
+      if (preparedArchive === undefined) {
+        sealed = true;
+        const endWall = localTime();
+        if (hideStart !== null) {
+          hiddenWindows.push({ start: hideStart, end: endWall });
+          hideStart = null;
+        }
+        for (const stepId of [...openSteps].reverse()) {
+          closeStep(stepId, 'skipped');
+        }
+        detach();
+        decoder.decode();
+        const recordedExit = exit ?? finalizeOptions.exit;
+        const contract = session.contract?.() ?? null;
 
-      return writeArchive({
-        dir: options.dir,
-        castEvents,
-        traceEvents,
-        semantics,
-        hiddenWindows,
-        idleTimeLimit: finalizeOptions.idleTimeLimit,
-        header: buildHeader(),
-        crash,
-        logs,
-        logSummary: buildLogSummary(),
-        meta: {
-          v: TRACE_VERSION,
-          sessionId: session.sessionId,
-          command: options.command ?? [],
-          columns: options.columns ?? 100,
-          rows: options.rows ?? 30,
-          startedAt,
-          platform: options.platform ?? process.platform,
-          semanticTree: resolveSemanticFlag(),
-          ...(contract === null ? {} : { contract }),
-          ...(resolveTerminalProfile() === undefined
-            ? {}
-            : { terminalProfile: resolveTerminalProfile() as string }),
-          ...(recordedExit === undefined ? {} : { exit: recordedExit }),
-          ...(truncated ? { truncated: true } : {}),
-        },
+        preparedArchive = {
+          dir: options.dir,
+          castEvents,
+          traceEvents,
+          semantics,
+          hiddenWindows,
+          idleTimeLimit: finalizeOptions.idleTimeLimit,
+          header: buildHeader(),
+          crash,
+          logs,
+          logSummary: buildLogSummary(),
+          meta: {
+            v: TRACE_VERSION,
+            sessionId: session.sessionId,
+            ...(options.runIdentity === undefined ? {} : { runIdentity: options.runIdentity }),
+            command: options.command ?? [],
+            columns: options.columns ?? 100,
+            rows: options.rows ?? 30,
+            startedAt,
+            platform: options.platform ?? process.platform,
+            semanticTree: resolveSemanticFlag(),
+            ...(contract === null ? {} : { contract }),
+            ...(resolveTerminalProfile() === undefined
+              ? {}
+              : { terminalProfile: resolveTerminalProfile() as string }),
+            ...(recordedExit === undefined ? {} : { exit: recordedExit }),
+            ...(truncated ? { truncated: true } : {}),
+          },
+        };
+      }
+      finalizePromise = writeArchive(preparedArchive).then((archive) => {
+        finalizedArchive = archive;
+        return archive;
+      }).catch((error: unknown) => {
+        finalizePromise = undefined;
+        throw error;
       });
+      return finalizePromise;
     },
 
     dispose(): void {
@@ -565,15 +595,15 @@ export function createTraceWriter(
   };
 
   function assertLive(): void {
-    if (finalized) {
-      throw new TraceError('session-closed', 'TraceWriter was already finalized');
+    if (sealed) {
+      throw new TraceError('session-closed', 'TraceWriter is finalizing or finalized');
     }
   }
 
   function resolveSemanticFlag(): boolean {
     if (options.semanticTree !== undefined) return options.semanticTree;
-    const capabilities = session.capabilities?.();
-    if (capabilities !== undefined) return capabilities.semanticTree;
+    const contract = session.contract?.() ?? null;
+    if (contract !== null) return contract.capabilities['semantic-tree'].status === 'supported';
     return semantics.length > 0;
   }
 
@@ -589,7 +619,7 @@ export function createTraceWriter(
   }
 
   function resolveTerminalProfile(): string | undefined {
-    return options.terminalProfile ?? session.capabilities?.()?.terminalProfile;
+    return options.terminalProfile ?? session.terminalProfile ?? session.contract?.()?.terminal.profile;
   }
 
   function buildHeader(): CastHeader {
@@ -686,18 +716,42 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
     ...(input.logSummary === undefined ? {} : { logs: input.logSummary }),
   };
 
-  await mkdir(input.dir, { recursive: true });
-  await Promise.all([
-    writeFile(join(input.dir, TRACE_FILES.meta), `${JSON.stringify(meta, null, 2)}\n`, 'utf8'),
-    writeFile(join(input.dir, TRACE_FILES.cast), `${castLines.join('\n')}\n`, 'utf8'),
-    writeFile(join(input.dir, TRACE_FILES.events), joinLines(eventLines), 'utf8'),
-    writeFile(join(input.dir, TRACE_FILES.semantics), joinLines(semanticLines), 'utf8'),
-    ...(logLines.length === 0
-      ? []
-      : [writeFile(join(input.dir, TRACE_FILES.logs), joinLines(logLines), 'utf8')]),
-  ]);
+  const target = resolve(input.dir);
+  const parent = dirname(target);
+  await mkdir(parent, { recursive: true });
+  const staging = await mkdtemp(join(parent, `.${basename(target)}.staging-`));
+  const files: Record<string, string> = {
+    [TRACE_FILES.meta]: `${JSON.stringify(meta, null, 2)}\n`,
+    [TRACE_FILES.cast]: `${castLines.join('\n')}\n`,
+    [TRACE_FILES.events]: joinLines(eventLines),
+    [TRACE_FILES.semantics]: joinLines(semanticLines),
+    ...(logLines.length === 0 ? {} : { [TRACE_FILES.logs]: joinLines(logLines) }),
+  };
+  await writeDurable(join(staging, TRACE_INCOMPLETE_FILE), `${JSON.stringify({ v: 1, target })}\n`);
+  for (const [name, body] of Object.entries(files)) await writeDurable(join(staging, name), body);
+  const checksums = Object.fromEntries(Object.entries(files).map(([name, body]) => [name, sha256(body)]));
+  await unlink(join(staging, TRACE_INCOMPLETE_FILE));
+  await writeDurable(join(staging, TRACE_FILES.commit), `${JSON.stringify({ v: 1, checksums })}\n`);
+  await fsyncDirectory(staging);
+  await rename(staging, target);
+  await fsyncDirectory(parent);
 
-  return { dir: input.dir, meta, durationMs: meta.durationMs ?? 0 };
+  return { dir: target, meta, durationMs: meta.durationMs ?? 0 };
+}
+
+async function writeDurable(path: string, body: string): Promise<void> {
+  await writeFile(path, body, 'utf8');
+  const handle = await open(path, 'r');
+  try { await handle.sync(); } finally { await handle.close(); }
+}
+
+async function fsyncDirectory(path: string): Promise<void> {
+  const handle = await open(path, 'r');
+  try { await handle.sync(); } finally { await handle.close(); }
+}
+
+function sha256(body: string): string {
+  return createHash('sha256').update(body).digest('hex');
 }
 
 function joinLines(lines: readonly string[]): string {

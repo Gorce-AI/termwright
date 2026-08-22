@@ -121,8 +121,12 @@ pub enum Capability {
     ClippedGeometry,
     /// Publishes state flags.
     States,
+    /// Publishes authoritative focus state.
+    FocusState,
     /// Publishes action hints.
     Actions,
+    /// Publishes physical input recipes.
+    ActionRecipes,
     /// Publishes offset-to-cell mappings.
     TextRanges,
     /// Emits a render-commit marker per revision.
@@ -134,12 +138,14 @@ pub enum Capability {
 }
 
 /// Every adapter capability.
-pub const ADAPTER_CAPABILITIES: [&str; 9] = [
+pub const ADAPTER_CAPABILITIES: [&str; 11] = [
     "tree",
     "intended-geometry",
     "clipped-geometry",
     "states",
+    "focus-state",
     "actions",
+    "action-recipes",
     "text-ranges",
     "render-revisions",
     "logs",

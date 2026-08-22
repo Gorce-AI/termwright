@@ -193,7 +193,8 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
 
     const values = snapshots
       .map((snapshot) => snapshot.nodes.find((node) => node.role === 'textbox')?.value)
-      .filter((value): value is string => value !== undefined);
+      .filter((value) => value?.status === 'known')
+      .map((value) => value!.status === 'known' ? value!.value : '');
 
     // The app types into the field on every step; at least one snapshot has to
     // show a value it set, or the probe is reporting a stale tree.
@@ -210,18 +211,13 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const selectedPositions = snapshots
       .map((snapshot) => snapshot.nodes.find((node) => node.role === 'list')?.state?.positionInSet)
       .filter((position): position is number => position !== undefined);
-    const scrollStates = snapshots
-      .map((snapshot) => snapshot.nodes.find(
-        (node) => node.frameworkType === 'ScrollBoxRenderable',
-      )?.state)
-      .filter((state) => state !== undefined);
-
-    // Select exposes a highlighted index, while ScrollBox exposes position and
-    // extent. These assertions require values changed by the application, so a
-    // probe that publishes only its initial tree cannot pass.
+    // Select exposes a highlighted index. ScrollBox's private offset/extent are
+    // retained in probe IR diagnostics, but do not become portable scroll
+    // truth without an explicit scroll-state producer including its viewport.
     expect(new Set(selectedPositions).size).toBeGreaterThan(1);
-    expect(scrollStates.some((state) => (state.scrollOffset ?? 0) > 0)).toBe(true);
-    expect(scrollStates.some((state) => (state.scrollExtent ?? 0) > 4)).toBe(true);
+    expect(snapshots.some((snapshot) => snapshot.nodes.some(
+      (node) => node.frameworkType === 'ScrollBoxRenderable' && node.scroll !== undefined,
+    ))).toBe(false);
   }, 60_000);
 
   it('marks each revision it published, and the markers verify', async () => {

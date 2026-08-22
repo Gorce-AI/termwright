@@ -77,7 +77,7 @@ Name of the profile that was applied, when any.
 
 ### requiredCapabilities
 
-> `readonly` **requiredCapabilities**: readonly (`"focus"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"keyboard-input"` \| `"pointer-input"` \| `"paired-revisions"`)[]
+> `readonly` **requiredCapabilities**: readonly (`"focus"` \| `"pointer-input"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
 Defined in: [test/src/config.ts:104](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L104)
 

@@ -5,21 +5,22 @@
  * ```
  * Terminal t1 100x30 revision 42
  * semanticTree: available
- * dialog "Permission" ref=n7@42 bounds=(8,20,40,9) modal
- *   button "Approve" ref=n8@42 bounds=(14,23,11,1) focused
+ * dialog "Permission" ref=semantic:n7@42 bounds=(8,20,40,9) modal
+ *   button "Approve" ref=semantic:n8@42 bounds=(14,23,11,1) focused
  * visible text:
  * <grid text>
  * ```
  *
  * `bounds` is `(row,column,width,height)` — the field order of the protocol's
- * `Rect`. Refs are `<nodeId>@<semanticRevision>`, byte-identical to the refs the
+ * `Rect`. Refs are `semantic:<nodeId>@<semanticRevision>`, byte-identical to the refs the
  * driver puts on `ResolvedTarget`, so a ref can be quoted back to any tool.
  */
 import type { Rect, SemanticNode, SemanticSnapshot, SemanticState } from './model.js';
+import type { SemanticLocatorRef } from '@termwright/driver';
 
 /** One line of the ref list, plus the structured fields behind it. */
 export interface RefEntry {
-  readonly ref: string;
+  readonly ref: SemanticLocatorRef;
   readonly role: string;
   readonly name: string;
   readonly depth: number;
@@ -27,19 +28,22 @@ export interface RefEntry {
   readonly flags: readonly string[];
   readonly testId?: string;
   readonly value?: string;
+  readonly applicationScroll?: string;
+  readonly paintedRegion?: string;
 }
 
-/** Formats `n8@42` for a node observed at `revision`. */
-export function formatRef(nodeId: string, revision: number): string {
-  return `${nodeId}@${revision}`;
+/** Formats an explicitly semantic ref for a node observed at `revision`. */
+export function formatRef(nodeId: string, revision: number): SemanticLocatorRef {
+  return `semantic:${nodeId}@${revision}`;
 }
 
-/** Splits `n8@42` back into its parts; returns `null` for anything else. */
+/** Splits a semantic ref back into its parts; screen refs are rejected. */
 export function parseRef(ref: string): { readonly nodeId: string; readonly revision: number } | null {
-  const at = ref.lastIndexOf('@');
-  if (at <= 0) return null;
-  const nodeId = ref.slice(0, at);
-  const revision = Number(ref.slice(at + 1));
+  const match = /^semantic:([^@\s]+)@(\d+)$/u.exec(ref);
+  if (match === null) return null;
+  const nodeId = match[1];
+  const revision = Number(match[2]);
+  if (nodeId === undefined) return null;
   if (!Number.isInteger(revision) || revision < 0) return null;
   return { nodeId, revision };
 }
@@ -70,6 +74,8 @@ export function stateFlags(state: SemanticState | undefined): readonly string[] 
 export function formatNodeLine(entry: RefEntry): string {
   const parts = [`${entry.role} ${JSON.stringify(entry.name)}`, `ref=${entry.ref}`];
   if (entry.bounds !== undefined) parts.push(`bounds=${formatBounds(entry.bounds)}`);
+  if (entry.applicationScroll !== undefined) parts.push(`app-scroll=${entry.applicationScroll}`);
+  if (entry.paintedRegion !== undefined) parts.push(`painted=${entry.paintedRegion}`);
   return [...parts, ...entry.flags].join(' ');
 }
 
@@ -118,7 +124,13 @@ export function toRefEntry(node: SemanticNode, revision: number, depth = 0): Ref
     ...(visibleRect.status === 'known' ? { bounds: visibleRect.value } : {}),
     flags: stateFlags(node.state),
     ...(node.testId === undefined ? {} : { testId: node.testId }),
-    ...(node.value === undefined ? {} : { value: node.value }),
+    ...(node.value?.status === 'known' && node.value.sensitivity === 'public' ? { value: node.value.value } : {}),
+    ...(node.scroll?.status === 'known'
+      ? { applicationScroll: `${node.scroll.value.axis}:${node.scroll.value.offset}+${node.scroll.value.viewport}/${node.scroll.value.extent}` }
+      : {}),
+    ...(node.paintedRegion?.status === 'known'
+      ? { paintedRegion: `${formatBounds(node.paintedRegion.value.regionBounds)}:${node.paintedRegion.value.spans.length}-spans` }
+      : {}),
   };
 }
 

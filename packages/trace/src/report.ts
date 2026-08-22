@@ -86,7 +86,7 @@ export interface ReportTestAttempt {
 /**
  * A crash handed straight to the report.
  *
- * Structural and JSON-safe on purpose: the Vitest preset moves this through
+ * Structural and JSON-safe on purpose: the Native Host runner moves this through
  * `task.meta` from a worker to the main process, so it must survive
  * `JSON.parse` without needing types from `@termwright/driver`. `code` is
  * therefore a plain string here, while the archive's own {@link TraceCrash}

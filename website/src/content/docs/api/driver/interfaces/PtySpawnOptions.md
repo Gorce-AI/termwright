@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: PtySpawnOptions
 
-Defined in: [driver/src/pty.ts:11](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L11)
+Defined in: [driver/src/pty.ts:14](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L14)
 
 Options accepted by [PtyBackend.spawn](../ptybackend/#spawn).
 
@@ -21,7 +21,7 @@ Options accepted by [PtyBackend.spawn](../ptybackend/#spawn).
 
 > `readonly` **columns**: `number`
 
-Defined in: [driver/src/pty.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L15)
+Defined in: [driver/src/pty.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L18)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [driver/src/pty.ts:15](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` **command**: readonly `string`[]
 
-Defined in: [driver/src/pty.ts:12](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L12)
+Defined in: [driver/src/pty.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L15)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [driver/src/pty.ts:12](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **cwd?**: `string`
 
-Defined in: [driver/src/pty.ts:13](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L13)
+Defined in: [driver/src/pty.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L16)
 
 ***
 
@@ -45,7 +45,7 @@ Defined in: [driver/src/pty.ts:13](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` **env**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: [driver/src/pty.ts:14](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L14)
+Defined in: [driver/src/pty.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L17)
 
 ***
 
@@ -53,7 +53,7 @@ Defined in: [driver/src/pty.ts:14](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` **rows**: `number`
 
-Defined in: [driver/src/pty.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L16)
+Defined in: [driver/src/pty.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L19)
 
 ***
 
@@ -61,6 +61,6 @@ Defined in: [driver/src/pty.ts:16](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **term?**: `string`
 
-Defined in: [driver/src/pty.ts:18](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L18)
+Defined in: [driver/src/pty.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L21)
 
 `$TERM` for the child. Defaults to `xterm-256color`.

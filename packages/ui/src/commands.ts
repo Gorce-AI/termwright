@@ -32,7 +32,7 @@ export interface CommandRow {
   /** `locator.click`, `toBeVisible`, or the step's title. */
   readonly label: string;
   readonly selector?: string;
-  /** Resolved target, `n8@42` — the node and the revision it was resolved at. */
+  /** Resolved target, `semantic:n8@42` — the node and the revision it was resolved at. */
   readonly ref?: string;
   /** Absent for steps that never closed, and for inputs. */
   readonly ok?: boolean;
@@ -191,7 +191,10 @@ function actionabilityFromTrace(value: unknown): UiActionability | undefined {
   const rawReason = asObject(explanation?.['reason']);
   const reasonCode = text(rawReason?.['code']);
   const reasonMessage = text(rawReason?.['message']);
-  const targetRef = text(rawReason?.['targetRef']);
+  const rawTargetRef = text(rawReason?.['targetRef']);
+  const targetRef = rawTargetRef !== undefined && /^(?:semantic:[^@\s]+|screen:\d+,\d+,\d+,\d+)@\d+$/u.test(rawTargetRef)
+    ? rawTargetRef as import('@termwright/driver').LocatorRef
+    : undefined;
   const reason = reasonCode === undefined || reasonMessage === undefined ? undefined : { code: reasonCode, message: reasonMessage, ...(targetRef === undefined ? {} : { targetRef }) };
   return { actionable, kind, contractId, sequence, requirements, ...(strategy === undefined ? {} : { strategy }), ...(reason === undefined ? {} : { reason }) };
 }
@@ -396,9 +399,9 @@ export function stepCommand(
   return [...interesting].reverse().find((row) => row.t < timeMs - 1);
 }
 
-/** Splits `n8@42` into its node id and the revision it was resolved at. */
+/** Splits an explicitly semantic ref into node id and revision. */
 export function parseRef(ref: string): { nodeId: string; revision: number } | null {
-  const match = /^([^@]+)@(\d+)$/.exec(ref);
+  const match = /^semantic:([^@]+)@(\d+)$/.exec(ref);
   if (match === null) return null;
   const [, nodeId, revision] = match;
   if (nodeId === undefined || revision === undefined) return null;

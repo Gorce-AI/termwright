@@ -109,7 +109,7 @@ async function runApplication(binary: string, debugFile?: string): Promise<Appli
     await terminal.press('Tab');
     await terminal.type('abc');
     await terminal.waitForText('***', { timeout: 20_000 });
-    await terminal.waitForStable({ frames: 2, timeout: 20_000 });
+    await terminal.waitForQuiet({ quietMs: 100, timeout: 20_000 });
     const screen = terminal.screen().text();
     await terminal.press('Escape');
     const exit = await terminal.waitForExit({ timeout: 20_000 });

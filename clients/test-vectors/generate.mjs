@@ -27,6 +27,14 @@ import { Buffer } from 'node:buffer';
 import {
   ABSOLUTE_LIMITS,
   ADAPTER_CAPABILITIES,
+  CAPABILITY_GRAPH,
+  CAPABILITY_GRAPH_VERSION,
+  CAPABILITY_CONFORMANCE_CLAIMS,
+  CAPABILITY_NODE_CATEGORIES,
+  CAPABILITY_NODE_LAYERS,
+  CONDITION_KINDS,
+  EVIDENCE_PROVIDER_CAPABILITIES,
+  EVIDENCE_PROVIDER_TYPES,
   LOG_LEVELS,
   LOG_LEVEL_SEVERITY,
   MAX_LOG_ATTRS,
@@ -40,6 +48,15 @@ import {
   PROVENANCE_SOURCES,
   PROTOCOL_ID,
   PROTOCOL_VERSION,
+  RUN_EVENT_CLASSES,
+  RUN_EVENT_VERSION,
+  RUN_ID_KINDS,
+  DEFAULT_RUN_EVENT_LIMITS,
+  RUN_STATES,
+  TERMINAL_RUN_STATES,
+  RUN_STATE_TRANSITIONS,
+  RUNTIME_PREREQUISITES,
+  SESSION_CAPABILITIES,
   SEMANTIC_ACTIONS,
   SEMANTIC_NODE_KEYS,
   SEMANTIC_ROLES,
@@ -53,6 +70,12 @@ import {
   verifyMarkerPayload,
   intersectRects,
   viewportIntersection,
+  createRunEvent,
+  createRunId,
+  validateRunEvent,
+  RunEventStreamValidator,
+  RunEventProducer,
+  RunEventJournal,
 } from '../../packages/protocol/dist/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -157,10 +180,26 @@ write('constants.json', {
   roles: [...SEMANTIC_ROLES],
   actions: [...SEMANTIC_ACTIONS],
   capabilities: [...ADAPTER_CAPABILITIES],
+  capabilityGraphVersion: CAPABILITY_GRAPH_VERSION,
+  capabilityNodeCategories: [...CAPABILITY_NODE_CATEGORIES],
+  capabilityNodeLayers: [...CAPABILITY_NODE_LAYERS],
+  sessionCapabilities: [...SESSION_CAPABILITIES],
+  evidenceProviderCapabilities: [...EVIDENCE_PROVIDER_CAPABILITIES],
+  evidenceProviderTypes: [...EVIDENCE_PROVIDER_TYPES],
+  runtimePrerequisites: [...RUNTIME_PREREQUISITES],
+  conditionKinds: [...CONDITION_KINDS],
+  capabilityConformanceClaims: [...CAPABILITY_CONFORMANCE_CLAIMS],
   provenanceSources: [...PROVENANCE_SOURCES],
   probeCapabilities: [...PROBE_CAPABILITIES],
   probeUnobservableFields: [...PROBE_UNOBSERVABLE_FIELDS],
   probeIdentityKinds: ['stable', 'frame-local'],
+  runIdKinds: [...RUN_ID_KINDS],
+  runEventClasses: [...RUN_EVENT_CLASSES],
+  runEventVersion: RUN_EVENT_VERSION,
+  runEventLimits: { ...DEFAULT_RUN_EVENT_LIMITS },
+  runStates: [...RUN_STATES],
+  terminalRunStates: [...TERMINAL_RUN_STATES],
+  runStateTransitions: Object.fromEntries(Object.entries(RUN_STATE_TRANSITIONS).map(([state, next]) => [state, [...next]])),
   // Every field a node and a state may carry. A client asserts its own
   // structures against these, so a field added to the protocol fails three
   // client suites at once instead of waiting to be noticed in production —
@@ -170,6 +209,10 @@ write('constants.json', {
   defaultLimits: { ...DEFAULT_LIMITS },
   absoluteLimits: { ...ABSOLUTE_LIMITS },
 });
+
+// The graph itself is a cross-language executable vector. Clients may project
+// it into native enums, but may not maintain a second dependency matrix.
+write('capability-graph.json', CAPABILITY_GRAPH);
 
 // --------------------------------------------------------------------------
 // observations.json — epistemic tags and half-open geometry across clients.
@@ -251,6 +294,109 @@ write('observations.json', {
   ),
   geometryCases,
   qualifiedSnapshot,
+});
+
+// --------------------------------------------------------------------------
+// run-events.json — orchestration identity, envelope and stream invariants.
+// --------------------------------------------------------------------------
+
+const runUuid = (suffix) => `00000000-0000-4000-8000-${suffix.toString(16).padStart(12, '0')}`;
+const runIdentity = {
+  invocationId: createRunId('invocation', () => runUuid(1)),
+  runId: createRunId('run', () => runUuid(2)),
+  projectId: createRunId('project', () => runUuid(3)),
+  specId: createRunId('spec', () => runUuid(4)),
+  runnerTaskId: createRunId('runner-task', () => runUuid(5)),
+  executionId: createRunId('execution', () => runUuid(6)),
+  attemptId: createRunId('attempt', () => runUuid(7)),
+};
+const runProducer = createRunId('producer', () => runUuid(8));
+const runEvent = (seq, overrides = {}) => createRunEvent({
+  producerId: runProducer,
+  epoch: 0,
+  seq,
+  eventClass: 'authoritative',
+  type: 'attempt.started',
+  monotonicTime: seq * 10,
+  wallTime: 1_800_000_000_000 + seq,
+  identity: runIdentity,
+  payload: { retry: 0 },
+  randomUUID: () => runUuid(20 + seq),
+  ...overrides,
+});
+const runAcceptInputs = [
+  { name: 'attempt-started', value: runEvent(0) },
+  { name: 'diagnostic-with-cause', value: runEvent(1, { eventClass: 'diagnostic', type: 'adapter.warning', causedBy: [runEvent(0).eventId], payload: { code: 'slow-frame' } }) },
+  { name: 'state-without-wall-clock', value: runEvent(2, { eventClass: 'state', type: 'session.snapshot', wallTime: undefined, payload: { status: 'running' } }) },
+];
+const self = runEvent(3);
+const runRejectInputs = [
+  { name: 'obsolete-envelope-version', value: { ...runEvent(0), v: 1 } },
+  { name: 'cross-domain-id', value: { ...runEvent(0), identity: { ...runIdentity, attemptId: runIdentity.executionId } } },
+  { name: 'detached-attempt-identity', value: { ...runEvent(0), identity: { invocationId: runIdentity.invocationId, runId: runIdentity.runId, attemptId: runIdentity.attemptId } } },
+  { name: 'self-cause', value: { ...self, causedBy: [self.eventId] } },
+  { name: 'non-finite-time', value: { ...runEvent(0), monotonicTime: null } },
+  { name: 'unknown-envelope-field', value: { ...runEvent(0), surprise: true } },
+];
+const annotateRunEvents = (entries, expected) => entries.map(({ name, value }) => {
+  const result = validateRunEvent(value);
+  if (result.ok !== expected) throw new Error(`run event vector ${name}: expected ok=${expected}, got ${JSON.stringify(result)}`);
+  return expected ? { name, value } : { name, value, code: result.code, detail: result.detail };
+});
+const streamVerdict = (name, values) => {
+  const validator = new RunEventStreamValidator();
+  const results = values.map((value) => validator.accept(value));
+  return { name, values, verdicts: results.map((result) => result.ok ? 'accept' : result.code) };
+};
+let gapId = 500;
+let gapTime = 1;
+const vectorJournal = new RunEventJournal({
+  invocationId: runIdentity.invocationId,
+  runId: runIdentity.runId,
+  gapProducer: new RunEventProducer({
+    producerId: createRunId('producer', () => runUuid(499)),
+    epoch: 0,
+    randomUUID: () => runUuid(gapId++),
+    monotonicNow: () => gapTime++,
+  }),
+  limits: { maxAuthoritativeEvents: 4, maxStateKeys: 4, maxDiagnosticEvents: 1 },
+});
+vectorJournal.append(runEvent(0, { eventClass: 'diagnostic', type: 'adapter.warning' }));
+vectorJournal.append(runEvent(1, { eventClass: 'diagnostic', type: 'adapter.warning' }));
+const diagnosticGapBatch = await vectorJournal.flushThrough(vectorJournal.barrier(), () => {});
+
+const stateJournal = new RunEventJournal({
+  invocationId: runIdentity.invocationId,
+  runId: runIdentity.runId,
+  gapProducer: new RunEventProducer({
+    producerId: createRunId('producer', () => runUuid(498)),
+    epoch: 0,
+    randomUUID: () => runUuid(gapId++),
+    monotonicNow: () => gapTime++,
+  }),
+});
+stateJournal.append(runEvent(0, { eventClass: 'state', type: 'run.state', payload: { status: 'scheduled' } }), { stateKey: 'run:state' });
+stateJournal.append(runEvent(1, { eventClass: 'state', type: 'run.state', payload: { status: 'running' } }), { stateKey: 'run:state' });
+const coalescedStateBatch = await stateJournal.flushThrough(stateJournal.barrier(), () => {});
+
+write('run-events.json', {
+  version: 2,
+  idKinds: [...RUN_ID_KINDS],
+  eventClasses: [...RUN_EVENT_CLASSES],
+  limits: { ...DEFAULT_RUN_EVENT_LIMITS },
+  identity: runIdentity,
+  accept: annotateRunEvents(runAcceptInputs, true),
+  reject: annotateRunEvents(runRejectInputs, false),
+  streams: [
+    streamVerdict('monotonic', [runEvent(0), runEvent(1)]),
+    streamVerdict('duplicate-sequence-coordinate', [runEvent(0), { ...runEvent(1), seq: 0 }]),
+    streamVerdict('monotonic-clock-regression', [runEvent(0, { monotonicTime: 10 }), runEvent(1, { monotonicTime: 9 })]),
+    streamVerdict('epoch-regression', [runEvent(0, { epoch: 2 }), runEvent(1, { epoch: 1 })]),
+  ],
+  journal: {
+    diagnosticGap: diagnosticGapBatch,
+    coalescedState: coalescedStateBatch,
+  },
 });
 
 // --------------------------------------------------------------------------
@@ -588,6 +734,133 @@ const snapshotAccept = [
     }),
   },
   {
+    name: 'public-semantic-value',
+    snapshot: mutate((s) => {
+      s.nodes[1].value = { status: 'known', value: '', sensitivity: 'public', evidence: evidence() };
+    }),
+  },
+  {
+    name: 'withheld-sensitive-semantic-value',
+    snapshot: mutate((s) => {
+      s.nodes[1].value = { status: 'withheld', reason: 'sensitive', sensitivity: 'sensitive' };
+    }),
+  },
+  {
+    name: 'authoritative-physical-input-recipes',
+    snapshot: mutate((s) => {
+      s.nodes[1].inputRecipes = [
+        { action: 'focus', requiresFocus: false, steps: [{ kind: 'press', key: 'Tab' }] },
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+      ];
+    }),
+  },
+  {
+    name: 'application-action-strategy-provider',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.keys',
+        sessionId: s.sessionId,
+        revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.keys',
+        },
+        pointerRegions: [],
+        actionRecipes: [{
+          recipientId: 'n2',
+          recipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] }],
+        }],
+      }];
+    }),
+  },
+  {
+    name: 'application-focus-provider',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.focus', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.focus',
+        },
+        pointerRegions: [],
+        focusState: { status: 'focused', recipientId: 'n2' },
+      }, {
+        providerId: 'app.focus.none', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.focus.none',
+        },
+        pointerRegions: [],
+        focusState: { status: 'none' },
+      }];
+    }),
+  },
+  {
+    name: 'application-scroll-provider',
+    snapshot: mutate((s) => {
+      s.nodes[1].scroll = {
+        status: 'known',
+        value: { axis: 'vertical', offset: 3, viewport: 4, extent: 20 },
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll',
+        },
+      };
+      s.providerEvidence = [{
+        providerId: 'app.scroll', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll',
+        },
+        pointerRegions: [],
+        scrollStates: [{ recipientId: 'n2', axis: 'vertical', offset: 3, viewport: 4, extent: 20 }],
+      }];
+    }),
+  },
+  {
+    name: 'application-painted-region-provider',
+    snapshot: mutate((s) => {
+      const region = {
+        regionBounds: { row: 1, column: 2, width: 9, height: 1 },
+        spans: [{ row: 1, from: 2, to: 11 }],
+      };
+      s.nodes[1].paintedRegion = {
+        status: 'known', value: region,
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+      };
+      s.providerEvidence = [{
+        providerId: 'app.paint', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+        pointerRegions: [],
+        paintedRegions: [{
+          recipientId: 'n2',
+          regionBounds: { ...region.regionBounds },
+          spans: region.spans.map((span) => ({ ...span })),
+        }],
+      }];
+    }),
+  },
+  {
+    name: 'application-terminal-input-mode-provider',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.input', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.input',
+        },
+        pointerRegions: [],
+        inputModes: {
+          mouseTracking: 'drag', mouseEncoding: 'sgr', focusReporting: 'on',
+        },
+      }];
+    }),
+  },
+  {
     name: 'two-roots',
     snapshot: mutate((s) => {
       s.rootIds = ['n1', 'n4'];
@@ -670,6 +943,10 @@ const snapshotReject = [
     name: 'unknown-provenance-per-field',
     snapshot: mutate((s) => { s.nodes[1].px = { name: 'vibes' }; }),
   },
+  {
+    name: 'legacy-raw-semantic-value',
+    snapshot: mutate((s) => { s.nodes[1].value = 'plaintext'; }),
+  },
   { name: 'root-with-parent', snapshot: mutate((s) => { s.nodes[0].parentId = 'n2'; }) },
   {
     name: 'parentless-node-not-in-rootids',
@@ -690,6 +967,202 @@ const snapshotReject = [
   { name: 'unknown-node-field', snapshot: mutate((s) => { s.nodes[1].colour = 'red'; }) },
   { name: 'unknown-state-field', snapshot: mutate((s) => { s.nodes[1].state = { sparkling: true }; }) },
   { name: 'unknown-action', snapshot: mutate((s) => { s.nodes[1].actions = ['detonate']; }) },
+  {
+    name: 'recipe-without-matching-intent',
+    snapshot: mutate((s) => {
+      s.nodes[1].actions = ['focus'];
+      s.nodes[1].inputRecipes = [
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+      ];
+    }),
+  },
+  {
+    name: 'focus-recipe-cannot-require-focus',
+    snapshot: mutate((s) => {
+      s.nodes[1].inputRecipes = [
+        { action: 'focus', requiresFocus: true, steps: [{ kind: 'press', key: 'Tab' }] },
+      ];
+    }),
+  },
+  {
+    name: 'setvalue-recipe-requires-exactly-one-action-value',
+    snapshot: mutate((s) => {
+      s.nodes[1].actions = ['setValue'];
+      s.nodes[1].inputRecipes = [
+        { action: 'setValue', requiresFocus: true, steps: [{ kind: 'press', key: 'Control+U' }] },
+      ];
+    }),
+  },
+  {
+    name: 'duplicate-recipe-action',
+    snapshot: mutate((s) => {
+      s.nodes[1].inputRecipes = [
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Space' }] },
+      ];
+    }),
+  },
+  {
+    name: 'recipe-step-is-strict',
+    snapshot: mutate((s) => {
+      s.nodes[1].inputRecipes = [
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter', callback: 'forbidden' }] },
+      ];
+    }),
+  },
+  {
+    name: 'provider-action-recipe-unknown-recipient',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.keys', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.keys',
+        },
+        pointerRegions: [],
+        actionRecipes: [{
+          recipientId: 'ghost',
+          recipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] }],
+        }],
+      }];
+    }),
+  },
+  {
+    name: 'provider-focus-unknown-recipient',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.focus', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.focus',
+        },
+        pointerRegions: [],
+        focusState: { status: 'focused', recipientId: 'ghost' },
+      }];
+    }),
+  },
+  {
+    name: 'provider-focus-none-is-strict',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.focus', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.focus',
+        },
+        pointerRegions: [],
+        focusState: { status: 'none', recipientId: 'n2' },
+      }];
+    }),
+  },
+  {
+    name: 'provider-scroll-unknown-recipient',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.scroll', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll',
+        },
+        pointerRegions: [],
+        scrollStates: [{ recipientId: 'ghost', axis: 'vertical', offset: 0, viewport: 4, extent: 20 }],
+      }];
+    }),
+  },
+  {
+    name: 'provider-scroll-outside-extent',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.scroll', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll',
+        },
+        pointerRegions: [],
+        scrollStates: [{ recipientId: 'n2', axis: 'vertical', offset: 18, viewport: 4, extent: 20 }],
+      }];
+    }),
+  },
+  {
+    name: 'provider-painted-region-unknown-recipient',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.paint', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+        pointerRegions: [],
+        paintedRegions: [{
+          recipientId: 'ghost',
+          regionBounds: { row: 1, column: 2, width: 9, height: 1 },
+          spans: [{ row: 1, from: 2, to: 11 }],
+        }],
+      }];
+    }),
+  },
+  {
+    name: 'provider-input-mode-invalid-tracking',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.input', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.input',
+        },
+        pointerRegions: [],
+        inputModes: {
+          mouseTracking: 'guess-sgr', mouseEncoding: 'sgr', focusReporting: 'on',
+        },
+      }];
+    }),
+  },
+  {
+    name: 'provider-input-mode-is-strict',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.input', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.input',
+        },
+        pointerRegions: [],
+        inputModes: {
+          mouseTracking: 'drag', mouseEncoding: 'sgr', focusReporting: 'on', guessed: true,
+        },
+      }];
+    }),
+  },
+  {
+    name: 'painted-region-span-outside-bounds',
+    snapshot: mutate((s) => {
+      s.nodes[1].paintedRegion = {
+        status: 'known',
+        value: {
+          regionBounds: { row: 1, column: 2, width: 4, height: 1 },
+          spans: [{ row: 1, from: 2, to: 11 }],
+        },
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+      };
+    }),
+  },
+  {
+    name: 'painted-region-span-outside-viewport',
+    snapshot: mutate((s) => {
+      s.nodes[1].paintedRegion = {
+        status: 'known',
+        value: {
+          regionBounds: { row: 30, column: 2, width: 4, height: 1 },
+          spans: [{ row: 30, from: 2, to: 6 }],
+        },
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+      };
+    }),
+  },
   { name: 'empty-node-id', snapshot: mutate((s) => { s.nodes[2].id = ''; }) },
   { name: 'labelledby-unknown-target', snapshot: mutate((s) => { s.nodes[1].labelledBy = ['ghost']; }) },
   { name: 'text-range-reversed', snapshot: mutate((s) => {

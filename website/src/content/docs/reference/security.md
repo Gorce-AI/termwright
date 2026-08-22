@@ -10,9 +10,9 @@ artifacts that may contain sensitive data.
 
 | Source | Automatic handling |
 | --- | --- |
-| Semantic password values | Redacted by the semantic protocol. |
+| Semantic values | `known`, `absent`, `unknown`, `unsupported`, and `withheld` remain distinct. Sensitive known values become `withheld` before traces, Runner or MCP publication. |
 | Raw terminal output | Not redacted. Secrets printed by the application remain visible. |
-| Typed keys and raw input | May appear in traces and recorder output. Paste previews are omitted from crash reports, but terminal output can still echo them. |
+| Typed keys and raw input | `redacted` by default in receipts, traces, Runner and recorder output. `raw` is an explicit opt-in; `none` retains no value payload. Terminal output can still echo input. |
 | Application logs | Not redacted by Termwright. Configure redaction in the logger. |
 | File paths and process errors | May appear in reports and diagnostics. |
 
@@ -42,3 +42,11 @@ whole developer or CI environment merely to make one variable available.
 Framework integrations authenticate their local semantic connection with a
 per-session token. This protects session routing; it does not redact data the
 application intentionally publishes.
+
+## Value recording policy
+
+`artifactValuePolicy` is `redacted` by default. Plain input strings are treated
+as sensitive. Use `sensitive(value)` to make intent explicit, or
+`publicValue(value)` when a value is safe to record. Only `raw` stores sensitive
+device-operation payloads; artifact readers reject a receipt whose declared
+policy and stored payload disagree.

@@ -1,6 +1,6 @@
 import type { SemanticAction, SemanticRole } from './roles.js';
 import type { ProvenanceSource } from './probe/ir.js';
-import type { CoordinateSpace, Observation } from './observation.js';
+import type { CoordinateSpace, Observation, SemanticValueObservation } from './observation.js';
 import type { EvidenceProvenance } from './contract.js';
 
 /** Zero-based viewport cell coordinates. */
@@ -40,12 +40,31 @@ export interface SemanticState {
   readonly offscreen?: boolean;
   readonly readonly?: boolean;
   readonly multiline?: boolean;
+  readonly required?: boolean;
+  readonly multiselectable?: boolean;
   readonly orientation?: 'horizontal' | 'vertical';
   readonly level?: number;
   readonly positionInSet?: number;
   readonly setSize?: number;
-  readonly scrollOffset?: number;
-  readonly scrollExtent?: number;
+}
+
+/** Authoritative application viewport state in production-defined logical units. */
+export interface SemanticScrollState {
+  readonly axis: 'vertical' | 'horizontal';
+  /** Logical distance from the start of the scrollable content. */
+  readonly offset: number;
+  /** Logical size of the visible application viewport. */
+  readonly viewport: number;
+  /** Logical size of the complete scrollable content. */
+  readonly extent: number;
+}
+
+/** Exact viewport cells painted by one semantic recipient for a committed frame. */
+export interface SemanticPaintedRegion {
+  /** Bounding box of the painted cells; this is not intended layout geometry. */
+  readonly regionBounds: Rect;
+  /** Canonical, non-overlapping half-open row runs. */
+  readonly spans: readonly { readonly row: number; readonly from: number; readonly to: number }[];
 }
 
 /** Maps grapheme offsets of a node's text to cell coordinates (optional capability). */
@@ -84,11 +103,13 @@ export interface SemanticNode {
   readonly role: SemanticRole;
   readonly name: string;
   readonly description?: string;
-  readonly value?: string;
+  readonly value?: SemanticValueObservation;
   readonly state?: SemanticState;
   /** Application-specific, serializable state; never promoted to portable flags. */
   readonly extended?: SemanticExtendedState;
   readonly actions?: readonly SemanticAction[];
+  /** Authoritative recipe executed only through Termwright's real input devices. */
+  readonly inputRecipes?: readonly import('./roles.js').PhysicalInputRecipe[];
   readonly labelledBy?: readonly string[];
   readonly describedBy?: readonly string[];
   readonly textRanges?: readonly SemanticTextRange[];
@@ -119,6 +140,10 @@ export interface SemanticNode {
   readonly px?: Readonly<Record<string, ProvenanceSource>>;
   /** Evidence-qualified layout facts for this committed observation. */
   readonly geometry: NodeGeometryObservations;
+  /** Application scroll state; distinct from the terminal emulator's scrollback. */
+  readonly scroll?: Observation<SemanticScrollState>;
+  /** Authoritative paint provenance; distinct from layout, clipping and pointer routing. */
+  readonly paintedRegion?: Observation<SemanticPaintedRegion>;
 }
 
 /** Layout facts reported independently so absence never masquerades as false. */
@@ -149,6 +174,34 @@ export interface ProviderPointerRegion {
   readonly spans: readonly { readonly row: number; readonly from: number; readonly to: number }[];
 }
 
+/** Revision-bound application strategy recipes for one semantic recipient. */
+export interface ProviderActionRecipes {
+  readonly recipientId: string;
+  readonly recipes: readonly import('./roles.js').PhysicalInputRecipe[];
+}
+
+/** Revision-bound application viewport state for one semantic recipient. */
+export interface ProviderScrollState extends SemanticScrollState {
+  readonly recipientId: string;
+}
+
+/** Revision-bound application paint provenance for one semantic recipient. */
+export interface ProviderPaintedRegion extends SemanticPaintedRegion {
+  readonly recipientId: string;
+}
+
+/** Production parser configuration hidden by the terminal transport. */
+export interface ProviderTerminalInputModes {
+  readonly mouseTracking: 'none' | 'x10' | 'vt200' | 'drag' | 'any';
+  readonly mouseEncoding: 'default' | 'sgr' | 'urxvt' | 'utf8';
+  readonly focusReporting: 'on' | 'off';
+}
+
+/** Exact production focus-manager result for one committed revision. */
+export type ProviderFocusState =
+  | { readonly status: 'focused'; readonly recipientId: string }
+  | { readonly status: 'none' };
+
 /**
  * Application evidence bound to the same revision as its containing snapshot.
  * A provider announced in hello must contribute exactly one entry per frame.
@@ -161,6 +214,16 @@ export type ProviderRevisionEvidence =
       readonly status: 'available';
       readonly evidence: EvidenceProvenance;
       readonly pointerRegions: readonly ProviderPointerRegion[];
+      /** Exact production focus-manager result when `focus-state` was announced. */
+      readonly focusState?: ProviderFocusState;
+      /** Production keybinding recipes when `action-recipes` was announced. */
+      readonly actionRecipes?: readonly ProviderActionRecipes[];
+      /** Complete application viewport facts when `scroll-state` was announced. */
+      readonly scrollStates?: readonly ProviderScrollState[];
+      /** Complete paint attribution when `painted-regions` was announced. */
+      readonly paintedRegions?: readonly ProviderPaintedRegion[];
+      /** Production parser configuration when `terminal-input-modes` was announced. */
+      readonly inputModes?: ProviderTerminalInputModes;
       /** Complete production-router ownership map when `hit-test` was announced. */
       readonly hitGrid?: PointerHitGrid;
     }

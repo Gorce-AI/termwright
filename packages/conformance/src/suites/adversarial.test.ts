@@ -28,6 +28,10 @@ const sessions = createSessionPool();
 /** The `log-flood` scenario sends this many records in one turn. */
 const LOG_FLOOD_RECORDS = 500;
 
+function semanticTreeSupported(terminal: TerminalHarness): boolean {
+  return terminal.contract()?.capabilities['semantic-tree'].status === 'supported';
+}
+
 /** Collects the log records a session publishes, in order. */
 function collectLogs(terminal: TerminalHarness): number[] {
   const seqs: number[] = [];
@@ -92,7 +96,40 @@ async function arm(scenario: string): Promise<TerminalHarness> {
 /** Fires the hostile act and waits until its effect can no longer be in flight. */
 async function fire(terminal: TerminalHarness): Promise<void> {
   await terminal.press('g');
-  await terminal.waitForStable({ frames: 4 }).catch(() => undefined);
+  await terminal.waitForQuiet({ quietMs: 200 }).catch(() => undefined);
+}
+
+/** Arm-before-check wait over the driver's owned diagnostic event source. */
+async function waitForDiagnosticCount(
+  terminal: TerminalHarness,
+  code: SessionDiagnostic['code'],
+  count: number,
+  timeout = 20_000,
+): Promise<void> {
+  const deadline = performance.now() + timeout;
+  while (entriesFor(terminal, code).length < count) {
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) throw new Error(`timed out waiting for ${count} ${code} diagnostics`);
+    await new Promise<void>((resolve, reject) => {
+      const off = terminal.events.on('diagnostic', () => {
+        if (entriesFor(terminal, code).length < count) return;
+        clearTimeout(timer);
+        off();
+        resolve();
+      });
+      // Re-check after arming so a diagnostic cannot land between the outer
+      // predicate and subscription.
+      if (entriesFor(terminal, code).length >= count) {
+        off();
+        resolve();
+        return;
+      }
+      const timer = setTimeout(() => {
+        off();
+        reject(new Error(`timed out waiting for ${count} ${code} diagnostics`));
+      }, remaining);
+    });
+  }
 }
 
 /**
@@ -179,7 +216,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(terminal.semanticTree()?.revision).toBe(1);
     const semanticError = (await rejection(terminal.getByRole('button').textContent())) as TermwrightError;
     expect(semanticError.code).toBe('protocol-violation');
-    expect(terminal.capabilities().semanticTree).toBe(true);
+    expect(semanticTreeSupported(terminal)).toBe(true);
 
     // The session says why it closed the channel, in its own log.
     expect(codes(terminal)).toContain('adapter-attached');
@@ -198,7 +235,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
   it('refuses a handshake with the wrong token and settles as generic', async () => {
     const terminal = await arm('bad-token');
 
-    expect(terminal.capabilities().semanticTree).toBe(false);
+    expect(semanticTreeSupported(terminal)).toBe(false);
     expect(terminal.semanticTree()).toBeNull();
     await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-token');
     await terminal.waitForText('PEER GOT ERROR bad-token');
@@ -218,7 +255,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const terminal = await arm('bad-version');
     await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('bad-version');
     await terminal.waitForText('PEER GOT ERROR bad-version');
-    expect(terminal.capabilities().semanticTree).toBe(false);
+    expect(semanticTreeSupported(terminal)).toBe(false);
     await expectSurvives(terminal);
   });
 
@@ -226,7 +263,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const terminal = await arm('no-hello');
     await expect.poll(() => entriesFor(terminal, 'protocol-violation')[0]?.wireCode).toBe('malformed');
     await terminal.waitForText('PEER GOT ERROR malformed');
-    expect(terminal.capabilities().semanticTree).toBe(false);
+    expect(semanticTreeSupported(terminal)).toBe(false);
     expect(terminal.semanticTree()).toBeNull();
     await expectSurvives(terminal);
   });
@@ -260,7 +297,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expect.poll(() => terminal.semanticTree()?.revision).toBe(3);
 
     // Revision 2 arrived after 3 was published; it must never overwrite it.
-    await terminal.waitForStable({ frames: 4 }).catch(() => undefined);
+    await terminal.waitForQuiet({ quietMs: 200 }).catch(() => undefined);
     expect(terminal.semanticTree()?.revision).toBe(3);
     expect(await terminal.getByRole('button').textContent()).toBe('Third');
 
@@ -342,7 +379,9 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     });
     await terminal.waitForText('PEER READY flood');
     await terminal.press('g');
-    await terminal.waitForIdle({ timeout: 20_000 }).catch(() => undefined);
+    // This line is emitted after the last flood byte. Waiting for it proves VT
+    // consumption causally; global quiet was both weaker and animation-prone.
+    await terminal.waitForText('PEER FLOOD OUTPUT COMPLETE', { timeout: 20_000 });
 
     // Eviction is bounded and honest: old lines are gone and say so.
     expect(terminal.scrollback.retainedFloor).toBeGreaterThan(0);
@@ -360,9 +399,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     // more to draw, which is no statement at all about frames still crossing
     // the socket that carries the evictions.
     const evicted = FLOOD_REVISIONS - DEFAULT_LIMITS.maxQueuedFrames;
-    await expect
-      .poll(() => entriesFor(terminal, 'revision-dropped').length, { timeout: 20_000 })
-      .toBe(evicted);
+    await waitForDiagnosticCount(terminal, 'revision-dropped', evicted);
 
     const dropped = entriesFor(terminal, 'revision-dropped');
     expect(dropped.map((entry) => entry.revision)).toEqual(
@@ -387,7 +424,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     });
     await terminal.waitForText('PEER SENT HELLO');
 
-    await expect.poll(() => terminal.capabilities().semanticTree).toBe(true);
+    await expect.poll(() => semanticTreeSupported(terminal)).toBe(true);
     expect(await terminal.getByRole('button').textContent()).toBe('Peer');
     expect(codes(terminal)).toContain('adapter-attached');
     await expectSurvives(terminal);
@@ -404,12 +441,14 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
 
     // Past the grace the session is generic for good: a late hello cannot flip
     // a mode the caller has already been told about.
-    await expect.poll(() => codes(terminal)).toContain('adapter-capability');
-    expect(terminal.capabilities().semanticTree).toBe(false);
+    // The endpoint's unauthenticated-client deadline is the first and stronger
+    // boundary here: it refuses and closes the socket before the delayed peer
+    // can send a hello. There is therefore no parsed adapter capability to
+    // diagnose after the contract freezes.
+    expect(codes(terminal)).toContain('endpoint-error');
+    expect(semanticTreeSupported(terminal)).toBe(false);
     expect(terminal.semanticTree()).toBeNull();
-
-    expect(entriesFor(terminal, 'adapter-capability')[0]?.wireCode).toBe('internal');
-    await terminal.waitForText('PEER GOT ERROR internal');
+    await terminal.waitForText('PEER SOCKET CLOSED');
     await expectSurvives(terminal);
   });
 
@@ -421,7 +460,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
 
     // The session keeps the adapter it already had: a refused newcomer is not
     // allowed to cost the incumbent its channel.
-    expect(terminal.capabilities().semanticTree).toBe(true);
+    expect(semanticTreeSupported(terminal)).toBe(true);
     expect(terminal.semanticTree()?.revision).toBe(1);
     await terminal.press('p');
     await expect.poll(() => terminal.semanticTree()?.revision).toBe(2);
@@ -454,7 +493,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     // session keeps its channel — the record after the duplicate still arrives.
     expect(codes(terminal)).toContain('log-dropped');
     expect(codes(terminal)).not.toContain('protocol-violation');
-    expect(terminal.capabilities().semanticTree).toBe(true);
+    expect(semanticTreeSupported(terminal)).toBe(true);
     await expectSurvives(terminal);
   });
 
@@ -489,7 +528,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const seqs = collectLogs(terminal);
     await fire(terminal);
     await expect.poll(() => codes(terminal)).toContain('log-dropped');
-    await terminal.waitForStable({ frames: 4 }).catch(() => undefined);
+    await terminal.waitForQuiet({ quietMs: 200 }).catch(() => undefined);
 
     const refused = entriesFor(terminal, 'log-dropped')
       .map((entry) => entry.count ?? 0)
@@ -507,7 +546,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     expect(seqs).toEqual(Array.from({ length: seqs.length }, (_, index) => index + 1));
 
     // A flood of logs must not cost the session its semantic channel.
-    expect(terminal.capabilities().semanticTree).toBe(true);
+    expect(semanticTreeSupported(terminal)).toBe(true);
     expect(codes(terminal)).not.toContain('protocol-violation');
     await expectSurvives(terminal);
   });
@@ -546,7 +585,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await terminal.waitForText('PEER SOCKET CLOSED');
 
     expect(terminal.semanticTree()?.revision).toBe(1);
-    expect(terminal.capabilities().semanticTree).toBe(true);
+    expect(semanticTreeSupported(terminal)).toBe(true);
     const error = (await rejection(terminal.getByRole('button').textContent())) as TermwrightError;
     expect(error.code).toBe('capability-provider-lost');
     await expect.poll(() => codes(terminal)).toContain('adapter-disconnected');

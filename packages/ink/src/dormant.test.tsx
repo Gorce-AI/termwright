@@ -30,7 +30,7 @@ describe('process hygiene', () => {
     const harness = await mountInk(createElement(CounterApp, {}), { columns: 30, rows: 8 });
     open.push(harness);
 
-    expect(harness.capabilities().semanticTree).toBe(true);
+    expect(harness.contract()?.capabilities['semantic-tree'].status).toBe('supported');
     for (const key of Object.keys(process.env)) {
       expect(key.startsWith('TERMWRIGHT_')).toBe(false);
     }
@@ -49,7 +49,7 @@ describe('process hygiene', () => {
     const harness = await mountInk(createElement(CounterApp, {}), { columns: 30, rows: 8 });
     open.push(harness);
     await harness.press('Tab');
-    await harness.waitForStable();
+    await harness.waitForQuiet();
 
     expect(console.log).toBe(console_.log);
     expect(console.error).toBe(console_.error);

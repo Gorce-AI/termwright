@@ -31,7 +31,7 @@ const INSTRUCTIONS =
   'Drive terminal programs the way a person would. terminal.launch starts a program and returns a ' +
   'handle; terminal.snapshot gives compact refs plus visible text; act with terminal.click / press / ' +
   'type; wait with terminal.wait_for; poll cheaply with terminal.capture_since using the revision a ' +
-  'snapshot returned. Refs like n8@42 are only valid at semantic revision 42 — re-snapshot after the ' +
+  'snapshot returned. Refs like semantic:n8@42 are only valid at semantic revision 42 — re-snapshot after the ' +
   'screen changes. Programs without a termwright adapter report semanticTree: unavailable; target ' +
   'them by text instead of by role.';
 
@@ -136,13 +136,21 @@ export interface ServeOptions {
 /** Connects a server to a transport and returns its lifecycle handle. */
 async function connect(stores: SessionStores, transport: Transport): Promise<RunningServer> {
   const server = createTermwrightMcpServer(stores);
-  await connectTransport(server, transport);
+  try {
+    await connectTransport(server, transport);
+  } catch (error) {
+    const cleanup = await Promise.allSettled([closeSessionStores(stores), server.close()]);
+    const failures = cleanup.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+    if (failures.length > 0) throw new AggregateError([error, ...failures], 'MCP transport startup and rollback failed');
+    throw error;
+  }
   return {
     server,
     stores,
     close: async (): Promise<void> => {
-      await closeSessionStores(stores);
-      await server.close();
+      const results = await Promise.allSettled([closeSessionStores(stores), server.close()]);
+      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+      if (failures.length > 0) throw new AggregateError(failures, 'MCP transport failed to close cleanly');
     },
   };
 }
@@ -242,8 +250,10 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
     onExpired: (key) => {
       log(`termwright: session ${key} expired after idling; terminals and traces released`);
     },
+    onBackgroundError: (error) => {
+      log(`termwright: idle session cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+    },
   });
-  registry.startIdleSweeper();
 
   const http = createServer((request, response) => {
     void (async () => {
@@ -288,7 +298,9 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
           });
           const server = createTermwrightMcpServer(stores);
           transport.onclose = (): void => {
-            void registry.delete(newKey);
+            void registry.delete(newKey).catch((error) => {
+              log(`termwright: session ${newKey} transport cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+            });
           };
           return { transport, server };
         });
@@ -302,9 +314,27 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
     })();
   });
 
-  await new Promise<void>((resolve) => {
-    http.listen(options.port ?? 0, options.host ?? '127.0.0.1', resolve);
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: Error): void => {
+        http.off('listening', onListening);
+        reject(error);
+      };
+      const onListening = (): void => {
+        http.off('error', onError);
+        resolve();
+      };
+      http.once('error', onError);
+      http.once('listening', onListening);
+      http.listen(options.port ?? 0, options.host ?? '127.0.0.1');
+    });
+  } catch (error) {
+    await registry.closeAll().catch((cleanup) => {
+      throw new AggregateError([error, cleanup], 'MCP HTTP bind and rollback both failed');
+    });
+    throw error;
+  }
+  registry.startIdleSweeper();
   const address = http.address();
   const port = typeof address === 'object' && address !== null ? address.port : (options.port ?? 0);
 
@@ -314,12 +344,14 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
     port,
     close: async (): Promise<void> => {
       registry.stopIdleSweeper();
-      await registry.closeAll();
-      await new Promise<void>((resolve) => {
-        http.close(() => {
-          resolve();
-        });
-      });
+      const results = await Promise.allSettled([
+        registry.closeAll(),
+        new Promise<void>((resolve, reject) => {
+          http.close((error) => error === undefined ? resolve() : reject(error));
+        }),
+      ]);
+      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+      if (failures.length > 0) throw new AggregateError(failures, 'MCP HTTP server failed to close cleanly');
     },
   };
 }

@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: NotFoundError
 
-Defined in: [driver/src/errors.ts:182](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L182)
+Defined in: [driver/src/errors.ts:205](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L205)
 
 A named resource does not exist. Reserved for absence, never for a resource
 that is present and wrong — that is a `protocol-violation`.
@@ -26,7 +26,7 @@ that is present and wrong — that is a `protocol-violation`.
 
 > **new NotFoundError**(`message`, `diagnostics`): `NotFoundError`
 
-Defined in: [driver/src/errors.ts:183](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L183)
+Defined in: [driver/src/errors.ts:206](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L206)
 
 #### Parameters
 

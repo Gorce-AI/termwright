@@ -21,7 +21,17 @@ export function node(
     ...(extra.parentId === undefined ? {} : { parentId: extra.parentId }),
     ...(extra.state === undefined ? {} : { state: extra.state }),
     ...(extra.testId === undefined ? {} : { testId: extra.testId }),
-    ...(extra.value === undefined ? {} : { value: extra.value }),
+    ...(extra.value === undefined ? {} : { value: {
+      status: 'known' as const,
+      value: extra.value,
+      sensitivity: 'public' as const,
+      evidence: {
+        source: 'application' as const,
+        method: 'declared' as const,
+        strength: 'authoritative' as const,
+        providerId: 'test-fixture',
+      },
+    } }),
   };
 }
 

@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Locator, ScreenSnapshot, TerminalHarness } from '@termwright/driver';
+import type { AnyLocator, ScreenSnapshot, TerminalHarness } from '@termwright/driver';
 import type {
   LocatorGeometry,
   LocatorVisibility,
@@ -16,6 +16,7 @@ import { node, permissionDialog, snapshot } from './__fixtures__/tree.js';
 import { configureTermwright, resetTermwrightConfig } from './config.js';
 import { registerTermwrightMatchers } from './matchers.js';
 import { beginSnapshotScope, resetSnapshotCache } from './snapshot-store.js';
+import { currentAttemptContext } from './attempt-context.js';
 import { createLogCollection, type CapturedLog } from './logs.js';
 import { enterScope, type TermwrightScope } from './trace-context.js';
 import { resolveTermwrightConfig } from './config.js';
@@ -44,14 +45,23 @@ interface FakeLocatorState {
 }
 
 /** A locator with just the surface the matchers touch. */
-function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("button")'): Locator {
+function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("button")'): AnyLocator {
+  let sequence = 1;
+  const stamp = () => ({ sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence, screenRevision: sequence, semanticRevision: sequence, pairedScreenRevision: sequence } as const);
   const locator = {
+    domain: 'semantic' as const,
     description,
+    checkpoint: stamp,
+    async waitForCheckpointChange() {
+      sequence += 1;
+      await Promise.resolve();
+      return stamp();
+    },
     async evaluateCondition(condition: import('@termwright/protocol').Condition) {
       const error = read().resolveError;
       if (error !== undefined && typeof error === 'object' && error !== null &&
           'code' in error && error.code === 'capability-unavailable') throw error;
-      const checkpoint = { sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence: 1, screenRevision: 1, semanticRevision: 1, pairedScreenRevision: 1 } as const;
+      const checkpoint = stamp();
       const known = (value: boolean): import('@termwright/protocol').Observation<boolean> =>
         ({ status: 'known', value, evidence: evidence('canonical-condition') });
       let observation: import('@termwright/protocol').Observation<boolean>;
@@ -153,17 +163,28 @@ function fakeLocator(read: () => FakeLocatorState, description = 'getByRole("but
     async resolve() {
       const error = read().resolveError;
       if (error !== undefined) throw error;
-      const ref = read().ref ?? 'n1@1';
-      return { ref, revision: 1, semantic: ref.startsWith('n'), rect: null };
+      const ref = read().ref ?? 'semantic:n1@1';
+      return { ref, revision: 1, semantic: ref.startsWith('semantic:'), rect: null };
     },
   };
-  return locator as unknown as Locator;
+  return locator as unknown as AnyLocator;
 }
 
 function fakeHarness(read: () => { screen?: ScreenSnapshot; tree?: SemanticSnapshot | null }): TerminalHarness {
+  let sequence = 1;
+  const checkpoint = () => ({
+    sessionId: 'fake', contractId: 'fake:0', epoch: 0, sequence,
+    screenRevision: sequence, semanticRevision: sequence, pairedScreenRevision: sequence,
+  } as const);
   const harness = {
     screen: () => read().screen ?? fakeScreen(['']),
     semanticTree: () => read().tree ?? null,
+    checkpoint,
+    async waitForCheckpointChange() {
+      sequence += 1;
+      await Promise.resolve();
+      return checkpoint();
+    },
   };
   return harness as unknown as TerminalHarness;
 }
@@ -185,8 +206,16 @@ function timeoutError(): Error & { code: string } {
 }
 
 const directories: string[] = [];
-
+let exitDefaultScope: (() => void) | undefined;
 beforeEach(() => {
+  // This suite intentionally consumes the same authoritative AttemptContext as
+  // product matchers. Installing a synthetic context here would hide host/ALS
+  // regressions and collapse every test onto one snapshot identity.
+  currentAttemptContext();
+  exitDefaultScope = enterScope({
+    testId: 'matcher-unit', testName: 'matcher unit', testFile: '/repo/matcher.test.ts',
+    config: resolveTermwrightConfig({}, {}), writers: [], traces: [],
+  });
   const dir = mkdtempSync(join(tmpdir(), 'tw-matchers-'));
   directories.push(dir);
   // The snapshot mode is pinned, never inherited. Left ambient, these tests
@@ -200,6 +229,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  exitDefaultScope?.();
+  exitDefaultScope = undefined;
   resetTermwrightConfig();
   while (directories.length > 0) rmSync(directories.pop() as string, { recursive: true, force: true });
 });
@@ -530,7 +561,7 @@ describe('toMatchSemanticSnapshot', () => {
 
   it('scopes the pattern to the inside of a locator', async () => {
     const harness = fakeHarness(() => ({ tree: permissionDialog() }));
-    const dialog = fakeLocator(() => ({ ref: 'n1@1' }), 'getByRole("dialog")');
+    const dialog = fakeLocator(() => ({ ref: 'semantic:n1@1' }), 'getByRole("dialog")');
     await expect(harness).toMatchSemanticSnapshot(
       ['- button "Approve" [focused]', '- button "Reject"'].join('\n'),
       { within: dialog },
@@ -541,13 +572,13 @@ describe('toMatchSemanticSnapshot', () => {
     const movesAt = Date.now() + 80;
     const harness = fakeHarness(() => ({ tree: permissionDialog() }));
     // Resolves to the focused button first, to the dialog once the app settles.
-    const moving = fakeLocator(() => ({ ref: Date.now() >= movesAt ? 'n1@1' : 'n3@1' }), 'getByTestId("scope")');
+    const moving = fakeLocator(() => ({ ref: Date.now() >= movesAt ? 'semantic:n1@1' : 'semantic:n3@1' }), 'getByTestId("scope")');
     await expect(harness).toMatchSemanticSnapshot('- button "Approve" [focused]', { within: moving });
   });
 
   it('names the scope in the failure header', async () => {
     const harness = fakeHarness(() => ({ tree: permissionDialog() }));
-    const dialog = fakeLocator(() => ({ ref: 'n1@1' }), 'getByRole("dialog")');
+    const dialog = fakeLocator(() => ({ ref: 'semantic:n1@1' }), 'getByRole("dialog")');
     await expect(async () => {
       await expect(harness).toMatchSemanticSnapshot('- button "Deny"', { within: dialog, timeout: 50 });
     }).rejects.toThrow(/expect\(semantic tree within getByRole\("dialog"\)\)\.toMatchSemanticSnapshot\(\)/u);
@@ -565,7 +596,7 @@ describe('toMatchSemanticSnapshot', () => {
     const harness = fakeHarness(() => ({ tree: permissionDialog() }));
     await expect(async () => {
       await expect(harness).toMatchSemanticSnapshot('- button "Approve"', {
-        within: fakeLocator(() => ({ ref: 'n1@1' })),
+        within: fakeLocator(() => ({ ref: 'semantic:n1@1' })),
         rootId: 'n1',
       });
     }).rejects.toThrow(/either \{ within \} or \{ rootId \}, not both/u);
@@ -777,6 +808,8 @@ describe('toHaveLogged', () => {
 describe('what the trace records', () => {
   /** A writer that keeps the assertions it was handed. */
   function recordingScope(): { asserts: Record<string, unknown>[]; exit: () => void } {
+    exitDefaultScope?.();
+    exitDefaultScope = undefined;
     const asserts: Record<string, unknown>[] = [];
     const writer = {
       recordAssert: (entry: Record<string, unknown>) => asserts.push(entry),
@@ -796,12 +829,12 @@ describe('what the trace records', () => {
   it('stores the ref of the node the assertion was about', async () => {
     const { asserts, exit } = recordingScope();
     try {
-      await expect(fakeLocator(() => ({ visible: true, ref: 'n8@42' }))).toBeVisible();
+      await expect(fakeLocator(() => ({ visible: true, ref: 'semantic:n8@42' }))).toBeVisible();
     } finally {
       exit();
     }
     expect(asserts).toHaveLength(1);
-    expect(asserts[0]).toMatchObject({ api: 'toBeVisible', ok: true, ref: 'n8@42' });
+    expect(asserts[0]).toMatchObject({ api: 'toBeVisible', ok: true, ref: 'semantic:n8@42' });
     expect(asserts[0]?.['selector']).toBe('getByRole("button")');
   });
 
@@ -825,11 +858,11 @@ describe('what the trace records', () => {
     try {
       const harness = fakeHarness(() => ({ tree: permissionDialog() }));
       await expect(harness).toMatchSemanticSnapshot('- button "Approve" [focused]', {
-        within: fakeLocator(() => ({ ref: 'n1@3' }), 'getByRole("dialog")'),
+        within: fakeLocator(() => ({ ref: 'semantic:n1@3' }), 'getByRole("dialog")'),
       });
     } finally {
       exit();
     }
-    expect(asserts[0]).toMatchObject({ api: 'toMatchSemanticSnapshot', ok: true, ref: 'n1@3' });
+    expect(asserts[0]).toMatchObject({ api: 'toMatchSemanticSnapshot', ok: true, ref: 'semantic:n1@3' });
   });
 });

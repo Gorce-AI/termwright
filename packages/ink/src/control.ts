@@ -86,6 +86,7 @@ export class ControlChannel {
   #everAttached = false;
   #fixtureGone = false;
   #closed = false;
+  #closePromise: Promise<void> | null = null;
 
   private constructor(server: Server, endpoint: string, token: string, directory: string | null) {
     this.#server = server;
@@ -112,13 +113,29 @@ export class ControlChannel {
       endpoint = join(directory, 'control.sock');
     }
 
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(endpoint, () => {
-        server.removeListener('error', reject);
-        resolve();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(endpoint, () => {
+          server.removeListener('error', reject);
+          resolve();
+        });
       });
-    });
+    } catch (error) {
+      server.close();
+      if (directory !== null) {
+        try {
+          await rm(directory, { recursive: true, force: true });
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            'control endpoint listen and rollback both failed',
+            { cause: error },
+          );
+        }
+      }
+      throw error;
+    }
 
     return new ControlChannel(server, endpoint, token, directory);
   }
@@ -256,18 +273,31 @@ export class ControlChannel {
   }
 
   /** Closes the endpoint and removes the socket directory. Idempotent. */
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    this.#closePromise ??= this.#performClose();
+    return this.#closePromise;
+  }
+
+  async #performClose(): Promise<void> {
     this.#closed = true;
     this.#rejectLifecycleWaiters(this.#sessionClosed('the control channel was closed'));
     this.#accepted?.destroy();
     this.#accepted = null;
     this.#socket?.destroy();
     this.#socket = null;
-    await new Promise<void>((resolve) => this.#server.close(() => resolve()));
+    const failures: unknown[] = [];
+    await new Promise<void>((resolve) => this.#server.close((error) => {
+      if (error !== undefined) failures.push(error);
+      resolve();
+    }));
     if (this.#directory !== null) {
-      await rm(this.#directory, { recursive: true, force: true }).catch(() => undefined);
+      try {
+        await rm(this.#directory, { recursive: true, force: true });
+      } catch (error) {
+        failures.push(error);
+      }
     }
+    if (failures.length > 0) throw new AggregateError(failures, 'failed to close the fixture control channel');
   }
 
   #accept(socket: Socket): void {

@@ -6,8 +6,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright';
 import { buildCrashedFixtureTrace, buildFixtureTrace, FIXTURE_TREES } from '../__fixtures__/build-trace.js';
+import { frameworkContract } from '../__fixtures__/fake-session.js';
+import { writeNativeRunFixture } from '../__fixtures__/native-run.js';
 import { writeInlineReport } from '../inline-report.js';
-import { RUN_MANIFEST_VERSION, writeRunManifest } from '../runs.js';
 import { startUiServer, type UiServer } from '../server.js';
 
 const CAPTURE = process.env['TERMWRIGHT_CAPTURE_DOCS'] === '1';
@@ -63,12 +64,12 @@ async function captureCatalogueAndExecution(): Promise<void> {
   await screenshot(page, 'spec-catalog.png');
 
   const startedAt = Date.UTC(2026, 7, 21, 10, 30, 0);
-  server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
+  server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
   server.hub.publish({ v: 1, type: 'test-start', id: 'login-pass', title: 'accepts valid credentials', file: '/workspace/permission-demo/tests/auth/login.test.ts', startedAt });
   server.hub.publish({ v: 1, type: 'test-end', id: 'login-pass', status: 'passed', durationMs: 184, flaky: false, lostLogRecords: 0 });
   server.hub.publish({ v: 1, type: 'test-start', id: 'approval-live', title: 'Permission approval > approves a pending request', file: '/workspace/permission-demo/tests/permissions.feature', startedAt: startedAt + 200 });
   server.hub.publish({ v: 1, type: 'test-start', id: 'waiting', title: 'Permission approval > rejects a pending request', file: '/workspace/permission-demo/tests/permissions.feature', startedAt: startedAt + 201 });
-  server.hub.publish({ v: 1, type: 'session', sessionId: 'permission-terminal', testId: 'approval-live', terminalProfile: 'default', adapter: { name: 'Ink', version: '1.0.0' }, columns: 80, rows: 24 });
+  server.hub.publish({ v: 1, type: 'session', sessionId: 'permission-terminal', testId: 'approval-live', terminalProfile: 'default', contract: frameworkContract('permission-terminal', 'Ink', '1.0.0'), adapterStatus: 'attached', columns: 80, rows: 24 });
   server.hub.publish({ v: 1, type: 'output', sessionId: 'permission-terminal', dataB64: Buffer.from('Permission required\r\n  [Approve]    Reject\r\n  Reviewer: Ada\r\n').toString('base64'), t: 1 });
   server.hub.publish({ v: 1, type: 'semantic', sessionId: 'permission-terminal', revision: 1, snapshot: { ...(FIXTURE_TREES[0] as NonNullable<(typeof FIXTURE_TREES)[number]>), sessionId: 'permission-terminal' } });
   const given = { keyword: 'Given', text: 'a pending permission request', source: { file: '/workspace/permission-demo/tests/permissions.feature', line: 4, column: 3 } } as const;
@@ -83,7 +84,7 @@ async function captureCatalogueAndExecution(): Promise<void> {
   await expect.poll(() => page.locator('.tw-command-row[data-status="running"]').count()).toBe(1);
   await screenshot(page, 'active-run.png');
 
-  server.hub.publish({ v: 1, type: 'action', actionId: 'approve', kind: 'assert', api: 'toHaveText', t: 82, ok: false, error: 'Expected status to contain "approved"\nReceived: "pending"', testId: 'approval-live', sessionId: 'permission-terminal', stepId: 'when', selector: "getByRole('status')", ref: 'b1@1' });
+  server.hub.publish({ v: 1, type: 'action', actionId: 'approve', kind: 'assert', api: 'toHaveText', t: 82, ok: false, error: 'Expected status to contain "approved"\nReceived: "pending"', testId: 'approval-live', sessionId: 'permission-terminal', stepId: 'when', selector: "getByRole('status')", ref: 'semantic:b1@1' });
   server.hub.publish({ v: 1, type: 'step', testId: 'approval-live', title: 'fixture', phase: 'end', stepId: 'when', t: 84, status: 'failed', gherkin: when });
   server.hub.publish({ v: 1, type: 'test-end', id: 'approval-live', status: 'failed', durationMs: 84, flaky: false, lostLogRecords: 0, attempt: 2, error: 'Expected status to contain "approved"', priorFailures: [{ attempt: 1, errors: ['Timed out waiting for the status'] }] });
   server.hub.publish({ v: 1, type: 'test-end', id: 'waiting', status: 'passed', durationMs: 86, flaky: false, lostLogRecords: 0 });
@@ -114,28 +115,17 @@ async function captureReplayAndSemantics(): Promise<void> {
 async function captureRunHistory(): Promise<void> {
   const runsDir = await mkdtemp(join(tmpdir(), 'termwright-doc-runs-'));
   temporaryDirectories.push(runsDir);
-  const trace = await buildFixtureTrace();
-  temporaryDirectories.push(dirname(trace));
-  const crashedTrace = await buildCrashedFixtureTrace();
-  temporaryDirectories.push(dirname(crashedTrace));
   const startedAt = Date.UTC(2026, 7, 21, 9, 15, 0);
-  await writeRunManifest(runsDir, {
-    v: RUN_MANIFEST_VERSION,
-    id: 'docs-run-history',
+  await writeNativeRunFixture(runsDir, {
     startedAt,
-    finishedAt: startedAt + 2_480,
-    summary: { total: 3, passed: 2, failed: 1, skipped: 0, flaky: 1, durationMs: 2_480 },
+    status: 'flaky',
     tests: [
       {
-        id: 'docs-retry', title: 'approves a pending request', file: '/workspace/permission-demo/tests/permissions.feature', status: 'passed', durationMs: 1_340,
-        flaky: true, lostLogRecords: 0, traceRef: trace,
-        attempts: [
-          { attempt: 1, status: 'failed', durationMs: 700, errors: ['Timed out waiting for the approval status'] },
-          { attempt: 2, status: 'passed', durationMs: 640, errors: [] },
-        ],
+        title: 'approves a pending request', file: '/workspace/permission-demo/tests/permissions.feature', status: 'passed', durationMs: 1_340,
+        retries: ['failed', 'passed'],
       },
-      { id: 'docs-crash', title: 'reports a terminal crash', file: '/workspace/permission-demo/tests/crash.test.ts', status: 'failed', durationMs: 940, flaky: false, lostLogRecords: 1, traceRef: crashedTrace, error: 'Terminal exited with SIGSEGV' },
-      { id: 'docs-pass', title: 'rejects a pending request', file: '/workspace/permission-demo/tests/permissions.feature', status: 'passed', durationMs: 200, flaky: false, lostLogRecords: 0, traceRef: trace },
+      { title: 'reports a terminal crash', file: '/workspace/permission-demo/tests/crash.test.ts', status: 'failed', durationMs: 940 },
+      { title: 'rejects a pending request', file: '/workspace/permission-demo/tests/permissions.feature', status: 'passed', durationMs: 200 },
     ],
   });
   const server = await openServer({ runsDir });
@@ -240,7 +230,12 @@ async function screenshot(page: Page, name: string): Promise<void> {
   const closeToast = page.locator('.tw-toast button');
   while (await closeToast.count() > 0) await closeToast.first().click();
   await page.mouse.move(720, 880);
-  await page.waitForTimeout(120);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all(document.getAnimations().map(async (animation) => {
+      await animation.finished.catch(() => undefined);
+    }));
+  });
   const visibleText = await page.locator('body').innerText();
   const home = process.env['HOME'];
   if (home !== undefined) expect(visibleText).not.toContain(home);

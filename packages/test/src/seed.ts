@@ -9,8 +9,8 @@
  * per test, into the directory that already exists only for that test.
  */
 
-import { cpSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { cpSync, lstatSync, mkdirSync, readlinkSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 /** File contents to write. A string is written as UTF-8. */
 export type SeedFile = string | Uint8Array;
@@ -50,18 +50,65 @@ export function seedDirectory(directory: string, options: SeedOptions): readonly
   const template = typeof options.template === 'string' ? { from: options.template } : options.template;
   if (template !== undefined) {
     const target = template.into === undefined ? root : safeJoin(root, template.into, 'template.into');
+    const source = resolve(root, template.from);
+    validateTemplateSymlinks(source);
     mkdirSync(target, { recursive: true });
-    cpSync(resolve(root, template.from), target, { recursive: true });
+    cpSync(source, target, { recursive: true, verbatimSymlinks: true });
     written.push(target);
   }
 
   for (const [path, contents] of Object.entries(options.files ?? {})) {
     const file = safeJoin(root, path, 'files');
+    assertNoSymlinkTraversal(root, file, `files: ${JSON.stringify(path)}`);
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, contents);
     written.push(file);
   }
   return written;
+}
+
+/**
+ * Preserves useful in-template relative links while refusing links whose
+ * meaning after the copy would escape the per-attempt sandbox.
+ */
+function validateTemplateSymlinks(source: string): void {
+  const sourceRoot = realpathSync(source);
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isSymbolicLink()) {
+        const target = readlinkSync(path);
+        if (isAbsolute(target) || escapes(sourceRoot, resolve(dirname(path), target))) {
+          throw new TypeError(`template symlink ${JSON.stringify(path)} escapes its template root`);
+        }
+      } else if (entry.isDirectory()) {
+        visit(path);
+      }
+    }
+  };
+  visit(sourceRoot);
+}
+
+/** A declared override must never follow even a safe copied symlink. */
+function assertNoSymlinkTraversal(root: string, target: string, what: string): void {
+  const parts = relative(root, target).split(sep).filter(Boolean);
+  let current = root;
+  for (const part of parts) {
+    current = join(current, part);
+    try {
+      if (lstatSync(current).isSymbolicLink()) {
+        throw new TypeError(`${what} traverses a symlink inside the test directory`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+  }
+}
+
+function escapes(root: string, target: string): boolean {
+  const path = relative(root, target);
+  return path === '..' || path.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(path);
 }
 
 /** Joins a declared path onto the root, refusing anything that escapes it. */

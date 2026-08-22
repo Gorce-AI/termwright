@@ -257,7 +257,6 @@ const helloSchema = z.strictObject({
     .max(64)
     .superRefine((providers, ctx) => {
       const ids = new Set<string>();
-      const owners = new Map<string, string>();
       for (let index = 0; index < providers.length; index += 1) {
         const provider = providers[index]!;
         const id = provider.id;
@@ -270,18 +269,6 @@ const helloSchema = z.strictObject({
           return;
         }
         ids.add(id);
-        for (const capability of provider.capabilities) {
-          const owner = owners.get(capability);
-          if (owner !== undefined) {
-            ctx.addIssue({
-              code: "custom",
-              path: [index, "capabilities"],
-              message: `providers ${owner} and ${id} both claim exclusive ${capability} ownership`,
-            });
-            return;
-          }
-          owners.set(capability, id);
-        }
       }
     })
     .optional(),

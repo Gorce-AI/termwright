@@ -99,7 +99,6 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
       'charm.land/bubbles/v2',
     ]);
     expect(first.companionCopyDirs['charm.land/bubbles/v2']).toContain('v2.1.1');
-    expect(first.unpatchedCompanions).toEqual({});
     expect(first.workspaceFile.startsWith(app)).toBe(false);
     expect(first.env['GOWORK']).toBe(first.workspaceFile);
     expect(env['GOWORK']).toBeUndefined();
@@ -115,7 +114,7 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     // The launcher must consume the current manifest, not resurrect an
     // older handshake/capability patch through a parallel launcher patch set.
     await expect(readFile(join(first.copyDir, 'TERMWRIGHT.md'), 'utf8')).resolves.toContain(
-      "patch set v13 applied",
+      "patch set v15 applied",
     );
 
     await run('go', ['build', '-o', join(dir, 'app-bin'), '.'], {
@@ -201,7 +200,7 @@ func main() { _, _ = tea.NewProgram(model{}).Run() }
     await expect(failure).rejects.toMatchObject({ code: 'both-majors' });
   }, 300_000);
 
-  it('keeps Bubble Tea semantics when an optional Bubbles version is not pinned', async () => {
+  it('refuses an unpinned Bubbles companion instead of changing semantic breadth', async () => {
     const dir = await scratch('tw-charm-launch-companion-');
     const app = join(dir, 'app');
     await writeModule(app, [
@@ -210,14 +209,11 @@ func main() { _, _ = tea.NewProgram(model{}).Run() }
     ]);
     const env = { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') };
 
-    const prepared = await prepareInstrumentedBuild({ moduleDir: app, env });
-    expect(prepared.companionCopyDirs).toEqual({});
-    expect(prepared.unpatchedCompanions).toEqual({
-      'github.com/charmbracelet/bubbles': 'v0.21.0',
+    await expect(prepareInstrumentedBuild({ moduleDir: app, env })).rejects.toMatchObject({
+      code: 'unsupported-version',
+      module: 'github.com/charmbracelet/bubbles',
+      version: 'v0.21.0',
     });
-    expect(await readFile(prepared.workspaceFile, 'utf8')).not.toContain(
-      'replace github.com/charmbracelet/bubbles',
-    );
   }, 600_000);
 
   it('refuses vendor mode instead of silently changing the dependency graph', async () => {

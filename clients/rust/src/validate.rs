@@ -45,7 +45,12 @@ impl Issue {
             "unknown-role"
         } else if has("revision") {
             "revision"
-        } else if has("bounds") || has("rect") {
+        } else if has("bounds")
+            || has("rect")
+            || has("regionBounds")
+            || has("paintedRegion")
+            || has("paintedRegions")
+        {
             "bad-rect"
         } else if self.too_big && (has("nodes") || has("rootIds")) {
             "count"
@@ -168,7 +173,7 @@ struct Rect {
     height: i64,
 }
 
-const STATE_BOOL_KEYS: [&str; 10] = [
+const STATE_BOOL_KEYS: [&str; 12] = [
     "disabled",
     "focused",
     "selected",
@@ -179,6 +184,8 @@ const STATE_BOOL_KEYS: [&str; 10] = [
     "offscreen",
     "readonly",
     "multiline",
+    "required",
+    "multiselectable",
 ];
 
 /// Every field a `state` object may carry, as this client knows them.
@@ -193,13 +200,13 @@ pub const STATE_KEYS: [&str; 17] = [
     "offscreen",
     "readonly",
     "multiline",
+    "required",
+    "multiselectable",
     "checked",
     "orientation",
     "level",
     "positionInSet",
     "setSize",
-    "scrollOffset",
-    "scrollExtent",
 ];
 
 fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
@@ -231,7 +238,7 @@ fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
             positive(object.get(key), path(at, &[key]))?;
         }
     }
-    for key in ["setSize", "scrollOffset", "scrollExtent"] {
+    for key in ["setSize"] {
         if object.contains_key(key) {
             non_negative(object.get(key), path(at, &[key]))?;
         }
@@ -240,7 +247,7 @@ fn check_state(value: &Value, at: &[String]) -> Result<(), Issue> {
 }
 
 /// Every field a node may carry, as this client knows them.
-pub const NODE_KEYS: [&str; 17] = [
+pub const NODE_KEYS: [&str; 20] = [
     "id",
     "parentId",
     "role",
@@ -251,6 +258,7 @@ pub const NODE_KEYS: [&str; 17] = [
     "state",
     "extended",
     "actions",
+    "inputRecipes",
     "labelledBy",
     "describedBy",
     "textRanges",
@@ -258,7 +266,60 @@ pub const NODE_KEYS: [&str; 17] = [
     "frameworkType",
     "p",
     "px",
+    "scroll",
+    "paintedRegion",
 ];
+
+fn check_painted_region(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
+    let region = as_object(value, at)?;
+    strict(region, &["regionBounds", "spans"], at)?;
+    let bounds = check_rect(
+        region.get("regionBounds").unwrap_or(&Value::Null),
+        &path(at, &["regionBounds"]),
+    )?;
+    let spans = region
+        .get("spans")
+        .and_then(Value::as_array)
+        .ok_or_else(|| Issue::new(path(at, &["spans"]), "expected an array"))?;
+    if spans.len() > limits.max_nodes {
+        return Err(Issue::too_big(
+            path(at, &["spans"]),
+            "too many region spans",
+        ));
+    }
+    let mut previous: Option<(i64, i64)> = None;
+    for (index, raw_span) in spans.iter().enumerate() {
+        let span_path = path(at, &["spans", &index.to_string()]);
+        let span = as_object(raw_span, &span_path)?;
+        strict(span, &["row", "from", "to"], &span_path)?;
+        let row = non_negative(span.get("row"), path(&span_path, &["row"]))?;
+        let from = non_negative(span.get("from"), path(&span_path, &["from"]))?;
+        let to = positive(span.get("to"), path(&span_path, &["to"]))?;
+        if to <= from {
+            return Err(Issue::new(span_path, "region span must be non-empty"));
+        }
+        if previous.is_some_and(|(previous_row, previous_to)| {
+            row < previous_row || (row == previous_row && from < previous_to)
+        }) {
+            return Err(Issue::new(
+                span_path,
+                "region spans must be non-overlapping row-major runs",
+            ));
+        }
+        if row < bounds.row
+            || row >= bounds.row + bounds.height
+            || from < bounds.column
+            || to > bounds.column + bounds.width
+        {
+            return Err(Issue::new(
+                span_path,
+                "region span lies outside regionBounds",
+            ));
+        }
+        previous = Some((row, to));
+    }
+    Ok(())
+}
 fn check_evidence(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
     let evidence = as_object(value, at)?;
     strict(
@@ -391,6 +452,116 @@ where
     }
 }
 
+fn check_semantic_value(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
+    let object = as_object(value, at)?;
+    let check_sensitivity = || -> Result<(), Issue> {
+        let sensitivity = text(
+            object.get("sensitivity"),
+            path(at, &["sensitivity"]),
+            limits,
+        )?;
+        if !["public", "sensitive"].contains(&sensitivity) {
+            return Err(Issue::new(
+                path(at, &["sensitivity"]),
+                "invalid semantic value sensitivity",
+            ));
+        }
+        Ok(())
+    };
+    match object.get("status").and_then(Value::as_str) {
+        Some("known") => {
+            strict(object, &["status", "value", "sensitivity", "evidence"], at)?;
+            text(object.get("value"), path(at, &["value"]), limits)?;
+            check_sensitivity()?;
+            check_evidence(
+                object.get("evidence").unwrap_or(&Value::Null),
+                &path(at, &["evidence"]),
+                limits,
+            )
+        }
+        Some("absent") => {
+            strict(object, &["status", "reason", "evidence"], at)?;
+            let reason = text(object.get("reason"), path(at, &["reason"]), limits)?;
+            if !["detached", "not-displayed", "not-laid-out", "no-value"].contains(&reason) {
+                return Err(Issue::new(
+                    path(at, &["reason"]),
+                    "invalid semantic value absent reason",
+                ));
+            }
+            let evidence_path = path(at, &["evidence"]);
+            check_evidence(
+                object.get("evidence").unwrap_or(&Value::Null),
+                &evidence_path,
+                limits,
+            )?;
+            if object
+                .get("evidence")
+                .and_then(Value::as_object)
+                .and_then(|v| v.get("strength"))
+                .and_then(Value::as_str)
+                != Some("authoritative")
+            {
+                return Err(Issue::new(
+                    path(&evidence_path, &["strength"]),
+                    "absent semantic value requires authoritative evidence",
+                ));
+            }
+            Ok(())
+        }
+        Some("unknown") => {
+            strict(object, &["status", "reason"], at)?;
+            let reason = text(object.get("reason"), path(at, &["reason"]), limits)?;
+            if ![
+                "awaiting-revision-pair",
+                "provider-refresh",
+                "stale-revision",
+            ]
+            .contains(&reason)
+            {
+                return Err(Issue::new(
+                    path(at, &["reason"]),
+                    "invalid semantic value unknown reason",
+                ));
+            }
+            Ok(())
+        }
+        Some("unsupported") => {
+            strict(object, &["status", "capability", "reason"], at)?;
+            if text(object.get("capability"), path(at, &["capability"]), limits)?
+                != "semantic-value"
+            {
+                return Err(Issue::new(
+                    path(at, &["capability"]),
+                    "expected semantic-value capability",
+                ));
+            }
+            let reason = text(object.get("reason"), path(at, &["reason"]), limits)?;
+            if !["capability", "framework-unobservable", "not-negotiated"].contains(&reason) {
+                return Err(Issue::new(
+                    path(at, &["reason"]),
+                    "invalid semantic value unsupported reason",
+                ));
+            }
+            Ok(())
+        }
+        Some("withheld") => {
+            strict(object, &["status", "reason", "sensitivity"], at)?;
+            let reason = text(object.get("reason"), path(at, &["reason"]), limits)?;
+            if !["sensitive", "artifact-policy", "provider-policy"].contains(&reason) {
+                return Err(Issue::new(
+                    path(at, &["reason"]),
+                    "invalid semantic value withheld reason",
+                ));
+            }
+            check_sensitivity()
+        }
+        _ => Err(Issue::new(
+            path(at, &["status"]),
+            "invalid semantic value status",
+        )),
+    }
+}
+
 fn check_extended(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
     match value {
         Value::Null | Value::Bool(_) => Ok(()),
@@ -444,10 +615,11 @@ fn check_extended(value: &Value, at: &[String], limits: &Limits) -> Result<(), I
 
 /// Where a semantic fact came from. Closed set, so an unknown source is a
 /// rejection rather than a silently ignored annotation.
-const PROVENANCE_SOURCES: [&str; 5] = [
+const PROVENANCE_SOURCES: [&str; 6] = [
     "annotation",
     "recognizer",
     "framework",
+    "application",
     "correlation",
     "heuristic",
 ];
@@ -464,6 +636,93 @@ fn check_relations(value: &Value, at: &[String], limits: &Limits) -> Result<(), 
     }
     for (index, item) in items.iter().enumerate() {
         text(Some(item), path(at, &[&index.to_string()]), limits)?;
+    }
+    Ok(())
+}
+
+const PHYSICAL_INPUT_RECIPE_ACTIONS: [&str; 4] = ["focus", "activate", "toggle", "setValue"];
+
+fn check_input_recipes(value: &Value, at: &[String], limits: &Limits) -> Result<(), Issue> {
+    let Some(items) = value.as_array() else {
+        return Err(Issue::new(at.to_vec(), "expected an array"));
+    };
+    if items.len() > PHYSICAL_INPUT_RECIPE_ACTIONS.len() {
+        return Err(Issue::too_big(at.to_vec(), "too many input recipes"));
+    }
+    let mut seen = HashSet::new();
+    for (index, item) in items.iter().enumerate() {
+        let item_path = path(at, &[&index.to_string()]);
+        let recipe = as_object(item, &item_path)?;
+        strict(recipe, &["action", "requiresFocus", "steps"], &item_path)?;
+        let action = text(recipe.get("action"), path(&item_path, &["action"]), limits)?;
+        if !PHYSICAL_INPUT_RECIPE_ACTIONS.contains(&action) {
+            return Err(Issue::new(
+                path(&item_path, &["action"]),
+                "expected a physical input recipe action",
+            ));
+        }
+        if !seen.insert(action) {
+            return Err(Issue::new(
+                path(&item_path, &["action"]),
+                "input recipe actions must be unique",
+            ));
+        }
+        let requires_focus = boolean(
+            recipe.get("requiresFocus"),
+            path(&item_path, &["requiresFocus"]),
+        )?;
+        if action == "focus" && requires_focus {
+            return Err(Issue::new(
+                path(&item_path, &["requiresFocus"]),
+                "focus recipe cannot require focus",
+            ));
+        }
+        let steps_path = path(&item_path, &["steps"]);
+        let Some(steps) = recipe.get("steps").and_then(Value::as_array) else {
+            return Err(Issue::new(steps_path, "expected an array"));
+        };
+        if steps.is_empty() {
+            return Err(Issue::new(steps_path, "expected at least one step"));
+        }
+        if steps.len() > limits.max_relation_targets {
+            return Err(Issue::too_big(steps_path, "too many recipe steps"));
+        }
+        let mut insert_count = 0;
+        for (step_index, raw_step) in steps.iter().enumerate() {
+            let step_path = path(&item_path, &["steps", &step_index.to_string()]);
+            let step = as_object(raw_step, &step_path)?;
+            let kind = text(step.get("kind"), path(&step_path, &["kind"]), limits)?;
+            match kind {
+                "press" => {
+                    strict(step, &["kind", "key"], &step_path)?;
+                    let key = text(step.get("key"), path(&step_path, &["key"]), limits)?;
+                    if key.is_empty() {
+                        return Err(Issue::new(
+                            path(&step_path, &["key"]),
+                            "key must not be empty",
+                        ));
+                    }
+                }
+                "insert-action-value" => {
+                    strict(step, &["kind"], &step_path)?;
+                    insert_count += 1;
+                }
+                _ => {
+                    return Err(Issue::new(
+                        path(&step_path, &["kind"]),
+                        "expected a physical input recipe step",
+                    ));
+                }
+            }
+        }
+        if (action == "setValue" && insert_count != 1)
+            || (action != "setValue" && insert_count != 0)
+        {
+            return Err(Issue::new(
+                path(&item_path, &["steps"]),
+                "setValue requires exactly one insert-action-value step",
+            ));
+        }
     }
     Ok(())
 }
@@ -488,10 +747,13 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
         }
     }
     text(object.get("name"), path(at, &["name"]), limits)?;
-    for key in ["description", "value", "testId", "frameworkType"] {
+    for key in ["description", "testId", "frameworkType"] {
         if object.contains_key(key) {
             text(object.get(key), path(at, &[key]), limits)?;
         }
+    }
+    if let Some(value) = object.get("value") {
+        check_semantic_value(value, &path(at, &["value"]), limits)?;
     }
     if let Some(source) = object.get("p") {
         if !source
@@ -567,6 +829,49 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
             |value, at| check_rect(value, at).map(|_| ()),
         )?;
     }
+    if let Some(scroll) = object.get("scroll") {
+        check_observation(
+            scroll,
+            &path(at, &["scroll"]),
+            limits,
+            |value, scroll_path| {
+                let state = as_object(value, scroll_path)?;
+                strict(
+                    state,
+                    &["axis", "offset", "viewport", "extent"],
+                    scroll_path,
+                )?;
+                if !matches!(
+                    state.get("axis").and_then(Value::as_str),
+                    Some("vertical") | Some("horizontal")
+                ) {
+                    return Err(Issue::new(
+                        path(scroll_path, &["axis"]),
+                        "invalid scroll axis",
+                    ));
+                }
+                let offset = non_negative(state.get("offset"), path(scroll_path, &["offset"]))?;
+                let viewport =
+                    non_negative(state.get("viewport"), path(scroll_path, &["viewport"]))?;
+                let extent = non_negative(state.get("extent"), path(scroll_path, &["extent"]))?;
+                if offset + viewport > extent {
+                    return Err(Issue::new(
+                        scroll_path.to_vec(),
+                        "scroll state must fit inside its extent",
+                    ));
+                }
+                Ok(())
+            },
+        )?;
+    }
+    if let Some(painted_region) = object.get("paintedRegion") {
+        check_observation(
+            painted_region,
+            &path(at, &["paintedRegion"]),
+            limits,
+            |value, painted_path| check_painted_region(value, painted_path, limits),
+        )?;
+    }
     if let Some(state) = object.get("state") {
         check_state(state, &path(at, &["state"]))?;
         // Every cell outside the visible area and the node still visible
@@ -591,6 +896,7 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
         }
         check_extended(extended, &path(at, &["extended"]), limits)?;
     }
+    let mut declared_actions = HashSet::new();
     if let Some(actions) = object.get("actions") {
         let Some(items) = actions.as_array() else {
             return Err(Issue::new(path(at, &["actions"]), "expected an array"));
@@ -600,13 +906,35 @@ fn check_node_schema(value: &Value, at: &[String], limits: &Limits) -> Result<()
         }
         for (index, item) in items.iter().enumerate() {
             match item.as_str() {
-                Some(action) if valid_action(action) => {}
+                Some(action) if valid_action(action) => {
+                    declared_actions.insert(action);
+                }
                 _ => {
                     return Err(Issue::new(
                         path(at, &["actions", &index.to_string()]),
                         "expected one of the semantic actions",
                     ))
                 }
+            }
+        }
+    }
+    if let Some(recipes) = object.get("inputRecipes") {
+        check_input_recipes(recipes, &path(at, &["inputRecipes"]), limits)?;
+        for (index, recipe) in recipes
+            .as_array()
+            .expect("validated recipe array")
+            .iter()
+            .enumerate()
+        {
+            let action = recipe
+                .get("action")
+                .and_then(Value::as_str)
+                .expect("validated recipe action");
+            if !declared_actions.contains(action) {
+                return Err(Issue::new(
+                    path(at, &["inputRecipes", &index.to_string(), "action"]),
+                    format!("input recipe {action:?} requires the matching semantic action intent"),
+                ));
             }
         }
     }
@@ -750,6 +1078,305 @@ fn check_snapshot_schema(value: &Value, limits: &Limits) -> Result<(), Issue> {
                 "expected at most 64 items",
             ));
         }
+        for (index, raw) in entries.iter().enumerate() {
+            let entry_path = vec!["providerEvidence".into(), index.to_string()];
+            let entry = as_object(raw, &entry_path)?;
+            let status = entry.get("status").and_then(Value::as_str);
+            match status {
+                Some("available") => {
+                    strict(
+                        entry,
+                        &[
+                            "providerId",
+                            "sessionId",
+                            "revision",
+                            "status",
+                            "evidence",
+                            "pointerRegions",
+                            "paintedRegions",
+                            "inputModes",
+                            "focusState",
+                            "actionRecipes",
+                            "scrollStates",
+                            "hitGrid",
+                        ],
+                        &entry_path,
+                    )?;
+                    check_evidence(
+                        entry.get("evidence").unwrap_or(&Value::Null),
+                        &path(&entry_path, &["evidence"]),
+                        limits,
+                    )?;
+                    let regions = entry
+                        .get("pointerRegions")
+                        .and_then(Value::as_array)
+                        .ok_or_else(|| {
+                            Issue::new(path(&entry_path, &["pointerRegions"]), "expected an array")
+                        })?;
+                    if regions.len() > limits.max_nodes {
+                        return Err(Issue::too_big(
+                            path(&entry_path, &["pointerRegions"]),
+                            "too many pointer regions",
+                        ));
+                    }
+                    for (region_index, raw_region) in regions.iter().enumerate() {
+                        let region_path =
+                            path(&entry_path, &["pointerRegions", &region_index.to_string()]);
+                        let region = as_object(raw_region, &region_path)?;
+                        strict(
+                            region,
+                            &["recipientId", "regionBounds", "spans"],
+                            &region_path,
+                        )?;
+                        if text(
+                            region.get("recipientId"),
+                            path(&region_path, &["recipientId"]),
+                            limits,
+                        )?
+                        .is_empty()
+                        {
+                            return Err(Issue::new(
+                                path(&region_path, &["recipientId"]),
+                                "recipient id must not be empty",
+                            ));
+                        }
+                        let projected = serde_json::json!({
+                            "regionBounds": region.get("regionBounds"),
+                            "spans": region.get("spans"),
+                        });
+                        check_painted_region(&projected, &region_path, limits)?;
+                    }
+                    if let Some(painted_regions) = entry.get("paintedRegions") {
+                        let regions = painted_regions.as_array().ok_or_else(|| {
+                            Issue::new(path(&entry_path, &["paintedRegions"]), "expected an array")
+                        })?;
+                        if regions.len() > limits.max_nodes {
+                            return Err(Issue::too_big(
+                                path(&entry_path, &["paintedRegions"]),
+                                "too many painted regions",
+                            ));
+                        }
+                        let mut recipients = HashSet::new();
+                        for (region_index, raw_region) in regions.iter().enumerate() {
+                            let region_path =
+                                path(&entry_path, &["paintedRegions", &region_index.to_string()]);
+                            let region = as_object(raw_region, &region_path)?;
+                            strict(
+                                region,
+                                &["recipientId", "regionBounds", "spans"],
+                                &region_path,
+                            )?;
+                            let recipient = text(
+                                region.get("recipientId"),
+                                path(&region_path, &["recipientId"]),
+                                limits,
+                            )?;
+                            if recipient.is_empty() || !recipients.insert(recipient) {
+                                return Err(Issue::new(
+                                    path(&region_path, &["recipientId"]),
+                                    "painted region recipients must be non-empty and unique",
+                                ));
+                            }
+                            let projected = serde_json::json!({
+                                "regionBounds": region.get("regionBounds"),
+                                "spans": region.get("spans"),
+                            });
+                            check_painted_region(&projected, &region_path, limits)?;
+                        }
+                    }
+                    if let Some(raw_modes) = entry.get("inputModes") {
+                        let modes_path = path(&entry_path, &["inputModes"]);
+                        let modes = as_object(raw_modes, &modes_path)?;
+                        strict(
+                            modes,
+                            &["mouseTracking", "mouseEncoding", "focusReporting"],
+                            &modes_path,
+                        )?;
+                        if !matches!(
+                            modes.get("mouseTracking").and_then(Value::as_str),
+                            Some("none" | "x10" | "vt200" | "drag" | "any")
+                        ) {
+                            return Err(Issue::new(
+                                path(&modes_path, &["mouseTracking"]),
+                                "invalid mouse tracking mode",
+                            ));
+                        }
+                        if !matches!(
+                            modes.get("mouseEncoding").and_then(Value::as_str),
+                            Some("default" | "sgr" | "urxvt" | "utf8")
+                        ) {
+                            return Err(Issue::new(
+                                path(&modes_path, &["mouseEncoding"]),
+                                "invalid mouse encoding",
+                            ));
+                        }
+                        if !matches!(
+                            modes.get("focusReporting").and_then(Value::as_str),
+                            Some("on" | "off")
+                        ) {
+                            return Err(Issue::new(
+                                path(&modes_path, &["focusReporting"]),
+                                "invalid focus reporting mode",
+                            ));
+                        }
+                    }
+                    if let Some(raw_focus) = entry.get("focusState") {
+                        let focus_path = path(&entry_path, &["focusState"]);
+                        let focus = as_object(raw_focus, &focus_path)?;
+                        match focus.get("status").and_then(Value::as_str) {
+                            Some("focused") => {
+                                strict(focus, &["status", "recipientId"], &focus_path)?;
+                                if text(
+                                    focus.get("recipientId"),
+                                    path(&focus_path, &["recipientId"]),
+                                    limits,
+                                )?
+                                .is_empty()
+                                {
+                                    return Err(Issue::new(
+                                        path(&focus_path, &["recipientId"]),
+                                        "recipient id must not be empty",
+                                    ));
+                                }
+                            }
+                            Some("none") => strict(focus, &["status"], &focus_path)?,
+                            _ => {
+                                return Err(Issue::new(
+                                    path(&focus_path, &["status"]),
+                                    "expected focused or none",
+                                ))
+                            }
+                        }
+                    }
+                    if let Some(action_recipes) = entry.get("actionRecipes") {
+                        let targets = action_recipes.as_array().ok_or_else(|| {
+                            Issue::new(path(&entry_path, &["actionRecipes"]), "expected an array")
+                        })?;
+                        if targets.len() > limits.max_nodes {
+                            return Err(Issue::too_big(
+                                path(&entry_path, &["actionRecipes"]),
+                                "too many action recipe recipients",
+                            ));
+                        }
+                        let mut recipients = HashSet::new();
+                        for (target_index, raw_target) in targets.iter().enumerate() {
+                            let target_path =
+                                path(&entry_path, &["actionRecipes", &target_index.to_string()]);
+                            let target = as_object(raw_target, &target_path)?;
+                            strict(target, &["recipientId", "recipes"], &target_path)?;
+                            let recipient = text(
+                                target.get("recipientId"),
+                                path(&target_path, &["recipientId"]),
+                                limits,
+                            )?;
+                            if recipient.is_empty() {
+                                return Err(Issue::new(
+                                    path(&target_path, &["recipientId"]),
+                                    "recipient id must not be empty",
+                                ));
+                            }
+                            if !recipients.insert(recipient) {
+                                return Err(Issue::new(
+                                    path(&target_path, &["recipientId"]),
+                                    "provider action recipe recipients must be unique",
+                                ));
+                            }
+                            check_input_recipes(
+                                target.get("recipes").unwrap_or(&Value::Null),
+                                &path(&target_path, &["recipes"]),
+                                limits,
+                            )?;
+                        }
+                    }
+                    if let Some(scroll_states) = entry.get("scrollStates") {
+                        let states = scroll_states.as_array().ok_or_else(|| {
+                            Issue::new(path(&entry_path, &["scrollStates"]), "expected an array")
+                        })?;
+                        if states.len() > limits.max_nodes {
+                            return Err(Issue::too_big(
+                                path(&entry_path, &["scrollStates"]),
+                                "too many scroll recipients",
+                            ));
+                        }
+                        let mut recipients = HashSet::new();
+                        for (state_index, raw_state) in states.iter().enumerate() {
+                            let state_path =
+                                path(&entry_path, &["scrollStates", &state_index.to_string()]);
+                            let state = as_object(raw_state, &state_path)?;
+                            strict(
+                                state,
+                                &["recipientId", "axis", "offset", "viewport", "extent"],
+                                &state_path,
+                            )?;
+                            let recipient = text(
+                                state.get("recipientId"),
+                                path(&state_path, &["recipientId"]),
+                                limits,
+                            )?;
+                            if recipient.is_empty() || !recipients.insert(recipient) {
+                                return Err(Issue::new(
+                                    path(&state_path, &["recipientId"]),
+                                    "scroll recipients must be non-empty and unique",
+                                ));
+                            }
+                            if !matches!(
+                                state.get("axis").and_then(Value::as_str),
+                                Some("vertical") | Some("horizontal")
+                            ) {
+                                return Err(Issue::new(
+                                    path(&state_path, &["axis"]),
+                                    "invalid scroll axis",
+                                ));
+                            }
+                            let offset =
+                                non_negative(state.get("offset"), path(&state_path, &["offset"]))?;
+                            let viewport = non_negative(
+                                state.get("viewport"),
+                                path(&state_path, &["viewport"]),
+                            )?;
+                            let extent =
+                                non_negative(state.get("extent"), path(&state_path, &["extent"]))?;
+                            if offset + viewport > extent {
+                                return Err(Issue::new(
+                                    state_path,
+                                    "scroll state must fit inside its extent",
+                                ));
+                            }
+                        }
+                    }
+                }
+                Some("lost") | Some("violation") => {
+                    strict(
+                        entry,
+                        &["providerId", "sessionId", "revision", "status", "reason"],
+                        &entry_path,
+                    )?;
+                    let reason = text(entry.get("reason"), path(&entry_path, &["reason"]), limits)?;
+                    if reason.is_empty() {
+                        return Err(Issue::new(
+                            path(&entry_path, &["reason"]),
+                            "provider reason must not be empty",
+                        ));
+                    }
+                }
+                _ => {
+                    return Err(Issue::new(
+                        path(&entry_path, &["status"]),
+                        "expected available, lost, or violation",
+                    ));
+                }
+            }
+            for key in ["providerId", "sessionId"] {
+                let value = text(entry.get(key), path(&entry_path, &[key]), limits)?;
+                if value.is_empty() {
+                    return Err(Issue::new(
+                        path(&entry_path, &[key]),
+                        "provider identity must not be empty",
+                    ));
+                }
+            }
+            positive(entry.get("revision"), path(&entry_path, &["revision"]))?;
+        }
     }
     check_observation(
         object.get("hitGrid").unwrap_or(&Value::Null),
@@ -827,12 +1454,31 @@ fn node_id(node: &Map<String, Value>) -> &str {
 
 fn check_node_shape(
     node: &Map<String, Value>,
-    _columns: i64,
-    _rows: i64,
+    columns: i64,
+    rows: i64,
     ids: &HashSet<&str>,
     limits: &Limits,
 ) -> Result<(), ValidationError> {
     let id = node_id(node);
+
+    if let Some(painted) = node.get("paintedRegion").and_then(Value::as_object) {
+        if painted.get("status").and_then(Value::as_str) == Some("known") {
+            let spans = painted["value"]["spans"]
+                .as_array()
+                .expect("painted region schema checked");
+            for span in spans {
+                let row = span["row"].as_i64().unwrap_or_default();
+                let from = span["from"].as_i64().unwrap_or_default();
+                let to = span["to"].as_i64().unwrap_or_default();
+                if row >= rows || from >= columns || to > columns {
+                    return Err(ValidationError::new(
+                        "bad-rect",
+                        format!("node {id} painted region span lies outside the viewport"),
+                    ));
+                }
+            }
+        }
+    }
 
     if let Some(ranges) = node.get("textRanges").and_then(Value::as_array) {
         for item in ranges {
@@ -1048,6 +1694,126 @@ pub fn validate_snapshot(value: &Value, limits: &Limits) -> Result<(), Validatio
                             "hitGrid region for {recipient_id} does not intersect the viewport"
                         ),
                     ));
+                }
+            }
+        }
+    }
+
+    if let Some(provider_evidence) = snapshot.get("providerEvidence").and_then(Value::as_array) {
+        let mut provider_ids = HashSet::new();
+        for raw in provider_evidence {
+            let entry = raw.as_object().expect("provider evidence schema checked");
+            let provider_id = entry["providerId"].as_str().unwrap_or_default();
+            if !provider_ids.insert(provider_id) {
+                return Err(ValidationError::new(
+                    "provider",
+                    format!("provider evidence id {provider_id} appears more than once"),
+                ));
+            }
+            if entry["sessionId"] != snapshot["sessionId"]
+                || entry["revision"] != snapshot["revision"]
+            {
+                return Err(ValidationError::new(
+                    "provider",
+                    format!("provider {provider_id} evidence does not match snapshot revision"),
+                ));
+            }
+            if entry.get("status").and_then(Value::as_str) != Some("available") {
+                continue;
+            }
+            if let Some(focus) = entry.get("focusState").and_then(Value::as_object) {
+                if focus.get("status").and_then(Value::as_str) == Some("focused") {
+                    let recipient = focus
+                        .get("recipientId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    if !by_id.contains_key(recipient) {
+                        return Err(ValidationError::new(
+                            "missing-parent",
+                            format!("provider {provider_id} focus references unknown recipient {recipient}"),
+                        ));
+                    }
+                }
+            }
+            for target in entry
+                .get("actionRecipes")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let target = target
+                    .as_object()
+                    .expect("action recipe target schema checked");
+                let recipient = target["recipientId"].as_str().unwrap_or_default();
+                let Some(node) = by_id.get(recipient) else {
+                    return Err(ValidationError::new(
+                        "missing-parent",
+                        format!(
+                            "provider {provider_id} action recipes reference unknown recipient {recipient}"
+                        ),
+                    ));
+                };
+                let intents: HashSet<&str> = node
+                    .get("actions")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .collect();
+                for recipe in target["recipes"].as_array().expect("recipe schema checked") {
+                    let action = recipe["action"].as_str().unwrap_or_default();
+                    if !intents.contains(action) {
+                        return Err(ValidationError::new(
+                            "provider",
+                            format!(
+                                "provider {provider_id} {action} recipe has no matching semantic action intent on {recipient}"
+                            ),
+                        ));
+                    }
+                }
+            }
+            for state in entry
+                .get("scrollStates")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let state = state.as_object().expect("scroll state schema checked");
+                let recipient = state["recipientId"].as_str().unwrap_or_default();
+                if !by_id.contains_key(recipient) {
+                    return Err(ValidationError::new(
+                        "missing-parent",
+                        format!("provider {provider_id} scroll state references unknown recipient {recipient}"),
+                    ));
+                }
+            }
+            for region in entry
+                .get("paintedRegions")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let region = region.as_object().expect("painted region schema checked");
+                let recipient = region["recipientId"].as_str().unwrap_or_default();
+                if !by_id.contains_key(recipient) {
+                    return Err(ValidationError::new(
+                        "missing-parent",
+                        format!("provider {provider_id} painted region references unknown recipient {recipient}"),
+                    ));
+                }
+                for span in region["spans"]
+                    .as_array()
+                    .expect("painted region schema checked")
+                {
+                    let row = span["row"].as_i64().unwrap_or_default();
+                    let from = span["from"].as_i64().unwrap_or_default();
+                    let to = span["to"].as_i64().unwrap_or_default();
+                    if row >= rows || from >= columns || to > columns {
+                        return Err(ValidationError::new(
+                            "bad-rect",
+                            format!("provider {provider_id} painted region for {recipient} lies outside the viewport"),
+                        ));
+                    }
                 }
             }
         }

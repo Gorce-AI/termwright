@@ -121,8 +121,8 @@ describe('facts are carried, not invented', () => {
       OPTIONS,
     );
 
-    expect(early.nodes[0]?.state?.scrollOffset).toBeUndefined();
-    expect(settled.nodes[0]?.state?.scrollOffset).toBe(3);
+    expect(early.nodes[0]?.scroll).toBeUndefined();
+    expect(settled.nodes[0]?.scroll).toBeUndefined();
   });
 
   it('prefers an annotation over the widget text for the name', () => {

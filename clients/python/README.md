@@ -4,8 +4,8 @@ Semantic side-channel client, automatic probe and optional annotation SDK for
 [Textual](https://textual.textualize.io).
 
 An instrumented app publishes its widget tree over a unix socket and commits
-each render with a signed OSC marker, so the driver can assert on *roles and
-names* instead of screen-scraping cells.
+each render with a signed OSC marker, so the driver can assert on _roles and
+names_ instead of screen-scraping cells.
 
 The protocol client speaks `termwright/2`. Every published semantic revision
 is a complete v2 snapshot with evidence-qualified geometry and pointer
@@ -264,12 +264,12 @@ the claim that the probe observes rather than redraws.
 
 **What it reports automatically.**
 
-| Fact | Where it comes from |
-|---|---|
-| intended and visible rectangles | `MapGeometry.region` and `MapGeometry.visible_region` |
-| exact pointer recipient | `Screen.get_widget_at`, compressed into the snapshot hit grid |
-| roles for your own widget classes | the MRO, so `SaveButton(Button)` is a button with no registration |
-| `frameworkType` on anything unrecognised | the widget's class name |
+| Fact                                      | Where it comes from                                                    |
+| ----------------------------------------- | ---------------------------------------------------------------------- |
+| intended and visible rectangles           | `MapGeometry.region` and `MapGeometry.visible_region`                  |
+| exact pointer recipient                   | `Screen.get_widget_at`, compressed into the snapshot hit grid          |
+| roles for your own widget classes         | the MRO, so `SaveButton(Button)` is a button with no registration      |
+| `frameworkType` on anything unrecognised  | the widget's class name                                                |
 | scrolled out of view vs `display = False` | both `hidden`; the first also `state.offscreen`, with a zero-area rect |
 
 The driver allows pointer actions only when the snapshot's hit grid names the
@@ -301,21 +301,39 @@ not listed here follows them.
   type for that reason and for no other — no other state here is inferred.
 - **Widgets on an inactive screen are absent, not `hidden`** (rule 4). The
   probe walks `app.screen`, so a pushed-over screen's widgets are not in the
-  tree at all. A widget hidden on the *active* screen (`display = False`) does
+  tree at all. A widget hidden on the _active_ screen (`display = False`) does
   publish `hidden: true`. Textual owns the screen stack; reaching into it would
   mean publishing widgets that no longer receive events.
-- **The probe instruments grandchildren too.** `PYTHONPATH` is inherited, so a
-  process the application spawns is also instrumented unless the variable is
-  scrubbed. Visible to the application as well: it can read its own
-  environment. This is a property of the injection mechanism, not a decision.
+- **Ownership is process-local and one-shot.** The first application
+  interpreter atomically owns the generated bootstrap. Before the
+  application's first line, the probe captures its credentials privately and
+  removes the endpoint, token, owner marker, and bootstrap path from the
+  inherited environment. Python children and grandchildren therefore cannot
+  attach to the parent's semantic session. `poetry run` receives a one-hop
+  launcher marker so ownership is claimed by its target interpreter, not by
+  Poetry's own console process.
 - **The probe does not report `frame-begin`** (probe capability). Textual calls
-  `post_display_hook` from the `finally` of `App._display`, *after* the frame
+  `post_display_hook` from the `finally` of `App._display`, _after_ the frame
   has been flushed, so there is no instant the probe could honestly call the
   start of a frame. Consumers must not read a missing `frame-begin` as "no
   frame in progress".
 - **A `Static` subclass with a custom `render()` is named by its `content`**
   (rule 2), which is the markup it was given rather than what it draws. Textual
   renders to a strip of segments with no text handle the adapter can read.
+
+## Application evidence providers
+
+`termwright.evidence` exposes closed pointer, focus, scroll, paint,
+terminal-input-mode, and action-strategy provider families.
+`ApplicationFocusEvidenceProvider.observe` returns a semantic
+recipient mapping or authoritative `None`; the wire keeps `focused` and `none`
+distinct from an unnegotiated provider. Registration must happen before the
+session freeze, and providers publish evidence/recipes only—physical input is
+still sent through the PTY.
+
+`ApplicationTerminalInputModeEvidenceProvider.observe` reports the production
+parser's exact mouse and focus modes. It is authoritative evidence for hidden
+ConPTY state, not a callback or a request to synthesize terminal modes.
 
 ## Conformance
 

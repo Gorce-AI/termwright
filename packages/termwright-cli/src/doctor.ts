@@ -2,6 +2,9 @@ import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createNodePtyBackend } from '@termwright/driver';
+import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
+import { TERMWRIGHT_RESOURCE_PROFILES } from './resource-profiles.js';
+import { DEFAULT_TERMWRIGHT_HOST_TIMEOUTS } from './test-host.js';
 
 export interface DoctorCheck {
   readonly name: string;
@@ -12,21 +15,39 @@ export interface DoctorCheck {
 export interface DoctorReport {
   readonly ok: boolean;
   readonly checks: readonly DoctorCheck[];
+  readonly effectiveConfig: {
+    readonly mode: 'termwright-native-only';
+    readonly engine: { readonly name: 'vitest'; readonly version: string };
+    readonly defaultProfile: typeof TERMWRIGHT_RESOURCE_PROFILES.local;
+    readonly profiles: typeof TERMWRIGHT_RESOURCE_PROFILES;
+    readonly semantics: 'explicit-session-contract';
+    readonly flakyPolicy: 'fail';
+    readonly artifactValuePolicy: 'redacted';
+    readonly hostTimeouts: typeof DEFAULT_TERMWRIGHT_HOST_TIMEOUTS;
+  };
 }
 
 export async function runDoctor(cwd: string): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
   const nodeMajor = Number(process.versions.node.split('.')[0]);
+  const nodeCertified = nodeMajor === 22 || nodeMajor === 24;
   checks.push({
     name: 'Node.js',
-    status: nodeMajor >= 22 ? 'pass' : 'fail',
-    detail: `${process.version}${nodeMajor >= 22 ? '' : ' (Termwright requires Node.js 22 or newer)'}`,
+    status: nodeCertified ? 'pass' : 'fail',
+    detail: `${process.version}${nodeCertified ? ' (certified LTS line)' : ' (certified Termwright host supports Node.js 22 and 24)'}`,
   });
 
   try {
     const require = createRequire(join(cwd, 'package.json'));
     const manifest = require('vitest/package.json') as { version?: string };
-    checks.push({ name: 'Vitest', status: 'pass', detail: manifest.version ?? 'installed' });
+    const version = manifest.version ?? 'unknown';
+    checks.push({
+      name: 'Vitest',
+      status: version === CERTIFIED_VITEST_VERSION ? 'pass' : 'fail',
+      detail: version === CERTIFIED_VITEST_VERSION
+        ? `${version} (exact-certified engine)`
+        : `${version}; Termwright requires exactly ${CERTIFIED_VITEST_VERSION}`,
+    });
   } catch {
     checks.push({ name: 'Vitest', status: 'fail', detail: 'not resolvable from this project' });
   }
@@ -56,32 +77,45 @@ export async function runDoctor(cwd: string): Promise<DoctorReport> {
   return Object.freeze({
     ok: checks.every((check) => check.status !== 'fail'),
     checks: Object.freeze(checks.map((check) => Object.freeze(check))),
+    effectiveConfig: Object.freeze({
+      mode: 'termwright-native-only',
+      engine: Object.freeze({ name: 'vitest', version: CERTIFIED_VITEST_VERSION }),
+      defaultProfile: TERMWRIGHT_RESOURCE_PROFILES.local,
+      profiles: TERMWRIGHT_RESOURCE_PROFILES,
+      semantics: 'explicit-session-contract',
+      flakyPolicy: 'fail',
+      artifactValuePolicy: 'redacted',
+      hostTimeouts: DEFAULT_TERMWRIGHT_HOST_TIMEOUTS,
+    }),
   });
 }
 
 async function checkPty(): Promise<DoctorCheck> {
+  let pty: ReturnType<ReturnType<typeof createNodePtyBackend>['spawn']> | undefined;
   try {
-    const pty = createNodePtyBackend().spawn({
+    pty = createNodePtyBackend().spawn({
       command: [process.execPath, '-e', "process.stdout.write('termwright-doctor'); process.exit(0)"],
       env: { PATH: process.env['PATH'] ?? '' },
       columns: 20,
       rows: 4,
     });
+    const proc = pty;
     const text: Uint8Array[] = [];
     const result = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('PTY smoke timed out')), 2_000);
-      pty.onData((data) => text.push(data));
-      pty.onExit((status) => {
+      proc.onData((data) => text.push(data));
+      proc.onExit((status) => {
         clearTimeout(timer);
         resolve(status);
       });
     });
-    pty.dispose();
     const output = new TextDecoder().decode(Buffer.concat(text.map((part) => Buffer.from(part))));
     if (result.code !== 0 || !output.includes('termwright-doctor')) throw new Error(`unexpected PTY result ${String(result.code)}`);
     return { name: 'PTY backend', status: 'pass', detail: 'spawn, output and exit verified' };
   } catch (error) {
     return { name: 'PTY backend', status: 'fail', detail: error instanceof Error ? error.message : String(error) };
+  } finally {
+    pty?.dispose();
   }
 }
 
@@ -106,6 +140,12 @@ export function formatDoctor(report: DoctorReport): string {
     'Termwright Doctor',
     '',
     ...report.checks.map((check) => `${icon[check.status]} ${check.name}: ${check.detail}`),
+    '',
+    `Native host: Vitest ${report.effectiveConfig.engine.version}, ` +
+      `${report.effectiveConfig.defaultProfile.scheduler.pool}, ` +
+      `${report.effectiveConfig.defaultProfile.scheduler.maxWorkers} workers, ` +
+      `${report.effectiveConfig.defaultProfile.capacities.ptySession} PTYs, ` +
+      `flaky=${report.effectiveConfig.flakyPolicy}, artifacts=${report.effectiveConfig.artifactValuePolicy}`,
     '',
     report.ok ? 'Ready to run Termwright.' : 'Termwright needs attention before tests can run.',
   ].join('\n');

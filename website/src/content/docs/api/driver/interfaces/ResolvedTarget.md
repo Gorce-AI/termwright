@@ -1,5 +1,5 @@
 ---
-title: "Interface: ResolvedTarget"
+title: "Interface: ResolvedTarget\\<D\\>"
 editUrl: false
 ---
 
@@ -9,9 +9,9 @@ editUrl: false
 
 [@termwright/driver](../../) / ResolvedTarget
 
-# Interface: ResolvedTarget
+# Interface: ResolvedTarget\<D\>
 
-Defined in: [driver/src/api.ts:599](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L599)
+Defined in: [driver/src/api.ts:775](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L775)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -30,13 +30,19 @@ await terminal.getByRole('button', { name: 'Approve' }).activate();
 await terminal.close();
 ```
 
+## Type Parameters
+
+### D
+
+`D` *extends* [`LocatorDomain`](../../type-aliases/locatordomain/) = [`LocatorDomain`](../../type-aliases/locatordomain/)
+
 ## Properties
 
 ### frameworkType?
 
 > `readonly` `optional` **frameworkType?**: `string`
 
-Defined in: [driver/src/api.ts:633](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L633)
+Defined in: [driver/src/api.ts:809](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L809)
 
 The framework's own name for the widget, when the node carries one.
 
@@ -50,7 +56,7 @@ node is worth having: without it an unrecognised widget says only
 
 > `readonly` **identity**: `"stable"` \| `"frame-local"`
 
-Defined in: [driver/src/api.ts:625](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L625)
+Defined in: [driver/src/api.ts:801](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L801)
 
 Whether a resolved target's `ref` means anything after this revision.
 
@@ -69,7 +75,7 @@ asserting about a widget it never selected.
 
 > `readonly` `optional` **name?**: `string`
 
-Defined in: [driver/src/api.ts:612](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L612)
+Defined in: [driver/src/api.ts:788](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L788)
 
 ***
 
@@ -77,7 +83,7 @@ Defined in: [driver/src/api.ts:612](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **occlusion?**: `"known"` \| `"unknown"`
 
-Defined in: [driver/src/api.ts:644](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L644)
+Defined in: [driver/src/api.ts:820](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L820)
 
 Whether the producer could tell what covers these cells.
 
@@ -90,9 +96,9 @@ be on top of it. Pointer actions refuse on anything but `'known'`.
 
 ### provenance?
 
-> `readonly` `optional` **provenance?**: `"annotation"` \| `"recognizer"` \| `"framework"` \| `"correlation"` \| `"heuristic"`
+> `readonly` `optional` **provenance?**: `"application"` \| `"annotation"` \| `"recognizer"` \| `"framework"` \| `"correlation"` \| `"heuristic"`
 
-Defined in: [driver/src/api.ts:635](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L635)
+Defined in: [driver/src/api.ts:811](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L811)
 
 Where this node's facts came from, when the producer reported it.
 
@@ -102,22 +108,22 @@ Where this node's facts came from, when the producer reported it.
 
 > `readonly` **rect**: `Rect` \| `null`
 
-Defined in: [driver/src/api.ts:610](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L610)
+Defined in: [driver/src/api.ts:786](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L786)
 
 Rectangle used by the resolution/action pipeline. A semantic target only
 exposes an evidence-qualified visible rectangle here; intended geometry is
-never promoted to pointer ownership. Use [Locator.geometry](../locator/#geometry),
-[Locator.visibility](../locator/#visibility), or [Locator.hitTest](../locator/#hittest) for assertions.
+never promoted to pointer ownership. Use the locator's `geometry()`,
+`visibility()`, or `hitTest()` observations for assertions.
 
 ***
 
 ### ref
 
-> `readonly` **ref**: `string`
+> `readonly` **ref**: `D` *extends* `"semantic"` ? `` `semantic:${string}@${number}` `` : `` `screen:${number},${number},${number},${number}@${number}` ``
 
-Defined in: [driver/src/api.ts:601](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L601)
+Defined in: [driver/src/api.ts:777](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L777)
 
-'n8@42' — node id at semantic revision, or a grid rect for generic matches.
+Explicitly domain-tagged, revision-bound identity.
 
 ***
 
@@ -125,7 +131,7 @@ Defined in: [driver/src/api.ts:601](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **revision**: `number`
 
-Defined in: [driver/src/api.ts:602](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L602)
+Defined in: [driver/src/api.ts:778](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L778)
 
 ***
 
@@ -133,7 +139,7 @@ Defined in: [driver/src/api.ts:602](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **role?**: `"application"` \| `"region"` \| `"dialog"` \| `"alert"` \| `"status"` \| `"list"` \| `"listitem"` \| `"menu"` \| `"menuitem"` \| `"button"` \| `"checkbox"` \| `"radio"` \| `"tab"` \| `"textbox"` \| `"heading"` \| `"text"` \| `"progressbar"` \| `"separator"` \| `"scrollbar"` \| `"table"` \| `"row"` \| `"cell"` \| `"generic"`
 
-Defined in: [driver/src/api.ts:611](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L611)
+Defined in: [driver/src/api.ts:787](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L787)
 
 ***
 
@@ -141,4 +147,4 @@ Defined in: [driver/src/api.ts:611](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **semantic**: `boolean`
 
-Defined in: [driver/src/api.ts:603](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L603)
+Defined in: [driver/src/api.ts:779](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L779)

@@ -17,7 +17,7 @@ export function highlightSemanticNode(node: SemanticNode, snapshot: SemanticSnap
   const bounds = qualifiedHighlightRect(node);
   return {
     sourceId: `semantic:${snapshot.revision}:${node.id}`,
-    targetRef: `${node.id}@${snapshot.revision}`,
+    targetRef: `semantic:${node.id}@${snapshot.revision}`,
     revision: snapshot.revision,
     role: node.role,
     name: node.name,

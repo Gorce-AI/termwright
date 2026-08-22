@@ -73,9 +73,12 @@ pub use messages::{
 pub use roles::{Action, Capability, Role};
 pub use tree::{
     Cursor, CursorShape, EvidenceMethod, EvidenceProvenance, EvidenceSource, EvidenceStrength,
-    Node, NodeGeometryObservations, Observation, Orientation, PointerHitGrid, PointerHitRegion,
-    Provenance, ProviderPointerRegion, ProviderPointerSpan, ProviderRevisionEvidence, Rect,
-    Snapshot, State, TextRange,
+    Node, NodeGeometryObservations, Observation, Orientation, PhysicalInputRecipe,
+    PhysicalInputRecipeAction, PhysicalInputRecipeStep, PointerHitGrid, PointerHitRegion,
+    Provenance, ProviderActionRecipes, ProviderFocusState, ProviderPaintedRegion,
+    ProviderPointerRegion, ProviderPointerSpan, ProviderRevisionEvidence, ProviderScrollState,
+    ProviderTerminalInputModes, Rect, ScrollState, SemanticPaintedRegion, SemanticValueObservation,
+    SemanticValueSensitivity, Snapshot, State, TextRange,
 };
 pub use validate::validate_snapshot;
 

@@ -84,6 +84,8 @@ export class LogTailer {
   readonly #hooks: LogTailHooks;
   #timer: NodeJS.Timeout | null = null;
   #stopped = false;
+  #polling: Promise<void> | null = null;
+  #closePromise: Promise<void> | null = null;
 
   constructor(sources: readonly AppLogSource[], hooks: LogTailHooks) {
     this.#hooks = hooks;
@@ -95,7 +97,7 @@ export class LogTailer {
       fingerprint: null,
       pending: Buffer.alloc(0),
       attached: false,
-      windowStartedAt: Date.now(),
+      windowStartedAt: performance.now(),
       windowLines: 0,
       droppedInWindow: 0,
       reading: false,
@@ -115,29 +117,63 @@ export class LogTailer {
       }
     }
     this.#timer = setInterval(() => {
-      void this.#poll();
+      if (this.#polling !== null) return;
+      this.#polling = this.#poll()
+        .catch((error: unknown) => {
+          this.#hooks.onDiagnostic('log-source', `log poll failed: ${error instanceof Error ? error.message : String(error)}`);
+        })
+        .finally(() => { this.#polling = null; });
     }, POLL_MS);
     this.#timer.unref?.();
   }
 
   /** Stops polling and releases every handle. Idempotent. */
   async stop(): Promise<void> {
-    if (this.#stopped) return;
+    this.#closePromise ??= this.#performStop();
+    return this.#closePromise;
+  }
+
+  async #performStop(): Promise<void> {
     this.#stopped = true;
-    if (this.#timer !== null) {
-      clearInterval(this.#timer);
-      this.#timer = null;
-    }
+    if (this.#timer !== null) clearInterval(this.#timer);
+    this.#timer = null;
+    await this.#polling;
+
+    // The process has ended before session teardown calls us. Read every byte
+    // currently visible at the source rather than waiting for another poll.
+    const deadline = performance.now() + 5_000;
     for (const state of this.#states) {
-      await state.handle?.close().catch(() => {});
+      for (;;) {
+        await this.#pollSource(state, true);
+        const info = await stat(state.source.path).catch(() => null);
+        if (info === null || state.offset >= info.size) break;
+        if (performance.now() >= deadline) {
+          throw new Error(`final log drain for ${label(state.source)} did not reach EOF`);
+        }
+      }
+      this.#flushDropped(state);
+      if (state.pending.length > 0) {
+        this.#hooks.onDiagnostic(
+          'log-source',
+          `discarded ${state.pending.length} trailing byte${state.pending.length === 1 ? '' : 's'} from ${label(state.source)} because the final record had no newline`,
+          state.pending.length,
+        );
+        state.pending = Buffer.alloc(0);
+      }
+    }
+
+    const failures: unknown[] = [];
+    for (const state of this.#states) {
+      try { await state.handle?.close(); } catch (error) { failures.push(error); }
       state.handle = null;
     }
+    if (failures.length > 0) throw new AggregateError(failures, 'failed to close application log sources');
   }
 
   async #poll(): Promise<void> {
     // Report drops on the tick, not only when the next line shows up: a flood
     // that stops would otherwise leave its losses unreported forever.
-    const now = Date.now();
+    const now = performance.now();
     for (const state of this.#states) {
       if (now - state.windowStartedAt >= RATE_WINDOW_MS) {
         this.#flushDropped(state);
@@ -148,8 +184,8 @@ export class LogTailer {
     await Promise.all(this.#states.map((state) => this.#pollSource(state)));
   }
 
-  async #pollSource(state: SourceState): Promise<void> {
-    if (this.#stopped || state.reading) return;
+  async #pollSource(state: SourceState, final = false): Promise<void> {
+    if ((this.#stopped && !final) || state.reading) return;
     state.reading = true;
     try {
       const info = await stat(state.source.path).catch(() => null);
@@ -175,7 +211,7 @@ export class LogTailer {
       } else if (await this.#headChanged(state, info.size)) {
         await this.#reopen(state, 'the head of the file changed (truncated and rewritten)');
       }
-      if (this.#stopped) return;
+      if (this.#stopped && !final) return;
       await this.#readDelta(state, info.size);
     } finally {
       state.reading = false;
@@ -282,7 +318,7 @@ export class LogTailer {
   }
 
   #emit(state: SourceState, raw: Buffer, forced = false): void {
-    const now = Date.now();
+    const now = performance.now();
     if (now - state.windowStartedAt >= RATE_WINDOW_MS) {
       this.#flushDropped(state);
       state.windowStartedAt = now;

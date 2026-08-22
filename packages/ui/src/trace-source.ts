@@ -135,7 +135,7 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
 export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void {
   const testId = overview.sessionId;
   const messages: ServerMessage[] = [
-    { v: 1, type: 'run-start', mode: 'post-mortem', startedAt: overview.startedAt },
+    { v: 1, type: 'run-start', runId: `trace:${overview.sessionId}`, mode: 'post-mortem', startedAt: overview.startedAt },
     {
       v: 1,
       type: 'session',

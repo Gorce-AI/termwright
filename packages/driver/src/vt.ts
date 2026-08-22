@@ -360,7 +360,7 @@ export class VtScreen {
    * Whether every cell in `spans` survived unchanged since `revision`.
    * Returns false when a resize/buffer/scroll changed the coordinate system.
    * This is the target-local counterpart of global
-   * waitForStable(): an unrelated status bar may animate without invalidating
+   * waitForQuiet(): an unrelated status bar may animate without invalidating
    * a button elsewhere on screen.
    */
   regionUnchangedSince(

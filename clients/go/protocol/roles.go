@@ -54,7 +54,9 @@ const (
 	CapIntendedGeometry Capability = "intended-geometry"
 	CapClippedGeometry  Capability = "clipped-geometry"
 	CapStates           Capability = "states"
+	CapFocusState       Capability = "focus-state"
 	CapActions          Capability = "actions"
+	CapActionRecipes    Capability = "action-recipes"
 	CapTextRanges       Capability = "text-ranges"
 	CapRenderRevisions  Capability = "render-revisions"
 	CapLogs             Capability = "logs"
@@ -76,8 +78,8 @@ var actionSet = map[Action]struct{}{
 }
 
 var capabilitySet = map[Capability]struct{}{
-	CapTree: {}, CapIntendedGeometry: {}, CapClippedGeometry: {}, CapStates: {},
-	CapActions: {}, CapTextRanges: {}, CapRenderRevisions: {},
+	CapTree: {}, CapIntendedGeometry: {}, CapClippedGeometry: {}, CapStates: {}, CapFocusState: {},
+	CapActions: {}, CapActionRecipes: {}, CapTextRanges: {}, CapRenderRevisions: {},
 	CapLogs: {}, CapPointerHitGrid: {},
 }
 

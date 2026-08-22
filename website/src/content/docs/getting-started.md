@@ -26,7 +26,8 @@ Add scripts that use the locally installed binaries:
 ```json
 {
   "scripts": {
-    "test": "vitest run",
+    "test": "termwright test",
+    "test:watch": "termwright watch",
     "test:ui": "termwright ui"
   }
 }

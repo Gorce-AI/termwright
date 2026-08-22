@@ -22,6 +22,11 @@ function context(
 ): ActionPlannerContext {
   const node = {
     id: 'field', role: 'textbox', name: 'Name', state: { focused: true },
+    inputRecipes: [
+      { action: 'focus', requiresFocus: false, steps: [{ kind: 'press', key: 'Tab' }] },
+      { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+      { action: 'setValue', requiresFocus: true, steps: [{ kind: 'press', key: 'Control+U' }, { kind: 'insert-action-value' }] },
+    ],
     geometry: {
       displayed: { status: 'known', value: true, evidence },
       intendedRect: { status: 'known', value: { row: 2, column: 3, width: 6, height: 1 }, evidence },
@@ -32,7 +37,7 @@ function context(
   const supported = Object.freeze({ status: 'supported' as const, evidence });
   const capabilities = Object.fromEntries([
     'semantic-tree', 'stable-identity', 'intended-geometry', 'clipped-geometry', 'painted-region',
-    'pointer-geometry', 'pointer-hit-testing', 'focus', 'scroll', 'render-order', 'keyboard-input',
+    'pointer-geometry', 'pointer-hit-testing', 'focus', 'scroll', 'render-order', 'action-strategies', 'keyboard-input',
     'pointer-input', 'paired-revisions',
   ].map((id) => [id, supported])) as EffectiveSessionContract['capabilities'];
   const contract: EffectiveSessionContract = Object.freeze({
@@ -62,7 +67,7 @@ function context(
 }
 
 const target = Object.freeze({
-  ref: 'field@3', semantic: true, identity: 'stable' as const, revision: 3,
+  ref: 'semantic:field@3', semantic: true, identity: 'stable' as const, revision: 3,
   rect: { row: 2, column: 3, width: 6, height: 1 }, role: 'textbox', name: 'Name', state: { focused: true },
 });
 
@@ -113,14 +118,14 @@ describe('ActionPlanner keyboard strategies', () => {
     });
   });
 
-  it('plans fill as focus, select-all and physical typing at one checkpoint', () => {
+  it('plans fill from an authoritative focus and replace-value recipe at one checkpoint', () => {
     const plan = new ActionPlanner(context({ state: { focused: false } }))
       .planKeyboard('a2', { kind: 'fill', targetRef: target.ref }, target, 'Ada');
-    expect(plan.strategy).toBe('pointer-focus-select-all-type');
+    expect(plan.strategy).toBe('authoritative-keyboard-focus-then-authoritative-replace');
     expect(plan.operations.map(({ device, kind }) => `${device}:${kind}`)).toEqual([
-      'mouse:down', 'mouse:up', 'keyboard:press', 'keyboard:type',
+      'keyboard:press', 'keyboard:press', 'keyboard:type',
     ]);
-    expect(plan.operations[2]).toMatchObject({ value: 'Control+A' });
+    expect(plan.operations[1]).toMatchObject({ value: 'Control+U' });
     expect(plan.requirements.every(({ checkpoint }) => checkpoint === stamp)).toBe(true);
   });
 
@@ -130,6 +135,21 @@ describe('ActionPlanner keyboard strategies', () => {
     const explanation = planner.explain({ kind: 'activate', targetRef: target.ref }, target);
     expect(explanation).toMatchObject({ actionable: true, strategy: plan.strategy, requirements: plan.requirements });
     expect(plan.operations).toEqual([{ device: 'keyboard', kind: 'press', value: 'Enter' }]);
+  });
+
+  it('never turns descriptive actions into guessed Enter or Ctrl+A bindings', () => {
+    const noRecipes = context({
+      actions: ['activate', 'setValue'],
+      inputRecipes: [],
+    }, {
+      pointerRegion: () => undefined,
+      hitGrid: () => ({ status: 'unsupported', capability: 'pointer-hit-testing', reason: 'capability' }),
+    });
+    const planner = new ActionPlanner(noRecipes);
+    expect(() => planner.planKeyboard('activate-without-recipe', { kind: 'activate', targetRef: target.ref }, target))
+      .toThrow();
+    expect(() => planner.planKeyboard('fill-without-recipe', { kind: 'fill', targetRef: target.ref }, target, 'Ada'))
+      .toThrow(/no authoritative setValue physical input recipe/u);
   });
 
   it('makes check idempotent and rejects non-checkable targets', () => {

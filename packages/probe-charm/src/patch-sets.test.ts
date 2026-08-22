@@ -101,7 +101,9 @@ describe('the runtime capability declarations', () => {
       const capabilities = [
         ...(literal?.matchAll(/protocol\.(Cap[A-Za-z]+)/gu) ?? []),
       ].map((match) => match[1]);
-      expect(capabilities).toEqual(['CapTree', 'CapStates', 'CapActions', 'CapRenderRevisions']);
+      expect(capabilities).toEqual([
+        'CapTree', 'CapStates', 'CapFocusState', 'CapActions', 'CapRenderRevisions',
+      ]);
 
       // This is a different capability vocabulary: it describes facts the
       // framework exposes, not message kinds the adapter can send.

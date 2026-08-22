@@ -39,7 +39,7 @@ importers:
         specifier: ^8.67.0
         version: 8.67.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   examples/bubbletea-login:
@@ -57,7 +57,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   examples/getting-started:
@@ -66,7 +66,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/termwright-cli
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   examples/ink-todo:
@@ -103,7 +103,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   examples/opentui-form:
@@ -125,7 +125,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   examples/ratatui-list:
@@ -140,7 +140,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   examples/textual-notes:
@@ -155,7 +155,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   examples/tview-menu:
@@ -173,7 +173,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   packages/conformance:
@@ -188,7 +188,7 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0
       vitest:
-        specifier: '>=3.2.0'
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
     devDependencies:
       '@modelcontextprotocol/sdk':
@@ -238,7 +238,7 @@ importers:
         specifier: ^0.34.3
         version: 0.34.5
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   packages/driver:
@@ -293,7 +293,7 @@ importers:
         specifier: ^7.3.0
         version: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   packages/ink:
@@ -340,7 +340,7 @@ importers:
         specifier: ^10.3.1
         version: 10.3.1
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
       winston:
         specifier: ^3.19.0
@@ -491,6 +491,24 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/resource-broker:
+    dependencies:
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/run-history:
+    dependencies:
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
+  packages/run-journal-transport:
+    dependencies:
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   packages/screenshot:
     dependencies:
       '@resvg/resvg-js':
@@ -510,7 +528,7 @@ importers:
         specifier: ^2.0.9
         version: 2.0.9
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   packages/termwright-cli:
@@ -530,6 +548,18 @@ importers:
       '@termwright/mcp':
         specifier: workspace:*
         version: link:../mcp
+      '@termwright/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
+      '@termwright/run-history':
+        specifier: workspace:*
+        version: link:../run-history
+      '@termwright/run-journal-transport':
+        specifier: workspace:*
+        version: link:../run-journal-transport
       '@termwright/screenshot':
         specifier: workspace:*
         version: link:../screenshot
@@ -542,9 +572,8 @@ importers:
       '@termwright/ui':
         specifier: workspace:*
         version: link:../ui
-    devDependencies:
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   packages/test:
@@ -555,6 +584,12 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@termwright/resource-broker':
+        specifier: workspace:*
+        version: link:../resource-broker
+      '@termwright/run-journal-transport':
+        specifier: workspace:*
+        version: link:../run-journal-transport
       '@termwright/trace':
         specifier: workspace:*
         version: link:../trace
@@ -565,8 +600,11 @@ importers:
         specifier: ^2.5.0
         version: 2.9.0
     devDependencies:
+      '@vitest/runner':
+        specifier: 3.2.7
+        version: 3.2.7
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   packages/trace:
@@ -595,6 +633,9 @@ importers:
       '@termwright/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@termwright/run-history':
+        specifier: workspace:*
+        version: link:../run-history
       '@termwright/trace':
         specifier: workspace:*
         version: link:../trace
@@ -648,7 +689,7 @@ importers:
         specifier: ^7.3.0
         version: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   packages/vt:
@@ -664,7 +705,7 @@ importers:
         version: 6.0.0
     devDependencies:
       vitest:
-        specifier: ^3.2.0
+        specifier: 3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
   website:
@@ -2442,6 +2483,7 @@ packages:
   '@xmldom/xmldom@0.9.11':
     resolution: {integrity: sha512-tW8bcK3hsG0/uqSnNz6TK4BkcuZSezoU7DlnYssILmZDktPnSHHuDJJFM0AJv+13gz2r0iGdrj6qqKeUnxXEDg==}
     engines: {node: '>=14.6'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xterm/addon-fit@0.11.0':
     resolution: {integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==}
@@ -3093,6 +3135,7 @@ packages:
   eslint@9.39.5:
     resolution: {integrity: sha512-DgZS62aPLXKlnxILS/AYCoRvHaZeXceIzlXPkkGGzJWSow1aEk0lbTlxUSlyjC8jcaKxAdOnTDz+o1JFSBsyjw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

@@ -4,8 +4,12 @@
  */
 
 import { openArchive, type ArchiveFiles } from "./archive.js";
+import { createHash } from "node:crypto";
+import { basename } from "node:path";
 import {
   CONDITION_KINDS,
+  EVIDENCE_PROVIDER_CAPABILITIES,
+  parseRunId,
   SESSION_CAPABILITIES,
   type ContractProvider,
   type EffectiveSessionContract,
@@ -90,6 +94,10 @@ export interface TraceReader {
   close(): Promise<void>;
 }
 
+export type TraceArchiveInspection =
+  | { readonly status: "complete"; readonly reader: TraceReader }
+  | { readonly status: "incomplete" | "corrupt" | "unsupported-version"; readonly path: string; readonly detail: string };
+
 /**
  * Opens a `.twtrace` directory or zip.
  *
@@ -106,9 +114,65 @@ export interface TraceReader {
  * ```
  */
 export async function openTrace(path: string): Promise<TraceReader> {
+  if (basename(path).includes(".staging-")) {
+    throw new TraceError("protocol-violation", `${path} is an incomplete staging trace`);
+  }
   const files = await openArchive(path);
-  const meta = parseMeta(await files.read(TRACE_FILES.meta), path);
-  return new ArchiveReader(files, meta);
+  try {
+    const meta = parseMeta(await files.read(TRACE_FILES.meta), path);
+    await verifyCommit(files, path);
+    return new ArchiveReader(files, meta);
+  } catch (error) {
+    await files.close();
+    throw error;
+  }
+}
+
+/** Classify a present trace artifact without making callers parse errors. */
+export async function inspectTrace(path: string): Promise<TraceArchiveInspection> {
+  try {
+    return { status: "complete", reader: await openTrace(path) };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (/unsupported trace version/u.test(detail)) return { status: "unsupported-version", path, detail };
+    if (/has no transactional commit marker|incomplete staging trace/u.test(detail)) {
+      return { status: "incomplete", path, detail };
+    }
+    return { status: "corrupt", path, detail };
+  }
+}
+
+async function verifyCommit(files: ArchiveFiles, path: string): Promise<void> {
+  if (!(await files.has(TRACE_FILES.commit))) {
+    throw new TraceError("protocol-violation", `${path} has no transactional commit marker`);
+  }
+  let parsed: unknown;
+  try { parsed = JSON.parse(await files.read(TRACE_FILES.commit)); } catch {
+    throw new TraceError("protocol-violation", `${path}: COMMITTED is not valid JSON`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new TraceError("protocol-violation", `${path}: COMMITTED is not an object`);
+  }
+  const record = parsed as Record<string, unknown>;
+  const checksums = record["checksums"];
+  if (record["v"] !== 1 || typeof checksums !== "object" || checksums === null || Array.isArray(checksums)) {
+    throw new TraceError("protocol-violation", `${path}: COMMITTED has an unsupported shape`);
+  }
+  for (const [name, expected] of Object.entries(checksums as Record<string, unknown>)) {
+    if (!Object.values(TRACE_FILES).includes(name as never) || name === TRACE_FILES.commit ||
+        typeof expected !== "string" || !/^[0-9a-f]{64}$/u.test(expected)) {
+      throw new TraceError("protocol-violation", `${path}: COMMITTED contains an invalid member`);
+    }
+    const actual = createHash("sha256").update(await files.read(name)).digest("hex");
+    if (actual !== expected) {
+      throw new TraceError("protocol-violation", `${path}: checksum mismatch for ${name}`);
+    }
+  }
+  for (const required of [TRACE_FILES.meta, TRACE_FILES.cast, TRACE_FILES.events, TRACE_FILES.semantics]) {
+    if (!(required in (checksums as Record<string, unknown>))) {
+      throw new TraceError("protocol-violation", `${path}: COMMITTED omits ${required}`);
+    }
+  }
 }
 
 function parseMeta(text: string, path: string): TraceMeta {
@@ -144,11 +208,34 @@ function parseMeta(text: string, path: string): TraceMeta {
       `${path}: meta.sessionId is missing`,
     );
   }
+  if (meta.runIdentity !== undefined) parseRunIdentity(meta.runIdentity, path);
   if (meta.contract === undefined) return meta;
   return {
     ...meta,
     contract: parseContract(meta.contract, meta.sessionId, path),
   };
+}
+
+function parseRunIdentity(value: unknown, path: string): void {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TraceError('protocol-violation', `${path}: meta.runIdentity is not an object`);
+  }
+  const identity = value as Record<string, unknown>;
+  const required = [
+    ['invocation', 'invocationId'], ['run', 'runId'], ['project', 'projectId'],
+    ['spec', 'specId'], ['runner-task', 'runnerTaskId'], ['execution', 'executionId'],
+    ['attempt', 'attemptId'],
+    ['session', 'sessionId'],
+  ] as const;
+  try {
+    for (const [kind, key] of required) parseRunId(kind, identity[key]);
+    if (identity['shardId'] !== undefined) parseRunId('shard', identity['shardId']);
+  } catch (error) {
+    throw new TraceError(
+      'protocol-violation',
+      `${path}: invalid meta.runIdentity: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 function parseContract(
@@ -305,17 +392,15 @@ function parseContract(
           provider["method"] !== "declared") ||
         !Array.isArray(provider["capabilities"]) ||
         provider["capabilities"].length === 0 ||
-        provider["capabilities"].length > 2 ||
+        provider["capabilities"].length > EVIDENCE_PROVIDER_CAPABILITIES.length ||
         new Set(provider["capabilities"]).size !==
           provider["capabilities"].length ||
         !provider["capabilities"].every(
-          (item) => item === "pointer-regions" || item === "hit-test",
+          (item) => EVIDENCE_PROVIDER_CAPABILITIES.includes(item as never),
         )
       )
         fail(`provider ${index} is invalid`);
-      const providerCapabilities = provider["capabilities"] as (
-        "pointer-regions" | "hit-test"
-      )[];
+      const providerCapabilities = provider["capabilities"] as import("@termwright/protocol").EvidenceProviderCapability[];
       return Object.freeze({
         ...base,
         kind,
@@ -675,6 +760,19 @@ async function* validateEvents(
     if (event.kind === "action" && event.actionability !== undefined) {
       validateActionability(event.actionability, lineNumber, event.ok);
     }
+    if (event.kind === "input") {
+      const input = event as unknown as Record<string, unknown>;
+      if (input["recording"] === "raw") {
+        boundedString(input["dataB64"], lineNumber, "input.dataB64");
+        if (input["withheldReason"] !== undefined) throw invalidEvent(lineNumber, "raw input also has a withheld marker");
+      } else if (input["recording"] === "withheld") {
+        if (input["dataB64"] !== undefined || input["withheldReason"] !== "artifact-policy") {
+          throw invalidEvent(lineNumber, "withheld input contains bytes or has an invalid reason");
+        }
+      } else {
+        throw invalidEvent(lineNumber, "input recording mode is invalid");
+      }
+    }
     yield event;
   }
 }
@@ -748,6 +846,10 @@ function validateActionReceipt(value: unknown, line: number): void {
     "receipt.plan.contractId",
   );
   boundedString(plan["strategy"], line, "receipt.plan.strategy");
+  const valuePolicy = plan["valuePolicy"];
+  if (valuePolicy !== "none" && valuePolicy !== "redacted" && valuePolicy !== "raw") {
+    throw invalidEvent(line, "receipt.plan.valuePolicy is invalid");
+  }
   if (
     actionId.length === 0 ||
     contractId !== before.contractId ||
@@ -773,8 +875,9 @@ function validateActionReceipt(value: unknown, line: number): void {
     plan["operations"],
     line,
     "receipt.plan.operations",
+    valuePolicy,
   );
-  const executed = operations(receipt["executed"], line, "receipt.executed");
+  const executed = operations(receipt["executed"], line, "receipt.executed", valuePolicy);
   const outcome = receipt["outcome"];
   if (
     outcome !== "completed" &&
@@ -985,6 +1088,7 @@ function operations(
   value: unknown,
   line: number,
   path: string,
+  valuePolicy: "none" | "redacted" | "raw",
 ): readonly unknown[] {
   if (!Array.isArray(value) || value.length > 10_000)
     throw invalidEvent(line, `${path} must be a bounded array`);
@@ -994,6 +1098,24 @@ function operations(
       throw invalidEvent(line, `${path}[${index}].device is invalid`);
     }
     boundedString(operation["kind"], line, `${path}[${index}].kind`);
+    if (operation["device"] === "keyboard") {
+      const value = object(operation["value"], line, `${path}[${index}].value`);
+      if (value["status"] === "known") {
+        boundedString(value["value"], line, `${path}[${index}].value.value`);
+        if (value["sensitivity"] !== "public" && value["sensitivity"] !== "sensitive") {
+          throw invalidEvent(line, `${path}[${index}].value.sensitivity is invalid`);
+        }
+        if ((operation["kind"] !== "press" || value["sensitivity"] !== "public") && (valuePolicy === "none" || (valuePolicy === "redacted" && value["sensitivity"] === "sensitive"))) {
+          throw invalidEvent(line, `${path}[${index}] contains a value forbidden by its artifact policy`);
+        }
+      } else if (value["status"] === "withheld") {
+        if (value["reason"] !== "artifact-policy" || !["public", "sensitive", "unknown"].includes(String(value["sensitivity"]))) {
+          throw invalidEvent(line, `${path}[${index}].value withheld marker is invalid`);
+        }
+      } else {
+        throw invalidEvent(line, `${path}[${index}].value.status is invalid`);
+      }
+    }
     if (operation["device"] === "mouse" && operation["modifiers"] !== undefined) {
       const modifiers = operation["modifiers"];
       if (

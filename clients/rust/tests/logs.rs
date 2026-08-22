@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 //! Log forwarding: the budget, the sequence gaps, and the tracing bridge.
 
 mod support;

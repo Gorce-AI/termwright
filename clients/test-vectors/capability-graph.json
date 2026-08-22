@@ -1,0 +1,1546 @@
+{
+  "version": 5,
+  "nodes": [
+    {
+      "id": "adapter.tree",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: tree.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes tree."
+      }
+    },
+    {
+      "id": "adapter.intended-geometry",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: intended-geometry.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes intended-geometry."
+      }
+    },
+    {
+      "id": "adapter.clipped-geometry",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: clipped-geometry.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes clipped-geometry."
+      }
+    },
+    {
+      "id": "adapter.states",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: states.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes states."
+      }
+    },
+    {
+      "id": "adapter.focus-state",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: focus-state.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes focus-state."
+      }
+    },
+    {
+      "id": "adapter.actions",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: actions.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes actions."
+      }
+    },
+    {
+      "id": "adapter.action-recipes",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: action-recipes.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes action-recipes."
+      }
+    },
+    {
+      "id": "adapter.text-ranges",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: text-ranges.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes text-ranges."
+      }
+    },
+    {
+      "id": "adapter.render-revisions",
+      "category": "synchronization",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: render-revisions.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes render-revisions."
+      }
+    },
+    {
+      "id": "adapter.logs",
+      "category": "diagnostic",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: logs.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes logs."
+      }
+    },
+    {
+      "id": "adapter.pointer-hit-grid",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Certified adapter handshake fact: pointer-hit-grid.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an exact certified adapter which publishes pointer-hit-grid."
+      }
+    },
+    {
+      "id": "probe.stable-identity",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Framework probe fact: stable-identity.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use exact certified instrumentation which publishes stable-identity."
+      }
+    },
+    {
+      "id": "probe.intended-rect",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Framework probe fact: intended-rect.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use exact certified instrumentation which publishes intended-rect."
+      }
+    },
+    {
+      "id": "probe.visible-rect",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Framework probe fact: visible-rect.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use exact certified instrumentation which publishes visible-rect."
+      }
+    },
+    {
+      "id": "probe.operations",
+      "category": "diagnostic",
+      "layer": "producer",
+      "description": "Framework probe fact: operations.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use exact certified instrumentation which publishes operations."
+      }
+    },
+    {
+      "id": "probe.annotations",
+      "category": "diagnostic",
+      "layer": "producer",
+      "description": "Framework probe fact: annotations.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use exact certified instrumentation which publishes annotations."
+      }
+    },
+    {
+      "id": "probe.frame-begin",
+      "category": "synchronization",
+      "layer": "producer",
+      "description": "Framework probe fact: frame-begin.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use exact certified instrumentation which publishes frame-begin."
+      }
+    },
+    {
+      "id": "probe.paint-order",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Framework probe fact: paint-order.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use exact certified instrumentation which publishes paint-order."
+      }
+    },
+    {
+      "id": "provider.pointer-regions",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Authoritative application production-router fact: pointer-regions.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "pointer-evidence",
+        "message": "Register a pointer-evidence provider backed by the application's production router (pointer-regions)."
+      }
+    },
+    {
+      "id": "provider.hit-test",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Authoritative application production-router fact: hit-test.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "pointer-evidence",
+        "message": "Register a pointer-evidence provider backed by the application's production router (hit-test)."
+      }
+    },
+    {
+      "id": "provider.focus-state",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Authoritative application production-router fact: focus-state.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "focus-evidence",
+        "message": "Register a focus-evidence provider backed by the application's production focus manager."
+      }
+    },
+    {
+      "id": "provider.action-recipes",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Authoritative application production-router fact: action-recipes.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "action-strategy",
+        "message": "Register an action-strategy provider backed by the application's production keybindings."
+      }
+    },
+    {
+      "id": "provider.scroll-state",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Authoritative application production-router fact: scroll-state.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "scroll-evidence",
+        "message": "Register a scroll-evidence provider backed by the application's production viewport model."
+      }
+    },
+    {
+      "id": "provider.painted-regions",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Authoritative application production-router fact: painted-regions.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "paint-evidence",
+        "message": "Register a paint-evidence provider backed by the application's production painter."
+      }
+    },
+    {
+      "id": "provider.terminal-input-modes",
+      "category": "evidence",
+      "layer": "producer",
+      "description": "Authoritative application production-router fact: terminal-input-modes.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "input-mode-evidence",
+        "message": "Register an input-mode-evidence provider backed by the application's production terminal parser configuration."
+      }
+    },
+    {
+      "id": "terminal.writable-pty",
+      "category": "input",
+      "layer": "producer",
+      "description": "The native session owns a writable PTY input channel.",
+      "remediation": {
+        "code": "enable-terminal-runtime",
+        "runtimePrerequisite": "writable-pty",
+        "message": "Launch the application in a writable real PTY."
+      }
+    },
+    {
+      "id": "terminal.input-modes-observable",
+      "category": "input",
+      "layer": "producer",
+      "description": "The terminal backend authoritatively observes application mouse modes.",
+      "remediation": {
+        "code": "enable-terminal-runtime",
+        "runtimePrerequisite": "terminal-input-modes-authoritative",
+        "message": "Use a terminal backend that authoritatively observes terminal input modes."
+      }
+    },
+    {
+      "id": "session.semantic-tree",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: semantic-tree.",
+      "conformanceClaims": [
+        "claim.semantic-tree-authoritative"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use a certified semantic adapter."
+      }
+    },
+    {
+      "id": "session.stable-identity",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: stable-identity.",
+      "conformanceClaims": [
+        "claim.stable-identity-authoritative"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use a certified retained-identity adapter or explicit SemanticKey contract."
+      }
+    },
+    {
+      "id": "session.intended-geometry",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: intended-geometry.",
+      "conformanceClaims": [
+        "claim.intended-geometry-authoritative"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an adapter instrumented at the authoritative layout/render boundary."
+      }
+    },
+    {
+      "id": "session.clipped-geometry",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: clipped-geometry.",
+      "conformanceClaims": [
+        "claim.clipped-geometry-authoritative"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an adapter that publishes authoritative clipping."
+      }
+    },
+    {
+      "id": "session.painted-region",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: painted-region.",
+      "conformanceClaims": [
+        "claim.painted-region-authoritative"
+      ],
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "paint-evidence",
+        "message": "Register a paint-evidence provider backed by the application's production painter."
+      }
+    },
+    {
+      "id": "session.pointer-geometry",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: pointer-geometry.",
+      "conformanceClaims": [
+        "claim.pointer-region-authoritative"
+      ],
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "pointer-evidence",
+        "message": "Register the application production pointer router as a pointer-evidence provider."
+      }
+    },
+    {
+      "id": "session.pointer-hit-testing",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: pointer-hit-testing.",
+      "conformanceClaims": [
+        "claim.pointer-hit-test-authoritative"
+      ],
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "pointer-evidence",
+        "message": "Register a pointer-evidence provider with authoritative hit testing."
+      }
+    },
+    {
+      "id": "session.focus",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: focus.",
+      "conformanceClaims": [
+        "claim.focus-authoritative"
+      ],
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "focus-evidence",
+        "message": "Use a certified adapter with focus-state or register the application's production focus manager."
+      }
+    },
+    {
+      "id": "session.scroll",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: scroll.",
+      "conformanceClaims": [
+        "claim.scroll-authoritative"
+      ],
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "scroll-evidence",
+        "message": "Use a certified adapter with explicit scroll evidence or register the application's production viewport model."
+      }
+    },
+    {
+      "id": "session.render-order",
+      "category": "evidence",
+      "layer": "session",
+      "description": "Frozen session capability: render-order.",
+      "conformanceClaims": [
+        "claim.render-order-authoritative"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use a certified adapter which guarantees render order for every applicable semantic node."
+      }
+    },
+    {
+      "id": "session.action-strategies",
+      "category": "planning",
+      "layer": "session",
+      "description": "Frozen session capability: action-strategies.",
+      "conformanceClaims": [
+        "claim.action-strategy-authoritative"
+      ],
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "action-strategy",
+        "message": "Register the application's production keybindings as authoritative physical input recipes."
+      }
+    },
+    {
+      "id": "session.keyboard-input",
+      "category": "input",
+      "layer": "session",
+      "description": "Frozen session capability: keyboard-input.",
+      "conformanceClaims": [
+        "claim.keyboard-real-pty"
+      ],
+      "remediation": {
+        "code": "enable-terminal-runtime",
+        "runtimePrerequisite": "writable-pty",
+        "message": "Launch in a writable real PTY."
+      }
+    },
+    {
+      "id": "session.pointer-input",
+      "category": "input",
+      "layer": "session",
+      "description": "Frozen session capability: pointer-input.",
+      "conformanceClaims": [
+        "claim.pointer-real-pty"
+      ],
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "input-mode-evidence",
+        "message": "Use a backend that observes terminal modes or register the application's authoritative production parser configuration."
+      }
+    },
+    {
+      "id": "session.focus-input",
+      "category": "input",
+      "layer": "session",
+      "description": "Frozen session capability: focus-input.",
+      "conformanceClaims": [
+        "claim.focus-report-real-pty"
+      ],
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "input-mode-evidence",
+        "message": "Use a backend that observes terminal modes or register the application's authoritative production parser configuration."
+      }
+    },
+    {
+      "id": "session.paired-revisions",
+      "category": "synchronization",
+      "layer": "session",
+      "description": "Frozen session capability: paired-revisions.",
+      "conformanceClaims": [
+        "claim.paired-revisions"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an adapter with exact render revision markers."
+      }
+    },
+    {
+      "id": "runtime.writable-pty",
+      "category": "input",
+      "layer": "runtime",
+      "description": "PTY input remains writable.",
+      "remediation": {
+        "code": "enable-terminal-runtime",
+        "runtimePrerequisite": "writable-pty",
+        "message": "Launch or retain a writable PTY."
+      }
+    },
+    {
+      "id": "runtime.terminal-input-modes-authoritative",
+      "category": "input",
+      "layer": "runtime",
+      "description": "Terminal mouse mode state is authoritative, either observed from VT output or supplied by the application's production parser.",
+      "remediation": {
+        "code": "enable-terminal-runtime",
+        "runtimePrerequisite": "terminal-input-modes-authoritative",
+        "message": "Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence."
+      }
+    },
+    {
+      "id": "runtime.mouse-reporting-enabled",
+      "category": "input",
+      "layer": "runtime",
+      "description": "The application currently enables compatible mouse reporting.",
+      "remediation": {
+        "code": "enable-terminal-runtime",
+        "runtimePrerequisite": "mouse-reporting-enabled",
+        "message": "Enable terminal mouse reporting in the application."
+      }
+    },
+    {
+      "id": "runtime.mouse-motion-enabled",
+      "category": "input",
+      "layer": "runtime",
+      "description": "The application currently requests unpressed pointer motion.",
+      "remediation": {
+        "code": "enable-terminal-runtime",
+        "runtimePrerequisite": "mouse-motion-enabled",
+        "message": "Enable terminal any-event mouse motion reporting for hover."
+      }
+    },
+    {
+      "id": "runtime.focus-reporting-enabled",
+      "category": "input",
+      "layer": "runtime",
+      "description": "The application currently enables terminal focus reports.",
+      "remediation": {
+        "code": "enable-terminal-runtime",
+        "runtimePrerequisite": "focus-reporting-enabled",
+        "message": "Enable terminal focus reporting in the application."
+      }
+    },
+    {
+      "id": "runtime.committed-observation",
+      "category": "synchronization",
+      "layer": "runtime",
+      "description": "Semantic and VT evidence share one committed checkpoint.",
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "strategy.pointer-target",
+      "category": "planning",
+      "layer": "strategy",
+      "description": "Resolve an authoritative safe physical pointer target.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "pointer-evidence",
+        "message": "Provide authoritative pointer regions, optionally with hit testing."
+      }
+    },
+    {
+      "id": "strategy.keyboard-activate",
+      "category": "planning",
+      "layer": "strategy",
+      "description": "Activate through a framework-declared keyboard convention and real PTY input.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Expose an authoritative semantic keyboard action convention."
+      }
+    },
+    {
+      "id": "strategy.pointer-activate",
+      "category": "planning",
+      "layer": "strategy",
+      "description": "Activate through a planned real pointer click.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "pointer-evidence",
+        "message": "Provide authoritative pointer evidence."
+      }
+    },
+    {
+      "id": "strategy.focus-by-pointer",
+      "category": "planning",
+      "layer": "strategy",
+      "description": "Focus using a real planned pointer action.",
+      "remediation": {
+        "code": "register-application-provider",
+        "providerType": "pointer-evidence",
+        "message": "Provide authoritative pointer evidence for the focus target."
+      }
+    },
+    {
+      "id": "strategy.type-focused",
+      "category": "planning",
+      "layer": "strategy",
+      "description": "Type only after authoritative element focus is known.",
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an adapter that guarantees focus state."
+      }
+    },
+    {
+      "id": "public.locator.semantic-query",
+      "category": "evidence",
+      "layer": "public",
+      "publicConsumer": "locator.semantic-query",
+      "description": "Public consumer locator.semantic-query.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.semantic-tree-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.locator.semantic-scroll",
+      "category": "evidence",
+      "layer": "public",
+      "publicConsumer": "locator.semantic-scroll",
+      "description": "Public consumer locator.semantic-scroll.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.scroll-authoritative",
+        "claim.paired-revisions"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.locator.painted-region",
+      "category": "evidence",
+      "layer": "public",
+      "publicConsumer": "locator.painted-region",
+      "description": "Public consumer locator.painted-region.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.painted-region-authoritative",
+        "claim.paired-revisions"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.condition.attached",
+      "category": "evidence",
+      "layer": "public",
+      "publicConsumer": "condition.attached",
+      "description": "Public consumer condition.attached.",
+      "conditions": [
+        "attached",
+        "detached"
+      ],
+      "conformanceClaims": [
+        "claim.semantic-tree-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.condition.displayed",
+      "category": "evidence",
+      "layer": "public",
+      "publicConsumer": "condition.displayed",
+      "description": "Public consumer condition.displayed.",
+      "conditions": [
+        "displayed",
+        "hidden"
+      ],
+      "conformanceClaims": [
+        "claim.semantic-tree-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.condition.visible",
+      "category": "evidence",
+      "layer": "public",
+      "publicConsumer": "condition.visible",
+      "description": "Public consumer condition.visible.",
+      "conditions": [
+        "visible"
+      ],
+      "conformanceClaims": [
+        "claim.clipped-geometry-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.condition.in-viewport",
+      "category": "evidence",
+      "layer": "public",
+      "publicConsumer": "condition.in-viewport",
+      "description": "Public consumer condition.in-viewport.",
+      "conditions": [
+        "in-viewport",
+        "offscreen"
+      ],
+      "conformanceClaims": [
+        "claim.clipped-geometry-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.condition.focused",
+      "category": "evidence",
+      "layer": "public",
+      "publicConsumer": "condition.focused",
+      "description": "Public consumer condition.focused.",
+      "conditions": [
+        "focused"
+      ],
+      "conformanceClaims": [
+        "claim.focus-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.condition.value",
+      "category": "evidence",
+      "layer": "public",
+      "publicConsumer": "condition.value",
+      "description": "Public consumer condition.value.",
+      "conditions": [
+        "value"
+      ],
+      "conformanceClaims": [
+        "claim.semantic-tree-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.action.click",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "action.click",
+      "description": "Public consumer action.click.",
+      "conditions": [
+        "attached",
+        "enabled",
+        "visible",
+        "pointer-region",
+        "receives-pointer",
+        "mouse-input-enabled"
+      ],
+      "conformanceClaims": [
+        "claim.pointer-region-authoritative",
+        "claim.pointer-real-pty",
+        "claim.paired-revisions"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.action.hover",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "action.hover",
+      "description": "Public consumer action.hover.",
+      "conditions": [
+        "attached",
+        "visible",
+        "pointer-region",
+        "receives-pointer",
+        "mouse-input-enabled"
+      ],
+      "conformanceClaims": [
+        "claim.pointer-region-authoritative",
+        "claim.pointer-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.action.drag",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "action.drag",
+      "description": "Public consumer action.drag.",
+      "conditions": [
+        "attached",
+        "enabled",
+        "visible",
+        "pointer-region",
+        "receives-pointer",
+        "mouse-input-enabled"
+      ],
+      "conformanceClaims": [
+        "claim.pointer-region-authoritative",
+        "claim.pointer-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.action.focus",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "action.focus",
+      "description": "Public consumer action.focus.",
+      "conditions": [
+        "attached",
+        "enabled",
+        "displayed"
+      ],
+      "conformanceClaims": [
+        "claim.keyboard-real-pty",
+        "claim.pointer-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.action.activate",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "action.activate",
+      "description": "Public consumer action.activate.",
+      "conditions": [
+        "attached",
+        "enabled",
+        "displayed"
+      ],
+      "conformanceClaims": [
+        "claim.keyboard-real-pty",
+        "claim.pointer-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.action.type",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "action.type",
+      "description": "Public consumer action.type.",
+      "conditions": [
+        "attached",
+        "enabled",
+        "displayed",
+        "focused"
+      ],
+      "conformanceClaims": [
+        "claim.focus-authoritative",
+        "claim.keyboard-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.action.fill",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "action.fill",
+      "description": "Public consumer action.fill.",
+      "conditions": [
+        "attached",
+        "enabled",
+        "displayed"
+      ],
+      "conformanceClaims": [
+        "claim.focus-authoritative",
+        "claim.keyboard-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.action.check",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "action.check",
+      "description": "Public consumer action.check.",
+      "conditions": [
+        "attached",
+        "enabled",
+        "displayed",
+        "checked"
+      ],
+      "conformanceClaims": [
+        "claim.keyboard-real-pty",
+        "claim.pointer-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.action.uncheck",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "action.uncheck",
+      "description": "Public consumer action.uncheck.",
+      "conditions": [
+        "attached",
+        "enabled",
+        "displayed",
+        "checked"
+      ],
+      "conformanceClaims": [
+        "claim.keyboard-real-pty",
+        "claim.pointer-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.device.keyboard",
+      "category": "input",
+      "layer": "public",
+      "publicConsumer": "device.keyboard",
+      "description": "Public consumer device.keyboard.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.keyboard-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.device.mouse",
+      "category": "input",
+      "layer": "public",
+      "publicConsumer": "device.mouse",
+      "description": "Public consumer device.mouse.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.pointer-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.device.window-focus",
+      "category": "input",
+      "layer": "public",
+      "publicConsumer": "device.window-focus",
+      "description": "Public consumer device.window-focus.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.focus-report-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.checkpoint",
+      "category": "synchronization",
+      "layer": "public",
+      "publicConsumer": "checkpoint",
+      "description": "Public consumer checkpoint.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.paired-revisions"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.runner.inspector",
+      "category": "diagnostic",
+      "layer": "public",
+      "publicConsumer": "runner.inspector",
+      "description": "Public consumer runner.inspector.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.semantic-tree-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.trace.action",
+      "category": "diagnostic",
+      "layer": "public",
+      "publicConsumer": "trace.action",
+      "description": "Public consumer trace.action.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.pointer-real-pty",
+        "claim.keyboard-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.recorder.semantic-action",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "recorder.semantic-action",
+      "description": "Public consumer recorder.semantic-action.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.pointer-hit-test-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.mcp.semantic-action",
+      "category": "planning",
+      "layer": "public",
+      "publicConsumer": "mcp.semantic-action",
+      "description": "Public consumer mcp.semantic-action.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.pointer-real-pty",
+        "claim.keyboard-real-pty"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.runner.diagnostics",
+      "category": "diagnostic",
+      "layer": "public",
+      "publicConsumer": "runner.diagnostics",
+      "description": "Public consumer runner.diagnostics.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.semantic-tree-authoritative"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "public.trace.diagnostics",
+      "category": "diagnostic",
+      "layer": "public",
+      "publicConsumer": "trace.diagnostics",
+      "description": "Public consumer trace.diagnostics.",
+      "conditions": [],
+      "conformanceClaims": [
+        "claim.logs-diagnostic"
+      ],
+      "remediation": {
+        "code": "wait-for-committed-observation",
+        "message": "Wait for one paired committed observation before using this capability."
+      }
+    },
+    {
+      "id": "diagnostic.semantic-tree",
+      "category": "diagnostic",
+      "layer": "session",
+      "description": "Best-effort semantic tree for inspector diagnostics only.",
+      "conformanceClaims": [
+        "claim.semantic-tree-authoritative"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use certified semantic evidence for public queries."
+      }
+    },
+    {
+      "id": "diagnostic.geometry",
+      "category": "diagnostic",
+      "layer": "session",
+      "description": "Best-effort geometry that cannot unlock actions.",
+      "conformanceClaims": [
+        "claim.intended-geometry-authoritative"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use certified geometry evidence for action planning."
+      }
+    },
+    {
+      "id": "diagnostic.render-order",
+      "category": "diagnostic",
+      "layer": "session",
+      "description": "Best-effort paint order that cannot prove actionability.",
+      "conformanceClaims": [
+        "claim.render-order-authoritative"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use a universally certified render-order producer."
+      }
+    },
+    {
+      "id": "diagnostic.logs",
+      "category": "diagnostic",
+      "layer": "session",
+      "description": "Structured application logs.",
+      "conformanceClaims": [
+        "claim.logs-diagnostic"
+      ],
+      "remediation": {
+        "code": "select-certified-adapter",
+        "message": "Use an adapter that negotiates structured logs."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "adapter.tree",
+      "to": "session.semantic-tree",
+      "kind": "produces"
+    },
+    {
+      "from": "probe.stable-identity",
+      "to": "session.stable-identity",
+      "kind": "produces"
+    },
+    {
+      "from": "adapter.intended-geometry",
+      "to": "session.intended-geometry",
+      "kind": "produces"
+    },
+    {
+      "from": "adapter.clipped-geometry",
+      "to": "session.clipped-geometry",
+      "kind": "produces"
+    },
+    {
+      "from": "adapter.focus-state",
+      "to": "session.focus",
+      "kind": "produces"
+    },
+    {
+      "from": "provider.focus-state",
+      "to": "session.focus",
+      "kind": "produces"
+    },
+    {
+      "from": "provider.scroll-state",
+      "to": "session.scroll",
+      "kind": "produces"
+    },
+    {
+      "from": "provider.painted-regions",
+      "to": "session.painted-region",
+      "kind": "produces"
+    },
+    {
+      "from": "adapter.action-recipes",
+      "to": "session.action-strategies",
+      "kind": "produces"
+    },
+    {
+      "from": "adapter.pointer-hit-grid",
+      "to": "session.pointer-geometry",
+      "kind": "produces"
+    },
+    {
+      "from": "adapter.pointer-hit-grid",
+      "to": "session.pointer-hit-testing",
+      "kind": "produces"
+    },
+    {
+      "from": "provider.pointer-regions",
+      "to": "session.pointer-geometry",
+      "kind": "produces"
+    },
+    {
+      "from": "provider.hit-test",
+      "to": "session.pointer-hit-testing",
+      "kind": "produces"
+    },
+    {
+      "from": "provider.action-recipes",
+      "to": "session.action-strategies",
+      "kind": "produces"
+    },
+    {
+      "from": "probe.paint-order",
+      "to": "session.render-order",
+      "kind": "produces"
+    },
+    {
+      "from": "probe.paint-order",
+      "to": "diagnostic.render-order",
+      "kind": "diagnoses"
+    },
+    {
+      "from": "adapter.logs",
+      "to": "diagnostic.logs",
+      "kind": "diagnoses"
+    },
+    {
+      "from": "terminal.writable-pty",
+      "to": "session.keyboard-input",
+      "kind": "produces"
+    },
+    {
+      "from": "terminal.input-modes-observable",
+      "to": "session.pointer-input",
+      "kind": "produces"
+    },
+    {
+      "from": "provider.terminal-input-modes",
+      "to": "session.pointer-input",
+      "kind": "produces"
+    },
+    {
+      "from": "terminal.input-modes-observable",
+      "to": "session.focus-input",
+      "kind": "produces"
+    },
+    {
+      "from": "provider.terminal-input-modes",
+      "to": "session.focus-input",
+      "kind": "produces"
+    },
+    {
+      "from": "adapter.render-revisions",
+      "to": "session.paired-revisions",
+      "kind": "produces"
+    },
+    {
+      "from": "terminal.writable-pty",
+      "to": "runtime.writable-pty",
+      "kind": "produces"
+    },
+    {
+      "from": "terminal.input-modes-observable",
+      "to": "runtime.terminal-input-modes-authoritative",
+      "kind": "produces"
+    },
+    {
+      "from": "provider.terminal-input-modes",
+      "to": "runtime.terminal-input-modes-authoritative",
+      "kind": "produces"
+    },
+    {
+      "from": "session.pointer-geometry",
+      "to": "strategy.pointer-target",
+      "kind": "requires"
+    },
+    {
+      "from": "runtime.committed-observation",
+      "to": "strategy.pointer-target",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "strategy.pointer-target",
+      "to": "strategy.pointer-activate",
+      "kind": "requires"
+    },
+    {
+      "from": "session.pointer-input",
+      "to": "strategy.pointer-activate",
+      "kind": "requires"
+    },
+    {
+      "from": "runtime.terminal-input-modes-authoritative",
+      "to": "strategy.pointer-activate",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "runtime.mouse-reporting-enabled",
+      "to": "strategy.pointer-activate",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "session.keyboard-input",
+      "to": "strategy.keyboard-activate",
+      "kind": "requires"
+    },
+    {
+      "from": "runtime.writable-pty",
+      "to": "strategy.keyboard-activate",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "strategy.pointer-activate",
+      "to": "strategy.focus-by-pointer",
+      "kind": "requires"
+    },
+    {
+      "from": "session.focus",
+      "to": "strategy.type-focused",
+      "kind": "requires"
+    },
+    {
+      "from": "session.keyboard-input",
+      "to": "strategy.type-focused",
+      "kind": "requires"
+    },
+    {
+      "from": "session.semantic-tree",
+      "to": "public.locator.semantic-query",
+      "kind": "requires"
+    },
+    {
+      "from": "session.scroll",
+      "to": "public.locator.semantic-scroll",
+      "kind": "requires"
+    },
+    {
+      "from": "runtime.committed-observation",
+      "to": "public.locator.semantic-scroll",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "session.painted-region",
+      "to": "public.locator.painted-region",
+      "kind": "requires"
+    },
+    {
+      "from": "runtime.committed-observation",
+      "to": "public.locator.painted-region",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "session.semantic-tree",
+      "to": "public.condition.attached",
+      "kind": "requires"
+    },
+    {
+      "from": "session.semantic-tree",
+      "to": "public.condition.displayed",
+      "kind": "requires"
+    },
+    {
+      "from": "session.clipped-geometry",
+      "to": "public.condition.visible",
+      "kind": "requires"
+    },
+    {
+      "from": "session.clipped-geometry",
+      "to": "public.condition.in-viewport",
+      "kind": "requires"
+    },
+    {
+      "from": "session.focus",
+      "to": "public.condition.focused",
+      "kind": "requires"
+    },
+    {
+      "from": "session.semantic-tree",
+      "to": "public.condition.value",
+      "kind": "requires"
+    },
+    {
+      "from": "strategy.pointer-activate",
+      "to": "public.action.click",
+      "kind": "requires"
+    },
+    {
+      "from": "strategy.pointer-target",
+      "to": "public.action.hover",
+      "kind": "requires"
+    },
+    {
+      "from": "session.pointer-input",
+      "to": "public.action.hover",
+      "kind": "requires"
+    },
+    {
+      "from": "runtime.terminal-input-modes-authoritative",
+      "to": "public.action.hover",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "runtime.mouse-motion-enabled",
+      "to": "public.action.hover",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "strategy.pointer-activate",
+      "to": "public.action.drag",
+      "kind": "requires"
+    },
+    {
+      "from": "strategy.focus-by-pointer",
+      "to": "public.action.focus",
+      "kind": "requires-any"
+    },
+    {
+      "from": "strategy.keyboard-activate",
+      "to": "public.action.focus",
+      "kind": "requires-any"
+    },
+    {
+      "from": "strategy.pointer-activate",
+      "to": "public.action.activate",
+      "kind": "requires-any"
+    },
+    {
+      "from": "strategy.keyboard-activate",
+      "to": "public.action.activate",
+      "kind": "requires-any"
+    },
+    {
+      "from": "strategy.type-focused",
+      "to": "public.action.type",
+      "kind": "requires"
+    },
+    {
+      "from": "public.action.focus",
+      "to": "public.action.fill",
+      "kind": "requires"
+    },
+    {
+      "from": "session.keyboard-input",
+      "to": "public.action.fill",
+      "kind": "requires"
+    },
+    {
+      "from": "public.action.activate",
+      "to": "public.action.check",
+      "kind": "requires"
+    },
+    {
+      "from": "public.action.activate",
+      "to": "public.action.uncheck",
+      "kind": "requires"
+    },
+    {
+      "from": "session.keyboard-input",
+      "to": "public.device.keyboard",
+      "kind": "requires"
+    },
+    {
+      "from": "session.pointer-input",
+      "to": "public.device.mouse",
+      "kind": "requires"
+    },
+    {
+      "from": "runtime.terminal-input-modes-authoritative",
+      "to": "public.device.mouse",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "runtime.mouse-reporting-enabled",
+      "to": "public.device.mouse",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "session.focus-input",
+      "to": "public.device.window-focus",
+      "kind": "requires"
+    },
+    {
+      "from": "runtime.focus-reporting-enabled",
+      "to": "public.device.window-focus",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "runtime.terminal-input-modes-authoritative",
+      "to": "public.device.window-focus",
+      "kind": "runtime-requires"
+    },
+    {
+      "from": "session.paired-revisions",
+      "to": "public.checkpoint",
+      "kind": "requires"
+    },
+    {
+      "from": "public.action.click",
+      "to": "public.recorder.semantic-action",
+      "kind": "requires"
+    },
+    {
+      "from": "public.action.click",
+      "to": "public.mcp.semantic-action",
+      "kind": "requires"
+    },
+    {
+      "from": "diagnostic.semantic-tree",
+      "to": "public.runner.diagnostics",
+      "kind": "diagnoses"
+    },
+    {
+      "from": "diagnostic.geometry",
+      "to": "public.runner.diagnostics",
+      "kind": "diagnoses"
+    },
+    {
+      "from": "diagnostic.logs",
+      "to": "public.trace.diagnostics",
+      "kind": "diagnoses"
+    },
+    {
+      "from": "public.action.click",
+      "to": "public.runner.inspector",
+      "kind": "diagnoses"
+    },
+    {
+      "from": "public.action.click",
+      "to": "public.trace.action",
+      "kind": "diagnoses"
+    }
+  ]
+}

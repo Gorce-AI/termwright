@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionPlan
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:661
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:830
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:661
 
 > `readonly` **actionId**: `string`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:662
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:831
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:662
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:665
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:834
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:665
 
 > `readonly` **contractId**: `string`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:663
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:832
 
 ***
 
@@ -43,15 +43,15 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:663
 
 > `readonly` **intent**: [`ActionIntent`](../actionintent/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:664
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:833
 
 ***
 
 ### operations
 
-> `readonly` **operations**: readonly [`DeviceOperation`](../../type-aliases/deviceoperation/)[]
+> `readonly` **operations**: readonly [`RecordedDeviceOperation`](../../type-aliases/recordeddeviceoperation/)[]
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:669
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:838
 
 ***
 
@@ -59,7 +59,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:669
 
 > `readonly` `optional` **physicalRegion?**: [`PhysicalRegion`](../physicalregion/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:668
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:837
 
 ***
 
@@ -67,7 +67,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:668
 
 > `readonly` **requirements**: readonly [`ConditionResult`](../conditionresult/)[]
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:666
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:835
 
 ***
 
@@ -75,4 +75,12 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:666
 
 > `readonly` **strategy**: `string`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:667
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:836
+
+***
+
+### valuePolicy
+
+> `readonly` **valuePolicy**: `"raw"` \| `"none"` \| `"redacted"`
+
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:839

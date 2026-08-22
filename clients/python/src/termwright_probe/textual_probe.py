@@ -164,6 +164,10 @@ def _publish_frames() -> None:
     """Register the observer that turns frames into published trees."""
 
     def publish(app: Any) -> None:
+        from . import _owns_current_process
+
+        if not _owns_current_process():
+            return
         session = _sessions.get(app)
         if session is None:
             from .session import session_for

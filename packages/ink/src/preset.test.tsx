@@ -62,7 +62,7 @@ test('moves application focus through physical input', async () => {
   const harness = await mount({ label: 'Approve' });
   // A real Tab byte on stdin, not a call into the component.
   await harness.press('Tab');
-  await harness.waitForStable();
+  await harness.waitForQuiet();
 
   await harness.type('x');
   await expect(harness).toHaveText('> x');
@@ -79,7 +79,7 @@ test('sees activation through the matchers', async () => {
 test('types into the textbox and reads the value back', async () => {
   const harness = await mount({ label: 'Approve' });
   await harness.press('Tab');
-  await harness.waitForStable();
+  await harness.waitForQuiet();
   await harness.type('hi');
 
   await expect(harness).toHaveText('> hi');

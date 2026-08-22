@@ -7,9 +7,9 @@
  * will read, so this file is the application half of that contract.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { measureElement, useStdout, type DOMElement } from 'ink';
-import { registerEvidenceProvider } from '@termwright/evidence-provider';
+import { registerPointerEvidenceProvider } from '@termwright/evidence-provider';
 
 /** Zero-based viewport coordinates of a mouse report. */
 export interface Point {
@@ -106,10 +106,11 @@ class PointerRouter {
 
 const pointerRouter = new PointerRouter();
 
-registerEvidenceProvider({
+registerPointerEvidenceProvider({
   id: 'ink-todo-production-router',
   version: '1.0.0',
   method: 'native',
+  family: 'pointer',
   capabilities: ['pointer-regions', 'hit-test'],
   observe: ({ columns, rows }) => ({
     pointerRegions: pointerRouter.regions(columns, rows),
@@ -125,7 +126,11 @@ export function usePointerTarget(
   testId: string,
   element: { readonly current: DOMElement | null },
 ): void {
-  useEffect(() => pointerRouter.register({ testId, element }), [testId, element]);
+  // The router is correctness evidence for the same committed render as the
+  // semantic tree. Passive-effect cleanup runs after a removal was already
+  // rendered and can therefore expose a stale recipient for one frame.
+  // Layout-effect ownership changes at the commit boundary instead.
+  useLayoutEffect(() => pointerRouter.register({ testId, element }), [testId, element]);
 }
 
 /** Resolve a normal terminal mouse report through the production router. */

@@ -19,7 +19,6 @@ import { PACKAGE_VERSION } from './version.js';
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(packageRoot, 'src', 'testing', 'vanilla-app.mjs');
 const annotatedApp = join(packageRoot, 'src', 'testing', 'annotated-app.mjs');
-const annotationSdkRoot = join(packageRoot, '..', 'ink');
 
 type Runtime = 'bun' | 'node';
 
@@ -110,22 +109,11 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
   const runtimes: readonly Runtime[] = bunAvailable() ? ['node', 'bun'] : ['node'];
 
   beforeAll(async () => {
-    // Process tests execute published JavaScript, not Vitest's source transform.
-    const { execFile } = await import('node:child_process');
-    const build = (cwd: string) => {
-      const executable = process.platform === 'win32' ? (process.env['ComSpec'] ?? 'cmd.exe') : 'npm';
-      const argv = process.platform === 'win32'
-        ? ['/d', '/s', '/c', 'npm run build']
-        : ['run', 'build'];
-      return new Promise<void>((resolve, reject) => {
-        execFile(executable, argv, { cwd }, (error) => {
-          if (error === null) resolve();
-          else reject(error);
-        });
-      });
-    };
-    await build(annotationSdkRoot);
-    await build(packageRoot);
+    // The native host consumes the already-built workspace just like a packed
+    // installation. Building here used `tsup --clean` against shared `dist/`
+    // directories and could delete the Ink preload while another project was
+    // spawning it. Build is a host prerequisite, never a concurrent test-side
+    // mutation of another attempt's executable inputs.
     const built = await import(join(packageRoot, 'dist', 'index.js')) as {
       readonly withProbe: BuiltWithProbe;
     };

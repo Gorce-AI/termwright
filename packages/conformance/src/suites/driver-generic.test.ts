@@ -7,7 +7,7 @@
  * and exact exit/close semantics.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { SemanticCapabilityUnavailableError, TermwrightError, type Locator } from '@termwright/driver';
+import { SemanticCapabilityUnavailableError, TermwrightError, type AnyLocator } from '@termwright/driver';
 import type { Rect } from '@termwright/protocol';
 import {
   CONFORMANCE_FIXTURES,
@@ -22,7 +22,7 @@ import {
 
 const sessions = createSessionPool();
 
-async function intendedRect(locator: Locator): Promise<Rect | null> {
+async function intendedRect(locator: AnyLocator): Promise<Rect | null> {
   const observation = (await locator.geometry()).intendedRect;
   return observation.status === 'known' ? observation.value : null;
 }
@@ -55,12 +55,13 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
       })
       .toBe(true);
 
-    expect(terminal.capabilities().semanticTree).toBe(false);
-    expect(terminal.capabilities().adapter).toBeUndefined();
+    const contract = await terminal.settled();
+    expect(contract.capabilities['semantic-tree'].status).toBe('unsupported');
+    expect(contract.framework).toBeNull();
     expect(terminal.semanticTree()).toBeNull();
     expect(Date.now() - started).toBeLessThan(15_000);
 
-    // The fallback is a decision, and the session records it as one.
+    // The generic frozen contract is a decision, and the session records it.
     expect(terminal.diagnostics().map((entry) => entry.code)).toContain('negotiation-timeout');
     expect(terminal.diagnostics().map((entry) => entry.code)).not.toContain('adapter-attached');
   });
@@ -72,8 +73,7 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     expect(target.semantic).toBe(false);
     expect(target.role).toBeUndefined();
     expect(target.name).toBeUndefined();
-    expect(target.ref).toMatch(/^grid:/u);
-    expect(await terminal.getByScreenText('Alpha').semanticState()).toBeNull();
+    expect(target.ref).toMatch(/^screen:/u);
   });
 
   it('resolves text, regex, occurrence, style and cell locators', async () => {

@@ -7,7 +7,7 @@ snapshot, click a button by its ref, wait on a condition, and ask what changed.
 It is deliberately thin. Every tool validates its arguments with zod, calls the
 public `@termwright/driver` API, and renders the result. There is no locator
 engine, no wait loop and no matching heuristic here — a behaviour that differed
-between this server and the test preset would be a bug in this package.
+between this server and the Native Host would be a bug in this package.
 
 ## Install
 
@@ -47,12 +47,12 @@ process.on('SIGINT', () => void running.close());
 // terminal.snapshot -> the compact format, plus refs / cursor / modes / scroll
 Terminal t1 100x30 revision 42
 semanticTree: available
-dialog "Permission" ref=n7@42 bounds=(8,20,40,9) modal
-  button "Approve" ref=n8@42 bounds=(14,23,11,1) focused
+dialog "Permission" ref=semantic:n7@42 bounds=(8,20,40,9) modal
+  button "Approve" ref=semantic:n8@42 bounds=(14,23,11,1) focused
 visible text:
 …
 
-// terminal.click        { "terminal": "t1", "ref": "n8@42" }
+// terminal.click        { "terminal": "t1", "ref": "semantic:n8@42" }
 // terminal.wait_for     { "terminal": "t1", "wait": "text", "text": "Approved" }
 // terminal.capture_since{ "terminal": "t1", "cursor": 42 }  -> changed rows + subtrees
 // terminal.close        { "terminal": "t1" }
@@ -102,8 +102,8 @@ same vocabulary as a live session.
 // trace.frame_at  { "traceId": "tr1", "stepIndex": 1 }
 Terminal tr1 40x6 revision 2
 semanticTree: available
-dialog "Permission" ref=n1@2 modal
-  button "Approve" ref=n2@2 disabled
+dialog "Permission" ref=semantic:n1@2 modal
+  button "Approve" ref=semantic:n2@2 disabled
 visible text:
 …
 // trace.diff      { "traceId": "tr1", "fromMs": 0, "toMs": 3000 }  -> changed rows + subtrees
@@ -139,8 +139,8 @@ window; lower `screenshotScale` or resize the terminal.
 
 ## Refs and revisions
 
-A ref is `n8@42`: node id at semantic revision 42 (grid matches get
-`grid:1,2,9,1@7`). Refs go straight to `harness.locatorForRef()`, so they resolve
+A ref is `semantic:n8@42`: node id at semantic revision 42 (screen matches get
+`screen:1,2,9,1@7`). Refs go straight to `harness.locatorForRef()`, so they resolve
 by node *identity* — two buttons with the same name stay distinct. A producer
 which promises stable identity can resolve that node again in later revisions.
 Frame-local identities and grid refs remain revision-bound; take a fresh
@@ -216,7 +216,7 @@ are the one thing never recorded: the driver keeps their size only.
 Failures come back as tool results with `isError` set. The text content reads
 
 ```
-error stale-snapshot: ref n8@42 no longer exists at semantic revision 43
+error stale-snapshot: ref semantic:n8@42 no longer exists at semantic revision 43
 suggestion: re-resolve the locator; the node identity is no longer present
 semanticTree: true
 ```

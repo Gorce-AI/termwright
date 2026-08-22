@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TermwrightScopeFixture
 
-Defined in: [test/src/fixtures.ts:94](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L94)
+Defined in: [test/src/fixtures.ts:103](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L103)
 
 Test-scoped services that do not depend on a running terminal.
 
@@ -21,7 +21,7 @@ Test-scoped services that do not depend on a running terminal.
 
 > `readonly` **config**: [`ResolvedTermwrightConfig`](../resolvedtermwrightconfig/)
 
-Defined in: [test/src/fixtures.ts:95](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L95)
+Defined in: [test/src/fixtures.ts:104](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L104)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [test/src/fixtures.ts:95](https://github.com/Gorce-AI/termwright/blo
 
 > `readonly` **step**: [`StepRunner`](../../type-aliases/steprunner/)
 
-Defined in: [test/src/fixtures.ts:100](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L100)
+Defined in: [test/src/fixtures.ts:109](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L109)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [test/src/fixtures.ts:100](https://github.com/Gorce-AI/termwright/bl
 
 > `readonly` **tmpdir**: `string`
 
-Defined in: [test/src/fixtures.ts:97](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L97)
+Defined in: [test/src/fixtures.ts:106](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L106)
 
 Private directory for this test; created on first access, removed after.
 
@@ -47,6 +47,6 @@ Private directory for this test; created on first access, removed after.
 
 > `readonly` **traces**: readonly `string`[]
 
-Defined in: [test/src/fixtures.ts:99](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L99)
+Defined in: [test/src/fixtures.ts:108](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L108)
 
 Trace archives kept for this test, filled in during teardown.

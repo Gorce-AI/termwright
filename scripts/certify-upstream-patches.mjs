@@ -206,8 +206,8 @@ function candidateKey(candidate) {
 export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(['go', 'rust'])) {
   const registryPath = join(root, 'compatibility/registry.json');
   const registry = JSON.parse(await readFile(registryPath, 'utf8'));
-  if (registry?.schemaVersion !== 3 || !Array.isArray(registry.frameworks)) {
-    throw new CertificationError('compatibility/registry.json is not schemaVersion 3');
+  if (registry?.schemaVersion !== 5 || !Array.isArray(registry.frameworks)) {
+    throw new CertificationError('compatibility/registry.json is not schemaVersion 5');
   }
   const declarations = new Map();
   for (const framework of registry.frameworks) {
@@ -215,13 +215,9 @@ export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(
     if (
       !['stable', 'frame-local', 'correlated'].includes(framework.probe?.identityKind)
       || !Array.isArray(framework.probe?.capabilities)
-      || !Array.isArray(framework.probe?.adapterCapabilityVariants)
+      || !Array.isArray(framework.probe?.adapterCapabilities)
       || framework.probe.capabilities.some((capability) => typeof capability !== 'string')
-      || framework.probe.adapterCapabilityVariants.some(
-        (variant) => typeof variant?.when !== 'string'
-          || !Array.isArray(variant?.capabilities)
-          || variant.capabilities.some((capability) => typeof capability !== 'string'),
-      )
+      || framework.probe.adapterCapabilities.some((capability) => typeof capability !== 'string')
     ) {
       throw new CertificationError(`${framework.id} has an invalid capability declaration`);
     }
@@ -251,7 +247,7 @@ export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(
         patchSetVersion: module.patchSetVersion,
         identityKind: framework.probe.identityKind,
         probeCapabilities: framework.probe.capabilities,
-        adapterCapabilityVariants: framework.probe.adapterCapabilityVariants,
+        adapterCapabilities: framework.probe.adapterCapabilities,
       });
     }
   }
@@ -590,7 +586,7 @@ function candidateRecord(root, candidate, local, execution) {
     identityKind: declaration.identityKind,
     capabilities: {
       probe: declaration.probeCapabilities,
-      adapterVariants: declaration.adapterCapabilityVariants,
+      adapter: declaration.adapterCapabilities,
     },
     patchSetPath: relative(root, patchSetDir).split(sep).join('/'),
     patchSetDigest: local.patchSetDigest,

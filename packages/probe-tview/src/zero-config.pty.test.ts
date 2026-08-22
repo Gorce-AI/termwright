@@ -16,11 +16,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import {
   createNodePtyBackend,
   launchTerminal,
-  type Locator,
+  type SemanticLocator,
   type PtyBackend,
   type PtyProcess,
   type TerminalHarness,
@@ -42,7 +42,7 @@ const FIXTURE = join(here, "testing", "fixture-app");
 const FIXTURE_ANNOTATED = join(here, "testing", "fixture-annotated");
 const CLIENT = join(here, "..", "..", "..", "clients", "go");
 
-async function intendedRect(locator: Locator): Promise<Rect | null> {
+async function intendedRect(locator: SemanticLocator): Promise<Rect | null> {
   const observation = (await locator.geometry()).intendedRect;
   return observation.status === "known" ? observation.value : null;
 }
@@ -134,8 +134,14 @@ function byteCapturingBackend(): {
   };
 }
 
+afterEach(async () => {
+  const owned = sessions.splice(0);
+  const results = await Promise.allSettled(owned.map((session) => session.close()));
+  const failures = results.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
+  if (failures.length > 0) throw new AggregateError(failures, "failed to close test-owned terminal sessions");
+});
+
 afterAll(async () => {
-  await Promise.all(sessions.map((session) => session.close()));
   await Promise.all(
     roots.map((dir) => rm(dir, { recursive: true, force: true })),
   );
@@ -450,18 +456,14 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
     // never told about us. Terminal output and the side-channel handshake are
     // independent streams, so rendered text is not a semantic readiness
     // barrier on a busy runner.
-    await expect.poll(() => app.capabilities().semanticTree).toBe(true);
-    expect(app.capabilities().adapter?.name).toBe("termwright-probe-tview");
-    expect(app.capabilities().probe).toEqual({
-      framework: "tview",
-      frameworkVersion: "v0.42.0",
-      probeVersion: PROBE_VERSION,
-      identityKind: "stable",
-      capabilities: ["stable-identity", "annotations"],
+    await expect.poll(() => app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
+    expect(app.contract()?.framework).toMatchObject({
+      name: "tview", version: "v0.42.0", adapterVersion: PROBE_VERSION,
     });
+    expect(app.contract()?.capabilities['stable-identity'].status).toBe('supported');
 
-    // The driver's own API rather than the Vitest preset's matchers: a probe
-    // package should not depend on the test preset to prove it works.
+    // The driver's own API rather than the Native Host's matchers: a probe
+    // package should not depend on the host authoring surface to prove it works.
     await expect
       .poll(() => app.getByRole("list", { name: "Files" }).count())
       .toBe(1);

@@ -23,6 +23,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openTrace, type TraceReader } from '@termwright/trace';
+import { createRunId, parseRunId, type RunId } from '@termwright/protocol';
 import { watch } from 'chokidar';
 import {
   fromBase64,
@@ -35,7 +36,7 @@ import {
   type ServerMessage,
   type UiServerMode,
 } from './events.js';
-import { discoverTests, parseDiscoveredId, type DiscoveredTest, type DiscoveryOptions } from './discovery.js';
+import { discoverTests, type DiscoveredTest, type DiscoveryOptions } from './discovery.js';
 import { readProjectInfo } from './project.js';
 import { readSpecFacts } from './specs.js';
 import { DEFAULT_RUNS_DIR, readRunHistory, readRunManifest } from './runs.js';
@@ -77,17 +78,17 @@ export interface UiServerOptions {
   readonly appDir?: string;
   /** Pre-shared token. Default: 24 random bytes. */
   readonly token?: string;
-  /** Called when a client asks for a rerun. */
   /**
-   * Start a run. `testIds` names spec files or tests; absent means everything.
+   * Start a native-host run. `runnerTaskIds` are invocation-scoped identities
+   * from structured discovery; absent means the complete collected graph.
    *
    * May return a promise: `POST /api/run` awaits it and reports a failure to
    * the panel, because a run that could not be started must not look like a
    * run that produced nothing.
    */
-  readonly onRerun?: (testIds: readonly string[] | undefined) => void | Promise<void>;
-  /** Called when a client asks to stop the run. */
-  readonly onStop?: () => void | Promise<void>;
+  readonly onRun?: (runnerTaskIds: readonly string[] | undefined) => UiRunHandle | Promise<UiRunHandle>;
+  /** Called when a client asks to stop one exact run. */
+  readonly onStop?: (runId: RunId) => void | Promise<void>;
   /**
    * List the project's tests at startup, and again when its files change, so
    * the panel shows what a run *would* contain before one happens.
@@ -100,6 +101,11 @@ export interface UiServerOptions {
   readonly runsDir?: string;
   /** Backlog limits. */
   readonly hub?: UiHubOptions;
+}
+
+export interface UiRunHandle {
+  readonly runId: RunId;
+  readonly completed: Promise<unknown>;
 }
 
 /** A session the server knows about, and how to write to it. */
@@ -134,9 +140,8 @@ export interface UiServer {
  *
  * @example
  * ```ts
- * // Live: the Vitest reporter connects and publishes into the same hub.
+ * // Live: the Termwright Native Host projects its EventJournal into the hub.
  * const server = await startUiServer();
- * process.env['TERMWRIGHT_UI_URL'] = server.url;
  *
  * // Post-mortem: open an archive from CI.
  * const viewer = await startUiServer({ trace: 'out/login.twtrace' });
@@ -159,7 +164,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
   let mode: UiServerMode = 'live';
   let stopping = false;
   let nextRequestedRunGeneration = 0;
-  let requestedRun: { readonly generation: number } | undefined;
+  let requestedRun: { readonly generation: number; readonly runId?: RunId } | undefined;
   let nextProducerGeneration = 0;
   const producerRuns = new Map<
     WebSocket,
@@ -233,7 +238,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     // Start the run before attaching the session. `run-start` resets event
     // history, so the opposite order erased the only session announcement for
     // every browser that connected after recording began.
-    hub.publish({ v: 1, type: 'run-start', mode: 'record', startedAt: Date.now() });
+    hub.publish({ v: 1, type: 'run-start', runId: createRunId('run'), mode: 'record', startedAt: Date.now() });
     detachRecorder = attach({
       source: recorder.harness,
       write: (bytes) => recorder?.handleInput(bytes) ?? Promise.resolve(),
@@ -278,7 +283,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     // the stale `record` start and showed a ghost REC banner for a process that
     // no longer existed. Resetting the hub also drops discovery, so republish
     // the cached listing immediately.
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
+    hub.publish({ v: 1, type: 'run-start', runId: createRunId('run'), mode: 'live', startedAt: Date.now() });
     if (options.discovery !== undefined) {
       hub.publish({ v: 1, type: 'tests-discovered', tests: discovered });
     }
@@ -312,6 +317,15 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     // Empty is state too: deleting the last case must clear the browser's
     // stable catalogue rather than leave a ghost row behind.
     hub.publish({ v: 1, type: 'tests-discovered', tests });
+  };
+
+  const publishDiscoveryManaged = async (): Promise<void> => {
+    try {
+      await publishDiscovery();
+    } catch (error) {
+      discoveryReady = false;
+      hub.publish({ v: 1, type: 'collection-failed', error: boundedWireError(error) });
+    }
   };
 
   const http = createServer((request, response) => {
@@ -365,7 +379,7 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     ws.on('error', remove);
   }
 
-  /** A producer (the Vitest reporter) publishes into the hub. */
+  /** An attached terminal-session producer publishes into the projection hub. */
   function acceptProducer(ws: WebSocket): void {
     // Producers are observers living in test workers. A worker can disappear
     // at any point; an unhandled EventEmitter `error` must never take the UI
@@ -400,9 +414,8 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       }
       hub.publish(message);
     });
-    // The reporter normally sends run-end before closing. If it crashes or
-    // cannot finish the WebSocket handshake, retaining its lease forever
-    // would make every later run impossible.
+    // Session producers can disappear at any time. Drop their projection
+    // ownership; authoritative run lifecycle is owned by the native host.
     ws.on('close', () => {
       producerRuns.delete(ws);
       for (const [sessionId, producer] of producerSessions) if (producer === ws) producerSessions.delete(sessionId);
@@ -413,63 +426,51 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
     return stopping || requestedRun !== undefined || producerRuns.size > 0;
   }
 
-  function validateRunTargets(testIds: readonly string[] | undefined): void {
-    if (options.discovery === undefined || testIds === undefined || testIds.length === 0) return;
+  function validateRunTargets(runnerTaskIds: readonly string[] | undefined): void {
+    if (options.discovery === undefined || runnerTaskIds === undefined || runnerTaskIds.length === 0) return;
     if (!discoveryReady) throw new RunRequestError(409, 'the scoped test catalogue is still loading');
     const providerTests = discovered.filter((test) => test.provider !== undefined);
-    for (const target of testIds) {
-      const parsed = parseDiscoveredId(target);
-      const allowed = parsed === null
-        ? providerTests.some((test) => test.file === target)
-        : providerTests.some((test) => test.id === target);
+    for (const target of runnerTaskIds) {
+      const allowed = providerTests.some((test) => test.id === target);
       if (!allowed) throw new RunRequestError(400, 'run targets must belong to the scoped provider catalogue');
     }
   }
 
-  async function requestRun(testIds: readonly string[] | undefined): Promise<void> {
-    if (options.onRerun === undefined) {
+  async function requestRun(runnerTaskIds: readonly string[] | undefined): Promise<UiRunHandle> {
+    if (options.onRun === undefined) {
       throw new RunRequestError(409, 'this panel has no test runner behind it');
     }
-    validateRunTargets(testIds);
+    validateRunTargets(runnerTaskIds);
     if (runIsBusy()) throw new RunRequestError(409, 'a live run is already in progress');
     const generation = ++nextRequestedRunGeneration;
     requestedRun = { generation };
     try {
-      await options.onRerun(testIds);
-    } finally {
+      const handle = await options.onRun(runnerTaskIds);
+      if (requestedRun?.generation === generation) requestedRun = { generation, runId: handle.runId };
+      void handle.completed.then(
+        () => {
+          if (requestedRun?.generation === generation) requestedRun = undefined;
+        },
+        (error: unknown) => {
+          if (requestedRun?.generation === generation) requestedRun = undefined;
+          hub.publish({
+            v: 1,
+            type: 'run-infrastructure-failed',
+            runId: handle.runId,
+            error: boundedWireError(error),
+          });
+        },
+      );
+      return handle;
+    } catch (error) {
       // A cancelled/older callback must not unlock a later request.
       if (requestedRun?.generation === generation) requestedRun = undefined;
+      throw error;
     }
   }
 
   async function handleClientMessage(message: ClientMessage, viewer: WebSocket): Promise<void> {
     switch (message.type) {
-      case 'rerun':
-        // Legacy socket controls have no response channel, but they share the
-        // exact same validation and atomic lease as POST /api/run. A rejected
-        // request therefore starts no child instead of bypassing the gate.
-        await requestRun(message.testIds);
-        return;
-      case 'stop':
-        if (stopping) return;
-        stopping = true;
-        const stoppedRequestedGeneration = requestedRun?.generation;
-        try {
-          await options.onStop?.();
-          if (stoppedRequestedGeneration !== undefined) {
-            for (const [producer, run] of producerRuns) {
-              if (run.requestedRunGeneration === stoppedRequestedGeneration) {
-                producerRuns.delete(producer);
-              }
-            }
-          }
-          hub.publish({ v: 1, type: 'run-cancelled', stoppedAt: Date.now() });
-        } catch (error) {
-          hub.publish({ v: 1, type: 'run-cancel-failed', error: boundedWireError(error) });
-        } finally {
-          stopping = false;
-        }
-        return;
       case 'pick':
         sessions.get(message.sessionId)?.setPickMode?.(message.enabled ?? true);
         return;
@@ -530,14 +531,14 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       case 'GET /api/state': {
         sendJson(response, 200, {
           mode,
-          canRun: options.onRerun !== undefined,
+          canRun: options.onRun !== undefined,
           project,
           sessions: [...sessions.values()].map((session) => ({
             sessionId: session.source.sessionId,
             command: session.command ?? [],
             columns: session.source.screen().columns,
             rows: session.source.screen().rows,
-            terminalProfile: session.source.capabilities().terminalProfile,
+            terminalProfile: session.source.terminalProfile,
             writable: session.write !== undefined,
           })),
           trace: overview ?? null,
@@ -582,19 +583,49 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       }
       case 'POST /api/run': {
         const body = await readJsonBody(request);
-        const files = body['files'];
-        if (files !== undefined && (!Array.isArray(files) || files.some((f) => typeof f !== 'string'))) {
-          sendJson(response, 400, { error: 'files must be an array of strings' });
+        const runnerTaskIds = body['runnerTaskIds'];
+        if (runnerTaskIds !== undefined && (!Array.isArray(runnerTaskIds) || runnerTaskIds.some((id) => typeof id !== 'string'))) {
+          sendJson(response, 400, { error: 'runnerTaskIds must be an array of strings' });
           return;
         }
         try {
           // Awaited so the answer says whether it *started*, not whether it
           // passed: the panel shows results over the event stream, and the one
           // thing it cannot learn from there is that nothing began.
-          await requestRun(files as string[] | undefined);
-          sendJson(response, 200, { started: true });
+          const handle = await requestRun(runnerTaskIds as string[] | undefined);
+          sendJson(response, 202, { runId: handle.runId });
         } catch (error) {
           sendJson(response, error instanceof RunRequestError ? error.status : 500, { error: describeError(error) });
+        }
+        return;
+      }
+      case 'POST /api/stop': {
+        const body = await readJsonBody(request);
+        let runId: RunId;
+        try {
+          runId = parseRunId('run', body['runId']);
+        } catch {
+          sendJson(response, 400, { error: 'runId must be a canonical RunId' });
+          return;
+        }
+        if (requestedRun?.runId !== runId) {
+          sendJson(response, 409, { error: `run ${runId} is not active` });
+          return;
+        }
+        if (stopping) {
+          sendJson(response, 409, { error: `run ${runId} is already stopping` });
+          return;
+        }
+        stopping = true;
+        try {
+          await options.onStop?.(runId);
+          hub.publish({ v: 1, type: 'run-cancelled', stoppedAt: Date.now() });
+          sendJson(response, 200, { runId, stopped: true });
+        } catch (error) {
+          hub.publish({ v: 1, type: 'run-cancel-failed', error: boundedWireError(error) });
+          sendJson(response, 500, { runId, error: describeError(error) });
+        } finally {
+          stopping = false;
         }
         return;
       }
@@ -604,23 +635,20 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
       }
       case 'GET /api/run': {
         const id = url.searchParams.get('id');
-        const manifest = id === null ? null : await readRunManifest(options.runsDir ?? DEFAULT_RUNS_DIR, id);
-        if (manifest === null) {
-          sendJson(response, 404, { error: 'no such run' });
+        if (id === null) {
+          sendJson(response, 400, { error: 'canonical RunId is required' });
           return;
         }
-        sendJson(response, 200, {
-          ...manifest,
-          tests: await Promise.all(
-            manifest.tests.map(async (test) => {
-              if (test.traceRef === undefined) return test;
-              const traceAvailable = await stat(test.traceRef)
-                .then((entry) => entry.isDirectory())
-                .catch(() => false);
-              return { ...test, traceAvailable };
-            }),
-          ),
-        });
+        const detail = await readRunManifest(options.runsDir ?? DEFAULT_RUNS_DIR, id);
+        if (detail.state === 'corrupt' && detail.reason === 'invalid canonical RunId') {
+          sendJson(response, 400, detail);
+          return;
+        }
+        if (detail.state === 'corrupt' && detail.reason === 'run history directory does not exist') {
+          sendJson(response, 404, detail);
+          return;
+        }
+        sendJson(response, 200, detail);
         return;
       }
       case 'POST /api/trace/open': {
@@ -907,9 +935,9 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
 
   // Discovery runs in the background: the server is useful before it finishes,
   // and a project whose listing takes ten seconds should not delay the page.
-  void publishDiscovery();
+  void publishDiscoveryManaged();
   const stopWatching = options.discovery?.watch === true
-    ? await watchForChanges(options.discovery.cwd, publishDiscovery)
+    ? await watchForChanges(options.discovery.cwd, publishDiscoveryManaged)
     : undefined;
 
   const port = await listen(http, options.port ?? 0, options.host ?? '127.0.0.1');

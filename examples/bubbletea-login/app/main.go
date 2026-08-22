@@ -109,13 +109,13 @@ func (m model) View() tea.View {
 }
 
 func main() {
-	registration, err := evidence.RegisterPointerEvidenceProvider(evidence.Provider{
+	registration, err := evidence.RegisterPointerEvidenceProvider(evidence.PointerProvider{
 		ID:           "bubbletea-login-production-router",
 		Version:      "1.0.0",
 		Method:       "native",
 		Capabilities: []string{"pointer-regions", "hit-test"},
-		Observe: func(context evidence.Context) (evidence.Observation, error) {
-			return evidence.Observation{
+		Observe: func(context evidence.Context) (evidence.PointerObservation, error) {
+			return evidence.PointerObservation{
 				PointerRegions: []protocol.ProviderPointerRegion{{
 					RecipientID:  submitRecipient,
 					RegionBounds: protocol.Rect{Row: 5, Column: 0, Width: 10, Height: 1},

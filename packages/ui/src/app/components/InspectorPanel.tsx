@@ -164,17 +164,21 @@ function SemanticDetail({ node, snapshot, recorder, actionability }: { readonly 
   const states = Object.entries(node.state ?? {}).filter(([, value]) => value !== undefined);
   const visibleRect = node.geometry.visibleRect.status === 'known' ? node.geometry.visibleRect.value : undefined;
   const intendedRect = node.geometry.intendedRect.status === 'known' ? node.geometry.intendedRect.value : undefined;
+  const scroll = node.scroll?.status === 'known' ? node.scroll.value : undefined;
+  const painted = node.paintedRegion?.status === 'known' ? node.paintedRegion.value : undefined;
   return <div className="tw-semantic-detail">
     <header><div><span>{node.role}</span><h3>{node.name || 'Unnamed node'}</h3></div><CopyButton label="Copy node ref" value={node.id} /></header>
     <div className="tw-state-chips">{states.length === 0 ? <em>no portable state</em> : states.map(([key, value]) => <span key={key} data-on={value === true}>{key}: {String(value)}</span>)}</div>
     <dl className="tw-property-grid">
       <Property label="ref" value={node.id} copy />
-      <Property label="value" value={node.value} />
+      <Property label="value" value={node.value?.status === 'known' && node.value.sensitivity === 'public' ? node.value.value : node.value?.status} />
       <Property label="description" value={node.description} />
       <Property label="test id" value={node.testId} copy />
       <Property label="framework" value={node.frameworkType} />
       <Property label="visible region" value={visibleRect === undefined ? node.geometry.visibleRect.status : `${visibleRect.column},${visibleRect.row} · ${visibleRect.width}×${visibleRect.height}`} />
       <Property label="intended region" value={intendedRect === undefined ? node.geometry.intendedRect.status : `${intendedRect.column},${intendedRect.row} · ${intendedRect.width}×${intendedRect.height}`} />
+      <Property label="application scroll" value={scroll === undefined ? node.scroll?.status : `${scroll.axis} · ${scroll.offset}+${scroll.viewport}/${scroll.extent}`} />
+      <Property label="painted region" value={painted === undefined ? node.paintedRegion?.status : `${painted.regionBounds.column},${painted.regionBounds.row} · ${painted.regionBounds.width}×${painted.regionBounds.height} · ${painted.spans.length} spans`} />
       <Property label="provenance" value={node.p} />
       <Property label="labelled by" value={node.labelledBy?.join(', ')} />
       <Property label="described by" value={node.describedBy?.join(', ')} />

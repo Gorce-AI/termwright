@@ -29,6 +29,10 @@ jobs:
         with:
           node-version: '22'
       - run: node scripts/check-package-metadata.mjs
+      - run: node scripts/check-platform-deviations.mjs
+      - run: node scripts/audit-determinism-constructs.mjs
+      - run: node scripts/generate-semantic-completeness.mjs
+      - run: node scripts/generate-mission-completion.mjs
 
   build:
     name: build ${{ matrix.os }} / node ${{ matrix.node }}
@@ -59,19 +63,36 @@ jobs:
         run: pnpm --filter @termwright/driver exec node -e "import('@lydell/node-pty').then(m => { if (typeof m.spawn !== 'function') process.exit(1); console.log('pty backend loaded'); })"
 
       - run: pnpm -r --filter './packages/*' run build
+      # The certification smoke imports the packed-shape driver entrypoint; a
+      # fresh checkout has no dist/ and must build before this check. Running
+      # it earlier accidentally depended on stale local artifacts.
+      - run: pnpm check:node-pty
+      - name: Verify packed driver on the native PTY backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-driver-packs"
+          install_dir="$RUNNER_TEMP/termwright-driver-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm --dir packages/protocol pack --pack-destination "$pack_dir"
+          pnpm --dir packages/vt pack --pack-destination "$pack_dir"
+          pnpm --dir packages/driver pack --pack-destination "$pack_dir"
+          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
+          node scripts/check-installed-driver.mjs "$install_dir"
       - run: pnpm -r --filter './packages/*' run typecheck
-      # Each package's Vitest suite still uses its own worker pool. Running
-      # several of those pools beside the real-PTY suites oversubscribes
-      # Windows runners and can tear down a healthy worker IPC channel. Bound
-      # package-level fanout; dedicated hostile and stress jobs retain explicit
-      # concurrency coverage.
-      - run: pnpm -r --workspace-concurrency=1 --filter './packages/*' run test
+      - name: Run the certified Termwright host
+        shell: bash
+        run: |
+          set -euo pipefail
+          profile=ci
+          if [[ "${{ runner.os }}" == "Windows" ]]; then profile=windows-ci; fi
+          pnpm test -- --resource-profile "$profile" --json
 
       # The Getting Started source is a real workspace package. This catches
       # stale imports, launch assumptions and expected output in the primary
       # documentation path on every supported Node/OS build row.
       - name: Run the Getting Started example
-        run: pnpm --filter @termwright-examples/getting-started test
+        run: pnpm test -- --resource-profile ci --json -- --run examples/getting-started
 
   hostile:
     name: hostile input (128 MiB heap)
@@ -91,18 +112,164 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
-      # These pin the worker's old-space to 128 MiB, so a resource-exhaustion
-      # case fails closed instead of passing on a large default heap.
-      - run: pnpm --filter @termwright/protocol run test:hostile
-      - run: pnpm --filter @termwright/conformance run test:hostile
-
-      # @termwright/ui has no hostile-specific vitest config: its suite states
-      # the 128 MiB cap as a CI obligation, so CI is where the cap is applied.
-      # Vitest workers inherit NODE_OPTIONS, which is what actually bounds them.
-      - name: '@termwright/ui hostile suite'
+      # Hostile suites still run through the certified host. NODE_OPTIONS is
+      # inherited by its exact Vitest workers, so malformed input is tested
+      # under the 128 MiB ceiling without creating an uncertified runner path.
+      - name: Bounded hostile-input suites
         env:
           NODE_OPTIONS: '--max-old-space-size=128'
-        run: pnpm --filter @termwright/ui exec vitest run src/hostile.test.ts
+          TERMWRIGHT_RETRIES: '0'
+        run: >-
+          pnpm test -- --resource-profile ci --json -- --run
+          packages/protocol/src
+          packages/conformance/src/suites/adversarial.test.ts
+          packages/conformance/src/suites/mcp-sessions.test.ts
+          packages/ui/src/hostile.test.ts
+
+  determinism:
+    name: determinism (50 native run cycles, zero retries)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: '22', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - name: Repeat concurrency-sensitive slices in one persistent host
+        env: { TERMWRIGHT_RETRIES: '0' }
+        run: >-
+          pnpm test -- --runs 50 --resource-profile ci --json -- --run
+          packages/resource-broker/src/index.test.ts
+          packages/resource-broker/src/transport.test.ts
+          packages/run-journal-transport/src/index.test.ts
+          packages/driver/src/internal/resource-scope.test.ts
+          packages/driver/src/session-lifecycle.test.ts
+          packages/termwright-cli/src/test-host.integration.test.ts
+
+  concurrency-stress:
+    name: concurrency stress (16 owned terminals)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: '22', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - name: Saturate the explicit PTY/process/endpoint budget
+        env: { TERMWRIGHT_RETRIES: '0' }
+        run: >-
+          pnpm test -- --resource-profile stress --json --
+          --config quality/stress/vitest.config.ts --run
+          quality/stress/terminal-concurrency.test.ts
+
+  resource-leak:
+    name: resource leak barrier (25 lifecycle cycles)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: '22', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - name: Every cycle must finish with zero broker leases and owned processes
+        env: { TERMWRIGHT_RETRIES: '0' }
+        run: >-
+          pnpm test -- --runs 25 --resource-profile ci --json --
+          --config quality/soak/vitest.config.ts --run
+          quality/soak/terminal-cycle.test.ts
+
+  fault-and-jitter:
+    name: fault injection and slow causal boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: '22', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - name: Acquisition, persistence, handshake and cleanup fault matrix
+        env: { TERMWRIGHT_RETRIES: '0' }
+        run: >-
+          pnpm test -- --resource-profile ci --json -- --run
+          packages/driver/src/internal/resource-scope.test.ts
+          packages/driver/src/session-lifecycle.test.ts
+          packages/driver/src/semantic.test.ts
+          packages/run-history/src/index.test.ts
+          packages/run-journal-transport/src/index.test.ts
+          packages/termwright-cli/src/test-host.test.ts
+          packages/conformance/src/suites/adversarial.test.ts
+
+  randomized-race:
+    name: randomized race (recorded seed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: '22', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - name: Shuffle concurrency-sensitive tests with a reproducible seed
+        shell: bash
+        env: { TERMWRIGHT_RETRIES: '0' }
+        run: |
+          set -euo pipefail
+          seed=$(( ${{ github.run_id }} % 2147483647 ))
+          echo "Termwright randomized-race seed: $seed"
+          echo "### Randomized-race seed: \`$seed\`" >> "$GITHUB_STEP_SUMMARY"
+          pnpm test -- --runs 10 --resource-profile stress --json -- \
+            --sequence.shuffle --sequence.seed="$seed" --run \
+            packages/resource-broker/src packages/run-journal-transport/src \
+            packages/driver/src/semantic.test.ts packages/driver/src/session-lifecycle.test.ts
+
+  windows-native-stress:
+    name: Windows native lifecycle stress / Node ${{ matrix.node }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with: { node-version: "${{ matrix.node }}", cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - name: ConPTY process tree, close-under-load and worker pressure
+        shell: bash
+        env: { TERMWRIGHT_RETRIES: '0' }
+        run: |
+          set -euo pipefail
+          pnpm test -- --resource-profile windows-ci --json -- --run \
+            packages/driver/src/process-lifecycle.pty.test.ts \
+            packages/driver/src/pty-upstream-boundary.test.ts \
+            packages/driver/src/session-lifecycle.test.ts
+          pnpm test -- --resource-profile stress --json -- \
+            --config quality/stress/vitest.config.ts --run \
+            quality/stress/terminal-concurrency.test.ts
 
   conformance:
     name: conformance ${{ matrix.os }}
@@ -350,6 +517,19 @@ jobs:
           cargo test --locked
           cargo clippy --locked --all-targets -- -D warnings
 
+  rust-windows-transport:
+    name: Rust semantic transport (Windows named pipe)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - name: Real named-pipe handshake and publication
+        working-directory: clients/rust
+        run: cargo test --locked --test windows_named_pipe
+
   release-hygiene:
     name: release hygiene
     runs-on: ubuntu-latest
@@ -559,6 +739,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm -r --filter './examples/*' run build
 
       - name: Install the Python client for the Textual example
         run: pip install -e "clients/python[textual]"
@@ -566,7 +747,11 @@ jobs:
       - name: Run every public example without skips
         env:
           TERMWRIGHT_REQUIRE_EXAMPLES: '1'
-        run: pnpm -r --filter './examples/*' run test
+        run: >-
+          pnpm test -- --resource-profile ci --json -- --run
+          examples/bubbletea-login examples/getting-started examples/ink-todo
+          examples/opentui-form examples/ratatui-list examples/textual-notes
+          examples/tview-menu
 
       - name: Upload failure reports
         if: failure()

@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: CapacityError
 
-Defined in: [driver/src/errors.ts:158](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L158)
+Defined in: [driver/src/errors.ts:181](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L181)
 
 A bounded resource (queued frames, pending waiters, sessions) is exhausted.
 
@@ -25,7 +25,7 @@ A bounded resource (queued frames, pending waiters, sessions) is exhausted.
 
 > **new CapacityError**(`message`, `diagnostics`): `CapacityError`
 
-Defined in: [driver/src/errors.ts:159](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L159)
+Defined in: [driver/src/errors.ts:182](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L182)
 
 #### Parameters
 

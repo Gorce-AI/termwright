@@ -85,7 +85,7 @@ describe('mountInk', () => {
   it('still keeps its own instrumentation out of the runner environment', async () => {
     const harness = track(await mountInk(createElement(EnvApp, {}), SIZE));
 
-    expect(harness.capabilities().semanticTree).toBe(true);
+    expect(harness.contract()?.capabilities['semantic-tree'].status).toBe('supported');
     for (const key of Object.keys(process.env)) {
       expect(key.startsWith('TERMWRIGHT_')).toBe(false);
     }

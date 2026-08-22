@@ -191,14 +191,13 @@ function resolveState(
   if (observed?.selected !== undefined) state['selected'] = observed.selected;
   if (observed?.busy !== undefined) state['busy'] = observed.busy;
   if (observed?.multiline !== undefined) state['multiline'] = observed.multiline;
+  if (observed?.required !== undefined) state['required'] = observed.required;
+  if (observed?.multiselectable !== undefined) state['multiselectable'] = observed.multiselectable;
   if (observed?.displayed !== undefined) state['hidden'] = !observed.displayed;
   // Probe IR keeps item selection distinct from a text range. The semantic
   // tree represents the highlighted item's zero-based index as the matching
   // one-based collection position.
   if (observed?.selectedIndex !== undefined) state['positionInSet'] = observed.selectedIndex + 1;
-  if (observed?.scroll !== undefined) state['scrollOffset'] = observed.scroll.row;
-  if (observed?.scrollExtent !== undefined) state['scrollExtent'] = observed.scrollExtent.rows;
-
   // Clipped entirely away is a different fact from the framework's own display
   // flag, and both end up as `hidden` because the wire has one field for it.
   if (hiddenByGeometry) state['hidden'] = true;
@@ -268,6 +267,9 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
     if (object.annotations?.actions !== undefined && roleSource !== 'annotation') {
       px['actions'] = 'annotation';
     }
+    if (object.annotations?.inputRecipes !== undefined && roleSource !== 'annotation') {
+      px['inputRecipes'] = 'annotation';
+    }
     if (object.annotations?.labelledBy !== undefined && roleSource !== 'annotation') {
       px['labelledBy'] = 'annotation';
     }
@@ -326,9 +328,17 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
       ...(object.annotations?.actions === undefined
         ? {}
         : { actions: object.annotations.actions }),
+      ...(object.annotations?.inputRecipes === undefined
+        ? {}
+        : { inputRecipes: object.annotations.inputRecipes }),
       ...(labelledBy === undefined || labelledBy.length === 0 ? {} : { labelledBy }),
       ...(describedBy === undefined || describedBy.length === 0 ? {} : { describedBy }),
-      ...(object.state?.value === undefined ? {} : { value: object.state.value }),
+      ...(object.state?.value === undefined ? {} : { value: {
+        status: 'known' as const,
+        value: object.state.value,
+        sensitivity: object.state?.valueSensitivity ?? 'sensitive',
+        evidence: evidence('framework', 'instrumented', 'authoritative', context.framework),
+      } }),
       p: roleSource,
       ...(Object.keys(px).length === 0 ? {} : { px }),
     });

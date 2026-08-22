@@ -477,7 +477,7 @@
           ]
         },
         "code": "malformed",
-        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"intended-geometry\"|\"clipped-geometry\"|\"states\"|\"actions\"|\"text-ranges\"|\"render-revisions\"|\"logs\"|\"pointer-hit-grid\""
+        "detail": "capabilities.0: Invalid option: expected one of \"tree\"|\"intended-geometry\"|\"clipped-geometry\"|\"states\"|\"focus-state\"|\"actions\"|\"action-recipes\"|\"text-ranges\"|\"render-revisions\"|\"logs\"|\"pointer-hit-grid\""
       },
       {
         "name": "hello-v1-rejected",

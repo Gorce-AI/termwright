@@ -673,6 +673,17 @@ fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
         "the wrapper hid the application's widget type: {node}"
     );
     assert_eq!(node["id"], "k:deployment-control");
+    assert_eq!(node["parentId"], "k:deployment-group");
+    assert_eq!(
+        tree["nodes"]
+            .as_array()
+            .expect("nodes")
+            .iter()
+            .filter(|candidate| candidate["id"] == "k:deployment-control")
+            .count(),
+        1,
+        "direct Annotated render was duplicated: {tree}"
+    );
 
     assert!(
         String::from_utf8_lossy(&run.stdout).contains("\u{1b}]8487;"),

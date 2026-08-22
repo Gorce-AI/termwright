@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 //! The adapter-side diagnostic log: off by default, a file when asked, never
 //! stderr.
 
@@ -160,10 +162,10 @@ fn dormancy_reason_names_only_the_missing_variable() {
     assert!(text.contains("dormant: TERMWRIGHT_TOKEN not set"), "{text}");
 }
 
-/// This client has no Windows transport, and a pipe path is the shape that
-/// exposes it. The log is the only place that says so.
+/// A Windows pipe is not a Unix local endpoint. Cross-platform configuration
+/// mistakes stay dormant and say why without exposing the pipe token.
 #[test]
-fn a_pipe_endpoint_says_which_transport_is_missing() {
+fn a_pipe_endpoint_is_rejected_on_unix() {
     let directory = support::temp_dir();
     let path = directory.join("adapter.log");
     let (options, log) = options_logging_to(&path);
@@ -174,7 +176,10 @@ fn a_pipe_endpoint_says_which_transport_is_missing() {
 
     let text = fs::read_to_string(&path).expect("readable");
     assert!(text.contains("dormant: pipe:"), "{text}");
-    assert!(text.contains("needs a Windows transport"), "{text}");
+    assert!(
+        text.contains("is not a local endpoint for this platform"),
+        "{text}"
+    );
 }
 
 /// The line that would have settled the Windows question by itself.

@@ -16,6 +16,12 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from .debug import DebugLog, describe_endpoint
 from .errors import ProtocolViolation, TermwrightError
+from .evidence import (
+    EvidenceProviderRegistry,
+    EvidenceRevisionContext,
+    FrozenEvidenceProviderRegistry,
+    default_evidence_provider_registry,
+)
 from .framing import FrameDecoder, encode_frame
 from .limits import DEFAULT_LIMITS, ProtocolLimits
 from .marker import encode_marker
@@ -144,6 +150,7 @@ class SemanticClient:
         debug: Optional[DebugLog] = None,
         probe: Optional[Mapping[str, Any]] = None,
         write_timeout: float = DEFAULT_WRITE_TIMEOUT,
+        evidence_registry: Optional[EvidenceProviderRegistry] = None,
     ) -> None:
         self._endpoint = endpoint
         self._token = token
@@ -160,6 +167,8 @@ class SemanticClient:
         #: Seconds one frame write may wait. Non-positive disables the bound,
         #: which is only sane for a caller that publishes off the render path.
         self._write_timeout = write_timeout
+        self._evidence_registry = evidence_registry
+        self._evidence_lease: Optional[FrozenEvidenceProviderRegistry] = None
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
         self._decoder = FrameDecoder(limits.maxFrameBytes, limits.maxDepth)
@@ -194,6 +203,8 @@ class SemanticClient:
             raises — when the endpoint is unreachable or the driver rejects us:
             a failed side-channel must not take the application down with it.
         """
+        if self._evidence_registry is not None and self._evidence_lease is None:
+            self._evidence_lease = self._evidence_registry.freeze()
         self._log("sem", f"dial {describe_endpoint(self._endpoint)} timeout={int(timeout * 1000)}ms")
         try:
             self._reader, self._writer = await asyncio.wait_for(
@@ -219,6 +230,7 @@ class SemanticClient:
                     self._adapter_version,
                     self._capabilities,
                     self._probe,
+                    self._evidence_lease.registrations if self._evidence_lease is not None else None,
                 )
             )
             self._log(
@@ -244,6 +256,9 @@ class SemanticClient:
                 f"logs_dropped={self.logs_dropped}",
             )
         self.closed = True
+        if self._evidence_lease is not None:
+            self._evidence_lease.close()
+            self._evidence_lease = None
         if self._reader_task is not None:
             self._reader_task.cancel()
             self._reader_task = None
@@ -277,6 +292,34 @@ class SemanticClient:
         wire = snapshot.to_wire()
         wire["sessionId"] = self.session_id
         wire["revision"] = self.revision
+        if self._evidence_lease is not None:
+            nodes = wire.get("nodes", ())
+
+            def resolve_recipient(recipient: Mapping[str, Any]) -> str:
+                if set(recipient) == {"semanticId"} and isinstance(recipient["semanticId"], str):
+                    matches = [node for node in nodes if node.get("id") == recipient["semanticId"]]
+                elif set(recipient) == {"testId"} and isinstance(recipient["testId"], str):
+                    matches = [node for node in nodes if node.get("testId") == recipient["testId"]]
+                elif set(recipient) == {"role", "name"}:
+                    matches = [
+                        node for node in nodes
+                        if node.get("role") == recipient["role"] and node.get("name") == recipient["name"]
+                    ]
+                else:
+                    raise ValueError("recipient must be exactly semanticId, testId, or role+name")
+                if len(matches) != 1:
+                    raise ValueError(f"recipient resolved to {len(matches)} semantic nodes")
+                return str(matches[0]["id"])
+
+            wire["providerEvidence"] = list(self._evidence_lease.collect(
+                EvidenceRevisionContext(
+                    sessionId=self.session_id,
+                    revision=self.revision,
+                    columns=int(wire["columns"]),
+                    rows=int(wire["rows"]),
+                ),
+                resolve_recipient,
+            ))
 
         result = validate_snapshot(wire, self._limits)
         if not result.ok:
@@ -564,6 +607,7 @@ def client_from_env(
     limits: ProtocolLimits = DEFAULT_LIMITS,
     debug: Optional[DebugLog] = None,
     probe: Optional[Mapping[str, Any]] = None,
+    evidence_registry: Optional[EvidenceProviderRegistry] = None,
 ) -> Optional[SemanticClient]:
     """Build a client from ``TERMWRIGHT_*``, or ``None`` when not instrumented.
 
@@ -597,6 +641,7 @@ def client_from_env(
         limits=limits,
         debug=log,
         probe=probe,
+        evidence_registry=evidence_registry or default_evidence_provider_registry(),
     )
 
 

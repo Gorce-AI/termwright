@@ -2,8 +2,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createRunId } from '@termwright/protocol';
 import {
-  beginSnapshotScope,
   pruneObsoleteSnapshots,
   nextSnapshotKey,
   readSnapshot,
@@ -12,8 +12,22 @@ import {
   snapshotFilePath,
   writeSnapshot,
 } from './snapshot-store.js';
+import {
+  createAttemptContext,
+  runWithAttemptContext,
+  runWithoutAttemptContextForTesting,
+} from './attempt-context.js';
+import { unitAttemptOptions } from './__fixtures__/attempt-options.js';
 
 const directories: string[] = [];
+
+function identity() {
+  return {
+    invocationId: createRunId('invocation'), runId: createRunId('run'), projectId: createRunId('project'),
+    specId: createRunId('spec'), runnerTaskId: createRunId('runner-task'), nativeTaskId: 'snapshot-unit',
+    file: '/repo/snapshot.test.ts', fullName: 'snapshot unit',
+  } as const;
+}
 
 function workspace(): string {
   const dir = mkdtempSync(join(tmpdir(), 'tw-snapshots-'));
@@ -110,22 +124,45 @@ describe('resolveUpdateMode', () => {
 
 describe('key allocation', () => {
   it('numbers assertions within a test', () => {
-    beginSnapshotScope();
-    expect(nextSnapshotKey('t1', 'shows the dialog', 'semantic')).toBe('shows the dialog 1');
-    expect(nextSnapshotKey('t1', 'shows the dialog', 'semantic')).toBe('shows the dialog 2');
-    expect(nextSnapshotKey('t1', 'shows the dialog', 'cells')).toBe('shows the dialog 1');
+    runWithAttemptContext(createAttemptContext(identity(), 0, 0, unitAttemptOptions()), () => {
+      expect(nextSnapshotKey('shows the dialog', 'semantic')).toBe('shows the dialog 1');
+      expect(nextSnapshotKey('shows the dialog', 'semantic')).toBe('shows the dialog 2');
+      expect(nextSnapshotKey('shows the dialog', 'cells')).toBe('shows the dialog 1');
+    });
   });
 
   it('restarts numbering for a retried test', () => {
-    beginSnapshotScope();
-    expect(nextSnapshotKey('t1', 'flaky', 'semantic')).toBe('flaky 1');
-    beginSnapshotScope();
-    expect(nextSnapshotKey('t1', 'flaky', 'semantic')).toBe('flaky 1');
+    runWithAttemptContext(createAttemptContext(identity(), 0, 0, unitAttemptOptions()), () => {
+      expect(nextSnapshotKey('flaky', 'semantic')).toBe('flaky 1');
+    });
+    runWithAttemptContext(createAttemptContext(identity(), 0, 1, unitAttemptOptions()), () => {
+      expect(nextSnapshotKey('flaky', 'semantic')).toBe('flaky 1');
+    });
   });
 
-  it('restarts numbering when the test changes, even without a scope', () => {
-    expect(nextSnapshotKey('t1', 'first', 'semantic')).toBe('first 1');
-    expect(nextSnapshotKey('t2', 'second', 'semantic')).toBe('second 1');
+  it('isolates concurrent duplicate-title attempts', async () => {
+    const first = createAttemptContext(identity(), 0, 0, unitAttemptOptions());
+    const second = createAttemptContext(identity(), 0, 0, unitAttemptOptions());
+    const values = await Promise.all([
+      runWithAttemptContext(first, async () => {
+        await Promise.resolve();
+        return [nextSnapshotKey('same title', 'semantic'), nextSnapshotKey('same title', 'semantic')];
+      }),
+      runWithAttemptContext(second, async () => {
+        await Promise.resolve();
+        return [nextSnapshotKey('same title', 'semantic'), nextSnapshotKey('same title', 'semantic')];
+      }),
+    ]);
+    expect(values).toEqual([
+      ['same title 1', 'same title 2'],
+      ['same title 1', 'same title 2'],
+    ]);
+  });
+
+  it('fails outside an authoritative attempt', () => {
+    runWithoutAttemptContextForTesting(() => {
+      expect(() => nextSnapshotKey('orphan', 'semantic')).toThrow(/exact-certified/u);
+    });
   });
 });
 

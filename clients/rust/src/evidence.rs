@@ -9,7 +9,9 @@ use std::sync::{Arc, Mutex};
 use crate::messages::EvidenceProviderRegistration;
 use crate::tree::{
     EvidenceMethod, EvidenceProvenance, EvidenceSource, EvidenceStrength, PointerHitGrid,
-    PointerHitRegion, ProviderPointerRegion, ProviderRevisionEvidence, Rect,
+    PointerHitRegion, ProviderActionRecipes, ProviderFocusState, ProviderPaintedRegion,
+    ProviderPointerRegion, ProviderRevisionEvidence, ProviderScrollState,
+    ProviderTerminalInputModes, Rect,
 };
 
 /// Immutable coordinates identifying the provider observation being requested.
@@ -25,8 +27,8 @@ pub struct Context {
     pub rows: i64,
 }
 
-/// Exact production-router facts returned for one revision.
-pub struct ProviderObservation {
+/// Exact production pointer-router facts returned for one revision.
+pub struct PointerObservation {
     /// Canonical pointer-owned regions for semantic recipients.
     pub pointer_regions: Vec<ProviderPointerRegion>,
     /// Optional production hit-test used to verify the complete viewport.
@@ -36,8 +38,8 @@ pub struct ProviderObservation {
 /// Thread-safe production pointer hit-test in `(column, row)` order.
 pub type HitTest = Arc<dyn Fn(i64, i64) -> Option<String> + Send + Sync>;
 
-/// Application integration that exposes authoritative production evidence.
-pub trait Provider: Debug + Send + Sync {
+/// Closed application provider family for production pointer evidence.
+pub trait PointerProvider: Debug + Send + Sync {
     /// Stable provider identity frozen into the session contract.
     fn id(&self) -> &str;
     /// Provider implementation version.
@@ -49,7 +51,257 @@ pub trait Provider: Debug + Send + Sync {
     /// independent providers, but each capability has one session owner.
     fn capabilities(&self) -> Vec<String>;
     /// Observe exact evidence for the requested session revision.
+    fn observe(&self, context: &Context) -> Result<PointerObservation, String>;
+}
+
+/// Closed application provider family for data-only physical input recipes.
+pub trait ActionStrategyProvider: Debug + Send + Sync {
+    /// Stable provider identity frozen into the session contract.
+    fn id(&self) -> &str;
+    /// Provider implementation version.
+    fn version(&self) -> &str;
+    /// How the application obtains the production recipes.
+    fn method(&self) -> EvidenceMethod;
+    /// Observe exact recipes for the requested session revision.
+    fn observe(&self, context: &Context) -> Result<Vec<ProviderActionRecipes>, String>;
+}
+
+/// Closed application provider family for the production focus manager.
+pub trait FocusProvider: Debug + Send + Sync {
+    /// Stable provider identity frozen into the session contract.
+    fn id(&self) -> &str;
+    /// Provider implementation version.
+    fn version(&self) -> &str;
+    /// How the application obtains the focus evidence.
+    fn method(&self) -> EvidenceMethod;
+    /// Focused semantic recipient, or `None` when no node owns focus.
+    fn observe(&self, context: &Context) -> Result<Option<String>, String>;
+}
+
+/// Closed provider family for the production application viewport model.
+pub trait ScrollProvider: Debug + Send + Sync {
+    /// Stable provider identity frozen into the session contract.
+    fn id(&self) -> &str;
+    /// Provider implementation version.
+    fn version(&self) -> &str;
+    /// How the application obtains viewport evidence.
+    fn method(&self) -> EvidenceMethod;
+    /// Complete scroll recipient states for this committed revision.
+    fn observe(&self, context: &Context) -> Result<Vec<ProviderScrollState>, String>;
+}
+
+/// Closed provider family for production painter attribution.
+pub trait PaintProvider: Debug + Send + Sync {
+    /// Stable provider identity frozen into the session contract.
+    fn id(&self) -> &str;
+    /// Provider implementation version.
+    fn version(&self) -> &str;
+    /// How the application obtains painter evidence.
+    fn method(&self) -> EvidenceMethod;
+    /// Complete painted regions for this committed revision.
+    fn observe(&self, context: &Context) -> Result<Vec<ProviderPaintedRegion>, String>;
+}
+
+/// Closed provider family for production terminal parser configuration.
+pub trait InputModeProvider: Debug + Send + Sync {
+    /// Stable provider identity frozen into the session contract.
+    fn id(&self) -> &str;
+    /// Provider implementation version.
+    fn version(&self) -> &str;
+    /// How the application obtains parser evidence.
+    fn method(&self) -> EvidenceMethod;
+    /// Exact production parser configuration for this committed revision.
+    fn observe(&self, context: &Context) -> Result<ProviderTerminalInputModes, String>;
+}
+
+trait Provider: Debug + Send + Sync {
+    fn id(&self) -> &str;
+    fn version(&self) -> &str;
+    fn method(&self) -> EvidenceMethod;
+    fn capabilities(&self) -> Vec<String>;
     fn observe(&self, context: &Context) -> Result<ProviderObservation, String>;
+}
+
+struct ProviderObservation {
+    pointer_regions: Vec<ProviderPointerRegion>,
+    hit_test: Option<HitTest>,
+    action_recipes: Option<Vec<ProviderActionRecipes>>,
+    focus_state: Option<ProviderFocusState>,
+    scroll_states: Option<Vec<ProviderScrollState>>,
+    painted_regions: Option<Vec<ProviderPaintedRegion>>,
+    input_modes: Option<ProviderTerminalInputModes>,
+}
+
+#[derive(Debug)]
+struct PointerProviderAdapter(Arc<dyn PointerProvider>);
+impl Provider for PointerProviderAdapter {
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+    fn version(&self) -> &str {
+        self.0.version()
+    }
+    fn method(&self) -> EvidenceMethod {
+        self.0.method()
+    }
+    fn capabilities(&self) -> Vec<String> {
+        self.0.capabilities()
+    }
+    fn observe(&self, context: &Context) -> Result<ProviderObservation, String> {
+        let value = self.0.observe(context)?;
+        Ok(ProviderObservation {
+            pointer_regions: value.pointer_regions,
+            hit_test: value.hit_test,
+            action_recipes: None,
+            focus_state: None,
+            scroll_states: None,
+            painted_regions: None,
+            input_modes: None,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct ActionStrategyProviderAdapter(Arc<dyn ActionStrategyProvider>);
+impl Provider for ActionStrategyProviderAdapter {
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+    fn version(&self) -> &str {
+        self.0.version()
+    }
+    fn method(&self) -> EvidenceMethod {
+        self.0.method()
+    }
+    fn capabilities(&self) -> Vec<String> {
+        vec!["action-recipes".into()]
+    }
+    fn observe(&self, context: &Context) -> Result<ProviderObservation, String> {
+        Ok(ProviderObservation {
+            pointer_regions: Vec::new(),
+            hit_test: None,
+            action_recipes: Some(self.0.observe(context)?),
+            focus_state: None,
+            scroll_states: None,
+            painted_regions: None,
+            input_modes: None,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct FocusProviderAdapter(Arc<dyn FocusProvider>);
+impl Provider for FocusProviderAdapter {
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+    fn version(&self) -> &str {
+        self.0.version()
+    }
+    fn method(&self) -> EvidenceMethod {
+        self.0.method()
+    }
+    fn capabilities(&self) -> Vec<String> {
+        vec!["focus-state".into()]
+    }
+    fn observe(&self, context: &Context) -> Result<ProviderObservation, String> {
+        Ok(ProviderObservation {
+            pointer_regions: Vec::new(),
+            hit_test: None,
+            action_recipes: None,
+            focus_state: Some(match self.0.observe(context)? {
+                Some(recipient_id) => ProviderFocusState::Focused { recipient_id },
+                None => ProviderFocusState::None,
+            }),
+            scroll_states: None,
+            painted_regions: None,
+            input_modes: None,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct ScrollProviderAdapter(Arc<dyn ScrollProvider>);
+impl Provider for ScrollProviderAdapter {
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+    fn version(&self) -> &str {
+        self.0.version()
+    }
+    fn method(&self) -> EvidenceMethod {
+        self.0.method()
+    }
+    fn capabilities(&self) -> Vec<String> {
+        vec!["scroll-state".into()]
+    }
+    fn observe(&self, context: &Context) -> Result<ProviderObservation, String> {
+        Ok(ProviderObservation {
+            pointer_regions: Vec::new(),
+            hit_test: None,
+            action_recipes: None,
+            focus_state: None,
+            scroll_states: Some(self.0.observe(context)?),
+            painted_regions: None,
+            input_modes: None,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct PaintProviderAdapter(Arc<dyn PaintProvider>);
+impl Provider for PaintProviderAdapter {
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+    fn version(&self) -> &str {
+        self.0.version()
+    }
+    fn method(&self) -> EvidenceMethod {
+        self.0.method()
+    }
+    fn capabilities(&self) -> Vec<String> {
+        vec!["painted-regions".into()]
+    }
+    fn observe(&self, context: &Context) -> Result<ProviderObservation, String> {
+        Ok(ProviderObservation {
+            pointer_regions: Vec::new(),
+            hit_test: None,
+            action_recipes: None,
+            focus_state: None,
+            scroll_states: None,
+            painted_regions: Some(self.0.observe(context)?),
+            input_modes: None,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct InputModeProviderAdapter(Arc<dyn InputModeProvider>);
+impl Provider for InputModeProviderAdapter {
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+    fn version(&self) -> &str {
+        self.0.version()
+    }
+    fn method(&self) -> EvidenceMethod {
+        self.0.method()
+    }
+    fn capabilities(&self) -> Vec<String> {
+        vec!["terminal-input-modes".into()]
+    }
+    fn observe(&self, context: &Context) -> Result<ProviderObservation, String> {
+        Ok(ProviderObservation {
+            pointer_regions: Vec::new(),
+            hit_test: None,
+            action_recipes: None,
+            focus_state: None,
+            scroll_states: None,
+            painted_regions: None,
+            input_modes: Some(self.0.observe(context)?),
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -95,7 +347,54 @@ impl Registry {
         Self::default()
     }
     /// Register a provider before any session freezes the registry.
-    pub fn register(&self, provider: Arc<dyn Provider>) -> Result<Registration, String> {
+    /// Register a production pointer provider before contract freeze.
+    pub fn register_pointer(
+        &self,
+        provider: Arc<dyn PointerProvider>,
+    ) -> Result<Registration, String> {
+        for capability in provider.capabilities() {
+            if capability != "pointer-regions" && capability != "hit-test" {
+                return Err(format!("pointer provider cannot declare {capability}"));
+            }
+        }
+        self.register(Arc::new(PointerProviderAdapter(provider)))
+    }
+
+    /// Register production physical input recipes before contract freeze.
+    pub fn register_action_strategies(
+        &self,
+        provider: Arc<dyn ActionStrategyProvider>,
+    ) -> Result<Registration, String> {
+        self.register(Arc::new(ActionStrategyProviderAdapter(provider)))
+    }
+
+    /// Register production focus-manager evidence before contract freeze.
+    pub fn register_focus(&self, provider: Arc<dyn FocusProvider>) -> Result<Registration, String> {
+        self.register(Arc::new(FocusProviderAdapter(provider)))
+    }
+
+    /// Register production viewport evidence before contract freeze.
+    pub fn register_scroll(
+        &self,
+        provider: Arc<dyn ScrollProvider>,
+    ) -> Result<Registration, String> {
+        self.register(Arc::new(ScrollProviderAdapter(provider)))
+    }
+
+    /// Register production painter attribution before contract freeze.
+    pub fn register_paint(&self, provider: Arc<dyn PaintProvider>) -> Result<Registration, String> {
+        self.register(Arc::new(PaintProviderAdapter(provider)))
+    }
+
+    /// Register production terminal parser configuration before contract freeze.
+    pub fn register_input_modes(
+        &self,
+        provider: Arc<dyn InputModeProvider>,
+    ) -> Result<Registration, String> {
+        self.register(Arc::new(InputModeProviderAdapter(provider)))
+    }
+
+    fn register(&self, provider: Arc<dyn Provider>) -> Result<Registration, String> {
         let mut state = self
             .state
             .lock()
@@ -114,15 +413,6 @@ impl Registry {
         }
         let capabilities = provider.capabilities();
         validate_capabilities(&capabilities)?;
-        for capability in &capabilities {
-            if state
-                .entries
-                .values()
-                .any(|entry| entry.capabilities.iter().any(|value| value == capability))
-            {
-                return Err(format!("competing {capability} providers"));
-            }
-        }
         let id = provider.id().to_owned();
         let entry = Arc::new(Entry {
             provider,
@@ -153,7 +443,14 @@ fn validate_capabilities(capabilities: &[String]) -> Result<(), String> {
     }
     let mut seen = std::collections::HashSet::new();
     for capability in capabilities {
-        if capability != "pointer-regions" && capability != "hit-test" {
+        if capability != "pointer-regions"
+            && capability != "hit-test"
+            && capability != "action-recipes"
+            && capability != "focus-state"
+            && capability != "scroll-state"
+            && capability != "painted-regions"
+            && capability != "terminal-input-modes"
+        {
             return Err(format!("unknown provider capability {capability}"));
         }
         if !seen.insert(capability) {
@@ -172,9 +469,44 @@ pub fn global_registry() -> Registry {
 
 /// Register a production evidence provider in the process-wide registry.
 pub fn register_pointer_evidence_provider(
-    provider: Arc<dyn Provider>,
+    provider: Arc<dyn PointerProvider>,
 ) -> Result<Registration, String> {
-    global_registry().register(provider)
+    global_registry().register_pointer(provider)
+}
+
+/// Register application production input recipes in the process-wide registry.
+pub fn register_action_strategy_provider(
+    provider: Arc<dyn ActionStrategyProvider>,
+) -> Result<Registration, String> {
+    global_registry().register_action_strategies(provider)
+}
+
+/// Register application production focus-manager evidence globally.
+pub fn register_focus_evidence_provider(
+    provider: Arc<dyn FocusProvider>,
+) -> Result<Registration, String> {
+    global_registry().register_focus(provider)
+}
+
+/// Register application production viewport evidence globally.
+pub fn register_scroll_evidence_provider(
+    provider: Arc<dyn ScrollProvider>,
+) -> Result<Registration, String> {
+    global_registry().register_scroll(provider)
+}
+
+/// Register application production painter attribution globally.
+pub fn register_paint_evidence_provider(
+    provider: Arc<dyn PaintProvider>,
+) -> Result<Registration, String> {
+    global_registry().register_paint(provider)
+}
+
+/// Register production terminal parser mode evidence globally.
+pub fn register_terminal_input_mode_evidence_provider(
+    provider: Arc<dyn InputModeProvider>,
+) -> Result<Registration, String> {
+    global_registry().register_input_modes(provider)
 }
 
 #[derive(Debug)]
@@ -245,6 +577,11 @@ fn collect_entry(
         status: status.into(),
         evidence: None,
         pointer_regions: None,
+        focus_state: None,
+        action_recipes: None,
+        scroll_states: None,
+        painted_regions: None,
+        input_modes: None,
         hit_grid: None,
         reason,
     };
@@ -282,7 +619,105 @@ fn collect_entry(
             Some("published a hit-test callback without negotiating hit-test".into()),
         );
     }
+    if capabilities.iter().any(|v| v == "action-recipes") && observation.action_recipes.is_none() {
+        return base(
+            "violation",
+            Some("negotiated action-recipes evidence is unavailable".into()),
+        );
+    }
+    if !capabilities.iter().any(|v| v == "action-recipes") && observation.action_recipes.is_some() {
+        return base(
+            "violation",
+            Some("published action recipes without negotiating action-recipes".into()),
+        );
+    }
+    if capabilities.iter().any(|v| v == "focus-state") && observation.focus_state.is_none() {
+        return base(
+            "violation",
+            Some("negotiated focus-state evidence is unavailable".into()),
+        );
+    }
+    if !capabilities.iter().any(|v| v == "focus-state") && observation.focus_state.is_some() {
+        return base(
+            "violation",
+            Some("published focus state without negotiating focus-state".into()),
+        );
+    }
+    if capabilities.iter().any(|v| v == "scroll-state") && observation.scroll_states.is_none() {
+        return base(
+            "violation",
+            Some("negotiated scroll-state evidence is unavailable".into()),
+        );
+    }
+    if !capabilities.iter().any(|v| v == "scroll-state") && observation.scroll_states.is_some() {
+        return base(
+            "violation",
+            Some("published scroll state without negotiating scroll-state".into()),
+        );
+    }
+    if let Some(states) = &observation.scroll_states {
+        if states.iter().any(|state| {
+            state.offset < 0
+                || state.viewport < 0
+                || state.extent < 0
+                || state.offset + state.viewport > state.extent
+        }) {
+            return base(
+                "violation",
+                Some("scroll state must fit inside its extent".into()),
+            );
+        }
+    }
+    if capabilities.iter().any(|v| v == "painted-regions") && observation.painted_regions.is_none()
+    {
+        return base(
+            "violation",
+            Some("negotiated painted-regions evidence is unavailable".into()),
+        );
+    }
+    if !capabilities.iter().any(|v| v == "painted-regions") && observation.painted_regions.is_some()
+    {
+        return base(
+            "violation",
+            Some("published painted regions without negotiating painted-regions".into()),
+        );
+    }
+    if capabilities.iter().any(|v| v == "terminal-input-modes") && observation.input_modes.is_none()
+    {
+        return base(
+            "violation",
+            Some("negotiated terminal-input-modes evidence is unavailable".into()),
+        );
+    }
+    if !capabilities.iter().any(|v| v == "terminal-input-modes")
+        && observation.input_modes.is_some()
+    {
+        return base(
+            "violation",
+            Some("published input modes without negotiating terminal-input-modes".into()),
+        );
+    }
+    if let Some(modes) = &observation.input_modes {
+        if !matches!(
+            modes.mouse_tracking.as_str(),
+            "none" | "x10" | "vt200" | "drag" | "any"
+        ) || !matches!(
+            modes.mouse_encoding.as_str(),
+            "default" | "sgr" | "urxvt" | "utf8"
+        ) || !matches!(modes.focus_reporting.as_str(), "on" | "off")
+        {
+            return base(
+                "violation",
+                Some("terminal input modes contain an invalid value".into()),
+            );
+        }
+    }
     result.pointer_regions = Some(observation.pointer_regions);
+    result.action_recipes = observation.action_recipes;
+    result.focus_state = observation.focus_state;
+    result.scroll_states = observation.scroll_states;
+    result.painted_regions = observation.painted_regions;
+    result.input_modes = observation.input_modes;
     if capabilities.iter().any(|v| v == "hit-test") {
         match exact_grid(
             result.pointer_regions.as_deref().unwrap_or_default(),
@@ -369,7 +804,7 @@ mod tests {
 
     #[derive(Debug)]
     struct Router;
-    impl Provider for Router {
+    impl PointerProvider for Router {
         fn id(&self) -> &str {
             "router"
         }
@@ -382,8 +817,8 @@ mod tests {
         fn capabilities(&self) -> Vec<String> {
             vec!["pointer-regions".into(), "hit-test".into()]
         }
-        fn observe(&self, _context: &Context) -> Result<ProviderObservation, String> {
-            Ok(ProviderObservation {
+        fn observe(&self, _context: &Context) -> Result<PointerObservation, String> {
+            Ok(PointerObservation {
                 pointer_regions: vec![ProviderPointerRegion {
                     recipient_id: "reject".into(),
                     region_bounds: Rect {
@@ -407,7 +842,7 @@ mod tests {
 
     #[derive(Debug)]
     struct Regions;
-    impl Provider for Regions {
+    impl PointerProvider for Regions {
         fn id(&self) -> &str {
             "regions"
         }
@@ -420,8 +855,8 @@ mod tests {
         fn capabilities(&self) -> Vec<String> {
             vec!["pointer-regions".into()]
         }
-        fn observe(&self, _context: &Context) -> Result<ProviderObservation, String> {
-            Ok(ProviderObservation {
+        fn observe(&self, _context: &Context) -> Result<PointerObservation, String> {
+            Ok(PointerObservation {
                 pointer_regions: Router.observe(_context)?.pointer_regions,
                 hit_test: None,
             })
@@ -430,7 +865,7 @@ mod tests {
 
     #[derive(Debug)]
     struct HitTestOnly;
-    impl Provider for HitTestOnly {
+    impl PointerProvider for HitTestOnly {
         fn id(&self) -> &str {
             "production-router"
         }
@@ -443,8 +878,8 @@ mod tests {
         fn capabilities(&self) -> Vec<String> {
             vec!["hit-test".into()]
         }
-        fn observe(&self, _context: &Context) -> Result<ProviderObservation, String> {
-            Ok(ProviderObservation {
+        fn observe(&self, _context: &Context) -> Result<PointerObservation, String> {
+            Ok(PointerObservation {
                 pointer_regions: Vec::new(),
                 hit_test: Some(Arc::new(|column, row| {
                     (row == 1 && (2..5).contains(&column)).then(|| "reject".into())
@@ -456,9 +891,11 @@ mod tests {
     #[test]
     fn freezes_per_session_and_fails_closed_after_loss() {
         let registry = Registry::new();
-        let registration = registry.register(Arc::new(Router)).expect("register");
+        let registration = registry
+            .register_pointer(Arc::new(Router))
+            .expect("register");
         let lease = registry.freeze();
-        assert!(registry.register(Arc::new(Router)).is_err());
+        assert!(registry.register_pointer(Arc::new(Router)).is_err());
         let evidence = lease.collect("s1", 1, 10, 4);
         assert_eq!(evidence[0].status, "available");
         assert_eq!(evidence[0].hit_grid.as_ref().unwrap().regions.len(), 1);
@@ -469,8 +906,12 @@ mod tests {
     #[test]
     fn composes_independent_region_and_hit_test_providers() {
         let registry = Registry::new();
-        registry.register(Arc::new(Regions)).expect("regions");
-        registry.register(Arc::new(HitTestOnly)).expect("hit test");
+        registry
+            .register_pointer(Arc::new(Regions))
+            .expect("regions");
+        registry
+            .register_pointer(Arc::new(HitTestOnly))
+            .expect("hit test");
         let evidence = registry.freeze().collect("s1", 4, 10, 4);
         let regions = evidence
             .iter()
@@ -488,11 +929,120 @@ mod tests {
         assert_eq!(hits.hit_grid.as_ref().unwrap().regions.len(), 1);
     }
 
+    #[derive(Debug)]
+    struct Keys;
+    impl ActionStrategyProvider for Keys {
+        fn id(&self) -> &str {
+            "app.keys"
+        }
+        fn version(&self) -> &str {
+            "1"
+        }
+        fn method(&self) -> EvidenceMethod {
+            EvidenceMethod::Native
+        }
+        fn observe(&self, _context: &Context) -> Result<Vec<ProviderActionRecipes>, String> {
+            Ok(vec![ProviderActionRecipes {
+                recipient_id: "editor".into(),
+                recipes: vec![crate::tree::PhysicalInputRecipe {
+                    action: crate::tree::PhysicalInputRecipeAction::SetValue,
+                    requires_focus: true,
+                    steps: vec![
+                        crate::tree::PhysicalInputRecipeStep::Press {
+                            key: "Control+U".into(),
+                        },
+                        crate::tree::PhysicalInputRecipeStep::InsertActionValue,
+                    ],
+                }],
+            }])
+        }
+    }
+
+    #[derive(Debug)]
+    struct Focus;
+    impl FocusProvider for Focus {
+        fn id(&self) -> &str {
+            "app.focus"
+        }
+        fn version(&self) -> &str {
+            "1"
+        }
+        fn method(&self) -> EvidenceMethod {
+            EvidenceMethod::Native
+        }
+        fn observe(&self, context: &Context) -> Result<Option<String>, String> {
+            Ok((context.revision == 1).then(|| "editor".into()))
+        }
+    }
+
+    #[derive(Debug)]
+    struct Scroll;
+    impl ScrollProvider for Scroll {
+        fn id(&self) -> &str {
+            "app.scroll"
+        }
+        fn version(&self) -> &str {
+            "1"
+        }
+        fn method(&self) -> EvidenceMethod {
+            EvidenceMethod::Native
+        }
+        fn observe(&self, _context: &Context) -> Result<Vec<ProviderScrollState>, String> {
+            Ok(vec![ProviderScrollState {
+                recipient_id: "results".into(),
+                axis: crate::tree::Orientation::Vertical,
+                offset: 3,
+                viewport: 4,
+                extent: 20,
+            }])
+        }
+    }
+
+    #[test]
+    fn focus_provider_preserves_authoritative_none() {
+        let registry = Registry::new();
+        registry.register_focus(Arc::new(Focus)).expect("focus");
+        let lease = registry.freeze();
+        assert_eq!(lease.registrations()[0].capabilities, vec!["focus-state"]);
+        assert!(matches!(
+            lease.collect("s", 1, 80, 24)[0].focus_state,
+            Some(ProviderFocusState::Focused { ref recipient_id }) if recipient_id == "editor"
+        ));
+        assert!(matches!(
+            lease.collect("s", 2, 80, 24)[0].focus_state,
+            Some(ProviderFocusState::None)
+        ));
+    }
+
+    #[test]
+    fn scroll_provider_publishes_bounded_application_viewport_state() {
+        let registry = Registry::new();
+        registry.register_scroll(Arc::new(Scroll)).expect("scroll");
+        let lease = registry.freeze();
+        assert_eq!(lease.registrations()[0].capabilities, vec!["scroll-state"]);
+        let frame = lease.collect("s", 1, 80, 24).remove(0);
+        assert_eq!(frame.status, "available");
+        assert_eq!(frame.scroll_states.as_ref().unwrap()[0].offset, 3);
+    }
+
+    #[test]
+    fn action_strategy_provider_is_a_separate_closed_family() {
+        let registry = Registry::new();
+        registry
+            .register_action_strategies(Arc::new(Keys))
+            .expect("keys");
+        let frame = registry.freeze().collect("s", 3, 80, 24).remove(0);
+        assert_eq!(frame.status, "available");
+        assert_eq!(frame.action_recipes.as_ref().map(Vec::len), Some(1));
+        assert!(frame.pointer_regions.as_ref().is_some_and(Vec::is_empty));
+        assert!(frame.hit_grid.is_none());
+    }
+
     #[test]
     fn rejects_invalid_and_competing_capability_declarations() {
         #[derive(Debug)]
         struct Invalid;
-        impl Provider for Invalid {
+        impl PointerProvider for Invalid {
             fn id(&self) -> &str {
                 "invalid"
             }
@@ -505,14 +1055,18 @@ mod tests {
             fn capabilities(&self) -> Vec<String> {
                 vec!["unknown".into()]
             }
-            fn observe(&self, _: &Context) -> Result<ProviderObservation, String> {
+            fn observe(&self, _: &Context) -> Result<PointerObservation, String> {
                 unreachable!()
             }
         }
         let registry = Registry::new();
-        assert!(registry.register(Arc::new(Invalid)).is_err());
-        registry.register(Arc::new(Regions)).expect("regions");
-        assert!(registry.register(Arc::new(Regions)).is_err());
-        registry.register(Arc::new(HitTestOnly)).expect("hit test");
+        assert!(registry.register_pointer(Arc::new(Invalid)).is_err());
+        registry
+            .register_pointer(Arc::new(Regions))
+            .expect("regions");
+        assert!(registry.register_pointer(Arc::new(Regions)).is_err());
+        registry
+            .register_pointer(Arc::new(HitTestOnly))
+            .expect("hit test");
     }
 }

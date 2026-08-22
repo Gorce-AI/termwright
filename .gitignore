@@ -10,6 +10,7 @@ coverage/
 .astro/
 .claude/
 .termwright/
+upstream-candidate/
 .playwright-mcp/
 test-results/
 playwright-report/

@@ -1,43 +1,14 @@
-/** Capabilities whose presence is frozen when a session finishes negotiation. */
-export const SESSION_CAPABILITIES = [
-  'semantic-tree',
-  'stable-identity',
-  'intended-geometry',
-  'clipped-geometry',
-  'painted-region',
-  'pointer-geometry',
-  'pointer-hit-testing',
-  'focus',
-  'scroll',
-  'render-order',
-  'keyboard-input',
-  'pointer-input',
-  'paired-revisions',
-] as const;
-
-export type SessionCapabilityId = (typeof SESSION_CAPABILITIES)[number];
-
-/** Closed adapter handshake vocabulary; browser-safe for Runner validation. */
-export const ADAPTER_CAPABILITIES = [
-  'tree',
-  'intended-geometry',
-  'clipped-geometry',
-  'states',
-  'actions',
-  'text-ranges',
-  'render-revisions',
-  'logs',
-  'pointer-hit-grid',
-] as const;
-export type AdapterCapability = (typeof ADAPTER_CAPABILITIES)[number];
-
-/** Application evidence that can be frozen into a session contract. */
-export const EVIDENCE_PROVIDER_CAPABILITIES = [
-  'pointer-regions',
-  'hit-test',
-] as const;
-
-export type EvidenceProviderCapability = (typeof EVIDENCE_PROVIDER_CAPABILITIES)[number];
+export {
+  ADAPTER_CAPABILITIES,
+  EVIDENCE_PROVIDER_CAPABILITIES,
+  SESSION_CAPABILITIES,
+} from './capability-graph.js';
+export type {
+  AdapterCapability,
+  EvidenceProviderCapability,
+  SessionCapabilityId,
+} from './capability-graph.js';
+import type { EvidenceProviderCapability, SessionCapabilityId } from './capability-graph.js';
 
 /**
  * Stable application provider identity announced in the adapter hello.

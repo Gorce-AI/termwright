@@ -17,8 +17,6 @@ npm install --save-dev termwright vitest
 | `termwright/test` | Vitest fixture, `expect`, matchers, snapshots, config, retries, and seeding. |
 | `termwright/ink` | Ink component-test helpers. |
 | `termwright/gherkin` | Gherkin plugin and step-definition API. |
-| `termwright/reporter` | Trace and CI report integration. |
-| `termwright/ui-reporter` | Live Runner reporter for manually managed hosts. |
 | `termwright/cli` | Programmatic CLI entry. |
 
 Prefer these imports in application test suites. They keep setup consistent and

@@ -67,7 +67,7 @@ await app.waitForText('Permission required');
 await expect(app.getByRole('button', {name: 'Approve'})).toBeAttached();
 ```
 
-Then inspect `app.capabilities()` or the Runner inspector. Do not infer a
+Then inspect `await app.settled()` or the Runner inspector. Do not infer a
 working integration from the package being installed; the launch command must
 actually enable it.
 

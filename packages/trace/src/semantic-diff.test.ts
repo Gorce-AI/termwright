@@ -25,6 +25,21 @@ describe('diffSemanticSnapshots', () => {
     });
   });
 
+  it('records paint provenance changes independently of layout movement', () => {
+    const evidence = { source: 'application' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'app.paint' };
+    const before = snapshot(1, [node({
+      id: 'n1', role: 'button', name: 'Submit',
+      paintedRegion: { status: 'known', value: { regionBounds: { row: 1, column: 1, width: 2, height: 1 }, spans: [{ row: 1, from: 1, to: 3 }] }, evidence },
+    })]);
+    const after = snapshot(2, [node({
+      id: 'n1', role: 'button', name: 'Submit',
+      paintedRegion: { status: 'known', value: { regionBounds: { row: 1, column: 1, width: 1, height: 1 }, spans: [{ row: 1, from: 1, to: 2 }] }, evidence },
+    })]);
+    expect(diffSemanticSnapshots(before, after).changed[0]?.changes).toEqual([
+      expect.objectContaining({ kind: 'painted-region', field: 'paintedRegion' }),
+    ]);
+  });
+
   it('describes a state that was cleared', () => {
     const before = snapshot(1, [
       node({ id: 'n1', role: 'button', name: 'Submit', state: { focused: true } }),
@@ -50,11 +65,11 @@ describe('diffSemanticSnapshots', () => {
   it('describes renames and value changes', () => {
     const before = snapshot(1, [
       node({ id: 'n1', role: 'button', name: 'Submit' }),
-      node({ id: 'n2', role: 'textbox', name: 'Name', value: '' }),
+      node({ id: 'n2', role: 'textbox', name: 'Name', value: { status: 'known', value: '', sensitivity: 'public', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } } }),
     ]);
     const after = snapshot(2, [
       node({ id: 'n1', role: 'button', name: 'Send' }),
-      node({ id: 'n2', role: 'textbox', name: 'Name', value: 'ada' }),
+      node({ id: 'n2', role: 'textbox', name: 'Name', value: { status: 'known', value: 'ada', sensitivity: 'public', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } } }),
     ]);
     expect(diffSemanticSnapshots(before, after).sentences).toEqual([
       `button "Submit" renamed to "Send"`,

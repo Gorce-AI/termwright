@@ -59,7 +59,6 @@ export type {
   SemanticRole,
   SemanticSnapshot,
   SemanticState,
-  SessionCapabilities,
 } from './model.js';
 
 export {

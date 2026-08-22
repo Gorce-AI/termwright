@@ -79,6 +79,28 @@ function rectContains(
   );
 }
 
+function regionProblem(
+  owner: string,
+  region: { readonly regionBounds: { row: number; column: number; width: number; height: number }; readonly spans: readonly { row: number; from: number; to: number }[] },
+  columns: number,
+  rows: number,
+): ValidationResult | null {
+  for (const span of region.spans) {
+    if (span.row >= rows || span.from >= columns || span.to > columns) {
+      return fail('bad-rect', `${owner} span lies outside the viewport`);
+    }
+    if (
+      span.row < region.regionBounds.row ||
+      span.row >= region.regionBounds.row + region.regionBounds.height ||
+      span.from < region.regionBounds.column ||
+      span.to > region.regionBounds.column + region.regionBounds.width
+    ) {
+      return fail('bad-rect', `${owner} span lies outside regionBounds`);
+    }
+  }
+  return null;
+}
+
 function checkNodeShape(
   node: SemanticNode,
   snapshot: SemanticSnapshot,
@@ -116,6 +138,16 @@ function checkNodeShape(
     if (!Number.isSafeInteger(row + height) || !Number.isSafeInteger(column + width)) {
       return fail('bad-rect', `node ${node.id}: ${name} overflows the safe-integer range`);
     }
+  }
+
+  if (node.paintedRegion?.status === 'known') {
+    const problem = regionProblem(
+      `node ${node.id} painted region`,
+      node.paintedRegion.value,
+      snapshot.columns,
+      snapshot.rows,
+    );
+    if (problem !== null) return problem;
   }
 
 
@@ -308,6 +340,15 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
         `provider ${provider.providerId} evidence provenance names ${provider.evidence.providerId}`,
       );
     }
+    if (
+      provider.focusState?.status === 'focused' &&
+      !ids.has(provider.focusState.recipientId)
+    ) {
+      return fail(
+        'missing-parent',
+        `provider ${provider.providerId} focus references unknown recipient ${provider.focusState.recipientId}`,
+      );
+    }
     for (const region of provider.pointerRegions) {
       if (!ids.has(region.recipientId)) {
         return fail(
@@ -315,29 +356,28 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
           `provider ${provider.providerId} references unknown recipient ${region.recipientId}`,
         );
       }
-      for (const span of region.spans) {
-        if (
-          span.row >= snapshot.rows ||
-          span.from >= snapshot.columns ||
-          span.to > snapshot.columns
-        ) {
-          return fail(
-            'bad-rect',
-            `provider ${provider.providerId} span for ${region.recipientId} lies outside the viewport`,
-          );
-        }
-        if (
-          span.row < region.regionBounds.row ||
-          span.row >= region.regionBounds.row + region.regionBounds.height ||
-          span.from < region.regionBounds.column ||
-          span.to > region.regionBounds.column + region.regionBounds.width
-        ) {
-          return fail(
-            'bad-rect',
-            `provider ${provider.providerId} span for ${region.recipientId} lies outside regionBounds`,
-          );
-        }
+      const problem = regionProblem(
+        `provider ${provider.providerId} span for ${region.recipientId}`,
+        region,
+        snapshot.columns,
+        snapshot.rows,
+      );
+      if (problem !== null) return problem;
+    }
+    for (const region of provider.paintedRegions ?? []) {
+      if (!ids.has(region.recipientId)) {
+        return fail(
+          'missing-parent',
+          `provider ${provider.providerId} painted region references unknown recipient ${region.recipientId}`,
+        );
       }
+      const problem = regionProblem(
+        `provider ${provider.providerId} painted region for ${region.recipientId}`,
+        region,
+        snapshot.columns,
+        snapshot.rows,
+      );
+      if (problem !== null) return problem;
     }
     for (const hit of provider.hitGrid?.regions ?? []) {
       if (!ids.has(hit.recipientId)) {
@@ -350,6 +390,31 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
         return fail(
           'bad-rect',
           `provider ${provider.providerId} hitGrid region for ${hit.recipientId} does not intersect the viewport`,
+        );
+      }
+    }
+    for (const entry of provider.actionRecipes ?? []) {
+      if (!ids.has(entry.recipientId)) {
+        return fail(
+          'missing-parent',
+          `provider ${provider.providerId} action recipes reference unknown recipient ${entry.recipientId}`,
+        );
+      }
+      const node = snapshot.nodes.find(({ id }) => id === entry.recipientId)!;
+      const intents = new Set(node.actions ?? []);
+      const missingIntent = entry.recipes.find(({ action }) => !intents.has(action));
+      if (missingIntent !== undefined) {
+        return fail(
+          'provider',
+          `provider ${provider.providerId} ${missingIntent.action} recipe has no matching semantic action intent on ${entry.recipientId}`,
+        );
+      }
+    }
+    for (const state of provider.scrollStates ?? []) {
+      if (!ids.has(state.recipientId)) {
+        return fail(
+          'missing-parent',
+          `provider ${provider.providerId} scroll state references unknown recipient ${state.recipientId}`,
         );
       }
     }

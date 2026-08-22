@@ -9,9 +9,8 @@ This page is rendered from the same registry that launch and patch declarations
 are checked against. Use the
 [JSON registry](../../compatibility/registry.json) and its
 [JSON Schema](../../compatibility/schema.json) when another tool needs the
-matrix. `verified` means a version has a real fixture, audit or CI lane;
-`declared` is the wider range the package accepts. They are deliberately
-separate.
+matrix. Every row is exact-certified: `declared` and `verified` identify the
+same upstream version set, backed by executable claim files.
 
 ## Matrix
 
@@ -23,6 +22,7 @@ separate.
       <th>Runtime</th>
       <th>Probe</th>
       <th>Automatic probe capabilities</th>
+      <th>Effective session graph</th>
       <th>Annotations</th>
     </tr>
   </thead>
@@ -33,6 +33,11 @@ separate.
         <td>
           <code>{entry.versions.declared}</code><br />
           verified: <code>{entry.versions.verified.join(', ')}</code>
+        </td>
+        <td>
+          automatic: <code>{entry.capabilityGraph.automatic.join(', ') || 'none'}</code><br />
+          application-integrated: <code>{entry.capabilityGraph.applicationIntegrated.flatMap((item) => item.capabilities).join(', ') || 'none'}</code><br />
+          unsupported: <code>{entry.capabilityGraph.unsupported.join(', ') || 'none'}</code>
         </td>
         <td>{entry.runtimes.map((runtime) => <><code>{runtime.name} {runtime.version}</code><br /></>)}</td>
         <td><code>{entry.probe.package} {entry.probe.packageVersion}</code></td>
@@ -83,9 +88,13 @@ executable exact-version combination is listed in the registry and below.
       </p>
     )}
     <p>
-      <strong>Adapter capability variants:</strong>{' '}
-      {entry.probe.adapterCapabilityVariants.map((variant) => (
-        <span><em>{variant.when}</em>: <code>{variant.capabilities.join(', ')}</code>{' '}</span>
+      <strong>Certified adapter facts:</strong>{' '}
+      <code>{entry.probe.adapterCapabilities.join(', ')}</code>
+    </p>
+    <p>
+      <strong>Executable graph claims:</strong>{' '}
+      {entry.capabilityGraph.claims.map((claim) => (
+        <span><code>{claim.id}</code>: {claim.files.join(', ')}{' '}</span>
       ))}
     </p>
     {entry.annotations !== null && <p><strong>Annotation contract:</strong> {entry.annotations.notes}</p>}
@@ -103,7 +112,5 @@ adapter capability declaration no longer matches this data. This prevents the
 common failure mode where the documentation promises geometry, annotations or
 stable identity that the actual handshake does not announce.
 
-Versions outside an exact patch row are refused by name. For range-based
-preload probes, an unverified version may attach only when its audited runtime
-assumptions are still present; the probe disables semantics instead of
-guessing when they are not.
+Versions outside an exact certification row are refused. There is no range or
+feature-detection fallback that silently upgrades the session contract.

@@ -13,7 +13,7 @@ editUrl: false
 
 > **Observation**\<`T`\> = \{ `evidence`: `ObservationEvidence`; `status`: `"known"`; `value`: `T`; \} \| \{ `evidence`: `AuthoritativeObservationEvidence`; `reason`: `ObservationAbsentReason`; `status`: `"absent"`; \} \| \{ `reason`: `ObservationUnknownReason`; `status`: `"unknown"`; \} \| \{ `capability`: `string`; `reason`: `ObservationUnsupportedReason`; `status`: `"unsupported"`; \}
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:477
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:559
 
 A fact with its epistemic state preserved.
 

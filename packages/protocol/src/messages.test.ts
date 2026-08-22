@@ -157,7 +157,7 @@ describe("parseAdapterMessage", () => {
     expect(adapterCode({ ...hello(), providers })).toBe("ok");
   });
 
-  it("rejects duplicate, competing, empty, and unknown evidence providers", () => {
+  it("rejects duplicate identities and malformed capabilities without registration-order ownership", () => {
     const provider = {
       id: "app.router",
       version: "1",
@@ -170,18 +170,12 @@ describe("parseAdapterMessage", () => {
     expect(
       adapterCode({
         ...hello(),
-        providers: [provider, { ...provider, id: "other" }],
-      }),
-    ).toBe("malformed");
-    expect(
-      adapterCode({
-        ...hello(),
         providers: [
           { ...provider, capabilities: ["hit-test"] },
           { ...provider, id: "other", capabilities: ["hit-test"] },
         ],
       }),
-    ).toBe("malformed");
+    ).toBe("ok");
     expect(
       adapterCode({
         ...hello(),

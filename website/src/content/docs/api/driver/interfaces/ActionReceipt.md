@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionReceipt
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:683
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:853
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:683
 
 > `readonly` **after**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:687
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:857
 
 ***
 
@@ -27,15 +27,15 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:687
 
 > `readonly` **before**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:686
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:856
 
 ***
 
 ### executed
 
-> `readonly` **executed**: readonly [`DeviceOperation`](../../type-aliases/deviceoperation/)[]
+> `readonly` **executed**: readonly [`RecordedDeviceOperation`](../../type-aliases/recordeddeviceoperation/)[]
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:688
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:858
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:688
 
 > `readonly` **intent**: [`ActionIntent`](../actionintent/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:684
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:854
 
 ***
 
@@ -51,7 +51,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:684
 
 > `readonly` **outcome**: `"completed"` \| `"partial"` \| `"failed"`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:689
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:859
 
 ***
 
@@ -59,4 +59,4 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:689
 
 > `readonly` **plan**: [`ActionPlan`](../actionplan/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:685
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:855

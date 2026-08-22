@@ -105,12 +105,12 @@ class SemanticState:
     offscreen: Optional[bool] = None
     readonly: Optional[bool] = None
     multiline: Optional[bool] = None
+    required: Optional[bool] = None
+    multiselectable: Optional[bool] = None
     orientation: Optional[str] = None
     level: Optional[int] = None
     positionInSet: Optional[int] = None
     setSize: Optional[int] = None
-    scrollOffset: Optional[int] = None
-    scrollExtent: Optional[int] = None
 
     def to_wire(self) -> Dict[str, Any]:
         return {
@@ -137,6 +137,64 @@ class SemanticTextRange:
 
 
 @dataclass(frozen=True)
+class SemanticScrollState:
+    """Production application viewport state, distinct from terminal scrollback."""
+
+    axis: str
+    offset: int
+    viewport: int
+    extent: int
+
+    def to_wire(self) -> Dict[str, Any]:
+        return {
+            "axis": self.axis,
+            "offset": self.offset,
+            "viewport": self.viewport,
+            "extent": self.extent,
+        }
+
+
+@dataclass(frozen=True)
+class SemanticPaintedRegion:
+    """Exact viewport cells painted by one semantic recipient."""
+
+    regionBounds: Rect
+    spans: Sequence[Mapping[str, int]]
+
+    def to_wire(self) -> Dict[str, Any]:
+        return {
+            "regionBounds": self.regionBounds.to_wire(),
+            "spans": [dict(span) for span in self.spans],
+        }
+
+
+@dataclass(frozen=True)
+class SemanticValueObservation:
+    """A semantic value with support, absence and confidentiality preserved."""
+
+    status: str
+    value: Optional[str] = None
+    sensitivity: Optional[str] = None
+    evidence: Optional[EvidenceProvenance] = None
+    reason: Optional[str] = None
+    capability: Optional[str] = None
+
+    def to_wire(self) -> Dict[str, Any]:
+        wire: Dict[str, Any] = {"status": self.status}
+        if self.value is not None:
+            wire["value"] = self.value
+        if self.sensitivity is not None:
+            wire["sensitivity"] = self.sensitivity
+        if self.evidence is not None:
+            wire["evidence"] = self.evidence.to_wire()
+        if self.reason is not None:
+            wire["reason"] = self.reason
+        if self.capability is not None:
+            wire["capability"] = self.capability
+        return wire
+
+
+@dataclass(frozen=True)
 class SemanticNode:
     """One accessible node with evidence-qualified geometry."""
 
@@ -146,11 +204,12 @@ class SemanticNode:
     name: str = ""
     parentId: Optional[str] = None
     description: Optional[str] = None
-    value: Optional[str] = None
+    value: Optional[SemanticValueObservation] = None
     state: Optional[SemanticState] = None
     #: Application-defined JSON state. Portable flags stay in ``state``.
     extended: Optional[Mapping[str, Any]] = None
     actions: Optional[Sequence[str]] = None
+    inputRecipes: Optional[Sequence[Mapping[str, Any]]] = None
     labelledBy: Optional[Sequence[str]] = None
     describedBy: Optional[Sequence[str]] = None
     textRanges: Optional[Sequence[SemanticTextRange]] = None
@@ -163,6 +222,8 @@ class SemanticNode:
     p: Optional[str] = None
     #: Where individual fields came from, when they differ from ``p``.
     px: Optional[Mapping[str, str]] = None
+    scroll: Optional[Observation] = None
+    paintedRegion: Optional[Observation] = None
 
     def to_wire(self) -> Dict[str, Any]:
         wire: Dict[str, Any] = {"id": self.id, "role": self.role, "name": self.name}
@@ -171,7 +232,7 @@ class SemanticNode:
         if self.description is not None:
             wire["description"] = self.description
         if self.value is not None:
-            wire["value"] = self.value
+            wire["value"] = self.value.to_wire()
         if self.state is not None:
             state = self.state.to_wire()
             if state:
@@ -180,6 +241,8 @@ class SemanticNode:
             wire["extended"] = _canonical_extended(self.extended)
         if self.actions is not None:
             wire["actions"] = list(self.actions)
+        if self.inputRecipes is not None:
+            wire["inputRecipes"] = [dict(recipe) for recipe in self.inputRecipes]
         if self.labelledBy is not None:
             wire["labelledBy"] = list(self.labelledBy)
         if self.describedBy is not None:
@@ -195,6 +258,10 @@ class SemanticNode:
         if self.px:
             wire["px"] = dict(self.px)
         wire["geometry"] = self.geometry.to_wire()
+        if self.scroll is not None:
+            wire["scroll"] = self.scroll.to_wire()
+        if self.paintedRegion is not None:
+            wire["paintedRegion"] = self.paintedRegion.to_wire()
         return wire
 
 
@@ -281,7 +348,18 @@ def snapshot_from_wire(value: Dict[str, Any]) -> SemanticSnapshot:
                 name=raw.get("name", ""),
                 parentId=raw.get("parentId"),
                 description=raw.get("description"),
-                value=raw.get("value"),
+                value=(
+                    SemanticValueObservation(
+                        status=raw["value"]["status"],
+                        value=raw["value"].get("value"),
+                        sensitivity=raw["value"].get("sensitivity"),
+                        evidence=(EvidenceProvenance(**raw["value"]["evidence"]) if isinstance(raw["value"].get("evidence"), dict) else None),
+                        reason=raw["value"].get("reason"),
+                        capability=raw["value"].get("capability"),
+                    )
+                    if isinstance(raw.get("value"), dict)
+                    else None
+                ),
                 state=SemanticState(**state) if state is not None else None,
                 extended=raw.get("extended"),
                 actions=tuple(raw["actions"]) if raw.get("actions") is not None else None,

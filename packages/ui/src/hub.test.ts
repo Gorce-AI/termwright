@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseServerMessage, toBase64, type ServerMessage } from './events.js';
+import { encodeMessage, parseServerMessage, toBase64, type ServerMessage } from './events.js';
 import { UiHub } from './hub.js';
 import { attachSession } from './live.js';
 import { FakeSession, node, snapshot } from './__fixtures__/fake-session.js';
@@ -29,7 +29,7 @@ const output = (text: string, t = 0): ServerMessage => ({
 describe('UiHub', () => {
   it('replays the backlog to a client that connects late', () => {
     const hub = new UiHub();
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
     hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
     const client = new RecordingClient();
     hub.addClient(client);
@@ -70,20 +70,24 @@ describe('UiHub', () => {
 
   it('clears the backlog when a new run starts', () => {
     const hub = new UiHub();
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
     hub.publish(output('first run'));
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 2 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 });
     expect(hub.backlog.map((message) => message.type)).toEqual(['run-start']);
   });
 
   it('drops output before lifecycle messages when the backlog fills', () => {
     const hub = new UiHub({ maxMessages: 3 });
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
     hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
     hub.publish(output('a'));
     hub.publish(output('b'));
     hub.publish(output('c'));
-    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'test-start', 'output']);
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'test-start', 'diagnostic-gap']);
+    expect(hub.backlog.at(-1)).toMatchObject({
+      source: 'ui-hub',
+      droppedMessages: 3,
+    });
   });
 
   it('bounds the backlog by output bytes as well as by count', () => {
@@ -93,11 +97,15 @@ describe('UiHub', () => {
       .filter((message) => message.type === 'output')
       .reduce((total, message) => total + (message.type === 'output' ? message.dataB64.length : 0), 0);
     expect(bytes).toBeLessThanOrEqual(16);
+    expect(hub.backlog.find((message) => message.type === 'diagnostic-gap')).toMatchObject({
+      source: 'ui-hub',
+      droppedMessages: 9,
+    });
   });
 
   it('coalesces and retains the newest session state under backlog pressure', () => {
     const hub = new UiHub({ maxMessages: 2 });
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
     hub.publish({
       v: 1,
       type: 'session',
@@ -111,17 +119,16 @@ describe('UiHub', () => {
       type: 'session',
       sessionId: 's1',
       terminalProfile: 'default',
-      adapter: { name: 'probe-fixture', version: '1.0.0' },
-      adapterStatus: 'attached',
       columns: 80,
       rows: 24,
     });
     hub.publish(output('evict me'));
+    hub.publish(output('evict me too'));
 
-    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session']);
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session', 'diagnostic-gap']);
     expect(hub.backlog[1]).toMatchObject({
       type: 'session',
-      adapterStatus: 'attached',
+      terminalProfile: 'default',
     });
   });
 
@@ -141,17 +148,46 @@ describe('UiHub', () => {
       type: 'session',
       sessionId: 's1',
       terminalProfile: 'default',
-      adapter: { name: 'probe', version: '1.0.0' },
       columns: 80,
       rows: 24,
     });
 
     expect(hub.backlog.map((message) => message.type)).toEqual(['session', 'output']);
-    expect(hub.backlog[0]).toMatchObject({ adapter: { name: 'probe' } });
+    expect(hub.backlog[0]).toMatchObject({ terminalProfile: 'default' });
   });
 });
 
 describe('attachSession', () => {
+  it('replays startup output and its exact semantic snapshot after attaching', () => {
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    session.output('booted before observer');
+    session.semantic(snapshot(1, [node({ id: 'boot', role: 'text', name: 'Booted' })]));
+
+    attachSession(hub, session);
+
+    expect(hub.backlog.map((message) => message.type)).toEqual(['session', 'output', 'semantic']);
+    expect(hub.backlog[1]).toMatchObject({ type: 'output' });
+    expect(hub.backlog[2]).toMatchObject({
+      type: 'semantic',
+      revision: 1,
+      snapshot: { nodes: [expect.objectContaining({ id: 'boot', name: 'Booted' })] },
+    });
+  });
+
+  it('withholds sensitive semantic values before Runner publication', () => {
+    const secret = 'TW_SENTINEL_runner_4fe0';
+    const hub = new UiHub();
+    const session = new FakeSession('s1');
+    attachSession(hub, session);
+    session.semantic(snapshot(1, [node({
+      id: 'password', role: 'textbox', name: 'Password',
+      value: { status: 'known', value: secret, sensitivity: 'sensitive', evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app' } },
+    })]));
+    const published = JSON.stringify(hub.backlog);
+    expect(published).not.toContain(secret);
+    expect(published).toContain('withheld');
+  });
   it('announces the session before anything it produces', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
@@ -167,50 +203,45 @@ describe('attachSession', () => {
     });
   });
 
-  it('announces probe identity and both capability layers', () => {
+  it('announces the frozen framework contract and supported capability layer', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
-    session.adapter = { name: '@termwright/probe-fixture', version: '0.1.0' };
-    session.probe = {
-      framework: 'fixture',
-      frameworkVersion: '2.0.0',
-      probeVersion: '0.1.0',
-      identityKind: 'stable',
-      capabilities: ['stable-identity'],
-    };
-    session.adapterCapabilities = ['tree', 'states'];
+    session.negotiateFramework('fixture', '2.0.0', ['semantic-tree', 'stable-identity']);
     attachSession(hub, session);
     expect(hub.backlog[0]).toMatchObject({
-      adapter: session.adapter,
-      probe: session.probe,
-      capabilities: ['tree', 'states'],
+      contract: {
+        framework: { name: 'fixture', version: '2.0.0' },
+        capabilities: {
+          'semantic-tree': { status: 'supported' },
+          'stable-identity': { status: 'supported' },
+        },
+      },
       adapterStatus: 'attached',
     });
   });
 
-  it('refreshes ProbeInfo after a late adapter handshake', () => {
+  it('refreshes the contract after a late adapter handshake', () => {
     const hub = new UiHub();
     const client = new RecordingClient();
     hub.addClient(client);
     const session = new FakeSession('s1');
     attachSession(hub, session);
 
-    session.adapter = { name: '@termwright/probe-fixture', version: '0.1.0' };
-    session.probe = {
-      framework: 'fixture',
-      probeVersion: '0.1.0',
-      identityKind: 'stable',
-      capabilities: ['stable-identity'],
-    };
-    session.adapterCapabilities = ['tree', 'states'];
+    session.negotiateFramework('fixture', '0.1.0', ['semantic-tree', 'stable-identity']);
     session.diagnostic('adapter-attached');
 
+    expect(() => encodeMessage(hub.backlog[0] as ServerMessage)).not.toThrow();
+    expect(() => parseServerMessage(encodeMessage(hub.backlog[0] as ServerMessage))).not.toThrow();
     expect(client.received).toHaveLength(2);
     expect(client.received[1]).toMatchObject({
       type: 'session',
-      adapter: session.adapter,
-      probe: session.probe,
-      capabilities: ['tree', 'states'],
+      contract: {
+        framework: { name: 'fixture', version: '0.1.0' },
+        capabilities: {
+          'semantic-tree': { status: 'supported' },
+          'stable-identity': { status: 'supported' },
+        },
+      },
       adapterStatus: 'attached',
     });
     expect(hub.backlog).toHaveLength(1);
@@ -219,7 +250,7 @@ describe('attachSession', () => {
   it('reports disconnects and does not downgrade a protocol failure', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
-    session.adapter = { name: 'fixture', version: '1.0.0' };
+    session.negotiateFramework('fixture', '1.0.0');
     attachSession(hub, session);
 
     session.diagnostic('protocol-violation');
@@ -240,18 +271,18 @@ describe('attachSession', () => {
     ]);
   });
 
-  it('publishes a tree only once the session holds the announced revision', () => {
+  it('publishes the exact tree carried by each revision instead of reading newer state', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
+    const first = snapshot(7, [node({ id: 'n1', role: 'button', name: 'First' })]);
+    const second = snapshot(8, [node({ id: 'n1', role: 'button', name: 'Second' })]);
+    session.semantic(first);
+    session.semantic(second);
+
     attachSession(hub, session);
-
-    session.announceRevision(7); // announced, not yet observable
-    expect(afterAnnouncement(hub)).toHaveLength(0);
-
-    const tree = snapshot(7, [node({ id: 'n1', role: 'button', name: 'Go' })]);
-    session.semantic(tree);
     expect(afterAnnouncement(hub)).toEqual([
-      { v: 1, type: 'semantic', sessionId: 's1', revision: 7, snapshot: tree },
+      { v: 1, type: 'semantic', sessionId: 's1', revision: 7, snapshot: first },
+      { v: 1, type: 'semantic', sessionId: 's1', revision: 8, snapshot: second },
     ]);
   });
 
@@ -308,12 +339,16 @@ describe('application logs', () => {
 
   it('evicts logs before lifecycle messages, and never run-start', () => {
     const hub = new UiHub({ maxMessages: 3 });
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
     hub.publish({ v: 1, type: 'test-start', id: 't1', title: 'login', file: '/repo/a.test.ts', startedAt: 1 });
     for (let index = 0; index < 20; index += 1) {
       hub.publish({ v: 1, type: 'app-log', sessionId: 's1', t: index, source: 'file', level: null, message: 'noise' });
     }
-    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'test-start', 'app-log']);
+    expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'test-start', 'diagnostic-gap']);
+    expect(hub.backlog.at(-1)).toMatchObject({
+      source: 'ui-hub',
+      droppedMessages: 20,
+    });
   });
 });
 
@@ -323,7 +358,7 @@ describe('driver actions', () => {
     const session = new FakeSession('s1');
     attachSession(hub, session);
     session.clock = 120;
-    session.action({ api: 'click', ok: true, selector: 'getByRole("button")', ref: 'n8@42' });
+    session.action({ api: 'click', ok: true, selector: 'getByRole("button")', ref: 'semantic:n8@42' });
 
     expect(afterAnnouncement(hub)).toEqual([
       {
@@ -336,7 +371,7 @@ describe('driver actions', () => {
         ok: true,
         sessionId: 's1',
         selector: 'getByRole("button")',
-        ref: 'n8@42',
+        ref: 'semantic:n8@42',
       },
     ]);
   });
@@ -352,7 +387,7 @@ describe('driver actions', () => {
       api: 'click',
       ok: true,
       selector: 'getByRole("button")',
-      ref: 'n8@42',
+      ref: 'semantic:n8@42',
     });
 
     expect(afterAnnouncement(hub)).toEqual([
@@ -375,7 +410,7 @@ describe('driver actions', () => {
         ok: true,
         sessionId: 's1',
         selector: 'getByRole("button")',
-        ref: 'n8@42',
+        ref: 'semantic:n8@42',
       },
     ]);
   });
@@ -389,12 +424,12 @@ describe('driver actions', () => {
     session.action({
       api: 'drag', ok: false, error: 'input-mode-disabled',
       actionability: {
-        actionable: false, intent: { kind: 'drag', targetRef: 'save@7' }, checkpoint,
+        actionable: false, intent: { kind: 'drag', targetRef: 'semantic:save@7' }, checkpoint,
         requirements: [
           { condition: { kind: 'pointer-input', target: 'save@7' }, checkpoint, observation: { status: 'known', value: true, evidence }, verdict: 'satisfied' },
           { condition: { kind: 'mouse-input-enabled', target: 'save@7' }, checkpoint, observation: { status: 'known', value: false, evidence }, verdict: 'unsatisfied' },
         ],
-        reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'save@7' },
+        reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'semantic:save@7' },
       },
     });
 
@@ -406,7 +441,7 @@ describe('driver actions', () => {
           { kind: 'pointer-input', target: 'save@7', verdict: 'satisfied', observation: 'known', evidence },
           { kind: 'mouse-input-enabled', target: 'save@7', verdict: 'unsatisfied', observation: 'known', evidence },
         ],
-        reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'save@7' },
+        reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'semantic:save@7' },
       },
     });
   });
@@ -442,7 +477,7 @@ describe('what survives a new run', () => {
     });
     hub.publish({ v: 1, type: 'test-end', id: 't1', status: 'passed', durationMs: 1, flaky: false, lostLogRecords: 0 });
 
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 2 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 });
 
     expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'tests-discovered']);
   });
@@ -456,7 +491,7 @@ describe('what survives a new run', () => {
     });
     hub.publish(listing('old'));
     hub.publish(listing('new'));
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
 
     const kept = hub.backlog.filter((message) => message.type === 'tests-discovered');
     expect(kept).toHaveLength(1);
@@ -466,10 +501,10 @@ describe('what survives a new run', () => {
   it('keeps current session state when run-start resets event history', () => {
     const hub = new UiHub();
     const session = new FakeSession('s1');
-    session.adapter = { name: 'fixture', version: '1.0.0' };
+    session.negotiateFramework('fixture', '1.0.0');
     attachSession(hub, session);
 
-    hub.publish({ v: 1, type: 'run-start', mode: 'record', startedAt: 1 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'record', startedAt: 1 });
 
     expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session']);
   });
@@ -482,7 +517,7 @@ describe('what survives a new run', () => {
     hub.addClient(client);
     client.received.length = 0;
 
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 1 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1 });
 
     expect(client.received.map((message) => message.type)).toEqual(['run-start', 'session']);
     expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session']);
@@ -511,7 +546,7 @@ describe('what survives a new run', () => {
     hub.addClient(client);
     client.received.length = 0;
 
-    hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: 2 });
+    hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 });
 
     expect(client.received.map((message) => message.type)).toEqual(['run-start', 'session']);
     expect(client.received.at(-1)).toMatchObject({ type: 'session', sessionId: 'manual' });
@@ -530,7 +565,7 @@ describe('what survives a new run', () => {
         columns: 80,
         rows: 24,
       });
-      hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: index });
+      hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: index });
     }
     expect(hub.backlog).toHaveLength(3);
     expect(hub.backlog.map((message) => message.type)).toEqual(['run-start', 'session', 'session']);

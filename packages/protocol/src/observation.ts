@@ -45,6 +45,34 @@ export type Observation<T> =
       readonly reason: ObservationUnsupportedReason;
     };
 
+export type SemanticValueAbsentReason = ObservationAbsentReason | 'no-value';
+export type SemanticValueWithheldReason = 'sensitive' | 'artifact-policy' | 'provider-policy';
+
+/** A semantic value never collapses absence, uncertainty, support or confidentiality. */
+export type SemanticValueObservation =
+  | {
+      readonly status: 'known';
+      readonly value: string;
+      readonly sensitivity: 'public' | 'sensitive';
+      readonly evidence: ObservationEvidence;
+    }
+  | {
+      readonly status: 'absent';
+      readonly reason: SemanticValueAbsentReason;
+      readonly evidence: AuthoritativeObservationEvidence;
+    }
+  | { readonly status: 'unknown'; readonly reason: ObservationUnknownReason }
+  | {
+      readonly status: 'unsupported';
+      readonly capability: 'semantic-value';
+      readonly reason: ObservationUnsupportedReason;
+    }
+  | {
+      readonly status: 'withheld';
+      readonly reason: SemanticValueWithheldReason;
+      readonly sensitivity: 'public' | 'sensitive';
+    };
+
 /** Atomic identity of the screen/tree pair used for an observation. */
 export interface ObservationStamp {
   readonly sessionId: string;

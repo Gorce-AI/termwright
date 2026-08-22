@@ -34,17 +34,22 @@ export type {
   ExitStatus,
   LaunchOptions,
   Keyboard,
-  Locator,
+  AnyLocator,
+  LocatorForDomain,
+  SemanticLocator,
+  ScreenLocator,
   LocatorCellSnapshot,
   LocatorCellSnapshotOptions,
   LocatorDragOptions,
-  LocatorFilterOptions,
+  SemanticLocatorFilterOptions,
+  ScreenLocatorFilterOptions,
   LocatorWheelOptions,
   MouseModifier,
   MouseModifierOptions,
   PointerOptions,
   Mouse,
   MousePoint,
+  OperationBudget,
   RecordingOptions,
   ResizeReceipt,
   ResolvedTarget,
@@ -59,9 +64,11 @@ export type {
   ShellStatus,
   ScrollbackApi,
   SelectionApi,
-  SessionCapabilities,
   SessionDiagnostic,
   SessionEventMap,
+  SessionEventGap,
+  SessionEventRecord,
+  SessionEventSubscriptionOptions,
   SessionEvents,
   TerminalHarness,
   TerminalWindow,
@@ -85,16 +92,34 @@ export type {
   ActionabilityExplanation,
   Condition,
   ConditionResult,
-  DeviceOperation,
+  ExecutableDeviceOperation,
+  RecordedDeviceOperation,
+  ArtifactValuePolicy,
+  ExecutableValue,
+  PublicValue,
+  RecordedValue,
+  SemanticValueObservation,
+  SensitiveValue,
   EffectiveSessionContract,
   EvidenceProvenance,
   Observation,
   ObservationStamp,
   PhysicalRegion,
   SessionCapabilityId,
+  LocatorDomain,
+  LocatorRef,
+  SemanticLocatorRef,
+  ScreenLocatorRef,
+  ScreenCondition,
 } from '@termwright/protocol';
 
 export { launchTerminal, type LaunchTerminalOptions } from './session.js';
+export { installTerminalLaunchResourceProvider } from './launch-resources.js';
+export type {
+  TerminalLaunchResourceLease,
+  TerminalLaunchResourceProvider,
+} from './launch-resources.js';
+export { publicValue, sensitive } from '@termwright/protocol';
 export { debugMode, type DebugCategory } from './debug.js';
 
 export {
@@ -103,6 +128,7 @@ export {
   DuplicateSemanticKeyError,
   CapabilityProviderLostError,
   CapabilityProviderViolationError,
+  EvidenceConflictError,
   CapabilityUnavailableError,
   CapacityError,
   HistoryTruncatedError,
@@ -111,6 +137,7 @@ export {
   NotActionableError,
   ProbeAttachFailedError,
   ProcessExitedError,
+  PtyBackendError,
   ProtocolViolationError,
   SessionClosedError,
   SemanticCapabilityUnavailableError,
@@ -128,10 +155,16 @@ export {
   type PtyUnsubscribe,
 } from './pty.js';
 
+export {
+  ProcessLifecycleError,
+  type ProcessLifecycleErrorCode,
+} from './internal/process-supervisor.js';
+
 export { encodeKeys, encodePaste, encodeText, type KeyEncodingModes } from './keys.js';
 export { encodeMouse, normalizeMouseModifiers, type MouseButton, type MouseEvent } from './mouse.js';
 export {
   parseRef,
+  semanticNodeId,
   parseSelector,
   textMatcher,
   type GenericQuery,

@@ -15,7 +15,7 @@ from .errors import ProtocolViolation
 from .framing import project_dto
 from .limits import DEFAULT_LIMITS, LIMIT_FIELDS, ProtocolLimits
 from .logs import LogRecord, validate_log_record
-from .roles import CAPABILITY_SET
+from .roles import CAPABILITY_SET, EVIDENCE_PROVIDER_CAPABILITY_SET
 from .validate import validate_snapshot
 
 PROTOCOL_ID = "termwright/2"
@@ -53,6 +53,7 @@ def hello(
     adapter_version: str,
     capabilities: Sequence[str],
     probe: Optional[Mapping[str, Any]] = None,
+    providers: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Build the handshake message. Unknown capabilities are refused locally.
 
@@ -73,6 +74,8 @@ def hello(
     }
     if probe is not None:
         message["probe"] = dict(probe)
+    if providers:
+        message["providers"] = [dict(provider) for provider in providers]
     return message
 
 
@@ -229,7 +232,11 @@ def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -
         protocol = message.get("protocol")
         if isinstance(protocol, str) and protocol != PROTOCOL_ID:
             return ParseResult(ok=False, code="bad-version", detail=f"unsupported protocol {protocol}")
-        issue = _exact_keys(message, ("type", "protocol", "token", "adapter", "capabilities"))
+        issue = _exact_keys(
+            message,
+            ("type", "protocol", "token", "adapter", "capabilities"),
+            ("probe", "providers"),
+        )
         if issue:
             return _malformed(issue)
         if message["protocol"] != PROTOCOL_ID:
@@ -253,6 +260,35 @@ def parse_adapter_message(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -
         for item in capabilities:
             if item not in CAPABILITY_SET:
                 return _malformed(f"capabilities: unknown capability {item!r}")
+        if "providers" in message:
+            providers = message["providers"]
+            if not isinstance(providers, list) or len(providers) > 64:
+                return _malformed("providers: expected a bounded array")
+            ids = set()
+            for index, provider in enumerate(providers):
+                if not isinstance(provider, dict):
+                    return _malformed(f"providers.{index}: expected an object")
+                issue = _exact_keys(provider, ("id", "version", "method", "capabilities"))
+                if issue:
+                    return _malformed(f"providers.{index}: {issue}")
+                for field in ("id", "version"):
+                    issue = _identifier(provider[field], f"providers.{index}.{field}")
+                    if issue:
+                        return _malformed(issue)
+                if provider["id"] in ids:
+                    return _malformed(f"providers.{index}.id: duplicate provider id")
+                ids.add(provider["id"])
+                if provider["method"] not in ("native", "declared"):
+                    return _malformed(f"providers.{index}.method: expected native or declared")
+                provider_capabilities = provider["capabilities"]
+                if (
+                    not isinstance(provider_capabilities, list)
+                    or not provider_capabilities
+                    or len(provider_capabilities) > len(EVIDENCE_PROVIDER_CAPABILITY_SET)
+                    or len(set(provider_capabilities)) != len(provider_capabilities)
+                    or any(value not in EVIDENCE_PROVIDER_CAPABILITY_SET for value in provider_capabilities)
+                ):
+                    return _malformed(f"providers.{index}.capabilities: expected unique provider capabilities")
         return ParseResult(ok=True, message=message)
 
     if kind == "revision-commit":

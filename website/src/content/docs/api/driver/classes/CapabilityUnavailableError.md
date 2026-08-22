@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: CapabilityUnavailableError
 
-Defined in: [driver/src/errors.ts:93](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L93)
+Defined in: [driver/src/errors.ts:101](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L101)
 
 The negotiated session contract does not include a required capability.
 
@@ -25,7 +25,7 @@ The negotiated session contract does not include a required capability.
 
 > **new CapabilityUnavailableError**(`message`, `diagnostics`): `CapabilityUnavailableError`
 
-Defined in: [driver/src/errors.ts:94](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L94)
+Defined in: [driver/src/errors.ts:102](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L102)
 
 #### Parameters
 

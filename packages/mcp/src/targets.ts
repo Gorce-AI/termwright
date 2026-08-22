@@ -5,7 +5,7 @@
  * arguments describe and hands everything else — strictness, waiting, staleness,
  * candidate diagnostics — to `@termwright/driver`.
  */
-import type { Locator, TerminalHarness } from '@termwright/driver';
+import { parseRef, type AnyLocator, type LocatorRef, type TerminalHarness } from '@termwright/driver';
 import { usageError } from './errors.js';
 import { definedOnly } from './objects.js';
 import type { Loose } from './objects.js';
@@ -18,7 +18,7 @@ import type { SemanticRole, SemanticState } from './model.js';
  * from zod-parsed arguments, where an absent key is present-and-undefined.
  */
 export interface TargetInput {
-  /** A ref from a previous snapshot: `n8@42`, or `grid:1,2,9,1@7`. */
+  /** A domain-tagged ref: `semantic:n8@42`, or `screen:1,2,9,1@7`. */
   readonly ref?: string | undefined;
   /** Termwright Semantic Selector Language, e.g. `dialog button#approve:focused`. */
   readonly selector?: string | undefined;
@@ -77,13 +77,16 @@ export function hasTarget(input: TargetInput): boolean {
  * Every branch hands straight to a driver factory; nothing here matches, waits
  * or decides staleness.
  */
-export function buildLocator(harness: TerminalHarness, input: TargetInput): Locator {
-  let locator: Locator;
+export function buildLocator(harness: TerminalHarness, input: TargetInput): AnyLocator {
+  let locator: AnyLocator;
   if (input.ref !== undefined) {
     // The driver resolves a ref by node identity and owns its staleness rule,
     // so two nodes with the same name stay distinct. The driver alone decides
     // whether that producer promised stable identity or requires a fresh ref.
-    locator = harness.locatorForRef(input.ref);
+    if (parseRef(input.ref) === null) {
+      throw usageError('ref must include an explicit locator domain', 'use semantic:<node>@<revision> or screen:<row>,<column>,<width>,<height>@<revision>');
+    }
+    locator = harness.locatorForRef(input.ref as LocatorRef);
   } else if (input.selector !== undefined) {
     locator = harness.locator(input.selector);
   } else if (input.testId !== undefined) {

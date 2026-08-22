@@ -27,6 +27,18 @@ type EvidenceProvenance struct {
 	ProviderID string `json:"providerId"`
 }
 
+// SemanticValueObservation preserves value support, absence and confidentiality.
+// Value is present only for Status "known"; a withheld sensitive value never
+// crosses the protocol boundary.
+type SemanticValueObservation struct {
+	Status      string              `json:"status"`
+	Value       *string             `json:"value,omitempty"`
+	Sensitivity string              `json:"sensitivity,omitempty"`
+	Evidence    *EvidenceProvenance `json:"evidence,omitempty"`
+	Reason      string              `json:"reason,omitempty"`
+	Capability  string              `json:"capability,omitempty"`
+}
+
 type NodeGeometryObservations struct {
 	Displayed    Observation[bool] `json:"displayed"`
 	IntendedRect Observation[Rect] `json:"intendedRect"`
@@ -57,17 +69,64 @@ type ProviderPointerRegion struct {
 	Spans        []ProviderPointerSpan `json:"spans"`
 }
 
+// PaintedRegion is authoritative cell attribution from a production painter.
+type PaintedRegion struct {
+	RegionBounds Rect                  `json:"regionBounds"`
+	Spans        []ProviderPointerSpan `json:"spans"`
+}
+
+// ProviderPaintedRegion binds painted cells to one semantic recipient.
+type ProviderPaintedRegion struct {
+	RecipientID  string                `json:"recipientId"`
+	RegionBounds Rect                  `json:"regionBounds"`
+	Spans        []ProviderPointerSpan `json:"spans"`
+}
+
+// ProviderActionRecipes binds production keybindings to one semantic recipient.
+type ProviderActionRecipes struct {
+	RecipientID string                `json:"recipientId"`
+	Recipes     []PhysicalInputRecipe `json:"recipes"`
+}
+
+// ProviderFocusState is the exact production focus-manager result.
+type ProviderFocusState struct {
+	Status      string `json:"status"`
+	RecipientID string `json:"recipientId,omitempty"`
+}
+
+// ProviderScrollState is application viewport state in logical units.
+type ProviderScrollState struct {
+	RecipientID string `json:"recipientId"`
+	Axis        string `json:"axis"`
+	Offset      int    `json:"offset"`
+	Viewport    int    `json:"viewport"`
+	Extent      int    `json:"extent"`
+}
+
+// ProviderTerminalInputModes is the application's production terminal parser
+// configuration for one committed semantic revision.
+type ProviderTerminalInputModes struct {
+	MouseTracking  string `json:"mouseTracking"`
+	MouseEncoding  string `json:"mouseEncoding"`
+	FocusReporting string `json:"focusReporting"`
+}
+
 // ProviderRevisionEvidence binds one frozen application provider to a session
 // and semantic revision. Status is available, lost, or violation.
 type ProviderRevisionEvidence struct {
-	ProviderID     string                   `json:"providerId"`
-	SessionID      string                   `json:"sessionId"`
-	Revision       int64                    `json:"revision"`
-	Status         string                   `json:"status"`
-	Evidence       *EvidenceProvenance      `json:"evidence,omitempty"`
-	PointerRegions *[]ProviderPointerRegion `json:"pointerRegions,omitempty"`
-	HitGrid        *PointerHitGrid          `json:"hitGrid,omitempty"`
-	Reason         string                   `json:"reason,omitempty"`
+	ProviderID     string                      `json:"providerId"`
+	SessionID      string                      `json:"sessionId"`
+	Revision       int64                       `json:"revision"`
+	Status         string                      `json:"status"`
+	Evidence       *EvidenceProvenance         `json:"evidence,omitempty"`
+	PointerRegions *[]ProviderPointerRegion    `json:"pointerRegions,omitempty"`
+	FocusState     *ProviderFocusState         `json:"focusState,omitempty"`
+	ActionRecipes  *[]ProviderActionRecipes    `json:"actionRecipes,omitempty"`
+	ScrollStates   *[]ProviderScrollState      `json:"scrollStates,omitempty"`
+	PaintedRegions *[]ProviderPaintedRegion    `json:"paintedRegions,omitempty"`
+	InputModes     *ProviderTerminalInputModes `json:"inputModes,omitempty"`
+	HitGrid        *PointerHitGrid             `json:"hitGrid,omitempty"`
+	Reason         string                      `json:"reason,omitempty"`
 }
 
 // State is the closed state set. Pointers distinguish "unset" from "false":
@@ -83,15 +142,23 @@ type State struct {
 	Hidden   *bool `json:"hidden,omitempty"`
 	// Offscreen says every cell is outside the visible area — scrolled away,
 	// not undisplayed. Implies Hidden; the pair without it is refused.
-	Offscreen     *bool  `json:"offscreen,omitempty"`
-	ReadOnly      *bool  `json:"readonly,omitempty"`
-	Multiline     *bool  `json:"multiline,omitempty"`
-	Orientation   string `json:"orientation,omitempty"`
-	Level         *int   `json:"level,omitempty"`
-	PositionInSet *int   `json:"positionInSet,omitempty"`
-	SetSize       *int   `json:"setSize,omitempty"`
-	ScrollOffset  *int   `json:"scrollOffset,omitempty"`
-	ScrollExtent  *int   `json:"scrollExtent,omitempty"`
+	Offscreen       *bool  `json:"offscreen,omitempty"`
+	ReadOnly        *bool  `json:"readonly,omitempty"`
+	Multiline       *bool  `json:"multiline,omitempty"`
+	Required        *bool  `json:"required,omitempty"`
+	Multiselectable *bool  `json:"multiselectable,omitempty"`
+	Orientation     string `json:"orientation,omitempty"`
+	Level           *int   `json:"level,omitempty"`
+	PositionInSet   *int   `json:"positionInSet,omitempty"`
+	SetSize         *int   `json:"setSize,omitempty"`
+}
+
+// ScrollState is application viewport state, distinct from terminal scrollback.
+type ScrollState struct {
+	Axis     string `json:"axis"`
+	Offset   int    `json:"offset"`
+	Viewport int    `json:"viewport"`
+	Extent   int    `json:"extent"`
 }
 
 // TextRange maps grapheme offsets of a node's text onto cell coordinates.
@@ -101,6 +168,18 @@ type TextRange struct {
 	Rect        Rect `json:"rect"`
 }
 
+// PhysicalInputRecipeStep is data executed later by Termwright's PTY devices.
+type PhysicalInputRecipeStep struct {
+	Kind string `json:"kind"`
+	Key  string `json:"key,omitempty"`
+}
+
+type PhysicalInputRecipe struct {
+	Action        string                    `json:"action"`
+	RequiresFocus bool                      `json:"requiresFocus"`
+	Steps         []PhysicalInputRecipeStep `json:"steps"`
+}
+
 // Node is one accessible element.
 type Node struct {
 	ID          string `json:"id"`
@@ -108,21 +187,19 @@ type Node struct {
 	Role        Role   `json:"role"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	// Value is what the widget CONTAINS, as against Name, which is what it is
-	// called. A pointer because the empty string is meaningful: `""` says the
-	// field is empty, absent says this is not a value-bearing widget at all.
-	// `omitempty` on a plain string collapses the first into the second and
-	// makes toHaveValue('') unassertable.
-	Value *string `json:"value,omitempty"`
-	State *State  `json:"state,omitempty"`
+	// Value is what the widget contains, with absence and confidentiality kept
+	// distinct from an empty public string.
+	Value *SemanticValueObservation `json:"value,omitempty"`
+	State *State                    `json:"state,omitempty"`
 	// Extended is application-defined JSON state. It is deliberately separate
 	// from State, whose portable vocabulary remains closed.
-	Extended    map[string]any `json:"extended,omitempty"`
-	Actions     []Action       `json:"actions,omitempty"`
-	LabelledBy  []string       `json:"labelledBy,omitempty"`
-	DescribedBy []string       `json:"describedBy,omitempty"`
-	TextRanges  []TextRange    `json:"textRanges,omitempty"`
-	TestID      string         `json:"testId,omitempty"`
+	Extended     map[string]any        `json:"extended,omitempty"`
+	Actions      []Action              `json:"actions,omitempty"`
+	InputRecipes []PhysicalInputRecipe `json:"inputRecipes,omitempty"`
+	LabelledBy   []string              `json:"labelledBy,omitempty"`
+	DescribedBy  []string              `json:"describedBy,omitempty"`
+	TextRanges   []TextRange           `json:"textRanges,omitempty"`
+	TestID       string                `json:"testId,omitempty"`
 	// FrameworkType is what the UI framework calls this widget. Required when
 	// Role is RoleGeneric: an unrecognised widget must at least name its own
 	// type, so a reader can tell one unknown thing from another.
@@ -130,8 +207,10 @@ type Node struct {
 	// P is where this node's facts came from, as a whole.
 	P string `json:"p,omitempty"`
 	// PX is where individual fields came from, when they differ from P.
-	PX       map[string]string        `json:"px,omitempty"`
-	Geometry NodeGeometryObservations `json:"geometry"`
+	PX            map[string]string           `json:"px,omitempty"`
+	Geometry      NodeGeometryObservations    `json:"geometry"`
+	Scroll        *Observation[ScrollState]   `json:"scroll,omitempty"`
+	PaintedRegion *Observation[PaintedRegion] `json:"paintedRegion,omitempty"`
 }
 
 // Provenance sources: where a semantic fact came from. Closed set.
@@ -139,13 +218,14 @@ const (
 	ProvenanceAnnotation  = "annotation"
 	ProvenanceRecognizer  = "recognizer"
 	ProvenanceFramework   = "framework"
+	ProvenanceApplication = "application"
 	ProvenanceCorrelation = "correlation"
 	ProvenanceHeuristic   = "heuristic"
 )
 
 // ProvenanceSources is every value P and PX accept.
 var ProvenanceSources = []string{
-	ProvenanceAnnotation, ProvenanceRecognizer, ProvenanceFramework,
+	ProvenanceAnnotation, ProvenanceRecognizer, ProvenanceFramework, ProvenanceApplication,
 	ProvenanceCorrelation, ProvenanceHeuristic,
 }
 
@@ -195,6 +275,12 @@ func Bool(v bool) *bool { return &v }
 // Int returns a pointer to v, for the optional State fields.
 func Int(v int) *int { return &v }
 
-// Text returns a pointer to v, for Node.Value, where the empty string differs
-// from no value at all.
-func Text(v string) *string { return &v }
+// PublicValue creates an authoritative public semantic value.
+func PublicValue(v string, evidence *EvidenceProvenance) *SemanticValueObservation {
+	return &SemanticValueObservation{Status: "known", Value: &v, Sensitivity: "public", Evidence: evidence}
+}
+
+// WithheldSensitiveValue declares that a value exists but must not cross the wire.
+func WithheldSensitiveValue() *SemanticValueObservation {
+	return &SemanticValueObservation{Status: "withheld", Reason: "sensitive", Sensitivity: "sensitive"}
+}

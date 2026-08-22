@@ -25,7 +25,7 @@ describe.skipIf(!runnable)('the tview menu', () => {
     // The matcher polls, so it is what waits for the probe's handshake — a
     // plain read of the capability is only meaningful once a tree arrived.
     await expect(app).toMatchSemanticSnapshot();
-    expect(app.capabilities().semanticTree).toBe(true);
+    expect(app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
     await expect(app).toMatchCellSnapshot();
   });
 
@@ -78,7 +78,7 @@ describe.skipIf(!runnable)('the tview menu', () => {
       // selects the physical keyboard strategy instead.
       await expect(save).toBeFocused();
       const receipt = await save.activate();
-      expect(['click', 'focus-enter', 'focus-space']).toContain(receipt.plan.strategy);
+      expect(receipt.plan.strategy).toBe('authoritative-activate');
     });
 
     await expect(app).toHaveText('status: saved release');

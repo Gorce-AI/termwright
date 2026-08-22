@@ -33,31 +33,31 @@ Spatial assertions additionally require both locators to come from the same
 session, observation revision and known coordinate space.
 
 <!-- geometry-matrices:start -->
-## Framework capability matrix
+## Framework capability graph
 
-The compatibility registry classifies facts as `automatic`, `application-integrated`, or `unsupported`. Runtime requirements are listed separately below.
+Every value below is generated from the executable capability graph and the exact certification row. `automatic`, `application-integrated`, and `unsupported` describe authoritative evidence sources; runtime prerequisites are separate.
 
-| Framework | Identity | Displayed | Intended rect | Visible rect | Exact hit test | Why |
-| --- | --- | --- | --- | --- | --- | --- |
-| Generic grid | none | automatic | automatic | automatic | automatic | Grid matches are terminal cells. Exact pointer delivery additionally requires application mouse reporting. |
-| Ink | stable | automatic | automatic | automatic | application-integrated | Checksummed Ink 7.1.1 renderer and frame hooks retain Yoga layout, nested overflow clipping, Static/live origins, and the exact committed VT buffer. Pointer ownership remains independent and requires an application evidence provider. |
-| OpenTUI | stable | automatic | automatic | automatic | automatic | The certified 0.5.3 render-command hook records ancestor scissor intersections at the committed frame boundary; native hitTest supplies pointer recipients independently. |
-| Textual | stable | automatic | automatic | automatic | automatic | The compositor exposes display state, intended and clipped regions, and the same fresh pointer-routing lookup used by Textual. |
-| tview | stable | automatic | unsupported | unsupported | application-integrated | The instrumented tree exposes display state. Primitive rectangles remain diagnostic because synthetic List and DropDown items lack universal intended geometry, while an application evidence provider can expose the production pointer router authoritatively. |
-| Ratatui | frame-local | unsupported | automatic | unsupported | application-integrated | Instrumented render calls expose intended areas. Ratatui does not retain per-widget display, clipping, paint ownership, or pointer recipients automatically; its application evidence SDK can expose the production router authoritatively. |
-| Bubble Tea / Bubbles | frame-local | unsupported | unsupported | unsupported | application-integrated | Bubble Tea hands the renderer a styled string without automatic attributable component geometry or pointer ownership. Its application evidence SDK can expose the production router authoritatively. |
+| Framework | Semantic tree | Stable identity | Intended geometry | Clipped geometry | Painted region | Pointer region | Hit testing | Focus | Scroll | Render order |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Ink | automatic | automatic | automatic | automatic | application-integrated | application-integrated | application-integrated | application-integrated | application-integrated | unsupported |
+| OpenTUI | automatic | automatic | automatic | automatic | application-integrated | automatic | automatic | automatic | application-integrated | unsupported |
+| Textual | automatic | automatic | automatic | automatic | application-integrated | automatic | automatic | automatic | application-integrated | automatic |
+| tview | automatic | automatic | unsupported | unsupported | application-integrated | application-integrated | application-integrated | automatic | application-integrated | unsupported |
+| Ratatui | automatic | unsupported | automatic | unsupported | application-integrated | application-integrated | application-integrated | application-integrated | application-integrated | unsupported |
+| Bubble Tea / Bubbles | automatic | unsupported | unsupported | unsupported | application-integrated | application-integrated | application-integrated | automatic | application-integrated | unsupported |
 
-## Action and assertion matrix
+## Derived public surface
 
-| Framework | Keyboard | Pointer | Attached | Detached | Displayed | Hidden | Visible | Offscreen | In viewport | Receives pointer | Bounds | Spatial | Cell snapshot |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Generic grid | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic |
-| Ink | automatic | application-integrated | automatic | automatic | automatic | automatic | automatic | automatic | automatic | application-integrated | automatic | automatic | automatic |
-| OpenTUI | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic |
-| Textual | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic |
-| tview | automatic | application-integrated | automatic | automatic | automatic | automatic | unsupported | unsupported | unsupported | application-integrated | unsupported | unsupported | unsupported |
-| Ratatui | automatic | application-integrated | automatic | automatic | unsupported | unsupported | unsupported | unsupported | unsupported | application-integrated | automatic | automatic | unsupported |
-| Bubble Tea / Bubbles | automatic | application-integrated | automatic | automatic | unsupported | unsupported | unsupported | unsupported | unsupported | application-integrated | unsupported | unsupported | unsupported |
+Public availability is computed by traversing the same graph used by certification. Diagnostic evidence never unlocks an action.
+
+| Framework | Semantic query | Visible | Click | Hover | Drag | Focus | Activate | Type | Fill | Checkpoint |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Ink | automatic | automatic | application-integrated | application-integrated | application-integrated | automatic | automatic | application-integrated | automatic | automatic |
+| OpenTUI | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic |
+| Textual | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic |
+| tview | automatic | unsupported | application-integrated | application-integrated | application-integrated | automatic | automatic | automatic | automatic | automatic |
+| Ratatui | automatic | unsupported | application-integrated | application-integrated | application-integrated | automatic | automatic | application-integrated | automatic | automatic |
+| Bubble Tea / Bubbles | automatic | unsupported | application-integrated | application-integrated | application-integrated | automatic | automatic | automatic | automatic | automatic |
 
 ## Exact certifications
 
@@ -70,50 +70,60 @@ The compatibility registry classifies facts as `automatic`, `application-integra
 | Ratatui | ratatui@0.30.2/0.2.0 | checksummed-replacement | `clients/rust-probe/upstream-patches/ratatui-core/0.1.2/manifest.json`<br>`clients/rust-probe/upstream-patches/ratatui-widgets/0.3.2/manifest.json` |
 | Bubble Tea / Bubbles | charm@v1.3.10/0.2.0<br>charm@v2.0.8/0.2.0 | checksummed-replacement | `packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v2.0.8/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v1.0.0/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v2.1.1/manifest.json` |
 
-## Application-integrated capability providers
+## Application-integrated providers
 
-| Framework | Accepted provider types | Extendable capabilities | SDKs |
+| Framework | Accepted provider types | Extended session capabilities | SDKs |
 | --- | --- | --- | --- |
-| Ink | pointer-evidence | pointer-geometry, pointer-hit-testing | `@termwright/evidence-provider` |
-| OpenTUI | pointer-evidence | pointer-geometry, pointer-hit-testing | `@termwright/evidence-provider` |
-| Textual | pointer-evidence | pointer-geometry, pointer-hit-testing | `termwright` |
-| tview | pointer-evidence | pointer-geometry, pointer-hit-testing | `github.com/gorce-ai/termwright/clients/go/evidence` |
-| Ratatui | pointer-evidence | pointer-geometry, pointer-hit-testing | `termwright-protocol`, `termwright-ratatui` |
-| Bubble Tea / Bubbles | pointer-evidence | pointer-geometry, pointer-hit-testing | `github.com/gorce-ai/termwright/clients/go/evidence` |
+| Ink | pointer-evidence, action-strategy, focus-evidence, scroll-evidence, paint-evidence, input-mode-evidence | pointer-geometry, pointer-hit-testing, action-strategies, focus, scroll, painted-region, pointer-input, focus-input | `@termwright/evidence-provider`, `/evidence-provider` |
+| OpenTUI | action-strategy, scroll-evidence, paint-evidence, input-mode-evidence | action-strategies, scroll, painted-region, pointer-input, focus-input | `@termwright/evidence-provider`, `/evidence-provider` |
+| Textual | action-strategy, scroll-evidence, paint-evidence, input-mode-evidence | action-strategies, scroll, painted-region, pointer-input, focus-input | `termwright`, `/evidence-provider` |
+| tview | pointer-evidence, scroll-evidence, paint-evidence, input-mode-evidence | pointer-geometry, pointer-hit-testing, scroll, painted-region, pointer-input, focus-input | `github.com/gorce-ai/termwright/clients/go/evidence`, `/evidence-provider` |
+| Ratatui | pointer-evidence, action-strategy, focus-evidence, scroll-evidence, paint-evidence, input-mode-evidence | pointer-geometry, pointer-hit-testing, action-strategies, focus, scroll, painted-region, pointer-input, focus-input | `termwright-protocol`, `termwright-ratatui`, `/evidence-provider` |
+| Bubble Tea / Bubbles | pointer-evidence, action-strategy, scroll-evidence, paint-evidence, input-mode-evidence | pointer-geometry, pointer-hit-testing, action-strategies, scroll, painted-region, pointer-input, focus-input | `github.com/gorce-ai/termwright/clients/go/evidence`, `/evidence-provider` |
 
-## Executable conformance coverage
+## Executable conformance claims
 
-| Framework | Covered areas | Real fixtures |
+| Framework | Mandatory claim IDs | Executable files |
 | --- | --- | --- |
-| Ink | semantic-tree, geometry, provider-pointer-pty, dormant-byte-parity | `packages/probe-ink/src/geometry.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts` |
-| OpenTUI | semantic-tree, clipping, native-hit-testing, dormant-byte-parity | `packages/probe-opentui/src/zero-config.test.ts`<br>`packages/probe-opentui/src/instrumentation.test.ts` |
-| Textual | semantic-tree, compositor-geometry, native-hit-testing, injection | `clients/python/tests/test_textual_probe_hook.py`<br>`clients/python/tests/test_probe_tree.py` |
-| tview | semantic-tree, exact-patch, application-pointer-provider, dormant-byte-parity | `packages/probe-tview/src/zero-config.pty.test.ts` |
-| Ratatui | immediate-mode-identity, exact-patch, application-pointer-provider, real-pty-input | `clients/rust-probe/tests/patchset.rs`<br>`examples/ratatui-list/tests/app.e2e.test.ts` |
-| Bubble Tea / Bubbles | model-semantics, exact-patch, application-pointer-provider, real-pty-input | `packages/probe-charm/src/zero-config.pty.test.ts`<br>`examples/bubbletea-login/tests/app.e2e.test.ts` |
+| Ink | `claim.semantic-tree-authoritative`<br>`claim.stable-identity-authoritative`<br>`claim.intended-geometry-authoritative`<br>`claim.clipped-geometry-authoritative`<br>`claim.paired-revisions`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `packages/probe-ink/src/geometry.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`examples/ink-todo/tests/app.e2e.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/driver/src/provider-evidence.test.ts`<br>`packages/evidence-provider/src/index.test.ts` |
+| OpenTUI | `claim.semantic-tree-authoritative`<br>`claim.stable-identity-authoritative`<br>`claim.intended-geometry-authoritative`<br>`claim.clipped-geometry-authoritative`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.paired-revisions`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `packages/probe-opentui/src/zero-config.test.ts`<br>`packages/probe-opentui/src/instrumentation.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/conformance/src/suites/interaction.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`packages/driver/src/provider-evidence.test.ts`<br>`packages/evidence-provider/src/index.test.ts` |
+| Textual | `claim.semantic-tree-authoritative`<br>`claim.stable-identity-authoritative`<br>`claim.intended-geometry-authoritative`<br>`claim.clipped-geometry-authoritative`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.render-order-authoritative`<br>`claim.paired-revisions`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `clients/python/tests/test_textual_probe_hook.py`<br>`clients/python/tests/test_probe_tree.py`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/conformance/src/suites/interaction.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`clients/python/tests/test_textual_annotations.py`<br>`packages/driver/src/provider-evidence.test.ts`<br>`clients/python/tests/test_evidence.py` |
+| tview | `claim.semantic-tree-authoritative`<br>`claim.stable-identity-authoritative`<br>`claim.paired-revisions`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `packages/probe-tview/src/zero-config.pty.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`clients/go/evidence/registry_test.go`<br>`packages/driver/src/provider-evidence.test.ts` |
+| Ratatui | `claim.semantic-tree-authoritative`<br>`claim.intended-geometry-authoritative`<br>`claim.paired-revisions`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `clients/rust-probe/tests/patchset.rs`<br>`examples/ratatui-list/tests/app.e2e.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`packages/driver/src/provider-evidence.test.ts`<br>`clients/rust/tests/evidence.rs` |
+| Bubble Tea / Bubbles | `claim.semantic-tree-authoritative`<br>`claim.paired-revisions`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `packages/probe-charm/src/zero-config.pty.test.ts`<br>`examples/bubbletea-login/tests/app.e2e.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`packages/driver/src/provider-evidence.test.ts`<br>`clients/go/evidence/registry_test.go` |
 
-### Runtime preconditions
+### Runtime prerequisites and generated remediation
 
-- **Generic grid — pointerActions:** The application enables terminal mouse reporting before pointer input is sent.
-- **Ink — hitTest:** The application registers an authoritative production pointer router before the probe handshake.
-- **tview — hitTest:** The application registers its authoritative production pointer router before capability negotiation.
-- **tview — pointerActions:** Terminal mouse reporting is enabled for the requested pointer action.
-- **Ratatui — hitTest:** The application registers its authoritative production pointer router before capability negotiation.
-- **Ratatui — pointerActions:** Terminal mouse reporting is enabled for the requested pointer action.
-- **Bubble Tea / Bubbles — hitTest:** The application registers its authoritative production pointer router before capability negotiation.
-- **Bubble Tea / Bubbles — pointerActions:** Bubble Tea enables terminal mouse reporting for the requested pointer action.
-- **Ink — keyboard-input:** A writable real PTY is attached.
-- **Ink — pointer-input:** Terminal mouse modes are observable and the application enables mouse reporting.
-- **OpenTUI — keyboard-input:** A writable real PTY is attached.
-- **OpenTUI — pointer-input:** Terminal mouse modes are observable and the application enables mouse reporting.
-- **Textual — keyboard-input:** A writable real PTY is attached.
-- **Textual — pointer-input:** Terminal mouse modes are observable and Textual enables mouse reporting.
-- **tview — keyboard-input:** A writable real PTY is attached.
-- **tview — pointer-input:** Terminal mouse modes are observable and the application enables mouse reporting.
-- **Ratatui — keyboard-input:** A writable real PTY is attached.
-- **Ratatui — pointer-input:** An application pointer provider is registered before negotiation and the application enables terminal mouse reporting.
-- **Bubble Tea / Bubbles — keyboard-input:** A writable real PTY is attached.
-- **Bubble Tea / Bubbles — pointer-input:** An application pointer provider is registered before negotiation and Bubble Tea mouse reporting is enabled.
+- **Ink — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **Ink — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Ink — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **Ink — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Ink — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **OpenTUI — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **OpenTUI — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **OpenTUI — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **OpenTUI — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **OpenTUI — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **Textual — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **Textual — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Textual — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **Textual — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Textual — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **tview — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **tview — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **tview — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **tview — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **tview — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **Ratatui — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **Ratatui — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Ratatui — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **Ratatui — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Ratatui — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **Bubble Tea / Bubbles — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **Bubble Tea / Bubbles — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Bubble Tea / Bubbles — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **Bubble Tea / Bubbles — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Bubble Tea / Bubbles — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
 <!-- geometry-matrices:end -->
 
 Every semantic snapshot uses the evidence-qualified v2 schema. A producer

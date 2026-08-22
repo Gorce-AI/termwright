@@ -116,6 +116,8 @@ class ProducerSocketSink implements UiSessionMessageSink {
   #settle: (() => void) | undefined;
   #queue: QueuedMessage[] = [];
   #queuedBytes = 0;
+  #droppedMessages = 0;
+  #droppedBytes = 0;
   #open = false;
   #failed = false;
   #accepting = true;
@@ -252,11 +254,18 @@ class ProducerSocketSink implements UiSessionMessageSink {
   #clearQueue(): void {
     this.#queue = [];
     this.#queuedBytes = 0;
+    this.#droppedMessages = 0;
+    this.#droppedBytes = 0;
   }
 
   #boundQueue(): void {
+    const existingGap = this.#queue.findIndex((message) => message.type === 'diagnostic-gap');
+    if (existingGap >= 0) {
+      const [removed] = this.#queue.splice(existingGap, 1);
+      if (removed !== undefined) this.#queuedBytes -= removed.bytes;
+    }
     while (
-      this.#queue.length > MAX_QUEUED_MESSAGES ||
+      this.#queue.length + 1 > MAX_QUEUED_MESSAGES ||
       this.#queuedBytes > MAX_QUEUED_BYTES
     ) {
       // Preserve the session announcement whenever another event can be
@@ -266,7 +275,38 @@ class ProducerSocketSink implements UiSessionMessageSink {
       if (index < 0) index = this.#queue.findIndex((message) => message.type !== 'session');
       if (index < 0) index = 0;
       const [dropped] = this.#queue.splice(index, 1);
-      if (dropped !== undefined) this.#queuedBytes -= dropped.bytes;
+      if (dropped !== undefined) {
+        this.#queuedBytes -= dropped.bytes;
+        this.#droppedMessages += 1;
+        this.#droppedBytes += dropped.bytes;
+      }
+    }
+    if (this.#droppedMessages > 0) {
+      const encoded = encodeMessage({
+        v: 1,
+        type: 'diagnostic-gap',
+        source: 'live-session-producer',
+        droppedMessages: this.#droppedMessages,
+        droppedBytes: this.#droppedBytes,
+      });
+      const gap = { type: 'diagnostic-gap' as const, encoded, bytes: Buffer.byteLength(encoded) };
+      while (this.#queue.length + 1 > MAX_QUEUED_MESSAGES || this.#queuedBytes + gap.bytes > MAX_QUEUED_BYTES) {
+        const [dropped] = this.#queue.splice(0, 1);
+        if (dropped === undefined) break;
+        this.#queuedBytes -= dropped.bytes;
+        this.#droppedMessages += 1;
+        this.#droppedBytes += dropped.bytes;
+      }
+      const finalEncoded = encodeMessage({
+        v: 1,
+        type: 'diagnostic-gap',
+        source: 'live-session-producer',
+        droppedMessages: this.#droppedMessages,
+        droppedBytes: this.#droppedBytes,
+      });
+      const finalGap = { type: 'diagnostic-gap' as const, encoded: finalEncoded, bytes: Buffer.byteLength(finalEncoded) };
+      this.#queue.push(finalGap);
+      this.#queuedBytes += finalGap.bytes;
     }
   }
 }

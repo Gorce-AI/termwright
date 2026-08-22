@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { prepareInstrumentedBuild, PROBE_VERSION } from './launch.js';
 
 const run = promisify(execFile);
@@ -55,8 +55,14 @@ const runnable = (await goAvailable()) && ptyAvailable();
 const roots: string[] = [];
 const sessions: TerminalHarness[] = [];
 
+afterEach(async () => {
+  const owned = sessions.splice(0);
+  const results = await Promise.allSettled(owned.map((session) => session.close()));
+  const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+  if (failures.length > 0) throw new AggregateError(failures, 'failed to close test-owned terminal sessions');
+});
+
 afterAll(async () => {
-  await Promise.all(sessions.map((session) => session.close()));
   await Promise.all(roots.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -132,10 +138,8 @@ describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe',
 
     await app.waitForText('ready');
     await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
-    expect(app.capabilities().probe).toMatchObject({
-      framework: 'charm',
-      frameworkVersion: 'v1.3.10',
-      probeVersion: PROBE_VERSION,
+    expect(app.contract()?.framework).toMatchObject({
+      name: 'charm', version: 'v1.3.10', adapterVersion: PROBE_VERSION,
     });
     // ConPTY consumes startup terminal queries before Termwright's emulator
     // can observe and answer them. Semantics and ordinary PTY input remain
@@ -185,24 +189,11 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     // The banner proves rendering started, not that the first tree committed.
     await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
 
-    expect(app.capabilities().semanticTree).toBe(true);
-    expect(app.capabilities().adapter?.name).toBe('termwright-probe-charm');
-    expect(app.capabilities().capabilities).toEqual([
-      'tree',
-      'states',
-      'actions',
-      'render-revisions',
-    ]);
-    // Probe capabilities describe what Bubble Tea lets the instrumentation
-    // observe; they are intentionally not the adapter traffic negotiated
-    // immediately above.
-    expect(app.capabilities().probe).toEqual({
-      framework: 'charm',
-      frameworkVersion: 'v2.0.8',
-      probeVersion: PROBE_VERSION,
-      identityKind: 'frame-local',
-      capabilities: ['annotations'],
+    expect(app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
+    expect(app.contract()?.framework).toMatchObject({
+      name: 'charm', version: 'v2.0.8', adapterVersion: PROBE_VERSION,
     });
+    expect(app.contract()?.capabilities['paired-revisions'].status).toBe('supported');
 
     // The claim: a grid scrape sees two rows of similar-looking text. The tree
     // says which component each is, and which one is focused — neither of
@@ -349,7 +340,7 @@ describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {
     // is a glyph, and "animating" is indistinguishable from "stuck". The
     // accessor makes the frame observable, so the tree can show it advancing.
     // Polled rather than settled: this application animates forever, so
-    // waitForStable() waits for a quiet screen that never comes. An
+    // waitForQuiet() waits for a quiet screen that never comes. An
     // always-animating UI is exactly the case where "wait for stability" is
     // the wrong instrument, and reaching for it here cost a red test.
     const frames = new Set<number | undefined>();

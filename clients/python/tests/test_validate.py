@@ -4,10 +4,31 @@ from __future__ import annotations
 
 from conftest import geometry, load_vectors, node, snapshot
 
-from termwright import DEFAULT_LIMITS, Rect, SemanticNode, SemanticSnapshot, validate_snapshot
+from termwright import (
+    DEFAULT_LIMITS,
+    Rect,
+    SemanticNode,
+    SemanticSnapshot,
+    SemanticValueObservation,
+    framework_evidence,
+    validate_snapshot,
+)
 
 def test_vector_limits_match_the_ported_defaults():
     assert load_vectors("snapshots")["limits"] == DEFAULT_LIMITS.to_wire()
+
+
+def test_snapshot_vectors_match_the_reference_validator():
+    vectors = load_vectors("snapshots")
+    for case in vectors["accept"]:
+        result = validate_snapshot(case["snapshot"], DEFAULT_LIMITS)
+        assert result.ok, f"valid snapshot {case['name']} rejected: {result.code}: {result.detail}"
+    for case in vectors["reject"]:
+        result = validate_snapshot(case["snapshot"], DEFAULT_LIMITS)
+        assert not result.ok, f"invalid snapshot {case['name']} accepted"
+        assert result.code == case["code"], (
+            f"snapshot {case['name']} code={result.code!r}, want {case['code']!r}: {result.detail}"
+        )
 
 
 def test_valid_protocol_v2_snapshot_is_accepted():
@@ -64,6 +85,41 @@ def test_snapshots_built_from_the_dataclasses_validate():
     assert result.ok, f"{result.code}: {result.detail}"
 
 
+def test_semantic_value_preserves_confidentiality_and_rejects_raw_strings():
+    known = snapshot(
+        nodes=[node(
+            id="field",
+            role="textbox",
+            value=SemanticValueObservation(
+                status="known",
+                value="visible",
+                sensitivity="public",
+                evidence=framework_evidence("python-test"),
+            ),
+        )],
+        root_ids=["field"],
+    ).to_wire()
+    assert validate_snapshot(known, DEFAULT_LIMITS).ok
+
+    withheld = snapshot(
+        nodes=[node(
+            id="secret",
+            role="textbox",
+            value=SemanticValueObservation(
+                status="withheld", reason="sensitive", sensitivity="sensitive"
+            ),
+        )],
+        root_ids=["secret"],
+    ).to_wire()
+    assert validate_snapshot(withheld, DEFAULT_LIMITS).ok
+    assert "value" not in withheld["nodes"][0]["value"]
+
+    known["nodes"][0]["value"] = "legacy plaintext"
+    rejected = validate_snapshot(known, DEFAULT_LIMITS)
+    assert not rejected.ok
+    assert "value" in rejected.detail
+
+
 def test_deeply_nested_trees_are_rejected_by_depth():
     nodes = [node(id="n0", role="region", name="")]
     for index in range(1, DEFAULT_LIMITS.maxDepth + 1):
@@ -106,8 +162,8 @@ def test_the_node_keys_are_exactly_the_protocols():
 
     expected = {
         "id", "parentId", "role", "name", "description", "value", "state",
-        "extended", "actions", "labelledBy", "describedBy", "textRanges",
-        "testId", "frameworkType", "p", "px", "geometry",
+        "extended", "actions", "inputRecipes", "labelledBy", "describedBy", "textRanges",
+        "testId", "frameworkType", "p", "px", "geometry", "scroll", "paintedRegion",
     }
     assert set(_NODE_KEYS) == expected, {
         "missing here": sorted(expected - set(_NODE_KEYS)),

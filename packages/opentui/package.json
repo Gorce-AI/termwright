@@ -10,7 +10,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "exports": {
     ".": {
@@ -24,8 +24,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:annotations": "vitest run src/annotations.test.ts"
+    "test": "pnpm --dir ../.. test -- -- --run packages/opentui",
+    "test:annotations": "pnpm --dir ../.. test -- -- packages/opentui/src/annotations.test.ts"
   },
   "dependencies": {
     "@termwright/protocol": "workspace:*"

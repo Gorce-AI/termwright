@@ -15,4 +15,4 @@ editUrl: false
 
 Defined in: [driver/src/selectors.ts:76](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L76)
 
-Anything a [Locator](../../interfaces/locator/) can be built from.
+Internal query union behind the distinct semantic and screen locator domains.

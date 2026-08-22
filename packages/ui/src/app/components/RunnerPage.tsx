@@ -212,6 +212,11 @@ export function RunnerPage({ state, dispatch, onRun, onStop, onInput, onOpenRepl
 
   return (
     <div className="tw-runner-page">
+      {state.run.diagnosticGaps === 0 ? null : (
+        <div className="tw-diagnostic-gap" role="alert">
+          Runner diagnostics incomplete: {state.run.diagnosticGaps} projected messages were dropped. The canonical run history remains authoritative.
+        </div>
+      )}
       <CompactTabs current={state.compactWorkspace} onSelect={(workspace) => {
         if (workspace === 'inspect') updatePreferences({ inspectorCollapsed: false });
         if (workspace === 'steps') updatePreferences({ timelineCollapsed: false });
@@ -493,7 +498,7 @@ function evidenceLabel(state: AppState): string {
 
 export function sessionLabel(session: SessionRecord | undefined, index: number): string {
   if (session === undefined) return `Terminal ${index + 1}`;
-  const framework = session.adapter?.name ?? session.probe?.framework;
+  const framework = session.contract?.framework?.name;
   const identity = framework === undefined ? 'Terminal' : framework;
   return `${identity} · ${session.terminalProfile} · ${session.columns}×${session.rows} · #${index + 1}`;
 }

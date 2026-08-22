@@ -44,11 +44,11 @@ func main() {
 	// This fixture owns no pointer targets, but still registers an authoritative
 	// region provider. The tview probe must freeze this application registry into
 	// its hello rather than silently running with framework evidence alone.
-	if _, err := evidence.RegisterPointerEvidenceProvider(evidence.Provider{
+	if _, err := evidence.RegisterPointerEvidenceProvider(evidence.PointerProvider{
 		ID: "fixture.pointer-regions", Version: "1", Method: "declared",
 		Capabilities: []string{"pointer-regions"},
-		Observe: func(evidence.Context) (evidence.Observation, error) {
-			return evidence.Observation{PointerRegions: nil}, nil
+		Observe: func(evidence.Context) (evidence.PointerObservation, error) {
+			return evidence.PointerObservation{PointerRegions: nil}, nil
 		},
 	}); err != nil {
 		panic(err)

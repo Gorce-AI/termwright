@@ -65,7 +65,7 @@ export async function waitForFirstFrame(
   harness: TerminalHarness,
   opts?: SettleOptions,
 ): Promise<void> {
-  const deadline = Date.now() + (opts?.timeout ?? DEFAULT_SETTLE_TIMEOUT_MS);
+  const deadline = performance.now() + (opts?.timeout ?? DEFAULT_SETTLE_TIMEOUT_MS);
 
   if (harness.screen().revision === 0) {
     await harness.waitForRender({ after: 0, timeout: remaining(deadline) });
@@ -87,7 +87,7 @@ export async function waitForFirstFrame(
 }
 
 function remaining(deadline: number): number {
-  return Math.max(1, deadline - Date.now());
+  return Math.max(1, deadline - performance.now());
 }
 
 /**
@@ -98,12 +98,12 @@ function remaining(deadline: number): number {
  * byte — and a mounted component's effects then produce output of their own:
  * entering the alternate screen, enabling mouse reporting, a first state
  * update. A test that ran between those would see a component that is on screen
- * but cannot yet be clicked. `waitForStable` is the driver's own answer to
- * "nothing is in flight", and it is revision-driven, not a sleep.
+ * but cannot yet be clicked. The final quiet proof is explicitly heuristic;
+ * causal frame pairing above remains the correctness boundary.
  */
 async function quiesce(harness: TerminalHarness, opts?: SettleOptions): Promise<void> {
-  await harness.waitForStable({
-    frames: 2,
+  await harness.waitForQuiet({
+    quietMs: 100,
     ...(opts?.timeout === undefined ? {} : { timeout: opts.timeout }),
   });
 }
@@ -137,7 +137,7 @@ function nextFrame(
           new TimeoutError(
             `the application committed no frame within ${timeout} ms`,
             {
-              semanticTree: harness.capabilities().semanticTree,
+              semanticTree: hasSemanticContract(harness),
               screenExcerpt: harness.screen().text(),
               suggestion:
                 'the component rendered nothing new; check that the update reaches React state, ' +
@@ -156,7 +156,7 @@ function nextFrame(
       harness.events.on('screen-revision', ({ revision }) => {
         // Only a fallback: in a semantic session the tree is the authority, and
         // waiting for it avoids acting on a frame whose tree is still in flight.
-        if (!harness.capabilities().semanticTree && revision > screenAfter) done(resolve);
+        if (!hasSemanticContract(harness) && revision > screenAfter) done(resolve);
       }),
       harness.events.on('exit', (status) => {
         done(() =>
@@ -164,11 +164,15 @@ function nextFrame(
             new ProcessExitedError(
               `the application exited (code ${String(status.code)}, signal ${String(status.signal)}) ` +
                 'before committing the awaited frame',
-              { semanticTree: harness.capabilities().semanticTree },
+              { semanticTree: hasSemanticContract(harness) },
             ),
           ),
         );
       }),
     );
   });
+}
+
+function hasSemanticContract(harness: TerminalHarness): boolean {
+  return harness.contract()?.capabilities['semantic-tree'].status === 'supported';
 }

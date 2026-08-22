@@ -17,9 +17,6 @@ export type { Rect, SemanticNode, SemanticRole, SemanticSnapshot, SemanticState 
 /** The driver's view of the visible grid. */
 export type ScreenSnapshot = ReturnType<TerminalHarness['screen']>;
 
-/** Session capabilities as reported after the semantic handshake window. */
-export type SessionCapabilities = ReturnType<TerminalHarness['capabilities']>;
-
 /** The role type the driver actually reports on a semantic node. */
 type DriverRole = NonNullable<ReturnType<TerminalHarness['semanticTree']>>['nodes'][number]['role'];
 

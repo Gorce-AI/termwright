@@ -5,7 +5,10 @@
  * `mountInk`) without touching sessions, locators or actions.
  */
 import { spawn as spawnPty } from '@lydell/node-pty';
+import { write as writeFd } from 'node:fs';
 import type { ExitStatus } from './api.js';
+import { EarlyPtyOutput } from './internal/early-pty-output.js';
+import { ProcessLifecycleError } from './internal/process-supervisor.js';
 
 /** Options accepted by {@link PtyBackend.spawn}. */
 export interface PtySpawnOptions {
@@ -24,14 +27,38 @@ export type PtyUnsubscribe = () => void;
 /** A live pseudo-terminal hosting one child process. */
 export interface PtyProcess {
   readonly pid: number;
-  /** Writes raw bytes to the child's stdin. Never appends a newline. */
+  /** Truthful lifecycle properties when the backend can prove them. */
+  readonly lifecycle?: {
+    readonly tree: 'posix-process-group' | 'conpty-console' | 'delegated';
+    readonly outputDrain: 'eof' | 'bounded-fallback';
+  };
+  /**
+   * Queues raw bytes in the backend's ordered input stream. Never appends a
+   * newline. A successful return proves queue admission, not child
+   * consumption; semantic actions prove consumption through their committed
+   * postcondition.
+   */
   write(data: Uint8Array): void;
   resize(columns: number, rows: number): void;
   /** Delivers a POSIX signal. On Windows only `KILL` is honored (TerminateProcess). */
   signal(sig: PtySignal): void;
+  /** Backend-native graceful lifecycle request; required when tree is delegated. */
+  terminate?(): void;
+  /**
+   * Hard-kills an owned process tree and captures the exact members that must
+   * subsequently be proven gone. Backends that claim tree ownership should
+   * expose this when the preparation step is asynchronous.
+   */
+  hardKillTree?(): Promise<void>;
   onData(cb: (data: Uint8Array) => void): PtyUnsubscribe;
   onExit(cb: (status: ExitStatus) => void): PtyUnsubscribe;
-  /** Idempotent; releases the pty without signalling the child. */
+  /** Fatal asynchronous failures after write() accepted bytes. */
+  onWriteError?(cb: (error: Error) => void): PtyUnsubscribe;
+  /** Queue-drained notification; it still does not claim child consumption. */
+  onWriteDrain?(cb: () => void): PtyUnsubscribe;
+  /** Liveness of the owned tree, when the backend has an OS primitive for it. */
+  treeState?(): 'alive' | 'gone' | 'unsupported';
+  /** Idempotent finalizer; hangs up a still-live PTY before releasing listeners. */
   dispose(): void;
 }
 
@@ -56,8 +83,9 @@ const SIGNAL_NAMES: Readonly<Record<PtySignal, string>> = Object.freeze({
  * socket accepts a Buffer and writes it verbatim. Passing bytes is the only way
  * to send input that is not valid UTF-8 (raw mouse reports, control bytes).
  */
-interface ByteWritablePty {
-  write(data: Buffer): void;
+interface PtyWriteChannel {
+  write(data: Uint8Array): void;
+  dispose(): void;
 }
 
 /**
@@ -88,15 +116,29 @@ export function createNodePtyBackend(): PtyBackend {
       let exitStatus: ExitStatus | null = null;
       const dataListeners = new Set<(data: Uint8Array) => void>();
       const exitListeners = new Set<(status: ExitStatus) => void>();
-      const pendingData: Uint8Array[] = [];
+      const writeErrorListeners = new Set<(error: Error) => void>();
+      const writeDrainListeners = new Set<() => void>();
+      const pendingData = new EarlyPtyOutput();
+      const onWriteError = (error: Error): void => {
+        for (const listener of writeErrorListeners) listener(error);
+      };
+      const onWriteDrain = (): void => {
+        for (const listener of writeDrainListeners) listener();
+      };
+      const writable = createExactNodePtyWriteChannel(pty, onWriteError, onWriteDrain);
+      const outputBoundary = observeExactNodePtyOutputBoundary(pty);
       const disposables: { dispose(): void }[] = [
+        writable,
+        outputBoundary,
         pty.onData((chunk: unknown) => {
           const data = typeof chunk === 'string'
             ? Buffer.from(chunk, 'utf8')
             : Buffer.from(chunk as Uint8Array);
           if (dataListeners.size === 0) {
             // ConPTY can deliver a complete first frame before spawn() returns
-            // to TerminalSession. Preserve it until the session subscribes.
+            // to TerminalSession. Preserve it until the session subscribes,
+            // but fail the transactional startup rather than silently drop or
+            // buffer an unbounded stream from a hostile backend.
             pendingData.push(data);
             return;
           }
@@ -115,6 +157,7 @@ export function createNodePtyBackend(): PtyBackend {
         }),
       ];
 
+      let conptyTreePids: readonly number[] | undefined;
       const proc: PtyProcess = {
         // ConPTY connects asynchronously in node-pty 1.2. Reading this lazily
         // prevents its transient pre-connect value (0) becoming permanent in
@@ -122,9 +165,19 @@ export function createNodePtyBackend(): PtyBackend {
         get pid(): number {
           return pty.pid;
         },
+        lifecycle: Object.freeze({
+          tree: process.platform === 'win32' ? 'conpty-console' : 'posix-process-group',
+          // The exact adapter observes the native data-pipe boundary before
+          // node-pty emits exit. Unix PTYs end with stream EOF or EIO after all
+          // queued bytes. beta.15's ConPTY socket close is timer-forced rather
+          // than an OS EOF and therefore remains explicitly degraded.
+          get outputDrain(): 'eof' | 'bounded-fallback' {
+            return outputBoundary.eof ? 'eof' : 'bounded-fallback';
+          },
+        }),
         write(data: Uint8Array): void {
           if (disposed || exited) return;
-          (pty as unknown as ByteWritablePty).write(Buffer.from(data));
+          writable.write(data);
         },
         resize(columns: number, rows: number): void {
           if (disposed || exited) return;
@@ -133,17 +186,66 @@ export function createNodePtyBackend(): PtyBackend {
         signal(sig: PtySignal): void {
           if (disposed || exited) return;
           if (process.platform === 'win32') {
-            // ConPTY has no signal delivery; only a hard kill is available.
+            if (sig !== 'KILL') {
+              throw new ProcessLifecycleError(
+                'unsupported-signal',
+                `ConPTY cannot deliver ${SIGNAL_NAMES[sig]}; use terminal input for Ctrl+C or KILL for hard termination`,
+              );
+            }
+            // This is node-pty's public ConPTY tree-kill path, not a POSIX
+            // signal: it enumerates console processes and closes the HPCON.
             pty.kill();
             return;
           }
-          pty.kill(SIGNAL_NAMES[sig]);
+          // forkpty makes the child a session/process-group leader. Address
+          // the negative PGID so children and grandchildren cannot outlive it.
+          try {
+            process.kill(-pty.pid, SIGNAL_NAMES[sig]);
+          } catch (error) {
+            // The group can disappear between the wrapper's exited check and
+            // kill(2). That is already the requested outcome.
+            if (!isErrno(error, 'ESRCH')) throw error;
+          }
         },
+        ...(process.platform === 'win32'
+          ? {
+              async hardKillTree(): Promise<void> {
+                if (disposed || exited) return;
+                const agent = exactWindowsAgent(pty);
+                const reported = await agent._getConsoleProcessList();
+                conptyTreePids = Object.freeze([...new Set(reported.filter((pid) =>
+                  Number.isSafeInteger(pid) && pid > 0,
+                ))]);
+                // An empty list while the root is demonstrably alive means
+                // AttachConsole/list enumeration failed. Closing HPCON might
+                // still work, but it cannot certify complete tree ownership.
+                if (conptyTreePids.length === 0 && pty.pid > 0 && processAlive(pty.pid)) {
+                  throw new ProcessLifecycleError(
+                    'cleanup-failed',
+                    `ConPTY could not enumerate the live console process tree rooted at ${pty.pid}`,
+                  );
+                }
+                for (const pid of conptyTreePids) {
+                  try {
+                    process.kill(pid);
+                  } catch (error) {
+                    if (!isErrno(error, 'ESRCH')) throw error;
+                  }
+                }
+                // Close HPCON and let node-pty reap its agent. Its own second
+                // enumeration is redundant but harmless and exact-version
+                // certified; our captured set is the verification boundary.
+                pty.kill();
+              },
+            }
+          : {}),
         onData(cb): PtyUnsubscribe {
           dataListeners.add(cb);
-          if (pendingData.length > 0) {
-            const buffered = pendingData.splice(0);
-            for (const data of buffered) cb(data);
+          try {
+            pendingData.drain(cb);
+          } catch (error) {
+            dataListeners.delete(cb);
+            throw error;
           }
           return () => dataListeners.delete(cb);
         },
@@ -153,6 +255,28 @@ export function createNodePtyBackend(): PtyBackend {
             if (exitListeners.has(cb)) cb(exitStatus!);
           });
           return () => exitListeners.delete(cb);
+        },
+        onWriteError(cb): PtyUnsubscribe {
+          writeErrorListeners.add(cb);
+          return () => writeErrorListeners.delete(cb);
+        },
+        onWriteDrain(cb): PtyUnsubscribe {
+          writeDrainListeners.add(cb);
+          return () => writeDrainListeners.delete(cb);
+        },
+        treeState(): 'alive' | 'gone' | 'unsupported' {
+          if (process.platform === 'win32') {
+            if (conptyTreePids === undefined) return 'unsupported';
+            return conptyTreePids.some(processAlive) ? 'alive' : 'gone';
+          }
+          try {
+            process.kill(-pty.pid, 0);
+            return 'alive';
+          } catch (error) {
+            if (isErrno(error, 'ESRCH')) return 'gone';
+            if (isErrno(error, 'EPERM')) return 'alive';
+            throw error;
+          }
         },
         dispose(): void {
           if (disposed) return;
@@ -166,7 +290,8 @@ export function createNodePtyBackend(): PtyBackend {
           // terminal window. Listeners stay attached until the exit is
           // observed, so the session still learns the final status.
           try {
-            pty.kill(process.platform === 'win32' ? undefined : 'SIGHUP');
+            if (process.platform === 'win32') pty.kill();
+            else process.kill(-pty.pid, 'SIGHUP');
           } catch {
             // The child is already gone; nothing to hang up.
           }
@@ -175,6 +300,223 @@ export function createNodePtyBackend(): PtyBackend {
       return proc;
     },
   };
+}
+
+interface ExactUnixPty {
+  readonly fd: number;
+}
+
+interface ExactOutputSocket {
+  readonly readableEnded?: boolean;
+  prependListener(event: 'end' | 'error' | 'close', listener: (...arguments_: unknown[]) => void): void;
+  removeListener(event: 'end' | 'error' | 'close', listener: (...arguments_: unknown[]) => void): void;
+}
+
+interface ExactOutputPty {
+  readonly _socket?: ExactOutputSocket;
+}
+
+interface ExactWindowsSocket {
+  write(data: Buffer): boolean;
+  on(event: 'error', listener: (error: Error) => void): void;
+  on(event: 'drain', listener: () => void): void;
+  removeListener(event: 'error', listener: (error: Error) => void): void;
+  removeListener(event: 'drain', listener: () => void): void;
+}
+
+interface ExactWindowsPty {
+  readonly _agent: ExactWindowsAgent;
+  _defer(callback: (value: undefined) => void, value: undefined): void;
+}
+
+interface ExactWindowsAgent {
+  readonly inSocket: ExactWindowsSocket;
+  _getConsoleProcessList(): Promise<readonly number[]>;
+}
+
+function exactWindowsAgent(value: unknown): ExactWindowsAgent {
+  const agent = (value as Partial<ExactWindowsPty>)._agent;
+  if (agent === undefined || typeof agent._getConsoleProcessList !== 'function') {
+    throw new Error('certified @lydell/node-pty ConPTY process-list boundary changed');
+  }
+  return agent;
+}
+
+/** Exact-version EOF evidence, installed ahead of node-pty's exit handler. */
+function observeExactNodePtyOutputBoundary(value: unknown): { readonly eof: boolean; dispose(): void } {
+  const socket = (value as ExactOutputPty)._socket;
+  if (socket === undefined || typeof socket.prependListener !== 'function') {
+    throw new Error('certified @lydell/node-pty output socket boundary changed');
+  }
+  let eof = socket.readableEnded === true;
+  const onEnd = (): void => { eof = true; };
+  const onError = (error: unknown): void => {
+    if (process.platform !== 'win32' && (isErrno(error, 'EIO') || errnoMessage(error, 'errno 5'))) eof = true;
+  };
+  const onClose = (): void => undefined;
+  socket.prependListener('end', onEnd);
+  socket.prependListener('error', onError);
+  socket.prependListener('close', onClose);
+  return {
+    get eof(): boolean { return eof; },
+    dispose(): void {
+      socket.removeListener('end', onEnd);
+      socket.removeListener('error', onError);
+      socket.removeListener('close', onClose);
+    },
+  };
+}
+
+/**
+ * Own the async write boundary instead of relying on beta.15's private
+ * CustomWriteStream, which prints EBADF/EIO to global stderr and exposes no
+ * error/drain API. The only private facts used here are exact-version checked
+ * (`fd` on Unix, `_agent.inSocket` + `_defer` on ConPTY); all queue semantics
+ * and failures belong to Termwright and therefore survive package install.
+ */
+function createExactNodePtyWriteChannel(
+  pty: unknown,
+  onError: (error: Error) => void,
+  onDrain: () => void,
+): PtyWriteChannel {
+  return process.platform === 'win32'
+    ? createWindowsWriteChannel(pty, onError, onDrain)
+    : createUnixWriteChannel(pty, onError, onDrain);
+}
+
+function createUnixWriteChannel(
+  value: unknown,
+  onError: (error: Error) => void,
+  onDrain: () => void,
+): PtyWriteChannel {
+  const pty = value as Partial<ExactUnixPty>;
+  if (!Number.isSafeInteger(pty.fd) || (pty.fd ?? -1) < 0) {
+    throw new Error('certified @lydell/node-pty Unix private fd boundary changed');
+  }
+  const queue: Buffer[] = [];
+  let offset = 0;
+  let writing = false;
+  let disposed = false;
+  let retry: NodeJS.Immediate | undefined;
+  const processQueue = (): void => {
+    retry = undefined;
+    if (disposed || writing) return;
+    const buffer = queue[0];
+    if (buffer === undefined) {
+      onDrain();
+      return;
+    }
+    writing = true;
+    writeFd(pty.fd!, buffer, offset, buffer.length - offset, null, (error, written) => {
+      writing = false;
+      if (disposed) return;
+      if (error !== null) {
+        if (isErrno(error, 'EAGAIN')) {
+          retry = setImmediate(processQueue);
+          return;
+        }
+        queue.length = 0;
+        offset = 0;
+        onError(error);
+        return;
+      }
+      offset += written;
+      if (offset >= buffer.length) {
+        queue.shift();
+        offset = 0;
+      }
+      processQueue();
+    });
+  };
+  return {
+    write(data): void {
+      if (disposed) return;
+      queue.push(Buffer.from(data));
+      processQueue();
+    },
+    dispose(): void {
+      if (disposed) return;
+      disposed = true;
+      queue.length = 0;
+      if (retry !== undefined) clearImmediate(retry);
+    },
+  };
+}
+
+function createWindowsWriteChannel(
+  value: unknown,
+  onError: (error: Error) => void,
+  onDrain: () => void,
+): PtyWriteChannel {
+  const pty = value as Partial<ExactWindowsPty>;
+  const socket = pty._agent?.inSocket;
+  if (socket === undefined || typeof socket.write !== 'function' || typeof pty._defer !== 'function') {
+    throw new Error('certified @lydell/node-pty ConPTY private input boundary changed');
+  }
+  const queue: Buffer[] = [];
+  let scheduled = false;
+  let backpressured = false;
+  let disposed = false;
+  const fail = (error: Error): void => {
+    if (disposed) return;
+    queue.length = 0;
+    backpressured = false;
+    onError(error);
+  };
+  const flush = (): void => {
+    scheduled = false;
+    if (disposed || backpressured) return;
+    while (queue.length > 0) {
+      const buffer = queue.shift()!;
+      if (!socket.write(buffer)) {
+        backpressured = true;
+        return;
+      }
+    }
+    onDrain();
+  };
+  const drain = (): void => {
+    if (disposed) return;
+    backpressured = false;
+    flush();
+  };
+  socket.on('error', fail);
+  socket.on('drain', drain);
+  return {
+    write(data): void {
+      if (disposed) return;
+      queue.push(Buffer.from(data));
+      if (scheduled || backpressured) return;
+      scheduled = true;
+      pty._defer!(flush, undefined);
+    },
+    dispose(): void {
+      if (disposed) return;
+      disposed = true;
+      queue.length = 0;
+      socket.removeListener('error', fail);
+      socket.removeListener('drain', drain);
+    },
+  };
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (isErrno(error, 'ESRCH')) return false;
+    if (isErrno(error, 'EPERM')) return true;
+    throw error;
+  }
+}
+
+function isErrno(error: unknown, code: string): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === code;
+}
+
+function errnoMessage(error: unknown, fragment: string): boolean {
+  return error instanceof Error && error.message.includes(fragment);
 }
 
 const SIGNAL_NUMBERS: Readonly<Record<number, string>> = Object.freeze({

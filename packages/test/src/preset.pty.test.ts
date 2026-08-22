@@ -68,7 +68,7 @@ describe.skipIf(!available)('the preset against a real PTY', () => {
     // marker slightly later, so every semantic assertion below is landing in
     // that gap on purpose. They pass because the matchers re-probe.
     await app.waitForText('Permission required');
-    expect(app.capabilities().semanticTree).toBe(true);
+    expect(app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
 
     await expect(app).toMatchSemanticSnapshot(`
       - dialog "Permission" [modal]:
@@ -168,6 +168,11 @@ describe.skipIf(!available)('the preset against a real PTY', () => {
   });
 
   test('notices records the session never delivered', { timeout: 30_000 }, async ({ terminal }) => {
+    // This test deliberately creates an authoritative source gap. The normal
+    // failOnLogLevel policy must reject such a run because an ERROR could be
+    // among the missing records; opt out here so the test can inspect the gap
+    // itself without weakening the default certification policy.
+    terminal.failOnLogLevel(false);
     const app = await terminal.launch();
     await app.waitForText('Permission required');
 
@@ -251,7 +256,7 @@ describe.skipIf(!available)('trace collection', () => {
     const aboutANode = asserts.filter((event) => event.selector?.startsWith('getBy') === true);
     expect(aboutANode.length).toBeGreaterThan(0);
     for (const event of aboutANode) {
-      expect(event.ref, `${event.api ?? '?'} on ${event.selector ?? '?'}`).toMatch(/^n\d+@\d+$/u);
+      expect(event.ref, `${event.api ?? '?'} on ${event.selector ?? '?'}`).toMatch(/^semantic:n\d+@\d+$/u);
     }
   });
 });

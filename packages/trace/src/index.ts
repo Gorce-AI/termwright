@@ -33,6 +33,7 @@ export { TraceError } from './errors.js';
 
 export {
   TRACE_FILES,
+  TRACE_INCOMPLETE_FILE,
   TRACE_VERSION,
   type ActionEvent,
   type AssertEvent,
@@ -53,6 +54,7 @@ export {
   type TraceLogSummary,
   type TraceExit,
   type TraceMeta,
+  type TraceRunIdentity,
 } from './types.js';
 
 export {
@@ -89,8 +91,10 @@ export {
 
 export {
   openTrace,
+  inspectTrace,
   type StateOptions,
   type TraceReader,
+  type TraceArchiveInspection,
   type TraceState,
 } from './reader.js';
 

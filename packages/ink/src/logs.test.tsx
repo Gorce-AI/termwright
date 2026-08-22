@@ -127,7 +127,7 @@ describe('logs passthrough', () => {
     const entries: AppLogEvent[] = [];
     harness.events.on('app-log', (entry) => entries.push(entry));
     await harness.press('Tab');
-    await harness.waitForStable();
+    await harness.waitForQuiet();
 
     expect(entries).toEqual([]);
   });

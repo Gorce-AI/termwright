@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: EvidenceProvenance
 
-Defined in: protocol/dist/contract.d.ts:25
+Defined in: protocol/dist/contract.d.ts:19
 
 Where a fact originated, how it was obtained, and what consumers may infer.
 
@@ -21,7 +21,7 @@ Where a fact originated, how it was obtained, and what consumers may infer.
 
 > `readonly` **method**: `"heuristic"` \| `"native"` \| `"instrumented"` \| `"declared"` \| `"correlated"` \| `"measured"` \| `"derived"`
 
-Defined in: protocol/dist/contract.d.ts:27
+Defined in: protocol/dist/contract.d.ts:21
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: protocol/dist/contract.d.ts:27
 
 > `readonly` **providerId**: `string`
 
-Defined in: protocol/dist/contract.d.ts:30
+Defined in: protocol/dist/contract.d.ts:24
 
 Stable identity of the producer, never a display label.
 
@@ -39,7 +39,7 @@ Stable identity of the producer, never a display label.
 
 > `readonly` **source**: `"application"` \| `"recognizer"` \| `"framework"` \| `"terminal"` \| `"driver"`
 
-Defined in: protocol/dist/contract.d.ts:26
+Defined in: protocol/dist/contract.d.ts:20
 
 ***
 
@@ -47,4 +47,4 @@ Defined in: protocol/dist/contract.d.ts:26
 
 > `readonly` **strength**: `"diagnostic"` \| `"authoritative"`
 
-Defined in: protocol/dist/contract.d.ts:28
+Defined in: protocol/dist/contract.d.ts:22

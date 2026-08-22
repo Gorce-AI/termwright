@@ -1,11 +1,8 @@
 /**
  * Readiness and the child's environment.
  *
- * `waitForReady` is the one wait that is allowed to be a heuristic, so what is
- * certified here is not just that it returns but that it is *honest about how*
- * it decided: shell-integration marks when the program emits them, a
- * settled-screen guess when it does not, and a `ready-strategy` diagnostic
- * naming which of the two happened.
+ * Prompt readiness and quiet-screen heuristics are deliberately separate.
+ * `waitForShellPrompt` proves OSC 133; `waitForQuiet` only proves silence.
  *
  * `envMode` is next to it because both are launch-time contracts about what the
  * child is handed before it can be ready at all.
@@ -22,7 +19,7 @@ function strategies(terminal: TerminalHarness): readonly DiagnosticCode[] {
   return terminal
     .diagnostics()
     .map((entry) => entry.code)
-    .filter((code) => code === 'ready-shell-integration' || code === 'ready-settled-screen');
+    .filter((code) => code === 'ready-shell-integration');
 }
 
 const prompt = (args: readonly string[] = []) =>
@@ -33,7 +30,7 @@ afterEach(sessions.closeAll);
 describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
   it('prefers OSC 133 marks when the program emits them', async () => {
     const terminal = await prompt();
-    await terminal.waitForReady();
+    await terminal.waitForShellPrompt();
 
     expect(terminal.screen().text()).toContain('PROMPT APP');
     // A fact and a guess are different outcomes and carry different codes, so
@@ -43,7 +40,7 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
 
   it('waits out a running command instead of returning between marks', async () => {
     const terminal = await prompt(['--work=400']);
-    await terminal.waitForReady();
+    await terminal.waitForShellPrompt();
 
     await terminal.type('hello');
     await terminal.press('Enter');
@@ -51,7 +48,7 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
 
     // The command is running now: OSC 133 C was emitted and D has not been.
     // Readiness must mean the next prompt, not the moment the keystroke landed.
-    await terminal.waitForReady();
+    await terminal.waitForShellPrompt();
     expect(terminal.screen().text()).toContain('ran hello');
 
     expect(strategies(terminal)).toEqual(['ready-shell-integration', 'ready-shell-integration']);
@@ -59,13 +56,13 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
 
   it('reports a command that never finished as a timeout, not as readiness', async () => {
     const terminal = await prompt();
-    await terminal.waitForReady();
+    await terminal.waitForShellPrompt();
 
     await terminal.type('hang');
     await terminal.press('Enter');
     await terminal.waitForText('HANGING');
 
-    const error = (await rejection(terminal.waitForReady({ timeout: 600 }))) as TermwrightError;
+    const error = (await rejection(terminal.waitForShellPrompt({ timeout: 600 }))) as TermwrightError;
     expect(error.code).toBe('timeout');
     expect(error.diagnostics.screenExcerpt).toContain('HANGING');
     // Structural rather than textual: the wait must not have concluded
@@ -74,27 +71,31 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     expect(strategies(terminal)).toEqual(['ready-shell-integration']);
   });
 
-  it('falls back to a settled screen, and says that is what it did', async () => {
+  it('refuses to call silence a shell prompt when marks are absent', async () => {
     // Same fixture, same output, marks suppressed: the only difference is
     // whether the program tells the terminal where its prompt is.
     const terminal = await prompt(['--marks=off']);
-    await terminal.waitForReady();
+    await terminal.waitForText('PROMPT APP');
+    await terminal.waitForQuiet({ quietMs: 150 });
 
     expect(terminal.screen().text()).toContain('PROMPT APP');
-    expect(strategies(terminal)).toEqual(['ready-settled-screen']);
+    const error = (await rejection(terminal.waitForShellPrompt({ timeout: 100 }))) as TermwrightError;
+    expect(error.code).toBe('capability-unavailable');
+    expect(strategies(terminal)).toEqual([]);
   });
 
   it('is available to an uninstrumented program with no prompt at all', async () => {
     const terminal = await sessions.launch(CONFORMANCE_FIXTURES.generic(), { columns: 60, rows: 20 });
-    await terminal.waitForReady();
+    await terminal.waitForText('GENERIC READY');
+    await terminal.waitForQuiet();
 
     expect(terminal.screen().text()).toContain('GENERIC READY');
-    expect(strategies(terminal)).toEqual(['ready-settled-screen']);
+    expect(strategies(terminal)).toEqual([]);
   });
 
   it('refuses to call a dead program ready, even with a prompt still on screen', async () => {
     const terminal = await prompt();
-    await terminal.waitForReady();
+    await terminal.waitForShellPrompt();
     await terminal.type('quit');
     await terminal.press('Enter');
     await terminal.waitForExit();
@@ -103,7 +104,7 @@ describe.skipIf(!ptyAvailable())('waiting for readiness', () => {
     // still on the grid — but readiness is a claim about the *future*: that the
     // program will accept input. A dead one will not, so this must fail rather
     // than hand back a promise the next press() would break.
-    const error = (await rejection(terminal.waitForReady({ timeout: 500 }))) as TermwrightError;
+    const error = (await rejection(terminal.waitForShellPrompt({ timeout: 500 }))) as TermwrightError;
     expect(error.code).toBe('process-exited');
 
     // The waits that assert an *observation* keep working after exit, on
@@ -183,7 +184,7 @@ describe.skipIf(!ptyAvailable())("the child's environment", () => {
     await terminal.waitForText('Termwright Conformance');
     await terminal.getByTestId('status').resolve();
 
-    expect(terminal.capabilities().semanticTree).toBe(true);
+    expect(terminal.contract()?.capabilities['semantic-tree'].status).toBe('supported');
     expect(terminal.diagnostics().map((entry) => entry.code)).toContain('adapter-attached');
   });
 });

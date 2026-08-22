@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LaunchTerminalOptions
 
-Defined in: [driver/src/session.ts:166](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L166)
+Defined in: [driver/src/session.ts:224](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L224)
 
 Options accepted by [launchTerminal](../../functions/launchterminal/), plus the injectable backend.
 
@@ -21,11 +21,25 @@ Options accepted by [launchTerminal](../../functions/launchterminal/), plus the 
 
 ## Properties
 
+### artifactValuePolicy?
+
+> `readonly` `optional` **artifactValuePolicy?**: `"raw"` \| `"none"` \| `"redacted"`
+
+Defined in: [driver/src/api.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L125)
+
+Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit opt-in.
+
+#### Inherited from
+
+[`LaunchOptions`](../launchoptions/).[`artifactValuePolicy`](../launchoptions/#artifactvaluepolicy)
+
+***
+
 ### backend?
 
 > `readonly` `optional` **backend?**: [`PtyBackend`](../ptybackend/)
 
-Defined in: [driver/src/session.ts:168](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L168)
+Defined in: [driver/src/session.ts:226](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L226)
 
 Defaults to `@lydell/node-pty`; swapped by component-testing harnesses.
 
@@ -35,7 +49,7 @@ Defaults to `@lydell/node-pty`; swapped by component-testing harnesses.
 
 > `readonly` `optional` **columns?**: `number`
 
-Defined in: [driver/src/api.ts:96](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L96)
+Defined in: [driver/src/api.ts:112](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L112)
 
 #### Inherited from
 
@@ -47,7 +61,7 @@ Defined in: [driver/src/api.ts:96](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` **command**: readonly `string`[]
 
-Defined in: [driver/src/api.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L71)
+Defined in: [driver/src/api.ts:87](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L87)
 
 #### Inherited from
 
@@ -59,7 +73,7 @@ Defined in: [driver/src/api.ts:71](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **cwd?**: `string`
 
-Defined in: [driver/src/api.ts:72](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L72)
+Defined in: [driver/src/api.ts:88](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L88)
 
 #### Inherited from
 
@@ -71,7 +85,7 @@ Defined in: [driver/src/api.ts:72](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **debug?**: `boolean`
 
-Defined in: [driver/src/api.ts:80](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L80)
+Defined in: [driver/src/api.ts:96](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L96)
 
 Streams a live log of API calls, waits, revisions and diagnostics to
 stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
@@ -86,7 +100,7 @@ stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: [driver/src/api.ts:73](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L73)
+Defined in: [driver/src/api.ts:89](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L89)
 
 #### Inherited from
 
@@ -98,7 +112,7 @@ Defined in: [driver/src/api.ts:73](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **envMode?**: [`EnvMode`](../../type-aliases/envmode/)
 
-Defined in: [driver/src/api.ts:75](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L75)
+Defined in: [driver/src/api.ts:91](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L91)
 
 Defaults to `'replace'`: a test process's secrets are not the child's.
 
@@ -112,7 +126,7 @@ Defaults to `'replace'`: a test process's secrets are not the child's.
 
 > `readonly` `optional` **logs?**: readonly [`AppLogSource`](../applogsource/)[]
 
-Defined in: [driver/src/api.ts:86](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L86)
+Defined in: [driver/src/api.ts:102](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L102)
 
 Log files to follow for the lifetime of the session. A file that does not
 exist yet is waited for; one that already exists is followed from its
@@ -128,7 +142,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **modesObservable?**: `boolean`
 
-Defined in: [driver/src/session.ts:175](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L175)
+Defined in: [driver/src/session.ts:233](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L233)
 
 Whether the child's mouse mode requests are observable. Defaults to the
 platform's answer (false under ConPTY). Overridable so the unobservable
@@ -137,11 +151,23 @@ only one OS reaches is a behaviour only one OS tests.
 
 ***
 
+### operationBudget?
+
+> `readonly` `optional` **operationBudget?**: [`OperationBudget`](../operationbudget/)
+
+Defined in: [driver/src/api.ts:122](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L122)
+
+#### Inherited from
+
+[`LaunchOptions`](../launchoptions/).[`operationBudget`](../launchoptions/#operationbudget)
+
+***
+
 ### recording?
 
 > `readonly` `optional` **recording?**: [`RecordingOptions`](../recordingoptions/)
 
-Defined in: [driver/src/api.ts:106](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L106)
+Defined in: [driver/src/api.ts:123](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L123)
 
 #### Inherited from
 
@@ -151,9 +177,9 @@ Defined in: [driver/src/api.ts:106](https://github.com/Gorce-AI/termwright/blob/
 
 ### requiredCapabilities?
 
-> `readonly` `optional` **requiredCapabilities?**: readonly (`"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"focus"` \| `"scroll"` \| `"render-order"` \| `"keyboard-input"` \| `"pointer-input"` \| `"paired-revisions"`)[]
+> `readonly` `optional` **requiredCapabilities?**: readonly (`"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"focus"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"pointer-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: [driver/src/api.ts:117](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L117)
+Defined in: [driver/src/api.ts:137](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L137)
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`
@@ -169,7 +195,7 @@ before returning a harness when any requirement is missing.
 
 > `readonly` `optional` **rows?**: `number`
 
-Defined in: [driver/src/api.ts:97](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L97)
+Defined in: [driver/src/api.ts:113](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L113)
 
 #### Inherited from
 
@@ -181,7 +207,7 @@ Defined in: [driver/src/api.ts:97](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **scrollbackLines?**: `number`
 
-Defined in: [driver/src/api.ts:104](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L104)
+Defined in: [driver/src/api.ts:120](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L120)
 
 #### Inherited from
 
@@ -193,7 +219,7 @@ Defined in: [driver/src/api.ts:104](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **semanticNegotiationMs?**: `number`
 
-Defined in: [driver/src/api.ts:103](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L103)
+Defined in: [driver/src/api.ts:119](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L119)
 
 Maximum time to wait for an optional semantic adapter. Defaults to 2,000
 ms for generic auto-detection. When `requiredCapabilities` is non-empty,
@@ -209,7 +235,7 @@ the default is the larger of 2,000 ms and the session `ready` timeout.
 
 > `readonly` `optional` **shellIntegration?**: `"external"` \| `"termwright-posix"` \| `"termwright-powershell"`
 
-Defined in: [driver/src/api.ts:111](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L111)
+Defined in: [driver/src/api.ts:130](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L130)
 
 Termwright-managed modes instrument an interactive shell with exact
 command markers. Test authors should normally use `terminal.openShell()`.
@@ -224,7 +250,7 @@ command markers. Test authors should normally use `terminal.openShell()`.
 
 > `readonly` `optional` **terminalProfile?**: `string`
 
-Defined in: [driver/src/api.ts:95](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L95)
+Defined in: [driver/src/api.ts:111](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L111)
 
 Terminal profile: which width tables and which of the switches terminals
 disagree on this session uses. A built-in id (`'default'`, `'kitty'`,
@@ -243,7 +269,7 @@ pane can count characters exactly as the live session did.
 
 > `readonly` `optional` **timeouts?**: [`TimeoutClasses`](../timeoutclasses/)
 
-Defined in: [driver/src/api.ts:105](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L105)
+Defined in: [driver/src/api.ts:121](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L121)
 
 #### Inherited from
 

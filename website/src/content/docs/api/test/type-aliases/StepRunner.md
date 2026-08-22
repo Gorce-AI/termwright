@@ -13,7 +13,7 @@ editUrl: false
 
 > **StepRunner** = \<`T`\>(`title`, `body`, `options?`) => `Promise`\<`T`\>
 
-Defined in: [test/src/fixtures.ts:91](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L91)
+Defined in: [test/src/fixtures.ts:100](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L100)
 
 ## Type Parameters
 

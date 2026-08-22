@@ -10,16 +10,12 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./reporter": {
-      "types": "./dist/reporter.d.ts",
-      "import": "./dist/reporter.js"
     },
     "./live-client": {
       "types": "./dist/live-client.d.ts",
@@ -34,17 +30,18 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm run check:boundary && tsup src/index.ts src/reporter.ts src/live-client.ts src/provider.ts --format esm --dts --sourcemap --clean && vite build",
+    "build": "pnpm run check:boundary && tsup src/index.ts src/live-client.ts src/provider.ts --format esm --dts --sourcemap --clean && vite build",
     "build:app": "vite build",
     "check:boundary": "node scripts/check-boundary.mjs",
     "screenshots:docs": "node scripts/capture-docs-screenshots.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.app.json --noEmit",
-    "test": "vitest run",
-    "test:browser": "vitest run --config vitest.browser.config.ts"
+    "test": "pnpm --dir ../.. test -- -- --run packages/ui",
+    "test:browser": "pnpm --dir ../.. test -- -- --config packages/ui/vitest.browser.config.ts"
   },
   "dependencies": {
     "@termwright/driver": "workspace:*",
     "@termwright/protocol": "workspace:*",
+    "@termwright/run-history": "workspace:*",
     "@termwright/trace": "workspace:*",
     "chokidar": "^4.0.3",
     "ws": "^8.18.0"
@@ -64,6 +61,6 @@
     "react-dom": "19.2.8",
     "tailwindcss": "4.3.3",
     "vite": "^7.3.0",
-    "vitest": "^3.2.0"
+    "vitest": "3.2.7"
   }
 }

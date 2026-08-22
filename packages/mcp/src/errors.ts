@@ -2,7 +2,7 @@
  * Error taxonomy shared by the tools and the CLI.
  *
  * Driver failures arrive as `TermwrightError` and keep their `code` verbatim —
- * a `stale-snapshot` on a reused `n8@42` ref reaches the agent as
+ * a `stale-snapshot` on a reused `semantic:n8@42` ref reaches the agent as
  * `kind: "stale-snapshot"`, not as a stack trace. The server adds three kinds of
  * its own for failures that never reach the driver: bad arguments, unknown
  * terminal handles, and internal faults.
@@ -49,6 +49,7 @@ export function exitCodeFor(kind: ErrorKind): number {
       return EXIT_CODES.usage;
     case 'protocol-violation':
       return EXIT_CODES.ipc;
+    case 'pty-backend-failed':
     case 'internal':
       return EXIT_CODES.internal;
     default:

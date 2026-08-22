@@ -3,9 +3,10 @@ title: Locators
 description: Find semantic elements by role, label, text, test ID, or selector.
 ---
 
-Locators find elements in the semantic tree published by your application or
-framework integration. Prefer a role and accessible name when they describe what a
-user interacts with.
+Termwright has two disjoint locator domains. `SemanticLocator` finds elements in
+the semantic tree published by your application or framework integration;
+`ScreenLocator` finds exact regions in the physical terminal grid. TypeScript
+rejects composition across those domains.
 
 ```ts
 const save = app.getByRole('button', {name: 'Save'});
@@ -88,7 +89,9 @@ await expect(secondError).toBeVisible();
 
 Use it for styled output, repeated rendered text, custom canvases, and programs
 without a framework integration. It returns a physical grid region, not a
-semantic role or component identity.
+semantic role or component identity. It supports truthful pointer actions when
+that exact region is actionable, but deliberately has no `fill()`, `focus()`,
+semantic state, role descendants, or semantic filters.
 
 ## Scope a locator
 
@@ -127,7 +130,8 @@ expect(await app.getByRole('button').count()).toBe(3);
 that receive a semantic reference from a snapshot. Normal tests should prefer a
 declarative locator.
 
-Stable semantic identities may be resolved again after a new revision. A
+Refs carry their domain explicitly: `semantic:n8@42` or
+`screen:4,10,6,1@17`. Stable semantic identities may be resolved again after a new revision. A
 frame-local reference cannot. Grid references remain tied to the revision that
 created them.
 

@@ -1,4 +1,4 @@
-import type { EffectiveSessionContract, ProbeInfo, SemanticSnapshot } from '@termwright/protocol';
+import type { EffectiveSessionContract, SemanticSnapshot } from '@termwright/protocol';
 import type { AppLogView } from '../../app-log.js';
 import type { CommandRow } from '../../commands.js';
 import type { UiActionability, UiActionPlan, UiGherkinStep, UiRunSummary, UiServerMode } from '../../events.js';
@@ -76,9 +76,6 @@ export interface SessionRecord {
   readonly columns: number;
   readonly rows: number;
   readonly terminalProfile: string;
-  readonly adapter?: { readonly name: string; readonly version: string };
-  readonly probe?: ProbeInfo;
-  readonly capabilities?: readonly string[];
   readonly contract?: EffectiveSessionContract;
   readonly adapterStatus?: 'attached' | 'disconnected' | 'error';
   readonly command: readonly string[];
@@ -96,6 +93,8 @@ export interface RunState {
   readonly startedAt: number | null;
   readonly summary: UiRunSummary | null;
   readonly stopError: string | null;
+  /** Projection loss only; canonical run history remains authoritative. */
+  readonly diagnosticGaps: number;
   /** null/[] mean the full initial CLI scope; a non-empty list is an exact UI request. */
   readonly requestedTargets: readonly string[] | null;
 }
@@ -158,6 +157,7 @@ export const initialAppState: AppState = {
     startedAt: null,
     summary: null,
     stopError: null,
+    diagnosticGaps: 0,
     requestedTargets: null,
   },
   catalog: [],

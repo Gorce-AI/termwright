@@ -18,7 +18,7 @@ import type { TraceOverview, TraceStatePayload } from './trace-source.js';
 import type { DataSource, DataSourceFeatures, ViewerState } from './data-source.js';
 import type { LogWindowQuery, TraceLogs } from './trace-logs.js';
 import type { TraceCommands, TraceFrames } from './trace-playback.js';
-import type { RunManifest, RunSummaryEntry } from './runs.js';
+import type { RunDetail, RunSummaryEntry } from './runs.js';
 import type { SpecFacts } from './spec-tree.js';
 import type { GeneratedSelector } from './selector.js';
 import type { RecordedEvent } from './codegen.js';
@@ -46,6 +46,7 @@ export class RunnerClient implements DataSource {
   /** Archive selected by this browser tab, never shared through the hub. */
   #archivePath: string | undefined;
   #nextInspection = 0;
+  #activeRunId: string | undefined;
   readonly #inspections = new Map<string, {
     readonly resolve: (results: readonly UiActionability[]) => void;
     readonly reject: (error: Error) => void;
@@ -81,6 +82,9 @@ export class RunnerClient implements DataSource {
           if (message.results !== undefined) pending.resolve(message.results);
           else pending.reject(new Error(message.error ?? 'actionability inspection failed'));
           return;
+        }
+        if (message.type === 'run-end' || message.type === 'run-cancelled' || message.type === 'run-infrastructure-failed') {
+          this.#activeRunId = undefined;
         }
         this.#onMessage(message);
       } catch {
@@ -155,11 +159,20 @@ export class RunnerClient implements DataSource {
   /**
    * Starts a run over HTTP rather than over the socket.
    *
-   * The `rerun` message has no reply, so a panel that sent one could not tell a
-   * run that never started from a run that started slowly. This can.
+   * Native RunnerTaskIds come from this invocation's structured catalogue.
+   * The response confirms admission and returns the collision-safe RunId.
    */
-  async startRun(files: readonly string[]): Promise<{ started: boolean }> {
-    return this.#post('/api/run', { files });
+  async startRun(runnerTaskIds: readonly string[]): Promise<{ runId: string }> {
+    const accepted = await this.#post<{ runId: string }>('/api/run', { runnerTaskIds });
+    this.#activeRunId = accepted.runId;
+    return accepted;
+  }
+
+  async stopRun(): Promise<void> {
+    const runId = this.#activeRunId;
+    if (runId === undefined) throw new Error('there is no accepted run to stop');
+    await this.#post('/api/stop', { runId });
+    if (this.#activeRunId === runId) this.#activeRunId = undefined;
   }
 
   /** Facts about the project's spec files: age, average, recent results. */
@@ -175,8 +188,8 @@ export class RunnerClient implements DataSource {
   }
 
   /** One run's manifest, with its tests. */
-  async run(id: string): Promise<RunManifest> {
-    return this.#get<RunManifest>(`/api/run?id=${encodeURIComponent(id)}`);
+  async run(id: string): Promise<RunDetail> {
+    return this.#get<RunDetail>(`/api/run?id=${encodeURIComponent(id)}`);
   }
 
   /** Replaces the replayed archive with another one. */

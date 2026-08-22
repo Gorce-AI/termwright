@@ -137,6 +137,20 @@ Appends an entry. Used by the fixtures; tests read rather than write.
 
 ***
 
+### revision()
+
+> **revision**(): `number`
+
+Defined in: [test/src/logs.ts:69](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L69)
+
+Monotonic collection revision for race-free matcher waits.
+
+#### Returns
+
+`number`
+
+***
+
 ### text()
 
 > **text**(`query?`): `string`
@@ -155,3 +169,27 @@ revisions — stable enough to put in a snapshot.
 #### Returns
 
 `string`
+
+***
+
+### waitForChange()
+
+> **waitForChange**(`after`, `timeout`): `Promise`\<`void`\>
+
+Defined in: [test/src/logs.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/logs.ts#L71)
+
+Arms first, then checks whether `after` was already superseded.
+
+#### Parameters
+
+##### after
+
+`number`
+
+##### timeout
+
+`number`
+
+#### Returns
+
+`Promise`\<`void`\>

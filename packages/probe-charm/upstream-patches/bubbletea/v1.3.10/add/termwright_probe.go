@@ -88,6 +88,7 @@ func newTermwrightProbe() *termwrightProbeState {
 		Capabilities: []protocol.Capability{
 			protocol.CapTree,
 			protocol.CapStates,
+			protocol.CapFocusState,
 			protocol.CapActions,
 			protocol.CapRenderRevisions,
 		},
@@ -471,9 +472,9 @@ func termwrightRecogniseBubbles(value reflect.Value, fieldName string) *recognis
 		// report — three places nobody expected one. The screen shows dots;
 		// so does the tree.
 		if termwrightEchoesPlainly(value) {
-			node.Value = termwrightCallString(value, "Value")
+			node.Value = termwrightSensitiveValue(termwrightCallString(value, "Value"))
 		} else {
-			node.State = termwrightWithReadonlySecret(node.State)
+			node.Value = protocol.WithheldSensitiveValue()
 		}
 	case "list":
 		node.Role = protocol.RoleList
@@ -595,13 +596,13 @@ func termwrightLibraryState(value reflect.Value, component string, node *protoco
 		// The drawn fraction, not the one being animated towards.
 		if shown, ok := termwrightCallFloat(value, "TermwrightShownPercent"); ok {
 			text := strconv.FormatFloat(shown, 'f', 3, 64)
-			node.Value = &text
+			node.Value = termwrightSensitiveValue(&text)
 		}
 	case "filepicker":
 		if index, ok := termwrightCallInt(value, "TermwrightSelectedIndex"); ok && index >= 0 {
 			node.State = termwrightWithPosition(node.State, index, termwrightCallIntOr(value, "TermwrightEntryCount", 0))
 			if name := termwrightCallString(value, "TermwrightSelectedName"); name != nil && *name != "" {
-				node.Value = name
+				node.Value = termwrightSensitiveValue(name)
 			}
 		}
 	case "list":
@@ -717,14 +718,13 @@ func termwrightEchoesPlainly(value reflect.Value) bool {
 	return field.Int() == 0 // EchoNormal
 }
 
-// termwrightWithReadonlySecret marks a field whose contents were withheld, so
-// a reader can tell "empty" from "not published on purpose".
-func termwrightWithReadonlySecret(state *protocol.State) *protocol.State {
-	if state == nil {
-		state = &protocol.State{}
+func termwrightSensitiveValue(value *string) *protocol.SemanticValueObservation {
+	if value == nil {
+		return nil
 	}
-	state.ReadOnly = protocol.Bool(true)
-	return state
+	return &protocol.SemanticValueObservation{
+		Status: "known", Value: value, Sensitivity: "sensitive", Evidence: termwrightEvidence("instrumented"),
+	}
 }
 
 func termwrightFocusState(value reflect.Value) *protocol.State {

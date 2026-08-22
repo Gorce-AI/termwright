@@ -46,7 +46,7 @@ Avoid `first()` unless position is the intended behavior. See
 - For keyboard input, confirm that the intended control is focused.
 - Send separate interactions as separate `press()` calls.
 - For pointer input, inspect `hitTest()` and the framework capability matrix.
-- Use `waitForStable()` before a geometry-dependent action if layout is moving.
+- Use `waitForQuiet()` before a geometry-dependent action if layout is moving.
 
 ```ts
 await expect(save).toBeFocused();
@@ -101,7 +101,7 @@ terminal log. See [Run tests in CI](../../guides/ci/).
 
 - Set `TERMWRIGHT_DEBUG=1` for driver decisions and waits.
 - Use `trace: 'on'` temporarily to retain successful runs.
-- Add the Termwright reporter for a self-contained HTML artifact.
+- Retain a trace and run `termwright report --trace …` for a self-contained HTML artifact.
 - Inspect application logs in the Runner; dropped records are shown explicitly.
 
 [Traces and reports →](../traces-reports/)

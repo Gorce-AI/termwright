@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: NotActionableError
 
-Defined in: [driver/src/errors.ts:100](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L100)
+Defined in: [driver/src/errors.ts:108](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L108)
 
 The capability exists, but the target cannot currently satisfy the action.
 
@@ -23,9 +23,9 @@ The capability exists, but the target cannot currently satisfy the action.
 
 ### Constructor
 
-> **new NotActionableError**(`message`, `diagnostics`): `NotActionableError`
+> **new NotActionableError**(`message`, `diagnostics`, `transient?`): `NotActionableError`
 
-Defined in: [driver/src/errors.ts:101](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L101)
+Defined in: [driver/src/errors.ts:112](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L112)
 
 #### Parameters
 
@@ -36,6 +36,10 @@ Defined in: [driver/src/errors.ts:101](https://github.com/Gorce-AI/termwright/bl
 ##### diagnostics
 
 [`ErrorDiagnostics`](../../interfaces/errordiagnostics/)
+
+##### transient?
+
+`"pointer-region"` \| `"target-state"` \| `"covered"` \| `null`
 
 #### Returns
 
@@ -80,6 +84,16 @@ Defined in: [driver/src/errors.ts:21](https://github.com/Gorce-AI/termwright/blo
 #### Inherited from
 
 [`TermwrightError`](../termwrighterror/).[`diagnostics`](../termwrighterror/#diagnostics)
+
+***
+
+### transient
+
+> `readonly` **transient**: `"pointer-region"` \| `"target-state"` \| `"covered"` \| `null`
+
+Defined in: [driver/src/errors.ts:110](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L110)
+
+Only these planner facts may become actionable on a later committed observation.
 
 ## Methods
 

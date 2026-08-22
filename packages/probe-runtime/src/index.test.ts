@@ -76,10 +76,11 @@ describe('shared probe transport', () => {
     });
 
     const evidenceProviderRegistry = createEvidenceProviderRegistry();
-    evidenceProviderRegistry.register({
+    evidenceProviderRegistry.registerPointer({
       id: 'app.router',
       version: '1',
       method: 'native',
+      family: 'pointer',
       capabilities: ['pointer-regions', 'hit-test'],
       observe: () => ({
         pointerRegions: [{

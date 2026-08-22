@@ -3,18 +3,23 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "packageManager": "pnpm@9.4.0",
   "scripts": {
     "build": "pnpm -r --filter './packages/*' run build",
     "check:package-metadata": "node scripts/check-package-metadata.mjs",
+    "check:platform-deviations": "node scripts/check-platform-deviations.mjs",
+    "check:determinism": "node scripts/audit-determinism-constructs.mjs",
+    "check:node-pty": "node scripts/check-node-pty-certification.mjs",
+    "check:semantic-completeness": "node scripts/generate-semantic-completeness.mjs",
+    "check:mission-completion": "node scripts/generate-mission-completion.mjs",
     "docs:screenshots": "pnpm --filter @termwright/ui run screenshots:docs",
     "docs:api": "typedoc && typedoc --options typedoc.driver.json && typedoc --options typedoc.ink.json && typedoc --options typedoc.gherkin.json && node scripts/prepare-api-docs.mjs",
-    "test": "vitest run",
+    "test": "node packages/termwright-cli/dist/bin.js test",
     "pretest:compatibility": "pnpm --filter @termwright/protocol --filter @termwright/recognizers --filter @termwright/evidence-provider --filter @termwright/probe-runtime --filter @termwright/probe-go build",
-    "test:compatibility": "vitest run compatibility/registry.test.ts",
-    "test:watch": "vitest",
+    "test:compatibility": "node packages/termwright-cli/dist/bin.js test -- compatibility/registry.test.ts",
+    "test:watch": "node packages/termwright-cli/dist/bin.js watch",
     "typecheck": "pnpm -r --filter './packages/*' run typecheck",
     "lint": "eslint packages/*/src"
   },
@@ -29,6 +34,6 @@
     "typedoc-plugin-markdown": "^4.12.0",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.67.0",
-    "vitest": "^3.2.0"
+    "vitest": "3.2.7"
   }
 }

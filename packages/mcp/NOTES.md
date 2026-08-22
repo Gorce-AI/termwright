@@ -45,7 +45,7 @@ no changed *subtrees*, because it caught the pair mid-flight — this one was
 intermittent in the end-to-end suite, and an agent polling `capture_since` after
 an action would have hit exactly the same race.
 
-`tools.ts: settleSemantics()` therefore calls the public `waitForStable()` before
+`tools.ts: settleSemantics()` therefore calls the public `waitForQuiet()` before
 every read: 2 s for a session still waiting for its first tree, 250 ms to let an
 in-flight render pair. Timeouts are swallowed — a session with no observable tree
 is reported honestly rather than made to look broken.

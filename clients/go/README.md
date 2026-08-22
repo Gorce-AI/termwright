@@ -4,7 +4,7 @@ Semantic side-channel client and developer annotation SDK for Termwright's
 automatic [tview](https://github.com/rivo/tview) and Charm probes.
 
 An instrumented app publishes its primitive tree over a unix socket and commits
-each frame with a signed OSC marker, so tests assert on *roles and names*
+each frame with a signed OSC marker, so tests assert on _roles and names_
 instead of screen-scraping cells.
 
 The protocol client speaks `termwright/2`. Every published semantic revision
@@ -55,14 +55,14 @@ The application imports no Termwright package. Build it through
 `@termwright/probe-tview`:
 
 ```ts
-import {prepareInstrumentedBuild} from '@termwright/probe-tview';
+import { prepareInstrumentedBuild } from "@termwright/probe-tview";
 
-const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
-await execFile('go', ['build', '-o', 'app-binary', '.'], {
-  cwd: 'path/to/app',
+const build = await prepareInstrumentedBuild({ moduleDir: "path/to/app" });
+await execFile("go", ["build", "-o", "app-binary", "."], {
+  cwd: "path/to/app",
   env: build.env,
 });
-await launchTerminal({command: ['./app-binary']});
+await launchTerminal({ command: ["./app-binary"] });
 ```
 
 The generated `go.work` redirects only tview and the probe client to cached,
@@ -149,7 +149,7 @@ the wire omits it rather than guessing from the Go runtime.
 The zero-config probes (`@termwright/probe-tview`, `@termwright/probe-charm`)
 observe facts: this is a button, it holds this text, it has the focus, it was
 drawn here. What they cannot observe is intent — that this list is the inbox,
-that a row is *overdue* in the sense your domain means. `annotate` is where the
+that a row is _overdue_ in the sense your domain means. `annotate` is where the
 author supplies that, and it is the only package here that a zero-config
 application imports.
 
@@ -301,6 +301,20 @@ not listed here follows them.
 - **DropDown options other than the current one have positional names** (rule
   2). tview exposes no per-index accessor, so an unselected option is published
   as `option 2` rather than its text.
+
+## Application evidence providers
+
+`clients/go/evidence` exposes closed production pointer, focus, scroll, paint,
+terminal-input-mode, and data-only physical action-recipe families.
+`FocusProvider.Observe` returns the focused semantic id or `nil` for the
+authoritative fact that no node owns focus. Register before the first session
+freeze; provider loss or disagreement fails the frozen contract. Providers
+never receive an action callback—the driver executes every recipe through the
+PTY.
+
+`InputModeProvider.Observe` publishes the production parser's closed
+mouse-tracking, mouse-encoding, and focus-reporting tuple. It can supply truth
+when ConPTY hides DEC modes, but never enables a mode or dispatches input.
 
 ## Conformance
 

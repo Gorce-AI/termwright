@@ -1,0 +1,1360 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-22",
+  "baselineHead": "a77bafeca83039d9f58ff0d5054da32f71535257",
+  "policy": {
+    "productMode": "termwright-native-host-only",
+    "backwardsCompatibility": false,
+    "embeddedEngine": "vitest@3.2.7",
+    "certificationRule": "partial sections cannot support the final cross-platform certification claim"
+  },
+  "baselineCiEvidence": {
+    "runId": "32530899608",
+    "headSha": "a77bafeca83039d9f58ff0d5054da32f71535257",
+    "url": "https://github.com/Gorce-AI/termwright/actions/runs/32530899608",
+    "observedAt": "2026-08-22",
+    "classification": [
+      "Windows Node 22 and 24 completed install, build and typecheck; their failures were nested pnpm.cmd spawn EINVAL in probe-Ink tests, not a worker-channel crash.",
+      "The current architecture removes those nested package-manager spawns and builds once before the Native Host run.",
+      "macOS Node 22 failed a scheduler-polled MCP semantic revision oracle; current MCP waits on the canonical focused Condition and committed-observation barrier.",
+      "This baseline does not certify the dirty current workspace; a new Windows Node 22/24 run remains mandatory."
+    ]
+  },
+  "localVitestPressureEvidence": {
+    "node": "v24.1.0",
+    "platform": "darwin-arm64",
+    "versions": [
+      "3.1.4",
+      "3.2.7",
+      "4.1.11"
+    ],
+    "pools": [
+      "forks",
+      "threads"
+    ],
+    "fileParallelism": [
+      true,
+      false
+    ],
+    "workers": 2,
+    "ptyConcurrency": 4,
+    "cellsPassed": 12,
+    "cellsTotal": 12,
+    "channelClosed": 0,
+    "command": "TERMWRIGHT_MATRIX_WORKERS=2 TERMWRIGHT_MATRIX_PTYS=4 TERMWRIGHT_MATRIX_FILE_PARALLELISM=true,false node scripts/run-vitest-pty-matrix.mjs <output>"
+  },
+  "summary": {
+    "alreadyFixed": 118,
+    "partiallyFixed": 9,
+    "obsoleteBecauseArchitectureChanged": 1,
+    "stillOpen": 0,
+    "remainingExternalEvidence": 9,
+    "incorrectAfterDeeperEvidence": 0
+  },
+  "sections": [
+    {
+      "section": 1,
+      "title": "Engineering principles",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 2,
+      "title": "Mandatory audit methodology",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 3,
+      "title": "Target product architecture",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 4,
+      "title": "Effective Session Contract",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 5,
+      "title": "Capability Graph",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 6,
+      "title": "No orphan capabilities",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 7,
+      "title": "Capability provenance",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 8,
+      "title": "Observation semantics",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 9,
+      "title": "Application evidence providers",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 10,
+      "title": "Provider conflicts and lifecycle",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/capability-graph.ts",
+        "compatibility/registry.json",
+        "packages/driver/src/provider-evidence.ts"
+      ]
+    },
+    {
+      "section": 11,
+      "title": "Physical action strategy evidence",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 12,
+      "title": "Strategy precedence",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 13,
+      "title": "Keyboard focus navigation",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 14,
+      "title": "type versus fill",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 15,
+      "title": "Semantic actions inform planning",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 16,
+      "title": "Semantic versus screen queries",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 17,
+      "title": "Type-safe Locator domains",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 18,
+      "title": "Locator algebra",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 19,
+      "title": "Single ActionPlanner",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 20,
+      "title": "Real PTY pointer actions",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 21,
+      "title": "Physical regions and safe points",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 22,
+      "title": "Keyboard and Mouse devices",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 23,
+      "title": "Action postconditions",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/action-planner.ts",
+        "packages/driver/src/locator.ts",
+        "packages/protocol/src/action-model.ts"
+      ]
+    },
+    {
+      "section": 24,
+      "title": "Canonical Conditions",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 25,
+      "title": "First semantic-tree absence rule",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 26,
+      "title": "Revision and checkpoint domain",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 27,
+      "title": "Monotonic total deadlines",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 28,
+      "title": "Outer attempt budget",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 29,
+      "title": "Event-driven waits",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 30,
+      "title": "Honest wait proof names",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 31,
+      "title": "Deterministic semantic negotiation",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 32,
+      "title": "Causal barriers",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 33,
+      "title": "Causal resize",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 34,
+      "title": "Semantic value confidentiality",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 35,
+      "title": "Portable semantic vocabulary",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 36,
+      "title": "Geometry model",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 37,
+      "title": "Painted-region vertical slice",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 38,
+      "title": "Truthful render order",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 39,
+      "title": "Decomposed scroll concepts",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/deadline.ts",
+        "packages/test/src/attempt-budget.ts",
+        "packages/driver/src/pairing.ts"
+      ]
+    },
+    {
+      "section": 40,
+      "title": "Framework evidence rule",
+      "status": "already-fixed",
+      "evidence": [
+        "compatibility/registry.json",
+        "compatibility/framework-semantic-completeness.json",
+        "packages/conformance/src/suites"
+      ]
+    },
+    {
+      "section": 41,
+      "title": "Textual completion",
+      "status": "already-fixed",
+      "evidence": [
+        "compatibility/registry.json",
+        "compatibility/framework-semantic-completeness.json",
+        "packages/conformance/src/suites"
+      ]
+    },
+    {
+      "section": 42,
+      "title": "OpenTUI completion",
+      "status": "already-fixed",
+      "evidence": [
+        "compatibility/registry.json",
+        "compatibility/framework-semantic-completeness.json",
+        "packages/conformance/src/suites"
+      ]
+    },
+    {
+      "section": 43,
+      "title": "Ink completion",
+      "status": "already-fixed",
+      "evidence": [
+        "compatibility/registry.json",
+        "compatibility/framework-semantic-completeness.json",
+        "packages/conformance/src/suites"
+      ]
+    },
+    {
+      "section": 44,
+      "title": "tview completion",
+      "status": "already-fixed",
+      "evidence": [
+        "compatibility/registry.json",
+        "compatibility/framework-semantic-completeness.json",
+        "packages/conformance/src/suites"
+      ]
+    },
+    {
+      "section": 45,
+      "title": "Ratatui completion",
+      "status": "already-fixed",
+      "evidence": [
+        "compatibility/registry.json",
+        "compatibility/framework-semantic-completeness.json",
+        "packages/conformance/src/suites"
+      ]
+    },
+    {
+      "section": 46,
+      "title": "Charm certification closure",
+      "status": "already-fixed",
+      "evidence": [
+        "compatibility/registry.json",
+        "compatibility/framework-semantic-completeness.json",
+        "packages/conformance/src/suites"
+      ]
+    },
+    {
+      "section": 47,
+      "title": "ConPTY input-mode evidence",
+      "status": "already-fixed",
+      "evidence": [
+        "compatibility/registry.json",
+        "compatibility/framework-semantic-completeness.json",
+        "packages/conformance/src/suites"
+      ]
+    },
+    {
+      "section": 48,
+      "title": "Input protocol completeness",
+      "status": "already-fixed",
+      "evidence": [
+        "compatibility/registry.json",
+        "compatibility/framework-semantic-completeness.json",
+        "packages/conformance/src/suites"
+      ]
+    },
+    {
+      "section": 49,
+      "title": "Native Termwright Test Host",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 50,
+      "title": "Shared test watch and UI host",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 51,
+      "title": "Plain Vitest compatibility mode",
+      "status": "obsolete because architecture changed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ],
+      "architectureDecision": "Product policy intentionally removed plain-Vitest compatibility. Termwright native-host execution is the only product mode; Vitest remains the embedded engine, not a parallel user-facing runner."
+    },
+    {
+      "section": 52,
+      "title": "Termwright-owned configuration",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 53,
+      "title": "Exact Vitest certification",
+      "status": "partially-fixed",
+      "evidence": [
+        "packages/test/src/vitest-engine.ts",
+        "packages/test/src/runner.test.ts",
+        "scripts/run-vitest-pty-matrix.mjs"
+      ],
+      "remainingEvidence": "The embedded Vitest 3.2.7 API is exact-pinned and the local 3.1.4/3.2.7/4.1.11 pressure comparison is 12/12 green; the Windows comparison still needs a reviewed current Node 22/24 run."
+    },
+    {
+      "section": 54,
+      "title": "Reporter composition",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 55,
+      "title": "Gherkin host integration",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 56,
+      "title": "Identity hierarchy",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 57,
+      "title": "Native Vitest task identity",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 58,
+      "title": "Collision-safe Run IDs",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 59,
+      "title": "First-class Attempt IDs",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 60,
+      "title": "Attempt AsyncLocalStorage",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/test/src/runner.ts",
+        "packages/test/src/attempt-context.ts"
+      ]
+    },
+    {
+      "section": 61,
+      "title": "Startup event journal",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/run-events.ts",
+        "packages/protocol/src/run-journal.ts",
+        "packages/run-journal-transport/src/index.ts"
+      ]
+    },
+    {
+      "section": 62,
+      "title": "Versioned Run Event envelope",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/run-events.ts",
+        "packages/protocol/src/run-journal.ts",
+        "packages/run-journal-transport/src/index.ts"
+      ]
+    },
+    {
+      "section": 63,
+      "title": "Run state machine",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/run-events.ts",
+        "packages/protocol/src/run-journal.ts",
+        "packages/run-journal-transport/src/index.ts"
+      ]
+    },
+    {
+      "section": 64,
+      "title": "Infrastructure failure classification",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/run-events.ts",
+        "packages/protocol/src/run-journal.ts",
+        "packages/run-journal-transport/src/index.ts"
+      ]
+    },
+    {
+      "section": 65,
+      "title": "Structured event transport",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/run-events.ts",
+        "packages/protocol/src/run-journal.ts",
+        "packages/run-journal-transport/src/index.ts"
+      ]
+    },
+    {
+      "section": 66,
+      "title": "Event data classes",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/run-events.ts",
+        "packages/protocol/src/run-journal.ts",
+        "packages/run-journal-transport/src/index.ts"
+      ]
+    },
+    {
+      "section": 67,
+      "title": "Bounded queues and backpressure",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/run-events.ts",
+        "packages/protocol/src/run-journal.ts",
+        "packages/run-journal-transport/src/index.ts"
+      ]
+    },
+    {
+      "section": 68,
+      "title": "Run-end flush barrier",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/protocol/src/run-events.ts",
+        "packages/protocol/src/run-journal.ts",
+        "packages/run-journal-transport/src/index.ts"
+      ]
+    },
+    {
+      "section": 69,
+      "title": "Workspace concurrency mitigation",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/resource-broker/src/index.ts",
+        "packages/resource-broker/src/transport.ts",
+        "packages/termwright-cli/src/resource-profiles.ts"
+      ]
+    },
+    {
+      "section": 70,
+      "title": "Windows worker-channel evidence",
+      "status": "partially-fixed",
+      "evidence": [
+        ".github/workflows/vitest-reliability.yml",
+        "scripts/run-vitest-pty-matrix.mjs",
+        "quality/experiments/vitest-pty-pressure.test.mjs"
+      ],
+      "remainingEvidence": "Infrastructure telemetry and the independent pressure harness exist; the current Windows Node 22/24 matrix result is external execution evidence and is not fabricated locally."
+    },
+    {
+      "section": 71,
+      "title": "Host ResourceBroker",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/resource-broker/src/index.ts",
+        "packages/resource-broker/src/transport.ts",
+        "packages/termwright-cli/src/resource-profiles.ts"
+      ]
+    },
+    {
+      "section": 72,
+      "title": "Cross-worker broker transport",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/resource-broker/src/index.ts",
+        "packages/resource-broker/src/transport.ts",
+        "packages/termwright-cli/src/resource-profiles.ts"
+      ]
+    },
+    {
+      "section": 73,
+      "title": "Broker deadlock prevention",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/resource-broker/src/index.ts",
+        "packages/resource-broker/src/transport.ts",
+        "packages/termwright-cli/src/resource-profiles.ts"
+      ]
+    },
+    {
+      "section": 74,
+      "title": "Resource profiles",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/resource-broker/src/index.ts",
+        "packages/resource-broker/src/transport.ts",
+        "packages/termwright-cli/src/resource-profiles.ts"
+      ]
+    },
+    {
+      "section": 75,
+      "title": "Suite cost classification",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/resource-broker/src/index.ts",
+        "packages/resource-broker/src/transport.ts",
+        "packages/termwright-cli/src/resource-profiles.ts"
+      ]
+    },
+    {
+      "section": 76,
+      "title": "ResourceScope",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/resource-scope.ts",
+        "packages/driver/src/internal/process-supervisor.ts",
+        "packages/driver/src/pty.ts"
+      ]
+    },
+    {
+      "section": 77,
+      "title": "Transactional TerminalSession startup",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/resource-scope.ts",
+        "packages/driver/src/internal/process-supervisor.ts",
+        "packages/driver/src/pty.ts"
+      ]
+    },
+    {
+      "section": 78,
+      "title": "Shared close promise",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/resource-scope.ts",
+        "packages/driver/src/internal/process-supervisor.ts",
+        "packages/driver/src/pty.ts"
+      ]
+    },
+    {
+      "section": 79,
+      "title": "Verified process-tree teardown",
+      "status": "partially-fixed",
+      "evidence": [
+        "packages/driver/src/internal/process-supervisor.ts",
+        "packages/driver/src/process-lifecycle.pty.test.ts",
+        ".github/workflows/ci.yml"
+      ],
+      "remainingEvidence": "POSIX group teardown is proven. ConPTY captures and verifies its console tree on hard kill, but the adversarial natural-root-exit descendant proof still requires the real Windows lane."
+    },
+    {
+      "section": 80,
+      "title": "No fabricated exit",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/resource-scope.ts",
+        "packages/driver/src/internal/process-supervisor.ts",
+        "packages/driver/src/pty.ts"
+      ]
+    },
+    {
+      "section": 81,
+      "title": "EOF-driven final output",
+      "status": "partially-fixed",
+      "evidence": [
+        "packages/driver/src/pty.ts",
+        "packages/driver/src/pty-upstream-boundary.test.ts",
+        "scripts/check-node-pty-certification.mjs"
+      ],
+      "remainingEvidence": "Unix owns an authoritative EOF boundary. Exact ConPTY beta.15 destroys output after a private timer and therefore remains explicitly degraded rather than falsely EOF-certified."
+    },
+    {
+      "section": 82,
+      "title": "Truthful signal semantics",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/resource-scope.ts",
+        "packages/driver/src/internal/process-supervisor.ts",
+        "packages/driver/src/pty.ts"
+      ]
+    },
+    {
+      "section": 83,
+      "title": "Semantic server hardening",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/resource-scope.ts",
+        "packages/driver/src/internal/process-supervisor.ts",
+        "packages/driver/src/pty.ts"
+      ]
+    },
+    {
+      "section": 84,
+      "title": "PTY early output and writes",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/driver/src/internal/resource-scope.ts",
+        "packages/driver/src/internal/process-supervisor.ts",
+        "packages/driver/src/pty.ts"
+      ]
+    },
+    {
+      "section": 85,
+      "title": "Final app-log drain",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 86,
+      "title": "Transactional trace finalization",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 87,
+      "title": "Transactional run persistence",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 88,
+      "title": "Artifact-safe receipts",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 89,
+      "title": "Artifact recording policy",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 90,
+      "title": "Sensitive input and values",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 91,
+      "title": "No per-test module globals",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 92,
+      "title": "Concurrent snapshot writes",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 93,
+      "title": "Symlink-aware filesystem sandbox",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 94,
+      "title": "Concurrent process-global isolation",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/trace/src/writer.ts",
+        "packages/run-history/src/index.ts",
+        "packages/test/src/snapshot-store.ts"
+      ]
+    },
+    {
+      "section": 95,
+      "title": "ResourceScope across services",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/ui/src/server.ts",
+        "packages/ui/src/runs.ts"
+      ]
+    },
+    {
+      "section": 96,
+      "title": "Managed monotonic sweepers",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/ui/src/server.ts",
+        "packages/ui/src/runs.ts"
+      ]
+    },
+    {
+      "section": 97,
+      "title": "Typed HTTP bind rollback",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/ui/src/server.ts",
+        "packages/ui/src/runs.ts"
+      ]
+    },
+    {
+      "section": 98,
+      "title": "Acknowledged UI control RPC",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/ui/src/server.ts",
+        "packages/ui/src/runs.ts"
+      ]
+    },
+    {
+      "section": 99,
+      "title": "Programmatic discovery",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/ui/src/server.ts",
+        "packages/ui/src/runs.ts"
+      ]
+    },
+    {
+      "section": 100,
+      "title": "No sibling Vitest reruns",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/ui/src/server.ts",
+        "packages/ui/src/runs.ts"
+      ]
+    },
+    {
+      "section": 101,
+      "title": "Native-ID UI selection",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/ui/src/server.ts",
+        "packages/ui/src/runs.ts"
+      ]
+    },
+    {
+      "section": 102,
+      "title": "History identity separation",
+      "status": "already-fixed",
+      "evidence": [
+        "packages/termwright-cli/src/test-host.ts",
+        "packages/ui/src/server.ts",
+        "packages/ui/src/runs.ts"
+      ]
+    },
+    {
+      "section": 103,
+      "title": "Fail-on-flaky policy",
+      "status": "already-fixed",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/reliability.yml",
+        "quality/platform-deviations.json"
+      ]
+    },
+    {
+      "section": 104,
+      "title": "Main and stress gates",
+      "status": "already-fixed",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/reliability.yml",
+        "quality/platform-deviations.json"
+      ]
+    },
+    {
+      "section": 105,
+      "title": "Reliability CI lanes",
+      "status": "already-fixed",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/reliability.yml",
+        "quality/platform-deviations.json"
+      ]
+    },
+    {
+      "section": 106,
+      "title": "Platform Deviation Registry",
+      "status": "already-fixed",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/reliability.yml",
+        "quality/platform-deviations.json"
+      ]
+    },
+    {
+      "section": 107,
+      "title": "Certification matrix",
+      "status": "already-fixed",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/reliability.yml",
+        "quality/platform-deviations.json"
+      ]
+    },
+    {
+      "section": 108,
+      "title": "Test oracle quality",
+      "status": "already-fixed",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/reliability.yml",
+        "quality/platform-deviations.json"
+      ]
+    },
+    {
+      "section": 109,
+      "title": "Static determinism audit",
+      "status": "already-fixed",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/reliability.yml",
+        "quality/platform-deviations.json"
+      ]
+    },
+    {
+      "section": 110,
+      "title": "Windows reliability matrix",
+      "status": "partially-fixed",
+      "evidence": [
+        "docs/architecture/audit/platform-completion-baseline.json",
+        ".github/workflows/vitest-reliability.yml",
+        "quality/platform-deviations.json"
+      ],
+      "remainingEvidence": "Every historical Windows issue is categorized and executable lanes exist; the current Windows matrix artifacts are still required before promoting the final certification claim."
+    },
+    {
+      "section": 111,
+      "title": "Windows process semantics",
+      "status": "partially-fixed",
+      "evidence": [
+        "packages/driver/src/internal/process-supervisor.ts",
+        "packages/driver/src/process-lifecycle.pty.test.ts",
+        ".github/workflows/ci.yml"
+      ],
+      "remainingEvidence": "Truthful Windows APIs and adversarial tests exist; their current Node 22/24 execution is required for the final supported-platform proof."
+    },
+    {
+      "section": 112,
+      "title": "ConPTY query and mode proof",
+      "status": "partially-fixed",
+      "evidence": [
+        "packages/driver/src/session.pty.test.ts",
+        "packages/conformance/src/suites/interaction.test.ts",
+        "quality/platform-deviations.json"
+      ],
+      "remainingEvidence": "ConPTY observability and functional provider-backed input are separated and tested; current Windows execution evidence remains required."
+    },
+    {
+      "section": 113,
+      "title": "node-pty boundary",
+      "status": "partially-fixed",
+      "evidence": [
+        "packages/driver/src/pty-upstream-boundary.test.ts",
+        "scripts/check-node-pty-certification.mjs",
+        "packages/driver/src/pty.ts"
+      ],
+      "remainingEvidence": "Termwright owns and exact-certifies the private async write boundary without a dependency patch; the Windows artifact is checked in CI but cannot be executed on this host."
+    },
+    {
+      "section": 114,
+      "title": "Worker-channel crash experiments",
+      "status": "partially-fixed",
+      "evidence": [
+        "scripts/run-vitest-pty-matrix.mjs",
+        "quality/experiments/vitest-pty-pressure.test.mjs",
+        ".github/workflows/vitest-reliability.yml"
+      ],
+      "remainingEvidence": "The independent A/B harness covers Vitest versions, pools, workers, file parallelism and PTY pressure and is locally 12/12 green with no channel loss; a reviewed current Windows artifact is the remaining evidence."
+    },
+    {
+      "section": 115,
+      "title": "Cross-language provider parity",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 116,
+      "title": "One action and event model",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 117,
+      "title": "Artifact-safe ActionReceipt",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 118,
+      "title": "Native Runner UX",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 119,
+      "title": "Reporter UX",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 120,
+      "title": "Runner node inspector",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 121,
+      "title": "Runner resource diagnostics",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 122,
+      "title": "Causal trace UX",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 123,
+      "title": "Truthful recorder abstraction",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 124,
+      "title": "Cross-surface consistency gates",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 125,
+      "title": "Framework semantic completeness report",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 126,
+      "title": "Lifecycle fault injection",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 127,
+      "title": "Contract-driven conformance",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    },
+    {
+      "section": 128,
+      "title": "Deviation closure policy",
+      "status": "already-fixed",
+      "evidence": [
+        "clients/test-vectors",
+        "packages/ui/src/live.ts",
+        "compatibility/framework-semantic-completeness.json",
+        "compatibility/registry.test.ts"
+      ]
+    }
+  ]
+}

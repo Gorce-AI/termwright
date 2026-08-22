@@ -290,7 +290,14 @@ describe('what reaches the driver', () => {
     const validation = validateSnapshot(snapshot, DEFAULT_LIMITS);
     if (!validation.ok) throw new Error(validation.detail);
     expect(snapshot.nodes.map((node) => node.role)).toEqual(['application', 'textbox', 'text']);
-    expect(snapshot.nodes[1]?.value).toBe('draft');
+    expect(snapshot.nodes[1]?.value).toEqual({
+      status: 'known',
+      value: 'draft',
+      sensitivity: 'sensitive',
+      evidence: {
+        source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'opentui',
+      },
+    });
   });
 });
 

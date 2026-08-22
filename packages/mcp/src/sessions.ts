@@ -64,6 +64,8 @@ export interface TerminalEntry {
   readonly directory: string;
   readonly command: readonly string[];
   exit: ExitStatus | null;
+  /** Backend/lifecycle failure is not a fabricated process exit. */
+  exitFailure?: unknown;
   closed: boolean;
   history: RevisionRecord[];
   /** The application's own log, buffered for `terminal.capture_since`. */
@@ -171,24 +173,23 @@ export class TerminalStore {
       history: [],
       logs: new LogBuffer(),
     };
-    // Buffered from launch, so a log written before the first capture is not
-    // lost: the driver only publishes each line once.
-    const seenLogs = new Set<object>();
-    const appendLog = (event: Parameters<typeof entry.logs.append>[0]): void => {
-      if (seenLogs.has(event)) return;
-      seenLogs.add(event);
-      entry.logs.append(event);
-    };
-    harness.events.on('app-log', appendLog);
-    for (const event of harness.appLogs()) appendLog(event);
+    // Subscribe from the source journal rather than racing a live listener
+    // against a separate snapshot. A bounded-prefix loss advances the cursor,
+    // so capture_since reports an explicit omission instead of looking whole.
+    harness.events.subscribe({
+      fromSequence: 1,
+      onGap: (gap) => entry.logs.omit(Math.max(1, gap.lostEvents)),
+    }, (recorded) => {
+      if (recorded.type === 'app-log') entry.logs.append(recorded.payload);
+    });
     // The exit promise is observed here so `terminal.close` can report a status
     // without racing, and so an exited child never leaves an unhandled rejection.
     void harness.exit.then(
       (status) => {
         entry.exit = status;
       },
-      () => {
-        entry.exit = { code: null, signal: null };
+      (error) => {
+        entry.exitFailure = error;
       },
     );
     this.#terminals.set(id, entry);
@@ -275,17 +276,17 @@ export class TerminalStore {
   /** Closes every terminal; failures are swallowed so shutdown always completes. */
   async closeAll(): Promise<void> {
     const entries = [...this.#terminals.values()];
-    this.#terminals.clear();
-    await Promise.all(
-      entries.map(async (entry) => {
-        try {
-          await entry.harness.close();
-        } catch {
-          // Shutdown is best-effort; a child that already exited is fine.
-        }
+    const failures: unknown[] = [];
+    await Promise.all(entries.map(async (entry) => {
+      try {
+        await entry.harness.close();
         entry.closed = true;
-      }),
-    );
+        this.#terminals.delete(entry.id);
+      } catch (error) {
+        failures.push(error);
+      }
+    }));
+    if (failures.length > 0) throw new AggregateError(failures, 'one or more MCP terminals failed to close');
   }
 }
 
@@ -314,7 +315,9 @@ export function createSessionStores(options: {
 
 /** Closes both stores of a session. */
 export async function closeSessionStores(stores: SessionStores): Promise<void> {
-  await Promise.all([stores.terminals.closeAll(), stores.traces.closeAll()]);
+  const results = await Promise.allSettled([stores.terminals.closeAll(), stores.traces.closeAll()]);
+  const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+  if (failures.length > 0) throw new AggregateError(failures, 'MCP session stores failed to close');
 }
 
 /** A registered MCP session: its key, its stores, and its disposer. */
@@ -324,6 +327,8 @@ export interface RegisteredSession<T> {
   readonly attachment: T;
   /** Clock reading of the last request that named this session. */
   lastSeenAt: number;
+  /** One shared cleanup transaction; retained on failure so callers observe it. */
+  closing?: Promise<void>;
 }
 
 /** Options for {@link SessionRegistry}. */
@@ -341,6 +346,8 @@ export interface SessionRegistryOptions<T> {
   readonly disposeAttachment?: (attachment: T) => Promise<void> | void;
   /** Called after an idle session was torn down, for the server log. */
   readonly onExpired?: (key: string) => void;
+  /** Receives managed sweeper failures; never an unhandled rejection. */
+  readonly onBackgroundError?: (error: unknown) => void;
 }
 
 /**
@@ -355,15 +362,19 @@ export class SessionRegistry<T> {
   readonly #now: () => number;
   readonly #disposeAttachment: ((attachment: T) => Promise<void> | void) | undefined;
   readonly #onExpired: ((key: string) => void) | undefined;
+  readonly #onBackgroundError: ((error: unknown) => void) | undefined;
   #sweeper: NodeJS.Timeout | undefined;
+  #sweepTask: Promise<readonly string[]> | undefined;
+  #sweeperStopped = true;
 
   constructor(options: SessionRegistryOptions<T> = {}) {
     this.#maxSessions = options.maxSessions ?? MCP_LIMITS.maxSessions;
     this.#storageDir = options.storageDir;
     this.#idleTtlMs = options.idleTtlMs ?? 0;
-    this.#now = options.now ?? Date.now;
+    this.#now = options.now ?? (() => performance.now());
     this.#disposeAttachment = options.disposeAttachment;
     this.#onExpired = options.onExpired;
+    this.#onBackgroundError = options.onBackgroundError;
   }
 
   /** The configured idle ceiling; `0` when expiry is disabled. */
@@ -408,17 +419,30 @@ export class SessionRegistry<T> {
    */
   startIdleSweeper(intervalMs = Math.min(Math.max(this.#idleTtlMs / 4, 1_000), 60_000)): () => void {
     if (this.#idleTtlMs <= 0) return () => undefined;
-    this.#sweeper = setInterval(() => {
-      void this.sweepIdle();
-    }, intervalMs);
-    this.#sweeper.unref?.();
+    if (!this.#sweeperStopped) return () => this.stopIdleSweeper();
+    this.#sweeperStopped = false;
+    const schedule = (): void => {
+      if (this.#sweeperStopped) return;
+      this.#sweeper = setTimeout(() => {
+        this.#sweeper = undefined;
+        const task = this.sweepIdle();
+        this.#sweepTask = task;
+        void task.catch((error) => this.#onBackgroundError?.(error)).finally(() => {
+          if (this.#sweepTask === task) this.#sweepTask = undefined;
+          schedule();
+        });
+      }, intervalMs);
+      this.#sweeper.unref?.();
+    };
+    schedule();
     return () => this.stopIdleSweeper();
   }
 
   /** Stops the sweeper started by {@link startIdleSweeper}. Idempotent. */
   stopIdleSweeper(): void {
+    this.#sweeperStopped = true;
     if (this.#sweeper === undefined) return;
-    clearInterval(this.#sweeper);
+    clearTimeout(this.#sweeper);
     this.#sweeper = undefined;
   }
 
@@ -457,22 +481,29 @@ export class SessionRegistry<T> {
   }
 
   /** Removes a session and closes everything it owned. */
-  async delete(key: string): Promise<void> {
+  delete(key: string): Promise<void> {
     const session = this.#sessions.get(key);
-    if (session === undefined) return;
-    this.#sessions.delete(key);
-    await closeSessionStores(session.stores);
-    try {
-      await this.#disposeAttachment?.(session.attachment);
-    } catch {
-      // A transport that already closed is not a failure to report.
-    }
+    if (session === undefined) return Promise.resolve();
+    if (session.closing !== undefined) return session.closing;
+    session.closing = (async () => {
+      const results = await Promise.allSettled([
+        closeSessionStores(session.stores),
+        Promise.resolve().then(() => this.#disposeAttachment?.(session.attachment)),
+      ]);
+      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+      if (failures.length > 0) throw new AggregateError(failures, `MCP session ${key} failed to close`);
+      this.#sessions.delete(key);
+    })();
+    return session.closing;
   }
 
   /** Closes every session and stops the sweeper. */
   async closeAll(): Promise<void> {
     this.stopIdleSweeper();
+    await this.#sweepTask?.catch(() => undefined);
     const keys = [...this.#sessions.keys()];
-    await Promise.all(keys.map(async (key) => this.delete(key)));
+    const results = await Promise.allSettled(keys.map(async (key) => this.delete(key)));
+    const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+    if (failures.length > 0) throw new AggregateError(failures, 'one or more MCP sessions failed to close');
   }
 }

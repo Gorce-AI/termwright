@@ -62,7 +62,7 @@ class _Issue(Exception):
             return "unknown-role"
         if "revision" in self.path:
             return "revision"
-        if "rect" in self.path:
+        if any(key in self.path for key in ("rect", "regionBounds", "paintedRegion", "paintedRegions")):
             return "bad-rect"
         if self.too_big and ("nodes" in self.path or "rootIds" in self.path):
             return "count"
@@ -150,6 +150,8 @@ _STATE_BOOLS = (
     "offscreen",
     "readonly",
     "multiline",
+    "required",
+    "multiselectable",
 )
 _STATE_KEYS = _STATE_BOOLS + (
     "checked",
@@ -157,8 +159,6 @@ _STATE_KEYS = _STATE_BOOLS + (
     "level",
     "positionInSet",
     "setSize",
-    "scrollOffset",
-    "scrollExtent",
 )
 
 
@@ -175,7 +175,7 @@ def _state(value: Any, path: Sequence[str]) -> None:
     for key in ("level", "positionInSet"):
         if key in state:
             _positive_int(state[key], tuple(path) + (key,))
-    for key in ("setSize", "scrollOffset", "scrollExtent"):
+    for key in ("setSize",):
         if key in state:
             _non_negative_int(state[key], tuple(path) + (key,))
 
@@ -190,6 +190,7 @@ _NODE_KEYS = (
     "state",
     "extended",
     "actions",
+    "inputRecipes",
     "labelledBy",
     "describedBy",
     "textRanges",
@@ -198,6 +199,8 @@ _NODE_KEYS = (
     "p",
     "px",
     "geometry",
+    "scroll",
+    "paintedRegion",
 )
 
 _EVIDENCE_SOURCES = ("framework", "application", "terminal", "recognizer", "driver")
@@ -253,6 +256,7 @@ PROVENANCE_SOURCES = (
     "annotation",
     "recognizer",
     "framework",
+    "application",
     "correlation",
     "heuristic",
 )
@@ -292,6 +296,130 @@ def _relations(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
         _text(item, tuple(path) + (str(index),), limits)
 
 
+_PHYSICAL_INPUT_RECIPE_ACTIONS = {"focus", "activate", "toggle", "setValue"}
+
+
+def _input_recipes(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
+    if not isinstance(value, list):
+        raise _Issue(path, "expected an array")
+    if len(value) > len(_PHYSICAL_INPUT_RECIPE_ACTIONS):
+        raise _Issue(path, "too many input recipes", too_big=True)
+    seen: Set[str] = set()
+    for index, raw_recipe in enumerate(value):
+        item_path = tuple(path) + (str(index),)
+        recipe = _obj(raw_recipe, item_path)
+        _strict(recipe, ("action", "requiresFocus", "steps"), item_path)
+        action = _text(recipe.get("action"), item_path + ("action",), limits)
+        if action not in _PHYSICAL_INPUT_RECIPE_ACTIONS:
+            raise _Issue(item_path + ("action",), "expected a physical input recipe action")
+        if action in seen:
+            raise _Issue(item_path + ("action",), "input recipe actions must be unique")
+        seen.add(action)
+        requires_focus = _bool(recipe.get("requiresFocus"), item_path + ("requiresFocus",))
+        if action == "focus" and requires_focus:
+            raise _Issue(item_path + ("requiresFocus",), "focus recipe cannot require focus")
+        steps = recipe.get("steps")
+        if not isinstance(steps, list):
+            raise _Issue(item_path + ("steps",), "expected an array")
+        if not steps:
+            raise _Issue(item_path + ("steps",), "expected at least one step")
+        if len(steps) > limits.maxRelationTargets:
+            raise _Issue(item_path + ("steps",), "too many recipe steps", too_big=True)
+        insert_count = 0
+        for step_index, raw_step in enumerate(steps):
+            step_path = item_path + ("steps", str(step_index))
+            step = _obj(raw_step, step_path)
+            kind = _text(step.get("kind"), step_path + ("kind",), limits)
+            if kind == "press":
+                _strict(step, ("kind", "key"), step_path)
+                key = _text(step.get("key"), step_path + ("key",), limits)
+                if not key:
+                    raise _Issue(step_path + ("key",), "key must not be empty")
+            elif kind == "insert-action-value":
+                _strict(step, ("kind",), step_path)
+                insert_count += 1
+            else:
+                raise _Issue(step_path + ("kind",), "expected a physical input recipe step")
+        if (action == "setValue" and insert_count != 1) or (
+            action != "setValue" and insert_count != 0
+        ):
+            raise _Issue(
+                item_path + ("steps",),
+                "setValue requires exactly one insert-action-value step",
+            )
+
+
+def _semantic_value(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
+    item = _obj(value, path)
+    status = item.get("status")
+    if status == "known":
+        _strict(item, ("status", "value", "sensitivity", "evidence"), path)
+        _text(item.get("value"), tuple(path) + ("value",), limits)
+        if item.get("sensitivity") not in ("public", "sensitive"):
+            raise _Issue(tuple(path) + ("sensitivity",), "expected 'public' or 'sensitive'")
+        _evidence(item.get("evidence"), tuple(path) + ("evidence",), limits)
+    elif status == "absent":
+        _strict(item, ("status", "reason", "evidence"), path)
+        if item.get("reason") not in ("detached", "not-displayed", "not-laid-out", "no-value"):
+            raise _Issue(tuple(path) + ("reason",), "invalid semantic value absent reason")
+        evidence = _obj(item.get("evidence"), tuple(path) + ("evidence",))
+        _evidence(evidence, tuple(path) + ("evidence",), limits)
+        if evidence.get("strength") != "authoritative":
+            raise _Issue(tuple(path) + ("evidence", "strength"), "absent semantic value requires authoritative evidence")
+    elif status == "unknown":
+        _strict(item, ("status", "reason"), path)
+        if item.get("reason") not in ("awaiting-revision-pair", "provider-refresh", "stale-revision"):
+            raise _Issue(tuple(path) + ("reason",), "invalid semantic value unknown reason")
+    elif status == "unsupported":
+        _strict(item, ("status", "capability", "reason"), path)
+        if item.get("capability") != "semantic-value":
+            raise _Issue(tuple(path) + ("capability",), "expected the literal 'semantic-value'")
+        if item.get("reason") not in ("capability", "framework-unobservable", "not-negotiated"):
+            raise _Issue(tuple(path) + ("reason",), "invalid semantic value unsupported reason")
+    elif status == "withheld":
+        _strict(item, ("status", "reason", "sensitivity"), path)
+        if item.get("reason") not in ("sensitive", "artifact-policy", "provider-policy"):
+            raise _Issue(tuple(path) + ("reason",), "invalid semantic value withheld reason")
+        if item.get("sensitivity") not in ("public", "sensitive"):
+            raise _Issue(tuple(path) + ("sensitivity",), "expected 'public' or 'sensitive'")
+    else:
+        raise _Issue(tuple(path) + ("status",), "invalid semantic value status")
+
+
+def _painted_region(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
+    region = _obj(value, path)
+    _strict(region, ("regionBounds", "spans"), path)
+    bounds = _rect(region.get("regionBounds"), tuple(path) + ("regionBounds",))
+    spans = region.get("spans")
+    if not isinstance(spans, list):
+        raise _Issue(tuple(path) + ("spans",), "expected an array")
+    if len(spans) > limits.maxNodes:
+        raise _Issue(tuple(path) + ("spans",), "too many region spans", too_big=True)
+    previous: Optional[Mapping[str, int]] = None
+    for index, raw_span in enumerate(spans):
+        span_path = tuple(path) + ("spans", str(index))
+        span = _obj(raw_span, span_path)
+        _strict(span, ("row", "from", "to"), span_path)
+        row = _non_negative_int(span.get("row"), span_path + ("row",))
+        start = _non_negative_int(span.get("from"), span_path + ("from",))
+        end = _positive_int(span.get("to"), span_path + ("to",))
+        if end <= start:
+            raise _Issue(span_path, "region span must be non-empty")
+        if previous is not None and (
+            row < previous["row"]
+            or (row == previous["row"] and start < previous["to"])
+        ):
+            raise _Issue(span_path, "region spans must be non-overlapping row-major runs")
+        if (
+            row < bounds["row"]
+            or row >= bounds["row"] + bounds["height"]
+            or start < bounds["column"]
+            or end > bounds["column"] + bounds["width"]
+        ):
+            raise _Issue(span_path, "region span lies outside regionBounds")
+        previous = {"row": row, "from": start, "to": end}
+
+
 def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> None:
     node = _obj(value, path)
     _strict(node, _NODE_KEYS, path)
@@ -307,9 +435,11 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
     if "name" not in node:
         raise _Issue(tuple(path) + ("name",), "expected a string")
     _text(node["name"], tuple(path) + ("name",), limits)
-    for key in ("description", "value", "testId", "frameworkType"):
+    for key in ("description", "testId", "frameworkType"):
         if key in node:
             _text(node[key], tuple(path) + (key,), limits)
+    if "value" in node:
+        _semantic_value(node["value"], tuple(path) + ("value",), limits)
     if "p" in node and node["p"] not in PROVENANCE_SOURCES:
         raise _Issue(tuple(path) + ("p",), "expected one of the provenance sources")
     if "px" in node:
@@ -336,6 +466,24 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
     _observation(geometry.get("displayed"), tuple(path) + ("geometry", "displayed"), _bool, limits)
     _observation(geometry.get("intendedRect"), tuple(path) + ("geometry", "intendedRect"), _rect, limits)
     _observation(geometry.get("visibleRect"), tuple(path) + ("geometry", "visibleRect"), _rect, limits)
+    if "scroll" in node:
+        def _scroll(value: Any, scroll_path: Sequence[str]) -> None:
+            item = _obj(value, scroll_path)
+            _strict(item, ("axis", "offset", "viewport", "extent"), scroll_path)
+            if item.get("axis") not in ("vertical", "horizontal"):
+                raise _Issue(tuple(scroll_path) + ("axis",), "invalid scroll axis")
+            for key in ("offset", "viewport", "extent"):
+                _non_negative_int(item.get(key), tuple(scroll_path) + (key,))
+            if item["offset"] + item["viewport"] > item["extent"]:
+                raise _Issue(tuple(scroll_path), "scroll state must fit inside its extent")
+        _observation(node["scroll"], tuple(path) + ("scroll",), _scroll, limits)
+    if "paintedRegion" in node:
+        _observation(
+            node["paintedRegion"],
+            tuple(path) + ("paintedRegion",),
+            lambda value, painted_path: _painted_region(value, painted_path, limits),
+            limits,
+        )
     if "state" in node:
         _state(node["state"], tuple(path) + ("state",))
         state = node["state"]
@@ -352,6 +500,7 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
         if not isinstance(node["extended"], dict):
             raise _Issue(tuple(path) + ("extended",), "expected an object")
         _extended(node["extended"], tuple(path) + ("extended",), limits)
+    declared_actions: Set[str] = set()
     if "actions" in node:
         actions = node["actions"]
         if not isinstance(actions, list):
@@ -362,6 +511,16 @@ def _node_schema(value: Any, path: Sequence[str], limits: ProtocolLimits) -> Non
             if action not in ACTION_SET:
                 raise _Issue(
                     tuple(path) + ("actions", str(index)), "expected a supported semantic action"
+                )
+            declared_actions.add(action)
+    if "inputRecipes" in node:
+        _input_recipes(node["inputRecipes"], tuple(path) + ("inputRecipes",), limits)
+        for index, recipe in enumerate(node["inputRecipes"]):
+            action = recipe["action"]
+            if action not in declared_actions:
+                raise _Issue(
+                    tuple(path) + ("inputRecipes", str(index), "action"),
+                    f"input recipe {action!r} requires the matching semantic action intent",
                 )
     for key in ("labelledBy", "describedBy"):
         if key in node:
@@ -399,7 +558,10 @@ def _cursor(value: Any, path: Sequence[str]) -> None:
         raise _Issue(tuple(path) + ("shape",), "expected 'block', 'underline' or 'bar'")
 
 
-_SNAPSHOT_KEYS = ("v", "sessionId", "revision", "columns", "rows", "cursor", "rootIds", "nodes", "coordinateSpace", "hitGrid")
+_SNAPSHOT_KEYS = (
+    "v", "sessionId", "revision", "columns", "rows", "cursor", "rootIds",
+    "nodes", "coordinateSpace", "hitGrid", "providerEvidence",
+)
 
 
 def _snapshot_schema(value: Any, limits: ProtocolLimits) -> None:
@@ -438,6 +600,177 @@ def _snapshot_schema(value: Any, limits: ProtocolLimits) -> None:
         raise _Issue(("nodes",), f"expected at most {limits.maxNodes} items", too_big=True)
     for index, node in enumerate(nodes):
         _node_schema(node, ("nodes", str(index)), limits)
+    if "providerEvidence" in snapshot:
+        providers = snapshot["providerEvidence"]
+        if not isinstance(providers, list):
+            raise _Issue(("providerEvidence",), "expected an array")
+        if len(providers) > 64:
+            raise _Issue(("providerEvidence",), "expected at most 64 items", too_big=True)
+        for index, raw_provider in enumerate(providers):
+            provider_path = ("providerEvidence", str(index))
+            provider = _obj(raw_provider, provider_path)
+            status = _text(provider.get("status"), provider_path + ("status",), limits)
+            if status == "available":
+                _strict(
+                    provider,
+                    (
+                        "providerId", "sessionId", "revision", "status", "evidence",
+                        "pointerRegions", "paintedRegions", "inputModes", "focusState", "actionRecipes", "scrollStates", "hitGrid",
+                    ),
+                    provider_path,
+                )
+                provider_id = _text(
+                    provider.get("providerId"), provider_path + ("providerId",), limits
+                )
+                if not provider_id:
+                    raise _Issue(provider_path + ("providerId",), "provider id must not be empty")
+                session_id = _text(
+                    provider.get("sessionId"), provider_path + ("sessionId",), limits
+                )
+                if not session_id:
+                    raise _Issue(
+                        provider_path + ("sessionId",), "provider session id must not be empty"
+                    )
+                _positive_int(provider.get("revision"), provider_path + ("revision",))
+                evidence = _obj(provider.get("evidence"), provider_path + ("evidence",))
+                _evidence(evidence, provider_path + ("evidence",), limits)
+                if (
+                    evidence.get("source") != "application"
+                    or evidence.get("method") not in ("native", "instrumented", "declared")
+                    or evidence.get("strength") != "authoritative"
+                ):
+                    raise _Issue(
+                        provider_path + ("evidence",),
+                        "provider evidence must be authoritative application evidence",
+                    )
+                pointer_regions = provider.get("pointerRegions")
+                if not isinstance(pointer_regions, list):
+                    raise _Issue(provider_path + ("pointerRegions",), "expected an array")
+                if len(pointer_regions) > limits.maxNodes:
+                    raise _Issue(
+                        provider_path + ("pointerRegions",),
+                        "too many pointer regions",
+                        too_big=True,
+                    )
+                for region_index, raw_region in enumerate(pointer_regions):
+                    region_path = provider_path + ("pointerRegions", str(region_index))
+                    region = _obj(raw_region, region_path)
+                    _strict(region, ("recipientId", "regionBounds", "spans"), region_path)
+                    recipient = _text(region.get("recipientId"), region_path + ("recipientId",), limits)
+                    if not recipient:
+                        raise _Issue(region_path + ("recipientId",), "recipient id must not be empty")
+                    _painted_region(
+                        {"regionBounds": region.get("regionBounds"), "spans": region.get("spans")},
+                        region_path,
+                        limits,
+                    )
+                if "paintedRegions" in provider:
+                    painted_regions = provider["paintedRegions"]
+                    if not isinstance(painted_regions, list):
+                        raise _Issue(provider_path + ("paintedRegions",), "expected an array")
+                    if len(painted_regions) > limits.maxNodes:
+                        raise _Issue(provider_path + ("paintedRegions",), "too many painted regions", too_big=True)
+                    recipients: Set[str] = set()
+                    for region_index, raw_region in enumerate(painted_regions):
+                        region_path = provider_path + ("paintedRegions", str(region_index))
+                        region = _obj(raw_region, region_path)
+                        _strict(region, ("recipientId", "regionBounds", "spans"), region_path)
+                        recipient = _text(region.get("recipientId"), region_path + ("recipientId",), limits)
+                        if not recipient or recipient in recipients:
+                            raise _Issue(region_path + ("recipientId",), "painted region recipients must be non-empty and unique")
+                        recipients.add(recipient)
+                        _painted_region(
+                            {"regionBounds": region.get("regionBounds"), "spans": region.get("spans")},
+                            region_path,
+                            limits,
+                        )
+                if "inputModes" in provider:
+                    modes_path = provider_path + ("inputModes",)
+                    modes = _obj(provider["inputModes"], modes_path)
+                    _strict(modes, ("mouseTracking", "mouseEncoding", "focusReporting"), modes_path)
+                    if modes.get("mouseTracking") not in ("none", "x10", "vt200", "drag", "any"):
+                        raise _Issue(modes_path + ("mouseTracking",), "invalid mouse tracking mode")
+                    if modes.get("mouseEncoding") not in ("default", "sgr", "urxvt", "utf8"):
+                        raise _Issue(modes_path + ("mouseEncoding",), "invalid mouse encoding")
+                    if modes.get("focusReporting") not in ("on", "off"):
+                        raise _Issue(modes_path + ("focusReporting",), "invalid focus reporting mode")
+                if "focusState" in provider:
+                    focus_path = provider_path + ("focusState",)
+                    focus = _obj(provider["focusState"], focus_path)
+                    focus_status = _text(focus.get("status"), focus_path + ("status",), limits)
+                    if focus_status == "focused":
+                        _strict(focus, ("status", "recipientId"), focus_path)
+                        recipient = _text(focus.get("recipientId"), focus_path + ("recipientId",), limits)
+                        if not recipient:
+                            raise _Issue(focus_path + ("recipientId",), "recipient id must not be empty")
+                    elif focus_status == "none":
+                        _strict(focus, ("status",), focus_path)
+                    else:
+                        raise _Issue(focus_path + ("status",), "expected focused or none")
+                if "actionRecipes" in provider:
+                    targets = provider["actionRecipes"]
+                    if not isinstance(targets, list):
+                        raise _Issue(provider_path + ("actionRecipes",), "expected an array")
+                    if len(targets) > limits.maxNodes:
+                        raise _Issue(
+                            provider_path + ("actionRecipes",),
+                            "too many action recipe recipients",
+                            too_big=True,
+                        )
+                    recipients: Set[str] = set()
+                    for target_index, raw_target in enumerate(targets):
+                        target_path = provider_path + ("actionRecipes", str(target_index))
+                        target = _obj(raw_target, target_path)
+                        _strict(target, ("recipientId", "recipes"), target_path)
+                        recipient = _text(
+                            target.get("recipientId"), target_path + ("recipientId",), limits
+                        )
+                        if not recipient:
+                            raise _Issue(
+                                target_path + ("recipientId",), "recipient id must not be empty"
+                            )
+                        if recipient in recipients:
+                            raise _Issue(
+                                target_path + ("recipientId",),
+                                "provider action recipe recipients must be unique",
+                            )
+                        recipients.add(recipient)
+                        _input_recipes(target.get("recipes"), target_path + ("recipes",), limits)
+                if "scrollStates" in provider:
+                    states = provider["scrollStates"]
+                    if not isinstance(states, list):
+                        raise _Issue(provider_path + ("scrollStates",), "expected an array")
+                    if len(states) > limits.maxNodes:
+                        raise _Issue(provider_path + ("scrollStates",), "too many scroll recipients", too_big=True)
+                    recipients: Set[str] = set()
+                    for state_index, raw_state in enumerate(states):
+                        state_path = provider_path + ("scrollStates", str(state_index))
+                        state = _obj(raw_state, state_path)
+                        _strict(state, ("recipientId", "axis", "offset", "viewport", "extent"), state_path)
+                        recipient = _text(state.get("recipientId"), state_path + ("recipientId",), limits)
+                        if not recipient or recipient in recipients:
+                            raise _Issue(state_path + ("recipientId",), "scroll recipients must be non-empty and unique")
+                        recipients.add(recipient)
+                        if state.get("axis") not in ("vertical", "horizontal"):
+                            raise _Issue(state_path + ("axis",), "invalid scroll axis")
+                        for key in ("offset", "viewport", "extent"):
+                            _non_negative_int(state.get(key), state_path + (key,))
+                        if state["offset"] + state["viewport"] > state["extent"]:
+                            raise _Issue(state_path, "scroll state must fit inside its extent")
+            elif status in ("lost", "violation"):
+                _strict(
+                    provider,
+                    ("providerId", "sessionId", "revision", "status", "reason"),
+                    provider_path,
+                )
+                for key in ("providerId", "sessionId", "reason"):
+                    if not _text(provider.get(key), provider_path + (key,), limits):
+                        raise _Issue(provider_path + (key,), f"provider {key} must not be empty")
+                _positive_int(provider.get("revision"), provider_path + ("revision",))
+            else:
+                raise _Issue(
+                    provider_path + ("status",), "expected available, lost, or violation"
+                )
     _observation(snapshot.get("coordinateSpace"), ("coordinateSpace",), lambda value, path: value in ("viewport-cells", "framework-local-cells") or (_ for _ in ()).throw(_Issue(path, "invalid coordinate space")), limits)
     def _grid(value: Any, path: Sequence[str]) -> None:
         grid = _obj(value, path)
@@ -493,6 +826,11 @@ def _check_node_shape(
     ids: Set[str],
     limits: ProtocolLimits,
 ) -> Optional[ValidationResult]:
+    painted = node.get("paintedRegion")
+    if isinstance(painted, dict) and painted.get("status") == "known":
+        for span in painted["value"]["spans"]:
+            if span["row"] >= snapshot["rows"] or span["from"] >= snapshot["columns"] or span["to"] > snapshot["columns"]:
+                return _fail("bad-rect", f"node {node['id']} painted region span lies outside the viewport")
     for text_range in node.get("textRanges") or []:
         if text_range["endOffset"] < text_range["startOffset"]:
             return _fail("bad-rect", f"node {node['id']}: text range ends before it starts")
@@ -607,6 +945,67 @@ def validate_snapshot(value: Any, limits: ProtocolLimits = DEFAULT_LIMITS) -> Va
                 return _fail(
                     "bad-rect",
                     f"hitGrid region for {recipient_id} does not intersect the viewport",
+                )
+
+    provider_ids: Set[str] = set()
+    for provider in snapshot.get("providerEvidence", ()):
+        provider_id = provider["providerId"]
+        if provider_id in provider_ids:
+            return _fail("provider", f"provider evidence id {provider_id} appears more than once")
+        provider_ids.add(provider_id)
+        if provider["sessionId"] != snapshot["sessionId"]:
+            return _fail(
+                "provider",
+                f"provider {provider_id} evidence session {provider['sessionId']} does not match snapshot session {snapshot['sessionId']}",
+            )
+        if provider["revision"] != snapshot["revision"]:
+            return _fail(
+                "provider",
+                f"provider {provider_id} evidence revision {provider['revision']} does not match snapshot revision {snapshot['revision']}",
+            )
+        if provider["status"] != "available":
+            continue
+        if provider["evidence"]["providerId"] != provider_id:
+            return _fail(
+                "schema",
+                f"provider {provider_id} evidence provenance names {provider['evidence']['providerId']}",
+            )
+        focus = provider.get("focusState")
+        if focus is not None and focus["status"] == "focused" and focus["recipientId"] not in ids:
+            return _fail(
+                "missing-parent",
+                f"provider {provider_id} focus references unknown recipient {focus['recipientId']}",
+            )
+        for target in provider.get("actionRecipes", ()):
+            recipient_id = target["recipientId"]
+            if recipient_id not in ids:
+                return _fail(
+                    "missing-parent",
+                    f"provider {provider_id} action recipes reference unknown recipient {recipient_id}",
+                )
+        for state in provider.get("scrollStates", ()):
+            recipient_id = state["recipientId"]
+            if recipient_id not in ids:
+                return _fail(
+                    "missing-parent",
+                    f"provider {provider_id} scroll state references unknown recipient {recipient_id}",
+                )
+        for region in provider.get("paintedRegions", ()):
+            recipient_id = region["recipientId"]
+            if recipient_id not in ids:
+                return _fail(
+                    "missing-parent",
+                    f"provider {provider_id} painted region references unknown recipient {recipient_id}",
+                )
+            if any(
+                span["row"] >= snapshot["rows"]
+                or span["from"] >= snapshot["columns"]
+                or span["to"] > snapshot["columns"]
+                for span in region["spans"]
+            ):
+                return _fail(
+                    "bad-rect",
+                    f"provider {provider_id} painted region for {recipient_id} lies outside the viewport",
                 )
 
     for node in nodes:

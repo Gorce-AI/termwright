@@ -95,6 +95,7 @@ export function createInProcessBackend(start: InProcessStart): PtyBackend {
 class InProcessPty implements PtyProcess {
   /** This process. There is no child, and pretending otherwise would mislead. */
   readonly pid = process.pid;
+  readonly lifecycle = Object.freeze({ tree: 'delegated' as const, outputDrain: 'eof' as const });
 
   readonly #stdout: HarnessStdout;
   readonly #stdin: HarnessStdin;
@@ -153,6 +154,11 @@ class InProcessPty implements PtyProcess {
     // terminal application — it stops, and the session learns how — is
     // reproduced by tearing the app down and reporting that status.
     void this.#stop(SIGNAL_STATUS[sig]);
+  }
+
+  terminate(): void {
+    if (this.#status !== null) return;
+    void this.#stop(HANGUP_STATUS);
   }
 
   onData(cb: (data: Uint8Array) => void): () => void {

@@ -329,6 +329,37 @@ func TestMarkerRejectsBadArguments(t *testing.T) {
 
 // -- snapshots -------------------------------------------------------------
 
+func TestSnapshotVectors(t *testing.T) {
+	var vectors struct {
+		Limits Limits `json:"limits"`
+		Accept []struct {
+			Name     string          `json:"name"`
+			Snapshot json.RawMessage `json:"snapshot"`
+		} `json:"accept"`
+		Reject []struct {
+			Name     string          `json:"name"`
+			Snapshot json.RawMessage `json:"snapshot"`
+			Code     string          `json:"code"`
+		} `json:"reject"`
+	}
+	loadVectors(t, "snapshots", &vectors)
+	for _, item := range vectors.Accept {
+		if err := ValidateSnapshot(decodeJSON(t, item.Snapshot), vectors.Limits); err != nil {
+			t.Errorf("valid snapshot %q rejected: %v", item.Name, err)
+		}
+	}
+	for _, item := range vectors.Reject {
+		err := ValidateSnapshot(decodeJSON(t, item.Snapshot), vectors.Limits)
+		if err == nil {
+			t.Errorf("invalid snapshot %q accepted", item.Name)
+			continue
+		}
+		if code := ValidationCode(err); code != item.Code {
+			t.Errorf("snapshot %q code=%q, want %q: %v", item.Name, code, item.Code, err)
+		}
+	}
+}
+
 func TestSnapshotBuiltFromStructsValidates(t *testing.T) {
 	snapshot := NewSnapshot("s-1", 1, 80, 24)
 	snapshot.RootIDs = []string{"root"}
@@ -597,7 +628,7 @@ func TestClosedSetsStayClosedInBothDirections(t *testing.T) {
 // key list; this compares against it, so the next one is a red test on the day
 // it lands.
 func TestNodeKeysAreExactlyTheProtocols(t *testing.T) {
-	wantNodeKeys := []string{"id", "parentId", "role", "name", "description", "value", "geometry", "state", "extended", "actions", "labelledBy", "describedBy", "textRanges", "testId", "frameworkType", "p", "px"}
+	wantNodeKeys := []string{"id", "parentId", "role", "name", "description", "value", "geometry", "state", "extended", "actions", "inputRecipes", "labelledBy", "describedBy", "textRanges", "testId", "frameworkType", "p", "px", "scroll", "paintedRegion"}
 	assertSameSet(t, "node", wantNodeKeys, nodeKeys)
 }
 

@@ -102,11 +102,12 @@ catalog, reporters, retries, run scopes, and rerun contract.
 Source locations point to the physical feature and step lines. The UI does not
 expose synthetic transformed JavaScript.
 
-## Direct Vitest configuration
+## Native-host configuration
 
-Direct Vitest and IDE runs must add `gherkinPlugin()` and include `.feature`
-files. See [Gherkin scenarios](../../guides/gherkin/#run-with-vitest-and-an-ide)
-for a complete configuration.
+Configure `gherkinPlugin()` in the Vite/Vitest configuration consumed by the
+Termwright host. The host remains the only supported scheduler and owns native
+Scenario/Outline Example identity; an IDE may use the language server for
+navigation but does not create a second execution mode.
 
 `gherkinPlugin({tags: expression})` filters compiled Scenario pickles before
 native Vitest cases are declared. `termwright ui --tags <expression>` applies

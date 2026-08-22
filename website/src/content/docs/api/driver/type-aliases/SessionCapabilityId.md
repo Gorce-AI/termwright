@@ -13,4 +13,4 @@ editUrl: false
 
 > **SessionCapabilityId** = *typeof* `SESSION_CAPABILITIES`\[`number`\]
 
-Defined in: protocol/dist/contract.d.ts:3
+Defined in: protocol/dist/capability-graph.d.ts:26

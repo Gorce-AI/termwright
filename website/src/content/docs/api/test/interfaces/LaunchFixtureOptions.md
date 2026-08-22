@@ -11,21 +11,35 @@ editUrl: false
 
 # Interface: LaunchFixtureOptions
 
-Defined in: [test/src/fixtures.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L48)
+Defined in: [test/src/fixtures.ts:57](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L57)
 
 What a test may override when launching a program.
 
 ## Extends
 
-- `Omit`\<`LaunchOptions`, `"command"`\>
+- `Omit`\<`LaunchOptions`, `"command"` \| `"operationBudget"`\>
 
 ## Properties
+
+### artifactValuePolicy?
+
+> `readonly` `optional` **artifactValuePolicy?**: `"none"` \| `"redacted"` \| `"raw"`
+
+Defined in: driver/dist/index.d.ts:81
+
+Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit opt-in.
+
+#### Inherited from
+
+`Omit.artifactValuePolicy`
+
+***
 
 ### columns?
 
 > `readonly` `optional` **columns?**: `number`
 
-Defined in: driver/dist/index.d.ts:69
+Defined in: driver/dist/index.d.ts:68
 
 #### Inherited from
 
@@ -37,7 +51,7 @@ Defined in: driver/dist/index.d.ts:69
 
 > `readonly` `optional` **command?**: readonly `string`[]
 
-Defined in: [test/src/fixtures.ts:50](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L50)
+Defined in: [test/src/fixtures.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L59)
 
 Defaults to `config.command`.
 
@@ -47,7 +61,7 @@ Defaults to `config.command`.
 
 > `readonly` `optional` **cwd?**: `string`
 
-Defined in: driver/dist/index.d.ts:45
+Defined in: driver/dist/index.d.ts:44
 
 #### Inherited from
 
@@ -59,7 +73,7 @@ Defined in: driver/dist/index.d.ts:45
 
 > `readonly` `optional` **debug?**: `boolean`
 
-Defined in: driver/dist/index.d.ts:53
+Defined in: driver/dist/index.d.ts:52
 
 Streams a live log of API calls, waits, revisions and diagnostics to
 stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
@@ -74,7 +88,7 @@ stderr. Also enabled by `TERMWRIGHT_DEBUG=1` (`=all` adds raw PTY traffic).
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: driver/dist/index.d.ts:46
+Defined in: driver/dist/index.d.ts:45
 
 #### Inherited from
 
@@ -86,7 +100,7 @@ Defined in: driver/dist/index.d.ts:46
 
 > `readonly` `optional` **envMode?**: `EnvMode`
 
-Defined in: driver/dist/index.d.ts:48
+Defined in: driver/dist/index.d.ts:47
 
 Defaults to `'replace'`: a test process's secrets are not the child's.
 
@@ -100,7 +114,7 @@ Defaults to `'replace'`: a test process's secrets are not the child's.
 
 > `readonly` `optional` **files?**: `Readonly`\<`Record`\<`string`, [`SeedFile`](../../type-aliases/seedfile/)\>\>
 
-Defined in: [test/src/fixtures.ts:62](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L62)
+Defined in: [test/src/fixtures.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L71)
 
 Files to create in the working directory before the program starts, keyed
 by relative path. Directories are created as needed.
@@ -119,7 +133,7 @@ await terminal.launch({
 
 > `readonly` `optional` **logs?**: readonly `AppLogSource`[]
 
-Defined in: driver/dist/index.d.ts:59
+Defined in: driver/dist/index.d.ts:58
 
 Log files to follow for the lifetime of the session. A file that does not
 exist yet is waited for; one that already exists is followed from its
@@ -145,9 +159,9 @@ Defined in: driver/dist/index.d.ts:79
 
 ### requiredCapabilities?
 
-> `readonly` `optional` **requiredCapabilities?**: readonly (`"focus"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"keyboard-input"` \| `"pointer-input"` \| `"paired-revisions"`)[]
+> `readonly` `optional` **requiredCapabilities?**: readonly (`"focus"` \| `"pointer-input"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
 
-Defined in: driver/dist/index.d.ts:90
+Defined in: driver/dist/index.d.ts:92
 
 Capabilities that must be present in the frozen session contract.
 Launch waits for negotiation and throws `CapabilityUnavailableError`
@@ -163,7 +177,7 @@ before returning a harness when any requirement is missing.
 
 > `readonly` `optional` **rows?**: `number`
 
-Defined in: driver/dist/index.d.ts:70
+Defined in: driver/dist/index.d.ts:69
 
 #### Inherited from
 
@@ -175,7 +189,7 @@ Defined in: driver/dist/index.d.ts:70
 
 > `readonly` `optional` **scrollbackLines?**: `number`
 
-Defined in: driver/dist/index.d.ts:77
+Defined in: driver/dist/index.d.ts:76
 
 #### Inherited from
 
@@ -187,7 +201,7 @@ Defined in: driver/dist/index.d.ts:77
 
 > `readonly` `optional` **semanticNegotiationMs?**: `number`
 
-Defined in: driver/dist/index.d.ts:76
+Defined in: driver/dist/index.d.ts:75
 
 Maximum time to wait for an optional semantic adapter. Defaults to 2,000
 ms for generic auto-detection. When `requiredCapabilities` is non-empty,
@@ -203,7 +217,7 @@ the default is the larger of 2,000 ms and the session `ready` timeout.
 
 > `readonly` `optional` **shellIntegration?**: `"external"` \| `"termwright-posix"` \| `"termwright-powershell"`
 
-Defined in: driver/dist/index.d.ts:84
+Defined in: driver/dist/index.d.ts:86
 
 Termwright-managed modes instrument an interactive shell with exact
 command markers. Test authors should normally use `terminal.openShell()`.
@@ -218,7 +232,7 @@ command markers. Test authors should normally use `terminal.openShell()`.
 
 > `readonly` `optional` **template?**: `string` \| [`SeedTemplate`](../seedtemplate/)
 
-Defined in: [test/src/fixtures.ts:67](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L67)
+Defined in: [test/src/fixtures.ts:76](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L76)
 
 A directory to copy in first, so a test can start from a whole project and
 change only what it is about. `files` are written over it.
@@ -229,7 +243,7 @@ change only what it is about. `files` are written over it.
 
 > `readonly` `optional` **terminalProfile?**: `string`
 
-Defined in: driver/dist/index.d.ts:68
+Defined in: driver/dist/index.d.ts:67
 
 Terminal profile: which width tables and which of the switches terminals
 disagree on this session uses. A built-in id (`'default'`, `'kitty'`,
@@ -248,7 +262,7 @@ pane can count characters exactly as the live session did.
 
 > `readonly` `optional` **timeouts?**: `TimeoutClasses`
 
-Defined in: driver/dist/index.d.ts:78
+Defined in: driver/dist/index.d.ts:77
 
 #### Inherited from
 
@@ -260,6 +274,6 @@ Defined in: driver/dist/index.d.ts:78
 
 > `readonly` `optional` **trace?**: [`TraceMode`](../../type-aliases/tracemode/)
 
-Defined in: [test/src/fixtures.ts:69](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L69)
+Defined in: [test/src/fixtures.ts:78](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L78)
 
 Trace policy for this session, overriding the file's and the project's.

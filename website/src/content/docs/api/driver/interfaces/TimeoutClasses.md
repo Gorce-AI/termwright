@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TimeoutClasses
 
-Defined in: [driver/src/api.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L34)
+Defined in: [driver/src/api.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L45)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` `optional` **action?**: `number`
 
-Defined in: [driver/src/api.ts:35](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L35)
+Defined in: [driver/src/api.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L46)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:35](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **exit?**: `number`
 
-Defined in: [driver/src/api.ts:39](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L39)
+Defined in: [driver/src/api.ts:50](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L50)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:39](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **idle?**: `number`
 
-Defined in: [driver/src/api.ts:37](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L37)
+Defined in: [driver/src/api.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L48)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [driver/src/api.ts:37](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **ready?**: `number`
 
-Defined in: [driver/src/api.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L38)
+Defined in: [driver/src/api.ts:49](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L49)
 
 ***
 
@@ -68,4 +68,4 @@ Defined in: [driver/src/api.ts:38](https://github.com/Gorce-AI/termwright/blob/m
 
 > `readonly` `optional` **text?**: `number`
 
-Defined in: [driver/src/api.ts:36](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L36)
+Defined in: [driver/src/api.ts:47](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L47)

@@ -15,23 +15,68 @@ type Context struct {
 	Columns, Rows int
 }
 
-// Observation is an authoritative pointer-region and optional router observation.
-type Observation struct {
+// PointerObservation is authoritative pointer evidence for one revision.
+type PointerObservation struct {
 	PointerRegions []protocol.ProviderPointerRegion
 	HitTest        func(column, row int) string
 }
 
-// Provider is an application evidence producer. Method is native or declared.
-// Pointer-regions and hit-test may be supplied together or by two independent
-// providers; each capability has exactly one frozen owner per session.
-type Provider struct {
+// PointerProvider exposes only production pointer ownership/routing facts.
+type PointerProvider struct {
 	ID, Version, Method string
 	Capabilities        []string
-	Observe             func(Context) (Observation, error)
+	Observe             func(Context) (PointerObservation, error)
+}
+
+// ActionStrategyProvider exposes data-only production keyboard recipes.
+type ActionStrategyProvider struct {
+	ID, Version, Method string
+	Observe             func(Context) ([]protocol.ProviderActionRecipes, error)
+}
+
+// FocusProvider exposes the application's production focus-manager result.
+// A nil recipient means authoritatively that no semantic node is focused.
+type FocusProvider struct {
+	ID, Version, Method string
+	Observe             func(Context) (*string, error)
+}
+
+// ScrollProvider exposes the application's production viewport model.
+type ScrollProvider struct {
+	ID, Version, Method string
+	Observe             func(Context) ([]protocol.ProviderScrollState, error)
+}
+
+// PaintProvider exposes the application's production paint attribution.
+type PaintProvider struct {
+	ID, Version, Method string
+	Observe             func(Context) ([]protocol.ProviderPaintedRegion, error)
+}
+
+// InputModeProvider exposes the application's production terminal parser configuration.
+type InputModeProvider struct {
+	ID, Version, Method string
+	Observe             func(Context) (protocol.ProviderTerminalInputModes, error)
+}
+
+type provider struct {
+	ID, Version, Method string
+	Capabilities        []string
+	Observe             func(Context) (observation, error)
+}
+
+type observation struct {
+	PointerRegions []protocol.ProviderPointerRegion
+	HitTest        func(column, row int) string
+	ActionRecipes  *[]protocol.ProviderActionRecipes
+	FocusRecipient **string
+	ScrollStates   *[]protocol.ProviderScrollState
+	PaintedRegions *[]protocol.ProviderPaintedRegion
+	InputModes     *protocol.ProviderTerminalInputModes
 }
 
 type entry struct {
-	provider Provider
+	provider provider
 	active   bool
 }
 
@@ -53,8 +98,33 @@ func DefaultRegistry() *Registry { return defaultRegistry }
 
 // RegisterPointerEvidenceProvider registers a production pointer router for
 // the process's next negotiated Termwright session.
-func RegisterPointerEvidenceProvider(provider Provider) (*Handle, error) {
-	return defaultRegistry.Register(provider)
+func RegisterPointerEvidenceProvider(value PointerProvider) (*Handle, error) {
+	return defaultRegistry.RegisterPointer(value)
+}
+
+// RegisterActionStrategyProvider registers production input recipes.
+func RegisterActionStrategyProvider(value ActionStrategyProvider) (*Handle, error) {
+	return defaultRegistry.RegisterActionStrategies(value)
+}
+
+// RegisterFocusEvidenceProvider registers production focus-manager evidence.
+func RegisterFocusEvidenceProvider(value FocusProvider) (*Handle, error) {
+	return defaultRegistry.RegisterFocus(value)
+}
+
+// RegisterScrollEvidenceProvider registers production application viewport evidence.
+func RegisterScrollEvidenceProvider(value ScrollProvider) (*Handle, error) {
+	return defaultRegistry.RegisterScroll(value)
+}
+
+// RegisterPaintEvidenceProvider registers production paint attribution.
+func RegisterPaintEvidenceProvider(value PaintProvider) (*Handle, error) {
+	return defaultRegistry.RegisterPaint(value)
+}
+
+// RegisterTerminalInputModeEvidenceProvider registers production parser modes.
+func RegisterTerminalInputModeEvidenceProvider(value InputModeProvider) (*Handle, error) {
+	return defaultRegistry.RegisterInputModes(value)
 }
 
 // Handle controls provider lifetime.
@@ -65,8 +135,99 @@ type Handle struct {
 
 func (h *Handle) Close() { h.once.Do(h.dispose) }
 
-// Register adds a provider before any active session freezes the registry.
-func (r *Registry) Register(provider Provider) (*Handle, error) {
+// RegisterPointer adds a closed pointer provider family before contract freeze.
+func (r *Registry) RegisterPointer(value PointerProvider) (*Handle, error) {
+	for _, capability := range value.Capabilities {
+		if capability != "pointer-regions" && capability != "hit-test" {
+			return nil, fmt.Errorf("termwright evidence: pointer provider cannot declare %q", capability)
+		}
+	}
+	return r.register(provider{
+		ID: value.ID, Version: value.Version, Method: value.Method,
+		Capabilities: value.Capabilities,
+		Observe: func(context Context) (observation, error) {
+			result, err := value.Observe(context)
+			return observation{PointerRegions: result.PointerRegions, HitTest: result.HitTest}, err
+		},
+	})
+}
+
+// RegisterActionStrategies adds a closed physical strategy family.
+func (r *Registry) RegisterActionStrategies(value ActionStrategyProvider) (*Handle, error) {
+	return r.register(provider{
+		ID: value.ID, Version: value.Version, Method: value.Method,
+		Capabilities: []string{"action-recipes"},
+		Observe: func(context Context) (observation, error) {
+			result, err := value.Observe(context)
+			if err != nil {
+				return observation{}, err
+			}
+			return observation{ActionRecipes: &result}, nil
+		},
+	})
+}
+
+// RegisterFocus adds a closed focus provider family before contract freeze.
+func (r *Registry) RegisterFocus(value FocusProvider) (*Handle, error) {
+	return r.register(provider{
+		ID: value.ID, Version: value.Version, Method: value.Method,
+		Capabilities: []string{"focus-state"},
+		Observe: func(context Context) (observation, error) {
+			result, err := value.Observe(context)
+			if err != nil {
+				return observation{}, err
+			}
+			return observation{FocusRecipient: &result}, nil
+		},
+	})
+}
+
+// RegisterScroll adds a closed scroll provider family before contract freeze.
+func (r *Registry) RegisterScroll(value ScrollProvider) (*Handle, error) {
+	return r.register(provider{
+		ID: value.ID, Version: value.Version, Method: value.Method,
+		Capabilities: []string{"scroll-state"},
+		Observe: func(context Context) (observation, error) {
+			result, err := value.Observe(context)
+			if err != nil {
+				return observation{}, err
+			}
+			return observation{ScrollStates: &result}, nil
+		},
+	})
+}
+
+// RegisterPaint adds a closed paint provider family before contract freeze.
+func (r *Registry) RegisterPaint(value PaintProvider) (*Handle, error) {
+	return r.register(provider{
+		ID: value.ID, Version: value.Version, Method: value.Method,
+		Capabilities: []string{"painted-regions"},
+		Observe: func(context Context) (observation, error) {
+			result, err := value.Observe(context)
+			if err != nil {
+				return observation{}, err
+			}
+			return observation{PaintedRegions: &result}, nil
+		},
+	})
+}
+
+// RegisterInputModes adds a closed terminal parser mode family before contract freeze.
+func (r *Registry) RegisterInputModes(value InputModeProvider) (*Handle, error) {
+	return r.register(provider{
+		ID: value.ID, Version: value.Version, Method: value.Method,
+		Capabilities: []string{"terminal-input-modes"},
+		Observe: func(context Context) (observation, error) {
+			result, err := value.Observe(context)
+			if err != nil {
+				return observation{}, err
+			}
+			return observation{InputModes: &result}, nil
+		},
+	})
+}
+
+func (r *Registry) register(provider provider) (*Handle, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.active > 0 {
@@ -81,13 +242,6 @@ func (r *Registry) Register(provider Provider) (*Handle, error) {
 	if err := validateCapabilities(provider.Capabilities); err != nil {
 		return nil, err
 	}
-	for _, existing := range r.entries {
-		for _, capability := range provider.Capabilities {
-			if has(existing.provider.Capabilities, capability) {
-				return nil, fmt.Errorf("termwright evidence: competing %s providers", capability)
-			}
-		}
-	}
 	provider.Capabilities = append([]string(nil), provider.Capabilities...)
 	e := &entry{provider: provider, active: true}
 	r.entries[provider.ID] = e
@@ -100,7 +254,7 @@ func validateCapabilities(values []string) error {
 	}
 	seen := map[string]bool{}
 	for _, value := range values {
-		if value != "pointer-regions" && value != "hit-test" {
+		if value != "pointer-regions" && value != "hit-test" && value != "focus-state" && value != "action-recipes" && value != "scroll-state" && value != "painted-regions" && value != "terminal-input-modes" {
 			return fmt.Errorf("termwright evidence: unknown capability %q", value)
 		}
 		if seen[value] {
@@ -184,9 +338,125 @@ func (l *lease) Collect(sessionID string, revision int64, columns, rows int) []p
 			result = append(result, base)
 			continue
 		}
+		if has(p.Capabilities, "action-recipes") && observation.ActionRecipes == nil {
+			base.Status = "violation"
+			base.Reason = "negotiated action-recipes evidence is unavailable"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
+		if !has(p.Capabilities, "action-recipes") && observation.ActionRecipes != nil {
+			base.Status = "violation"
+			base.Reason = "published action recipes without negotiating action-recipes"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
+		if has(p.Capabilities, "focus-state") && observation.FocusRecipient == nil {
+			base.Status = "violation"
+			base.Reason = "negotiated focus-state evidence is unavailable"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
+		if !has(p.Capabilities, "focus-state") && observation.FocusRecipient != nil {
+			base.Status = "violation"
+			base.Reason = "published focus state without negotiating focus-state"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
+		if has(p.Capabilities, "scroll-state") && observation.ScrollStates == nil {
+			base.Status = "violation"
+			base.Reason = "negotiated scroll-state evidence is unavailable"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
+		if !has(p.Capabilities, "scroll-state") && observation.ScrollStates != nil {
+			base.Status = "violation"
+			base.Reason = "published scroll state without negotiating scroll-state"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
+		if has(p.Capabilities, "painted-regions") && observation.PaintedRegions == nil {
+			base.Status = "violation"
+			base.Reason = "negotiated painted-regions evidence is unavailable"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
+		if !has(p.Capabilities, "painted-regions") && observation.PaintedRegions != nil {
+			base.Status = "violation"
+			base.Reason = "published painted regions without negotiating painted-regions"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
+		if has(p.Capabilities, "terminal-input-modes") && observation.InputModes == nil {
+			base.Status = "violation"
+			base.Reason = "negotiated terminal-input-modes evidence is unavailable"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
+		if !has(p.Capabilities, "terminal-input-modes") && observation.InputModes != nil {
+			base.Status = "violation"
+			base.Reason = "published input modes without negotiating terminal-input-modes"
+			base.Evidence = nil
+			result = append(result, base)
+			continue
+		}
 		regions := make([]protocol.ProviderPointerRegion, len(observation.PointerRegions))
 		copy(regions, observation.PointerRegions)
 		base.PointerRegions = &regions
+		if observation.ActionRecipes != nil {
+			recipes := append([]protocol.ProviderActionRecipes(nil), (*observation.ActionRecipes)...)
+			base.ActionRecipes = &recipes
+		}
+		if observation.FocusRecipient != nil {
+			if *observation.FocusRecipient == nil {
+				base.FocusState = &protocol.ProviderFocusState{Status: "none"}
+			} else {
+				base.FocusState = &protocol.ProviderFocusState{Status: "focused", RecipientID: **observation.FocusRecipient}
+			}
+		}
+		if observation.ScrollStates != nil {
+			states := append([]protocol.ProviderScrollState(nil), (*observation.ScrollStates)...)
+			valid := true
+			for _, state := range states {
+				if (state.Axis != "vertical" && state.Axis != "horizontal") || state.Offset < 0 || state.Viewport < 0 || state.Extent < 0 || state.Offset+state.Viewport > state.Extent {
+					valid = false
+					break
+				}
+			}
+			if !valid {
+				base.Status = "violation"
+				base.Reason = "scroll state must fit inside its extent"
+				base.Evidence = nil
+				result = append(result, base)
+				continue
+			}
+			base.ScrollStates = &states
+		}
+		if observation.PaintedRegions != nil {
+			regions := append([]protocol.ProviderPaintedRegion(nil), (*observation.PaintedRegions)...)
+			base.PaintedRegions = &regions
+		}
+		if observation.InputModes != nil {
+			modes := *observation.InputModes
+			if !has([]string{"none", "x10", "vt200", "drag", "any"}, modes.MouseTracking) ||
+				!has([]string{"default", "sgr", "urxvt", "utf8"}, modes.MouseEncoding) ||
+				!has([]string{"on", "off"}, modes.FocusReporting) {
+				base.Status = "violation"
+				base.Reason = "terminal input modes contain an invalid value"
+				base.Evidence = nil
+				result = append(result, base)
+				continue
+			}
+			base.InputModes = &modes
+		}
 		if has(p.Capabilities, "hit-test") {
 			grid, gridErr := exactGrid(observation, columns, rows, has(p.Capabilities, "pointer-regions"))
 			if gridErr != nil {
@@ -203,7 +473,7 @@ func (l *lease) Collect(sessionID string, revision int64, columns, rows int) []p
 	return result
 }
 
-func exactGrid(observation Observation, columns, rows int, verifyDeclaredRegions bool) (protocol.PointerHitGrid, error) {
+func exactGrid(observation observation, columns, rows int, verifyDeclaredRegions bool) (protocol.PointerHitGrid, error) {
 	if observation.HitTest == nil {
 		return protocol.PointerHitGrid{}, fmt.Errorf("negotiated hit-test callback unavailable")
 	}

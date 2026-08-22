@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionIntent
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:642
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:793
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:642
 
 > `readonly` **kind**: [`ActionKind`](../../type-aliases/actionkind/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:643
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:794
 
 ***
 
@@ -27,12 +27,12 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:643
 
 > `readonly` `optional` **selector?**: `string`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:644
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:795
 
 ***
 
 ### targetRef?
 
-> `readonly` `optional` **targetRef?**: `string`
+> `readonly` `optional` **targetRef?**: [`LocatorRef`](../../type-aliases/locatorref/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:645
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:796

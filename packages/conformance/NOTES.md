@@ -57,7 +57,7 @@ Round 3 (driver 23c61e5 and aa06a8a):
 
 Round 2 (driver 0e1b0fe, contract note 2d09049):
 
-4. **`waitForReady` called a dead program ready** — fixed; see the liveness
+4. **`waitForQuiet` called a dead program ready** — fixed; see the liveness
    split below, which is a deliberate distinction and must not be "harmonised"
    away later.
 5. **`SessionDiagnostic` carried no machine-readable wire code** — `wireCode?`
@@ -110,7 +110,7 @@ Round 6 (driver f17b251, e404026, cf1229d):
 ## The liveness split (do not "fix" this)
 
 `waitForText`, `waitForTitle` and `waitForRender` keep succeeding after the
-child has exited. `waitForReady` does not. That is not an inconsistency waiting
+child has exited. `waitForQuiet` does not. That is not an inconsistency waiting
 to be levelled — the two kinds of wait claim different things:
 
 - an **observation** wait asserts something about the past: text that was
@@ -382,9 +382,9 @@ has to delete an assertion that explains itself.
   wait here targets either the newest line or a full-frame repaint; the
   scrollback test waits on `SCROLL DONE`, which the fixture prints last on
   purpose.
-- **`waitForReady` can return before the command it should wait for starts.**
+- **`waitForQuiet` can return before the command it should wait for starts.**
   Between `press('Enter')` and the shell's `OSC 133 C`, the last mark still says
-  "prompt waiting", so a `waitForReady` issued immediately after a keystroke
+  "prompt waiting", so a `waitForQuiet` issued immediately after a keystroke
   resolves against the *previous* prompt. The prompt fixture prints
   `RUNNING <command>` at command start so the suite can wait for the command to
   be observably running first; a user hits the same race and needs the same

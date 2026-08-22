@@ -68,6 +68,57 @@ pub enum Observation<T> {
     },
 }
 
+/// Whether a semantic value may safely cross normal artifact boundaries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SemanticValueSensitivity {
+    /// The application declares the value safe to expose.
+    Public,
+    /// The value is sensitive and must be redacted by default.
+    Sensitive,
+}
+
+/// A semantic value with absence, support and confidentiality preserved.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum SemanticValueObservation {
+    /// The value is known for this committed revision.
+    Known {
+        /// Exact plaintext value.
+        value: String,
+        /// Application-declared artifact sensitivity.
+        sensitivity: SemanticValueSensitivity,
+        /// Source proving this value for the committed revision.
+        evidence: EvidenceProvenance,
+    },
+    /// The node authoritatively has no value now.
+    Absent {
+        /// Why the node currently has no semantic value.
+        reason: String,
+        /// Authoritative source proving absence.
+        evidence: EvidenceProvenance,
+    },
+    /// A later paired revision may provide the value.
+    Unknown {
+        /// Retryable revision-domain reason.
+        reason: String,
+    },
+    /// The frozen contract cannot provide semantic values.
+    Unsupported {
+        /// Always `semantic-value` on the v2 wire.
+        capability: String,
+        /// Why the capability is unavailable.
+        reason: String,
+    },
+    /// A value exists but its plaintext is deliberately not transported.
+    Withheld {
+        /// Policy or sensitivity reason for withholding plaintext.
+        reason: String,
+        /// Sensitivity of the omitted value.
+        sensitivity: SemanticValueSensitivity,
+    },
+}
+
 /// Provenance carried by every known physical observation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -182,6 +233,54 @@ pub struct ProviderPointerRegion {
     pub spans: Vec<ProviderPointerSpan>,
 }
 
+/// Exact viewport cells painted by an application's production painter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderPaintedRegion {
+    /// Semantic node whose production painter produced these cells.
+    pub recipient_id: String,
+    /// Bounding rectangle of all attributed spans.
+    pub region_bounds: Rect,
+    /// Exact possibly disjoint cells as canonical row spans.
+    pub spans: Vec<ProviderPointerSpan>,
+}
+
+/// Production keybinding recipes for one semantic recipient and revision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderActionRecipes {
+    /// Semantic node the application strategy targets.
+    pub recipient_id: String,
+    /// Data-only recipes executed later by Termwright's PTY devices.
+    pub recipes: Vec<PhysicalInputRecipe>,
+}
+
+/// Exact production focus-manager result for one committed revision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ProviderFocusState {
+    /// One semantic recipient owns focus.
+    Focused {
+        /// Stable semantic recipient id.
+        #[serde(rename = "recipientId")]
+        recipient_id: String,
+    },
+    /// The production focus manager authoritatively reports no focus owner.
+    None,
+}
+
+/// Production terminal parser configuration for one committed revision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderTerminalInputModes {
+    /// Mouse tracking level accepted by the production parser.
+    pub mouse_tracking: String,
+    /// Mouse report encoding accepted by the production parser.
+    pub mouse_encoding: String,
+    /// Whether the production parser accepts terminal focus reports.
+    pub focus_reporting: String,
+}
+
 /// Revision-bound application evidence. `status` is available, lost, or violation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -200,12 +299,53 @@ pub struct ProviderRevisionEvidence {
     /// Exact pointer regions when the provider supplies them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pointer_regions: Option<Vec<ProviderPointerRegion>>,
+    /// Production focus-manager result when negotiated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focus_state: Option<ProviderFocusState>,
+    /// Production action recipes when negotiated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action_recipes: Option<Vec<ProviderActionRecipes>>,
+    /// Production application viewport facts when negotiated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scroll_states: Option<Vec<ProviderScrollState>>,
+    /// Production painter attribution when negotiated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub painted_regions: Option<Vec<ProviderPaintedRegion>>,
+    /// Production terminal parser configuration when negotiated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_modes: Option<ProviderTerminalInputModes>,
     /// Complete verified production hit grid when negotiated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hit_grid: Option<PointerHitGrid>,
     /// Diagnostic explanation for lost or violating providers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+}
+
+/// Revision-bound application viewport state for one semantic recipient.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderScrollState {
+    /// Stable semantic recipient id.
+    pub recipient_id: String,
+    /// Logical scroll axis.
+    pub axis: Orientation,
+    /// First visible logical unit.
+    pub offset: i64,
+    /// Visible logical units.
+    pub viewport: i64,
+    /// Total logical units.
+    pub extent: i64,
+}
+
+/// Exact painted cells attached to a semantic node observation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SemanticPaintedRegion {
+    /// Bounding rectangle of all attributed spans.
+    pub region_bounds: Rect,
+    /// Exact possibly disjoint cells as canonical row spans.
+    pub spans: Vec<ProviderPointerSpan>,
 }
 
 /// Whether a tri-state control is on, off, or partially selected.
@@ -287,6 +427,12 @@ pub struct State {
     /// The text control accepts newlines.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub multiline: Option<bool>,
+    /// The control requires a value or selection before submission.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    /// The composite permits more than one selected descendant.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub multiselectable: Option<bool>,
     /// Layout direction of a composite widget.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub orientation: Option<Orientation>,
@@ -299,12 +445,6 @@ pub struct State {
     /// Number of siblings in the set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub set_size: Option<i64>,
-    /// First visible unit of scrollable content.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub scroll_offset: Option<i64>,
-    /// Total scrollable units.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub scroll_extent: Option<i64>,
 }
 
 impl State {
@@ -326,6 +466,45 @@ pub struct TextRange {
     pub rect: Rect,
 }
 
+/// Semantic intent backed by a physical PTY-input recipe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PhysicalInputRecipeAction {
+    /// Move authoritative application focus to the target.
+    Focus,
+    /// Invoke the target's primary action.
+    Activate,
+    /// Change the target's checked/toggled state.
+    Toggle,
+    /// Replace the target's editable value.
+    SetValue,
+}
+
+/// One data-only recipe step; no framework callback can cross this boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum PhysicalInputRecipeStep {
+    /// Press one terminal key through the real PTY input device.
+    Press {
+        /// Key descriptor interpreted by Termwright's keyboard device.
+        key: String,
+    },
+    /// Insert the value supplied to the current semantic action at execution time.
+    InsertActionValue,
+}
+
+/// A revision-bound, data-only physical strategy for one semantic intent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PhysicalInputRecipe {
+    /// Semantic intent implemented by this recipe.
+    pub action: PhysicalInputRecipeAction,
+    /// Whether the target must already be focused before executing the steps.
+    pub requires_focus: bool,
+    /// Ordered real keyboard operations. At least one step is required.
+    pub steps: Vec<PhysicalInputRecipeStep>,
+}
+
 /// One accessible node with evidence-qualified geometry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -342,9 +521,9 @@ pub struct Node {
     /// Longer description, when one exists.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// Current value of a value-bearing node.
+    /// Current value of a value-bearing node, without collapsing secrets.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<String>,
+    pub value: Option<SemanticValueObservation>,
     /// Asserted state flags; unset members are not claims.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<State>,
@@ -354,6 +533,9 @@ pub struct Node {
     /// Capability hints, never callback endpoints.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub actions: Option<Vec<Action>>,
+    /// Authoritative physical recipe executed only by Termwright devices.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_recipes: Option<Vec<PhysicalInputRecipe>>,
     /// Ids of nodes that name this one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub labelled_by: Option<Vec<String>>,
@@ -379,6 +561,26 @@ pub struct Node {
     pub px: Option<BTreeMap<String, Provenance>>,
     /// Qualified layout facts for this committed observation.
     pub geometry: NodeGeometryObservations,
+    /// Production application viewport state, not terminal scrollback.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scroll: Option<Observation<ScrollState>>,
+    /// Exact production-painted cells, distinct from layout and pointer ownership.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub painted_region: Option<Observation<SemanticPaintedRegion>>,
+}
+
+/// Application viewport state in production-defined logical units.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ScrollState {
+    /// Logical scroll axis.
+    pub axis: Orientation,
+    /// First visible logical unit.
+    pub offset: i64,
+    /// Visible logical units.
+    pub viewport: i64,
+    /// Total logical units.
+    pub extent: i64,
 }
 
 /// Where a semantic fact came from. Closed set.
@@ -391,6 +593,8 @@ pub enum Provenance {
     Recognizer,
     /// What the framework itself reported.
     Framework,
+    /// What the application's production mechanism reported.
+    Application,
     /// What matching across sources implied.
     Correlation,
     /// A guess that happened to be useful.
@@ -410,6 +614,7 @@ impl Node {
             state: None,
             extended: None,
             actions: None,
+            input_recipes: None,
             labelled_by: None,
             described_by: None,
             text_ranges: None,
@@ -431,6 +636,8 @@ impl Node {
                     reason: "framework-unobservable".into(),
                 },
             },
+            scroll: None,
+            painted_region: None,
         }
     }
 

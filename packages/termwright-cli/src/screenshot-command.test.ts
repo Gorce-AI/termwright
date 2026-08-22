@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTraceWriter } from '@termwright/trace';
-import type { SessionEventMap, SessionEvents } from '@termwright/driver';
+import type { SessionEventMap, SessionEventRecord, SessionEvents } from '@termwright/driver';
 import { captureScreenshot, checkRequest } from './screenshot-command.js';
 
 type Listener = (payload: never) => void;
@@ -12,6 +12,9 @@ type Listener = (payload: never) => void;
 class Recorded {
   readonly sessionId = 'shot-session';
   readonly #listeners = new Map<keyof SessionEventMap, Set<Listener>>();
+  readonly #journalListeners = new Set<(record: SessionEventRecord) => void>();
+  readonly #journal: SessionEventRecord[] = [];
+  #sequence = 0;
   clock = 0;
 
   readonly now = (): number => this.clock;
@@ -28,6 +31,14 @@ class Recorded {
         set.delete(callback as Listener);
       };
     },
+    checkpoint: () => this.#sequence,
+    subscribe: (options, callback) => {
+      for (const record of this.#journal) {
+        if (record.sequence >= options.fromSequence) callback(record);
+      }
+      this.#journalListeners.add(callback);
+      return () => this.#journalListeners.delete(callback);
+    },
   };
 
   semanticTree(): null {
@@ -35,6 +46,9 @@ class Recorded {
   }
 
   emit<E extends keyof SessionEventMap>(event: E, payload: SessionEventMap[E]): void {
+    const record = { sequence: ++this.#sequence, type: event, payload } as SessionEventRecord;
+    this.#journal.push(record);
+    for (const listener of this.#journalListeners) listener(record);
     for (const listener of this.#listeners.get(event) ?? []) {
       (listener as (value: SessionEventMap[E]) => void)(payload);
     }

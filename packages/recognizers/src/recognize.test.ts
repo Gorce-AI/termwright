@@ -139,7 +139,7 @@ describe('developer intent merge', () => {
       role: 'textbox',
       name: 'Domain input',
       description: 'Provided by the application',
-      value: 'physical',
+      value: expect.objectContaining({ status: 'known', value: 'physical', sensitivity: 'sensitive' }),
       geometry: expect.objectContaining({
         intendedRect: expect.objectContaining({ value: { row: 3, column: 4, width: 12, height: 1 } }),
       }),
@@ -381,7 +381,10 @@ describe('physical facts stay the framework\'s', () => {
       context,
     );
 
-    expect(snapshot.nodes[0]?.value).toBe('');
+    expect(snapshot.nodes[0]?.value).toEqual({
+      status: 'known', value: '', sensitivity: 'sensitive',
+      evidence: { source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'opentui' },
+    });
   });
 
   it('maps focus and display straight through', () => {

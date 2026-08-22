@@ -200,9 +200,9 @@ it; `resize` waits for PTY resize + a subsequent stable render. Optional
 `activate()` reports which physical strategy it used.
 
 Waits are revision/event-based, never sleeps: `waitFor({state})`, `waitForText`,
-`waitForRender({after})`, `waitForStable({frames, timeout})` ("no screen or
+`waitForRender({after})`, `waitForQuiet({frames, timeout})` ("no screen or
 semantic revision for a quiet interval, no unpaired render in flight"),
-`waitForIdle` and `waitForReady` (shell prompt) for generic sessions. Timeout
+`waitForQuiet` and `waitForQuiet` (shell prompt) for generic sessions. Timeout
 classes: separate defaults for text/idle/ready/exit/action, each overridable
 per call, config, and env.
 

@@ -16,7 +16,7 @@ func TestTermwrightSemanticKeysStabiliseIDsAndResolveRelations(t *testing.T) {
 		node: protocol.Node{
 			Role:  protocol.RoleTextbox,
 			Name:  "framework name",
-			Value: protocol.Text("live"),
+			Value: protocol.PublicValue("live", termwrightEvidence("instrumented")),
 			State: &protocol.State{Focused: protocol.Bool(true)},
 			P:     protocol.ProvenanceFramework,
 			PX:    map[string]string{"role": protocol.ProvenanceRecognizer},
@@ -51,7 +51,8 @@ func TestTermwrightSemanticKeysStabiliseIDsAndResolveRelations(t *testing.T) {
 	if !reflect.DeepEqual(got.Actions, []protocol.Action{protocol.ActionFocus, protocol.ActionSetValue}) {
 		t.Fatalf("actions were not closed and deduplicated: %v", got.Actions)
 	}
-	if got.Value == nil || *got.Value != "live" || got.State == nil || got.State.Focused == nil || !*got.State.Focused {
+	if got.Value == nil || got.Value.Status != "known" || got.Value.Value == nil || *got.Value.Value != "live" ||
+		got.State == nil || got.State.Focused == nil || !*got.State.Focused {
 		t.Fatalf("annotation replaced live framework facts: %+v", got)
 	}
 	for _, field := range []string{"id", "name", "actions", "labelledBy", "describedBy"} {

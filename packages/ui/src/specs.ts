@@ -69,19 +69,23 @@ async function readRecentResults(runsDir: string): Promise<Map<string, Recorded[
   const runs = (await readRunHistory(runsDir)).slice(0, MANIFESTS_READ);
 
   for (const summary of runs) {
+    // Health records are surfaced by Runs. They are deliberately excluded
+    // from performance/result facts because they do not certify test results.
+    if (summary.state !== 'complete') continue;
     const manifest = await readRunManifest(runsDir, summary.id);
-    if (manifest === null) continue;
+    if (manifest.state !== 'complete') continue;
 
     const perFile = new Map<string, { failed: boolean; skipped: boolean; durationMs: number }>();
     for (const test of manifest.tests) {
       if (test.file === '') continue;
+      if (test.status === 'incomplete' || test.status === 'not-run') continue;
       const seen = perFile.get(test.file) ?? { failed: false, skipped: true, durationMs: 0 };
       perFile.set(test.file, {
         // One failure makes the file's run a failure, which is how a person
         // reads a spec file's result.
         failed: seen.failed || test.status === 'failed',
         skipped: seen.skipped && test.status === 'skipped',
-        durationMs: seen.durationMs + test.durationMs,
+        durationMs: seen.durationMs + (test.durationMs ?? 0),
       });
     }
 

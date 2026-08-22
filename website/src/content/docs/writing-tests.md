@@ -77,7 +77,7 @@ await expect(app.getByRole('button', {name: 'Save'})).toBeFocused();
 Avoid `setTimeout()` and fixed sleeps. They add latency and still fail under a
 slower machine.
 
-Use `waitForStable()` before an action that requires geometry to stop moving.
+Use `waitForQuiet()` before an action that requires geometry to stop moving.
 Use `waitForExit()` when process termination is the outcome under test.
 
 ## Group actions into steps

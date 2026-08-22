@@ -8,6 +8,23 @@ import { appReducer } from './reducer.js';
 import { nodesForSelected } from './selectors.js';
 
 describe('greenfield application reducer identities', () => {
+  it('makes bounded diagnostic loss visible and cumulative', () => {
+    let state = appReducer(initialAppState, {
+      type: 'message',
+      message: { v: 1, type: 'diagnostic-gap', source: 'ui-hub', droppedMessages: 7, droppedBytes: 1_024 },
+    });
+    state = appReducer(state, {
+      type: 'message',
+      message: { v: 1, type: 'diagnostic-gap', source: 'live-session-producer', droppedMessages: 2, droppedBytes: 64 },
+    });
+
+    expect(state.run.diagnosticGaps).toBe(9);
+    expect(state.toast).toMatchObject({
+      tone: 'failure',
+      text: expect.stringContaining('2 projected messages were dropped'),
+    });
+  });
+
   it('keeps a pinned historical replay while a new live run starts', () => {
     const history = execution('history-run', 'history-runtime', 'history-session');
     const replay = {
@@ -33,10 +50,10 @@ describe('greenfield application reducer identities', () => {
 
     const after = appReducer(before, {
       type: 'message',
-      message: { v: 1, type: 'run-start', mode: 'live', startedAt: 2_000 },
+      message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2_000 },
     });
 
-    expect(after.run.runId).toBe('run:2000');
+    expect(after.run.runId).toBe('run:test');
     expect(after.selectedExecutionId).toBe(history.executionId);
     expect(after.evidence).toBe(before.evidence);
     expect(after.executions).toEqual([history]);
@@ -55,25 +72,25 @@ describe('greenfield application reducer identities', () => {
       },
     };
     state = appReducer(state, { type: 'run-requested', targets: [history.caseKey] });
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', mode: 'live', startedAt: 2 } });
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'new-runtime', title: 'case', file: '/repo/case.test.ts', startedAt: 2 } });
+    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 } });
+    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'new-runtime', runnerTaskId: history.caseKey, title: 'case', file: '/repo/case.test.ts', startedAt: 2 } });
 
-    expect(state.selectedExecutionId).toBe('run:2:new-runtime:1');
-    expect(state.evidence).toEqual({ kind: 'live', runId: 'run:2', executionId: 'run:2:new-runtime:1' });
+    expect(state.selectedExecutionId).toBe('run:test:new-runtime:1');
+    expect(state.evidence).toEqual({ kind: 'live', runId: 'run:test', executionId: 'run:test:new-runtime:1' });
     expect(state.selectedSessionId).toBeNull();
     expect(state.pendingRunTargets).toBeNull();
   });
 
   it('keeps the requested scope after the pending latch clears and resets it for a background run', () => {
-    const selected = '/repo/a.test.ts::suite > A';
+    const selected = 'runner-task:a';
     let state = appReducer(initialAppState, { type: 'run-requested', targets: [selected] });
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', mode: 'live', startedAt: 10 } });
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'runtime-a', title: 'suite > A', file: '/repo/a.test.ts', startedAt: 10 } });
+    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 10 } });
+    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'runtime-a', runnerTaskId: selected, title: 'suite > A', file: '/repo/a.test.ts', startedAt: 10 } });
     expect(state.pendingRunTargets).toBeNull();
     expect(state.run.requestedTargets).toEqual([selected]);
     state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } } });
     expect(state.run.requestedTargets).toEqual([selected]);
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', mode: 'live', startedAt: 20 } });
+    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 20 } });
     expect(state.run.requestedTargets).toBeNull();
   });
 
@@ -104,7 +121,7 @@ describe('greenfield application reducer identities', () => {
     });
     const oldExecution = state.executions[0] as ExecutionCase;
 
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', mode: 'live', startedAt: 2 } });
+    state = appReducer(state, { type: 'message', message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 } });
     state = start(state, 'same-runtime', 'same-session', 2);
     state = appReducer(state, {
       type: 'message',
@@ -153,7 +170,7 @@ describe('greenfield application reducer identities', () => {
     state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-end', id: 'runtime-a', status: 'passed', durationMs: 1, flaky: false, lostLogRecords: 0 } });
     state = appReducer(state, {
       type: 'message',
-      message: { v: 1, type: 'test-start', id: 'runtime-b', title: 'case without terminal', file: '/repo/b.test.ts', startedAt: 2 },
+      message: { v: 1, type: 'test-start', id: 'runtime-b', runnerTaskId: 'runner-task:b', title: 'case without terminal', file: '/repo/b.test.ts', startedAt: 2 },
     });
     expect(state.selectedSessionId).toBeNull();
     expect(state.selectedExecutionId).toBe('run:1:runtime-b:1');
@@ -163,7 +180,7 @@ describe('greenfield application reducer identities', () => {
   it('keeps the selected running case when another concurrent case starts', () => {
     let state: AppState = { ...initialAppState, run: { ...initialAppState.run, runId: 'run:1', status: 'running' } };
     state = start(state, 'runtime-a', 'session-a', 1);
-    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'runtime-b', title: 'case b', file: '/repo/b.test.ts', startedAt: 2 } });
+    state = appReducer(state, { type: 'message', message: { v: 1, type: 'test-start', id: 'runtime-b', runnerTaskId: 'runner-task:b', title: 'case b', file: '/repo/b.test.ts', startedAt: 2 } });
     expect(state.selectedExecutionId).toBe('run:1:runtime-a:1');
     expect(state.selectedSessionId).toBe('run:1:session-a');
     expect(state.executions.map((test) => test.status)).toEqual(['running', 'running']);
@@ -176,7 +193,7 @@ describe('greenfield application reducer identities', () => {
     };
     const after = appReducer(before, {
       type: 'message',
-      message: { v: 1, type: 'run-start', mode: 'live', startedAt: 2 },
+      message: { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 2 },
     });
     expect(after.run).toMatchObject({ mode: 'live', status: 'idle' });
   });
@@ -260,7 +277,7 @@ describe('greenfield application reducer identities', () => {
 function start(state: AppState, runtimeId: string, sessionId: string, startedAt: number): AppState {
   let next = appReducer(state, {
     type: 'message',
-    message: { v: 1, type: 'test-start', id: runtimeId, title: 'case', file: '/repo/case.test.ts', startedAt, sessionId },
+    message: { v: 1, type: 'test-start', id: runtimeId, runnerTaskId: `runner-task:${runtimeId}`, title: 'case', file: '/repo/case.test.ts', startedAt, sessionId },
   });
   next = appReducer(next, {
     type: 'message',

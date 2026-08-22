@@ -41,6 +41,8 @@ let loaderVisible = process.env['TERMWRIGHT_FIXTURE_LOADER'] === '1';
 // received from a real adapter process rather than merely unit-testing the
 // composition helper.
 const staleProviderEvidence = process.env['TERMWRIGHT_FIXTURE_STALE_PROVIDER'] === '1';
+const providerActionRecipes = process.env['TERMWRIGHT_FIXTURE_PROVIDER_ACTION_RECIPES'] === '1';
+const providerFocusState = process.env['TERMWRIGHT_FIXTURE_PROVIDER_FOCUS_STATE'] === '1';
 
 let sessionId = null;
 let revision = 0;
@@ -58,6 +60,17 @@ let logBudget = null;
  */
 const probeMode = process.env['TERMWRIGHT_FIXTURE_PROBE'];
 let typed = '';
+const focusOrder = ['approve', 'reject', 'name'];
+
+function focusRecipe(target) {
+  if (focused === target) return [];
+  const key = target === 'approve' ? 'P' : target === 'reject' ? 'J' : 'N';
+  return [{
+    action: 'focus',
+    requiresFocus: false,
+    steps: [{ kind: 'press', key }],
+  }];
+}
 
 function draw() {
   process.stdout.write('\x1b[2J\x1b[H');
@@ -94,10 +107,14 @@ function tree() {
         testId: 'approve',
         bounds: { row: 1, column: 2, width: 9, height: 1 },
         state: {
-          focused: focused === 'approve',
+          ...(!providerFocusState ? { focused: focused === 'approve' } : {}),
           ...(conditionStates ? { checked: true, selected: true, expanded: false } : {}),
         },
         actions: ['focus', 'activate'],
+        ...(!providerActionRecipes ? { inputRecipes: [
+            ...focusRecipe('approve'),
+            { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+          ] } : {}),
       },
       {
         id: 'n4',
@@ -105,10 +122,23 @@ function tree() {
         role: 'textbox',
         name: 'Your name',
         testId: 'name-input',
-        value: typed,
+        value: {
+          status: 'known',
+          value: typed,
+          sensitivity: 'public',
+          evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'fixture' },
+        },
         bounds: { row: 2, column: 6, width: 20, height: 1 },
-        state: { focused: false },
+        state: !providerFocusState ? { focused: focused === 'name' } : undefined,
         actions: ['focus', 'setValue'],
+        ...(!providerActionRecipes ? { inputRecipes: [
+            ...focusRecipe('name'),
+            {
+              action: 'setValue',
+              requiresFocus: true,
+              steps: [{ kind: 'press', key: 'K' }, { kind: 'insert-action-value' }],
+            },
+          ] } : {}),
       },
       ...(probeMode === undefined
         ? []
@@ -130,8 +160,12 @@ function tree() {
         name: 'Reject',
         testId: 'reject',
         bounds: { row: 1, column: 14, width: 8, height: 1 },
-        state: { focused: focused === 'reject' },
+        state: !providerFocusState ? { focused: focused === 'reject' } : undefined,
         actions: ['focus', 'activate'],
+        ...(!providerActionRecipes ? { inputRecipes: [
+            ...focusRecipe('reject'),
+            { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+          ] } : {}),
       },
       ...(loaderVisible
         ? [{
@@ -212,9 +246,9 @@ function qualifiedSnapshot(snapshot) {
       ? { status: 'unsupported', capability: 'coordinate-space', reason: 'framework-unobservable' }
       : known(withoutAbsoluteBounds ? 'framework-local-cells' : 'viewport-cells', 'adapter'),
     hitGrid,
-    ...(staleProviderEvidence
+    ...(staleProviderEvidence || providerActionRecipes || providerFocusState
       ? {
-          providerEvidence: [{
+          providerEvidence: [...(staleProviderEvidence ? [{
             providerId: 'fixture-production-router',
             sessionId,
             // Revision 1 is valid so negotiation can freeze normally; the
@@ -235,7 +269,44 @@ function qualifiedSnapshot(snapshot) {
             // Match the framework's complete production ownership map on the
             // valid first frame. Only the next frame's revision is corrupt.
             hitGrid: hitGrid.status === 'known' ? hitGrid.value : {regions: []},
-          }],
+          }] : []), ...(providerActionRecipes ? [{
+            providerId: 'fixture-production-keys',
+            sessionId,
+            revision,
+            status: 'available',
+            evidence: {
+              source: 'application', method: 'native', strength: 'authoritative',
+              providerId: 'fixture-production-keys',
+            },
+            pointerRegions: [],
+            actionRecipes: [
+              { recipientId: 'n2', recipes: [
+                ...focusRecipe('approve'),
+                { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+              ] },
+              { recipientId: 'n3', recipes: [
+                ...focusRecipe('reject'),
+                { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+              ] },
+              { recipientId: 'n4', recipes: [
+                ...focusRecipe('name'),
+                { action: 'setValue', requiresFocus: true, steps: [
+                  { kind: 'press', key: 'K' }, { kind: 'insert-action-value' },
+                ] },
+              ] },
+            ],
+          }] : []), ...(providerFocusState ? [{
+            providerId: 'fixture-production-focus',
+            sessionId,
+            revision,
+            status: 'available',
+            evidence: {
+              source: 'application', method: 'native', strength: 'authoritative',
+              providerId: 'fixture-production-focus',
+            },
+            pointerRegions: [],
+            focusState: { status: 'focused', recipientId: focused === 'approve' ? 'n2' : focused === 'reject' ? 'n3' : 'n4' },
+          }] : [])],
         }
       : {}),
   };
@@ -298,6 +369,15 @@ process.stdin.setRawMode?.(true);
 process.stdin.resume();
 process.stdin.on('data', (chunk) => {
   const text = chunk.toString('utf8');
+  // PTYs are byte streams, not message transports. The clear recipe and the
+  // immediately following typed payload may arrive as one chunk (`Kada`) or
+  // as two; the production parser must assign identical meaning to both.
+  const combinedReplace = /^K([a-z]+)$/u.exec(text);
+  if (combinedReplace !== null) {
+    typed = combinedReplace[1];
+    publish();
+    return;
+  }
   if (text === '\x03' || text === 'q') {
     process.stdout.write('BYE\r\n');
     process.exit(0);
@@ -382,12 +462,36 @@ process.stdin.on('data', (chunk) => {
     publish();
     return;
   }
+  if (text === 'P' || text === 'J' || text === 'N') {
+    focused = text === 'P' ? 'approve' : text === 'J' ? 'reject' : 'name';
+    lastEvent = `FOCUS ${focused}`;
+    publish();
+    return;
+  }
+  if (text === 'K') {
+    typed = '';
+    publish();
+    return;
+  }
   if (text === '\r' || text === ' ') {
     lastEvent = `ACTIVATED ${focused}`;
     publish();
     return;
   }
-  if (/^[a-z]$/u.test(text) && text !== 'q') {
+  if (/^\t+$/u.test(text)) {
+    for (const _tab of text) focused = focusOrder[(focusOrder.indexOf(focused) + 1) % focusOrder.length];
+    lastEvent = `FOCUS ${focused}`;
+    publish();
+    return;
+  }
+  if (text.startsWith('\x15')) {
+    typed = '';
+    const inserted = text.slice(1);
+    if (/^[a-z]+$/u.test(inserted)) typed += inserted;
+    publish();
+    return;
+  }
+  if (/^[a-z]+$/u.test(text) && text !== 'q') {
     typed += text;
     publish();
     return;
@@ -420,21 +524,33 @@ if (endpoint === undefined || token === undefined) {
             ...((!withoutBounds || brokenGeometryGuarantee) && !withoutAbsoluteBounds ? ['intended-geometry'] : []),
             ...(!withoutBounds && !withoutAbsoluteBounds ? ['clipped-geometry'] : []),
             'states',
+            ...(!providerFocusState ? ['focus-state'] : []),
             'actions',
+            ...(!providerActionRecipes ? ['action-recipes'] : []),
             'render-revisions',
             'logs',
             ...(!withoutBounds && !withoutAbsoluteBounds && probeMode === undefined
               ? ['pointer-hit-grid']
               : []),
           ],
-          ...(staleProviderEvidence
+          ...(staleProviderEvidence || providerActionRecipes || providerFocusState
             ? {
-                providers: [{
+                providers: [...(staleProviderEvidence ? [{
                   id: 'fixture-production-router',
                   version: '1.0.0',
                   method: 'native',
                   capabilities: ['pointer-regions', 'hit-test'],
-                }],
+                }] : []), ...(providerActionRecipes ? [{
+                  id: 'fixture-production-keys',
+                  version: '1.0.0',
+                  method: 'native',
+                  capabilities: ['action-recipes'],
+                }] : []), ...(providerFocusState ? [{
+                  id: 'fixture-production-focus',
+                  version: '1.0.0',
+                  method: 'native',
+                  capabilities: ['focus-state'],
+                }] : [])],
               }
             : {}),
           ...(probeMode === undefined && !pendingFocusFrame

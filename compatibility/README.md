@@ -2,34 +2,46 @@
 
 [`registry.json`](registry.json) is the single source of truth for framework
 compatibility. It separates a package's declared range from versions actually
-verified by fixtures/audits, and records both capability vocabularies carried
-by the `hello` handshake:
+verified by fixtures/audits, and binds the exact producer facts carried by the
+`hello` handshake into the executable protocol capability graph:
 
 - `probe.capabilities` describes observable probe facts (`hello.probe`);
-- `probe.adapterCapabilityVariants` describes message features on `hello`.
+- `probe.adapterCapabilities` describes the one certified message contract on
+  `hello`; structural variants are forbidden.
 
 Copy-based probes also list every checksummed module patch. Optional annotation
 APIs and known limitations belong in the framework row rather than in a second
 hand-maintained matrix.
 
-Schema v3 additionally binds each executable row to:
+Schema v5 binds each executable row to:
 
 - the exact `certification.ids` emitted by the frozen session contract and the
   checksum profile or patch manifests that justify them;
-- application provider types, capability extensions and language-native SDKs;
-- terminal runtime prerequisites, kept separate from static support;
-- named conformance areas and real fixture paths.
+- the `automatic`, `applicationIntegrated`, `terminal`, and `unsupported`
+  partition of every frozen session capability;
+- accepted provider facts and language-native SDKs;
+- terminal runtime prerequisite IDs, kept separate from static support;
+- mandatory conformance claim IDs and the real executable files proving them.
 
-CI rejects missing checksum sources, nonexistent fixtures, certification IDs
-that drift from verified versions, or `application-integrated` pointer support
-without an accepted pointer provider. The website tables are generated from
-the same fields, while Runner displays the negotiated instance of that
-contract rather than copying this registry into browser logic.
+CI rejects graph orphans, impossible remediation, missing checksum sources,
+nonexistent claim files, certification IDs that drift from verified versions,
+or provider support without a producer-to-session graph edge. The website
+tables and remediation text are generated from the same graph, while Runner
+displays the negotiated instance rather than copying a capability matrix.
+
+[`framework-semantic-completeness.json`](framework-semantic-completeness.json)
+is a generated, machine-readable projection of every exact adapter row. It
+records upstream/probe facts, automatically portable capabilities,
+application-provider additions, runtime input prerequisites, facts retained
+only as extended/diagnostic evidence, remaining automatic limits, and the
+executable claim files. It introduces no second source of truth: CI regenerates
+it from `registry.json` and rejects drift.
 
 Validate a change with:
 
 ```sh
 pnpm run test:compatibility
+pnpm run check:semantic-completeness
 ```
 
 The test compares package versions, patch manifests, framework detection and

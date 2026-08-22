@@ -22,7 +22,7 @@ describe.skipIf(!pty)('the todo app', () => {
     const app = await terminal.launch();
     // No shell integration here, so this settles on a quiet screen — the
     // diagnostic log says which of the two strategies was used.
-    await app.waitForReady();
+    await app.waitForQuiet();
 
     // Written to __snapshots__/app.e2e.test.ts.tw-semantic.yaml on first run
     // and compared strictly after that: a file snapshot is a fence around the
@@ -30,7 +30,7 @@ describe.skipIf(!pty)('the todo app', () => {
     // so it is what waits for the probe's handshake — the plain read of the
     // capability below is only meaningful once a tree has arrived.
     await expect(app).toMatchSemanticSnapshot();
-    expect(app.capabilities().semanticTree).toBe(true);
+    expect(app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
     // A semantic snapshot can pass on a blank screen: the tree is published by
     // the probe, not read off the terminal. The cell snapshot is the second
     // oracle that says something was actually painted.
@@ -39,7 +39,7 @@ describe.skipIf(!pty)('the todo app', () => {
 
   test('filters the list by what is typed into the filter box', async ({ terminal, step }) => {
     const app = await terminal.launch();
-    await app.waitForReady();
+    await app.waitForQuiet();
 
     await app.type('ship');
 
@@ -52,24 +52,14 @@ describe.skipIf(!pty)('the todo app', () => {
 
   test('asks for confirmation before removing a todo', async ({ terminal, step }) => {
     const app = await terminal.launch();
-    await app.waitForReady();
-
-    async function pressAndWaitForRender(key: string): Promise<void> {
-      // Arm the causal boundary before input. Calling waitForStable() after the
-      // write can observe the old screen as already quiet on a loaded runner
-      // and let the next key overtake the React render caused by this one.
-      const before = app.checkpoint();
-      await app.press(key);
-      await app.waitForRender({ after: before.screenRevision });
-    }
-
-    await pressAndWaitForRender('Tab');
-    await pressAndWaitForRender('ArrowDown');
-    await pressAndWaitForRender('Tab');
-    await pressAndWaitForRender('Tab');
+    await app.waitForQuiet();
 
     await step('open the dialog', async () => {
-      await app.press('Enter');
+      // The semantic action uses the application's authoritative pointer
+      // router and verifies the committed causal consequence. A chain of raw
+      // keys plus generic screen revisions could be satisfied by unrelated
+      // terminal mode output on a loaded worker.
+      await app.getByRole('button', { name: 'Remove' }).click();
     });
 
     // Scoped to the dialog, so the pattern says what this test is about
@@ -88,19 +78,18 @@ describe.skipIf(!pty)('the todo app', () => {
     await expect(app.getByRole('listitem', { name: 'record a demo' })).toBeAttached();
 
     await step('open it again and confirm', async () => {
-      await app.press('Enter');
+      await app.getByRole('button', { name: 'Remove' }).click();
       await expect(app.getByRole('dialog')).toBeAttached();
-      await pressAndWaitForRender('Tab');
-      await app.press('Enter');
+      await app.getByRole('button', { name: 'Delete' }).click();
     });
 
-    await expect(app.getByRole('listitem', { name: 'record a demo' })).toBeDetached();
-    await expect(app).toHaveText('status: removed record a demo');
+    await expect(app.getByRole('listitem', { name: 'write the README' })).toBeDetached();
+    await expect(app).toHaveText('status: removed write the README');
   });
 
   test('uses the production pointer router but delivers clicks through the PTY', async ({ terminal }) => {
     const app = await terminal.launch();
-    await app.waitForReady();
+    await app.waitForQuiet();
 
     const remove = await app.getByRole('button', { name: 'Remove' }).click();
     await expect(app.getByRole('dialog', { name: 'Confirm' })).toBeAttached();

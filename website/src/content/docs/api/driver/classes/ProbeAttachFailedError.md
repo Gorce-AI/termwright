@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: ProbeAttachFailedError
 
-Defined in: [driver/src/errors.ts:86](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L86)
+Defined in: [driver/src/errors.ts:94](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L94)
 
 A semantic integration was explicitly required, but no probe completed negotiation.
 
@@ -25,7 +25,7 @@ A semantic integration was explicitly required, but no probe completed negotiati
 
 > **new ProbeAttachFailedError**(`message`, `diagnostics`): `ProbeAttachFailedError`
 
-Defined in: [driver/src/errors.ts:87](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L87)
+Defined in: [driver/src/errors.ts:95](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L95)
 
 #### Parameters
 

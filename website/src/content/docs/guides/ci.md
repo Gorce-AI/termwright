@@ -1,6 +1,6 @@
 ---
 title: Run tests in CI
-description: Run Termwright on CI, retain reports and traces, and retry failed cases with Vitest.
+description: Certify a Termwright run with explicit resources, zero hidden retries, and transactional evidence.
 ---
 
 Termwright runs on macOS, Windows, and glibc-based Linux. Use Node.js 22 or
@@ -28,38 +28,46 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test
+      - run: npx termwright doctor --json
+      - run: npx termwright test --resource-profile ci
         env:
           CI: 'true'
-          TERMWRIGHT_RETRIES: '2'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: termwright-report
-          path: termwright-report/
+          name: termwright-runs
+          path: .termwright/runs/
 ```
 
-`TERMWRIGHT_RETRIES=2` means two additional attempts, for at most three
-attempts total. Vitest remains the retry scheduler.
+The native host records the resolved resource profile, exact Vitest/Node
+runtime, RunId, AttemptIds, Git/CI provenance and authoritative journal in each
+committed run. `ci` is an explicit bounded PTY/process envelope; it is not a
+package-wide serialization switch.
 
-## Configure retries and reports
+## Retries do not certify determinism
 
-```ts
-// vitest.config.ts
-import {defineConfig} from 'vitest/config';
-import {termwrightRetry} from 'termwright/test';
-import TermwrightReporter from 'termwright/reporter';
-
-export default defineConfig({
-  test: {
-    retry: termwrightRetry({ci: 2, local: 0}),
-    reporters: ['default', new TermwrightReporter()],
-  },
-});
+```sh
+# Optional diagnostic experiment; a fail-then-pass run is still flaky/nonzero.
+npx termwright test --resource-profile ci -- --retry=2
 ```
 
-The report keeps earlier attempt failures with the final outcome. A case that
-passes after a failed attempt is marked flaky.
+Every retry gets a distinct AttemptId and evidence. Certification lanes use
+zero retries. If a diagnostic retry passes after an earlier failure, the host
+classifies the run as `flaky` and exits non-zero; a later pass never erases the
+reliability defect.
+
+For a determinism lane, repeat full lifecycle cycles inside one host rather
+than wrapping the command in a shell loop:
+
+```sh
+TERMWRIGHT_RETRIES=0 npx termwright test --runs 50 --resource-profile ci
+```
+
+Termwright's own certification also has separate bounded lanes for
+multi-terminal pressure, deterministic acquisition/cleanup faults, seeded
+shuffle (the seed is written to the job summary), resource-leak barriers,
+Windows ConPTY lifecycle stress, and a scheduled Node 22/24 soak on all three
+supported operating systems.
 
 ## Choose a trace policy
 
@@ -75,7 +83,8 @@ needed.
 - Set a terminal profile and palette when color or width is asserted.
 - Declare input files through the fixture instead of relying on a repository
   working directory.
-- Upload `termwright-report/` with `if: always()` so failed jobs retain it.
+- Upload `.termwright/runs/` with `if: always()` so complete and explicitly
+  incomplete infrastructure artifacts remain distinguishable.
 
 See [Configuration](../../reference/configuration/) for profiles and
 [Traces and reports](../../tools/traces-reports/) for artifact formats.

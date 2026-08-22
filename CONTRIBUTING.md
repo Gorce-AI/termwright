@@ -9,7 +9,7 @@ works; the long version is [`CONTRACTS.md`](CONTRACTS.md), which is normative.
 pnpm install
 pnpm -r --filter './packages/*' run build
 pnpm -r --filter './packages/*' run typecheck
-pnpm -r --filter './packages/*' run test
+pnpm test -- --resource-profile local
 ```
 
 Node >= 22 and pnpm 9. Most integration suites need a real pseudo-terminal and

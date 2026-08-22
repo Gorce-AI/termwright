@@ -35,7 +35,7 @@ describe.skipIf(!runnable)('the notes app', () => {
     await expect(add).toReceivePointerEvents();
 
     const draft = app.getByRole('textbox');
-    await app.waitForStable();
+    await app.waitForQuiet();
     await draft.click();
     await app.type('v2 pointer');
     await expect(draft).toHaveText('v2 pointer');
@@ -46,7 +46,7 @@ describe.skipIf(!runnable)('the notes app', () => {
     await app.waitForText('write the release notes');
     await app.getByRole('button', { name: 'Delete' }).activate();
     await expect(app.getByRole('dialog')).toBeVisible();
-    await app.waitForStable();
+    await app.waitForQuiet();
 
     const covered = app.getByTestId('add');
     const hit = await covered.hitTest();
@@ -65,7 +65,7 @@ describe.skipIf(!runnable)('the notes app', () => {
     // The matcher polls, so it is what waits for the probe's handshake — a
     // plain read of the capability is only meaningful once a tree arrived.
     await expect(app).toMatchSemanticSnapshot();
-    expect(app.capabilities().semanticTree).toBe(true);
+    expect(app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
   });
 
   test('adds a note from the input field', async ({ terminal, step }) => {

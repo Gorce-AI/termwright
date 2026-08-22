@@ -92,7 +92,8 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
 .tw-project-context { display: flex; align-items: center; gap: 9px; color: var(--tw-muted); font-size: 11px; }
 .tw-project-context strong { padding: 5px 8px; border: 1px solid var(--tw-stroke); border-radius: 999px; color: var(--tw-copy); }
 
-.tw-runner-page { display: grid; grid-template-rows: minmax(0,1fr); height: 100dvh; min-height: 0; padding: 0; gap: 0; }
+.tw-runner-page { position: relative; display: grid; grid-template-rows: minmax(0,1fr); height: 100dvh; min-height: 0; padding: 0; gap: 0; }
+.tw-diagnostic-gap { position: absolute; z-index: 30; top: 8px; left: 50%; transform: translateX(-50%); max-width: min(760px, calc(100% - 32px)); padding: 8px 12px; border: 1px solid rgba(255,184,77,.45); border-radius: 8px; background: rgba(43,31,13,.96); color: var(--tw-amber); box-shadow: 0 8px 28px rgba(0,0,0,.35); font-size: 11px; font-weight: 700; }
 .tw-session-switcher select { max-width: 210px; min-height: 32px; padding: 0 25px 0 8px; border: 1px solid var(--tw-stroke-bright); border-radius: 8px; outline: none; color: var(--tw-copy); background: #111a2c; font-size: 9px; text-overflow: ellipsis; }
 .tw-session-switcher select { max-width: 130px; min-height: 27px; }
 .tw-secondary-button, .tw-stop-button, .tw-primary-button, .tw-back-button, .tw-record-button, .tw-record-stop {

@@ -1,0 +1,587 @@
+{
+  "version": 2,
+  "idKinds": [
+    "invocation",
+    "run",
+    "project",
+    "shard",
+    "spec",
+    "runner-task",
+    "execution",
+    "attempt",
+    "session",
+    "step",
+    "action",
+    "producer",
+    "event"
+  ],
+  "eventClasses": [
+    "authoritative",
+    "state",
+    "diagnostic"
+  ],
+  "limits": {
+    "maxEventBytes": 262144,
+    "maxPayloadDepth": 32,
+    "maxPayloadEntries": 10000,
+    "maxStringBytes": 16384,
+    "maxCauses": 64
+  },
+  "identity": {
+    "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+    "runId": "run:00000000-0000-4000-8000-000000000002",
+    "projectId": "project:00000000-0000-4000-8000-000000000003",
+    "specId": "spec:00000000-0000-4000-8000-000000000004",
+    "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+    "executionId": "execution:00000000-0000-4000-8000-000000000006",
+    "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+  },
+  "accept": [
+    {
+      "name": "attempt-started",
+      "value": {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000014",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 0,
+        "eventClass": "authoritative",
+        "type": "attempt.started",
+        "monotonicTime": 0,
+        "wallTime": 1800000000000,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "payload": {
+          "retry": 0
+        }
+      }
+    },
+    {
+      "name": "diagnostic-with-cause",
+      "value": {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000015",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 1,
+        "eventClass": "diagnostic",
+        "type": "adapter.warning",
+        "monotonicTime": 10,
+        "wallTime": 1800000000001,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "causedBy": [
+          "event:00000000-0000-4000-8000-000000000014"
+        ],
+        "payload": {
+          "code": "slow-frame"
+        }
+      }
+    },
+    {
+      "name": "state-without-wall-clock",
+      "value": {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000016",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 2,
+        "eventClass": "state",
+        "type": "session.snapshot",
+        "monotonicTime": 20,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "payload": {
+          "status": "running"
+        }
+      }
+    }
+  ],
+  "reject": [
+    {
+      "name": "obsolete-envelope-version",
+      "value": {
+        "v": 1,
+        "eventId": "event:00000000-0000-4000-8000-000000000014",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 0,
+        "eventClass": "authoritative",
+        "type": "attempt.started",
+        "monotonicTime": 0,
+        "wallTime": 1800000000000,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "payload": {
+          "retry": 0
+        }
+      },
+      "code": "invalid-envelope",
+      "detail": "v must be exactly 2"
+    },
+    {
+      "name": "cross-domain-id",
+      "value": {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000014",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 0,
+        "eventClass": "authoritative",
+        "type": "attempt.started",
+        "monotonicTime": 0,
+        "wallTime": 1800000000000,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "execution:00000000-0000-4000-8000-000000000006"
+        },
+        "payload": {
+          "retry": 0
+        }
+      },
+      "code": "invalid-id",
+      "detail": "attemptId is invalid"
+    },
+    {
+      "name": "detached-attempt-identity",
+      "value": {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000014",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 0,
+        "eventClass": "authoritative",
+        "type": "attempt.started",
+        "monotonicTime": 0,
+        "wallTime": 1800000000000,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "payload": {
+          "retry": 0
+        }
+      },
+      "code": "invalid-identity",
+      "detail": "attemptId requires executionId"
+    },
+    {
+      "name": "self-cause",
+      "value": {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000017",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 3,
+        "eventClass": "authoritative",
+        "type": "attempt.started",
+        "monotonicTime": 30,
+        "wallTime": 1800000000003,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "payload": {
+          "retry": 0
+        },
+        "causedBy": [
+          "event:00000000-0000-4000-8000-000000000017"
+        ]
+      },
+      "code": "causal-cycle",
+      "detail": "an event cannot cause itself"
+    },
+    {
+      "name": "non-finite-time",
+      "value": {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000014",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 0,
+        "eventClass": "authoritative",
+        "type": "attempt.started",
+        "monotonicTime": null,
+        "wallTime": 1800000000000,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "payload": {
+          "retry": 0
+        }
+      },
+      "code": "invalid-envelope",
+      "detail": "monotonicTime must be a finite non-negative number"
+    },
+    {
+      "name": "unknown-envelope-field",
+      "value": {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000014",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 0,
+        "eventClass": "authoritative",
+        "type": "attempt.started",
+        "monotonicTime": 0,
+        "wallTime": 1800000000000,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "payload": {
+          "retry": 0
+        },
+        "surprise": true
+      },
+      "code": "invalid-envelope",
+      "detail": "event contains an unknown field"
+    }
+  ],
+  "streams": [
+    {
+      "name": "monotonic",
+      "values": [
+        {
+          "v": 2,
+          "eventId": "event:00000000-0000-4000-8000-000000000014",
+          "producerId": "producer:00000000-0000-4000-8000-000000000008",
+          "epoch": 0,
+          "seq": 0,
+          "eventClass": "authoritative",
+          "type": "attempt.started",
+          "monotonicTime": 0,
+          "wallTime": 1800000000000,
+          "identity": {
+            "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+            "runId": "run:00000000-0000-4000-8000-000000000002",
+            "projectId": "project:00000000-0000-4000-8000-000000000003",
+            "specId": "spec:00000000-0000-4000-8000-000000000004",
+            "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+            "executionId": "execution:00000000-0000-4000-8000-000000000006",
+            "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+          },
+          "payload": {
+            "retry": 0
+          }
+        },
+        {
+          "v": 2,
+          "eventId": "event:00000000-0000-4000-8000-000000000015",
+          "producerId": "producer:00000000-0000-4000-8000-000000000008",
+          "epoch": 0,
+          "seq": 1,
+          "eventClass": "authoritative",
+          "type": "attempt.started",
+          "monotonicTime": 10,
+          "wallTime": 1800000000001,
+          "identity": {
+            "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+            "runId": "run:00000000-0000-4000-8000-000000000002",
+            "projectId": "project:00000000-0000-4000-8000-000000000003",
+            "specId": "spec:00000000-0000-4000-8000-000000000004",
+            "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+            "executionId": "execution:00000000-0000-4000-8000-000000000006",
+            "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+          },
+          "payload": {
+            "retry": 0
+          }
+        }
+      ],
+      "verdicts": [
+        "accept",
+        "accept"
+      ]
+    },
+    {
+      "name": "duplicate-sequence-coordinate",
+      "values": [
+        {
+          "v": 2,
+          "eventId": "event:00000000-0000-4000-8000-000000000014",
+          "producerId": "producer:00000000-0000-4000-8000-000000000008",
+          "epoch": 0,
+          "seq": 0,
+          "eventClass": "authoritative",
+          "type": "attempt.started",
+          "monotonicTime": 0,
+          "wallTime": 1800000000000,
+          "identity": {
+            "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+            "runId": "run:00000000-0000-4000-8000-000000000002",
+            "projectId": "project:00000000-0000-4000-8000-000000000003",
+            "specId": "spec:00000000-0000-4000-8000-000000000004",
+            "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+            "executionId": "execution:00000000-0000-4000-8000-000000000006",
+            "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+          },
+          "payload": {
+            "retry": 0
+          }
+        },
+        {
+          "v": 2,
+          "eventId": "event:00000000-0000-4000-8000-000000000015",
+          "producerId": "producer:00000000-0000-4000-8000-000000000008",
+          "epoch": 0,
+          "seq": 0,
+          "eventClass": "authoritative",
+          "type": "attempt.started",
+          "monotonicTime": 10,
+          "wallTime": 1800000000001,
+          "identity": {
+            "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+            "runId": "run:00000000-0000-4000-8000-000000000002",
+            "projectId": "project:00000000-0000-4000-8000-000000000003",
+            "specId": "spec:00000000-0000-4000-8000-000000000004",
+            "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+            "executionId": "execution:00000000-0000-4000-8000-000000000006",
+            "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+          },
+          "payload": {
+            "retry": 0
+          }
+        }
+      ],
+      "verdicts": [
+        "accept",
+        "event-collision"
+      ]
+    },
+    {
+      "name": "monotonic-clock-regression",
+      "values": [
+        {
+          "v": 2,
+          "eventId": "event:00000000-0000-4000-8000-000000000014",
+          "producerId": "producer:00000000-0000-4000-8000-000000000008",
+          "epoch": 0,
+          "seq": 0,
+          "eventClass": "authoritative",
+          "type": "attempt.started",
+          "monotonicTime": 10,
+          "wallTime": 1800000000000,
+          "identity": {
+            "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+            "runId": "run:00000000-0000-4000-8000-000000000002",
+            "projectId": "project:00000000-0000-4000-8000-000000000003",
+            "specId": "spec:00000000-0000-4000-8000-000000000004",
+            "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+            "executionId": "execution:00000000-0000-4000-8000-000000000006",
+            "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+          },
+          "payload": {
+            "retry": 0
+          }
+        },
+        {
+          "v": 2,
+          "eventId": "event:00000000-0000-4000-8000-000000000015",
+          "producerId": "producer:00000000-0000-4000-8000-000000000008",
+          "epoch": 0,
+          "seq": 1,
+          "eventClass": "authoritative",
+          "type": "attempt.started",
+          "monotonicTime": 9,
+          "wallTime": 1800000000001,
+          "identity": {
+            "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+            "runId": "run:00000000-0000-4000-8000-000000000002",
+            "projectId": "project:00000000-0000-4000-8000-000000000003",
+            "specId": "spec:00000000-0000-4000-8000-000000000004",
+            "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+            "executionId": "execution:00000000-0000-4000-8000-000000000006",
+            "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+          },
+          "payload": {
+            "retry": 0
+          }
+        }
+      ],
+      "verdicts": [
+        "accept",
+        "monotonic-time-regression"
+      ]
+    },
+    {
+      "name": "epoch-regression",
+      "values": [
+        {
+          "v": 2,
+          "eventId": "event:00000000-0000-4000-8000-000000000014",
+          "producerId": "producer:00000000-0000-4000-8000-000000000008",
+          "epoch": 2,
+          "seq": 0,
+          "eventClass": "authoritative",
+          "type": "attempt.started",
+          "monotonicTime": 0,
+          "wallTime": 1800000000000,
+          "identity": {
+            "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+            "runId": "run:00000000-0000-4000-8000-000000000002",
+            "projectId": "project:00000000-0000-4000-8000-000000000003",
+            "specId": "spec:00000000-0000-4000-8000-000000000004",
+            "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+            "executionId": "execution:00000000-0000-4000-8000-000000000006",
+            "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+          },
+          "payload": {
+            "retry": 0
+          }
+        },
+        {
+          "v": 2,
+          "eventId": "event:00000000-0000-4000-8000-000000000015",
+          "producerId": "producer:00000000-0000-4000-8000-000000000008",
+          "epoch": 1,
+          "seq": 1,
+          "eventClass": "authoritative",
+          "type": "attempt.started",
+          "monotonicTime": 10,
+          "wallTime": 1800000000001,
+          "identity": {
+            "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+            "runId": "run:00000000-0000-4000-8000-000000000002",
+            "projectId": "project:00000000-0000-4000-8000-000000000003",
+            "specId": "spec:00000000-0000-4000-8000-000000000004",
+            "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+            "executionId": "execution:00000000-0000-4000-8000-000000000006",
+            "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+          },
+          "payload": {
+            "retry": 0
+          }
+        }
+      ],
+      "verdicts": [
+        "accept",
+        "epoch-regression"
+      ]
+    }
+  ],
+  "journal": {
+    "diagnosticGap": [
+      {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-0000000001f4",
+        "producerId": "producer:00000000-0000-4000-8000-0000000001f3",
+        "epoch": 0,
+        "seq": 0,
+        "eventClass": "diagnostic",
+        "type": "journal.diagnostic-gap",
+        "monotonicTime": 1,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002"
+        },
+        "causedBy": [
+          "event:00000000-0000-4000-8000-000000000014"
+        ],
+        "payload": {
+          "dropped": 1,
+          "firstEventId": "event:00000000-0000-4000-8000-000000000014",
+          "lastEventId": "event:00000000-0000-4000-8000-000000000014"
+        }
+      },
+      {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000015",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 1,
+        "eventClass": "diagnostic",
+        "type": "adapter.warning",
+        "monotonicTime": 10,
+        "wallTime": 1800000000001,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "payload": {
+          "retry": 0
+        }
+      }
+    ],
+    "coalescedState": [
+      {
+        "v": 2,
+        "eventId": "event:00000000-0000-4000-8000-000000000015",
+        "producerId": "producer:00000000-0000-4000-8000-000000000008",
+        "epoch": 0,
+        "seq": 1,
+        "eventClass": "state",
+        "type": "run.state",
+        "monotonicTime": 10,
+        "wallTime": 1800000000001,
+        "identity": {
+          "invocationId": "invocation:00000000-0000-4000-8000-000000000001",
+          "runId": "run:00000000-0000-4000-8000-000000000002",
+          "projectId": "project:00000000-0000-4000-8000-000000000003",
+          "specId": "spec:00000000-0000-4000-8000-000000000004",
+          "runnerTaskId": "runner-task:00000000-0000-4000-8000-000000000005",
+          "executionId": "execution:00000000-0000-4000-8000-000000000006",
+          "attemptId": "attempt:00000000-0000-4000-8000-000000000007"
+        },
+        "payload": {
+          "status": "running"
+        }
+      }
+    ]
+  }
+}

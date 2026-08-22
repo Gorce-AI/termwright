@@ -25,7 +25,7 @@ const test = base.extend<{ app: TerminalHarness }>({
     // its first frame. No shared fixtures directory, so no test can be
     // affected by what another one left behind.
     const app = await terminal.launch({ files: { 'todos.json': JSON.stringify(SEEDED) } });
-    await app.waitForReady();
+    await app.waitForQuiet();
 
     await use(app);
 
@@ -52,9 +52,11 @@ describe.skipIf(!pty)('a suite with its own fixture', () => {
       // Tab moves the focus onto the list without moving the selection, which
       // an arrow key would.
       await app.press('Tab');
-      // Ink does not retain a host-level focus fact. Waiting for the painted
-      // focus transition keeps the next byte in a separate render commit.
-      await app.waitForStable();
+      // Ink does not expose authoritative host-level focus evidence. The
+      // application's own status is therefore the causal production fact:
+      // unlike a quiet-window heuristic, it proves the Tab reached the child
+      // and its focus manager committed the transition before Space is sent.
+      await expect(app).toHaveText('status: focused list');
 
       await app.press('Space');
       await expect(app).toHaveText('[x] restore the backup');

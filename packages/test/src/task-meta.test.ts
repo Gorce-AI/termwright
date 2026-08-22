@@ -27,6 +27,10 @@ describe('buildTaskMeta', () => {
       buildTaskMeta({
         traces: ['out/a.twtrace'],
         attemptFailures: [{
+          executionId: 'execution:e1' as import('./attempt-context.js').ExecutionId,
+          attemptId: 'attempt:a1' as import('./attempt-context.js').AttemptId,
+          repeat: 0,
+          retry: 0,
           attempt: 1,
           errors: [{ message: 'not ready', stack: 'at retry' }],
           traceRefs: ['out/retry-1.twtrace'],
@@ -38,6 +42,10 @@ describe('buildTaskMeta', () => {
     ).toEqual({
       traces: ['out/a.twtrace'],
       attemptFailures: [{
+        executionId: 'execution:e1',
+        attemptId: 'attempt:a1',
+        repeat: 0,
+        retry: 0,
         attempt: 1,
         errors: [{ message: 'not ready', stack: 'at retry' }],
         traceRefs: ['out/retry-1.twtrace'],

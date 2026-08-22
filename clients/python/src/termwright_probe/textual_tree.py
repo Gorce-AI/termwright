@@ -39,6 +39,7 @@ from termwright.tree import (
     SemanticNode,
     SemanticSnapshot,
     SemanticState,
+    SemanticValueObservation,
     framework_evidence,
 )
 
@@ -227,7 +228,7 @@ def actions_for(role: str) -> Optional[Sequence[str]]:
     return None
 
 
-def value_for(widget: Any, role: str) -> Optional[str]:
+def value_for(widget: Any, role: str) -> Optional[SemanticValueObservation]:
     """Current value of a value-bearing widget, as text.
 
     `''` is a value: it says the field is empty, where absence says the widget
@@ -240,7 +241,16 @@ def value_for(widget: Any, role: str) -> Optional[str]:
         value = getattr(widget, "value", None)
     if isinstance(value, bool) or value is None:
         return None
-    return value if isinstance(value, str) else str(value)
+    if role == "textbox" and bool(getattr(widget, "password", False)):
+        return SemanticValueObservation(
+            status="withheld", reason="sensitive", sensitivity="sensitive"
+        )
+    return SemanticValueObservation(
+        status="known",
+        value=value if isinstance(value, str) else str(value),
+        sensitivity="public",
+        evidence=framework_evidence("textual-probe"),
+    )
 
 
 def _rect(region: Any) -> Optional[Rect]:

@@ -1238,6 +1238,1795 @@
       }
     },
     {
+      "name": "public-semantic-value",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "value": {
+              "status": "known",
+              "value": "",
+              "sensitivity": "public",
+              "evidence": {
+                "source": "framework",
+                "method": "native",
+                "strength": "authoritative",
+                "providerId": "vector-provider"
+              }
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      }
+    },
+    {
+      "name": "withheld-sensitive-semantic-value",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "value": {
+              "status": "withheld",
+              "reason": "sensitive",
+              "sensitivity": "sensitive"
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      }
+    },
+    {
+      "name": "authoritative-physical-input-recipes",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "inputRecipes": [
+              {
+                "action": "focus",
+                "requiresFocus": false,
+                "steps": [
+                  {
+                    "kind": "press",
+                    "key": "Tab"
+                  }
+                ]
+              },
+              {
+                "action": "activate",
+                "requiresFocus": true,
+                "steps": [
+                  {
+                    "kind": "press",
+                    "key": "Enter"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      }
+    },
+    {
+      "name": "application-action-strategy-provider",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.keys",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.keys"
+            },
+            "pointerRegions": [],
+            "actionRecipes": [
+              {
+                "recipientId": "n2",
+                "recipes": [
+                  {
+                    "action": "activate",
+                    "requiresFocus": true,
+                    "steps": [
+                      {
+                        "kind": "press",
+                        "key": "Enter"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "application-focus-provider",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.focus",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.focus"
+            },
+            "pointerRegions": [],
+            "focusState": {
+              "status": "focused",
+              "recipientId": "n2"
+            }
+          },
+          {
+            "providerId": "app.focus.none",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.focus.none"
+            },
+            "pointerRegions": [],
+            "focusState": {
+              "status": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "application-scroll-provider",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "scroll": {
+              "status": "known",
+              "value": {
+                "axis": "vertical",
+                "offset": 3,
+                "viewport": 4,
+                "extent": 20
+              },
+              "evidence": {
+                "source": "application",
+                "method": "native",
+                "strength": "authoritative",
+                "providerId": "app.scroll"
+              }
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.scroll",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.scroll"
+            },
+            "pointerRegions": [],
+            "scrollStates": [
+              {
+                "recipientId": "n2",
+                "axis": "vertical",
+                "offset": 3,
+                "viewport": 4,
+                "extent": 20
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "application-painted-region-provider",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "paintedRegion": {
+              "status": "known",
+              "value": {
+                "regionBounds": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "spans": [
+                  {
+                    "row": 1,
+                    "from": 2,
+                    "to": 11
+                  }
+                ]
+              },
+              "evidence": {
+                "source": "application",
+                "method": "native",
+                "strength": "authoritative",
+                "providerId": "app.paint"
+              }
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.paint",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.paint"
+            },
+            "pointerRegions": [],
+            "paintedRegions": [
+              {
+                "recipientId": "n2",
+                "regionBounds": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "spans": [
+                  {
+                    "row": 1,
+                    "from": 2,
+                    "to": 11
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "application-terminal-input-mode-provider",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.input",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.input"
+            },
+            "pointerRegions": [],
+            "inputModes": {
+              "mouseTracking": "drag",
+              "mouseEncoding": "sgr",
+              "focusReporting": "on"
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "two-roots",
       "snapshot": {
         "v": 2,
@@ -4187,7 +5976,7 @@
         }
       },
       "code": "schema",
-      "detail": "nodes.1.p: Invalid option: expected one of \"annotation\"|\"recognizer\"|\"framework\"|\"correlation\"|\"heuristic\""
+      "detail": "nodes.1.p: Invalid option: expected one of \"annotation\"|\"recognizer\"|\"framework\"|\"application\"|\"correlation\"|\"heuristic\""
     },
     {
       "name": "unknown-provenance-per-field",
@@ -4388,7 +6177,206 @@
         }
       },
       "code": "schema",
-      "detail": "nodes.1.px.name: Invalid option: expected one of \"annotation\"|\"recognizer\"|\"framework\"|\"correlation\"|\"heuristic\""
+      "detail": "nodes.1.px.name: Invalid option: expected one of \"annotation\"|\"recognizer\"|\"framework\"|\"application\"|\"correlation\"|\"heuristic\""
+    },
+    {
+      "name": "legacy-raw-semantic-value",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "value": "plaintext"
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      },
+      "code": "schema",
+      "detail": "nodes.1.value: Invalid input: expected object, received string"
     },
     {
       "name": "root-with-parent",
@@ -7168,6 +9156,3285 @@
       },
       "code": "schema",
       "detail": "nodes.1.actions.0: Invalid option: expected one of \"focus\"|\"activate\"|\"toggle\"|\"setValue\"|\"scroll\"|\"select\"|\"expand\""
+    },
+    {
+      "name": "recipe-without-matching-intent",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus"
+            ],
+            "inputRecipes": [
+              {
+                "action": "activate",
+                "requiresFocus": true,
+                "steps": [
+                  {
+                    "kind": "press",
+                    "key": "Enter"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      },
+      "code": "schema",
+      "detail": "nodes.1.inputRecipes.0.action: input recipe 'activate' requires the matching semantic action intent"
+    },
+    {
+      "name": "focus-recipe-cannot-require-focus",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "inputRecipes": [
+              {
+                "action": "focus",
+                "requiresFocus": true,
+                "steps": [
+                  {
+                    "kind": "press",
+                    "key": "Tab"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      },
+      "code": "schema",
+      "detail": "nodes.1.inputRecipes.0: focus recipe cannot require focus"
+    },
+    {
+      "name": "setvalue-recipe-requires-exactly-one-action-value",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "setValue"
+            ],
+            "inputRecipes": [
+              {
+                "action": "setValue",
+                "requiresFocus": true,
+                "steps": [
+                  {
+                    "kind": "press",
+                    "key": "Control+U"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      },
+      "code": "schema",
+      "detail": "nodes.1.inputRecipes.0: setValue requires exactly one insert-action-value step"
+    },
+    {
+      "name": "duplicate-recipe-action",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "inputRecipes": [
+              {
+                "action": "activate",
+                "requiresFocus": true,
+                "steps": [
+                  {
+                    "kind": "press",
+                    "key": "Enter"
+                  }
+                ]
+              },
+              {
+                "action": "activate",
+                "requiresFocus": true,
+                "steps": [
+                  {
+                    "kind": "press",
+                    "key": "Space"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      },
+      "code": "schema",
+      "detail": "nodes.1.inputRecipes: input recipe actions must be unique"
+    },
+    {
+      "name": "recipe-step-is-strict",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "inputRecipes": [
+              {
+                "action": "activate",
+                "requiresFocus": true,
+                "steps": [
+                  {
+                    "kind": "press",
+                    "key": "Enter",
+                    "callback": "forbidden"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      },
+      "code": "schema",
+      "detail": "nodes.1.inputRecipes.0.steps.0: Invalid input"
+    },
+    {
+      "name": "provider-action-recipe-unknown-recipient",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.keys",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.keys"
+            },
+            "pointerRegions": [],
+            "actionRecipes": [
+              {
+                "recipientId": "ghost",
+                "recipes": [
+                  {
+                    "action": "activate",
+                    "requiresFocus": true,
+                    "steps": [
+                      {
+                        "kind": "press",
+                        "key": "Enter"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "code": "missing-parent",
+      "detail": "provider app.keys action recipes reference unknown recipient ghost"
+    },
+    {
+      "name": "provider-focus-unknown-recipient",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.focus",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.focus"
+            },
+            "pointerRegions": [],
+            "focusState": {
+              "status": "focused",
+              "recipientId": "ghost"
+            }
+          }
+        ]
+      },
+      "code": "missing-parent",
+      "detail": "provider app.focus focus references unknown recipient ghost"
+    },
+    {
+      "name": "provider-focus-none-is-strict",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.focus",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.focus"
+            },
+            "pointerRegions": [],
+            "focusState": {
+              "status": "none",
+              "recipientId": "n2"
+            }
+          }
+        ]
+      },
+      "code": "schema",
+      "detail": "providerEvidence.0.focusState: Unrecognized key: \"recipientId\""
+    },
+    {
+      "name": "provider-scroll-unknown-recipient",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.scroll",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.scroll"
+            },
+            "pointerRegions": [],
+            "scrollStates": [
+              {
+                "recipientId": "ghost",
+                "axis": "vertical",
+                "offset": 0,
+                "viewport": 4,
+                "extent": 20
+              }
+            ]
+          }
+        ]
+      },
+      "code": "missing-parent",
+      "detail": "provider app.scroll scroll state references unknown recipient ghost"
+    },
+    {
+      "name": "provider-scroll-outside-extent",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.scroll",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.scroll"
+            },
+            "pointerRegions": [],
+            "scrollStates": [
+              {
+                "recipientId": "n2",
+                "axis": "vertical",
+                "offset": 18,
+                "viewport": 4,
+                "extent": 20
+              }
+            ]
+          }
+        ]
+      },
+      "code": "schema",
+      "detail": "providerEvidence.0.scrollStates.0: scroll state must fit inside its extent"
+    },
+    {
+      "name": "provider-painted-region-unknown-recipient",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.paint",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.paint"
+            },
+            "pointerRegions": [],
+            "paintedRegions": [
+              {
+                "recipientId": "ghost",
+                "regionBounds": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "spans": [
+                  {
+                    "row": 1,
+                    "from": 2,
+                    "to": 11
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "code": "missing-parent",
+      "detail": "provider app.paint painted region references unknown recipient ghost"
+    },
+    {
+      "name": "provider-input-mode-invalid-tracking",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.input",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.input"
+            },
+            "pointerRegions": [],
+            "inputModes": {
+              "mouseTracking": "guess-sgr",
+              "mouseEncoding": "sgr",
+              "focusReporting": "on"
+            }
+          }
+        ]
+      },
+      "code": "schema",
+      "detail": "providerEvidence.0.inputModes.mouseTracking: Invalid option: expected one of \"none\"|\"x10\"|\"vt200\"|\"drag\"|\"any\""
+    },
+    {
+      "name": "provider-input-mode-is-strict",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        },
+        "providerEvidence": [
+          {
+            "providerId": "app.input",
+            "sessionId": "s-0001",
+            "revision": 1,
+            "status": "available",
+            "evidence": {
+              "source": "application",
+              "method": "native",
+              "strength": "authoritative",
+              "providerId": "app.input"
+            },
+            "pointerRegions": [],
+            "inputModes": {
+              "mouseTracking": "drag",
+              "mouseEncoding": "sgr",
+              "focusReporting": "on",
+              "guessed": true
+            }
+          }
+        ]
+      },
+      "code": "schema",
+      "detail": "providerEvidence.0.inputModes: Unrecognized key: \"guessed\""
+    },
+    {
+      "name": "painted-region-span-outside-bounds",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "paintedRegion": {
+              "status": "known",
+              "value": {
+                "regionBounds": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 4,
+                  "height": 1
+                },
+                "spans": [
+                  {
+                    "row": 1,
+                    "from": 2,
+                    "to": 11
+                  }
+                ]
+              },
+              "evidence": {
+                "source": "application",
+                "method": "native",
+                "strength": "authoritative",
+                "providerId": "app.paint"
+              }
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      },
+      "code": "bad-rect",
+      "detail": "node n2 painted region span lies outside regionBounds"
+    },
+    {
+      "name": "painted-region-span-outside-viewport",
+      "snapshot": {
+        "v": 2,
+        "sessionId": "s-0001",
+        "revision": 1,
+        "columns": 80,
+        "rows": 24,
+        "cursor": {
+          "row": 0,
+          "column": 0,
+          "visible": false
+        },
+        "rootIds": [
+          "n1"
+        ],
+        "nodes": [
+          {
+            "id": "n1",
+            "role": "dialog",
+            "name": "Permission",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 0,
+                  "column": 0,
+                  "width": 40,
+                  "height": 2
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "modal": true
+            }
+          },
+          {
+            "id": "n2",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Approve",
+            "testId": "approve",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 2,
+                  "width": 9,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": true
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ],
+            "paintedRegion": {
+              "status": "known",
+              "value": {
+                "regionBounds": {
+                  "row": 30,
+                  "column": 2,
+                  "width": 4,
+                  "height": 1
+                },
+                "spans": [
+                  {
+                    "row": 30,
+                    "from": 2,
+                    "to": 6
+                  }
+                ]
+              },
+              "evidence": {
+                "source": "application",
+                "method": "native",
+                "strength": "authoritative",
+                "providerId": "app.paint"
+              }
+            }
+          },
+          {
+            "id": "n3",
+            "parentId": "n1",
+            "role": "button",
+            "name": "Reject",
+            "geometry": {
+              "displayed": {
+                "status": "known",
+                "value": true,
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "intendedRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              },
+              "visibleRect": {
+                "status": "known",
+                "value": {
+                  "row": 1,
+                  "column": 14,
+                  "width": 8,
+                  "height": 1
+                },
+                "evidence": {
+                  "source": "framework",
+                  "method": "native",
+                  "strength": "authoritative",
+                  "providerId": "vector-provider"
+                }
+              }
+            },
+            "state": {
+              "focused": false
+            },
+            "actions": [
+              "focus",
+              "activate"
+            ]
+          }
+        ],
+        "coordinateSpace": {
+          "status": "known",
+          "value": "viewport-cells",
+          "evidence": {
+            "source": "framework",
+            "method": "native",
+            "strength": "authoritative",
+            "providerId": "vector-provider"
+          }
+        },
+        "hitGrid": {
+          "status": "unsupported",
+          "capability": "pointer-hit-grid",
+          "reason": "framework-unobservable"
+        }
+      },
+      "code": "bad-rect",
+      "detail": "node n2 painted region span lies outside the viewport"
     },
     {
       "name": "empty-node-id",

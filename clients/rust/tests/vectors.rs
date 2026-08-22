@@ -588,18 +588,31 @@ fn node_and_state_keys_are_exactly_the_protocols() {
 fn the_node_struct_can_carry_every_field() {
     use std::collections::{BTreeMap, BTreeSet};
 
-    use termwright_protocol::{Node, Provenance, Role, State};
+    use termwright_protocol::{
+        Node, Observation, PhysicalInputRecipe, PhysicalInputRecipeAction, PhysicalInputRecipeStep,
+        Provenance, Role, SemanticValueObservation, SemanticValueSensitivity, State,
+    };
 
     let mut node = Node::new("n1", Role::Generic, "name");
     node.parent_id = Some("root".into());
     node.description = Some("described".into());
-    node.value = Some(String::new());
+    node.value = Some(SemanticValueObservation::Withheld {
+        reason: "sensitive".into(),
+        sensitivity: SemanticValueSensitivity::Sensitive,
+    });
     node.state = Some(State::default());
     node.extended = Some(BTreeMap::from([(
         "domain".to_owned(),
         serde_json::json!({ "status": "ready" }),
     )]));
     node.actions = Some(vec![]);
+    node.input_recipes = Some(vec![PhysicalInputRecipe {
+        action: PhysicalInputRecipeAction::Activate,
+        requires_focus: true,
+        steps: vec![PhysicalInputRecipeStep::Press {
+            key: "Enter".into(),
+        }],
+    }]);
     node.labelled_by = Some(vec!["a".into()]);
     node.described_by = Some(vec!["b".into()]);
     node.text_ranges = Some(vec![]);
@@ -610,6 +623,14 @@ fn the_node_struct_can_carry_every_field() {
         "name".to_owned(),
         Provenance::Annotation,
     )]));
+    node.scroll = Some(Observation::Unsupported {
+        capability: "scroll".into(),
+        reason: "not-negotiated".into(),
+    });
+    node.painted_region = Some(Observation::Unsupported {
+        capability: "painted-region".into(),
+        reason: "not-negotiated".into(),
+    });
 
     let wire = serde_json::to_value(&node).expect("a node serialises");
     let carried: BTreeSet<&str> = wire
@@ -655,12 +676,12 @@ fn the_state_struct_can_carry_every_field() {
         offscreen: Some(true),
         readonly: Some(true),
         multiline: Some(true),
+        required: Some(true),
+        multiselectable: Some(true),
         orientation: Some(Orientation::Vertical),
         level: Some(1),
         position_in_set: Some(1),
         set_size: Some(1),
-        scroll_offset: Some(0),
-        scroll_extent: Some(1),
     };
     let wire = serde_json::to_value(state).expect("a state serialises");
     let carried: BTreeSet<&str> = wire

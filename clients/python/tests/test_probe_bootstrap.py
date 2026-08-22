@@ -104,6 +104,9 @@ def test_the_probe_is_installed_before_the_script_runs(tmp_path):
             print(__import__('json').dumps({
                 'probe_imported': 'termwright_probe' in sys.modules,
                 'watching': [type(f).__name__ for f in sys.meta_path],
+                'endpoint_in_env': 'TERMWRIGHT_ENDPOINT' in __import__('os').environ,
+                'token_in_env': 'TERMWRIGHT_TOKEN' in __import__('os').environ,
+                'owner_in_env': 'TERMWRIGHT_PYTHON_OWNER' in __import__('os').environ,
             }))
             """,
             env,
@@ -112,6 +115,9 @@ def test_the_probe_is_installed_before_the_script_runs(tmp_path):
     observed = json.loads(result.stdout)
     assert observed["probe_imported"] is True, "sitecustomize did not reach the probe"
     assert "_Waiter" in observed["watching"], "nothing is waiting for textual"
+    assert observed["endpoint_in_env"] is False
+    assert observed["token_in_env"] is False
+    assert observed["owner_in_env"] is False
 
 
 def _assert_injected(command: list[str], env: dict, *, cwd: Path | None = None) -> None:
@@ -126,11 +132,180 @@ def test_injection_reaches_python_module_and_console_entrypoint(tmp_path):
     console = tmp_path / "probe-console"
     console.write_text(f"#!{sys.executable}\nimport sys\nprint('termwright_probe' in sys.modules)\n")
     console.chmod(0o755)
+    for command in ([sys.executable, "-m", "probe_entry"], [str(console)]):
+        with write_bootstrap(package_root=SRC) as bootstrap:
+            env = bootstrap.env(instrumented_env(tmp_path))
+            env["PYTHONPATH"] = os.pathsep.join([bootstrap.directory, str(tmp_path), SRC])
+            _assert_injected(command, env, cwd=tmp_path)
+
+
+def test_python_console_launcher_passes_one_shot_ownership_to_its_child(tmp_path):
+    launcher = tmp_path / "poetry"
+    launcher.write_text(
+        f"#!{sys.executable}\n"
+        "import os, subprocess, sys\n"
+        "result = subprocess.run([sys.executable, '-c', "
+        "\"import sys; print('termwright_probe' in sys.modules)\"], env=os.environ)\n"
+        "raise SystemExit(result.returncode)\n"
+    )
+    launcher.chmod(0o755)
+    command, env, bootstrap = with_probe(
+        [str(launcher), "run", "python"],
+        env=instrumented_env(tmp_path),
+    )
+    assert bootstrap is not None
+    try:
+        _assert_injected(command, env, cwd=tmp_path)
+    finally:
+        bootstrap.cleanup()
+
+
+def test_bootstrap_is_owned_by_exactly_one_interpreter(tmp_path):
     with write_bootstrap(package_root=SRC) as bootstrap:
         env = bootstrap.env(instrumented_env(tmp_path))
-        env["PYTHONPATH"] = os.pathsep.join([bootstrap.directory, str(tmp_path), SRC])
-        _assert_injected([sys.executable, "-m", "probe_entry"], env, cwd=tmp_path)
-        _assert_injected([str(console)], env, cwd=tmp_path)
+        command = [
+            sys.executable,
+            "-c",
+            "import sys; print('termwright_probe' in sys.modules)",
+        ]
+        first = subprocess.run(command, env=env, capture_output=True, text=True, timeout=60)
+        second = subprocess.run(command, env=env, capture_output=True, text=True, timeout=60)
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert first.stdout.strip() == "True"
+    assert second.stdout.strip() == "False"
+
+
+def test_concurrent_interpreters_cannot_both_claim_one_bootstrap(tmp_path):
+    with write_bootstrap(package_root=SRC) as bootstrap:
+        env = bootstrap.env(instrumented_env(tmp_path))
+        command = [
+            sys.executable,
+            "-c",
+            "import sys; print('termwright_probe' in sys.modules)",
+        ]
+        children = [subprocess.Popen(
+            command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        ) for _ in range(8)]
+        outcomes = [child.communicate(timeout=60) for child in children]
+    assert [child.returncode for child in children] == [0] * 8
+    assert [stderr for _, stderr in outcomes] == [""] * 8
+    assert [stdout.strip() for stdout, _ in outcomes].count("True") == 1
+    assert [stdout.strip() for stdout, _ in outcomes].count("False") == 7
+
+
+def test_python_child_inherits_neither_bootstrap_nor_semantic_credentials(tmp_path):
+    with write_bootstrap(package_root=SRC) as bootstrap:
+        env = bootstrap.env(instrumented_env(tmp_path))
+        result = run_child(
+            """
+            import json, os, subprocess, sys
+            bootstrap = sys.argv[1]
+            child = subprocess.run(
+                [sys.executable, '-c',
+                 "import json, os, sys; print(json.dumps({"
+                 "'probe': 'termwright_probe' in sys.modules,"
+                 "'endpoint': 'TERMWRIGHT_ENDPOINT' in os.environ,"
+                 "'token': 'TERMWRIGHT_TOKEN' in os.environ,"
+                 "'owner': 'TERMWRIGHT_PYTHON_OWNER' in os.environ,"
+                 "'bootstrap': sys.argv[1] in os.environ.get('PYTHONPATH', '').split(os.pathsep)}))",
+                 bootstrap],
+                env=os.environ,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(json.dumps({
+                'parent_probe': 'termwright_probe' in sys.modules,
+                'child': json.loads(child.stdout),
+            }))
+            """,
+            env,
+            args=(bootstrap.directory,),
+        )
+    assert result.returncode == 0, result.stderr
+    observed = json.loads(result.stdout)
+    assert observed == {
+        "parent_probe": True,
+        "child": {
+            "probe": False,
+            "endpoint": False,
+            "token": False,
+            "owner": False,
+            "bootstrap": False,
+        },
+    }
+
+
+def test_concurrent_textual_children_cannot_attach_to_parent_session(tmp_path):
+    pytest.importorskip("textual")
+    log = tmp_path / "probe.log"
+    with write_bootstrap(package_root=SRC) as bootstrap:
+        env = bootstrap.env(instrumented_env(tmp_path, TERMWRIGHT_DEBUG_FILE=str(log)))
+        result = run_child(
+            """
+            import json, os, subprocess, sys
+            import textual.app
+            command = [sys.executable, '-c',
+                       "import json, sys; import textual.app; "
+                       "print(json.dumps('termwright_probe' in sys.modules))"]
+            children = [subprocess.Popen(
+                command, env=os.environ, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True,
+            ) for _ in range(8)]
+            outcomes = []
+            for child in children:
+                stdout, stderr = child.communicate(timeout=60)
+                outcomes.append([child.returncode, json.loads(stdout), stderr])
+            print(json.dumps(outcomes))
+            """,
+            env,
+        )
+    assert result.returncode == 0, result.stderr
+    outcomes = json.loads(result.stdout)
+    assert outcomes == [[0, False, ""]] * 8
+    assert log.read_text().count("attached to Textual") == 1
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="os.fork is POSIX-only")
+def test_fork_child_erases_captured_session_and_cannot_attach(tmp_path):
+    pytest.importorskip("textual")
+    log = tmp_path / "probe.log"
+    with write_bootstrap(package_root=SRC) as bootstrap:
+        env = bootstrap.env(instrumented_env(tmp_path, TERMWRIGHT_DEBUG_FILE=str(log)))
+        result = run_child(
+            """
+            import json, os
+            read_fd, write_fd = os.pipe()
+            pid = os.fork()
+            if pid == 0:
+                os.close(read_fd)
+                import textual.app
+                import termwright_probe
+                payload = json.dumps({
+                    'owns': termwright_probe._owns_current_process(),
+                    'session_env': termwright_probe._session_environment(),
+                    'captured_erased': termwright_probe._session_env is None,
+                }).encode()
+                os.write(write_fd, payload)
+                os.close(write_fd)
+                os._exit(0)
+            os.close(write_fd)
+            payload = os.read(read_fd, 65536)
+            os.close(read_fd)
+            _, status = os.waitpid(pid, 0)
+            import textual.app
+            print(json.dumps({'child': json.loads(payload), 'status': status}))
+            """,
+            env,
+        )
+    assert result.returncode == 0, result.stderr
+    observed = json.loads(result.stdout)
+    assert observed == {
+        "child": {"owns": False, "session_env": None, "captured_erased": True},
+        "status": 0,
+    }
+    assert log.read_text().count("attached to Textual") == 1
 
 
 @pytest.mark.parametrize("bypass", ["-S", "-E"])
@@ -170,12 +345,18 @@ def test_injection_reaches_poetry_run(tmp_path):
     (tmp_path / "pyproject.toml").write_text(
         "[project]\nname='termwright-injection-fixture'\nversion='0.0.0'\nrequires-python='>=3.9'\n"
     )
-    with write_bootstrap(package_root=SRC) as bootstrap:
-        env = bootstrap.env(instrumented_env(tmp_path, POETRY_VIRTUALENVS_CREATE="false"))
-        _assert_injected([
+    command, env, bootstrap = with_probe(
+        [
             "poetry", "run", "python", "-c",
             "import sys; print('termwright_probe' in sys.modules)",
-        ], env, cwd=tmp_path)
+        ],
+        env=instrumented_env(tmp_path, POETRY_VIRTUALENVS_CREATE="false"),
+    )
+    assert bootstrap is not None
+    try:
+        _assert_injected(command, env, cwd=tmp_path)
+    finally:
+        bootstrap.cleanup()
 
 
 def test_the_script_directory_does_not_shadow_us(tmp_path):
@@ -328,6 +509,8 @@ def test_install_is_idempotent_and_dormant_by_default():
         assert install(env={"TERMWRIGHT_ENDPOINT": "/x", "TERMWRIGHT_TOKEN": "t"}) is False
     finally:
         termwright_probe._installed = False
+        termwright_probe._owner_pid = None
+        termwright_probe._session_env = None
         from termwright_probe import defer
 
         defer.reset()

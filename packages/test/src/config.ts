@@ -1,5 +1,5 @@
 /**
- * Configuration for the Vitest preset: viewport, timeout classes, trace mode,
+ * Configuration for the Termwright Native Host: viewport, timeout classes, trace mode,
  * snapshot directories and profiles.
  *
  * A project declares its configuration once with {@link defineTermwrightConfig}

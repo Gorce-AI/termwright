@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "deviations": [
+    {
+      "id": "TW-DEV-CONPTY-POINTER-MODE-OBSERVABILITY",
+      "capability": "pointer-input / focus-reports",
+      "predicate": "win32",
+      "category": "backend-observability-limitation",
+      "reason": "ConPTY consumes the child's DECSET mouse/focus negotiation before Termwright's VT observer can prove the active protocol. Generic fixtures without a production-parser provider remain fail-closed; separate provider-backed Windows E2E proves that this observability limitation is not functional impossibility and sends real input through ConPTY.",
+      "evidence": "docs/architecture/audit/platform-completion-baseline.json",
+      "issueOrAdr": "CONTRACTS.md §Effective Session Contract",
+      "removalCondition": "The certified backend exposes application input-mode negotiation universally, so generic applications no longer need production-parser evidence.",
+      "owner": "termwright-core",
+      "revalidate": "each node-pty, ConPTY backend, or Windows certification change",
+      "tests": [
+        [
+          "packages/conformance/src/suites/driver-generic.test.ts",
+          "sends mouse reports only after the child asks for them"
+        ],
+        [
+          "packages/conformance/src/suites/interaction.test.ts",
+          "clicks, double-clicks and misses"
+        ],
+        [
+          "packages/conformance/src/suites/interaction.test.ts",
+          "drags and lets the application own the selection"
+        ],
+        [
+          "packages/conformance/src/suites/interaction.test.ts",
+          "follows mouse mode on and off"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "sends an SGR mouse report the child can decode"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "sends wheel reports and right-button clicks"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "delivers semantic modifier-click through PTY and preserves it in the receipt"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "delivers semantic hover as real any-motion terminal input"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "plans horizontal wheel input truthfully and returns the executed operations"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "executes a locator drag as one checkpointed stepped device plan"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "re-resolves both drag endpoints without bytes when destination resolution makes the source stale"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "clicks a semantic node through the PTY and observes the new revision"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "allows unrelated status animation without weakening target-local pointer safety"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "emits no pointer bytes when unpaired output damages the target cells"
+        ],
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "plans around a covered center cell using the authoritative hit region"
+        ],
+        [
+          "packages/mcp/src/server.test.ts",
+          "walks launch -> snapshot -> click -> wait_for -> capture_since -> close"
+        ]
+      ]
+    },
+    {
+      "id": "TW-DEV-CONPTY-TERMINAL-QUERY-INTERCEPTION",
+      "capability": "terminal-query-response",
+      "predicate": "win32",
+      "category": "fundamental-backend-difference",
+      "reason": "ConPTY answers or consumes selected terminal queries before the emulated VT path can observe them; platform-free VT protocol tests cover the emulator path separately.",
+      "evidence": "packages/driver/src/session.pty.test.ts",
+      "issueOrAdr": "CONTRACTS.md §PTY",
+      "removalCondition": "A Windows backend exposes query traffic end to end without ConPTY interception.",
+      "owner": "termwright-core",
+      "revalidate": "each Windows backend certification change",
+      "tests": [
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "returns emulator query responses through PTY without classifying them as user input"
+        ]
+      ]
+    },
+    {
+      "id": "TW-DEV-UNIX-LISTEN-FAULT-FIXTURE",
+      "capability": "semantic-endpoint rollback fault injection",
+      "predicate": "win32",
+      "category": "test-fixture-gap",
+      "reason": "The current deterministic listen-failure injection uses a POSIX filesystem socket collision; Windows named-pipe hostile close/handshake tests cover production ownership but not this exact acquisition stage.",
+      "evidence": "packages/driver/src/semantic.test.ts",
+      "issueOrAdr": "PART W fault injection",
+      "removalCondition": "Add an equivalent deterministic named-pipe listen failure injector on Windows.",
+      "owner": "termwright-core",
+      "revalidate": "before Windows fault-injection certification",
+      "tests": [
+        [
+          "packages/driver/src/semantic.test.ts",
+          "rolls back its private directory when listen fails"
+        ]
+      ]
+    },
+    {
+      "id": "TW-DEV-POSIX-PROCESS-GROUP-PROOF",
+      "capability": "POSIX process-group lifecycle",
+      "predicate": "win32",
+      "category": "fundamental-os-difference",
+      "reason": "Negative-PGID signaling and process-group liveness are POSIX primitives; Windows has a separate ConPTY tree lifecycle proof.",
+      "evidence": "packages/driver/src/process-lifecycle.pty.test.ts",
+      "issueOrAdr": "CONTRACTS.md §PTY",
+      "removalCondition": "Never; retain as a platform-specific positive certification test.",
+      "owner": "termwright-core",
+      "revalidate": "each POSIX backend certification change",
+      "tests": [
+        [
+          "packages/driver/src/process-lifecycle.pty.test.ts",
+          "POSIX process lifecycle"
+        ]
+      ]
+    },
+    {
+      "id": "TW-DEV-WINDOWS-CONPTY-TREE-PROOF",
+      "capability": "Windows ConPTY process-tree lifecycle",
+      "predicate": "non-win32",
+      "category": "fundamental-os-difference",
+      "reason": "ConPTY tree termination and unsupported POSIX signal behavior exist only on Windows; POSIX has its own process-group proof.",
+      "evidence": "packages/driver/src/process-lifecycle.pty.test.ts",
+      "issueOrAdr": "CONTRACTS.md §PTY",
+      "removalCondition": "Never; retain as a platform-specific positive certification test.",
+      "owner": "termwright-core",
+      "revalidate": "each ConPTY or node-pty certification change",
+      "tests": [
+        [
+          "packages/driver/src/process-lifecycle.pty.test.ts",
+          "Windows process lifecycle"
+        ]
+      ]
+    },
+    {
+      "id": "TW-DEV-WINDOWS-CONPTY-CONCURRENT-CLOSE-PROOF",
+      "capability": "ConPTY concurrent teardown",
+      "predicate": "non-win32",
+      "category": "fundamental-os-difference",
+      "reason": "The AttachConsole regression and helper process exist only in the Windows node-pty artifact.",
+      "evidence": "packages/driver/src/session.pty.test.ts",
+      "issueOrAdr": "docs/architecture/audit/platform-completion-baseline.json",
+      "removalCondition": "Never while ConPTY is certified; retain as a Windows-native regression.",
+      "owner": "termwright-core",
+      "revalidate": "each node-pty certification change",
+      "tests": [
+        [
+          "packages/driver/src/session.pty.test.ts",
+          "closes concurrent live ConPTY sessions without the AttachConsole fallback stall"
+        ]
+      ]
+    }
+  ]
+}

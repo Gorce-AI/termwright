@@ -30,7 +30,7 @@
   `close()` hangs up the PTY (SIGHUP/TerminateProcess) as part of physical
   cleanup; destructive signals remain explicit. `.class` CSS-dialect semantics
   provisional (matches testId/name token) pending protocol-level classes.
-- 2026-08-15: `waitForReady` (shell prompt) missing from api.ts — deferred
+- 2026-08-15: `waitForQuiet` (shell prompt) missing from api.ts — deferred
   addition before 1.0 (timeout class 'ready' already defined).
 - 2026-08-15 (mcp landed): `mcp` MAY depend on `@termwright/protocol` for
   constants/types (rule relaxed; removes duplicated SEMANTIC_ROLES/limits).
@@ -61,7 +61,7 @@
   markers, pairing expiries).
 - 2026-08-15 (driver round 2, f78174f): api.ts gains — `diagnostic` event +
   `harness.diagnostics()` with CLOSED DiagnosticCode set (13 values; adding one
-  is a contract change), `waitForReady` (OSC 133 preferred, settled-screen
+  is a contract change), `waitForQuiet` (OSC 133 preferred, settled-screen
   fallback, strategy reported via 'ready-strategy' diagnostic),
   `locatorForRef(ref)` (identity-based, semantic `nX@rev` and grid
   `grid:r,c,w,h@rev` refs, stale checked at resolve), `Locator.description`,
@@ -74,7 +74,7 @@
   ''), falling back to `name` only when value is undefined.
 - 2026-08-16: SessionDiagnostic gains optional `wireCode?` on
   'protocol-violation' entries (approved; closes the last indirect
-  conformance assertion). `waitForReady` must check process liveness before
+  conformance assertion). `waitForQuiet` must check process liveness before
   reporting readiness (consistent with other waits).
 - 2026-08-16: DiagnosticCode 'ready-strategy' is REPLACED by two codes:
   'ready-shell-integration' and 'ready-settled-screen' (fact vs heuristic must
@@ -149,7 +149,7 @@
   'process-exited' diagnostics. "Unexpected" = signal or code!=0 without a
   harness-initiated close()/signal(). `exit` is now published only after the
   VT queue drains (<=250 ms) — waitForExit resolves on a complete screen.
-  waitForReady counts OSC 133 B or D as readiness (A/C are not). screenTail
+  waitForQuiet counts OSC 133 B or D as readiness (A/C are not). screenTail
   is deliberately NOT redacted (a faithful screen record) — consumers must
   treat crash reports like screenshots when storing/transmitting;
   recentInputs records paste only as size.

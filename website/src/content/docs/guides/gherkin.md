@@ -77,7 +77,7 @@ export default defineSteps(
     world.app = undefined;
   }),
   Given('the application is ready', async ({world}) => {
-    await (world.app as TerminalHarness).waitForReady();
+    await (world.app as TerminalHarness).waitForQuiet();
   }),
 );
 ```
@@ -122,10 +122,10 @@ timeline, with driver actions and assertions nested below the matching step.
 
 No generated TypeScript files or separate Cucumber process are required.
 
-## Run with Vitest and an IDE
+## Configure the embedded engine and editor
 
-Direct Vitest and IDE runs require the plugin and an explicit `.feature`
-include:
+The Termwright host loads the project's Vite/Vitest configuration. Add the
+plugin and an explicit `.feature` include there; execute through Termwright:
 
 ```ts
 // vitest.config.ts
@@ -143,10 +143,10 @@ export default defineConfig({
 });
 ```
 
-Then use normal Vitest selection:
+Select the feature through the Termwright host:
 
 ```sh
-npx vitest run tests/features/command-approval.feature
+npx termwright test -- tests/features/command-approval.feature
 ```
 
 ## Filter scenarios by tag
@@ -155,15 +155,6 @@ Runner-owned execution accepts standard Cucumber tag expressions:
 
 ```sh
 npx termwright ui --tags '@e2e and not @slow'
-```
-
-For direct Vitest or IDE runs, configure the same expression on the plugin:
-
-```ts
-gherkinPlugin({
-  featureRoot: 'tests/features',
-  tags: process.env.GHERKIN_TAGS,
-})
 ```
 
 Filtering happens during feature collection, so excluded Scenario and Outline

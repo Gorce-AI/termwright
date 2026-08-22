@@ -115,7 +115,7 @@ const MOUNT_COMMAND = '<mountInk>';
 /**
  * Ink throttles frames to `maxFps`. Tests wait for revisions rather than for
  * time, so throttling only adds latency — and, with a 33 ms default gap, enough
- * of it to make `waitForStable`'s quiet window land between two frames of the
+ * of it to make `waitForQuiet`'s quiet window land between two frames of the
  * same update.
  */
 const MOUNT_MAX_FPS = 1_000;
@@ -138,7 +138,7 @@ const MOUNT_MAX_FPS = 1_000;
  * const onPress = vi.fn();
  * const harness = await mountInk(<Approve onPress={onPress} />, { columns: 40, rows: 10 });
  * await harness.press('Tab');
- * await harness.waitForStable();
+ * await harness.waitForQuiet();
  * await harness.press('Enter');
  * await harness.waitForText('approved');
  * await vi.waitFor(() => expect(onPress).toHaveBeenCalledOnce());

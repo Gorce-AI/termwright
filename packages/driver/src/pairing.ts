@@ -5,7 +5,7 @@
  * halves of it: the tree that arrived on the semantic socket and the
  * render-commit marker that arrived in stdout after the last byte of that
  * render. Until then the revision is in flight — which is exactly what
- * `waitForStable` needs to know.
+ * `waitForQuiet` needs to know.
  *
  * Everything here is bounded: at most {@link PairingOptions.maxPending} halves
  * are held, each half expires after {@link PairingOptions.pairingTimeoutMs},

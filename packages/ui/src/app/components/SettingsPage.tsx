@@ -113,7 +113,7 @@ export function buildDiagnosticReport(state: AppState, features: DataSourceFeatu
   };
 }
 
-function adapterLabels(state: AppState): string[] { return [...new Set(Object.values(state.sessions).flatMap((session) => session.adapter === undefined ? [] : [`${session.adapter.name}@${session.adapter.version}`]))]; }
-function probeLabels(state: AppState): string[] { return [...new Set(Object.values(state.sessions).flatMap((session) => session.probe === undefined ? [] : [`${session.probe.framework}@${session.probe.probeVersion}`]))]; }
-function capabilityLabels(state: AppState, features: DataSourceFeatures): string[] { return [...new Set([...Object.values(state.sessions).flatMap((session) => session.capabilities ?? session.probe?.capabilities ?? []), ...(features.live ? ['live'] : []), ...(features.history ? ['history'] : []), ...(features.openTrace ? ['open-trace'] : [])])]; }
+function adapterLabels(state: AppState): string[] { return [...new Set(Object.values(state.sessions).flatMap((session) => session.contract?.framework === null || session.contract?.framework === undefined ? [] : [`${session.contract.framework.name}@${session.contract.framework.version}`]))]; }
+function probeLabels(state: AppState): string[] { return adapterLabels(state); }
+function capabilityLabels(state: AppState, features: DataSourceFeatures): string[] { return [...new Set([...Object.values(state.sessions).flatMap((session) => session.contract === undefined ? [] : Object.entries(session.contract.capabilities).filter(([, value]) => value.status === 'supported').map(([id]) => id)), ...(features.live ? ['live'] : []), ...(features.history ? ['history'] : []), ...(features.openTrace ? ['open-trace'] : [])])]; }
 function counts(values: readonly string[]): Record<string, number> { const result: Record<string, number> = {}; for (const value of values) result[value] = (result[value] ?? 0) + 1; return result; }

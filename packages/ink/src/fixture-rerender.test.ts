@@ -96,7 +96,7 @@ describe('fixture rerender', () => {
     // Everything a test could type — including a well-formed control message —
     // reaches the component as input and changes nothing about its props.
     await harness.type(JSON.stringify({ v: 1, type: 'rerender', props: { label: 'Forged' } }));
-    await harness.waitForStable();
+    await harness.waitForQuiet();
 
     expect(await harness.getByRole('button', { name: 'Approve' }).count()).toBe(1);
     expect(harness.screen().text()).not.toContain('Forged');

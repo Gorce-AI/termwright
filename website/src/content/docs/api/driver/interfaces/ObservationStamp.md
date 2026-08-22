@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ObservationStamp
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:494
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:600
 
 Atomic identity of the screen/tree pair used for an observation.
 
@@ -21,7 +21,7 @@ Atomic identity of the screen/tree pair used for an observation.
 
 > `readonly` **contractId**: `string`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:496
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:602
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:496
 
 > `readonly` **epoch**: `number`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:497
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:603
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:497
 
 > `readonly` **pairedScreenRevision**: `number` \| `null`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:503
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:609
 
 Screen revision paired to semanticRevision, or null when no pair exists.
 
@@ -47,7 +47,7 @@ Screen revision paired to semanticRevision, or null when no pair exists.
 
 > `readonly` **screenRevision**: `number`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:500
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:606
 
 ***
 
@@ -55,7 +55,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:500
 
 > `readonly` **semanticRevision**: `number` \| `null`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:501
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:607
 
 ***
 
@@ -63,7 +63,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:501
 
 > `readonly` **sequence**: `number`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:499
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:605
 
 Monotonic publication order across both screen and semantic revisions.
 
@@ -73,4 +73,4 @@ Monotonic publication order across both screen and semantic revisions.
 
 > `readonly` **sessionId**: `string`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:495
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:601

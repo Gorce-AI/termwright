@@ -13,7 +13,7 @@ editUrl: false
 
 > **parseSelector**(`selector`): [`SemanticQuery`](../../interfaces/semanticquery/)
 
-Defined in: [driver/src/selectors.ts:209](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L209)
+Defined in: [driver/src/selectors.ts:215](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L215)
 
 Parses the Termwright Semantic Selector Language into a [SemanticQuery](../../interfaces/semanticquery/).
 

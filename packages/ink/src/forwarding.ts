@@ -3,7 +3,7 @@
  *
  * Every member of the driver's interface is named here and delegated to a real
  * session. That is deliberate, and it has now paid for itself three times: when
- * `locatorForRef`/`waitForReady`/`diagnostics` landed, when `crashReport` did,
+ * `locatorForRef`/`waitForShellPrompt`/`diagnostics` landed, when `crashReport` did,
  * and it would again for the next addition. A `Proxy` or an `Object.create`
  * over the session would be shorter and would keep compiling — and the second
  * one does not even work, because the driver's session keeps its state in
@@ -19,9 +19,14 @@ import type {
   CellSnapshot,
   CrashReport,
   ExitStatus,
-  Locator,
+  LocatorRef,
+  SemanticLocator,
+  SemanticLocatorRef,
+  ScreenLocator,
+  ScreenLocatorRef,
   Keyboard,
   Mouse,
+  OperationBudget,
   ResizeReceipt,
   RoleLocatorOptions,
   ScreenSnapshot,
@@ -29,7 +34,6 @@ import type {
   ShellApi,
   ScrollbackApi,
   SelectionApi,
-  SessionCapabilities,
   SessionDiagnostic,
   SessionEvents,
   TerminalHarness,
@@ -51,6 +55,10 @@ export abstract class ForwardingHarness implements TerminalHarness {
 
   get sessionId(): string {
     return this.session.sessionId;
+  }
+
+  get terminalProfile(): string {
+    return this.session.terminalProfile;
   }
 
   get shell(): ShellApi {
@@ -89,10 +97,6 @@ export abstract class ForwardingHarness implements TerminalHarness {
     return this.session.exit;
   }
 
-  capabilities(): SessionCapabilities {
-    return this.session.capabilities();
-  }
-
   contract(): EffectiveSessionContract | null {
     return this.session.contract();
   }
@@ -103,6 +107,17 @@ export abstract class ForwardingHarness implements TerminalHarness {
 
   waitForCheckpointChange(options: { readonly after: ObservationStamp } & WaitOptions): Promise<ObservationStamp> {
     return this.session.waitForCheckpointChange(options);
+  }
+
+  waitForCommittedObservation(options?: WaitOptions): Promise<ObservationStamp> {
+    return this.session.waitForCommittedObservation(options);
+  }
+
+  bindOperationBudget(budget: OperationBudget): void {
+    if (this.session.bindOperationBudget === undefined) {
+      throw new TypeError('the forwarded Termwright session is not budget-aware');
+    }
+    this.session.bindOperationBudget(budget);
   }
 
   screen(): ScreenSnapshot {
@@ -117,31 +132,34 @@ export abstract class ForwardingHarness implements TerminalHarness {
     return this.session.cell(pos);
   }
 
-  getByRole(role: SemanticRole, opts?: RoleLocatorOptions): Locator {
+  getByRole(role: SemanticRole, opts?: RoleLocatorOptions): SemanticLocator {
     return this.session.getByRole(role, opts);
   }
 
-  getByLabel(text: string | RegExp, opts?: { exact?: boolean }): Locator {
+  getByLabel(text: string | RegExp, opts?: { exact?: boolean }): SemanticLocator {
     return this.session.getByLabel(text, opts);
   }
 
-  getByText(text: string | RegExp, opts?: TextLocatorOptions): Locator {
+  getByText(text: string | RegExp, opts?: TextLocatorOptions): SemanticLocator {
     return this.session.getByText(text, opts);
   }
 
-  getByScreenText(text: string | RegExp, opts?: ScreenTextLocatorOptions): Locator {
+  getByScreenText(text: string | RegExp, opts?: ScreenTextLocatorOptions): ScreenLocator {
     return this.session.getByScreenText(text, opts);
   }
 
-  getByTestId(testId: string): Locator {
+  getByTestId(testId: string): SemanticLocator {
     return this.session.getByTestId(testId);
   }
 
-  locator(selector: string): Locator {
+  locator(selector: string): SemanticLocator {
     return this.session.locator(selector);
   }
 
-  locatorForRef(ref: string): Locator {
+  locatorForRef(ref: SemanticLocatorRef): SemanticLocator;
+  locatorForRef(ref: ScreenLocatorRef): ScreenLocator;
+  locatorForRef(ref: LocatorRef): SemanticLocator | ScreenLocator;
+  locatorForRef(ref: LocatorRef): SemanticLocator | ScreenLocator {
     return this.session.locatorForRef(ref);
   }
 
@@ -177,20 +195,16 @@ export abstract class ForwardingHarness implements TerminalHarness {
     return this.session.waitForRender(opts);
   }
 
-  waitForStable(opts?: { frames?: number } & WaitOptions): Promise<void> {
-    return this.session.waitForStable(opts);
-  }
-
-  waitForIdle(opts?: WaitOptions): Promise<void> {
-    return this.session.waitForIdle(opts);
+  waitForQuiet(opts?: { quietMs?: number } & WaitOptions): Promise<void> {
+    return this.session.waitForQuiet(opts);
   }
 
   settled(opts?: WaitOptions): Promise<EffectiveSessionContract> {
     return this.session.settled(opts);
   }
 
-  waitForReady(opts?: WaitOptions): Promise<void> {
-    return this.session.waitForReady(opts);
+  waitForShellPrompt(opts?: WaitOptions): Promise<void> {
+    return this.session.waitForShellPrompt(opts);
   }
 
   waitForExit(opts?: WaitOptions): Promise<ExitStatus> {

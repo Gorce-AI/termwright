@@ -1,5 +1,5 @@
 /**
- * `termwright/test` — the Vitest preset, re-exported.
+ * `termwright/test` — the Native Host authoring API, re-exported.
  *
  * Importing this registers termwright's matchers with `expect`, so a test file
  * needs exactly one import for `test`, `expect`, the `terminal` fixture, the

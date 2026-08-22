@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { Box, Text } from 'ink';
-import type { Locator } from '@termwright/driver';
+import type { SemanticLocator } from '@termwright/driver';
 import type { Rect } from '@termwright/protocol';
 import type { InkHarness } from './mount.js';
 import { mountInk } from './mount.js';
@@ -14,7 +14,7 @@ import CounterApp from './testing/counter-app.mjs';
 
 const open: InkHarness[] = [];
 
-async function intendedRect(locator: Locator): Promise<Rect | null> {
+async function intendedRect(locator: SemanticLocator): Promise<Rect | null> {
   const observation = (await locator.geometry()).intendedRect;
   return observation.status === 'known' ? observation.value : null;
 }
@@ -33,9 +33,9 @@ describe('mountInk', () => {
   it('publishes a semantic tree the driver can address by role', async () => {
     const harness = await mount();
 
-    expect(harness.capabilities().semanticTree).toBe(true);
-    expect(harness.capabilities().adapter?.name).toBe('@termwright/probe-ink');
-    expect(harness.capabilities().capabilities).toContain('intended-geometry');
+    expect(harness.contract()?.capabilities['semantic-tree'].status).toBe('supported');
+    expect(harness.contract()?.framework?.name).toBe('ink');
+    expect(harness.contract()?.capabilities['intended-geometry'].status).toBe('supported');
 
     const button = harness.getByRole('button', { name: 'Approve' });
     expect(await button.count()).toBe(1);
@@ -90,12 +90,12 @@ describe('mountInk', () => {
     const harness = await mount();
 
     await harness.press('Tab');
-    await harness.waitForStable();
+    await harness.waitForQuiet();
     await harness.type('hi');
     await harness.waitForText('> hi');
     // `waitForText` is satisfied by the screen; the tree describing that frame
     // is published immediately afterwards.
-    await harness.waitForStable();
+    await harness.waitForQuiet();
 
     expect(harness.screen().text()).toContain('> hi');
   });
@@ -202,12 +202,10 @@ describe('mountInk', () => {
     expect(await harness.settled()).toEqual(capabilities);
   });
 
-  it('answers waitForReady, and says how it decided', async () => {
+  it('offers an explicitly heuristic quiet wait for a TUI without shell markers', async () => {
     const harness = await mount();
 
-    // Ink emits no shell-integration marks, so this exercises the driver's
-    // settled-screen fallback — the path a TUI always takes.
-    await harness.waitForReady();
+    await harness.waitForQuiet({ quietMs: 100 });
 
     expect(harness.diagnostics().every((entry) => typeof entry.code === 'string')).toBe(true);
   });

@@ -31,7 +31,7 @@ const dialog = tree([
   },
   { id: 'b2', parentId: 'd1', role: 'button', name: 'Reject', testId: 'reject', state: { disabled: true } },
   { id: 'l1', parentId: 'root', role: 'text', name: 'Your name' },
-  { id: 'i1', parentId: 'root', role: 'textbox', name: '', value: 'Ada', labelledBy: ['l1'] },
+  { id: 'i1', parentId: 'root', role: 'textbox', name: '', value: { status: 'known', value: 'Ada', sensitivity: 'public', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } }, labelledBy: ['l1'] },
   { id: 'b3', parentId: 'root', role: 'button', name: 'Approve' },
 ]);
 

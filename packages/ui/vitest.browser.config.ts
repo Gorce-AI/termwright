@@ -20,7 +20,9 @@ export default defineConfig({
     ],
   },
   test: {
-    include: ['src/app/**/*.e2e.ts'],
+    // The Termwright host owns the repository root. Keep collection explicit
+    // instead of inheriting the caller's cwd as a hidden execution mode.
+    include: ['packages/ui/src/app/**/*.e2e.ts'],
     environment: 'node',
     testTimeout: 60_000,
     hookTimeout: 120_000,

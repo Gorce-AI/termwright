@@ -1,9 +1,13 @@
 import type {
   EvidenceProviderCapability,
   EvidenceProviderRegistration,
+  PhysicalInputRecipe,
   PointerHitGrid,
   ProviderPointerRegion,
+  ProviderPaintedRegion,
   ProviderRevisionEvidence,
+  ProviderTerminalInputModes,
+  SemanticScrollState,
   Rect,
 } from "@termwright/protocol";
 
@@ -33,7 +37,7 @@ export interface ApplicationPointerRegion {
   }[];
 }
 
-export interface ApplicationEvidenceObservation {
+export interface ApplicationPointerEvidenceObservation {
   /** Regions owned by semantic recipients in the production application. */
   readonly pointerRegions: readonly ApplicationPointerRegion[];
   /**
@@ -43,14 +47,99 @@ export interface ApplicationEvidenceObservation {
   readonly hitTest?: (column: number, row: number) => EvidenceRecipient | null;
 }
 
-export interface ApplicationEvidenceProvider {
+export interface ApplicationActionStrategyObservation {
+  /** Production keybindings for semantic recipients; data only, never callbacks. */
+  readonly actionRecipes: readonly {
+    readonly recipient: EvidenceRecipient;
+    readonly recipes: readonly PhysicalInputRecipe[];
+  }[];
+}
+
+export interface ApplicationFocusEvidenceObservation {
+  /** Recipient selected by the application's production focus manager. */
+  readonly focused: EvidenceRecipient | null;
+}
+
+export interface ApplicationScrollEvidenceObservation {
+  /** Complete production viewport facts for every published scroll recipient. */
+  readonly scrollStates: readonly ({
+    readonly recipient: EvidenceRecipient;
+  } & SemanticScrollState)[];
+}
+
+export interface ApplicationPaintEvidenceObservation {
+  /** Complete production paint attribution for the committed frame. */
+  readonly paintedRegions: readonly ApplicationPointerRegion[];
+}
+
+export interface ApplicationTerminalInputModeObservation {
+  /** The application's actual production terminal parser configuration. */
+  readonly inputModes: ProviderTerminalInputModes;
+}
+
+interface ApplicationProviderIdentity {
   readonly id: string;
   readonly version: string;
-  readonly capabilities: readonly EvidenceProviderCapability[];
-  /** `native` for a production router; `declared` for explicit region contracts. */
+  /** `native` for a production mechanism; `declared` for an explicit app contract. */
   readonly method: "native" | "declared";
-  observe(context: EvidenceRevisionContext): ApplicationEvidenceObservation;
 }
+
+/** A closed provider family for production pointer ownership/routing. */
+export interface ApplicationPointerEvidenceProvider
+  extends ApplicationProviderIdentity {
+  readonly family: "pointer";
+  readonly capabilities: readonly ("pointer-regions" | "hit-test")[];
+  observe(
+    context: EvidenceRevisionContext,
+  ): ApplicationPointerEvidenceObservation;
+}
+
+/** A closed provider family for production physical keyboard recipes. */
+export interface ApplicationActionStrategyProvider
+  extends ApplicationProviderIdentity {
+  readonly family: "action-strategy";
+  observe(
+    context: EvidenceRevisionContext,
+  ): ApplicationActionStrategyObservation;
+}
+
+/** A closed provider family for the application's production focus manager. */
+export interface ApplicationFocusEvidenceProvider
+  extends ApplicationProviderIdentity {
+  readonly family: "focus";
+  observe(context: EvidenceRevisionContext): ApplicationFocusEvidenceObservation;
+}
+
+/** A closed provider family for the application's production viewport model. */
+export interface ApplicationScrollEvidenceProvider
+  extends ApplicationProviderIdentity {
+  readonly family: "scroll";
+  observe(context: EvidenceRevisionContext): ApplicationScrollEvidenceObservation;
+}
+
+/** A closed provider family for the application's production painter. */
+export interface ApplicationPaintEvidenceProvider
+  extends ApplicationProviderIdentity {
+  readonly family: "paint";
+  observe(context: EvidenceRevisionContext): ApplicationPaintEvidenceObservation;
+}
+
+/** A closed provider family for production terminal parser configuration. */
+export interface ApplicationTerminalInputModeEvidenceProvider
+  extends ApplicationProviderIdentity {
+  readonly family: "input-mode";
+  observe(
+    context: EvidenceRevisionContext,
+  ): ApplicationTerminalInputModeObservation;
+}
+
+export type ApplicationEvidenceProvider =
+  | ApplicationPointerEvidenceProvider
+  | ApplicationFocusEvidenceProvider
+  | ApplicationScrollEvidenceProvider
+  | ApplicationPaintEvidenceProvider
+  | ApplicationTerminalInputModeEvidenceProvider
+  | ApplicationActionStrategyProvider;
 
 export interface EvidenceProviderRegistrationHandle {
   /**
@@ -62,6 +151,7 @@ export interface EvidenceProviderRegistrationHandle {
 
 interface ProviderEntry {
   readonly provider: ApplicationEvidenceProvider;
+  readonly capabilities: readonly EvidenceProviderCapability[];
   active: boolean;
 }
 
@@ -71,8 +161,23 @@ interface RegistryState {
 }
 
 export interface EvidenceProviderRegistry {
-  register(
-    provider: ApplicationEvidenceProvider,
+  registerPointer(
+    provider: ApplicationPointerEvidenceProvider,
+  ): EvidenceProviderRegistrationHandle;
+  registerActionStrategies(
+    provider: ApplicationActionStrategyProvider,
+  ): EvidenceProviderRegistrationHandle;
+  registerFocus(
+    provider: ApplicationFocusEvidenceProvider,
+  ): EvidenceProviderRegistrationHandle;
+  registerScroll(
+    provider: ApplicationScrollEvidenceProvider,
+  ): EvidenceProviderRegistrationHandle;
+  registerPaint(
+    provider: ApplicationPaintEvidenceProvider,
+  ): EvidenceProviderRegistrationHandle;
+  registerInputModes(
+    provider: ApplicationTerminalInputModeEvidenceProvider,
   ): EvidenceProviderRegistrationHandle;
   /** @internal Framework probes lease a frozen declaration set per session. */
   freeze(): FrozenEvidenceProviderRegistry;
@@ -101,9 +206,23 @@ function assertIdentifier(value: string, field: string): void {
 }
 
 function normalizedCapabilities(
-  capabilities: readonly EvidenceProviderCapability[],
+  provider: ApplicationEvidenceProvider,
 ): readonly EvidenceProviderCapability[] {
-  const unique = [...new Set(capabilities)];
+  const capabilities =
+    provider.family === "action-strategy"
+      ? (["action-recipes"] as const)
+      : provider.family === "focus"
+        ? (["focus-state"] as const)
+        : provider.family === "scroll"
+          ? (["scroll-state"] as const)
+          : provider.family === "paint"
+            ? (["painted-regions"] as const)
+            : provider.family === "input-mode"
+              ? (["terminal-input-modes"] as const)
+            : provider.capabilities;
+  const unique: EvidenceProviderCapability[] = [
+    ...new Set<EvidenceProviderCapability>(capabilities as readonly EvidenceProviderCapability[]),
+  ];
   if (unique.length === 0) {
     throw new TypeError(
       "provider must declare at least one evidence capability",
@@ -112,7 +231,13 @@ function normalizedCapabilities(
   if (
     unique.some(
       (capability) =>
-        capability !== "pointer-regions" && capability !== "hit-test",
+        capability !== "pointer-regions" &&
+        capability !== "hit-test" &&
+        capability !== "focus-state" &&
+        capability !== "action-recipes" &&
+        capability !== "scroll-state" &&
+        capability !== "painted-regions" &&
+        capability !== "terminal-input-modes",
     )
   ) {
     throw new TypeError("provider declares an unknown evidence capability");
@@ -137,22 +262,12 @@ function registerIn(
       `provider ${provider.id} is already registered`,
     );
   }
-  const capabilities = normalizedCapabilities(provider.capabilities);
-  for (const existing of registry.entries.values()) {
-    const competingCapability = capabilities.find((capability) =>
-      existing.provider.capabilities.includes(capability),
-    );
-    if (competingCapability !== undefined) {
-      throw new EvidenceProviderLifecycleError(
-        `providers ${existing.provider.id} and ${provider.id} both claim exclusive ${competingCapability} ownership`,
-      );
-    }
-  }
+  const capabilities = normalizedCapabilities(provider);
+  // Multiple authoritative producers may co-prove the same fact. Revision
+  // composition rejects disagreement; registration order is never a winner.
   const entry: ProviderEntry = {
-    provider: Object.freeze({
-      ...provider,
-      capabilities,
-    }),
+    provider: Object.freeze({ ...provider }),
+    capabilities,
     active: true,
   };
   registry.entries.set(provider.id, entry);
@@ -169,12 +284,12 @@ function freezeState(registry: RegistryState): FrozenEvidenceProviderRegistry {
   registry.activeLeases += 1;
   const entries = [...registry.entries.values()];
   const registrations = Object.freeze(
-    entries.map(({ provider }) =>
+    entries.map(({ provider, capabilities }) =>
       Object.freeze({
         id: provider.id,
         version: provider.version,
         method: provider.method,
-        capabilities: Object.freeze([...provider.capabilities]),
+        capabilities: Object.freeze([...capabilities]),
       }),
     ),
   );
@@ -198,7 +313,17 @@ function freezeState(registry: RegistryState): FrozenEvidenceProviderRegistry {
 
 function registryFor(state: RegistryState): EvidenceProviderRegistry {
   return Object.freeze({
-    register: (provider: ApplicationEvidenceProvider) =>
+    registerPointer: (provider: ApplicationPointerEvidenceProvider) =>
+      registerIn(state, provider),
+    registerActionStrategies: (provider: ApplicationActionStrategyProvider) =>
+      registerIn(state, provider),
+    registerFocus: (provider: ApplicationFocusEvidenceProvider) =>
+      registerIn(state, provider),
+    registerScroll: (provider: ApplicationScrollEvidenceProvider) =>
+      registerIn(state, provider),
+    registerPaint: (provider: ApplicationPaintEvidenceProvider) =>
+      registerIn(state, provider),
+    registerInputModes: (provider: ApplicationTerminalInputModeEvidenceProvider) =>
       registerIn(state, provider),
     freeze: () => freezeState(state),
   });
@@ -213,11 +338,51 @@ export function createEvidenceProviderRegistry(): EvidenceProviderRegistry {
  * Register in the process facade used by zero-config probes. Pass an explicit
  * registry when one process hosts independently configured applications.
  */
-export function registerEvidenceProvider(
-  provider: ApplicationEvidenceProvider,
+export function registerPointerEvidenceProvider(
+  provider: ApplicationPointerEvidenceProvider,
   registry: EvidenceProviderRegistry = registryFor(defaultState()),
 ): EvidenceProviderRegistrationHandle {
-  return registry.register(provider);
+  return registry.registerPointer(provider);
+}
+
+/** Register production physical input strategies before contract freeze. */
+export function registerActionStrategyProvider(
+  provider: ApplicationActionStrategyProvider,
+  registry: EvidenceProviderRegistry = registryFor(defaultState()),
+): EvidenceProviderRegistrationHandle {
+  return registry.registerActionStrategies(provider);
+}
+
+/** Register production focus-manager evidence before contract freeze. */
+export function registerFocusEvidenceProvider(
+  provider: ApplicationFocusEvidenceProvider,
+  registry: EvidenceProviderRegistry = registryFor(defaultState()),
+): EvidenceProviderRegistrationHandle {
+  return registry.registerFocus(provider);
+}
+
+/** Register production application viewport evidence before contract freeze. */
+export function registerScrollEvidenceProvider(
+  provider: ApplicationScrollEvidenceProvider,
+  registry: EvidenceProviderRegistry = registryFor(defaultState()),
+): EvidenceProviderRegistrationHandle {
+  return registry.registerScroll(provider);
+}
+
+/** Register production paint attribution before contract freeze. */
+export function registerPaintEvidenceProvider(
+  provider: ApplicationPaintEvidenceProvider,
+  registry: EvidenceProviderRegistry = registryFor(defaultState()),
+): EvidenceProviderRegistrationHandle {
+  return registry.registerPaint(provider);
+}
+
+/** Register production parser input-mode evidence before contract freeze. */
+export function registerTerminalInputModeEvidenceProvider(
+  provider: ApplicationTerminalInputModeEvidenceProvider,
+  registry: EvidenceProviderRegistry = registryFor(defaultState()),
+): EvidenceProviderRegistrationHandle {
+  return registry.registerInputModes(provider);
 }
 
 /** @internal Framework probes create one frozen lease per connection. */
@@ -244,27 +409,60 @@ function collectEntry(
     });
   }
   try {
-    const observation = entry.provider.observe(context);
+    let pointerObservation: ApplicationPointerEvidenceObservation | undefined;
+    let strategyObservation: ApplicationActionStrategyObservation | undefined;
+    let focusObservation: ApplicationFocusEvidenceObservation | undefined;
+    let scrollObservation: ApplicationScrollEvidenceObservation | undefined;
+    let paintObservation: ApplicationPaintEvidenceObservation | undefined;
+    let inputModeObservation: ApplicationTerminalInputModeObservation | undefined;
+    if (entry.provider.family === "pointer") {
+      pointerObservation = entry.provider.observe(context);
+    } else if (entry.provider.family === "action-strategy") {
+      strategyObservation = entry.provider.observe(context);
+    } else if (entry.provider.family === "focus") {
+      focusObservation = entry.provider.observe(context);
+    } else if (entry.provider.family === "scroll") {
+      scrollObservation = entry.provider.observe(context);
+    } else if (entry.provider.family === "paint") {
+      paintObservation = entry.provider.observe(context);
+    } else {
+      inputModeObservation = entry.provider.observe(context);
+    }
     if (
-      !entry.provider.capabilities.includes("pointer-regions") &&
-      observation.pointerRegions.length > 0
+      !entry.capabilities.includes("pointer-regions") &&
+      pointerObservation !== undefined &&
+      pointerObservation.pointerRegions.length > 0
     ) {
       throw new Error(
         "published pointer regions without negotiating pointer-regions",
       );
     }
     if (
-      entry.provider.capabilities.includes("hit-test") &&
-      observation.hitTest === undefined
+      entry.capabilities.includes("hit-test") &&
+      pointerObservation?.hitTest === undefined
     ) {
       throw new Error("negotiated hit-test callback is unavailable");
     }
     if (
-      !entry.provider.capabilities.includes("hit-test") &&
-      observation.hitTest !== undefined
+      !entry.capabilities.includes("hit-test") &&
+      pointerObservation?.hitTest !== undefined
     ) {
       throw new Error(
         "published a hit-test callback without negotiating hit-test",
+      );
+    }
+    if (
+      entry.capabilities.includes("action-recipes") &&
+      strategyObservation?.actionRecipes === undefined
+    ) {
+      throw new Error("negotiated action-recipes evidence is unavailable");
+    }
+    if (
+      !entry.capabilities.includes("action-recipes") &&
+      strategyObservation?.actionRecipes !== undefined
+    ) {
+      throw new Error(
+        "published action recipes without negotiating action-recipes",
       );
     }
     const resolve =
@@ -274,22 +472,55 @@ function collectEntry(
         throw new Error("semantic recipient resolver is unavailable");
       });
     const pointerRegions = Object.freeze(
-      observation.pointerRegions.map((region) =>
+      (pointerObservation?.pointerRegions ?? []).map((region) =>
         freezeRegion(region, resolve(region.recipient)),
       ),
     );
     const hitGrid =
-      observation.hitTest === undefined
+      pointerObservation?.hitTest === undefined
         ? undefined
         : buildHitGrid(
             pointerRegions,
             (column, row) => {
-              const recipient = observation.hitTest?.(column, row) ?? null;
+              const recipient = pointerObservation.hitTest?.(column, row) ?? null;
               return recipient === null ? null : resolve(recipient);
             },
             context,
-            entry.provider.capabilities.includes("pointer-regions"),
+            entry.capabilities.includes("pointer-regions"),
           );
+    const actionRecipes = strategyObservation?.actionRecipes.map((entry) =>
+      Object.freeze({
+        recipientId: resolve(entry.recipient),
+        recipes: Object.freeze(
+          entry.recipes.map((recipe) =>
+            Object.freeze({
+              ...recipe,
+              steps: Object.freeze(
+                recipe.steps.map((step) => Object.freeze({ ...step })),
+              ),
+            }),
+          ),
+        ),
+      }),
+    );
+    const scrollStates = scrollObservation?.scrollStates.map((state) => {
+      if (!Number.isSafeInteger(state.offset) || !Number.isSafeInteger(state.viewport) || !Number.isSafeInteger(state.extent) || state.offset < 0 || state.viewport < 0 || state.extent < 0 || state.offset + state.viewport > state.extent) {
+        throw new Error("scroll state must contain non-negative safe integers within its extent");
+      }
+      return Object.freeze({
+        recipientId: resolve(state.recipient),
+        axis: state.axis,
+        offset: state.offset,
+        viewport: state.viewport,
+        extent: state.extent,
+      });
+    });
+    const paintedRegions: readonly ProviderPaintedRegion[] | undefined =
+      paintObservation?.paintedRegions.map((region) =>
+        freezeRegion(region, resolve(region.recipient)),
+      );
+    const inputModes = inputModeObservation?.inputModes;
+    if (inputModes !== undefined) validateInputModes(inputModes);
     return Object.freeze({
       providerId,
       sessionId: context.sessionId,
@@ -302,6 +533,29 @@ function collectEntry(
         providerId,
       }),
       pointerRegions,
+      ...(focusObservation === undefined
+        ? {}
+        : {
+            focusState:
+              focusObservation.focused === null
+                ? Object.freeze({ status: "none" as const })
+                : Object.freeze({
+                    status: "focused" as const,
+                    recipientId: resolve(focusObservation.focused),
+                  }),
+          }),
+      ...(actionRecipes === undefined
+        ? {}
+        : { actionRecipes: Object.freeze(actionRecipes) }),
+      ...(scrollStates === undefined
+        ? {}
+        : { scrollStates: Object.freeze(scrollStates) }),
+      ...(paintedRegions === undefined
+        ? {}
+        : { paintedRegions: Object.freeze(paintedRegions) }),
+      ...(inputModes === undefined
+        ? {}
+        : { inputModes: Object.freeze({ ...inputModes }) }),
       ...(hitGrid === undefined ? {} : { hitGrid }),
     });
   } catch (error) {
@@ -312,6 +566,18 @@ function collectEntry(
       status: "violation" as const,
       reason: error instanceof Error ? error.message : String(error),
     });
+  }
+}
+
+function validateInputModes(modes: ProviderTerminalInputModes): void {
+  if (!["none", "x10", "vt200", "drag", "any"].includes(modes.mouseTracking)) {
+    throw new Error("input modes contain an invalid mouseTracking value");
+  }
+  if (!["default", "sgr", "urxvt", "utf8"].includes(modes.mouseEncoding)) {
+    throw new Error("input modes contain an invalid mouseEncoding value");
+  }
+  if (modes.focusReporting !== "on" && modes.focusReporting !== "off") {
+    throw new Error("input modes contain an invalid focusReporting value");
   }
 }
 

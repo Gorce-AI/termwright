@@ -48,10 +48,12 @@ duplicate non-empty keys terminate the semantic session with
 `duplicate-semantic-key`. The handshake remains conservatively
 `identityKind: frame-local` because ordinary unannotated Ratatui nodes still do.
 
-The wrapper must be passed through `Frame::render_widget` or
-`Frame::render_stateful_widget`. Ratatui composition that calls `Widget::render`
-directly is not intercepted. The SDK detects that case and drops the nested
-annotation instead of attaching it to the wrong outer render call.
+The wrapper itself is an authoritative render boundary. It is observed both
+through `Frame::render_widget` / `Frame::render_stateful_widget` and when a
+custom parent calls its `Widget::render` implementation directly. An exact
+Frame announcement is claimed instead of duplicated. Nested `Annotated`
+calls retain hierarchy only where their real Rust call nesting proves it;
+ordinary unannotated immediate-mode calls remain flat.
 
 ## Versions
 

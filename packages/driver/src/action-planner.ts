@@ -1,10 +1,11 @@
 import type {
   ActionIntent,
-  ActionPlan,
+  ExecutableActionPlan,
   ActionabilityExplanation,
   Condition,
   ConditionResult,
-  DeviceOperation,
+  ExecutableDeviceOperation,
+  ExecutableValue,
   EffectiveSessionContract,
   EvidenceProvenance,
   Observation,
@@ -17,6 +18,7 @@ import type {
 import type { ErrorDiagnostics, PointerOptions, ResolvedTarget, TerminalModes, WaitOptions } from './api.js';
 import { CapabilityUnavailableError, InputModeDisabledError, NotActionableError, StaleSnapshotError, TermwrightError } from './errors.js';
 import { normalizeMouseModifiers } from './mouse.js';
+import { semanticNodeId } from './selectors.js';
 
 export interface ActionPlannerContext {
   /** Whether every source that can change action evidence is at a commit boundary. */
@@ -32,7 +34,7 @@ export interface ActionPlannerContext {
 }
 
 export interface PlannedPointerAction {
-  readonly plan: ActionPlan;
+  readonly plan: ExecutableActionPlan;
   readonly point: { readonly row: number; readonly column: number };
 }
 
@@ -72,6 +74,13 @@ export function isAuthoritativeRegionOwnership(
     && provider.capabilities.includes('pointer-regions')
     && !contract.providers.some((candidate) =>
       candidate.kind === 'application' && candidate.capabilities.includes('hit-test'));
+}
+
+function contractSupports(
+  contract: EffectiveSessionContract | null,
+  capability: keyof EffectiveSessionContract['capabilities'],
+): boolean {
+  return contract?.capabilities[capability].status === 'supported';
 }
 
 function result(condition: Condition, checkpoint: ObservationStamp, observation: Observation<boolean>): ConditionResult {
@@ -267,7 +276,7 @@ export class ActionPlanner {
       }
       const contract = this.#ctx.contract();
       const verifiesOwnership = contract?.capabilities['pointer-hit-testing'].status === 'supported';
-      const nodeId = target.ref.split('@')[0] ?? '';
+      const nodeId = semanticNodeId(target.ref) ?? '';
       const node = this.#ctx.semanticNode(nodeId);
       if (node === undefined) throw new StaleSnapshotError(`semantic target ${target.ref} is detached`, diagnostics);
       const enabled: Condition = { kind: 'enabled', target: target.ref };
@@ -375,8 +384,8 @@ export class ActionPlanner {
     actionId: string,
     intent: ActionIntent,
     target: ResolvedTarget,
-    value = '',
-  ): ActionPlan {
+    value: ExecutableValue = '',
+  ): ExecutableActionPlan {
     try {
       return this.#planKeyboard(actionId, intent, target, value);
     } catch (error) {
@@ -388,8 +397,8 @@ export class ActionPlanner {
     actionId: string,
     intent: ActionIntent,
     target: ResolvedTarget,
-    value = '',
-  ): ActionPlan {
+    value: ExecutableValue = '',
+  ): ExecutableActionPlan {
     this.#lastRequirements = Object.freeze([]);
     this.#requireSettledObservation(intent);
     const checkpoint = this.#ctx.checkpoint();
@@ -407,7 +416,7 @@ export class ActionPlanner {
     if (target.revision !== checkpoint.semanticRevision || checkpoint.pairedScreenRevision === null) {
       throw new StaleSnapshotError(`${intent.kind} target and terminal screen do not belong to one committed observation`, diagnostics);
     }
-    const nodeId = target.ref.split('@')[0] ?? '';
+    const nodeId = semanticNodeId(target.ref) ?? '';
     const node = this.#ctx.semanticNode(nodeId);
     if (node === undefined) throw new StaleSnapshotError(`${intent.kind} target is detached`, diagnostics);
     const requirements: ConditionResult[] = [
@@ -436,29 +445,52 @@ export class ActionPlanner {
 
     if (intent.kind === 'type' || intent.kind === 'press') {
       if (focused !== true) throw new NotActionableError(`${intent.kind} requires ${target.ref} to be focused`, diagnostics);
-      const operations: readonly DeviceOperation[] = Object.freeze([{ device: 'keyboard', kind: intent.kind === 'press' ? 'press' : 'type', value }]);
+      const operations: readonly ExecutableDeviceOperation[] = Object.freeze([{ device: 'keyboard', kind: intent.kind === 'press' ? 'press' : 'type', value }]);
       return Object.freeze({ actionId, contractId: checkpoint.contractId, intent, checkpoint, requirements: Object.freeze(requirements), strategy: 'focused-keyboard', operations });
     }
     if (intent.kind === 'fill') {
-      const pointer = focused === true ? null : this.planPointer(actionId, { kind: 'focus', targetRef: target.ref }, target);
-      const focusOps = pointer?.plan.operations ?? [];
-      const operations: readonly DeviceOperation[] = Object.freeze([...focusOps, { device: 'keyboard', kind: 'press', value: 'Control+A' }, { device: 'keyboard', kind: 'type', value }]);
+      this.#requireCapability('action-strategies', 'fill requires an authoritative physical replace-value recipe', diagnostics);
+      const recipe = this.#recipeOperations(node, 'setValue', value, diagnostics);
+      if (recipe === null) throw new CapabilityUnavailableError('target has no authoritative setValue physical input recipe', diagnostics);
+      const focusPlan = focused === true
+        ? null
+        : this.#planKeyboard(actionId, { kind: 'focus', targetRef: target.ref }, target, undefined);
+      if (recipe.requiresFocus && focused !== true && (focusPlan === null || focusPlan.operations.length === 0)) {
+        throw new NotActionableError('fill recipe requires focus but no focus operation was planned', diagnostics);
+      }
+      const operations: readonly ExecutableDeviceOperation[] = Object.freeze([...(focusPlan?.operations ?? []), ...recipe.operations]);
       return Object.freeze({
         actionId, contractId: checkpoint.contractId, intent, checkpoint,
-        requirements: Object.freeze(pointer === null ? requirements : [...requirements, ...pointer.plan.requirements]),
-        strategy: focused === true ? 'focused-select-all-type' : 'pointer-focus-select-all-type',
-        ...(pointer?.plan.physicalRegion === undefined ? {} : { physicalRegion: pointer.plan.physicalRegion }),
+        requirements: Object.freeze(focusPlan === null ? requirements : [...requirements, ...focusPlan.requirements]),
+        strategy: focused === true ? 'focused-authoritative-replace' : `${focusPlan?.strategy ?? 'focus'}-then-authoritative-replace`,
+        ...(focusPlan?.physicalRegion === undefined ? {} : { physicalRegion: focusPlan.physicalRegion }),
         operations,
       });
     }
     if (intent.kind === 'focus') {
-      const pointer = focused === true ? null : this.planPointer(actionId, { kind: 'focus', targetRef: target.ref }, target);
+      if (focused === true) {
+        return Object.freeze({
+          actionId, contractId: checkpoint.contractId, intent, checkpoint,
+          requirements: Object.freeze(requirements), strategy: 'already-focused', operations: Object.freeze([]),
+        });
+      }
+      const recipe = contractSupports(this.#ctx.contract(), 'action-strategies')
+        ? this.#recipeOperations(node, 'focus', undefined, diagnostics, false)
+        : null;
+      if (recipe !== null) {
+        if (recipe.requiresFocus) throw new CapabilityUnavailableError('focus recipe cannot require the target to already be focused', diagnostics);
+        return Object.freeze({
+          actionId, contractId: checkpoint.contractId, intent, checkpoint,
+          requirements: Object.freeze(requirements), strategy: 'authoritative-keyboard-focus', operations: recipe.operations,
+        });
+      }
+      const pointer = this.planPointer(actionId, { kind: 'focus', targetRef: target.ref }, target);
       return Object.freeze({
         actionId, contractId: checkpoint.contractId, intent, checkpoint,
-        requirements: Object.freeze(pointer === null ? requirements : [...requirements, ...pointer.plan.requirements]),
-        strategy: focused === true ? 'already-focused' : 'authoritative-pointer-focus',
-        ...(pointer?.plan.physicalRegion === undefined ? {} : { physicalRegion: pointer.plan.physicalRegion }),
-        operations: pointer?.plan.operations ?? [],
+        requirements: Object.freeze([...requirements, ...pointer.plan.requirements]),
+        strategy: 'authoritative-pointer-focus',
+        ...(pointer.plan.physicalRegion === undefined ? {} : { physicalRegion: pointer.plan.physicalRegion }),
+        operations: pointer.plan.operations,
       });
     }
     if (intent.kind === 'activate' || intent.kind === 'check' || intent.kind === 'uncheck') {
@@ -474,10 +506,22 @@ export class ActionPlanner {
         this.#remember(requirements);
         return Object.freeze({ actionId, contractId: checkpoint.contractId, intent, checkpoint, requirements: Object.freeze(requirements), strategy: 'already-in-state', operations: Object.freeze([]) });
       }
-      if (focused === true) {
-        const key = node.role === 'checkbox' || node.role === 'radio' ? 'Space' : 'Enter';
-        const operations: readonly DeviceOperation[] = Object.freeze([{ device: 'keyboard', kind: 'press', value: key }]);
-        return Object.freeze({ actionId, contractId: checkpoint.contractId, intent, checkpoint, requirements: Object.freeze(requirements), strategy: key === 'Space' ? 'focus-space' : 'focus-enter', operations });
+      if (contractSupports(this.#ctx.contract(), 'action-strategies')) {
+        const action = desired === undefined ? 'activate' : 'toggle';
+        const recipe = this.#recipeOperations(node, action, undefined, diagnostics, false);
+        if (recipe !== null) {
+          const focusPlan = recipe.requiresFocus && focused !== true
+            ? this.#planKeyboard(actionId, { kind: 'focus', targetRef: target.ref }, target, undefined)
+            : null;
+          const operations = Object.freeze([...focusPlan?.operations ?? [], ...recipe.operations]);
+          return Object.freeze({
+            actionId, contractId: checkpoint.contractId, intent, checkpoint,
+            requirements: Object.freeze(focusPlan === null ? requirements : [...requirements, ...focusPlan.requirements]),
+            strategy: `${focusPlan === null ? '' : `${focusPlan.strategy}-then-`}authoritative-${action}`,
+            ...(focusPlan?.physicalRegion === undefined ? {} : { physicalRegion: focusPlan.physicalRegion }),
+            operations,
+          });
+        }
       }
       const pointer = this.planPointer(actionId, { kind: 'activate', targetRef: target.ref }, target);
       return Object.freeze({
@@ -488,6 +532,28 @@ export class ActionPlanner {
       });
     }
     throw new CapabilityUnavailableError(`planner does not support keyboard intent ${intent.kind}`, diagnostics);
+  }
+
+  #recipeOperations(
+    node: SemanticNode,
+    action: 'focus' | 'activate' | 'toggle' | 'setValue',
+    value: ExecutableValue | undefined,
+    diagnostics: ErrorDiagnostics,
+    required = true,
+  ): { readonly requiresFocus: boolean; readonly operations: readonly ExecutableDeviceOperation[] } | null {
+    const recipe = node.inputRecipes?.find((candidate) => candidate.action === action);
+    if (recipe === undefined) {
+      if (!required) return null;
+      throw new CapabilityUnavailableError(`target has no authoritative ${action} physical input recipe`, diagnostics);
+    }
+    const operations = recipe.steps.map((step): ExecutableDeviceOperation => {
+      if (step.kind === 'press') return Object.freeze({ device: 'keyboard', kind: 'press', value: step.key });
+      if (value === undefined) {
+        throw new CapabilityUnavailableError(`${action} recipe requires the action value`, diagnostics);
+      }
+      return Object.freeze({ device: 'keyboard', kind: 'type', value });
+    });
+    return Object.freeze({ requiresFocus: recipe.requiresFocus, operations: Object.freeze(operations) });
   }
 
   planWheel(
@@ -504,10 +570,10 @@ export class ActionPlanner {
     const planned = this.planPointer(actionId, intent, target, options);
     const modifiers = normalizeMouseModifiers(options.modifiers);
     const operations = Object.freeze([
-      ...Array.from({ length: Math.abs(vertical) }, () => Object.freeze<DeviceOperation>({
+      ...Array.from({ length: Math.abs(vertical) }, () => Object.freeze<ExecutableDeviceOperation>({
         device: 'mouse', kind: 'wheel', ...planned.point, modifiers, deltaY: Math.sign(vertical),
       })),
-      ...Array.from({ length: Math.abs(horizontal) }, () => Object.freeze<DeviceOperation>({
+      ...Array.from({ length: Math.abs(horizontal) }, () => Object.freeze<ExecutableDeviceOperation>({
         device: 'mouse', kind: 'wheel', ...planned.point, modifiers, deltaX: Math.sign(horizontal),
       })),
     ]);
@@ -554,9 +620,9 @@ export class ActionPlanner {
       index === 0 || point.row !== path[index - 1]?.row || point.column !== path[index - 1]?.column,
     );
     const modifiers = normalizeMouseModifiers(options.modifiers);
-    const operations = Object.freeze<DeviceOperation[]>([
+    const operations = Object.freeze<ExecutableDeviceOperation[]>([
       Object.freeze({ device: 'mouse', kind: 'down', button: 'left', modifiers, ...from.point }),
-      ...unique.map((point) => Object.freeze<DeviceOperation>({
+      ...unique.map((point) => Object.freeze<ExecutableDeviceOperation>({
         device: 'mouse', kind: 'move', button: 'left', modifiers, ...point,
       })),
       Object.freeze({ device: 'mouse', kind: 'up', button: 'left', modifiers, ...to.point }),
@@ -605,14 +671,14 @@ export class ActionPlanner {
     }
   }
 
-  #operations(intent: ActionIntent, point: { row: number; column: number }, options?: PointerOptions): readonly DeviceOperation[] {
+  #operations(intent: ActionIntent, point: { row: number; column: number }, options?: PointerOptions): readonly ExecutableDeviceOperation[] {
     const button = options?.button ?? 'left';
     const modifiers = normalizeMouseModifiers(options?.modifiers);
     if (intent.kind === 'hover') return Object.freeze([{ device: 'mouse', kind: 'move', modifiers, ...point }]);
     const clicks = intent.kind === 'double-click' ? 2 : 1;
     return Object.freeze(Array.from({ length: clicks }, () => [
-      Object.freeze<DeviceOperation>({ device: 'mouse', kind: 'down', button, modifiers, ...point }),
-      Object.freeze<DeviceOperation>({ device: 'mouse', kind: 'up', button, modifiers, ...point }),
+      Object.freeze<ExecutableDeviceOperation>({ device: 'mouse', kind: 'down', button, modifiers, ...point }),
+      Object.freeze<ExecutableDeviceOperation>({ device: 'mouse', kind: 'up', button, modifiers, ...point }),
     ]).flat());
   }
 

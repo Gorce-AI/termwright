@@ -26,6 +26,23 @@ from .client import (
 )
 from .debug import ENV_DEBUG, ENV_DEBUG_FILE, DebugLog, debug_path
 from .errors import ProtocolViolation, TermwrightError
+from .evidence import (
+    ApplicationActionStrategyProvider,
+    ApplicationFocusEvidenceProvider,
+    ApplicationScrollEvidenceProvider,
+    ApplicationPaintEvidenceProvider,
+    ApplicationTerminalInputModeEvidenceProvider,
+    EvidenceProviderLifecycleError,
+    EvidenceProviderRegistry,
+    EvidenceProviderRegistration,
+    EvidenceRevisionContext,
+    default_evidence_provider_registry,
+    register_action_strategy_provider,
+    register_focus_evidence_provider,
+    register_scroll_evidence_provider,
+    register_paint_evidence_provider,
+    register_terminal_input_mode_evidence_provider,
+)
 from .framing import FRAME_HEADER_BYTES, FrameDecoder, encode_frame, project_dto
 from .limits import ABSOLUTE_LIMITS, DEFAULT_LIMITS, ProtocolLimits
 from .logs import (
@@ -52,7 +69,12 @@ from .messages import (
     parse_adapter_message,
     parse_driver_message,
 )
-from .roles import ADAPTER_CAPABILITIES, SEMANTIC_ACTIONS, SEMANTIC_ROLES
+from .roles import (
+    ADAPTER_CAPABILITIES,
+    EVIDENCE_PROVIDER_CAPABILITIES,
+    SEMANTIC_ACTIONS,
+    SEMANTIC_ROLES,
+)
 from .tree import (
     EvidenceProvenance,
     CursorInfo,
@@ -62,8 +84,11 @@ from .tree import (
     Rect,
     SemanticNode,
     SemanticSnapshot,
+    SemanticScrollState,
+    SemanticPaintedRegion,
     SemanticState,
     SemanticTextRange,
+    SemanticValueObservation,
 )
 from .validate import ValidationResult, validate_snapshot
 
@@ -80,6 +105,11 @@ __all__ = [
     "flatten_attrs",
     "validate_log_record",
     "ADAPTER_CAPABILITIES",
+    "ApplicationActionStrategyProvider",
+    "ApplicationFocusEvidenceProvider",
+    "ApplicationScrollEvidenceProvider",
+    "ApplicationPaintEvidenceProvider",
+    "ApplicationTerminalInputModeEvidenceProvider",
     "DEFAULT_CAPABILITIES",
     "DEFAULT_LIMITS",
     "DebugLog",
@@ -87,6 +117,11 @@ __all__ = [
     "ENV_DEBUG_FILE",
     "ENV_ENDPOINT",
     "ENV_TOKEN",
+    "EvidenceProviderLifecycleError",
+    "EvidenceProviderRegistry",
+    "EvidenceProviderRegistration",
+    "EvidenceRevisionContext",
+    "EVIDENCE_PROVIDER_CAPABILITIES",
     "FRAME_HEADER_BYTES",
     "FrameDecoder",
     "MARKER_MAC_BYTES",
@@ -109,17 +144,26 @@ __all__ = [
     "SemanticClient",
     "SemanticNode",
     "SemanticSnapshot",
+    "SemanticScrollState",
+    "SemanticPaintedRegion",
     "SemanticState",
     "SemanticTextRange",
+    "SemanticValueObservation",
     "TermwrightError",
     "ValidationResult",
     "client_from_env",
     "debug_path",
+    "default_evidence_provider_registry",
     "encode_frame",
     "encode_marker",
     "parse_adapter_message",
     "parse_driver_message",
     "project_dto",
+    "register_action_strategy_provider",
+    "register_focus_evidence_provider",
+    "register_scroll_evidence_provider",
+    "register_paint_evidence_provider",
+    "register_terminal_input_mode_evidence_provider",
     "validate_snapshot",
     "verify_marker_payload",
 ]

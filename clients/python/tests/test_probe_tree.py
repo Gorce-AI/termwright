@@ -36,6 +36,11 @@ class DemoApp(App):
             yield Input(placeholder="Reason", id="reason")
 
 
+class PasswordApp(App):
+    def compose(self) -> ComposeResult:
+        yield Input(value="sentinel-secret", password=True, id="password")
+
+
 class ScrollingApp(App):
     """Far more content than fits, so most of it is clipped away."""
 
@@ -96,6 +101,20 @@ async def test_the_snapshot_validates():
     snapshot = await snapshot_of(DemoApp())
     result = validate_snapshot(snapshot, DEFAULT_LIMITS)
     assert result.ok, f"{result.code}: {result.detail}"
+
+
+async def test_textual_values_are_observations_and_passwords_are_withheld():
+    public = by_test_id(await snapshot_of(DemoApp()))["reason"]["value"]
+    assert public["status"] == "known"
+    assert public["sensitivity"] == "public"
+
+    password = by_test_id(await snapshot_of(PasswordApp()))["password"]["value"]
+    assert password == {
+        "status": "withheld",
+        "reason": "sensitive",
+        "sensitivity": "sensitive",
+    }
+    assert "sentinel-secret" not in str(password)
 
 
 async def test_roles_come_from_the_class_ancestry():

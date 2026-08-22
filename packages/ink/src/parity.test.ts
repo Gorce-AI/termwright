@@ -11,7 +11,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { createElement } from 'react';
 import type { Rect, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
-import type { Locator, TerminalHarness } from '@termwright/driver';
+import type { SemanticLocator, TerminalHarness } from '@termwright/driver';
 import { launchInkFixture } from './fixture.js';
 import { mountInk } from './mount.js';
 import CounterApp from './testing/counter-app.mjs';
@@ -22,7 +22,7 @@ const PROPS = { label: 'Approve', greeting: 'parity' } as const;
 
 const open: TerminalHarness[] = [];
 
-async function intendedRect(locator: Locator): Promise<Rect | null> {
+async function intendedRect(locator: SemanticLocator): Promise<Rect | null> {
   const observation = (await locator.geometry()).intendedRect;
   return observation.status === 'known' ? observation.value : null;
 }
@@ -62,7 +62,7 @@ it('describes the same component identically in-process and in a pty', async () 
     columns: mountedTree?.columns,
     rows: mountedTree?.rows,
   });
-  expect(fixture.capabilities().capabilities).toEqual(mounted.capabilities().capabilities);
+  expect(fixture.contract()?.capabilities).toEqual(mounted.contract()?.capabilities);
   expect(fixture.screen().text()).toBe(mounted.screen().text());
 });
 

@@ -10,7 +10,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "exports": {
     ".": {
@@ -29,8 +29,8 @@
   "scripts": {
     "build": "tsup src/index.ts src/runtime.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run && vitest run --config test-fixtures/direct/vitest.config.ts",
-    "test:fixture": "vitest run --config test-fixtures/direct/vitest.config.ts"
+    "test": "pnpm --dir ../.. test -- -- --run packages/gherkin && pnpm --dir ../.. test -- -- --config packages/gherkin/test-fixtures/direct/vitest.config.ts --run packages/gherkin/test-fixtures/direct",
+    "test:fixture": "pnpm --dir ../.. test -- -- --config packages/gherkin/test-fixtures/direct/vitest.config.ts --run packages/gherkin/test-fixtures/direct"
   },
   "dependencies": {
     "@cucumber/cucumber-expressions": "20.1.0",
@@ -43,10 +43,10 @@
   },
   "peerDependencies": {
     "vite": "^7.0.0",
-    "vitest": "^3.2.0"
+    "vitest": "3.2.7"
   },
   "devDependencies": {
     "vite": "^7.3.0",
-    "vitest": "^3.2.0"
+    "vitest": "3.2.7"
   }
 }

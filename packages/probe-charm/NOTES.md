@@ -160,7 +160,7 @@ declared name follows the value without any invalidation step.
 
 ## Traps
 
-- **`waitForStable()` is the wrong instrument for an animating UI.** The
+- **`waitForQuiet()` is the wrong instrument for an animating UI.** The
   spinner fixture never stops redrawing, so waiting for a quiet screen waits
   forever — "the screen never settled for 100 ms". Poll the tree instead. This
   is not a probe limitation: a stability wait asks a question an animation

@@ -20,9 +20,12 @@ const everyNodeField: Record<keyof SemanticNode, true> = {
   description: true,
   value: true,
   geometry: true,
+  scroll: true,
+  paintedRegion: true,
   state: true,
   extended: true,
   actions: true,
+  inputRecipes: true,
   labelledBy: true,
   describedBy: true,
   textRanges: true,
@@ -44,12 +47,12 @@ const everyStateField: Record<keyof SemanticState, true> = {
   offscreen: true,
   readonly: true,
   multiline: true,
+  required: true,
+  multiselectable: true,
   orientation: true,
   level: true,
   positionInSet: true,
   setSize: true,
-  scrollOffset: true,
-  scrollExtent: true,
 };
 
 describe('SEMANTIC_NODE_KEYS', () => {

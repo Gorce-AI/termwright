@@ -57,7 +57,7 @@ export const targetShape = {
     .string()
     .optional()
     .describe(
-      'ref from a previous snapshot: "n8@42" (semantic node) or "grid:1,2,9,1@7" (grid match); ' +
+      'ref from a previous snapshot: "semantic:n8@42" (semantic node) or "screen:1,2,9,1@7" (grid match); ' +
         'stable semantic identities may survive later revisions; frame-local and grid refs may not',
     ),
   selector: z

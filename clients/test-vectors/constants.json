@@ -65,16 +65,118 @@
     "intended-geometry",
     "clipped-geometry",
     "states",
+    "focus-state",
     "actions",
+    "action-recipes",
     "text-ranges",
     "render-revisions",
     "logs",
     "pointer-hit-grid"
   ],
+  "capabilityGraphVersion": 5,
+  "capabilityNodeCategories": [
+    "evidence",
+    "input",
+    "planning",
+    "synchronization",
+    "diagnostic"
+  ],
+  "capabilityNodeLayers": [
+    "producer",
+    "session",
+    "runtime",
+    "strategy",
+    "public"
+  ],
+  "sessionCapabilities": [
+    "semantic-tree",
+    "stable-identity",
+    "intended-geometry",
+    "clipped-geometry",
+    "painted-region",
+    "pointer-geometry",
+    "pointer-hit-testing",
+    "focus",
+    "scroll",
+    "render-order",
+    "action-strategies",
+    "keyboard-input",
+    "pointer-input",
+    "focus-input",
+    "paired-revisions"
+  ],
+  "evidenceProviderCapabilities": [
+    "pointer-regions",
+    "hit-test",
+    "focus-state",
+    "action-recipes",
+    "scroll-state",
+    "painted-regions",
+    "terminal-input-modes"
+  ],
+  "evidenceProviderTypes": [
+    "pointer-evidence",
+    "focus-evidence",
+    "action-strategy",
+    "scroll-evidence",
+    "paint-evidence",
+    "input-mode-evidence"
+  ],
+  "runtimePrerequisites": [
+    "writable-pty",
+    "terminal-input-modes-authoritative",
+    "mouse-reporting-enabled",
+    "mouse-motion-enabled",
+    "focus-reporting-enabled",
+    "committed-observation"
+  ],
+  "conditionKinds": [
+    "attached",
+    "detached",
+    "displayed",
+    "hidden",
+    "visible",
+    "in-viewport",
+    "offscreen",
+    "receives-pointer",
+    "pointer-region",
+    "pointer-input",
+    "mouse-input-enabled",
+    "enabled",
+    "disabled",
+    "focused",
+    "checked",
+    "selected",
+    "expanded",
+    "collapsed",
+    "value",
+    "not",
+    "all",
+    "any"
+  ],
+  "capabilityConformanceClaims": [
+    "claim.semantic-tree-authoritative",
+    "claim.stable-identity-authoritative",
+    "claim.intended-geometry-authoritative",
+    "claim.clipped-geometry-authoritative",
+    "claim.painted-region-authoritative",
+    "claim.pointer-region-authoritative",
+    "claim.pointer-hit-test-authoritative",
+    "claim.focus-authoritative",
+    "claim.scroll-authoritative",
+    "claim.render-order-authoritative",
+    "claim.action-strategy-authoritative",
+    "claim.keyboard-real-pty",
+    "claim.pointer-real-pty",
+    "claim.focus-report-real-pty",
+    "claim.paired-revisions",
+    "claim.logs-diagnostic"
+  ],
   "provenanceSources": [
     "annotation",
     "recognizer",
     "framework",
+    "application",
     "correlation",
     "heuristic"
   ],
@@ -96,6 +198,8 @@
     "selected",
     "busy",
     "multiline",
+    "required",
+    "multiselectable",
     "displayed",
     "value",
     "selectedIndex",
@@ -112,6 +216,111 @@
     "stable",
     "frame-local"
   ],
+  "runIdKinds": [
+    "invocation",
+    "run",
+    "project",
+    "shard",
+    "spec",
+    "runner-task",
+    "execution",
+    "attempt",
+    "session",
+    "step",
+    "action",
+    "producer",
+    "event"
+  ],
+  "runEventClasses": [
+    "authoritative",
+    "state",
+    "diagnostic"
+  ],
+  "runEventVersion": 2,
+  "runEventLimits": {
+    "maxEventBytes": 262144,
+    "maxPayloadDepth": 32,
+    "maxPayloadEntries": 10000,
+    "maxStringBytes": 16384,
+    "maxCauses": 64
+  },
+  "runStates": [
+    "requested",
+    "collecting",
+    "scheduled",
+    "running",
+    "cancelling",
+    "finalizing",
+    "passed",
+    "failed",
+    "skipped",
+    "cancelled",
+    "infrastructure-failed",
+    "crashed",
+    "incomplete",
+    "flaky"
+  ],
+  "terminalRunStates": [
+    "passed",
+    "failed",
+    "skipped",
+    "cancelled",
+    "infrastructure-failed",
+    "crashed",
+    "incomplete",
+    "flaky"
+  ],
+  "runStateTransitions": {
+    "requested": [
+      "collecting",
+      "cancelling",
+      "infrastructure-failed"
+    ],
+    "collecting": [
+      "scheduled",
+      "cancelling",
+      "infrastructure-failed",
+      "incomplete"
+    ],
+    "scheduled": [
+      "running",
+      "cancelling",
+      "finalizing",
+      "infrastructure-failed",
+      "incomplete"
+    ],
+    "running": [
+      "cancelling",
+      "finalizing",
+      "infrastructure-failed",
+      "crashed",
+      "incomplete"
+    ],
+    "cancelling": [
+      "finalizing",
+      "cancelled",
+      "infrastructure-failed",
+      "incomplete"
+    ],
+    "finalizing": [
+      "passed",
+      "failed",
+      "skipped",
+      "cancelled",
+      "infrastructure-failed",
+      "crashed",
+      "incomplete",
+      "flaky"
+    ],
+    "passed": [],
+    "failed": [],
+    "skipped": [],
+    "cancelled": [],
+    "infrastructure-failed": [],
+    "crashed": [],
+    "incomplete": [],
+    "flaky": []
+  },
   "nodeKeys": [
     "id",
     "parentId",
@@ -122,6 +331,7 @@
     "state",
     "extended",
     "actions",
+    "inputRecipes",
     "labelledBy",
     "describedBy",
     "textRanges",
@@ -129,7 +339,9 @@
     "frameworkType",
     "p",
     "px",
-    "geometry"
+    "geometry",
+    "scroll",
+    "paintedRegion"
   ],
   "stateKeys": [
     "disabled",
@@ -143,12 +355,12 @@
     "offscreen",
     "readonly",
     "multiline",
+    "required",
+    "multiselectable",
     "orientation",
     "level",
     "positionInSet",
-    "setSize",
-    "scrollOffset",
-    "scrollExtent"
+    "setSize"
   ],
   "defaultLimits": {
     "maxFrameBytes": 1048576,

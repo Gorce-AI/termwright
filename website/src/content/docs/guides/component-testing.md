@@ -24,7 +24,7 @@ test('approves the request', async ({terminal}) => {
   );
 
   await harness.press('Tab');
-  await harness.waitForStable();
+  await harness.waitForQuiet();
   await harness.press('Enter');
   await vi.waitFor(() => expect(onApprove).toHaveBeenCalledOnce());
 });
@@ -60,7 +60,7 @@ the commits separate:
 
 ```ts
 await harness.press('Tab');
-await harness.waitForStable();
+await harness.waitForQuiet();
 await harness.press('Enter');
 ```
 

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: EffectiveSessionContract
 
-Defined in: protocol/dist/contract.d.ts:57
+Defined in: protocol/dist/contract.d.ts:51
 
 Immutable public contract negotiated once for one session epoch.
 
@@ -24,7 +24,7 @@ intentionally absent. Those are actionability observations, not capability.
 
 > `readonly` **capabilities**: `Readonly`\<`Record`\<[`SessionCapabilityId`](../../type-aliases/sessioncapabilityid/), `SessionCapabilityAvailability`\>\>
 
-Defined in: protocol/dist/contract.d.ts:69
+Defined in: protocol/dist/contract.d.ts:63
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: protocol/dist/contract.d.ts:69
 
 > `readonly` **contractId**: `string`
 
-Defined in: protocol/dist/contract.d.ts:58
+Defined in: protocol/dist/contract.d.ts:52
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: protocol/dist/contract.d.ts:58
 
 > `readonly` **epoch**: `number`
 
-Defined in: protocol/dist/contract.d.ts:60
+Defined in: protocol/dist/contract.d.ts:54
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: protocol/dist/contract.d.ts:60
 
 > `readonly` **framework**: \{ `adapterVersion`: `string`; `certificationId`: `string`; `name`: `string`; `version`: `string`; \} \| `null`
 
-Defined in: protocol/dist/contract.d.ts:62
+Defined in: protocol/dist/contract.d.ts:56
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: protocol/dist/contract.d.ts:62
 
 > `readonly` **protocol**: `"termwright/2"`
 
-Defined in: protocol/dist/contract.d.ts:61
+Defined in: protocol/dist/contract.d.ts:55
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: protocol/dist/contract.d.ts:61
 
 > `readonly` **providers**: readonly `ContractProvider`[]
 
-Defined in: protocol/dist/contract.d.ts:68
+Defined in: protocol/dist/contract.d.ts:62
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: protocol/dist/contract.d.ts:68
 
 > `readonly` **sessionId**: `string`
 
-Defined in: protocol/dist/contract.d.ts:59
+Defined in: protocol/dist/contract.d.ts:53
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: protocol/dist/contract.d.ts:59
 
 > `readonly` **terminal**: `object`
 
-Defined in: protocol/dist/contract.d.ts:70
+Defined in: protocol/dist/contract.d.ts:64
 
 #### mouseModesObservable
 

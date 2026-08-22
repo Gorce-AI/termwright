@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ActionabilityExplanation
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:671
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:841
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:671
 
 > `readonly` **actionable**: `boolean`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:672
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:842
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:672
 
 > `readonly` **checkpoint**: [`ObservationStamp`](../observationstamp/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:674
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:844
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:674
 
 > `readonly` **intent**: [`ActionIntent`](../actionintent/)
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:673
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:843
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:673
 
 > `readonly` `optional` **reason?**: `object`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:677
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:847
 
 #### code
 
@@ -55,7 +55,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:677
 
 #### targetRef?
 
-> `readonly` `optional` **targetRef?**: `string`
+> `readonly` `optional` **targetRef?**: [`LocatorRef`](../../type-aliases/locatorref/)
 
 ***
 
@@ -63,7 +63,7 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:677
 
 > `readonly` **requirements**: readonly [`ConditionResult`](../conditionresult/)[]
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:675
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:845
 
 ***
 
@@ -71,4 +71,4 @@ Defined in: protocol/dist/action-model-ClhrNC39.d.ts:675
 
 > `readonly` `optional` **strategy?**: `string`
 
-Defined in: protocol/dist/action-model-ClhrNC39.d.ts:676
+Defined in: protocol/dist/action-model-8X-3ivpw.d.ts:846

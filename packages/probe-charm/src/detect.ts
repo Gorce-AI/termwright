@@ -150,7 +150,7 @@ async function moduleVersion(
  * future instrumentation work.
  */
 export function capabilitiesFor(_major: CharmMajor): readonly string[] {
-  return ['tree', 'states', 'actions', 'render-revisions'];
+  return ['tree', 'states', 'focus-state', 'actions', 'render-revisions'];
 }
 
 /** Whether geometry can be reported at all for this major. */

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ErrorDiagnostics
 
-Defined in: [driver/src/api.ts:923](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L923)
+Defined in: [driver/src/api.ts:1154](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1154)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -34,9 +34,9 @@ await terminal.close();
 
 ### candidates?
 
-> `readonly` `optional` **candidates?**: readonly [`ResolvedTarget`](../resolvedtarget/)[]
+> `readonly` `optional` **candidates?**: readonly [`ResolvedTarget`](../resolvedtarget/)\<[`LocatorDomain`](../../type-aliases/locatordomain/)\>[]
 
-Defined in: [driver/src/api.ts:926](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L926)
+Defined in: [driver/src/api.ts:1157](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1157)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [driver/src/api.ts:926](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **screenExcerpt?**: `string`
 
-Defined in: [driver/src/api.ts:924](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L924)
+Defined in: [driver/src/api.ts:1155](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1155)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [driver/src/api.ts:924](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` **semanticTree**: `boolean`
 
-Defined in: [driver/src/api.ts:925](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L925)
+Defined in: [driver/src/api.ts:1156](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1156)
 
 ***
 
@@ -60,4 +60,4 @@ Defined in: [driver/src/api.ts:925](https://github.com/Gorce-AI/termwright/blob/
 
 > `readonly` `optional` **suggestion?**: `string`
 
-Defined in: [driver/src/api.ts:927](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L927)
+Defined in: [driver/src/api.ts:1158](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1158)

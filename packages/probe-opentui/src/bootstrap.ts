@@ -35,6 +35,7 @@ const BASE_CAPABILITIES: readonly AdapterCapability[] = [
   'tree',
   'intended-geometry',
   'states',
+  'focus-state',
   'actions',
   'render-revisions',
 ];

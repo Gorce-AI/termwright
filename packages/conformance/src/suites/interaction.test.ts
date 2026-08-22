@@ -8,7 +8,7 @@
  * session ownership when more than one is open.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Locator, TerminalHarness } from '@termwright/driver';
+import type { AnyLocator, TerminalHarness } from '@termwright/driver';
 import type { Rect } from '@termwright/protocol';
 import { TermwrightError } from '@termwright/driver';
 import {
@@ -24,7 +24,7 @@ import {
 
 const sessions = createSessionPool();
 
-async function intendedRect(locator: Locator): Promise<Rect | null> {
+async function intendedRect(locator: AnyLocator): Promise<Rect | null> {
   const observation = (await locator.geometry()).intendedRect;
   return observation.status === 'known' ? observation.value : null;
 }
@@ -117,7 +117,7 @@ describe.skipIf(!ptyAvailable())('terminal-side interaction', () => {
     await terminal.waitForText('SCROLL DONE');
 
     // Wait for the history itself, not for the program to fall silent.
-    // `waitForIdle` asks "has output stopped for 100 ms", which on a loaded
+    // `waitForQuiet` asks "has output stopped for 100 ms", which on a loaded
     // machine is a question about the scheduler: 120 lines arriving in bursts
     // keep resetting the quiet window, and the wait fails for a reason that has
     // nothing to do with scrollback. These two conditions are the state the
