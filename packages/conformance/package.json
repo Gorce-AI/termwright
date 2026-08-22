@@ -41,6 +41,7 @@
     "@termwright/mcp": "workspace:*",
     "@termwright/probe-ink": "workspace:*",
     "@termwright/probe-tview": "workspace:*",
+    "@termwright/test": "workspace:*",
     "@types/react": "^19.2.18",
     "ink": "^7.1.1",
     "react": "^19.2.8"

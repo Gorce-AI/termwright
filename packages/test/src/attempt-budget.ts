@@ -86,6 +86,20 @@ export class TestBudget {
     this.#started = true;
   }
 
+  /**
+   * Returns time spent waiting for host-owned resource admission.
+   *
+   * Queueing for capacity shared by the whole run is a property of the
+   * machine and the configured parallelism, never of the attempt's own work.
+   * An attempt admitted up front through `test.resources()` never pays for the
+   * wait, and one that acquires lazily must not pay either — otherwise the
+   * same test passes or fails on how busy its neighbours happen to be.
+   */
+  creditAdmissionWait(waitedMs: number): void {
+    finiteNonNegative(waitedMs, 'admission wait');
+    this.#endsAt += waitedMs;
+  }
+
   enter(phase: AttemptPhase): void {
     this.#assertStarted();
     this.#phase = phase;

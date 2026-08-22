@@ -17,7 +17,7 @@
     "docs:screenshots": "pnpm --filter @termwright/ui run screenshots:docs",
     "docs:api": "typedoc && typedoc --options typedoc.driver.json && typedoc --options typedoc.ink.json && typedoc --options typedoc.gherkin.json && node scripts/prepare-api-docs.mjs",
     "test": "node packages/termwright-cli/dist/bin.js test",
-    "pretest:compatibility": "pnpm --filter @termwright/protocol --filter @termwright/recognizers --filter @termwright/evidence-provider --filter @termwright/probe-runtime --filter @termwright/probe-go build",
+    "pretest:compatibility": "pnpm --filter @termwright/protocol --filter @termwright/recognizers --filter @termwright/evidence-provider --filter @termwright/probe-runtime --filter @termwright/probe-go --filter termwright... build",
     "test:compatibility": "node packages/termwright-cli/dist/bin.js test -- compatibility/registry.test.ts",
     "test:watch": "node packages/termwright-cli/dist/bin.js watch",
     "typecheck": "pnpm -r --filter './packages/*' run typecheck",

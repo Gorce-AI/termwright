@@ -500,8 +500,17 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
     const closed = new Set<Session>();
     for (const session of sessions.reverse()) {
       try {
-        await session.live.close();
-        await session.harness.close();
+        // Close the harness even when the live projection fails on its way
+        // out. The harness owns the terminal outcome of every action it
+        // announced, and the run journal requires each announced action to be
+        // closed out; skipping it leaves an action.started that nothing can
+        // ever answer, which fails the whole run as incomplete rather than
+        // reporting the projection error that actually happened.
+        try {
+          await session.live.close();
+        } finally {
+          await session.harness.close();
+        }
         closed.add(session);
         currentAttemptEventRecorder().record({
           eventClass: 'authoritative',

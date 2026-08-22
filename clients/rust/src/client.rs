@@ -571,24 +571,20 @@ impl Client {
         loop {
             let read = match self.stream.as_mut() {
                 None => return Ok(()),
-                Some(stream) => stream.read(&mut buffer),
+                Some(stream) => read_transport(stream, &mut buffer),
             };
             match read {
-                Ok(0) => {
+                Ok(Incoming::Closed) => {
                     self.close();
                     return Ok(());
                 }
-                Ok(count) => {
+                Ok(Incoming::Data(count)) => {
                     let frames = self.decoder.push(&buffer[..count])?;
                     for frame in frames {
                         self.handle(&frame.value)?;
                     }
                 }
-                Err(error)
-                    if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
-                {
-                    return Ok(())
-                }
+                Ok(Incoming::Idle) => return Ok(()),
                 Err(error) if error.kind() == ErrorKind::Interrupted => continue,
                 Err(error) => {
                     self.close();
@@ -724,6 +720,58 @@ fn connect_transport(
     // write_transport_frame enforce one monotonic whole-frame deadline.
     stream.set_nonblocking(true)?;
     Ok(stream)
+}
+
+/// What one non-blocking read of the side channel found.
+enum Incoming {
+    Data(usize),
+    /// Nothing buffered right now; the channel is still open.
+    Idle,
+    /// The driver closed its end.
+    Closed,
+}
+
+#[cfg(unix)]
+fn read_transport(stream: &mut TransportStream, buffer: &mut [u8]) -> std::io::Result<Incoming> {
+    match stream.read(buffer) {
+        Ok(0) => Ok(Incoming::Closed),
+        Ok(count) => Ok(Incoming::Data(count)),
+        Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+            Ok(Incoming::Idle)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// Windows: `ERROR_NO_DATA`, returned by a `PIPE_NOWAIT` read of an empty pipe.
+#[cfg(windows)]
+const ERROR_NO_DATA: i32 = 232;
+/// Windows: `ERROR_BROKEN_PIPE`, the peer actually closed its end.
+#[cfg(windows)]
+const ERROR_BROKEN_PIPE: i32 = 109;
+
+/// Reads the named pipe, where an empty read does not mean end of stream.
+///
+/// `set_nonblocking(true)` puts the handle in `PIPE_NOWAIT`, and a read of an
+/// empty pipe in that mode succeeds with zero bytes — or fails with
+/// `ERROR_NO_DATA` — rather than reporting `WouldBlock`. Both mean "nothing
+/// yet". Treating either as end of stream closed the channel in the gap
+/// between sending `hello` and the driver's `hello-ack`, which the driver then
+/// saw as a vanished peer. Only `ERROR_BROKEN_PIPE` reports a real close; note
+/// that Rust maps both 109 and 232 to `ErrorKind::BrokenPipe`, so the raw code
+/// is the only thing that separates them.
+#[cfg(windows)]
+fn read_transport(stream: &mut TransportStream, buffer: &mut [u8]) -> std::io::Result<Incoming> {
+    match stream.read(buffer) {
+        Ok(0) => Ok(Incoming::Idle),
+        Ok(count) => Ok(Incoming::Data(count)),
+        Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+            Ok(Incoming::Idle)
+        }
+        Err(error) if error.raw_os_error() == Some(ERROR_NO_DATA) => Ok(Incoming::Idle),
+        Err(error) if error.raw_os_error() == Some(ERROR_BROKEN_PIPE) => Ok(Incoming::Closed),
+        Err(error) => Err(error),
+    }
 }
 
 #[cfg(unix)]

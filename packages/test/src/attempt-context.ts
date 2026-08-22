@@ -166,12 +166,22 @@ function createAttemptResources(
     reservation: Object.freeze({ ...reservation }),
     acquire: async (requested: ResourceVector): Promise<RemoteResourceLease> => {
       if (reservedLease === undefined) {
-        const remaining = budget.operationTimeout(Number.MAX_SAFE_INTEGER, 'operation');
-        return await broker.acquire({
-          attemptId,
-          resources: requested,
-          deadline: performance.timeOrigin + performance.now() + remaining,
-        });
+        // Bound the wait by one whole attempt timeout — the same allowance an
+        // atomic reservation gets — rather than by whatever is left of this
+        // attempt's budget, and give the queueing time back once capacity is
+        // held. The attempt did no work while it waited, and charging it for
+        // the queue makes the verdict depend on the run's parallelism.
+        budget.assertAvailable('operation');
+        const startedAt = performance.now();
+        try {
+          return await broker.acquire({
+            attemptId,
+            resources: requested,
+            deadline: performance.timeOrigin + performance.now() + budget.totalMs,
+          });
+        } finally {
+          budget.creditAdmissionWait(performance.now() - startedAt);
+        }
       }
       const normalized = normalizeVector(requested);
       for (const resource of RESOURCE_CLASSES) {

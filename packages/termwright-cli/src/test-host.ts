@@ -2,6 +2,8 @@
 
 import { createRequire } from 'node:module';
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { isAbsolute, resolve } from 'node:path';
 import { inspect, promisify } from 'node:util';
 import { ResourceBroker, type ResourceVector } from '@termwright/resource-broker';
 import { startResourceBrokerServer, type ResourceBrokerServer } from '@termwright/resource-broker/transport';
@@ -266,7 +268,7 @@ export class TermwrightTestHost {
     }
     return new TermwrightTestHost(created.engine, {
       ...options,
-      filters: [...(options.filters ?? []), ...created.filters],
+      filters: hostRelativeFilters([...(options.filters ?? []), ...created.filters], options.cwd),
     });
   }
 
@@ -451,6 +453,14 @@ export class TermwrightTestHost {
       const collection = await active.budget.execution('Vitest collection', () => this.#engine.collect(this.#filters));
       if (collection.result.unhandledErrors.length > 0) {
         throw new AggregateError(collection.result.unhandledErrors, 'Vitest collection failed');
+      }
+      if (collection.tests.length === 0 && this.#filters.length > 0) {
+        // A filter that selects nothing is a caller error, not an empty run.
+        // Reporting it as `skipped` made a misdirected filter look like a
+        // passing suite, which is the failure mode this host exists to remove.
+        throw new Error(
+          `no test matched the host filters [${this.#filters.join(', ')}] under root ${this.#cwd}`,
+        );
       }
       const catalog = this.#catalog(active.runId, collection.tests);
       active.catalog = catalog;
@@ -1253,6 +1263,26 @@ function removeEmbeddedDefaultReporter(vitest: Vitest): void {
       exact.reporters.splice(index, 1);
     }
   }
+}
+
+/**
+ * Anchors path filters to the host's declared `cwd`.
+ *
+ * Vitest resolves a relative filter with `relative(project.dir, filter)`, which
+ * Node anchors to `process.cwd()`. The host declares its own root instead, so
+ * the same options would otherwise select different tests depending on the
+ * directory the host process happens to run in — `pnpm --filter` runs a script
+ * from the package directory, and the filters then matched nothing. Absolute
+ * filters take Vitest's `isAbsolute` branch, which no working directory can
+ * reinterpret. Filters that do not name an existing path stay untouched: those
+ * are substring patterns, not paths.
+ */
+function hostRelativeFilters(filters: readonly string[], cwd: string): readonly string[] {
+  return filters.map((filter) => {
+    if (filter === '' || isAbsolute(filter)) return filter;
+    const anchored = resolve(cwd, filter);
+    return existsSync(anchored) ? anchored : filter;
+  });
 }
 
 class ExactVitestEngine implements TermwrightVitestEngine {

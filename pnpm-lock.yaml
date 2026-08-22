@@ -209,6 +209,9 @@ importers:
       '@termwright/probe-tview':
         specifier: workspace:*
         version: link:../probe-tview
+      '@termwright/test':
+        specifier: workspace:*
+        version: link:../test
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18

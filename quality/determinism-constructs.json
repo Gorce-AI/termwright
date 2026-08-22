@@ -536,91 +536,91 @@
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 93,
+      "line": 94,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "const pid = await poll(() => {"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 102,
+      "line": 103,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const deadline = Date.now() + timeoutMs;"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 110,
+      "line": 111,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "if (Date.now() >= deadline) throw new Error('conformance: value never became available');"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 111,
+      "line": 112,
       "kind": "delay-helper",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await delay(25);"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 126,
+      "line": 127,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const deadline = Date.now() + timeoutMs;"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 128,
+      "line": 129,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "if (Date.now() >= deadline) throw new Error(`conformance: pid ${pid} outlived its owning session`);"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 129,
+      "line": 130,
       "kind": "delay-helper",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await delay(25);"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 133,
+      "line": 134,
       "kind": "delay-helper",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "function delay(ms: number): Promise<void> {"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 135,
+      "line": 136,
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "const timer = setTimeout(resolve, ms);"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 146,
+      "line": 147,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 }, () => {"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 223,
+      "line": 228,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "let clock = Date.now();"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 253,
+      "line": 258,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "let clock = Date.now();"
     },
     {
       "path": "packages/conformance/src/suites/mcp-sessions.test.ts",
-      "line": 300,
+      "line": 305,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => handle.registry.size).toBe(1);"
@@ -2972,49 +2972,49 @@
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 264,
+      "line": 266,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void creation.then(({ engine }) => engine.close()).catch(() => undefined);"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 293,
+      "line": 295,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const startedAt = Date.now();"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 314,
+      "line": 316,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void this.#drive(active, request).then(settle);"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 329,
+      "line": 331,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void handle.completed.then((completion) => onCompletion?.(completion)).finally(() => {"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 984,
+      "line": 994,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "finishedAt: Date.now(),"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 1391,
+      "line": 1421,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void operation.catch(() => undefined);"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 1399,
+      "line": 1429,
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "timer = setTimeout(() => reject(new TermwrightHostTimeoutError(phase, totalMs)), remaining);"
