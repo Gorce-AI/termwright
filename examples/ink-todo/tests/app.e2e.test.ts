@@ -10,14 +10,20 @@
  * wait and how it ended, every revision.
  */
 
+import { existsSync } from 'node:fs';
 import { describe, expect, ptyAvailable, test } from 'termwright/test';
+import { cli } from '../termwright.config.js';
 
-const pty = await ptyAvailable();
-if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !pty) {
-  throw new Error('Ink end-to-end example requires a working pseudo-terminal');
+// The built CLI is as much a precondition as the pseudo-terminal: without it
+// the launch starts nothing, the probe has nothing to attach to, and the
+// failure reads as a missing semantic capability instead of a missing build.
+// Every other example already gates on its own artifact this way.
+const runnable = (await ptyAvailable()) && existsSync(cli);
+if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !runnable) {
+  throw new Error('Ink end-to-end example requires a built CLI and a working pseudo-terminal');
 }
 
-describe.skipIf(!pty)('the todo app', () => {
+describe.skipIf(!runnable)('the todo app', () => {
   test('starts on the list it was seeded with', async ({ terminal }) => {
     const app = await terminal.launch();
     // No shell integration here, so this settles on a quiet screen — the

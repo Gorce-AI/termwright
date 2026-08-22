@@ -34,7 +34,7 @@ import {
   type AttemptContext,
   type ExecutionId,
 } from './attempt-context.js';
-import { DEFAULT_ATTEMPT_BUDGET_RESERVES, type AttemptBudgetReserves } from './attempt-budget.js';
+import { DEFAULT_ATTEMPT_BUDGET_RESERVES, type AttemptBudgetReserves, type AttemptPhase } from './attempt-budget.js';
 import {
   assertCertifiedVitestRuntime,
   CERTIFIED_VITEST_VERSION,
@@ -606,7 +606,7 @@ function createAttemptEventRecorder(
           eventDeadline(
             context,
             acknowledgementTimeoutMs,
-            event.phase ?? 'operation',
+            event.phase ?? budgetPhaseOf(context.currentPhase()),
           ),
         );
       });
@@ -619,6 +619,32 @@ function createAttemptEventRecorder(
       await pending;
     },
   });
+}
+
+/**
+ * Bills an event to the window the attempt is actually in.
+ *
+ * Terminal receipts for actions still open when a session closes are produced
+ * during teardown, after the operation window has been marked done. Assuming
+ * `operation` for anything that does not name its phase billed them against a
+ * window that had already closed, so the append threw — and the throw happened
+ * inside a session-event listener, where it was swallowed as a diagnostic. The
+ * receipt then simply never existed, and the run failed manifest validation
+ * minutes later with no trace of why.
+ */
+function budgetPhaseOf(phase: AttemptPhase): 'operation' | 'cleanup' {
+  switch (phase) {
+    case 'before-each':
+    case 'fixture':
+    case 'operation':
+    case 'assertion':
+      return 'operation';
+    case 'diagnostics':
+    case 'trace-flush':
+    case 'teardown':
+    case 'cleanup':
+      return 'cleanup';
+  }
 }
 
 function eventDeadline(

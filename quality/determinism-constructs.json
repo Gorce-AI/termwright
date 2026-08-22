@@ -46,24 +46,24 @@
     },
     {
       "path": "examples/ink-todo/tests/app.e2e.test.ts",
-      "line": 16,
+      "line": 22,
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !pty) {"
+      "excerpt": "if (process.env['TERMWRIGHT_REQUIRE_EXAMPLES'] === '1' && !runnable) {"
     },
     {
       "path": "examples/ink-todo/tests/app.e2e.test.ts",
-      "line": 20,
+      "line": 26,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!pty)('the todo app', () => {"
+      "excerpt": "describe.skipIf(!runnable)('the todo app', () => {"
     },
     {
       "path": "examples/ink-todo/tests/fixtures.test.ts",
-      "line": 40,
+      "line": 43,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!pty)('a suite with its own fixture', () => {"
+      "excerpt": "describe.skipIf(!runnable)('a suite with its own fixture', () => {"
     },
     {
       "path": "examples/opentui-form/tests/app.e2e.test.ts",

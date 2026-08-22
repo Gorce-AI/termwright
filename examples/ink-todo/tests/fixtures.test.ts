@@ -7,11 +7,14 @@
  * flow through.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, ptyAvailable, test as base, type TerminalHarness } from 'termwright/test';
+import { cli } from '../termwright.config.js';
 
-const pty = await ptyAvailable();
+// The built CLI gates this suite for the same reason it gates the end-to-end
+// one: an unbuilt example launches nothing and fails as a missing capability.
+const runnable = (await ptyAvailable()) && existsSync(cli);
 
 const SEEDED = [
   { id: 1, text: 'restore the backup', done: false },
@@ -37,7 +40,7 @@ const test = base.extend<{ app: TerminalHarness }>({
   },
 });
 
-describe.skipIf(!pty)('a suite with its own fixture', () => {
+describe.skipIf(!runnable)('a suite with its own fixture', () => {
   test('starts from the state the fixture declared', async ({ app }) => {
     await expect(app.getByRole('listitem', { name: 'restore the backup' })).toBeAttached();
     await expect(app).toHaveText('[x] rotate the keys');

@@ -48,10 +48,25 @@ if (lock.includes('@lydell/node-pty-darwin-arm64@1.2.0-beta.15(patch_hash=')) {
   throw new Error('node-pty certification must not depend on root-only package-manager patches');
 }
 
+// This smoke test spawns the backend directly, below the driver's environment
+// allowlist, so it has to honour the same platform floor itself. A Node
+// process started on Windows without SystemRoot does not fail — it aborts
+// inside CSPRNG initialization with exit code 134 before running a line of
+// script, which reads here as a broken PTY write boundary rather than a
+// malformed environment. See WINDOWS_ENV_KEYS in packages/driver/src/session.ts.
+const environmentFloor = process.platform === 'win32'
+  ? ['PATH', 'PATHEXT', 'SystemRoot', 'SystemDrive', 'windir', 'TEMP', 'TMP', 'COMSPEC']
+  : ['PATH'];
+const environment = {};
+for (const key of environmentFloor) {
+  const value = process.env[key];
+  if (typeof value === 'string') environment[key] = value;
+}
+
 const backend = createNodePtyBackend();
 const proc = backend.spawn({
   command: [process.execPath, '-e', "process.stdin.setRawMode?.(true);process.stdin.once('data',()=>{process.stdout.write('tw-write-ok');process.exit(0)});process.stdin.resume()"],
-  env: { PATH: process.env.PATH ?? '' },
+  env: environment,
   columns: 40,
   rows: 4,
 });
