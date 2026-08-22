@@ -108,6 +108,22 @@ describe('RunEvent v2 envelope', () => {
     expect(validateRunEvent(event(0, { eventClass })).ok).toBe(true);
   });
 
+  it('keeps a payload whose own fields look like a validation failure', () => {
+    // `action.finished` reports the action's outcome as `ok`, and a failed
+    // action therefore carries `ok: false` — the same shape the projection
+    // walk once used to signal its own rejection. The event was dropped and
+    // the run later failed with a missing receipt and no reason.
+    const failedAction = event(1, {
+      type: 'action.finished',
+      payload: { api: 'press', ok: false, error: 'the key was refused' },
+    });
+
+    expect(failedAction.payload).toEqual({ api: 'press', ok: false, error: 'the key was refused' });
+    expect(event(2, { payload: { ok: false } }).payload).toEqual({ ok: false });
+    expect(event(3, { payload: { nested: { ok: false, code: 'invalid-payload', detail: 'x' } } }).payload)
+      .toEqual({ nested: { ok: false, code: 'invalid-payload', detail: 'x' } });
+  });
+
   it('enforces identity ancestry rather than accepting detached attempt ids', () => {
     const broken = { ...event(0), identity: { invocationId, attemptId } };
     expect(validateRunEvent(broken)).toEqual({

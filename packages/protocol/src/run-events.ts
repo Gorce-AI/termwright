@@ -442,63 +442,77 @@ function validateLimits(limits: RunEventLimits): RunEventFailure | null {
   return null;
 }
 
+/**
+ * Carries a rejection out of the projection walk.
+ *
+ * The walk cannot signal failure with a plain `{ok: false}` object: that is
+ * indistinguishable from payload data of the same shape, and `action.finished`
+ * carries exactly that — an `ok` field reporting whether the action succeeded.
+ * A failed action therefore looked like a rejected projection, and the event
+ * was thrown away with a message built from a code and detail that were never
+ * there ("undefined: undefined"). A class cannot be forged by JSON data.
+ */
+class ProjectionFailure {
+  constructor(readonly failure: RunEventFailure) {}
+}
+
+function reject(code: RunEventViolationCode, detail: string): ProjectionFailure {
+  return new ProjectionFailure(fail(code, detail));
+}
+
 function projectJson(value: unknown, limits: RunEventLimits): { readonly ok: true; readonly value: RunEventJson } | RunEventFailure {
   let entries = 0;
   const seen = new Set<object>();
-  const visit = (current: unknown, depth: number): RunEventJson | RunEventFailure => {
+  const visit = (current: unknown, depth: number): RunEventJson | ProjectionFailure => {
     if (current === null || typeof current === 'boolean' || typeof current === 'string') {
-      if (typeof current === 'string' && utf8(current) > limits.maxStringBytes) return fail('invalid-payload', 'a string exceeds maxStringBytes');
+      if (typeof current === 'string' && utf8(current) > limits.maxStringBytes) return reject('invalid-payload', 'a string exceeds maxStringBytes');
       return current;
     }
-    if (typeof current === 'number') return Number.isFinite(current) ? current : fail('invalid-payload', 'numbers must be finite');
-    if (typeof current !== 'object') return fail('invalid-payload', 'payload is not JSON data');
-    if (depth > limits.maxPayloadDepth) return fail('invalid-payload', 'payload exceeds maxPayloadDepth');
-    if (seen.has(current)) return fail('invalid-payload', 'payload aliases or cycles an object');
+    if (typeof current === 'number') return Number.isFinite(current) ? current : reject('invalid-payload', 'numbers must be finite');
+    if (typeof current !== 'object') return reject('invalid-payload', 'payload is not JSON data');
+    if (depth > limits.maxPayloadDepth) return reject('invalid-payload', 'payload exceeds maxPayloadDepth');
+    if (seen.has(current)) return reject('invalid-payload', 'payload aliases or cycles an object');
     seen.add(current);
     try {
       const symbols = Object.getOwnPropertySymbols(current);
-      if (symbols.length > 0) return fail('invalid-payload', 'payload contains symbol keys');
+      if (symbols.length > 0) return reject('invalid-payload', 'payload contains symbol keys');
       if (Array.isArray(current)) {
-        if (Object.keys(current).length !== current.length) return fail('invalid-payload', 'payload contains a sparse array or extra array keys');
+        if (Object.keys(current).length !== current.length) return reject('invalid-payload', 'payload contains a sparse array or extra array keys');
         const result: RunEventJson[] = [];
         for (const item of current) {
           entries += 1;
-          if (entries > limits.maxPayloadEntries) return fail('invalid-payload', 'payload exceeds maxPayloadEntries');
+          if (entries > limits.maxPayloadEntries) return reject('invalid-payload', 'payload exceeds maxPayloadEntries');
           const child = visit(item, depth + 1);
-          if (isFailure(child)) return child;
+          if (child instanceof ProjectionFailure) return child;
           result.push(child);
         }
         return Object.freeze(result);
       }
       const prototype = Object.getPrototypeOf(current);
-      if (prototype !== Object.prototype && prototype !== null) return fail('invalid-payload', 'payload object has a non-plain prototype');
+      if (prototype !== Object.prototype && prototype !== null) return reject('invalid-payload', 'payload object has a non-plain prototype');
       const result: Record<string, RunEventJson> = Object.create(null) as Record<string, RunEventJson>;
       for (const key of Object.keys(current)) {
-        if (key === '__proto__' || key === 'constructor' || key === 'prototype') return fail('invalid-payload', 'payload contains a reserved key');
-        if (utf8(key) > limits.maxStringBytes) return fail('invalid-payload', 'a payload key exceeds maxStringBytes');
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') return reject('invalid-payload', 'payload contains a reserved key');
+        if (utf8(key) > limits.maxStringBytes) return reject('invalid-payload', 'a payload key exceeds maxStringBytes');
         const descriptor = Object.getOwnPropertyDescriptor(current, key);
-        if (descriptor === undefined || !('value' in descriptor)) return fail('invalid-payload', 'payload contains an accessor');
+        if (descriptor === undefined || !('value' in descriptor)) return reject('invalid-payload', 'payload contains an accessor');
         entries += 1;
-        if (entries > limits.maxPayloadEntries) return fail('invalid-payload', 'payload exceeds maxPayloadEntries');
+        if (entries > limits.maxPayloadEntries) return reject('invalid-payload', 'payload exceeds maxPayloadEntries');
         const child = visit(descriptor.value, depth + 1);
-        if (isFailure(child)) return child;
+        if (child instanceof ProjectionFailure) return child;
         result[key] = child;
       }
       return Object.freeze(result);
     } catch {
-      return fail('invalid-payload', 'payload object could not be inspected safely');
+      return reject('invalid-payload', 'payload object could not be inspected safely');
     }
   };
   const projected = visit(value, 0);
-  return isFailure(projected) ? projected : { ok: true, value: projected };
+  return projected instanceof ProjectionFailure ? projected.failure : { ok: true, value: projected };
 }
 
 function isRecord(value: RunEventJson | undefined): value is { readonly [key: string]: RunEventJson } {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isFailure(value: RunEventJson | RunEventFailure): value is RunEventFailure {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) && 'ok' in value && value.ok === false;
 }
 
 function fail(code: RunEventViolationCode, detail: string): RunEventFailure {
