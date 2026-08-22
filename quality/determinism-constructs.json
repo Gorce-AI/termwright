@@ -1152,14 +1152,14 @@
     },
     {
       "path": "packages/driver/src/process-lifecycle.pty.test.ts",
-      "line": 17,
+      "line": 35,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeout: 20_000 }, () => {"
     },
     {
       "path": "packages/driver/src/process-lifecycle.pty.test.ts",
-      "line": 84,
+      "line": 102,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(process.platform !== 'win32')('Windows process lifecycle', { timeout: 20_000 }, () => {"

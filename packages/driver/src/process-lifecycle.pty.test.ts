@@ -1,8 +1,26 @@
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { launchTerminal } from './session.js';
+import type { TerminalHarness } from './api.js';
 
 const fixtures = fileURLToPath(new URL('../test-fixtures/', import.meta.url));
+
+// These tests own their terminals directly rather than through the fixture,
+// so a failed assertion would leave one alive. The host treats an attempt that
+// ends holding a lease as a leaked resource and fails the whole run as
+// infrastructure — turning one wrong assertion into a result that says nothing
+// about which test was wrong.
+const opened: TerminalHarness[] = [];
+
+async function open(...args: Parameters<typeof launchTerminal>): Promise<TerminalHarness> {
+  const terminal = await launchTerminal(...args);
+  opened.push(terminal);
+  return terminal;
+}
+
+afterEach(async () => {
+  while (opened.length > 0) await opened.pop()?.close().catch(() => undefined);
+});
 
 function alive(pid: number): boolean {
   try {
@@ -16,7 +34,7 @@ function alive(pid: number): boolean {
 
 describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeout: 20_000 }, () => {
   it('reaps an owned process group when its root exits naturally first', async () => {
-    const terminal = await launchTerminal({
+    const terminal = await open({
       command: [process.execPath, `${fixtures}/process-tree-natural-exit.mjs`],
       envMode: 'inherit',
     });
@@ -33,7 +51,7 @@ describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeo
   });
 
   it('escalates and removes a child plus grandchild that ignore graceful shutdown', async () => {
-    const terminal = await launchTerminal({
+    const terminal = await open({
       command: [process.execPath, `${fixtures}/process-tree-app.mjs`],
       envMode: 'inherit',
     });
@@ -54,7 +72,7 @@ describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeo
 
 describe('PTY output lifecycle', { timeout: 20_000 }, () => {
   it('parses all output through the EOF boundary before publishing exit', async () => {
-    const terminal = await launchTerminal({
+    const terminal = await open({
       command: [process.execPath, `${fixtures}/output-flood-exit.mjs`],
       envMode: 'inherit',
       rows: 30,
@@ -69,7 +87,7 @@ describe('PTY output lifecycle', { timeout: 20_000 }, () => {
   });
 
   it('keeps terminal Ctrl+C distinct from an operating-system signal', async () => {
-    const terminal = await launchTerminal({
+    const terminal = await open({
       command: [process.execPath, `${fixtures}/echo-app.mjs`],
       envMode: 'inherit',
     });
@@ -83,7 +101,7 @@ describe('PTY output lifecycle', { timeout: 20_000 }, () => {
 
 describe.skipIf(process.platform !== 'win32')('Windows process lifecycle', { timeout: 20_000 }, () => {
   it('does not publish natural exit while a console descendant remains alive', async () => {
-    const terminal = await launchTerminal({
+    const terminal = await open({
       command: [process.execPath, `${fixtures}/process-tree-natural-exit.mjs`],
       envMode: 'inherit',
     });
@@ -100,7 +118,7 @@ describe.skipIf(process.platform !== 'win32')('Windows process lifecycle', { tim
   });
 
   it('uses the ConPTY hard-kill mechanism for the complete console tree', async () => {
-    const terminal = await launchTerminal({
+    const terminal = await open({
       command: [process.execPath, `${fixtures}/process-tree-app.mjs`],
       envMode: 'inherit',
     });
@@ -117,7 +135,7 @@ describe.skipIf(process.platform !== 'win32')('Windows process lifecycle', { tim
   });
 
   it('rejects TERM instead of silently converting it to a hard kill', async () => {
-    const terminal = await launchTerminal({
+    const terminal = await open({
       command: [process.execPath, `${fixtures}/echo-app.mjs`],
       envMode: 'inherit',
     });
