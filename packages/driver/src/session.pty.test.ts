@@ -1649,11 +1649,18 @@ describe.skipIf(!ptyAvailable())(
       await terminal.settled();
       expect(terminal.screen().modes.focusReporting).toBe("unknown");
 
+      // Raw device input is mode-gated: the refusal names the mode nobody
+      // could observe, which is also the thing an application or a probe can
+      // fix. The locator path is contract-gated and stays
+      // capability-unavailable. Reporting the contract for both would erase
+      // that difference, and it did so inconsistently — the contract is frozen
+      // by negotiation or by the first locator action, so the same call
+      // answered differently depending on what ran before it.
       await expect(terminal.window.focus()).rejects.toMatchObject({
-        code: "capability-unavailable",
+        code: "input-mode-disabled",
       });
       await expect(terminal.window.blur()).rejects.toMatchObject({
-        code: "capability-unavailable",
+        code: "input-mode-disabled",
       });
       await expect(
         terminal.getByScreenText("MOUSE ON").click(),

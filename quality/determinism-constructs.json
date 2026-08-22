@@ -1523,112 +1523,112 @@
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 1665,
+      "line": 1672,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 1785,
+      "line": 1792,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => terminal.semanticTree()?.revision ?? 0)"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 1911,
+      "line": 1918,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!ptyAvailable())("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2005,
+      "line": 2012,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "const deadline = Date.now() + 3_000;"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2006,
+      "line": 2013,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "while (terminal.semanticTree() === null && Date.now() < deadline) {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2007,
+      "line": 2014,
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 50));"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2139,
+      "line": 2146,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(process.platform === \"win32\")("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2152,
+      "line": 2159,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => terminal.semanticTree()?.revision ?? 0, {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2162,
+      "line": 2169,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(process.platform === \"win32\")("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2184,
+      "line": 2191,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(process.platform === \"win32\")("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2206,
+      "line": 2213,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(process.platform === \"win32\")("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2238,
+      "line": 2245,
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 450));"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2264,
+      "line": 2271,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2293,
+      "line": 2300,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => input.textContent()).toBe(\"a\");"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2295,
+      "line": 2302,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () =>"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2376,
+      "line": 2383,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() =>"
@@ -1656,49 +1656,49 @@
     },
     {
       "path": "packages/driver/src/session.ts",
-      "line": 2115,
+      "line": 2124,
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "timer: setTimeout(() => {"
     },
     {
       "path": "packages/driver/src/session.ts",
-      "line": 2194,
+      "line": 2203,
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "const timer = setTimeout(resolve, ms);"
     },
     {
       "path": "packages/driver/src/session.ts",
-      "line": 2526,
+      "line": 2535,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "this.#clockAnchor = { epochMs: Date.now(), sessionMs: this.#now() };"
     },
     {
       "path": "packages/driver/src/session.ts",
-      "line": 2608,
+      "line": 2617,
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "this.#logDropTimer = setTimeout(() => {"
     },
     {
       "path": "packages/driver/src/session.ts",
-      "line": 3059,
+      "line": 3068,
       "kind": "delay-helper",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "await Promise.race([this.#vt.drain(), delay(CRASH_DRAIN_MS)]);"
     },
     {
       "path": "packages/driver/src/session.ts",
-      "line": 3474,
+      "line": 3483,
       "kind": "delay-helper",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "function delay(ms: number): Promise<void> {"
     },
     {
       "path": "packages/driver/src/session.ts",
-      "line": 3476,
+      "line": 3485,
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "const timer = setTimeout(resolve, ms);"

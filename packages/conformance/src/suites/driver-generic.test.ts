@@ -190,11 +190,12 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     const physicalInputs: string[] = [];
     terminal.events.on('input', ({ kind }) => physicalInputs.push(kind));
 
-    // A terminal that hides its input modes cannot support the pointer and
-    // focus capabilities at all, so the contract leaves them out and every
-    // attempt is refused for that reason. `input-mode-disabled` would claim
-    // knowledge of a mode this terminal never revealed; the refusal has to
-    // name what is actually known, which is that the terminal is unobservable.
+    // The contract does leave both input capabilities out on a terminal that
+    // hides its modes, and that fact is worth pinning. It is not, however, what
+    // a refusal should say: the locator path is contract-gated and reports
+    // capability-unavailable, while the raw device API is mode-gated and names
+    // the sequence that was never observed. Both fail closed; they differ in
+    // what they can honestly claim to know.
     const contract = await terminal.settled();
     expect(contract.capabilities['pointer-input']).toMatchObject({
       status: 'unsupported',
@@ -207,12 +208,15 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
 
     expect(((await rejection(terminal.getByScreenText('Alpha').click())) as TermwrightError).code)
       .toBe('capability-unavailable');
-    expect(((await rejection(terminal.mouse.drag({
+    const refusedDrag = (await rejection(terminal.mouse.drag({
       from: { row: 1, column: 2 },
       to: { row: 3, column: 2 },
-    }))) as TermwrightError).code).toBe('capability-unavailable');
-    expect(((await rejection(terminal.window.focus())) as TermwrightError).code)
-      .toBe('capability-unavailable');
+    }))) as TermwrightError;
+    expect(refusedDrag.code).toBe('input-mode-disabled');
+    expect(refusedDrag.message).toContain('not observable');
+    const refusedFocus = (await rejection(terminal.window.focus())) as TermwrightError;
+    expect(refusedFocus.code).toBe('input-mode-disabled');
+    expect(refusedFocus.message).toContain('not observable');
     expect(physicalInputs).toEqual([]);
   });
 

@@ -192,9 +192,11 @@ export function createNodePtyBackend(): PtyBackend {
                 `ConPTY cannot deliver ${SIGNAL_NAMES[sig]}; use terminal input for Ctrl+C or KILL for hard termination`,
               );
             }
-            // This is node-pty's public ConPTY tree-kill path, not a POSIX
-            // signal: it enumerates console processes and closes the HPCON.
-            pty.kill();
+            // The agent's tree kill, not WindowsTerminal's: the latter is
+            // deferred until the child has produced output, so a silent child
+            // could not be killed at all. This enumerates console processes
+            // and closes the HPCON immediately.
+            exactWindowsAgent(pty).kill();
             return;
           }
           // forkpty makes the child a session/process-group leader. Address
@@ -235,7 +237,10 @@ export function createNodePtyBackend(): PtyBackend {
                 // Close HPCON and let node-pty reap its agent. Its own second
                 // enumeration is redundant but harmless and exact-version
                 // certified; our captured set is the verification boundary.
-                pty.kill();
+                // Again the agent's immediate kill: WindowsTerminal's would
+                // queue behind first output and leave the HPCON and the conout
+                // worker alive after the tree was already gone.
+                exactWindowsAgent(pty).kill();
               },
             }
           : {}),

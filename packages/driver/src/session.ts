@@ -2074,14 +2074,23 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     if (this.#providerInputModes !== null && this.#providerFailure !== null) {
       throw this.#providerFailure;
     }
-    if (this.#contract?.capabilities[capability].status === "unsupported") {
-      throw new CapabilityUnavailableError(
-        `${capability} is outside this frozen session contract`,
-        this.errorDiagnostics({
-          suggestion: capabilityRemediation(`session.${capability}`).message,
-        }),
-      );
-    }
+    const contracted = this.#contract?.capabilities[capability];
+    if (contracted?.status !== "unsupported") return;
+    // A terminal that hides its modes is not the same as a session that lacks
+    // the capability, and only the mode layer can say which sequence is
+    // missing. Refusing here would replace "1002 was never enabled, and this
+    // terminal will not let me see it" with a bare contract complaint, and it
+    // would do so inconsistently: the contract is frozen by negotiation or by
+    // the first locator action, so the same mouse.drag() reported different
+    // codes depending on what ran before it. Fall through and let the mode
+    // layer refuse — the action is still denied, with the reason intact.
+    if (contracted.reason === "terminal-unobservable") return;
+    throw new CapabilityUnavailableError(
+      `${capability} is outside this frozen session contract`,
+      this.errorDiagnostics({
+        suggestion: capabilityRemediation(`session.${capability}`).message,
+      }),
+    );
   }
 
   actionObservationState():
