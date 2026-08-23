@@ -147,6 +147,14 @@ export {
 } from './errors.js';
 
 export {
+  resolveDefaultPtyBackend,
+  resetPtyBackendChoice,
+  type PtyBackendChoice,
+} from './backend-selection.js';
+
+export { createConPtyBackend, CONPTY_BACKEND_NAME } from './conpty-backend.js';
+
+export {
   createNodePtyBackend,
   type PtyBackend,
   type PtyProcess,

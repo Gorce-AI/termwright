@@ -214,6 +214,58 @@ jobs:
         env: { TERMWRIGHT_RETRIES: '0' }
         run: pnpm test -- --resource-profile windows-ci --json -- --run packages/conpty/src
 
+  windows-driver-native:
+    name: Windows suites on the native backend (Node ${{ matrix.node }})
+    # The Windows rows of the build matrix run on node-pty, because a machine
+    # without the addon still has to work until prebuilds ship. That path has
+    # standing failures — cleanup that cannot confirm a tree is gone, and a
+    # pointer target that moves after its paired frame — and the question is
+    # whether they are the backend's or the driver's. Here the driver gets the
+    # certified session instead, and the answer is the difference between the
+    # two job's results rather than an argument.
+    runs-on: windows-latest
+    needs: conpty-native-build
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: conpty-addon
+          path: packages/conpty/build/Release
+
+      # A selection step, not a smoke test. If this prints the node-pty name
+      # the job below proves nothing, and a silent fallback would make it look
+      # like it had.
+      - name: Confirm the driver selects the native backend
+        shell: bash
+        run: |
+          node --input-type=module -e "
+            const { resolveDefaultPtyBackend } = await import('./packages/driver/dist/index.js');
+            const { backend, degradedReason } = await resolveDefaultPtyBackend();
+            console.log('selected backend:', backend.name);
+            if (degradedReason !== undefined) { console.error(degradedReason); process.exit(1); }
+          "
+
+      - name: Run the certified Termwright host
+        run: pnpm test -- --resource-profile windows-ci --json
+
   determinism:
     name: determinism (50 native run cycles, zero retries)
     runs-on: ubuntu-latest
