@@ -6,7 +6,7 @@ description: Supported imports from the Termwright umbrella package and speciali
 Most projects install only the umbrella package:
 
 ```sh
-npm install --save-dev termwright vitest
+npm install --save-dev termwright
 ```
 
 ## Public umbrella exports

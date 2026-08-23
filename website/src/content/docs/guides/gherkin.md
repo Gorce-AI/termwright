@@ -14,7 +14,7 @@ step, retry, trace, report, and Runner behavior as a `.test.ts` case.
 The umbrella package includes the Gherkin authoring API and Runner integration:
 
 ```sh
-npm install --save-dev termwright vitest
+npm install --save-dev termwright
 ```
 
 ## Write a terminal scenario

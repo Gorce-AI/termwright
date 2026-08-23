@@ -2,6 +2,14 @@
 
 import { createRequire } from 'node:module';
 
+/**
+ * The engine version this build is certified against.
+ *
+ * Every statement elsewhere about engine behaviour refers to this exact
+ * version rather than restating a number. Comments that named a version
+ * directly went on describing 3.2.7 long after the engine had moved, which is
+ * how a comment stops being documentation and becomes a false claim.
+ */
 export const CERTIFIED_VITEST_VERSION = '4.1.11' as const;
 export const TERMWRIGHT_RUNNER_CONTEXT_KEY = 'termwright.runner.context.v3' as const;
 

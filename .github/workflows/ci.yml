@@ -129,9 +129,50 @@ jobs:
           packages/conformance/src/suites/mcp-sessions.test.ts
           packages/ui/src/hostile.test.ts
 
+  conpty-native-build:
+    name: build the ConPTY addon
+    # Pinned to the 2022 image on purpose. windows-latest now ships Visual
+    # Studio 18, which node-gyp 11 cannot identify — it reports "unknown
+    # version undefined" and gives up. Users are never asked to compile this
+    # (prebuilds ship with the package), so the toolchain that produces the
+    # binary and the Windows that runs it are separate choices, and this is
+    # the one where the toolchain is supported.
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Node-API, so one binary serves every supported Node line. Building it
+      # twice would only prove the compiler runs twice.
+      - name: Compile
+        working-directory: packages/conpty
+        run: pnpm run build:native
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: conpty-addon
+          path: packages/conpty/build/Release/termwright_conpty.node
+          if-no-files-found: error
+          retention-days: 1
+
   conpty-native:
     name: native ConPTY backend (Windows / Node ${{ matrix.node }})
+    # 24H2, which is where ReleasePseudoConsole exists. The addon detects the
+    # symbol rather than the version, and this is the image that proves the
+    # modern path is the one taken.
     runs-on: windows-latest
+    needs: conpty-native-build
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -152,17 +193,20 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
-      # Compiled from source here. The addon is the boundary being certified,
-      # so a run that could not build it has proven nothing and must fail
-      # rather than fall through to a suite that skips every real case.
-      - name: Build the ConPTY addon
-        working-directory: packages/conpty
-        run: pnpm run build:native
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: conpty-addon
+          path: packages/conpty/build/Release
 
       - name: Record which pseudoconsole path this runner takes
         shell: bash
         run: |
-          node -e "const b=require('./packages/conpty/build/Release/termwright_conpty.node');console.log('addon loaded:', Object.keys(b).join(','))"
+          node -e "
+            const { ConPtySession } = require('./packages/conpty/build/Release/termwright_conpty.node');
+            const s = new ConPtySession({ commandLine: process.execPath + ' -e \"process.exit(0)\"', columns: 80, rows: 24 }, () => {});
+            console.log('ReleasePseudoConsole available:', s.releaseSupported);
+            s.dispose();
+          "
 
       # Real pseudoconsole, real job object, real pipes. A skip here is a
       # failure: these cases exist because nothing else can prove them.

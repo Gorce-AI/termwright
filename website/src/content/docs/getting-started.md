@@ -18,7 +18,7 @@ Linux CI, use a Debian- or Ubuntu-based Node image such as `node:22-slim`.
 ## Install Termwright
 
 ```sh
-npm install --save-dev termwright vitest
+npm install --save-dev termwright
 ```
 
 Add scripts that use the locally installed binaries:

@@ -27,7 +27,11 @@ export async function writeNativeRunFixture(
   const startedAt = options.startedAt ?? Date.now();
   const start: RunStartProvenance = {
     invocationId: createRunId('invocation'), runId: createRunId('run'), startedAt,
-    engine: { name: 'vitest', version: '3.2.7', certification: 'termwright-vitest-3.2.7' },
+    // Deliberately not a real engine version. This is a viewer fixture, and a
+    // genuine version here reads as a claim about what Termwright certifies —
+    // which is how this file went on naming 3.2.7 for months after the engine
+    // moved on.
+    engine: { name: 'vitest', version: '0.0.0-fixture', certification: 'termwright-vitest-fixture' },
     runtime: { node: process.version, platform: process.platform, arch: process.arch },
     resources: {
       profile: 'default', scheduler: { pool: 'forks', maxWorkers: 1, fileParallelism: true },

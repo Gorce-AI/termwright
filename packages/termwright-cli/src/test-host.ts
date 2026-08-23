@@ -153,7 +153,7 @@ interface EngineCollection {
   readonly tests: readonly TestCase[];
 }
 
-/** Narrow seam around the exact Vitest 3.2.7 APIs certified by this host. */
+/** Narrow seam around the exact engine APIs this host certifies. */
 export interface TermwrightVitestEngine {
   readonly version: string;
   setRunnerContext(context: TermwrightRunnerContext): void;

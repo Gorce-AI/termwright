@@ -304,13 +304,13 @@ importers:
       tinyglobby:
         specifier: 0.2.17
         version: 0.2.17
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
     devDependencies:
       vite:
         specifier: ^7.3.0
         version: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
-      vitest:
-        specifier: 4.1.11
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
   packages/ink:
     dependencies:
@@ -612,6 +612,9 @@ importers:
       '@termwright/ui':
         specifier: workspace:*
         version: link:../ui
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
       yaml:
         specifier: ^2.5.0
         version: 2.9.0
@@ -619,9 +622,6 @@ importers:
       '@vitest/runner':
         specifier: 4.1.11
         version: 4.1.11
-      vitest:
-        specifier: 4.1.11
-        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
 
   packages/trace:
     dependencies:

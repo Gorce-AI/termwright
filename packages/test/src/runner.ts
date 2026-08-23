@@ -171,7 +171,7 @@ export function certifiedTryOrdinal(value: unknown): CertifiedNativeTryOrdinal {
 /**
  * The sole certified Termwright runner.
  *
- * Vitest 3.2.7 calls `onBeforeTryTask(test, {retry, repeats})` immediately
+ * The engine calls `onBeforeTryTask(test, {retry, repeats})` immediately
  * before resolving fixtures. Its public declaration omits the second argument,
  * so this override keeps it optional for TypeScript and rejects its absence at
  * runtime. The ALS value intentionally remains installed past
@@ -244,7 +244,7 @@ export class TermwrightTestRunner extends VitestTestRunner {
           deadline: performance.timeOrigin + performance.now() + task.timeout,
         });
     if (reservationAdmission !== undefined) {
-      // Vitest 3.2.7 invokes onBeforeTryTask before beforeEach and before the
+      // The engine invokes onBeforeTryTask before beforeEach and before the
       // timeout-wrapped authored callback. This is the exact-certified
       // scheduler admission boundary: an atomic group wait is bounded, but it
       // cannot spend the Attempt's operation/diagnostic/teardown budget.
@@ -265,7 +265,7 @@ export class TermwrightTestRunner extends VitestTestRunner {
     }, native.repeats, native.retry, {
       executionId,
       attemptId,
-      // Vitest's task timeout bounds the authored callback. Its exact 3.2.7
+      // Vitest's task timeout bounds the authored callback. Its exact
       // runner executes fixture cleanup/onFinished afterwards under hook
       // budgets. Give that mandatory lifecycle phase only the explicit
       // teardown reserve: operation/diagnostic/trace cutoffs remain before the
@@ -688,7 +688,7 @@ function installAttemptFinalizer(
     else hooks.push(afterFailures);
   };
   const hooks = test.onFinished ??= [];
-  // onFinished is hard-coded to stack order by Vitest 3.2.7. Inserting first
+  // onFinished is hard-coded to stack order by the engine. Inserting first
   // makes the authoritative finalizer execute last, after user callbacks.
   hooks.unshift(afterCleanup);
   rememberOpenAttempt(test, context.attemptId, async () => {
@@ -791,7 +791,7 @@ function attemptTerminalState(test: NativeAttemptTask): 'passed' | 'failed' | 's
 }
 
 function workerIdentity(context: TermwrightRunnerBrokerContext): { readonly workerId: string; readonly workerEpoch: number } {
-  // Exact Vitest 3.2.7 assigns both values in its worker bootstrap. Combining
+  // The exact engine assigns both values in its worker bootstrap. Combining
   // them with PID distinguishes process and thread pools without random ids.
   const pool = exactWorkerOrdinal('VITEST_POOL_ID');
   const worker = exactWorkerOrdinal('VITEST_WORKER_ID');

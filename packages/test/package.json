@@ -9,18 +9,31 @@
     "directory": "packages/test"
   },
   "type": "module",
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./config": { "types": "./dist/config.d.ts", "import": "./dist/config.js" },
-    "./vitest-engine": { "types": "./dist/vitest-engine.d.ts", "import": "./dist/vitest-engine.js" },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./vitest-engine": {
+      "types": "./dist/vitest-engine.d.ts",
+      "import": "./dist/vitest-engine.js"
+    },
     "./runner": {
       "types": "./dist/runner.d.ts",
       "import": "./dist/runner.js",
       "default": "./dist/runner.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts src/config.ts src/runner.ts src/vitest-engine.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
@@ -33,10 +46,8 @@
     "@termwright/run-journal-transport": "workspace:*",
     "@termwright/trace": "workspace:*",
     "@termwright/ui": "workspace:*",
+    "vitest": "4.1.11",
     "yaml": "^2.5.0"
-  },
-  "peerDependencies": {
-    "vitest": "4.1.11"
   },
   "devDependencies": {
     "@vitest/runner": "4.1.11",

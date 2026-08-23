@@ -8,7 +8,7 @@ the component's process, environment, signals, crash behavior, or real PTY is
 part of the test.
 
 ```sh
-npm install --save-dev termwright vitest
+npm install --save-dev termwright
 ```
 
 ```tsx

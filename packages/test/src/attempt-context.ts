@@ -37,7 +37,7 @@ export interface AttemptContext {
   readonly shardId?: ShardId;
   readonly specId: SpecId;
   readonly runnerTaskId: RunnerTaskId;
-  /** Exact Vitest 3.2.7 collection id; never reconstructed from a title. */
+  /** The engine's own collection id; never reconstructed from a title. */
   readonly nativeTaskId: string;
   /** Authoritative collected module path supplied by TermwrightTestHost. */
   readonly file: string;
