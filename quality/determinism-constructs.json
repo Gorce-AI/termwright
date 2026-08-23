@@ -2972,7 +2972,7 @@
     },
     {
       "path": "packages/termwright-cli/src/test-host.test.ts",
-      "line": 96,
+      "line": 97,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "time: Date.now(),"
@@ -3315,28 +3315,28 @@
     },
     {
       "path": "packages/test/src/runner.ts",
-      "line": 240,
+      "line": 243,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void reservationAdmission.catch(() => undefined);"
     },
     {
       "path": "packages/test/src/runner.ts",
-      "line": 440,
+      "line": 443,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void connection.catch(() => brokerConnections.delete(key));"
     },
     {
       "path": "packages/test/src/runner.ts",
-      "line": 470,
+      "line": 473,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void connection.catch(() => journalConnections.delete(key));"
     },
     {
       "path": "packages/test/src/runner.ts",
-      "line": 615,
+      "line": 618,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void pending.catch(() => undefined);"

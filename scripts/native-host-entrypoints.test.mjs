@@ -25,7 +25,7 @@ describe('the native host is the only Termwright test entrypoint', () => {
       expect(command, entry.name).not.toMatch(/(?:^|\s)vitest(?:\s|$)/u);
       expect(command, entry.name).toMatch(/(?:termwright-cli\/dist\/bin\.js test|pnpm --dir \.\.\/\.\. test)/u);
       for (const dependencies of [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies]) {
-        if (dependencies?.vitest !== undefined) expect(dependencies.vitest, `${entry.name} Vitest range`).toBe('3.2.7');
+        if (dependencies?.vitest !== undefined) expect(dependencies.vitest, `${entry.name} Vitest range`).toBe('4.1.11');
       }
     }
   });

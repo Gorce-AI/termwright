@@ -34,6 +34,6 @@
   "devDependencies": {
     "png2icons": "2.0.1",
     "sharp": "^0.34.3",
-    "vitest": "3.2.7"
+    "vitest": "4.1.11"
   }
 }

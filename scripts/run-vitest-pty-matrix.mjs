@@ -89,7 +89,7 @@ try {
   await rm(work, { recursive: true, force: true });
 }
 
-const certifiedFailures = results.filter((result) => result.vitest === '3.2.7' && result.code !== 0);
+const certifiedFailures = results.filter((result) => result.vitest === '4.1.11' && result.code !== 0);
 console.log(`Vitest/PTy matrix wrote ${results.length} cells to ${output}; certified failures: ${certifiedFailures.length}`);
 if (certifiedFailures.length > 0) process.exitCode = 1;
 

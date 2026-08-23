@@ -19,7 +19,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir as osTmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test as base } from 'vitest';
+import { expect as globalExpect, test as base } from 'vitest';
 import {
   launchTerminal,
   type LaunchOptions,
@@ -187,7 +187,17 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
   termwrightOptions: {},
 
   termwright: [
-    async ({ task, expect, annotate, onTestFailed }, use) => {
+    async ({ task, annotate, onTestFailed }, use) => {
+      // `expect` cannot be named in the destructuring pattern. Vitest 4 derives
+      // fixture dependencies from that pattern and validates them against its
+      // built-ins — task, signal, onTestFailed, onTestFinished, skip, annotate
+      // — and `expect` is not one, so naming it fails as an unknown fixture.
+      // Rest parameters are rejected outright. The task carries the same
+      // context, and it has to be that instance rather than the global one:
+      // the global expect would miss a run that is only updating this file's
+      // snapshots.
+      const expect = (task as { readonly context?: { readonly expect?: typeof globalExpect } })
+        .context?.expect ?? globalExpect;
       const config = getTermwrightConfig();
       const testName = fullName(task);
       // The exact runner owns retry/repeat identity; task.result is aggregate

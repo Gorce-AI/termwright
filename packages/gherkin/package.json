@@ -43,10 +43,10 @@
   },
   "peerDependencies": {
     "vite": "^7.0.0",
-    "vitest": "3.2.7"
+    "vitest": "4.1.11"
   },
   "devDependencies": {
     "vite": "^7.3.0",
-    "vitest": "3.2.7"
+    "vitest": "4.1.11"
   }
 }

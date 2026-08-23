@@ -19,9 +19,10 @@ import {
   TERMWRIGHT_RESOURCE_PROFILES,
   type TermwrightVitestEngine,
 } from './test-host.js';
+import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
 
 class FakeEngine implements TermwrightVitestEngine {
-  readonly version = '3.2.7';
+  readonly version = CERTIFIED_VITEST_VERSION;
   contexts: TermwrightRunnerContext[] = [];
   cancellations = 0;
   closes = 0;
@@ -212,7 +213,7 @@ describe('TermwrightTestHost', () => {
       .filter((event) => event.type === 'run.configuration' || event.type === 'run.state')
       .map((event) => event.payload)).toEqual([
       {
-        engine: { name: 'vitest', version: '3.2.7' },
+        engine: { name: 'vitest', version: CERTIFIED_VITEST_VERSION },
         runtime: { node: process.version, platform: process.platform, arch: process.arch },
         resourceProfile: {
           name: 'local',
@@ -319,7 +320,7 @@ describe('TermwrightTestHost', () => {
       runId: completion.runId,
       invocationId: completion.invocationId,
       status: 'passed',
-      engine: { name: 'vitest', version: '3.2.7' },
+      engine: { name: 'vitest', version: CERTIFIED_VITEST_VERSION },
       runtime: { node: process.version, platform: process.platform, arch: process.arch },
     });
     expect(record.manifest.attempts[0]?.attemptId).toMatch(/^attempt:/u);

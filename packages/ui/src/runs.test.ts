@@ -81,7 +81,7 @@ async function emptyDir(): Promise<string> { return mkdtemp(join(tmpdir(), 'tw-u
 function provenance(startedAt: number): RunStartProvenance {
   return {
     invocationId: createRunId('invocation'), runId: createRunId('run'), startedAt,
-    engine: { name: 'vitest', version: '3.2.7', certification: 'termwright-vitest-3.2.7' },
+    engine: { name: 'vitest', version: '4.1.11', certification: 'termwright-vitest-4.1.11' },
     runtime: { node: process.version, platform: process.platform, arch: process.arch },
     resources: {
       profile: 'default', scheduler: { pool: 'forks', maxWorkers: 2, fileParallelism: true },

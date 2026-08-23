@@ -67,6 +67,6 @@
     "@termwright/ui": "workspace:*",
     "@termwright/screenshot": "workspace:*",
     "@termwright/trace": "workspace:*",
-    "vitest": "3.2.7"
+    "vitest": "4.1.11"
   }
 }

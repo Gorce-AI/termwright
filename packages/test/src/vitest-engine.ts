@@ -2,7 +2,7 @@
 
 import { createRequire } from 'node:module';
 
-export const CERTIFIED_VITEST_VERSION = '3.2.7' as const;
+export const CERTIFIED_VITEST_VERSION = '4.1.11' as const;
 export const TERMWRIGHT_RUNNER_CONTEXT_KEY = 'termwright.runner.context.v3' as const;
 
 /** Reads the package which supplies the embedded Vitest engine. */

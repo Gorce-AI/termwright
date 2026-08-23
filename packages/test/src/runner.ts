@@ -11,7 +11,10 @@ import {
   type ShardId,
   type SpecId,
 } from '@termwright/protocol';
-import { VitestTestRunner } from 'vitest/runners';
+// `vitest/runners` is deprecated since Vitest 4.1 and warns on import. The
+// root entry exports the same concrete class as `TestRunner`; note that its
+// `VitestTestRunner` export is the interface type, not this class.
+import { TestRunner as VitestTestRunner } from 'vitest';
 import { installTerminalLaunchResourceProvider } from '@termwright/driver';
 import type { ResourceVector } from '@termwright/resource-broker';
 import {

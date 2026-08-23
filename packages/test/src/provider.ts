@@ -1,6 +1,9 @@
 /** Declaration-time ownership of cases created by `@termwright/test`. */
 
-import { getCurrentSuite } from 'vitest/suite';
+// `vitest/suite` is deprecated since Vitest 4.1 and warns on import, which
+// lands in the run's own console output. The static methods on the runner
+// class are the supported entry point.
+import { TestRunner } from 'vitest';
 import { termwrightProvider } from '@termwright/ui/provider';
 import type {
   TermwrightProviderDeclaration,
@@ -111,11 +114,11 @@ function validateResources(value: TermwrightTestResources): Readonly<TermwrightT
   return Object.freeze(result);
 }
 
-type DeclaredTask = ReturnType<typeof getCurrentSuite>['tasks'][number];
+type DeclaredTask = ReturnType<typeof TestRunner.getCurrentSuite>['tasks'][number];
 
 function currentTasks(): readonly DeclaredTask[] | undefined {
   try {
-    return [...getCurrentSuite().tasks];
+    return [...TestRunner.getCurrentSuite().tasks];
   } catch {
     // `test.step()` is also a function property and runs after collection. It
     // has no collector to mark, and must remain a normal runtime helper.

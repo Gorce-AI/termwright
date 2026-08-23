@@ -87,7 +87,7 @@ function doctorReport(ok: boolean): DoctorReport {
     checks: ok ? [] : [{ name: 'PTY backend', status: 'fail', detail: 'unavailable' }],
     effectiveConfig: {
       mode: 'termwright-native-only',
-      engine: { name: 'vitest', version: '3.2.7' },
+      engine: { name: 'vitest', version: '4.1.11' },
       defaultProfile: TERMWRIGHT_RESOURCE_PROFILES.local,
       profiles: TERMWRIGHT_RESOURCE_PROFILES,
       semantics: 'explicit-session-contract',

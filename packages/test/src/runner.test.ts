@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
@@ -20,6 +20,22 @@ import {
 } from './runner.js';
 
 const execute = promisify(execFile);
+
+/**
+ * Absolute path to Vitest's CLI entry.
+ *
+ * `vitest/vitest.mjs` is not a declared subpath — Vitest 4 tightened its
+ * exports map and the specifier no longer resolves. The bin field is the
+ * supported way to find it, and it works across both lines.
+ */
+function vitestCliPath(): string {
+  const require = createRequire(import.meta.url);
+  const manifestPath = require.resolve('vitest/package.json');
+  const manifest = require('vitest/package.json') as { readonly bin?: Record<string, string> | string };
+  const entry = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.['vitest'];
+  if (entry === undefined) throw new Error('the installed Vitest package declares no vitest bin');
+  return join(dirname(manifestPath), entry);
+}
 const directories: string[] = [];
 
 afterEach(async () => {
@@ -28,10 +44,10 @@ afterEach(async () => {
 
 describe('exact Vitest certification', () => {
   it('pins the runtime whose native try hook Termwright consumes', () => {
-    expect(installedVitestVersion()).toBe('3.2.7');
-    expect(CERTIFIED_VITEST_VERSION).toBe('3.2.7');
+    expect(installedVitestVersion()).toBe(CERTIFIED_VITEST_VERSION);
+    expect(CERTIFIED_VITEST_VERSION).toBe('4.1.11');
     expect(() => assertCertifiedVitestRuntime()).not.toThrow();
-    expect(() => assertCertifiedVitestRuntime('3.2.8')).toThrow(/exact-certified for 3\.2\.7/u);
+    expect(() => assertCertifiedVitestRuntime('4.1.10')).toThrow(/exact-certified for 4\.1\.11/u);
   });
 
   it('fails closed if the certified hook omits either native ordinal', () => {
@@ -95,7 +111,7 @@ describe('native AttemptContext', () => {
     const directory = await mkdtemp(join(tmpdir(), 'termwright-attempt-context-'));
     directories.push(directory);
     const output = join(directory, 'events.jsonl');
-    const vitest = createRequire(import.meta.url).resolve('vitest/vitest.mjs');
+    const vitest = vitestCliPath();
     const config = fileURLToPath(new URL('__fixtures__/attempt-context.vitest.config.ts', import.meta.url));
     const runId = createRunId('run');
     const broker = new ResourceBroker({ runId, capacities: {
@@ -199,7 +215,7 @@ describe('native AttemptContext', () => {
     const directory = await mkdtemp(join(tmpdir(), 'termwright-broker-denied-'));
     directories.push(directory);
     const marker = join(directory, 'spawned');
-    const vitest = createRequire(import.meta.url).resolve('vitest/vitest.mjs');
+    const vitest = vitestCliPath();
     const config = fileURLToPath(new URL('__fixtures__/broker-denied.vitest.config.ts', import.meta.url));
     const runId = createRunId('run');
     const broker = new ResourceBroker({ runId, capacities: {

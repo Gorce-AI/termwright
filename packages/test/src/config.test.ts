@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { UserConfig } from 'vitest/config';
+// Vitest 4 renamed the re-exported Vite config type to ViteUserConfig.
+import type { ViteUserConfig as UserConfig } from 'vitest/config';
 import {
   XTERM_PALETTE,
   configureTermwright,
