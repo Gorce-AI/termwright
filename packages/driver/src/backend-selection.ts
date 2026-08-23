@@ -44,13 +44,15 @@ async function loadNativeWindowsBackend(): Promise<PtyBackendChoice> {
   try {
     const module_ = (await import('@termwright/conpty')) as {
       conPtyAvailable(): boolean;
+      conPtyUnavailableReason?(): string | undefined;
       spawnConPty: ConPtySpawn;
     };
     if (!module_.conPtyAvailable()) {
       return {
         backend: createNodePtyBackend(),
         degradedReason:
-          '@termwright/conpty is present but its native addon is not built for this Node ABI; ' +
+          '@termwright/conpty is present but its native addon did not load ' +
+          `(${module_.conPtyUnavailableReason?.() ?? 'no reason reported'}); ` +
           'output ends on a bounded flush window rather than on the pipe',
       };
     }

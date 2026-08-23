@@ -59,14 +59,26 @@ export function loadConPtyBinding(): { readonly ConPtySession: NativeBinding } {
   return cachedBinding;
 }
 
+let unavailableReason: string | undefined;
+
 /** True when the addon is present and usable in this process. */
 export function conPtyAvailable(): boolean {
   try {
     loadConPtyBinding();
+    unavailableReason = undefined;
     return true;
-  } catch {
+  } catch (error) {
+    // Kept, because "not available" is the least useful half of the answer.
+    // A missing file, an ABI mismatch and a load-time failure inside the addon
+    // all arrive here, and they are three different pieces of work.
+    unavailableReason = error instanceof Error ? error.message : String(error);
     return false;
   }
+}
+
+/** Why the addon could not be loaded, as the loader reported it. */
+export function conPtyUnavailableReason(): string | undefined {
+  return unavailableReason;
 }
 
 /**
