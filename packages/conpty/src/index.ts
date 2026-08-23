@@ -18,6 +18,7 @@ type NativeEvent =
   | { readonly type: 'data'; readonly data: Buffer }
   | { readonly type: 'exit'; readonly exitCode: number }
   | { readonly type: 'eof'; readonly code: number }
+  | { readonly type: 'notice'; readonly message: string }
   | { readonly type: 'error'; readonly message: string; readonly code: number };
 
 interface NativeSession {
@@ -156,6 +157,15 @@ export interface ConPtyHandle {
    * properly, and telling them apart is the claim this backend exists to make.
    */
   readonly endReason: number | undefined;
+  /**
+   * The session's own account of its lifecycle, oldest first.
+   *
+   * Root exit, what the job said, and when the console was closed. These
+   * moments are only observable while they happen: the console takes its
+   * evidence with it when it goes, so anything reconstructed afterwards is
+   * inference. Kept bounded, because a session is not a log file.
+   */
+  readonly notices: readonly string[];
   write(data: Uint8Array): void;
   resize(columns: number, rows: number): boolean;
   terminateTree(): void;
@@ -177,6 +187,8 @@ export function spawnConPty(options: ConPtySpawnOptions): ConPtyHandle {
   let ended = false;
   let endReason: number | undefined;
   let disposed = false;
+  const notices: string[] = [];
+  const NOTICE_LIMIT = 64;
 
   const session = new binding.ConPtySession(
     {
@@ -205,6 +217,13 @@ export function spawnConPty(options: ConPtySpawnOptions): ConPtyHandle {
           ended = true;
           resolveEnded?.();
           return;
+        case 'notice':
+          // Oldest dropped first: a session that somehow produces more of
+          // these than the bound must not grow without limit, and the last
+          // ones are the ones that describe how it ended.
+          if (notices.length >= NOTICE_LIMIT) notices.shift();
+          notices.push(event.message);
+          return;
         case 'error': {
           const failure = Object.assign(new Error(event.message), { win32: event.code });
           for (const listener of [...errorListeners]) listener(failure);
@@ -219,6 +238,7 @@ export function spawnConPty(options: ConPtySpawnOptions): ConPtyHandle {
     get releaseSupported(): boolean { return session.releaseSupported; },
     get sawRealEof(): boolean { return ended; },
     get endReason(): number | undefined { return endReason; },
+    get notices(): readonly string[] { return [...notices]; },
     outputEnded,
     write(data: Uint8Array): void {
       if (disposed) return;

@@ -199,7 +199,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       `descendant ${spawned?.[0] ?? 'unreported'}, alive in the OS: ${alive}, ` +
         `job members while the root was alive: ${membersWithRootAlive}, ` +
         `marker already delivered: ${output.text().includes('FINAL_CHILD_MARKER')}, ` +
-        `its own journal says: ${JSON.stringify(readJournal(journal))}`,
+        `its own journal says: ${JSON.stringify(readJournal(journal))}, ` +
+        `the session says: ${JSON.stringify(handle.notices)}`,
     ).toBeGreaterThan(0);
     await handle.outputEnded;
     expect(handle.sawRealEof).toBe(true);

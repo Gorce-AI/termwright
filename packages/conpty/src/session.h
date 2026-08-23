@@ -60,7 +60,13 @@ class Handle {
 };
 
 /// What the session hands to JavaScript, in the order it happened.
-enum class EventKind { kData, kExit, kEof, kError };
+///
+/// `kNotice` carries the session's own account of its lifecycle: when the root
+/// left, what the job said, and when the console was closed. It exists because
+/// the alternative is inferring those moments from their consequences, and a
+/// consequence arrives after the thing that caused it has stopped being
+/// observable — the console takes its own evidence with it when it goes.
+enum class EventKind { kData, kExit, kEof, kError, kNotice };
 
 struct SessionEvent {
   EventKind kind = EventKind::kData;
@@ -123,6 +129,8 @@ class Session {
   void WaitForRootExit();
   void WaitForEmptyTree();
   void Emit(SessionEvent event);
+  /// Records a lifecycle moment on the same ordered channel as the output.
+  void Notice(std::string message);
 
   HPCON pseudoconsole_ = nullptr;
   Handle host_output_read_;

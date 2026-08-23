@@ -290,12 +290,22 @@ void Session::WaitForRootExit() {
   // fact: a job reporting zero active processes cannot produce another byte.
   // Closing after that is a cleanup of something already finished, and the
   // reader still ends on the pipe rather than on a timer.
+  Notice("root exited with " + std::to_string(code) + "; job members " +
+         std::to_string(ActiveProcesses()));
   WaitForEmptyTree();
   if (pseudoconsole_ != nullptr && !closed_pseudoconsole_.exchange(true)) {
+    Notice("closing the pseudoconsole; job members " + std::to_string(ActiveProcesses()));
     HPCON closing = pseudoconsole_;
     pseudoconsole_ = nullptr;
     ClosePseudoConsole(closing);
   }
+}
+
+void Session::Notice(std::string message) {
+  SessionEvent notice;
+  notice.kind = EventKind::kNotice;
+  notice.message = std::move(message);
+  Emit(std::move(notice));
 }
 
 void Session::WaitForEmptyTree() {
@@ -309,11 +319,20 @@ void Session::WaitForEmptyTree() {
   // is empty. Bounded, because a job that never empties must not hold teardown
   // open for ever, and hitting the bound is reported as a tree that could not
   // be proven gone rather than one that was.
-  if (ActiveProcesses() <= 0) return;
+  if (ActiveProcesses() <= 0) {
+    Notice("tree already empty when the drain began");
+    return;
+  }
   const DWORD deadline = GetTickCount() + TREE_DRAIN_TIMEOUT_MS;
   for (;;) {
     const DWORD now = GetTickCount();
-    if (now >= deadline) return;
+    if (now >= deadline) {
+      // Never reported as a drained tree. A budget that runs out is a tree
+      // that could not be proven gone, which is an infrastructure failure and
+      // must read as one.
+      Notice("drain budget expired with " + std::to_string(ActiveProcesses()) + " job members");
+      return;
+    }
     DWORD completion = 0;
     ULONG_PTR key = 0;
     LPOVERLAPPED overlapped = nullptr;
@@ -323,7 +342,10 @@ void Session::WaitForEmptyTree() {
     } else {
       Sleep(TREE_POLL_INTERVAL_MS);
     }
-    if (ActiveProcesses() <= 0) return;
+    if (ActiveProcesses() <= 0) {
+      Notice("job reported the tree empty");
+      return;
+    }
   }
 }
 
