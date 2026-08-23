@@ -7,6 +7,7 @@
 
 #include <napi.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -83,14 +84,23 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
     channel_ = Napi::ThreadSafeFunction::New(env, info[1].As<Napi::Function>(),
                                              "termwright-conpty", 0, 1);
 
+    // Armed before Start, never after. Start launches the reader, the writer
+    // and the exit watcher and only then returns, so a gate flipped afterwards
+    // discards everything produced in between — which for a child that prints
+    // and exits immediately is the entire session. That is not a race that
+    // shows up occasionally; it is every fast child, every time.
+    started_.store(true);
     std::string error;
     if (!session_->Start(spawn, &ConPtySession::OnSessionEvent, this, &error)) {
+      // Start can fail after its threads exist, so join them before letting
+      // the channel go.
+      session_->Dispose();
+      started_.store(false);
       channel_.Release();
       channel_ = Napi::ThreadSafeFunction();
       Napi::Error::New(env, error).ThrowAsJavaScriptException();
       return;
     }
-    started_ = true;
   }
 
   ~ConPtySession() override { Shutdown(); }
@@ -102,7 +112,7 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
   }
 
   void Deliver(termwright::SessionEvent event) {
-    if (!started_) return;
+    if (!started_.load()) return;
     auto* carried = new termwright::SessionEvent(std::move(event));
     // BlockingCall keeps the queue ordered and applies backpressure to the
     // producing thread instead of growing without bound.
@@ -184,16 +194,23 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
   }
 
   void Shutdown() {
-    if (!started_) return;
-    started_ = false;
+    if (shuttingDown_.exchange(true)) return;
+    if (!started_.load()) return;
+    // Dispose first, and keep delivering while it runs. It joins the producing
+    // threads, so once it returns nothing can emit — but until then the reader
+    // may still see the pipe genuinely end, and closing the gate first would
+    // discard that EOF and leave the session reporting it never happened. The
+    // queue is unbounded, so a producer mid-call cannot be waiting on us.
     session_->Dispose();
+    started_.store(false);
     channel_.Release();
     channel_ = Napi::ThreadSafeFunction();
   }
 
   std::unique_ptr<termwright::Session> session_;
   Napi::ThreadSafeFunction channel_;
-  bool started_ = false;
+  std::atomic<bool> started_{false};
+  std::atomic<bool> shuttingDown_{false};
 };
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
