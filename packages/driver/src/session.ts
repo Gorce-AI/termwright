@@ -124,6 +124,7 @@ import {
 } from "./mouse.js";
 import { SemanticIndex, textInRect } from "./matching.js";
 import { RevisionPairing } from "./pairing.js";
+import { resolveDefaultPtyBackend } from "./backend-selection.js";
 import {
   createNodePtyBackend,
   type PtyBackend,
@@ -293,9 +294,16 @@ export async function launchTerminal(
   // The native host admits scarce resources before the semantic endpoint or
   // PTY exists. Standalone driver processes can install their own owner.
   const launchLease = await acquireTerminalLaunchResourceLease();
+  // Resolved here rather than in the constructor because choosing it can mean
+  // loading a native module, and that is an await the constructor cannot
+  // perform. A caller that supplied its own backend is asked nothing.
+  const launched =
+    options.backend === undefined
+      ? { ...options, backend: (await resolveDefaultPtyBackend()).backend }
+      : options;
   let session: TerminalSession;
   try {
-    session = new TerminalSession(options, launchLease);
+    session = new TerminalSession(launched, launchLease);
   } catch (error) {
     if (launchLease === null) throw error;
     try {

@@ -32,5 +32,8 @@
     "@xterm/headless": "^6.0.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@termwright/vt": "workspace:*"
+  },
+  "optionalDependencies": {
+    "@termwright/conpty": "workspace:*"
   }
 }

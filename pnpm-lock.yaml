@@ -274,6 +274,10 @@ importers:
       '@xterm/headless':
         specifier: ^6.0.0
         version: 6.0.0
+    optionalDependencies:
+      '@termwright/conpty':
+        specifier: workspace:*
+        version: link:../conpty
 
   packages/evidence-provider:
     dependencies:
