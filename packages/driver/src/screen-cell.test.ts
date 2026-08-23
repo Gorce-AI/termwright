@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { VtScreen } from './vt.js';
-import { captureCell, captureScreen } from './screen.js';
+import { captureCell, captureRows, captureScreen, captureText } from './screen.js';
 
 /**
  * The fast path has to be indistinguishable from the slow one.
@@ -97,6 +97,69 @@ describe('direct cell reads stay a fast path', () => {
     const directMs = performance.now() - directStart;
 
     expect(directMs * 10).toBeLessThan(screenMs);
+    vt.dispose();
+  }, 60_000);
+});
+
+/**
+ * waitForText polls, so the cost of reading the screen as text is paid on
+ * every iteration of every wait. captureText must produce exactly the string
+ * captureRows would have joined, or a wait would start matching against
+ * something subtly different from what the screen actually shows.
+ */
+describe('text-only capture', () => {
+  for (const [name, content] of CORPUS) {
+    it(`matches the joined row text for ${name}`, async () => {
+      const vt = await paint(content);
+      expect(captureText(vt)).toBe(captureRows(vt).map((row) => row.text).join('\n'));
+      vt.dispose();
+    });
+  }
+
+  it('matches after scrolling past the viewport', async () => {
+    const vt = await paint(`${Array.from({ length: 40 }, (_, index) => `row ${index}`).join('\r\n')}\r\n`);
+    expect(captureText(vt)).toBe(captureRows(vt).map((row) => row.text).join('\n'));
+    vt.dispose();
+  });
+
+  it('keeps trailing blank rows, which a substring search can depend on', async () => {
+    const vt = await paint('only one line\r\n');
+    const expected = captureRows(vt).map((row) => row.text).join('\n');
+    expect(captureText(vt)).toBe(expected);
+    expect(captureText(vt).split('\n')).toHaveLength(vt.rows);
+    vt.dispose();
+  });
+});
+
+describe('text-only capture stays a fast path', () => {
+  it('is an order of magnitude cheaper than building every cell', async () => {
+    // Measured at roughly 1407 us against 20.5 us per call on a 200x50
+    // terminal. The heap difference is smaller — the joined string is most of
+    // it — but the time is paid on every polling iteration of every wait, so
+    // that is the number worth guarding. Ten against a measured sixty-eight
+    // leaves room for any CI machine while still catching a return to
+    // captureRows.
+    const vt = new VtScreen({ columns: 200, rows: 50, scrollbackLines: 500 });
+    const esc = String.fromCharCode(27);
+    const line = `${esc}[38;5;208mabcdefghij${esc}[0m 家族 text `;
+    await vt.write(Buffer.from(Array.from({ length: 50 }, () => line).join('\r\n'), 'utf8'));
+    await vt.drain();
+
+    const iterations = 200;
+    for (let index = 0; index < 50; index += 1) {
+      captureRows(vt).map((row) => row.text).join('\n');
+      captureText(vt);
+    }
+
+    const rowsStart = performance.now();
+    for (let index = 0; index < iterations; index += 1) captureRows(vt).map((row) => row.text).join('\n');
+    const rowsMs = performance.now() - rowsStart;
+
+    const textStart = performance.now();
+    for (let index = 0; index < iterations; index += 1) captureText(vt);
+    const textMs = performance.now() - textStart;
+
+    expect(textMs * 10).toBeLessThan(rowsMs);
     vt.dispose();
   }, 60_000);
 });

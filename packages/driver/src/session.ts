@@ -132,6 +132,7 @@ import {
 import {
   captureCell,
   captureRows,
+  captureText,
   captureScreen,
   screenExcerpt,
   type CapturedRow,
@@ -1655,9 +1656,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       this.operationTimeout(opts?.timeout ?? this.timeouts.text, "waitForText"),
     );
     const matches = (): boolean => {
-      const screenText = captureRows(this.#vt)
-        .map((row) => row.text)
-        .join("\n");
+      const screenText = captureText(this.#vt);
       if (matcher.kind === "regex") {
         return new RegExp(
           matcher.source.source,

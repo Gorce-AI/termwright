@@ -141,6 +141,24 @@ export function captureRows(vt: VtScreen): readonly CapturedRow[] {
  * The snapshot's revision is the emulator revision at capture time.
  */
 /**
+ * The viewport as text, without building a single cell.
+ *
+ * captureRows resolves colours, attributes and hyperlinks for every cell in
+ * the viewport and then joins the row strings — and callers that only want to
+ * look for a substring throw all of that away. waitForText does it on every
+ * polling iteration while it waits, which is the worst place for it.
+ */
+export function captureText(vt: VtScreen): string {
+  const buffer = vt.terminal.buffer.active;
+  const lines: string[] = [];
+  for (let y = 0; y < vt.rows; y += 1) {
+    const line = buffer.getLine(buffer.viewportY + y);
+    lines.push(line === undefined ? '' : line.translateToString(true));
+  }
+  return lines.join('\n');
+}
+
+/**
  * Reads one cell without building the rest of the screen.
  *
  * `screen().cell(y, x)` materialises every cell in the viewport, the text of
