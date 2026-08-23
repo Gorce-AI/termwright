@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { createTerminal } from '@termwright/vt';
 import { VtScreen } from './vt.js';
 import { captureCell, captureScreen } from './screen.js';
 
@@ -69,4 +68,35 @@ describe('direct cell reads', () => {
     }
     vt.dispose();
   });
+});
+
+describe('direct cell reads stay a fast path', () => {
+  it('is an order of magnitude cheaper than materialising the screen', async () => {
+    // A ratchet, not a benchmark. The measured gap on a 200x50 terminal is
+    // roughly 1350 us against 0.5 us per call, and 10 KB of heap against 0.7
+    // KB; asserting a factor of ten against a factor of nearly three thousand
+    // leaves room for any machine CI runs on while still failing loudly if
+    // cell() is ever routed back through captureScreen.
+    const vt = new VtScreen({ columns: 200, rows: 50, scrollbackLines: 500 });
+    const line = '\u001b[38;5;208mabcdefghij\u001b[0m 家族 text ';
+    await vt.write(Buffer.from(Array.from({ length: 50 }, () => line).join('\r\n'), 'utf8'));
+    await vt.drain();
+
+    const iterations = 200;
+    for (let index = 0; index < 50; index += 1) {
+      captureScreen(vt).cell(25, 10);
+      captureCell(vt, 25, 10);
+    }
+
+    const screenStart = performance.now();
+    for (let index = 0; index < iterations; index += 1) captureScreen(vt).cell(25, 10);
+    const screenMs = performance.now() - screenStart;
+
+    const directStart = performance.now();
+    for (let index = 0; index < iterations; index += 1) captureCell(vt, 25, 10);
+    const directMs = performance.now() - directStart;
+
+    expect(directMs * 10).toBeLessThan(screenMs);
+    vt.dispose();
+  }, 60_000);
 });
