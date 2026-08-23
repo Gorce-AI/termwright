@@ -132,6 +132,7 @@ class Session {
   Handle root_process_;
   Handle root_thread_;
   Handle job_;
+  Handle completion_port_;
 
   DWORD pid_ = 0;
   bool release_supported_ = false;

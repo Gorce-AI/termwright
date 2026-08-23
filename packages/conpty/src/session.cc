@@ -70,6 +70,20 @@ bool Session::Start(const SpawnOptions& options, EventSink sink, void* context, 
     *error = FormatError("CreateJobObject", GetLastError());
     return false;
   }
+  // A port to be woken on, rather than a sleep to repeat. Failure to associate
+  // is not fatal: the wait below falls back to asking the job directly, which
+  // is the part that decides anyway.
+  completion_port_ = Handle(CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 1));
+  if (completion_port_.valid()) {
+    JOBOBJECT_ASSOCIATE_COMPLETION_PORT association{};
+    association.CompletionKey = job_.get();
+    association.CompletionPort = completion_port_.get();
+    if (!SetInformationJobObject(job_.get(), JobObjectAssociateCompletionPortInformation,
+                                 &association, sizeof(association))) {
+      completion_port_.Close();
+    }
+  }
+
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
   limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
   if (!SetInformationJobObject(job_.get(), JobObjectExtendedLimitInformation, &limits,
@@ -287,17 +301,31 @@ void Session::WaitForRootExit() {
 }
 
 void Session::WaitForEmptyTree() {
-  // Queried, not assumed. The job is the owner of the tree, so its accounting
-  // is the only thing that can say the last process is gone; the loop exists
-  // because there is no notification this thread can wait on that means the
-  // same, and it is bounded so a job that never empties cannot hold teardown
-  // open for ever.
+  // Woken by the job, confirmed by the job.
+  //
+  // Windows posts JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO to a completion port the
+  // job is associated with, so there is a real event to block on rather than a
+  // sleep to repeat. The message alone is not the proof though — it can be
+  // delivered for a job that goes on to gain a process again — so the wake-up
+  // is followed by the accounting query, which is what actually says the tree
+  // is empty. Bounded, because a job that never empties must not hold teardown
+  // open for ever, and hitting the bound is reported as a tree that could not
+  // be proven gone rather than one that was.
+  if (ActiveProcesses() <= 0) return;
   const DWORD deadline = GetTickCount() + TREE_DRAIN_TIMEOUT_MS;
   for (;;) {
-    const long long active = ActiveProcesses();
-    if (active <= 0) return;
-    if (GetTickCount() > deadline) return;
-    Sleep(TREE_POLL_INTERVAL_MS);
+    const DWORD now = GetTickCount();
+    if (now >= deadline) return;
+    DWORD completion = 0;
+    ULONG_PTR key = 0;
+    LPOVERLAPPED overlapped = nullptr;
+    if (completion_port_.valid()) {
+      GetQueuedCompletionStatus(completion_port_.get(), &completion, &key, &overlapped,
+                                deadline - now);
+    } else {
+      Sleep(TREE_POLL_INTERVAL_MS);
+    }
+    if (ActiveProcesses() <= 0) return;
   }
 }
 
@@ -364,6 +392,7 @@ void Session::Dispose() {
   host_output_read_.Close();
   root_thread_.Close();
   root_process_.Close();
+  completion_port_.Close();
   job_.Close();
 
   std::lock_guard<std::mutex> lock(sink_mutex_);
