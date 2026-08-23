@@ -38,7 +38,16 @@ for (const absolute of sources.sort()) {
     }
   }
 }
-findings.sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line || left.kind.localeCompare(right.kind));
+// Sorted and stored without line numbers on purpose. The invariant is "every
+// construct is classified"; a line number adds nothing to it, and pinning one
+// makes an edit anywhere above a construct rewrite the inventory. That churn
+// buries the entries a reviewer actually needs to see. Lines are still
+// reported live, in the messages below, where they help someone navigate.
+findings.sort((left, right) =>
+  left.path.localeCompare(right.path) ||
+  left.kind.localeCompare(right.kind) ||
+  left.excerpt.localeCompare(right.excerpt) ||
+  left.line - right.line);
 
 const forbidden = findings.filter(({ kind }) => kind === 'arbitrary-browser-wait' || kind === 'fixed-listen-port');
 if (forbidden.length > 0) {
@@ -54,7 +63,7 @@ const report = {
     platformSkips: 'additionally governed by quality/platform-deviations.json',
   },
   summary: Object.fromEntries([...new Set(findings.map(({ classification }) => classification))].sort().map((classification) => [classification, findings.filter((finding) => finding.classification === classification).length])),
-  findings,
+  findings: findings.map(({ path, kind, classification, excerpt }) => ({ path, kind, classification, excerpt })),
 };
 const encoded = `${JSON.stringify(report, null, 2)}\n`;
 if (process.argv.includes('--write')) {
@@ -63,9 +72,46 @@ if (process.argv.includes('--write')) {
 } else {
   const current = await readFile(outputPath, 'utf8');
   if (current !== encoded) {
-    throw new Error(`determinism construct inventory drifted; inspect the diff, remove accidental waits, then run node scripts/audit-determinism-constructs.mjs --write`);
+    throw new Error(
+      'determinism construct inventory drifted; inspect the diff, remove accidental waits, then run node scripts/audit-determinism-constructs.mjs --write\n' +
+      describeDrift(current, encoded),
+    );
   }
   console.log(`determinism constructs: ${findings.length} classified, zero forbidden, zero drift`);
+}
+
+/**
+ * Names the constructs that entered or left the inventory, with the live line
+ * numbers, so a failing gate points at the change instead of at a diff.
+ */
+function describeDrift(current, next) {
+  const key = ({ path, kind, excerpt }) => `${path}\u0000${kind}\u0000${excerpt}`;
+  const count = (encoded) => {
+    const counts = new Map();
+    for (const finding of JSON.parse(encoded).findings) counts.set(key(finding), (counts.get(key(finding)) ?? 0) + 1);
+    return counts;
+  };
+  let recorded;
+  try {
+    recorded = count(current);
+  } catch {
+    return '  the recorded inventory is not readable JSON; regenerate it';
+  }
+  const found = count(next);
+  const lines = [];
+  for (const [entry, total] of found) {
+    const delta = total - (recorded.get(entry) ?? 0);
+    if (delta <= 0) continue;
+    const [path, kind, excerpt] = entry.split('\u0000');
+    const at = findings.filter((finding) => key(finding) === entry).map((finding) => finding.line).join(', ');
+    lines.push(`  + ${path}:${at} ${kind} ${excerpt}`);
+  }
+  for (const [entry, total] of recorded) {
+    if (total - (found.get(entry) ?? 0) <= 0) continue;
+    const [path, kind, excerpt] = entry.split('\u0000');
+    lines.push(`  - ${path} ${kind} ${excerpt}`);
+  }
+  return lines.length === 0 ? '  (classification or summary changed)' : lines.sort().join('\n');
 }
 
 function classify(path, kind) {
