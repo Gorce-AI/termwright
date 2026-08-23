@@ -217,8 +217,18 @@ const LOG_WINDOW_MS = 250;
 /** Bounded diagnostics log: a flooding adapter cannot grow it without bound. */
 const MAX_DIAGNOSTICS = 200;
 
-/** Upper bound on how long `close()` waits for the child to hang up. */
-const CLOSE_GRACE_MS = 2_000;
+/**
+ * Upper bound on how long `close()` waits for the child to hang up.
+ *
+ * Longer on Windows because the work is longer there. Closing a pseudoconsole
+ * hands the tree to the console host to reap, and its exit notification comes
+ * back through that host rather than from a signal the caller sent — a loaded
+ * runner measured that arriving after the 2 s that is ample for a process
+ * group, and the session then reported "did not report a real exit" for a
+ * child that had in fact exited. Nothing is assumed either way: real exit
+ * evidence is still required, and its absence is still a cleanup failure.
+ */
+const CLOSE_GRACE_MS = process.platform === 'win32' ? 10_000 : 2_000;
 
 /** Options accepted by {@link launchTerminal}, plus the injectable backend. */
 export interface LaunchTerminalOptions extends LaunchOptions {
