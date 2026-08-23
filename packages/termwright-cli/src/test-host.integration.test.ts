@@ -46,9 +46,27 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
     const output = first.events.filter((event) => event.type === 'test.output');
     expect(output).toHaveLength(2);
     expect(output.map((event) => (event.payload as { stream: string }).stream).sort()).toEqual(['stderr', 'stdout']);
-    expect(output.every((event) => event.identity.attemptId?.startsWith('attempt:'))).toBe(true);
-    expect(new Set(output.map((event) => event.identity.attemptId)).size).toBe(2);
-    expect(output.every((event) => (event.payload as { taskAttributed: boolean }).taskAttributed)).toBe(true);
+    // Vitest delivers console output on its own schedule, so a line written
+    // just before a test returns can arrive after that attempt has finished,
+    // and the journal forbids any event after attempt.finished — the id is
+    // legitimately absent then, which is what taskAttributed reports. The
+    // guarantee that matters is the other one: a line must never land on a
+    // different test's attempt, and it must always name its own task.
+    const startedFor = new Map(first.events
+      .filter((event) => event.type === 'attempt.started')
+      .map((event) => [(event.payload as { nativeTaskId: string }).nativeTaskId, event.identity.attemptId]));
+    expect(startedFor.size).toBe(2);
+    for (const event of output) {
+      const task = (event.payload as { nativeTaskId?: string }).nativeTaskId;
+      expect(task).toBeDefined();
+      expect(event.identity.runnerTaskId).toBeDefined();
+      const attributed = (event.payload as { taskAttributed: boolean }).taskAttributed;
+      expect(attributed).toBe(event.identity.attemptId !== undefined);
+      if (event.identity.attemptId !== undefined) {
+        expect(event.identity.attemptId).toBe(startedFor.get(task!));
+      }
+    }
+    expect(new Set(output.map((event) => (event.payload as { nativeTaskId: string }).nativeTaskId)).size).toBe(2);
 
     const selected = first.catalog?.tests[1]?.runnerTaskId;
     expect(selected).toBeDefined();
