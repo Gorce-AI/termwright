@@ -77,8 +77,16 @@ export async function preparePatchBundle({ rootDir = root, candidate, sourceRoot
     const patch = safeRelative(entry.patch, `patched[${index}].patch`);
     const targetPath = join(sourceRoot, target);
     entry.sha256Before = hash(await readFile(targetPath));
+    // `git apply`, not `patch`. Which `patch.exe` a machine has is whatever
+    // happens to be first in PATH — a Windows runner with Strawberry Perl
+    // installed supplies GNU patch 2.5.9, which aborts on an internal
+    // assertion here. An audited transform that applies or does not apply
+    // depending on the host's PATH is not audited, and git is already a
+    // requirement of every path that reaches this script.
     try {
-      await exec('patch', ['--batch', '--fuzz=0', '-p1', '-i', join(destination, patch)], { cwd: sourceRoot });
+      await exec('git', ['apply', '--unsafe-paths', '-p1', `--directory=.`, join(destination, patch)], {
+        cwd: sourceRoot,
+      });
     } catch (error) {
       throw new Error(`${candidate.id}: audited transform no longer applies to ${target}: ${error.stderr || error.message}`);
     }
