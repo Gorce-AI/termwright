@@ -130,6 +130,7 @@ import {
   type PtyProcess,
 } from "./pty.js";
 import {
+  captureCell,
   captureRows,
   captureScreen,
   screenExcerpt,
@@ -1003,7 +1004,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   cell(pos: { row: number; column: number }): CellSnapshot {
-    return this.screen().cell(pos.row, pos.column);
+    this.assertOpen();
+    return captureCell(this.#vt, pos.row, pos.column);
   }
 
   title(): string {
