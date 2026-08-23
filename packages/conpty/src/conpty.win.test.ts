@@ -145,6 +145,11 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         `saw ${JSON.stringify(output.text())}`,
     ).toBe('CHILD_UP');
     const spawned = /SPAWN_(?:PID|ERROR)=(\S+)/u.exec(output.text());
+    // Counted while the root is demonstrably still alive and the descendant
+    // has just spoken. Two members means the job holds them both and whatever
+    // kills the descendant comes later; one means it was never contained, and
+    // then the console closing at root exit is this backend killing it.
+    const membersWithRootAlive = handle.activeProcesses();
     await rootExit;
     // Asked of the operating system and of the job separately, because the two
     // answers mean different things. A live descendant outside the job is a
@@ -155,6 +160,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     expect(
       handle.activeProcesses(),
       `descendant ${spawned?.[0] ?? 'unreported'}, alive in the OS: ${alive}, ` +
+        `job members while the root was alive: ${membersWithRootAlive}, ` +
         `marker already delivered: ${output.text().includes('FINAL_CHILD_MARKER')}`,
     ).toBeGreaterThan(0);
     await handle.outputEnded;
