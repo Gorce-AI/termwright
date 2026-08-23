@@ -214,6 +214,13 @@ export function createNodePtyBackend(): PtyBackend {
               async hardKillTree(): Promise<void> {
                 if (disposed || exited) return;
                 const agent = exactWindowsAgent(pty);
+                // Wait for ConPTY to attach before asking it anything. Until
+                // then the agent has no child and reports pid 0 with an empty
+                // process list, which reads exactly like "the tree is already
+                // gone" — so a session closed early killed nothing, waited for
+                // an exit that could never arrive, and failed its own teardown
+                // while the child kept running.
+                await agentAttached(agent);
                 const reported = await agent._getConsoleProcessList();
                 conptyTreePids = Object.freeze([...new Set(reported.filter((pid) =>
                   Number.isSafeInteger(pid) && pid > 0,
@@ -221,6 +228,15 @@ export function createNodePtyBackend(): PtyBackend {
                 // An empty list while the root is demonstrably alive means
                 // AttachConsole/list enumeration failed. Closing HPCON might
                 // still work, but it cannot certify complete tree ownership.
+                if (conptyTreePids.length === 0 && pty.pid <= 0) {
+                  // No list and no root pid is absence of evidence, not
+                  // evidence of absence. Reporting cleanup as complete here
+                  // would certify a tree nobody ever saw.
+                  throw new ProcessLifecycleError(
+                    'cleanup-failed',
+                    'ConPTY reported neither a console process list nor a root pid, so no tree could be proven gone',
+                  );
+                }
                 if (conptyTreePids.length === 0 && pty.pid > 0 && processAlive(pty.pid)) {
                   throw new ProcessLifecycleError(
                     'cleanup-failed',
@@ -554,6 +570,38 @@ function createWindowsWriteChannel(
     },
   };
 }
+
+/**
+ * Resolves once ConPTY has attached to the output pipe.
+ *
+ * Before that the agent has not created the child: `pid` reads 0 and the
+ * console process list is empty. Both are the same values a fully reaped tree
+ * produces, so anything that inspects the tree earlier cannot tell "not
+ * started yet" from "already gone".
+ */
+function agentAttached(agent: ExactWindowsAgent): Promise<void> {
+  const ready = agent.outSocket;
+  if (!ready.connecting && ready.readyState === 'open') return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    // Bounded, because teardown owns a deadline of its own and an agent that
+    // never attaches must not hold it open. Giving up here is not a verdict:
+    // the tree checks that follow still have to prove what they claim, and
+    // with no pid and no process list they will refuse to.
+    const timer = setTimeout(() => {
+      ready.removeListener('ready_datapipe', onReady);
+      resolve();
+    }, CONPTY_ATTACH_TIMEOUT_MS);
+    timer.unref?.();
+    const onReady = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    ready.once('ready_datapipe', onReady);
+  });
+}
+
+/** How long teardown waits for ConPTY to attach before inspecting the tree. */
+const CONPTY_ATTACH_TIMEOUT_MS = 2_000;
 
 function processAlive(pid: number): boolean {
   try {
