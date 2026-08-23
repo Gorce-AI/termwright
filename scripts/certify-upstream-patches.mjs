@@ -661,9 +661,13 @@ export function sanitizeFailureMessage(error, root = defaultRoot, outputDir) {
   // Keep the diagnostic useful while making failure evidence portable and
   // safe to upload from a developer machine.
   message = message
-    .replace(/file:\/\/\/[^\s"'<>]*/gmu, 'file://<absolute-path>')
+    // A Windows file URL is `file://C:\path`, with two slashes — requiring
+    // three left the drive-qualified path in the message, and the bare
+    // drive-letter rule below could not catch it either because the character
+    // before `C:` is a slash rather than whitespace.
+    .replace(/file:\/\/\/?[^\s"'<>]*/gmu, 'file://<absolute-path>')
     .replace(/(^|[\s"'=(])\/(?!\/)[^\s"'<>]*/gmu, '$1<absolute-path>')
-    .replace(/(^|[\s"'=(])[A-Za-z]:\\[^\s"'<>]*/gmu, '$1<absolute-path>');
+    .replace(/(^|[\s"'=(])[A-Za-z]:[\\/][^\s"'<>]*/gmu, '$1<absolute-path>');
   return message.slice(-12_000);
 }
 

@@ -2,11 +2,15 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const exec = promisify(execFile);
-const root = new URL('..', import.meta.url).pathname;
+// `URL.pathname` yields "/D:/a/repo" on Windows, which is not a usable path.
+const root = fileURLToPath(new URL('..', import.meta.url));
+// execFile does not resolve PATHEXT, so the bare name misses pnpm.cmd.
+const PNPM = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const scratch = [];
 
 afterEach(async () => {
@@ -22,7 +26,7 @@ describe('published protocol subpath exports', () => {
     await mkdir(archiveDirectory, { recursive: true });
     await mkdir(packageDirectory, { recursive: true });
 
-    await exec('pnpm', ['--dir', 'packages/protocol', 'pack', '--pack-destination', archiveDirectory], { cwd: root });
+    await exec(PNPM, ['--dir', 'packages/protocol', 'pack', '--pack-destination', archiveDirectory], { cwd: root });
     const archive = (await readdir(archiveDirectory)).find((name) => name.endsWith('.tgz'));
     expect(archive).toBeDefined();
     await exec('tar', ['-xzf', join(archiveDirectory, archive), '--strip-components=1', '-C', packageDirectory]);

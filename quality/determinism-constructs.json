@@ -1173,84 +1173,84 @@
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 201,
+      "line": 207,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.attachments.length).toBe(1);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 206,
+      "line": 212,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.frameBegins).toEqual([7]);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 215,
+      "line": 221,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.attachments.length).toBe(1);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 231,
+      "line": 237,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.snapshots.length).toBe(1);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 240,
+      "line": 246,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(process.platform === 'win32')('rolls back its private directory when listen fails', async () => {"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 276,
+      "line": 282,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.snapshots.length).toBe(1);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 293,
+      "line": 299,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.snapshots.length).toBe(1);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 488,
+      "line": 494,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.snapshots.length).toBe(1);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 546,
+      "line": 552,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "record: { ts: Date.now(), level: 'info', message: 'hello from the adapter', seq: 1 },"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 548,
+      "line": 554,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.records.length).toBe(1);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 569,
+      "line": 575,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "client.send({ type: 'log', record: { ts: Date.now(), level: 'warn', message: 'x', seq: 1 } });"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 582,
+      "line": 588,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "client.send({ type: 'log', record: { ts: Date.now(), level: 'shouting', message: 'x', seq: 1 } });"

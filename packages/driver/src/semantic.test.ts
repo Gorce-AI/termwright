@@ -35,6 +35,12 @@ interface Harness {
 const open: { channel: SemanticChannel; sockets: Socket[] }[] = [];
 
 afterEach(async () => {
+  // Restore the clock unconditionally. A test that installs fake timers and
+  // then times out never reaches its own finally, and the next test inherits
+  // a clock running behind the real one — which surfaces as "producer
+  // monotonic clock moved backwards" in whatever runs next, hiding the test
+  // that actually failed behind a cascade of unrelated ones.
+  vi.useRealTimers();
   while (open.length > 0) {
     const entry = open.pop();
     for (const socket of entry?.sockets ?? []) socket.destroy();
