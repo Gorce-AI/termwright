@@ -3098,9 +3098,19 @@ class TerminalSession implements TerminalHarness, LocatorContext {
    */
   async #finishExit(status: ExitStatus): Promise<void> {
     if (this.#exitStatus !== null) return;
+    const producerEnded = this.#pty?.outputEnded;
+    if (producerEnded !== undefined) {
+      // Wait for the producer before the parser. The pty reports the exit as
+      // soon as the process is gone, so the last chunk it wrote can still be
+      // in flight; draining the parser then drains only what happened to have
+      // arrived, and the final line is lost after the exit is published. This
+      // is bounded, and hitting the bound is reported below as the degraded
+      // drain it would then be.
+      await Promise.race([producerEnded, delay(CRASH_DRAIN_MS)]);
+    }
     if (this.#pty?.lifecycle?.outputDrain === "eof") {
-      // A backend that explicitly certifies EOF has closed the producer, so
-      // the VT queue can be drained exactly, regardless of CI load.
+      // The producer certified EOF, so the VT queue can be drained exactly,
+      // regardless of CI load.
       await this.#vt.drain();
     } else {
       this.#diagnostic(

@@ -52,6 +52,8 @@ export interface PtyProcess {
   hardKillTree?(): Promise<void>;
   onData(cb: (data: Uint8Array) => void): PtyUnsubscribe;
   onExit(cb: (status: ExitStatus) => void): PtyUnsubscribe;
+  /** Settles once the backend's output producer can deliver no more bytes. */
+  readonly outputEnded?: Promise<void>;
   /** Fatal asynchronous failures after write() accepted bytes. */
   onWriteError?(cb: (error: Error) => void): PtyUnsubscribe;
   /** Queue-drained notification; it still does not claim child consumption. */
@@ -175,6 +177,7 @@ export function createNodePtyBackend(): PtyBackend {
             return outputBoundary.eof ? 'eof' : 'bounded-fallback';
           },
         }),
+        outputEnded: outputBoundary.ended,
         write(data: Uint8Array): void {
           if (disposed || exited) return;
           writable.write(data);
@@ -393,23 +396,37 @@ function exactWindowsAgent(value: unknown): ExactWindowsAgent {
 }
 
 /** Exact-version EOF evidence, installed ahead of node-pty's exit handler. */
-function observeExactNodePtyOutputBoundary(value: unknown): { readonly eof: boolean; dispose(): void } {
+function observeExactNodePtyOutputBoundary(
+  value: unknown,
+): { readonly eof: boolean; readonly ended: Promise<void>; dispose(): void } {
   const socket = (value as ExactOutputPty)._socket;
   if (socket === undefined || typeof socket.prependListener !== 'function') {
     throw new Error('certified @lydell/node-pty output socket boundary changed');
   }
   let eof = socket.readableEnded === true;
-  const onEnd = (): void => { eof = true; };
+  // A flag read at exit answers "has the producer ended yet", which is a
+  // different question from "wait until it has". node-pty reports the exit as
+  // soon as the process is gone, and on a loaded machine the last chunk it
+  // wrote can still be in flight — so a reader that only checks the flag
+  // publishes an exit that is missing the final bytes.
+  let settle = (): void => undefined;
+  const ended = eof ? Promise.resolve() : new Promise<void>((resolve) => { settle = resolve; });
+  const finish = (): void => { eof = true; settle(); };
+  const onEnd = (): void => finish();
   const onError = (error: unknown): void => {
-    if (process.platform !== 'win32' && (isErrno(error, 'EIO') || errnoMessage(error, 'errno 5'))) eof = true;
+    if (process.platform !== 'win32' && (isErrno(error, 'EIO') || errnoMessage(error, 'errno 5'))) finish();
   };
-  const onClose = (): void => undefined;
+  // Not an EOF, so it never sets the flag — but a destroyed socket produces no
+  // further bytes, and a waiter must not outlive the thing it waits for.
+  const onClose = (): void => settle();
   socket.prependListener('end', onEnd);
   socket.prependListener('error', onError);
   socket.prependListener('close', onClose);
   return {
     get eof(): boolean { return eof; },
+    ended,
     dispose(): void {
+      settle();
       socket.removeListener('end', onEnd);
       socket.removeListener('error', onError);
       socket.removeListener('close', onClose);
