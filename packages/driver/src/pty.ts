@@ -160,6 +160,28 @@ export function createNodePtyBackend(): PtyBackend {
       ];
 
       let conptyTreePids: readonly number[] | undefined;
+      let agentKilled = false;
+      /**
+       * The agent's immediate kill, at most once.
+       *
+       * WindowsPtyAgent.kill() has no guard of its own: every call re-enters
+       * the native kill on the same HPCON handle, re-forks the console-list
+       * helper and disposes the conout worker again. Teardown reaches it from
+       * three directions — the KILL signal, the tree kill, and dispose — so the
+       * second call hands an already-released handle back to native code and
+       * the process disappears without a JavaScript frame to show for it.
+       */
+      const killAgentOnce = (): void => {
+        if (agentKilled) {
+          // TEMPORARY (remove once Windows CI is green): confirms from the
+          // lane whether teardown really reached the agent kill more than
+          // once, which is the diagnosis this guard is based on.
+          process.stderr.write(`termwright-debug: suppressed a repeat ConPTY agent kill for pid ${pty.pid}\n`);
+          return;
+        }
+        agentKilled = true;
+        exactWindowsAgent(pty).kill();
+      };
       const proc: PtyProcess = {
         // ConPTY connects asynchronously in node-pty 1.2. Reading this lazily
         // prevents its transient pre-connect value (0) becoming permanent in
@@ -199,7 +221,7 @@ export function createNodePtyBackend(): PtyBackend {
             // deferred until the child has produced output, so a silent child
             // could not be killed at all. This enumerates console processes
             // and closes the HPCON immediately.
-            exactWindowsAgent(pty).kill();
+            killAgentOnce();
             return;
           }
           // forkpty makes the child a session/process-group leader. Address
@@ -257,7 +279,7 @@ export function createNodePtyBackend(): PtyBackend {
                 // Again the agent's immediate kill: WindowsTerminal's would
                 // queue behind first output and leave the HPCON and the conout
                 // worker alive after the tree was already gone.
-                exactWindowsAgent(pty).kill();
+                killAgentOnce();
               },
             }
           : {}),
@@ -314,7 +336,7 @@ export function createNodePtyBackend(): PtyBackend {
             // and is safe to call once the process has already exited.
             if (process.platform === 'win32') {
               try {
-                exactWindowsAgent(pty).kill();
+                killAgentOnce();
               } catch {
                 // Already released.
               }
@@ -330,7 +352,7 @@ export function createNodePtyBackend(): PtyBackend {
             // not be killed at all — the hang-up simply queued forever. The
             // agent's kill runs immediately and is what actually releases the
             // ConPTY handles and the console process list.
-            if (process.platform === 'win32') exactWindowsAgent(pty).kill();
+            if (process.platform === 'win32') killAgentOnce();
             else process.kill(-pty.pid, 'SIGHUP');
           } catch {
             // The child is already gone; nothing to hang up.
