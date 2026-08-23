@@ -16,7 +16,7 @@
  * ```
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir as osTmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect as globalExpect, test as base } from 'vitest';
@@ -239,7 +239,12 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
       const fixture: TermwrightScopeFixture = {
         config,
         get tmpdir(): string {
-          directory ??= mkdtempSync(join(osTmpdir(), 'termwright-'));
+          // Resolved, because on Windows os.tmpdir() hands back the 8.3 short
+          // form ("C:\\Users\\RUNNER~1\\...") while any program launched into this
+          // directory reports the long one. Both name the same directory, so a
+          // test comparing its shell's cwd against this path would be comparing
+          // two spellings of the same place and finding them different.
+          directory ??= realpathSync(mkdtempSync(join(osTmpdir(), 'termwright-')));
           return directory;
         },
         get traces(): readonly string[] {

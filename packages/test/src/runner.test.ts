@@ -38,6 +38,11 @@ function vitestCliPath(): string {
 }
 const directories: string[] = [];
 
+/** Last 2 KB of a child stream, which is where a startup failure prints. */
+function tail(text: string | undefined): string {
+  return text === undefined || text === '' ? '(empty)' : text.slice(-2_048);
+}
+
 afterEach(async () => {
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
@@ -114,6 +119,7 @@ describe('native AttemptContext', () => {
     const vitest = vitestCliPath();
     const config = fileURLToPath(new URL('__fixtures__/attempt-context.vitest.config.ts', import.meta.url));
     const runId = createRunId('run');
+    let nested: { readonly stdout: string; readonly stderr: string } | undefined;
     const broker = new ResourceBroker({ runId, capacities: {
       ptySession: 4, externalProcess: 4, semanticEndpoint: 4, traceWriter: 4,
     } });
@@ -141,7 +147,7 @@ describe('native AttemptContext', () => {
       }
     } });
     try {
-      await execute(process.execPath, [vitest, 'run', '--config', config], {
+      nested = await execute(process.execPath, [vitest, 'run', '--config', config], {
         cwd: fileURLToPath(new URL('../../..', import.meta.url)),
         env: {
           ...process.env,
@@ -159,7 +165,16 @@ describe('native AttemptContext', () => {
       await server.close();
     }
 
-    const records = (await readFile(output, 'utf8')).trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
+    // The nested run is the thing under test, so when it produces nothing the
+    // useful evidence is what it printed — not an ENOENT on the file it never
+    // wrote, which names the symptom and hides the cause.
+    const written = await readFile(output, 'utf8').catch((error: unknown) => {
+      throw new Error(
+        `the nested attempt-context run wrote no events (${String(error)})\n` +
+        `stdout: ${tail(nested?.stdout)}\nstderr: ${tail(nested?.stderr)}`,
+      );
+    });
+    const records = written.trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
     const duplicateCallbacks = records.filter((entry) => entry['phase'] === 'callback' && String(entry['label']).startsWith('duplicate-'));
     expect(new Set(duplicateCallbacks.map((entry) => entry['runnerTaskId'])).size).toBe(2);
     expect(new Set(duplicateCallbacks.map((entry) => entry['attemptId'])).size).toBe(2);
