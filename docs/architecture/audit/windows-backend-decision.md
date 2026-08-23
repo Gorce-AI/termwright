@@ -60,6 +60,41 @@ here rather than acted on mid-debug, because swapping the foundation while the
 current one is one fix from green would trade a nearly-finished problem for a
 fresh one.
 
+## What the reference implementations actually do
+
+Read rather than assumed, after four rounds of guessing at ConPTY semantics.
+
+| | node-pty (native) | WezTerm `portable-pty` |
+| --- | --- | --- |
+| CreateProcess flags | `EXTENDED_STARTUPINFO_PRESENT \| CREATE_UNICODE_ENVIRONMENT` | same |
+| `STARTF_USESTDHANDLES` | not set | set, all three handles `INVALID_HANDLE_VALUE` |
+| `ReleasePseudoConsole` | only when using the standalone ConPTY DLL | never |
+| shutdown | `ClosePseudoConsole` | `ClosePseudoConsole` in `Drop` |
+| end of output | waits on the process handle, then a one-second flush window | not addressed |
+
+Three conclusions follow.
+
+**Dropping the release was right.** Neither implementation depends on it, and
+the run proves it was never the cause here: with no release at all, the output
+is still only ConPTY's first frame. Three rounds went into moving a call that
+did not matter.
+
+**Neither has an authoritative EOF.** node-pty reaches for a timer, which is
+the exact thing this package exists to remove; WezTerm does not answer the
+question. So adopting `portable-pty` would buy the plumbing and leave the
+differentiator still to be written — which changes the arithmetic in the table
+above rather than settling it.
+
+**One concrete difference remained.** WezTerm sets `STARTF_USESTDHANDLES` with
+invalid handles, saying explicitly that the child inherits none and must take
+its console's. A stream carrying ConPTY's frame and none of the child's output
+is what its absence would look like.
+
+Microsoft's shutdown discussion (microsoft/terminal#19112) adds one more: an
+unclosed ConPTY-side pipe handle makes `ReadFile` block for ever. This code
+closes both as soon as `CreatePseudoConsole` has them, so that hazard is
+already avoided.
+
 ## Decision
 
 Finish the current addon to a certified contract. Then revisit this table with
@@ -69,6 +104,11 @@ a decision with evidence rather than another turn.
 
 Revisit immediately if the remaining failures turn out to be in the plumbing
 rather than the contract: that would mean the cost is not a one-off.
+
+Note that the comparison has already shifted once. `portable-pty` looked like
+it would cover "the basics"; reading it shows the basics it covers stop
+exactly where our requirement starts. The plumbing it removes is real, and so
+is the Rust toolchain it adds.
 
 ## Open
 
