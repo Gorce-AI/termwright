@@ -264,8 +264,11 @@ function qualifiedSnapshot(snapshot) {
             },
             pointerRegions: [],
             inputModes: {
-              mouseTracking: hoverTracking ? 'any' : 'vt200',
-              mouseEncoding: 'sgr',
+              // Must match what this fixture actually writes below, or the
+              // driver's VT cross-check rejects the evidence as a conflict on
+              // platforms where the modes are observable.
+              mouseTracking: !terminalMouseEnabled ? 'none' : hoverTracking ? 'any' : 'vt200',
+              mouseEncoding: terminalMouseEnabled ? 'sgr' : 'default',
               focusReporting: 'off',
             },
           }] : []), ...(staleProviderEvidence ? [{
