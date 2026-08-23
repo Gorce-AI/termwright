@@ -118,7 +118,7 @@ now reports that before it waits.
 Cost so far: four rounds spent guessing, one round spent asking. Every
 remaining boundary in this backend should be approached the second way.
 
-## A descendant does not outlive its root — platform, not backend
+## The console, not the job, ends a descendant — platform, not backend
 
 This was written as a mandatory property and it is not one Windows offers.
 The evidence, gathered in that order:
@@ -129,26 +129,42 @@ The evidence, gathered in that order:
 | Did it run and reach the console? | yes | it printed its own line first |
 | Was it inside the job? | yes — two members | job census while the root was alive |
 | Was it alive at root exit? | no | `process.kill(pid, 0)` from the test |
-| What did the job say at that instant? | zero members | counted natively inside the session, before anything else ran |
-| How did it die? | terminated | its on-disk journal ends at startup: no signal, no exit code, no failed write |
+| What did the job say at that instant? | zero members | counted natively inside the session, before the drain and before the console close |
+| Did it finish or was it cut off? | cut off | its journal stops before the exit hook it installed, with work still pending |
+| Is the console what kills it? | yes | the same case run detached from the console survives its root, stays in the job, and is still killable by it |
 
-The last two rows are what settle it. The count is taken in the session's own
-exit path, immediately after the root's handle is signalled and before the
-drain or the console close, so nothing in this backend had acted yet. A
-descendant that is gone by then was killed by the console session ending, and
-`ClosePseudoConsole` is documented to terminate remaining clients — the same
-mechanism, reached the other way round.
+The count is taken in the session's own exit path, immediately after the
+root's handle is signalled, so nothing in this backend had acted yet. The last
+row is the one that names the cause: a descendant with no console outlives its
+root by its own record, while a console-attached one with pending work never
+reaches it. The difference between the two cases is the console and nothing
+else.
 
-The certification test now pins what is true: the job holds both while the
-root lives, the descendant's own output is delivered in order through the
-pseudoconsole, and at root exit the tree is reported as empty because it is.
-The death is asserted rather than tolerated, so the day the platform changes
-is a failing test rather than a silently wider claim.
+Neither Microsoft's documentation nor conhost's source predicts this.
+`ClosePseudoConsole` is documented to terminate attached clients, and
+`CloseConsoleProcessState` is reached from a broken output pipe, which is the
+host having stopped reading — not what happens here. `RemoveConsole` only
+recomputes the window owner when the root leaves. So this is an observed
+platform behaviour with no documented mechanism, which is exactly why it is
+pinned by a test rather than trusted to a comment.
+
+One earlier version of that test proved less than it claimed: with the root
+alive for two seconds and the descendant writing at four hundred milliseconds,
+the descendant simply ran out of work and exited on its own, and "gone by root
+exit" was satisfied for that reason. Three cases now each mean one thing —
+delivery with a clean finish, a cut-off with work pending, and the detached
+control.
 
 What this costs: a Windows session cannot promise that output written after
-its root exits will arrive, because there is nothing left to write it. What it
-does not cost: everything written before that point is still delivered before
-the stream ends, and the end is still the pipe ending rather than a timer.
+its root exits will arrive, because the console takes its writers with it. The
+practical shape of that is a launcher command which starts the real
+application and returns — the application goes with it. Configure the
+application itself, not a wrapper that exits.
+
+What it does not cost: everything written before that point is still delivered
+before the stream ends, the end is still the pipe ending rather than a timer,
+and ownership of the tree does not depend on the console — a detached
+descendant is still counted by the job and still killed by it.
 
 ## Decision
 
