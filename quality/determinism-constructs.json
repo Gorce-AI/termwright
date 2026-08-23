@@ -11,7 +11,7 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 41,
-    "deadline-or-scheduler-regression-test": 61,
+    "deadline-or-scheduler-regression-test": 65,
     "deterministic-adversarial-fixture-schedule": 36,
     "display-or-persisted-wall-time-not-correctness-order": 85,
     "explicit-external-file-polling": 3,
@@ -591,7 +591,13 @@
       "path": "packages/conpty/src/conpty.win.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "'spawn(process.execPath, [\"-e\", \"setTimeout(() => process.stdout.write(\\\\\"FINAL_CHILD_MARKER\\\\\\\\r\\\\\\\\n\\\\\"), 400)\"], { stdio: \"inherit\", detached: false });',"
+      "excerpt": "'setTimeout(() => { note(\"timer fired\"); process.stdout.write(\"FINAL_CHILD_MARKER\\\\r\\\\n\"); }, 400);',"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => process.exit(0), 2000);',"
     },
     {
       "path": "packages/conpty/src/conpty.win.test.ts",
@@ -604,6 +610,24 @@
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "command: node('setInterval(() => process.stdout.write(\"f\".repeat(8192)), 1);'),"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "const timer = setTimeout(() => {"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "const timer = setTimeout(() => {"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "const timer = setTimeout(() => {"
     },
     {
       "path": "packages/desktop-host/src/deadline.test.ts",
