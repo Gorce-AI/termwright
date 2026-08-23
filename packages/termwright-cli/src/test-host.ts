@@ -1049,9 +1049,25 @@ export class TermwrightTestHost {
 export function describeFailure(error: unknown): string {
   if (error instanceof AggregateError) {
     const nested = [...error.errors].map(describeFailure).filter((detail) => detail.length > 0);
-    return nested.length === 0 ? error.message : `${error.message}: ${nested.join('; ')}`;
+    const head = nested.length === 0 ? error.message : `${error.message}: ${nested.join('; ')}`;
+    return withCause(error, head);
   }
-  return error instanceof Error ? error.message : inspect(error, { depth: 16, breakLength: Infinity });
+  if (error instanceof Error) return withCause(error, error.message);
+  return inspect(error, { depth: 16, breakLength: Infinity });
+}
+
+/**
+ * Appends the chain a message hides.
+ *
+ * A wrapper's own text is usually the least informative part of a failure —
+ * "Worker forks emitted error" says which layer noticed, not what happened —
+ * and the layer that knows is attached as `cause`.
+ */
+function withCause(error: Error, described: string): string {
+  const cause = (error as { readonly cause?: unknown }).cause;
+  if (cause === undefined || cause === null) return described;
+  const detail = describeFailure(cause);
+  return detail.length === 0 || described.includes(detail) ? described : `${described} <- ${detail}`;
 }
 
 function infrastructureFailureCategory(error: unknown): string {

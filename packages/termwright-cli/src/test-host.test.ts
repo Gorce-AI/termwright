@@ -414,6 +414,19 @@ describe('TermwrightTestHost', () => {
     await host.close();
   });
 
+  it('follows an error to the layer that knows what happened', () => {
+    // A wrapper's own text names which layer noticed, not what went wrong, and
+    // the pool errors that end a Windows run are exactly that shape.
+    const wrapped = new Error('worker pool reported a failure', {
+      cause: new Error('the child exited with code 3221226505'),
+    });
+    expect(describeFailure(wrapped)).toBe(
+      'worker pool reported a failure <- the child exited with code 3221226505',
+    );
+    expect(describeFailure(new AggregateError([wrapped], 'run failed'))).toContain('3221226505');
+    expect(describeFailure(new Error('no cause here'))).toBe('no cause here');
+  });
+
   it('reports why a run with unhandled errors could not be certified', async () => {
     const engine = new FakeEngine();
     engine.tests = [testCase('native-unhandled', 'passes while the process throws')];
