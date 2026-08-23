@@ -33,7 +33,11 @@ describe('published protocol subpath exports', () => {
     await exec(PNPM, ['--dir', 'packages/protocol', 'pack', '--pack-destination', archiveDirectory], { cwd: root, ...PNPM_OPTIONS });
     const archive = (await readdir(archiveDirectory)).find((name) => name.endsWith('.tgz'));
     expect(archive).toBeDefined();
-    await exec('tar', ['-xzf', join(archiveDirectory, archive), '--strip-components=1', '-C', packageDirectory]);
+    // GNU tar reads `host:path` in the archive argument as a remote transfer,
+    // so an absolute Windows path makes it try to resolve the drive letter as a
+    // hostname. Naming the archive relative to its own directory keeps the
+    // colon out of that argument; -C is not parsed that way.
+    await exec('tar', ['-xzf', archive, '--strip-components=1', '-C', packageDirectory], { cwd: archiveDirectory });
 
     const consumer = join(directory, 'consumer.mjs');
     await writeFile(consumer, [

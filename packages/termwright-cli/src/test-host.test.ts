@@ -17,6 +17,7 @@ import type { TestCase, TestRunResult } from 'vitest/node';
 import {
   TermwrightTestHost,
   TERMWRIGHT_RESOURCE_PROFILES,
+  describeFailure,
   type TermwrightVitestEngine,
 } from './test-host.js';
 import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
@@ -407,6 +408,29 @@ describe('TermwrightTestHost', () => {
     expect(String(completion.error)).toContain('attempt journal incomplete');
     expect(completion.events.some((event) => event.type === 'attempt.started')).toBe(true);
     expect(completion.events.some((event) => event.type === 'attempt.finished')).toBe(false);
+    await host.close();
+  });
+
+  it('reports why a run with unhandled errors could not be certified', async () => {
+    const engine = new FakeEngine();
+    engine.tests = [testCase('native-unhandled', 'passes while the process throws')];
+    engine.runResult = result(engine.tests, [
+      new Error('listener leaked past its test'),
+      'a rejection that was never an Error',
+    ]);
+    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
+    const completion = await host.requestRun().completed;
+    expect(completion.state).toBe('infrastructure-failed');
+    // Vitest owns the only copy of these errors. If the host does not lift them
+    // into the completion, the CLI exits non-zero with nothing to read and the
+    // journal records a category without a cause.
+    expect(describeFailure(completion.error)).toContain('listener leaked past its test');
+    expect(describeFailure(completion.error)).toContain('a rejection that was never an Error');
+    expect(completion.events.filter((event) => event.type === 'run.infrastructure-failed')).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ detail: expect.stringContaining('listener leaked past its test') }),
+      }),
+    ]);
     await host.close();
   });
 

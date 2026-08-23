@@ -544,6 +544,16 @@ export class TermwrightTestHost {
           if (resourceFailure !== undefined) throw resourceFailure;
           this.#transition(active, active.cancellationRequested ? 'cancelling' : 'finalizing');
           terminal = active.cancellationRequested ? 'cancelled' : classifyVitestResult(result);
+          // An unhandled error is the one classification that carries its own
+          // evidence. Without lifting it into `failure` the run reports
+          // infrastructure-failed with nothing to read: the reason exists, and
+          // only this assignment puts it in the journal and the CLI output.
+          if (terminal === 'infrastructure-failed' && result.unhandledErrors.length > 0) {
+            failure = new AggregateError(
+              result.unhandledErrors.map((error) => (error instanceof Error ? error : new Error(describeFailure(error)))),
+              `vitest reported ${result.unhandledErrors.length} unhandled error(s) outside any test`,
+            );
+          }
         }
       }
     } catch (error) {
@@ -1012,7 +1022,12 @@ export class TermwrightTestHost {
   }
 }
 
-function describeFailure(error: unknown): string {
+/**
+ * Flattens an aggregate into a single readable line. Every infrastructure
+ * failure this host raises is an AggregateError, so reading only `.message`
+ * loses the actual cause.
+ */
+export function describeFailure(error: unknown): string {
   if (error instanceof AggregateError) {
     const nested = [...error.errors].map(describeFailure).filter((detail) => detail.length > 0);
     return nested.length === 0 ? error.message : `${error.message}: ${nested.join('; ')}`;

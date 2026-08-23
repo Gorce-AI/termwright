@@ -37,7 +37,7 @@ import {
 } from './ui-command.js';
 import { CLI_NAME, CLI_VERSION } from './version.js';
 import { formatDoctor, runDoctor, type DoctorReport } from './doctor.js';
-import { TERMWRIGHT_RESOURCE_PROFILES, TermwrightTestHost, type RunCompletion, type TermwrightTestHostOptions } from './test-host.js';
+import { TERMWRIGHT_RESOURCE_PROFILES, TermwrightTestHost, describeFailure, type RunCompletion, type TermwrightTestHostOptions } from './test-host.js';
 
 export type { CliIo };
 
@@ -195,7 +195,7 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
         state: completion.state,
         tests: completion.catalog?.tests.length ?? 0,
         failures: completion.failures,
-        ...(completion.error === undefined ? {} : { infrastructureError: describeCliFailure(completion.error) }),
+        ...(completion.error === undefined ? {} : { infrastructureError: describeFailure(completion.error) }),
       })),
     }));
   } else {
@@ -204,7 +204,7 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
         deps.io.err(`FAIL ${failure.file} > ${failure.fullName}`);
         for (const error of failure.errors) deps.io.err(error);
       }
-      if (completion.error !== undefined) deps.io.err(`INFRASTRUCTURE ${describeCliFailure(completion.error)}`);
+      if (completion.error !== undefined) deps.io.err(`INFRASTRUCTURE ${describeFailure(completion.error)}`);
       deps.io.out(
         `termwright ${completion.state} — run ${completion.runId} ` +
         `(${completion.catalog?.tests.length ?? 0} tests, resources: ${args.resourceProfile}, cycle: ${index + 1}/${args.runs})`,
@@ -221,10 +221,6 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
 
 function isInfrastructureState(state: RunCompletion['state']): boolean {
   return state === 'infrastructure-failed' || state === 'incomplete' || state === 'crashed' || state === 'cancelled';
-}
-
-function describeCliFailure(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
