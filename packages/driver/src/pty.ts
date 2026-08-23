@@ -289,6 +289,19 @@ export function createNodePtyBackend(): PtyBackend {
           if (exited) {
             for (const d of disposables) d.dispose();
             disposables.length = 0;
+            // The child being gone does not release ConPTY. node-pty keeps a
+            // conout worker thread per pty, and a live worker thread keeps the
+            // whole Node process alive: a Windows CI step stayed open for 43
+            // minutes after its work had finished and printed success. The
+            // agent's kill closes the pseudoconsole and disposes that worker,
+            // and is safe to call once the process has already exited.
+            if (process.platform === 'win32') {
+              try {
+                exactWindowsAgent(pty).kill();
+              } catch {
+                // Already released.
+              }
+            }
             return;
           }
           // Releasing a pty hangs the terminal up, exactly like closing a
