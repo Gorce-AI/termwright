@@ -200,13 +200,20 @@ export function createNodePtyBackend(): PtyBackend {
         },
         lifecycle: Object.freeze({
           tree: process.platform === 'win32' ? 'conpty-console' : 'posix-process-group',
-          // The exact adapter observes the native data-pipe boundary before
-          // node-pty emits exit. Unix PTYs end with stream EOF or EIO after all
-          // queued bytes. beta.15's ConPTY socket close is timer-forced rather
-          // than an OS EOF and therefore remains explicitly degraded.
-          get outputDrain(): 'eof' | 'bounded-fallback' {
-            return outputBoundary.eof ? 'eof' : 'bounded-fallback';
-          },
+          // A capability, not an observation. Whether this backend couples its
+          // exit to a real end of output is a property of the platform: a Unix
+          // pty master ends with EOF or EIO after its queued bytes, while
+          // beta.15's ConPTY socket close is timer-forced and never an OS end.
+          //
+          // Deriving it from "has the end been seen yet" made it read
+          // bounded-fallback at the one moment it is asked — exit is observed
+          // before the socket finishes — so the caller took the degraded path
+          // instead of waiting for the end that was about to arrive. Whether
+          // the end actually happened is `outputEnded`, which is separate on
+          // purpose.
+          outputDrain: process.platform === 'win32'
+            ? ('bounded-fallback' as const)
+            : ('eof' as const),
         }),
         outputEnded: outputBoundary.ended,
         write(data: Uint8Array): void {

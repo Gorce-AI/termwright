@@ -3118,7 +3118,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       // a timer during teardown, not at the child's exit — so waiting here
       // would spend the whole bound on every natural exit and push close()
       // past the budget its caller allows.
-      const producerEnded = this.#pty?.outputEnded;
+      const producerEnded = this.#pty.outputEnded;
       if (producerEnded !== undefined) await Promise.race([producerEnded, delay(CRASH_DRAIN_MS)]);
       await this.#vt.drain();
     } else {
