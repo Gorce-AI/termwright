@@ -80,6 +80,13 @@ describe('PTY output lifecycle', { timeout: 20_000 }, () => {
       scrollbackLines: 20_000,
     });
     await terminal.waitForExit();
+    // Checked before the screen, because it explains the screen. When this
+    // test fails on CI the sentinel is missing, and the two possible reasons —
+    // the driver published the exit too early, or the backend's producer was
+    // torn down with bytes unread — call for entirely different work.
+    expect(
+      terminal.diagnostics().filter((entry) => entry.code === 'truncated-output'),
+    ).toEqual([]);
     expect(terminal.screen().text()).toContain('FINAL OUTPUT SENTINEL');
     expect(terminal.diagnostics().some((entry) => entry.code === 'degraded-output-drain'))
       .toBe(process.platform === 'win32');
