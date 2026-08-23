@@ -2065,16 +2065,12 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     const observed = this.#vt.modes();
     const provided = this.#providerInputModes;
     if (provided === null) return observed;
-    // Provider mode facts describe one committed revision. Any input can make
-    // the application change them, and until it publishes a causally newer
-    // frame the last value is a guess about the present. The locator path is
-    // already barriered on `actionObservationState()`, but the raw device API
-    // (mouse.*, window.focus) is not, so without this a second raw action
-    // encodes for modes the application may have just turned off — and on a
-    // terminal that hides its own modes there is nothing to contradict it.
-    // Reporting the VT view alone leaves the fields "unknown", which is what
-    // makes the encoders refuse rather than emit bytes on a guess.
-    if (this.#providerEvidenceInvalidAfterInputRevision !== null) return observed;
+    // Deliberately not gated on provider-evidence staleness. Callers that act
+    // on these modes wait for fresh evidence first (see
+    // #awaitLiveInputModeEvidence); blanking the fields here would instead
+    // make every diagnostic read say "unknown" for as long as the application
+    // has not redrawn, which is less true than the last committed frame, not
+    // more.
     return Object.freeze({
       ...observed,
       mouseTracking:

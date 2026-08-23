@@ -72,7 +72,13 @@ export class ProcessSupervisor {
 
   constructor(pty: PtyProcess, options: ProcessSupervisorOptions = {}) {
     this.#pty = pty;
-    this.#now = options.monotonicNow ?? performance.now.bind(performance);
+    // Read the clock lazily rather than binding it here. Binding captures
+    // whichever implementation is installed at construction, so a supervisor
+    // built while a test's fake timers are active keeps calling that clock
+    // after they are uninstalled — and then compares an epoch-scale reading
+    // against a deadline computed from the real one, which makes every
+    // shutdown look like its deadline had already expired.
+    this.#now = options.monotonicNow ?? ((): number => performance.now());
     this.#timers = options.timers ?? DEFAULT_TIMERS;
     this.#platform = options.platform ?? process.platform;
   }

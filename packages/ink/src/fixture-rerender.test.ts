@@ -151,7 +151,10 @@ describe('fixture rerender', () => {
   it('reports a rerender sent after the fixture is gone', async () => {
     const harness = await launch({ label: 'Approve' });
 
-    await harness.signal('TERM');
+    // TERM is undeliverable over ConPTY; hard termination is the platform's
+    // equivalent and the only signal it carries. What the test needs is a
+    // fixture that is gone, which both routes produce.
+    await harness.signal(process.platform === 'win32' ? 'KILL' : 'TERM');
     await harness.waitForExit();
 
     await expect(harness.rerender({ label: 'Too late' })).rejects.toMatchObject({

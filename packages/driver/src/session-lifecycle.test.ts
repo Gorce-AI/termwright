@@ -208,12 +208,18 @@ describe('terminal session resource lifecycle', () => {
         exitSettled = true;
       });
 
-      const closing = terminal.close();
+      // Assert before advancing, not after. close() rejects somewhere inside
+      // the timer advancement below, and a rejection with no handler attached
+      // yet is an unhandled rejection — Node reports it the moment it happens
+      // and only warns later that a handler arrived. Building the assertion
+      // first attaches that handler up front, which is what the sibling test
+      // above does with `void launched.then(...)`.
+      const closed = expect(terminal.close()).rejects.toMatchObject({ name: 'ResourceCleanupError' });
       // ResourceScope starts disposers in a microtask. Arm the supervisor's
       // absolute deadline before advancing the manual clock to that boundary.
       await vi.advanceTimersByTimeAsync(0);
       await vi.advanceTimersByTimeAsync(2_000);
-      await expect(closing).rejects.toMatchObject({ name: 'ResourceCleanupError' });
+      await closed;
       await Promise.resolve();
 
       expect(exitSettled).toBe(false);

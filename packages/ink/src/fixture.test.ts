@@ -103,10 +103,16 @@ describe('launchInkFixture', () => {
     });
   });
 
-  it('exits on a real signal', async () => {
+  it('exits on a real interrupt', async () => {
     const harness = await launch();
 
-    await harness.signal('INT');
+    // ConPTY carries no interrupt signal, and the driver says so rather than
+    // pretending otherwise. Windows still has the capability — it is delivered
+    // through terminal input, which is exactly what the driver's own error
+    // points at — so both platforms interrupt the program for real here
+    // instead of one of them skipping the case.
+    if (process.platform === 'win32') await harness.write('\u0003');
+    else await harness.signal('INT');
 
     // How a signalled child is *reported* is the platform's business: POSIX
     // fills in the signal, ConPTY has no signals at all and gives back a plain

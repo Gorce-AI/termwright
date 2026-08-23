@@ -760,7 +760,11 @@ interface TraceNaming {
 }
 
 function traceDir(config: ResolvedTermwrightConfig, naming: TraceNaming): string {
-  const slug = naming.name.replace(/[^\w.-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 80) || 'test';
+  // Bounded well under the Windows path limit: the rest of the name adds a
+  // task id, an attempt id and the repeat/retry pair, and the trace directory
+  // then holds files of its own. The slug is for a human reading the
+  // directory; the two ids are what make it unique.
+  const slug = naming.name.replace(/[^\w.-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 48) || 'test';
   const taskIdentity = naming.taskId.replace(/[^\w.-]+/gu, '-');
   const identity = naming.attemptId.replace(/^attempt:/u, '');
   const suffix = `-repeat${naming.repeat + 1}-retry${naming.retry + 1}-${identity}`;

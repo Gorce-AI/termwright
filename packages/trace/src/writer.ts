@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { mkdir, mkdtemp, rename, unlink, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { DEFAULT_ARTIFACT_VALUE_POLICY, projectActionReceiptForArtifact, projectSemanticSnapshotForArtifact, type ArtifactValuePolicy, type EffectiveSessionContract, type SemanticSnapshot } from '@termwright/protocol';
 import type { SessionEventRecord, SessionEvents } from '@termwright/driver';
 import { formatCastEvent, formatCastHeader, type CastEventCode, type CastHeader } from './cast.js';
@@ -719,7 +719,11 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
   const target = resolve(input.dir);
   const parent = dirname(target);
   await mkdir(parent, { recursive: true });
-  const staging = await mkdtemp(join(parent, `.${basename(target)}.staging-`));
+  // The staging name deliberately omits the target's basename. Repeating a
+  // name that already carries a slug and two UUIDs pushed the staging path
+  // past the Windows limit and failed the write outright; mkdtemp is what
+  // makes it unique, and .incomplete records which target it belongs to.
+  const staging = await mkdtemp(join(parent, '.staging-'));
   const files: Record<string, string> = {
     [TRACE_FILES.meta]: `${JSON.stringify(meta, null, 2)}\n`,
     [TRACE_FILES.cast]: `${castLines.join('\n')}\n`,
