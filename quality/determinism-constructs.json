@@ -11,9 +11,9 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 41,
-    "deadline-or-scheduler-regression-test": 65,
+    "deadline-or-scheduler-regression-test": 71,
     "deterministic-adversarial-fixture-schedule": 36,
-    "display-or-persisted-wall-time-not-correctness-order": 85,
+    "display-or-persisted-wall-time-not-correctness-order": 87,
     "explicit-external-file-polling": 3,
     "explicit-external-or-ui-source-polling": 184,
     "explicit-test-selection-reviewed-with-platform-registry": 99,
@@ -591,13 +591,49 @@
       "path": "packages/conpty/src/conpty.win.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => { note(\"done\"); }, 4000);',"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => { note(\"outlived the root\"); }, 1500);',"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "'setTimeout(() => { note(\"timer fired\"); process.stdout.write(\"FINAL_CHILD_MARKER\\\\r\\\\n\"); }, 400);',"
     },
     {
       "path": "packages/conpty/src/conpty.win.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => note(\"still here\"), 2000);',"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "'setTimeout(() => process.exit(0), 2000);',"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => process.exit(0), 300);',"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setTimeout(() => process.exit(0), 300);',"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 50));"
     },
     {
       "path": "packages/conpty/src/conpty.win.test.ts",
@@ -628,6 +664,18 @@
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "const timer = setTimeout(() => {"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "const deadline = Date.now() + budgetMs;"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "wall-clock",
+      "classification": "display-or-persisted-wall-time-not-correctness-order",
+      "excerpt": "if (Date.now() >= deadline) return false;"
     },
     {
       "path": "packages/desktop-host/src/deadline.test.ts",
