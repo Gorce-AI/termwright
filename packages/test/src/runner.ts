@@ -14,7 +14,7 @@ import {
 // `vitest/runners` is deprecated since Vitest 4.1 and warns on import. The
 // root entry exports the same concrete class as `TestRunner`; note that its
 // `VitestTestRunner` export is the interface type, not this class.
-import { TestRunner as VitestTestRunner } from 'vitest';
+import { TestRunner as VitestTestRunner, vi } from 'vitest';
 import { installTerminalLaunchResourceProvider } from '@termwright/driver';
 import type { ResourceVector } from '@termwright/resource-broker';
 import {
@@ -194,6 +194,14 @@ export class TermwrightTestRunner extends VitestTestRunner {
   }
 
   override async onBeforeRunTask(test: Parameters<VitestTestRunner['onBeforeRunTask']>[0]): Promise<void> {
+    // Every attempt starts on the real clock. A test that installs fake timers
+    // restores them in its own teardown, which is exactly the code a timeout
+    // skips — the body is abandoned where it stands. The hijacked clock is a
+    // process global, so the next attempt in that worker inherits it and fails
+    // for reasons of its own making: one hung test has twice cost a second,
+    // unrelated failure here. Restoring at the boundary the host owns is the
+    // only place that cannot be skipped by whatever happened before it.
+    if (vi.isFakeTimers()) vi.useRealTimers();
     const task = test as NativeRunnerTask;
     const identity = this.#hostContext.tasks[task.id];
     if (identity === undefined) task.mode = 'skip';
@@ -564,6 +572,13 @@ function installAttemptFinalizer(
     if (resourceFailure !== undefined) throw resourceFailure;
   };
   const afterCleanup = async (): Promise<void> => {
+    // The authoritative lifecycle must not be timed by a clock the test owns.
+    // A test that leaves fake timers installed — which a timeout guarantees,
+    // since it abandons the body before any restore — makes the journal's
+    // monotonic producer read backwards, the terminal event is rejected, and
+    // the attempt never closes. The run then fails its finalization barrier
+    // for a test that merely forgot to put the clock back.
+    if (vi.isFakeTimers()) vi.useRealTimers();
     const state = attemptTerminalState(test);
     if (state !== 'failed') {
       await emit(state);
