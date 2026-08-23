@@ -876,24 +876,22 @@ export class TermwrightTestHost {
     const running = forTask.filter(([, attempt]) => attempt.finished === undefined);
     // Vitest delivers console output on its own schedule, so a line written
     // just before a test returns can arrive after that attempt has finished.
-    // It still belongs to that attempt: attributing it to the most recently
-    // finished one is truthful, where discarding it as unattributable lost the
-    // output and failed the whole run as infrastructure. Genuine ambiguity —
-    // two attempts of the same task running at once — is still an error.
-    const settled = running.length > 0
-      ? running
-      : forTask
-          .slice()
-          .sort(([, left], [, right]) =>
-            (right.finished?.monotonicTime ?? 0) - (left.finished?.monotonicTime ?? 0))
-          .slice(0, 1);
-    if (test !== undefined && settled.length !== 1) {
+    // That is a race, not a defect: the output is still recorded, but it
+    // cannot carry the finished attempt's id, because the journal forbids any
+    // event after attempt.finished. It is journalled against the run instead,
+    // flagged unattributed. Only genuine ambiguity — no attempt for the task
+    // at all, or several running at once — is a control-plane failure.
+    if (test !== undefined && running.length > 1) {
       active.controlFailures.push(new Error(
-        `console ${log.type} for native task ${log.taskId} matched ${running.length} running and ` +
-        `${forTask.length} recorded attempts`,
+        `console ${log.type} for native task ${log.taskId} matched ${running.length} concurrent attempts`,
       ));
     }
-    const attempt = settled.length === 1 ? settled[0] : undefined;
+    if (test !== undefined && forTask.length === 0) {
+      active.controlFailures.push(new Error(
+        `console ${log.type} for native task ${log.taskId} matched no recorded attempt`,
+      ));
+    }
+    const attempt = running.length === 1 ? running[0] : undefined;
     for (const [index, content] of splitDiagnosticContent(log.content)) {
       const event = this.#producer.emit({
         eventClass: 'diagnostic',

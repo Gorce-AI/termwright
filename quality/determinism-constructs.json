@@ -1908,42 +1908,42 @@
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 342,
+      "line": 345,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "record: { ts: Date.now(), level, message, seq: logSeq, logger: 'fixture', ...extra },"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 427,
+      "line": 430,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "setTimeout(() => {"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 449,
+      "line": 452,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "setTimeout(publish, unpairedRefreshDelay);"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 461,
+      "line": 464,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "setTimeout(() => {"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 601,
+      "line": 604,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "if (helloDelay > 0) setTimeout(sendHello, helloDelay);"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 619,
+      "line": 622,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "if (firstTreeDelay > 0) setTimeout(publish, firstTreeDelay);"
@@ -3007,21 +3007,21 @@
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 1008,
+      "line": 1006,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "finishedAt: Date.now(),"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 1435,
+      "line": 1433,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void operation.catch(() => undefined);"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 1443,
+      "line": 1441,
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "timer = setTimeout(() => reject(new TermwrightHostTimeoutError(phase, totalMs)), remaining);"
