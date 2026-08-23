@@ -79,15 +79,26 @@ describe('PTY output lifecycle', { timeout: 20_000 }, () => {
       columns: 100,
       scrollbackLines: 20_000,
     });
+    // Weighed as it arrives. The producer reported a clean end on the run
+    // where the sentinel went missing, which rules out a torn-down source and
+    // leaves two possibilities that look identical from the screen: the bytes
+    // never reached the driver, or they reached it and were not parsed into
+    // the grid. A byte count separates them.
+    let delivered = 0;
+    let sentinelDelivered = false;
+    terminal.events.on('output', ({ data }) => {
+      delivered += data.length;
+      if (Buffer.from(data).includes('FINAL OUTPUT SENTINEL')) sentinelDelivered = true;
+    });
     await terminal.waitForExit();
-    // Checked before the screen, because it explains the screen. When this
-    // test fails on CI the sentinel is missing, and the two possible reasons —
-    // the driver published the exit too early, or the backend's producer was
-    // torn down with bytes unread — call for entirely different work.
     expect(
       terminal.diagnostics().filter((entry) => entry.code === 'truncated-output'),
     ).toEqual([]);
-    expect(terminal.screen().text()).toContain('FINAL OUTPUT SENTINEL');
+    expect(
+      terminal.screen().text(),
+      `bytes delivered to the driver: ${delivered}, ` +
+        `the sentinel among them: ${sentinelDelivered}`,
+    ).toContain('FINAL OUTPUT SENTINEL');
     expect(terminal.diagnostics().some((entry) => entry.code === 'degraded-output-drain'))
       .toBe(process.platform === 'win32');
     await terminal.close();
