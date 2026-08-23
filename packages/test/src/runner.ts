@@ -558,7 +558,7 @@ function installAttemptFinalizer(
       });
     }
     await attemptEvents.flush();
-    await journal.client.append(journal.producer.emit({
+    const terminal = journal.producer.emit({
       eventClass: 'authoritative',
       type: 'attempt.finished',
       identity: attemptIdentity(context),
@@ -568,7 +568,20 @@ function installAttemptFinalizer(
         repeat: context.repeat,
         retry: context.retry,
       },
-    }), eventDeadline(context, acknowledgementTimeoutMs, 'cleanup'));
+    });
+    try {
+      await journal.client.append(terminal, eventDeadline(context, acknowledgementTimeoutMs, 'cleanup'));
+    } catch (error) {
+      // The barrier that reports an unfinished attempt cannot tell whether
+      // this append failed or never ran, and those want opposite fixes. The
+      // host reads the worker's stderr, so say which one happened here; the
+      // failure is still raised, this only makes it attributable.
+      process.stderr.write(
+        `termwright: attempt ${context.attemptId} could not commit its terminal event ` +
+        `(${context.nativeTaskId}): ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      throw error;
+    }
     if (resourceFailure !== undefined) throw resourceFailure;
   };
   const afterCleanup = async (): Promise<void> => {
