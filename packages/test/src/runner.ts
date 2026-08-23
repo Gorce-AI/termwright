@@ -285,6 +285,7 @@ export class TermwrightTestRunner extends VitestTestRunner {
       this.#hostContext.journal.acknowledgementTimeoutMs,
     );
     installAttemptEventRecorder(attemptEvents);
+    let started = false;
     try {
       if (reservationAdmission !== undefined) {
         await reservationAdmission;
@@ -296,10 +297,30 @@ export class TermwrightTestRunner extends VitestTestRunner {
         identity: attemptIdentity(context),
         payload: { nativeTaskId: task.id, repeat: native.repeats, retry: native.retry },
       }), eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'operation'));
+      started = true;
       installAttemptFinalizer(test as NativeAttemptTask, context, journal, attemptEvents, this.config.sequence.hooks,
         this.#hostContext.journal.acknowledgementTimeoutMs);
       super.onBeforeTryTask(test);
     } catch (error) {
+      // Close the attempt this method opened. Everything after the started
+      // event — installing the finalizer included — can throw, and until now
+      // that left an attempt in the journal with a beginning and no end. The
+      // run could never be certified, and because a retry of the same test can
+      // succeed, the report showed no failing test to explain it. The failure
+      // is still rethrown; the journal simply stops being incomplete.
+      if (started) {
+        await journal.client.append(journal.producer.emit({
+          eventClass: 'authoritative',
+          type: 'attempt.finished',
+          identity: attemptIdentity(context),
+          payload: {
+            state: 'failed',
+            nativeTaskId: task.id,
+            repeat: native.repeats,
+            retry: native.retry,
+          },
+        }), eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'cleanup')).catch(() => undefined);
+      }
       const admitted = await reservationAdmission?.catch(() => undefined);
       await admitted?.release().catch(() => undefined);
       clearAttemptContext();
