@@ -35,6 +35,11 @@ const coverApproveCenter = process.env['TERMWRIGHT_FIXTURE_COVER_APPROVE_CENTER'
 const conditionStates = process.env['TERMWRIGHT_FIXTURE_CONDITIONS'] === '1';
 const duplicateSemanticKey = process.env['TERMWRIGHT_FIXTURE_DUPLICATE_KEY'] === '1';
 const hoverTracking = process.env['TERMWRIGHT_FIXTURE_HOVER'] === '1';
+// Declares the DEC modes this fixture enables below, the way an instrumented
+// application does. ConPTY consumes those sequences before the driver can see
+// them, so on Windows this evidence is the only authoritative source for what
+// the application is actually decoding.
+const providerInputModes = process.env['TERMWRIGHT_FIXTURE_INPUT_MODES'] === '1';
 let loaderVisible = process.env['TERMWRIGHT_FIXTURE_LOADER'] === '1';
 // Deliberately malicious provider wire frame. Unlike application SDKs (which
 // stamp revisions themselves), this proves the driver rejects a stale frame
@@ -246,9 +251,24 @@ function qualifiedSnapshot(snapshot) {
       ? { status: 'unsupported', capability: 'coordinate-space', reason: 'framework-unobservable' }
       : known(withoutAbsoluteBounds ? 'framework-local-cells' : 'viewport-cells', 'adapter'),
     hitGrid,
-    ...(staleProviderEvidence || providerActionRecipes || providerFocusState
+    ...(staleProviderEvidence || providerActionRecipes || providerFocusState || providerInputModes
       ? {
-          providerEvidence: [...(staleProviderEvidence ? [{
+          providerEvidence: [...(providerInputModes ? [{
+            providerId: 'fixture-production-input',
+            sessionId,
+            revision,
+            status: 'available',
+            evidence: {
+              source: 'application', method: 'native', strength: 'authoritative',
+              providerId: 'fixture-production-input',
+            },
+            pointerRegions: [],
+            inputModes: {
+              mouseTracking: hoverTracking ? 'any' : 'vt200',
+              mouseEncoding: 'sgr',
+              focusReporting: 'off',
+            },
+          }] : []), ...(staleProviderEvidence ? [{
             providerId: 'fixture-production-router',
             sessionId,
             // Revision 1 is valid so negotiation can freeze normally; the
@@ -533,9 +553,14 @@ if (endpoint === undefined || token === undefined) {
               ? ['pointer-hit-grid']
               : []),
           ],
-          ...(staleProviderEvidence || providerActionRecipes || providerFocusState
+          ...(staleProviderEvidence || providerActionRecipes || providerFocusState || providerInputModes
             ? {
-                providers: [...(staleProviderEvidence ? [{
+                providers: [...(providerInputModes ? [{
+                  id: 'fixture-production-input',
+                  version: '1.0.0',
+                  method: 'native',
+                  capabilities: ['terminal-input-modes'],
+                }] : []), ...(staleProviderEvidence ? [{
                   id: 'fixture-production-router',
                   version: '1.0.0',
                   method: 'native',
