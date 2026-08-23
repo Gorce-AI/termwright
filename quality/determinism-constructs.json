@@ -1222,35 +1222,35 @@
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 494,
+      "line": 493,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.snapshots.length).toBe(1);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 552,
+      "line": 551,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "record: { ts: Date.now(), level: 'info', message: 'hello from the adapter', seq: 1 },"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 554,
+      "line": 553,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => harness.records.length).toBe(1);"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 575,
+      "line": 574,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "client.send({ type: 'log', record: { ts: Date.now(), level: 'warn', message: 'x', seq: 1 } });"
     },
     {
       "path": "packages/driver/src/semantic.test.ts",
-      "line": 588,
+      "line": 587,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "client.send({ type: 'log', record: { ts: Date.now(), level: 'shouting', message: 'x', seq: 1 } });"

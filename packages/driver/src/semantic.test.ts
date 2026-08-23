@@ -422,22 +422,21 @@ describe('SemanticChannel', () => {
   });
 
   it('closes a peer that never authenticates at the absolute hello deadline', async () => {
-    vi.useFakeTimers();
-    try {
-      const harness = await createChannel(true, 50);
-      const client = await connectClient(harness.channel);
+    // Real timers on purpose. The channel is a real socket, so the deadline
+    // and the connection race each other under a faked clock: advancing time
+    // does not advance the I/O, and on Windows the pipe had not finished
+    // connecting when the 50 ms was already spent. Waiting for the server's
+    // own message is the barrier — the deadline is short enough to await.
+    const harness = await createChannel(true, 50);
+    const client = await connectClient(harness.channel);
 
-      await vi.advanceTimersByTimeAsync(50);
-      expect(await client.next()).toMatchObject({
-        type: 'error',
-        code: 'internal',
-        message: 'semantic hello deadline exceeded',
-      });
-      await client.closed;
-      expect(harness.diagnostics.join('\n')).toContain('did not authenticate within 50 ms');
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(await client.next()).toMatchObject({
+      type: 'error',
+      code: 'internal',
+      message: 'semantic hello deadline exceeded',
+    });
+    await client.closed;
+    expect(harness.diagnostics.join('\n')).toContain('did not authenticate within 50 ms');
   });
 
   it('destroys accepted unauthenticated sockets and shares concurrent close', async () => {

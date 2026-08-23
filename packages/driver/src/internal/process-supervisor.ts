@@ -188,9 +188,16 @@ export class ProcessSupervisor {
           if (observed === null) this.#trySignal('KILL', failures);
         }
       } else {
-        this.#trySignal('HUP', failures);
-        const graceDeadline = Math.min(options.deadline, this.#now() + options.gracefulMs);
-        if (observed === null) observed = await this.#waitForExit(exit, graceDeadline);
+        // ConPTY has no hang-up signal — the backend rejects HUP outright, and
+        // sending it anyway turned every Windows teardown into a cleanup
+        // failure. Closing the pseudoconsole is the platform's equivalent, and
+        // KILL is what does that here, so skip straight to it rather than
+        // recording a failure for a signal the platform cannot carry.
+        if (process.platform !== 'win32') {
+          this.#trySignal('HUP', failures);
+          const graceDeadline = Math.min(options.deadline, this.#now() + options.gracefulMs);
+          if (observed === null) observed = await this.#waitForExit(exit, graceDeadline);
+        }
         if (observed === null) this.#trySignal('KILL', failures);
       }
 
