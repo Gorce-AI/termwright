@@ -33,6 +33,31 @@ async function readEvents(dir: string): Promise<TraceEvent[]> {
     .map((line) => JSON.parse(line) as TraceEvent);
 }
 
+describe('trace targets', () => {
+  it('delivers into a directory the caller already created', async () => {
+    // Preparing the output directory first is ordinary, and POSIX renames the
+    // staged directory straight onto an existing empty one. Windows refuses as
+    // soon as the target exists, so without handling this the writer could not
+    // deliver a trace there at all.
+    const dir = await workspace();
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.output('ready');
+    await writer.finalize();
+    expect(await readFile(join(dir, TRACE_FILES.cast), 'utf8')).toContain('ready');
+  });
+
+  it('refuses a target that already holds something instead of replacing it', async () => {
+    const dir = await workspace();
+    await writeFile(join(dir, 'keep.txt'), 'not mine to delete', 'utf8');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.output('ready');
+    await expect(writer.finalize()).rejects.toThrow(/already holds content/u);
+    expect(await readFile(join(dir, 'keep.txt'), 'utf8')).toBe('not mine to delete');
+  });
+});
+
 describe('trace staging names', () => {
   it('cannot be mistaken for a half-written run', () => {
     // run-history names its own incomplete runs `.staging-<run>` and decodes

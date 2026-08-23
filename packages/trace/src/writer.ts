@@ -5,7 +5,7 @@
 
 import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
-import { mkdir, mkdtemp, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { DEFAULT_ARTIFACT_VALUE_POLICY, projectActionReceiptForArtifact, projectSemanticSnapshotForArtifact, type ArtifactValuePolicy, type EffectiveSessionContract, type SemanticSnapshot } from '@termwright/protocol';
 import type { SessionEventRecord, SessionEvents } from '@termwright/driver';
@@ -752,10 +752,41 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
   await unlink(join(staging, TRACE_INCOMPLETE_FILE));
   await writeDurable(join(staging, TRACE_FILES.commit), `${JSON.stringify({ v: 1, checksums })}\n`);
   await fsyncDirectory(staging);
+  await clearEmptyTarget(target);
   await rename(staging, target);
   await fsyncDirectory(parent);
 
   return { dir: target, meta, durationMs: meta.durationMs ?? 0 };
+}
+
+/**
+ * Makes room for the staged directory when the caller pre-created its target.
+ *
+ * POSIX renames a directory onto an existing empty one; Windows refuses as
+ * soon as the target exists at all. Passing a directory you already made is an
+ * ordinary thing to do — every caller who prepares an output path does it — so
+ * without this the writer simply could not deliver a trace there on Windows.
+ *
+ * Only an empty directory is removed, which is a placeholder rather than
+ * content, and that is exactly what POSIX would have replaced. A target
+ * holding anything fails here with a reason instead of failing at the rename
+ * with an errno, and nothing is ever overwritten.
+ */
+async function clearEmptyTarget(target: string): Promise<void> {
+  try {
+    await rmdir(target);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return;
+    if (code === 'ENOTEMPTY' || code === 'EEXIST' || code === 'EPERM' || code === 'EACCES') {
+      throw new TraceError(
+        'protocol-violation',
+        `trace target ${target} already holds content; refusing to replace it`,
+        { suggestion: 'write the trace to a new directory, or remove the existing one first' },
+      );
+    }
+    throw error;
+  }
 }
 
 async function writeDurable(path: string, body: string): Promise<void> {

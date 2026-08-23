@@ -244,7 +244,9 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
           // directory reports the long one. Both name the same directory, so a
           // test comparing its shell's cwd against this path would be comparing
           // two spellings of the same place and finding them different.
-          directory ??= realpathSync(mkdtempSync(join(osTmpdir(), 'termwright-')));
+          // `.native` on purpose: the JS realpath resolves symlinks but leaves
+          // 8.3 components alone, so it returns the short form unchanged.
+          directory ??= realpathSync.native(mkdtempSync(join(osTmpdir(), 'termwright-')));
           return directory;
         },
         get traces(): readonly string[] {
