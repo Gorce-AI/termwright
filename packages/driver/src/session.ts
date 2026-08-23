@@ -3128,6 +3128,18 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       const producerEnded = this.#pty.outputEnded;
       if (producerEnded !== undefined) await Promise.race([producerEnded, delay(CRASH_DRAIN_MS)]);
       await this.#vt.drain();
+      // Settling is not ending. A producer torn down with bytes still unread
+      // settles the same promise as one whose source ended, and the screen
+      // that results is missing its last output with nothing to say so. Naming
+      // it here is the difference between a test that fails for a reason and
+      // one that fails on a line that looks fine.
+      if (this.#pty.sawOutputEnd?.() === false) {
+        this.#diagnostic(
+          "truncated-output",
+          `the ${this.#backend.name} output producer was torn down before its source ended; ` +
+            "output written shortly before exit may be missing from the screen",
+        );
+      }
     } else {
       this.#diagnostic(
         "degraded-output-drain",

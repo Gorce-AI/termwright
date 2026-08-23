@@ -901,6 +901,12 @@ export type DiagnosticCode =
   | "endpoint-error"
   /** A custom PTY cannot prove output EOF, so final parsing used a bounded fallback. */
   | "degraded-output-drain"
+  /**
+   * The output producer was torn down before its source ended, so bytes the
+   * program wrote may never have reached the screen. Distinct from a bounded
+   * drain: there the backend cannot prove an end, here it proved the opposite.
+   */
+  | "truncated-output"
   /** A `SessionEvents` listener threw; the session continued. */
   | "listener-error"
   /** Lines the driver did not deliver: a log source outran its rate limit. */

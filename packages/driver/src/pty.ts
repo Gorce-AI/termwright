@@ -55,6 +55,18 @@ export interface PtyProcess {
   /** Settles once the backend's output producer can deliver no more bytes. */
   readonly outputEnded?: Promise<void>;
   /**
+   * Whether the producer stopped because its source ended, as opposed to being
+   * torn down with bytes still unread.
+   *
+   * `outputEnded` settles either way — a waiter must not outlive the thing it
+   * waits for — so on its own it cannot say whether the stream is complete.
+   * The two are different facts and a session that publishes an exit needs the
+   * second one: a destroyed source has lost whatever had not been read yet,
+   * and reporting that as a clean finish hands the caller a screen that is
+   * missing its last line with nothing to indicate it.
+   */
+  readonly sawOutputEnd?: () => boolean;
+  /**
    * Settles once the backend has finished attaching, if it attaches at all.
    *
    * ConPTY creates the child from a callback that fires when its output worker
@@ -216,6 +228,7 @@ export function createNodePtyBackend(): PtyBackend {
             : ('eof' as const),
         }),
         outputEnded: outputBoundary.ended,
+        sawOutputEnd: (): boolean => outputBoundary.eof,
         write(data: Uint8Array): void {
           if (disposed || exited) return;
           writable.write(data);

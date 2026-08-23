@@ -26,6 +26,8 @@ import type {
 export interface ConPtySessionHandle {
   readonly pid: number;
   readonly outputEnded: Promise<void>;
+  /** True only when the output pipe actually ended; disposal does not set it. */
+  readonly sawRealEof: boolean;
   write(data: Uint8Array): void;
   resize(columns: number, rows: number): boolean;
   terminateTree(): void;
@@ -115,6 +117,7 @@ export function createConPtyBackend(spawn: ConPtySpawn): PtyBackend {
           });
         },
         outputEnded: session.outputEnded,
+        sawOutputEnd: (): boolean => session.sawRealEof,
         // The session exists the moment spawn returns: the pseudoconsole, the
         // job and the root are all created before it does. There is nothing to
         // wait for, which is itself the difference from the node-pty path.

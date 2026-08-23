@@ -18,6 +18,7 @@ function fakeSession(overrides: Partial<ConPtySessionHandle> = {}): ConPtySessio
   return {
     pid: 4242,
     outputEnded: Promise.resolve(),
+    sawRealEof: true,
     write: vi.fn(),
     resize: vi.fn(() => true),
     terminateTree: vi.fn(),
