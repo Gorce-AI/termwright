@@ -20,6 +20,7 @@ env:
 jobs:
   package-metadata:
     name: package metadata
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -36,6 +37,7 @@ jobs:
 
   build:
     name: build ${{ matrix.os }} / node ${{ matrix.node }}
+    timeout-minutes: 45
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -96,6 +98,7 @@ jobs:
 
   hostile:
     name: hostile input (128 MiB heap)
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -430,6 +433,7 @@ jobs:
 
   clients:
     name: clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -532,6 +536,7 @@ jobs:
 
   release-hygiene:
     name: release hygiene
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -688,6 +693,7 @@ jobs:
 
   vectors:
     name: cross-language vectors are current
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -711,6 +717,7 @@ jobs:
 
   examples:
     name: examples (dogfooding)
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -764,6 +771,7 @@ jobs:
 
   website:
     name: website builds
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
