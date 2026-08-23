@@ -3,30 +3,13 @@ import type { ResourceCapacities, ResourceVector } from '@termwright/resource-br
 export interface TermwrightResourceProfile {
   readonly name: TermwrightResourceProfileName;
   readonly scheduler: {
-    readonly pool: TermwrightPool;
+    readonly pool: 'forks';
     readonly maxWorkers: number;
     readonly fileParallelism: true;
   };
   readonly capacities: ResourceCapacities;
   readonly perTerminal: ResourceVector;
 }
-
-/**
- * Worker pool for the embedded engine.
- *
- * `forks` everywhere except Windows. Vitest's programmatic `forks` pool relies
- * on a SIGTERM handler in the child to shut down cleanly (a workaround for
- * nodejs/node#55094), and on Windows `child.kill()` maps to TerminateProcess,
- * so that handler never runs — vitest#9907, still open, reported for exactly
- * this configuration and confirmed upstream as a Node bug. The observed
- * symptom is the run finishing and then crashing on a closed IPC channel.
- * `threads` has no such handshake. The A/B pressure matrix covers both pools
- * against real PTYs, so this is a measured choice rather than a preference.
- */
-export type TermwrightPool = 'forks' | 'threads';
-
-/** Pools differ only in shutdown, so pick per platform, not per profile. */
-const DEFAULT_POOL: TermwrightPool = process.platform === 'win32' ? 'threads' : 'forks';
 
 export const TERMWRIGHT_RESOURCE_PROFILE_NAMES = [
   'local',
@@ -63,7 +46,7 @@ export function isTermwrightResourceProfileName(value: string): value is Termwri
 function resourceProfile(name: TermwrightResourceProfileName, terminals: number, maxWorkers: number): TermwrightResourceProfile {
   return Object.freeze({
     name,
-    scheduler: Object.freeze({ pool: DEFAULT_POOL, maxWorkers, fileParallelism: true }),
+    scheduler: Object.freeze({ pool: 'forks', maxWorkers, fileParallelism: true }),
     capacities: Object.freeze({
       ptySession: terminals,
       externalProcess: terminals,
