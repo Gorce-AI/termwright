@@ -604,8 +604,18 @@ export class TermwrightTestHost {
       const observedTasks = new Set([...attempts.values()].filter((attempt) => attempt.finished).map((attempt) => attempt.task));
       const missingTasks = [...expectedTasks].filter((task) => !observedTasks.has(task) && !skippedTasks.has(task));
       if (unfinished.length > 0 || missingTasks.length > 0) {
+        // Name the tasks. A RunnerTaskId identifies the attempt to the journal
+        // but tells a reader nothing about which test stopped short, and this
+        // barrier fires exactly when the run cannot explain itself.
+        const named = (task: RunnerTaskId): string => {
+          const test = active.catalog?.tests.find((candidate) => candidate.runnerTaskId === task);
+          return test === undefined ? task : `${test.file} > ${test.fullName}`;
+        };
         const lifecycleFailure = new Error(
-          `authoritative attempt journal incomplete: ${unfinished.length} attempts unfinished, ${missingTasks.length} executed tasks without a finished attempt${missingTasks.length === 0 ? '' : ` (${missingTasks.slice(0, 8).join(', ')})`}`,
+          `authoritative attempt journal incomplete: ${unfinished.length} attempts unfinished` +
+          `${unfinished.length === 0 ? '' : ` (${unfinished.slice(0, 8).map(([, attempt]) => named(attempt.task)).join('; ')})`}` +
+          `, ${missingTasks.length} executed tasks without a finished attempt` +
+          `${missingTasks.length === 0 ? '' : ` (${missingTasks.slice(0, 8).map(named).join('; ')})`}`,
         );
         failure = failure === undefined
           ? lifecycleFailure

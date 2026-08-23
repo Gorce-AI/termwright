@@ -406,6 +406,9 @@ describe('TermwrightTestHost', () => {
     const completion = await host.requestRun().completed;
     expect(completion.state).toBe('infrastructure-failed');
     expect(String(completion.error)).toContain('attempt journal incomplete');
+    // The barrier fires when the run cannot explain itself, so it has to say
+    // which test stopped short rather than quoting an opaque task id.
+    expect(String(completion.error)).toContain('worker disappears');
     expect(completion.events.some((event) => event.type === 'attempt.started')).toBe(true);
     expect(completion.events.some((event) => event.type === 'attempt.finished')).toBe(false);
     await host.close();
