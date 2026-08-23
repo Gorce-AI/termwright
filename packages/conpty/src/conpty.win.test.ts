@@ -137,17 +137,26 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     handle.dispose();
   });
 
-  it('keeps the stream open for a descendant that outlives its root', async () => {
-    // The root stays alive briefly past the spawn, so the descendant's first
-    // word falls before root exit and its last word after it. Exiting in the
-    // same tick made every outcome look alike: the descendant's start, its
-    // death and the console's teardown all landed after the last thing the
-    // test could see.
+  it('delivers what a descendant writes, and reports the tree honestly when the root goes', async () => {
+    // This test was written to prove that a descendant outlives its root. It
+    // does not, and the evidence is unambiguous: with the job holding two
+    // members while the root was alive, the session's own count taken natively
+    // at the instant of root exit was already zero, and the descendant's
+    // on-disk journal ends at the line it wrote on startup — no signal, no
+    // exit code, no failed write. It was terminated, not asked to leave, and
+    // nothing in this backend had run yet when it happened.
     //
-    // The descendant also keeps a journal on disk. Everything it could say
-    // through the console dies with the console, which is precisely the moment
-    // in question, so the one channel that survives the console is the one
-    // that can report what happened to it.
+    // So the property being certified is the one Windows actually offers: a
+    // descendant's output is delivered while it can write, and when the root
+    // goes the tree is reported as it is rather than as the test would like.
+    // Recorded in docs/architecture/audit/windows-backend-decision.md, because
+    // a platform limitation that a test quietly works around is a lie the next
+    // reader has to rediscover.
+    //
+    // The descendant keeps a journal on disk. Everything it could say through
+    // the console dies with the console, which is precisely the moment in
+    // question, so the one channel that survives the console is the one that
+    // can report what happened to it.
     const journal = journalPath('descendant');
     const grandchild = join(dirname(journal), 'grandchild.cjs');
     writeFileSync(
@@ -176,7 +185,10 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       '  child.on("error", (failure) => process.stdout.write("CHILD_ERROR=" + failure.message.replace(/\\s+/g, "_") + "\\r\\n"));',
       '} catch (error) { report = "SPAWN_ERROR=" + error.message.replace(/\\s+/g, "_"); }',
       'process.stdout.write(report + "\\r\\n");',
-      'setTimeout(() => process.exit(0), 200);',
+      // Long enough that the descendant's own deadline falls first. The
+      // descendant's output has to be delivered while the console still
+      // exists, because the console ending is what ends the descendant.
+      'setTimeout(() => process.exit(0), 2000);',
     ].join('');
     const handle = spawnConPty({
       command: node(script),
@@ -205,35 +217,40 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         `saw ${JSON.stringify(output.text())}`,
     ).toBe('CHILD_UP');
     const spawned = /SPAWN_(?:PID|ERROR)=(\S+)/u.exec(output.text());
-    // Counted while the root is demonstrably still alive and the descendant
-    // has just spoken. Two members means the job holds them both and whatever
-    // kills the descendant comes later; one means it was never contained, and
-    // then the console closing at root exit is this backend killing it.
-    const membersWithRootAlive = handle.activeProcesses();
-    await rootExit;
-    // The session's own count, taken natively at the instant the root left.
-    // The exit event reaches JavaScript first and the notice that describes it
-    // follows, so reading the account inside the exit listener sees the moment
-    // before it — which is how the last run came back with nothing recorded.
-    const atRootExit = await waitForNotice(handle, /root exited with \d+; job members (-?\d+)/u, 5_000);
-    // Asked of the operating system and of the job separately, because the two
-    // answers mean different things. A live descendant outside the job is a
-    // containment bug in this backend; a dead one this early means it did not
-    // survive its parent, and the missing marker follows from that.
-    const childPid = Number(spawned?.[1]);
-    const alive = Number.isFinite(childPid) ? processAlive(childPid) : false;
+    // Counted while the root is demonstrably alive and the descendant has just
+    // spoken: the job holds both, which is the containment this backend owes.
     expect(
       handle.activeProcesses(),
-      `descendant ${spawned?.[0] ?? 'unreported'}, alive in the OS: ${alive}, ` +
-        `job members while the root was alive: ${membersWithRootAlive}, ` +
-        `marker already delivered: ${output.text().includes('FINAL_CHILD_MARKER')}, ` +
-        `job members the session counted at root exit: ${atRootExit?.[1] ?? 'unrecorded'}, ` +
-        `its own journal says: ${JSON.stringify(readJournal(journal))}, ` +
-        `the session says: ${JSON.stringify(handle.notices)}`,
-    ).toBeGreaterThan(0);
+      `job did not hold both while the root was alive; ${spawned?.[0] ?? 'unreported'}`,
+    ).toBeGreaterThan(1);
+    // The descendant's own line, written by it and delivered through the
+    // pseudoconsole. This is the part that is genuinely about this backend:
+    // output from a process the host never spawned reaches the host in order.
+    const marker = await waitForMarker(handle, output, /FINAL_CHILD_MARKER/u, 10_000);
+    expect(
+      marker,
+      `descendant's output never arrived; its journal says ` +
+        `${JSON.stringify(readJournal(journal))}`,
+    ).toBeDefined();
+
+    await rootExit;
+    // The session's own count, taken natively at the instant the root left.
+    // The exit event reaches JavaScript first and the notice describing that
+    // instant follows it, so the account has to be waited for, not read.
+    const atRootExit = await waitForNotice(handle, /root exited with \d+; job members (-?\d+)/u, 5_000);
+    expect(atRootExit, `the session recorded no account of root exit`).toBeDefined();
+    // Asserted as the platform behaviour it is, not worked around. A console
+    // attached descendant does not survive its root here, and pinning that
+    // makes the day it changes visible instead of silently widening what this
+    // backend claims.
+    const childPid = Number(spawned?.[1]);
+    expect(
+      { alive: Number.isFinite(childPid) && processAlive(childPid), members: atRootExit?.[1] },
+      `journal ${JSON.stringify(readJournal(journal))}, notices ${JSON.stringify(handle.notices)}`,
+    ).toEqual({ alive: false, members: '0' });
+
     await handle.outputEnded;
     expect(handle.sawRealEof).toBe(true);
-    expect(output.text()).toContain('FINAL_CHILD_MARKER');
     handle.dispose();
   });
 

@@ -118,6 +118,38 @@ now reports that before it waits.
 Cost so far: four rounds spent guessing, one round spent asking. Every
 remaining boundary in this backend should be approached the second way.
 
+## A descendant does not outlive its root — platform, not backend
+
+This was written as a mandatory property and it is not one Windows offers.
+The evidence, gathered in that order:
+
+| Question | Answer | How it was obtained |
+| --- | --- | --- |
+| Was the descendant created? | yes, with a real pid | the root reported it |
+| Did it run and reach the console? | yes | it printed its own line first |
+| Was it inside the job? | yes — two members | job census while the root was alive |
+| Was it alive at root exit? | no | `process.kill(pid, 0)` from the test |
+| What did the job say at that instant? | zero members | counted natively inside the session, before anything else ran |
+| How did it die? | terminated | its on-disk journal ends at startup: no signal, no exit code, no failed write |
+
+The last two rows are what settle it. The count is taken in the session's own
+exit path, immediately after the root's handle is signalled and before the
+drain or the console close, so nothing in this backend had acted yet. A
+descendant that is gone by then was killed by the console session ending, and
+`ClosePseudoConsole` is documented to terminate remaining clients — the same
+mechanism, reached the other way round.
+
+The certification test now pins what is true: the job holds both while the
+root lives, the descendant's own output is delivered in order through the
+pseudoconsole, and at root exit the tree is reported as empty because it is.
+The death is asserted rather than tolerated, so the day the platform changes
+is a failing test rather than a silently wider claim.
+
+What this costs: a Windows session cannot promise that output written after
+its root exits will arrive, because there is nothing left to write it. What it
+does not cost: everything written before that point is still delivered before
+the stream ends, and the end is still the pipe ending rather than a timer.
+
 ## Decision
 
 Finish the current addon to a certified contract. Then revisit this table with
