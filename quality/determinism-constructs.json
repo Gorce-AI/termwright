@@ -1565,70 +1565,70 @@
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2146,
+      "line": 2174,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(process.platform === \"win32\")("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2159,
+      "line": 2187,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() => terminal.semanticTree()?.revision ?? 0, {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2169,
+      "line": 2197,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(process.platform === \"win32\")("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2191,
+      "line": 2219,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(process.platform === \"win32\")("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2213,
+      "line": 2241,
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(process.platform === \"win32\")("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2245,
+      "line": 2273,
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 450));"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2271,
+      "line": 2299,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll("
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2300,
+      "line": 2328,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => input.textContent()).toBe(\"a\");"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2302,
+      "line": 2330,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(async () =>"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
-      "line": 2383,
+      "line": 2411,
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() =>"

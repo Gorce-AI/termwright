@@ -2143,6 +2143,34 @@ describe.skipIf(!ptyAvailable())(
       ).toThrow(/same terminal session/u);
     });
 
+    it("clicks through a transport that hides DEC modes when the application declares them", async () => {
+      // ConPTY consumes the child's DECSET before the driver can read it, so
+      // an uninstrumented app has no observable mouse mode there. An
+      // instrumented one knows what it enabled and says so, and that evidence
+      // is authoritative. modesObservable:false reproduces the ConPTY
+      // condition on every platform, and the assertion is that the click
+      // actually reaches the application — not merely that the contract calls
+      // pointer-input supported.
+      const terminal = await launch("semantic-app.mjs", {
+        modesObservable: false,
+        semanticNegotiationMs: 5_000,
+        env: { TERMWRIGHT_FIXTURE_INPUT_MODES: "1" },
+      });
+      await terminal.waitForText("Permission required");
+      await waitForPairedSemanticRevision(terminal, 1);
+
+      expect(terminal.contract()?.capabilities["pointer-input"]).toMatchObject({
+        status: "supported",
+        evidence: { providerId: "fixture-production-input" },
+      });
+      // screen().modes deliberately reports the raw VT observation, which
+      // stays 'unknown' here; the provider fact belongs to the action path.
+      expect(terminal.screen().modes.mouseTracking).toBe("unknown");
+
+      await terminal.getByRole("button", { name: "Reject" }).click();
+      await terminal.waitForText("CLICKED reject");
+    });
+
     it.skipIf(process.platform === "win32")(
       "clicks a semantic node through the PTY and observes the new revision",
       async () => {
