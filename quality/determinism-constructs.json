@@ -3007,21 +3007,21 @@
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 994,
+      "line": 1008,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "finishedAt: Date.now(),"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 1421,
+      "line": 1435,
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void operation.catch(() => undefined);"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
-      "line": 1429,
+      "line": 1443,
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "timer = setTimeout(() => reject(new TermwrightHostTimeoutError(phase, totalMs)), remaining);"

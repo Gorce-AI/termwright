@@ -870,16 +870,30 @@ export class TermwrightTestHost {
     const test = log.taskId === undefined
       ? undefined
       : active.catalog?.tests.find((candidate) => candidate.nativeTaskId === log.taskId);
-    const matchingAttempts = log.taskId === undefined
+    const forTask = log.taskId === undefined
       ? []
-      : [...active.attempts.entries()].filter(([, attempt]) =>
-          attempt.nativeTaskId === log.taskId && attempt.finished === undefined);
-    if (test !== undefined && matchingAttempts.length !== 1) {
+      : [...active.attempts.entries()].filter(([, attempt]) => attempt.nativeTaskId === log.taskId);
+    const running = forTask.filter(([, attempt]) => attempt.finished === undefined);
+    // Vitest delivers console output on its own schedule, so a line written
+    // just before a test returns can arrive after that attempt has finished.
+    // It still belongs to that attempt: attributing it to the most recently
+    // finished one is truthful, where discarding it as unattributable lost the
+    // output and failed the whole run as infrastructure. Genuine ambiguity —
+    // two attempts of the same task running at once — is still an error.
+    const settled = running.length > 0
+      ? running
+      : forTask
+          .slice()
+          .sort(([, left], [, right]) =>
+            (right.finished?.monotonicTime ?? 0) - (left.finished?.monotonicTime ?? 0))
+          .slice(0, 1);
+    if (test !== undefined && settled.length !== 1) {
       active.controlFailures.push(new Error(
-        `console ${log.type} for native task ${log.taskId} matched ${matchingAttempts.length} active attempts`,
+        `console ${log.type} for native task ${log.taskId} matched ${running.length} running and ` +
+        `${forTask.length} recorded attempts`,
       ));
     }
-    const attempt = matchingAttempts.length === 1 ? matchingAttempts[0] : undefined;
+    const attempt = settled.length === 1 ? settled[0] : undefined;
     for (const [index, content] of splitDiagnosticContent(log.content)) {
       const event = this.#producer.emit({
         eventClass: 'diagnostic',

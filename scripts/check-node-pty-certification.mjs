@@ -89,10 +89,16 @@ const watchdog = setTimeout(() => {
   process.stderr.write(
     `node-pty certification watchdog fired; stages=${stages.join(',')} output=${JSON.stringify(output)}\n`,
   );
-  // Release the pty before leaving. process.exit() skips finally blocks, so
-  // an orphaned child keeps the console handles this CI step is waiting on and
-  // the job hangs anyway — the exact failure this watchdog exists to prevent.
+  // Release the pty AND terminate the child before leaving. process.exit()
+  // skips finally blocks, and closing the pseudoconsole does not reliably take
+  // the child with it, so an orphan keeps the console handles this CI step
+  // waits on and the job hangs anyway — the exact failure this watchdog exists
+  // to prevent. The smoke's child never exits on its own: it blocks on stdin.
+  const pid = spawned?.pid;
   try { spawned?.dispose(); } catch { /* already gone */ }
+  if (typeof pid === 'number' && pid > 0) {
+    try { process.kill(pid); } catch { /* already gone */ }
+  }
   process.exit(1);
 }, smokeTimeoutMs * 3);
 
