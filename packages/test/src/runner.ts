@@ -613,7 +613,24 @@ function installAttemptFinalizer(
     // the attempt never closes. The run then fails its finalization barrier
     // for a test that merely forgot to put the clock back.
     if (vi.isFakeTimers()) vi.useRealTimers();
-    const state = attemptTerminalState(test);
+    let state: 'passed' | 'failed' | 'skipped';
+    try {
+      state = attemptTerminalState(test);
+    } catch (error) {
+      // An unsettled state here used to throw and nothing else, which leaves
+      // the attempt open: this is the only code that would have closed it. And
+      // the throw itself can disappear — a retry that passes makes Vitest
+      // report the test as passed, so the run failed its finalization barrier
+      // with no failing test to point at. Record the attempt as failed,
+      // because an attempt that produced no verdict is not a passing one, and
+      // say on stderr what the state actually was. The error still propagates.
+      process.stderr.write(
+        `termwright: attempt ${context.attemptId} (${context.nativeTaskId}) reached cleanup unsettled: ` +
+        `${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      await emit('failed').catch(() => undefined);
+      throw error;
+    }
     if (state !== 'failed') {
       await emit(state);
       return;
