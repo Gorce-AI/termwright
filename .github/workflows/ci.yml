@@ -65,6 +65,9 @@ jobs:
         run: pnpm --filter @termwright/driver exec node -e "import('@lydell/node-pty').then(m => { if (typeof m.spawn !== 'function') process.exit(1); console.log('pty backend loaded'); })"
 
       - run: pnpm -r --filter './packages/*' run build
+      # A bundled native dependency resolves its addon beside the wrong file,
+      # and the only symptom is a silent fallback to the backend it replaces.
+      - run: node scripts/check-optional-native-externals.mjs
       # The certification smoke imports the packed-shape driver entrypoint; a
       # fresh checkout has no dist/ and must build before this check. Running
       # it earlier accidentally depended on stale local artifacts.
