@@ -80,6 +80,15 @@ bool Session::Start(const SpawnOptions& options, EventSink sink, void* context, 
 
   STARTUPINFOEXW startup{};
   startup.StartupInfo.cb = sizeof(STARTUPINFOEXW);
+  // Say explicitly that the child has no inherited standard handles, so it
+  // takes the ones its console gives it. WezTerm's ConPTY backend does exactly
+  // this and it is the one concrete difference left between this code and two
+  // implementations that work; without it a child can end up writing somewhere
+  // other than the pseudoconsole, which is what the empty frames look like.
+  startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+  startup.StartupInfo.hStdInput = INVALID_HANDLE_VALUE;
+  startup.StartupInfo.hStdOutput = INVALID_HANDLE_VALUE;
+  startup.StartupInfo.hStdError = INVALID_HANDLE_VALUE;
   SIZE_T attribute_bytes = 0;
   InitializeProcThreadAttributeList(nullptr, 1, 0, &attribute_bytes);
   std::vector<char> attribute_storage(attribute_bytes);
