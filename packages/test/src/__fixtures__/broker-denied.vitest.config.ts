@@ -1,12 +1,11 @@
 import { fileURLToPath } from 'node:url';
-import { relative } from 'node:path';
 import { defineConfig } from 'vitest/config';
-import { generateFileHash } from '@vitest/runner/utils';
+import { hostFileId } from './host-task-id.js';
 import { createRunId, parseRunId } from '@termwright/protocol';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const fixture = fileURLToPath(new URL('broker-denied.fixture.ts', import.meta.url));
-const fileId = generateFileHash(relative(root, fixture), undefined);
+const fileId = hostFileId(root, fixture);
 const endpoint = process.env['TERMWRIGHT_TEST_BROKER_ENDPOINT'];
 const token = process.env['TERMWRIGHT_TEST_BROKER_TOKEN'];
 const runId = process.env['TERMWRIGHT_TEST_RUN_ID'];

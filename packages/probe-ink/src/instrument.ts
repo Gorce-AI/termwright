@@ -30,6 +30,10 @@ import { onInkAnnotationChange } from './annotations.js';
  * anything — is still observed. Starting later would let the probe report
  * those modes as off while they were on, and "authoritatively off" is a worse
  * answer than none at all.
+ *
+ * Handing the observation to a render-time tracker instead was tried and does
+ * not work: the shadow parses its bytes on a queue, so the modes are not
+ * readable at the synchronous moment render() would collect them.
  */
 const processTracker = trackTerminal(process.stdout, process.stderr);
 

@@ -1,16 +1,11 @@
 import { fileURLToPath } from 'node:url';
-import { relative } from 'node:path';
 import { defineConfig } from 'vitest/config';
-import { generateFileHash } from '@vitest/runner/utils';
+import { hostFileId } from './host-task-id.js';
 import { createRunId, parseRunId } from '@termwright/protocol';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const fixture = fileURLToPath(new URL('attempt-context.fixture.ts', import.meta.url));
-// Vitest hashes the module's slash-separated path. `relative` yields
-// backslashes on Windows, which hashes to a different id, so every task id
-// below matched nothing and the runner skipped all seven tests — a nested run
-// that reported "7 tests" and executed none.
-const fileId = generateFileHash(relative(root, fixture).replaceAll('\\', '/'), undefined);
+const fileId = hostFileId(root, fixture);
 const projectId = createRunId('project');
 const brokerEndpoint = process.env['TERMWRIGHT_TEST_BROKER_ENDPOINT'];
 const brokerToken = process.env['TERMWRIGHT_TEST_BROKER_TOKEN'];
