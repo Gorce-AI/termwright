@@ -220,15 +220,14 @@ const MAX_DIAGNOSTICS = 200;
 /**
  * Upper bound on how long `close()` waits for the child to hang up.
  *
- * Longer on Windows because the work is longer there. Closing a pseudoconsole
- * hands the tree to the console host to reap, and its exit notification comes
- * back through that host rather than from a signal the caller sent — a loaded
- * runner measured that arriving after the 2 s that is ample for a process
- * group, and the session then reported "did not report a real exit" for a
- * child that had in fact exited. Nothing is assumed either way: real exit
- * evidence is still required, and its absence is still a cleanup failure.
+ * Was raised for Windows while "did not report a real exit" looked like a slow
+ * console host. It was not slow: teardown inspected the tree before ConPTY had
+ * attached, so it killed nothing and waited for an exit that could not come.
+ * With that fixed the extra budget bought nothing and cost something — close()
+ * has a caller with a budget of its own, and stacking waits inside it turned
+ * one slow teardown into a timed-out hook.
  */
-export const CLOSE_GRACE_MS = process.platform === 'win32' ? 10_000 : 2_000;
+export const CLOSE_GRACE_MS = 2_000;
 
 /** Options accepted by {@link launchTerminal}, plus the injectable backend. */
 export interface LaunchTerminalOptions extends LaunchOptions {
@@ -3098,19 +3097,19 @@ class TerminalSession implements TerminalHarness, LocatorContext {
    */
   async #finishExit(status: ExitStatus): Promise<void> {
     if (this.#exitStatus !== null) return;
-    const producerEnded = this.#pty?.outputEnded;
-    if (producerEnded !== undefined) {
-      // Wait for the producer before the parser. The pty reports the exit as
-      // soon as the process is gone, so the last chunk it wrote can still be
-      // in flight; draining the parser then drains only what happened to have
-      // arrived, and the final line is lost after the exit is published. This
-      // is bounded, and hitting the bound is reported below as the degraded
-      // drain it would then be.
-      await Promise.race([producerEnded, delay(CRASH_DRAIN_MS)]);
-    }
     if (this.#pty?.lifecycle?.outputDrain === "eof") {
-      // The producer certified EOF, so the VT queue can be drained exactly,
-      // regardless of CI load.
+      // Wait for the producer, then the parser. The pty reports the exit as
+      // soon as the process is gone, so the last chunk it wrote can still be
+      // in flight; draining the parser first drains only what happened to have
+      // arrived, and the final line is lost after the exit is published.
+      //
+      // Only on this branch. A backend without EOF coupling has no moment at
+      // which its producer is known to be finished — ConPTY's socket closes on
+      // a timer during teardown, not at the child's exit — so waiting here
+      // would spend the whole bound on every natural exit and push close()
+      // past the budget its caller allows.
+      const producerEnded = this.#pty?.outputEnded;
+      if (producerEnded !== undefined) await Promise.race([producerEnded, delay(CRASH_DRAIN_MS)]);
       await this.#vt.drain();
     } else {
       this.#diagnostic(

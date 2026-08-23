@@ -1443,12 +1443,6 @@
       "path": "packages/driver/src/session.ts",
       "kind": "delay-helper",
       "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "await Promise.race([producerEnded, delay(CRASH_DRAIN_MS)]);"
-    },
-    {
-      "path": "packages/driver/src/session.ts",
-      "kind": "delay-helper",
-      "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "await Promise.race([this.#vt.drain(), delay(CRASH_DRAIN_MS)]);"
     },
     {
@@ -1456,6 +1450,12 @@
       "kind": "delay-helper",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "function delay(ms: number): Promise<void> {"
+    },
+    {
+      "path": "packages/driver/src/session.ts",
+      "kind": "delay-helper",
+      "classification": "bounded-deadline-or-managed-background-task",
+      "excerpt": "if (producerEnded !== undefined) await Promise.race([producerEnded, delay(CRASH_DRAIN_MS)]);"
     },
     {
       "path": "packages/driver/src/session.ts",
