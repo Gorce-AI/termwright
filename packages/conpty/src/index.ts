@@ -142,6 +142,11 @@ export interface ConPtyHandle {
    * `outputEnded` also settles on disposal so a teardown cannot hang, which
    * means resolving it is not by itself evidence of EOF. This is the flag that
    * separates the two, and nothing but the reader sets it.
+   *
+   * The end itself is reached by the tree emptying: the job reports zero
+   * active processes, which means no byte can follow, and the console is
+   * closed only then. The reader still ends on the pipe rather than on a
+   * timer — what changed is that the moment is chosen by evidence.
    */
   readonly sawRealEof: boolean;
   /**

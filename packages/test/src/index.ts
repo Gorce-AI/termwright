@@ -94,7 +94,7 @@ export {
 
 export { serializeScreen, type CellSnapshotOptions } from './cells.js';
 
-export { ptyAvailable } from './pty-available.js';
+export { ptyAvailable, ptyUnavailableReason, type PtyUnavailableReason } from './pty-available.js';
 
 export {
   type LaunchOverrides,

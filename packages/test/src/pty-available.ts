@@ -11,6 +11,21 @@
 import { createNodePtyBackend, inheritedSpawnEnv } from '@termwright/driver';
 
 let probe: Promise<boolean> | undefined;
+let unavailable: PtyUnavailableReason | undefined;
+
+/**
+ * Why this machine reported no pseudo-terminal.
+ *
+ * `opted-out` is a deliberate choice and means nothing is wrong. `probe-failed`
+ * is a machine that cannot do the thing the suite exists to test, and the two
+ * must not look alike: a run whose PTY suites all skipped for the second
+ * reason has proven nothing, and returning a bare `false` for both is how that
+ * becomes a green tick.
+ */
+export interface PtyUnavailableReason {
+  readonly kind: 'opted-out' | 'probe-failed';
+  readonly detail: string;
+}
 
 /**
  * Whether this machine can open a pseudo-terminal.
@@ -42,13 +57,27 @@ export function ptyAvailable(): Promise<boolean> {
   return probe;
 }
 
+/**
+ * Why the last probe answered `false`, or undefined if it answered `true`.
+ *
+ * Resolve {@link ptyAvailable} before reading this: the answer is produced by
+ * the probe.
+ */
+export function ptyUnavailableReason(): PtyUnavailableReason | undefined {
+  return unavailable;
+}
+
 /** Clears the memoized probe. Intended for this package's own tests. */
 export function resetPtyProbe(): void {
   probe = undefined;
+  unavailable = undefined;
 }
 
 async function detect(): Promise<boolean> {
-  if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;
+  if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') {
+    unavailable = { kind: 'opted-out', detail: 'TERMWRIGHT_SKIP_PTY=1' };
+    return false;
+  }
   try {
     const pty = createNodePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
@@ -57,8 +86,15 @@ async function detect(): Promise<boolean> {
       rows: 4,
     });
     pty.dispose();
+    unavailable = undefined;
     return true;
-  } catch {
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    unavailable = { kind: 'probe-failed', detail };
+    // Said out loud, once. A machine that cannot open a pseudo-terminal skips
+    // every suite that needs one, and without this the log of that run gives
+    // no hint that anything was wrong with the machine rather than the code.
+    process.stderr.write(`termwright: no usable pseudo-terminal on this machine (${detail})\n`);
     return false;
   }
 }

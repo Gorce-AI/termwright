@@ -20,7 +20,7 @@
     "managed-or-diagnostic-background-task": 60,
     "production-process-isolation-review": 27,
     "test-observer-or-intentional-background-task": 12,
-    "test-process-isolation-review": 48
+    "test-process-isolation-review": 51
   },
   "findings": [
     {
@@ -2916,10 +2916,28 @@
       "excerpt": "RUNNING_IN_UI ? new Promise((resolve) => setTimeout(resolve, 3_000)) : Promise.resolve();"
     },
     {
+      "path": "packages/test/src/pty-available.test.ts",
+      "kind": "process-global-mutation",
+      "classification": "test-process-isolation-review",
+      "excerpt": "else process.env['TERMWRIGHT_SKIP_PTY'] = previous;"
+    },
+    {
+      "path": "packages/test/src/pty-available.test.ts",
+      "kind": "process-global-mutation",
+      "classification": "test-process-isolation-review",
+      "excerpt": "process.env['TERMWRIGHT_SKIP_PTY'] = '1';"
+    },
+    {
+      "path": "packages/test/src/pty-available.test.ts",
+      "kind": "process-global-mutation",
+      "classification": "test-process-isolation-review",
+      "excerpt": "process.env['TERMWRIGHT_SKIP_PTY'] = '1';"
+    },
+    {
       "path": "packages/test/src/pty-available.ts",
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;"
+      "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') {"
     },
     {
       "path": "packages/test/src/pty-available.ts",

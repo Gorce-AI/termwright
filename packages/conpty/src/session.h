@@ -122,6 +122,7 @@ class Session {
   void ReaderLoop();
   void WriterLoop();
   void WaitForRootExit();
+  void WaitForEmptyTree();
   void Emit(SessionEvent event);
   void ReleasePseudoConsoleIfSupported();
 

@@ -5,6 +5,10 @@
 namespace termwright {
 namespace {
 
+/// How long teardown waits for the owned tree to empty before giving up.
+constexpr DWORD TREE_DRAIN_TIMEOUT_MS = 10'000;
+constexpr DWORD TREE_POLL_INTERVAL_MS = 5;
+
 /// `ReleasePseudoConsole`, when the running Windows exports it.
 ///
 /// Feature detection rather than a version comparison: the symbol is the fact
@@ -198,14 +202,6 @@ void Session::ReaderLoop() {
       Emit(std::move(end));
       return;
     }
-    // The first chunk is the proof the console has a client: ConPTY announces
-    // itself the moment one attaches, before the child writes anything of its
-    // own. That is the signal the release was missing — issuing it at startup
-    // tore the console down before the suspended child could attach, and
-    // issuing it at root exit cut the console's own rendering short. Releasing
-    // here means the host stops holding the console exactly when something
-    // else already is.
-    if (!first_output_seen_.exchange(true)) ReleasePseudoConsoleIfSupported();
     SessionEvent chunk;
     chunk.kind = EventKind::kData;
     chunk.data.assign(buffer.begin(), buffer.begin() + read);
@@ -257,13 +253,43 @@ void Session::WaitForRootExit() {
   if (previous != State::kSourceEof && previous != State::kDisposed) {
     state_.store(State::kRootExited);
   }
-  // A backstop for a console that never said anything at all. Normally the
-  // reader has already released on the first chunk.
-  ReleasePseudoConsoleIfSupported();
+  // Root exit is not the end of the session, only of its first process. Wait
+  // for the job to say the tree is empty, because until then a descendant can
+  // still be writing, and only then let the console go.
+  //
+  // ReleasePseudoConsole is not what ends the stream here. Three placements
+  // were tried — at startup, at root exit, at the first output — and every one
+  // of them tore the console down before a short-lived child's output had been
+  // rendered; the stream carried ConPTY's startup and shutdown sequences and
+  // nothing in between. What makes this authoritative is not a call but a
+  // fact: a job reporting zero active processes cannot produce another byte.
+  // Closing after that is a cleanup of something already finished, and the
+  // reader still ends on the pipe rather than on a timer.
+  WaitForEmptyTree();
+  if (pseudoconsole_ != nullptr && !closed_pseudoconsole_.exchange(true)) {
+    HPCON closing = pseudoconsole_;
+    pseudoconsole_ = nullptr;
+    ClosePseudoConsole(closing);
+  }
   SessionEvent exited;
   exited.kind = EventKind::kExit;
   exited.exit_code = code;
   Emit(std::move(exited));
+}
+
+void Session::WaitForEmptyTree() {
+  // Queried, not assumed. The job is the owner of the tree, so its accounting
+  // is the only thing that can say the last process is gone; the loop exists
+  // because there is no notification this thread can wait on that means the
+  // same, and it is bounded so a job that never empties cannot hold teardown
+  // open for ever.
+  const DWORD deadline = GetTickCount() + TREE_DRAIN_TIMEOUT_MS;
+  for (;;) {
+    const long long active = ActiveProcesses();
+    if (active <= 0) return;
+    if (GetTickCount() > deadline) return;
+    Sleep(TREE_POLL_INTERVAL_MS);
+  }
 }
 
 void Session::Emit(SessionEvent event) {
