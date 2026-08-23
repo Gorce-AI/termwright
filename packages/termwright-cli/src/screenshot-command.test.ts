@@ -161,7 +161,12 @@ describe('capturing a moment of a recording', () => {
     expect(result.chosen).toBe('the last step');
   });
 
-  it('reports a character the embedded fonts do not cover', async () => {
+  // Enumerating the machine's fonts is the work under test, and a Windows CI
+  // runner has thousands of them: this is the one case here that legitimately
+  // outlasts the default 5 s. The budget is generous because it is only ever
+  // paid on a slow machine, and a scan that took a minute would be a finding
+  // rather than a flake.
+  it('reports a character the embedded fonts do not cover', { timeout: 60_000 }, async () => {
     // U+F0000 is in a private-use plane, so no real font claims it: this is the
     // one way to reach the fallback branch on any machine. impl-trace measured
     // that coverage is a property of the *installed* fonts rather than of the
