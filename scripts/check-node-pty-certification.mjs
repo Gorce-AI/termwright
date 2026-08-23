@@ -84,10 +84,15 @@ const stage = (name) => {
   stages.push(`${name}@${Math.round(performance.now())}ms`);
   process.stderr.write(`node-pty certification: ${name}\n`);
 };
+let spawned;
 const watchdog = setTimeout(() => {
   process.stderr.write(
     `node-pty certification watchdog fired; stages=${stages.join(',')} output=${JSON.stringify(output)}\n`,
   );
+  // Release the pty before leaving. process.exit() skips finally blocks, so
+  // an orphaned child keeps the console handles this CI step is waiting on and
+  // the job hangs anyway — the exact failure this watchdog exists to prevent.
+  try { spawned?.dispose(); } catch { /* already gone */ }
   process.exit(1);
 }, smokeTimeoutMs * 3);
 
@@ -99,6 +104,7 @@ const proc = backend.spawn({
   columns: 40,
   rows: 4,
 });
+spawned = proc;
 let writeFailure;
 let sawOutput = false;
 proc.onData((data) => {
