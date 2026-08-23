@@ -130,7 +130,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     const alive = Number.isFinite(childPid) ? processAlive(childPid) : false;
     expect(
       handle.activeProcesses(),
-      `descendant ${spawned?.[0]}, alive in the OS: ${alive}`,
+      `descendant ${spawned?.[0]}, alive in the OS: ${alive}, ` +
+        `marker already delivered: ${output.text().includes('FINAL_CHILD_MARKER')}`,
     ).toBeGreaterThan(0);
     await handle.outputEnded;
     expect(handle.sawRealEof).toBe(true);
@@ -141,20 +142,23 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
   it('drives a child that never writes anything', async () => {
     // No first-output gate: the session is usable from the moment it exists,
     // so input, resize and termination all work before a silent child speaks.
-    const handle = spawnConPty({
-      command: node('process.stdin.resume(); process.stdin.on("data", () => process.exit(0));'),
-      env: environment(),
-      columns: 80,
-      rows: 24,
-    });
+    // The child reports what the console handed it before it waits. A child
+    // whose standard input is not a terminal never sees a keystroke no matter
+    // what the host writes, and that is a different fault from input failing
+    // to travel — one belongs to process creation, the other to the pipe.
+    const script = [
+      'const tty = require("node:tty");',
+      'process.stdout.write("STDIN_TTY=" + tty.isatty(0) + ",STDOUT_TTY=" + tty.isatty(1) + "\\r\\n");',
+      'process.stdin.resume();',
+      'process.stdin.on("data", () => process.exit(0));',
+    ].join('');
+    const handle = spawnConPty({ command: node(script), env: environment(), columns: 80, rows: 24 });
+    const output = collect(handle);
     expect(handle.resize(120, 40)).toBe(true);
-    // Whether the console announces itself before the child speaks is recorded
-    // rather than required. It is the fact that separates "the session never
-    // came up" from "the child never got the keystroke", and a bare timeout
-    // reported neither.
-    const spoke = await waitForMarker(handle, collect(handle), /[\s\S]/u, 5_000);
+    const spoke = await waitForMarker(handle, output, /STDIN_TTY=(\w+),STDOUT_TTY=(\w+)/u, 10_000);
     const processes = handle.activeProcesses();
-    expect(processes, `console spoke first: ${spoke !== undefined}`).toBeGreaterThan(0);
+    expect(processes, `child never reported its handles; saw ${JSON.stringify(output.text())}`)
+      .toBeGreaterThan(0);
     handle.write(Buffer.from('x'));
     const exited = await new Promise<'exit' | 'budget'>((resolve) => {
       const timer = setTimeout(() => {
@@ -171,7 +175,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     // can be acted on and one that says only that something took too long.
     expect(
       exited,
-      `child never exited after input; console spoke first: ${spoke !== undefined}, ` +
+      `child never exited after input; it reported ${spoke?.[0] ?? 'nothing'}, ` +
         `job members before the write: ${processes}, now: ${handle.activeProcesses()}`,
     ).toBe('exit');
     await handle.outputEnded;

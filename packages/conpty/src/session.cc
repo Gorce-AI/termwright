@@ -171,24 +171,16 @@ bool Session::Start(const SpawnOptions& options, EventSink sink, void* context, 
     return false;
   }
 
-  // Detected now, released later. Releasing here tears the pseudoconsole down
-  // before the child has attached to it: the first run produced an immediate
-  // EOF with no bytes, no input accepted and no exit, while the job still
-  // showed a live process — a child running against a console that had already
-  // gone. The release happens when the root exits, which is the first moment
-  // the host demonstrably no longer needs to hold it, and descendants that are
-  // still attached keep it alive until the last one detaches.
+  // Detected and reported, never called. Three placements of the release were
+  // tried — at startup, at root exit, and at first output — and each tore the
+  // pseudoconsole down under a child that was still attached to it. Reading
+  // the two reference implementations settled why: node-pty releases only when
+  // it loads the standalone ConPTY DLL, and WezTerm never releases at all. The
+  // capability is still worth knowing, because which path a machine offers is
+  // evidence the certification matrix records.
   static ReleasePseudoConsoleFn detected = LoadReleasePseudoConsole();
   release_supported_ = detected != nullptr;
   return true;
-}
-
-void Session::ReleasePseudoConsoleIfSupported() {
-  static ReleasePseudoConsoleFn release = LoadReleasePseudoConsole();
-  if (release == nullptr || pseudoconsole_ == nullptr) return;
-  if (released_.exchange(true)) return;
-  release(pseudoconsole_);
-  state_.store(State::kReleased);
 }
 
 void Session::ReaderLoop() {
@@ -276,6 +268,16 @@ void Session::WaitForRootExit() {
   if (previous != State::kSourceEof && previous != State::kDisposed) {
     state_.store(State::kRootExited);
   }
+  // Reported the moment it is true. Holding this back until the tree drained
+  // made the event a lie: `onExit` fired only after the job was already empty,
+  // so a listener asking what the tree looked like at root exit was always
+  // told nothing was left — including when a descendant had been holding the
+  // console for the whole time in between.
+  SessionEvent exited;
+  exited.kind = EventKind::kExit;
+  exited.exit_code = code;
+  Emit(std::move(exited));
+
   // Root exit is not the end of the session, only of its first process. Wait
   // for the job to say the tree is empty, because until then a descendant can
   // still be writing, and only then let the console go.
@@ -294,10 +296,6 @@ void Session::WaitForRootExit() {
     pseudoconsole_ = nullptr;
     ClosePseudoConsole(closing);
   }
-  SessionEvent exited;
-  exited.kind = EventKind::kExit;
-  exited.exit_code = code;
-  Emit(std::move(exited));
 }
 
 void Session::WaitForEmptyTree() {
