@@ -1563,6 +1563,13 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         );
       }
       const before = this.checkpoint();
+      // Catch the parser up before establishing the barrier. Bytes the child
+      // sent before the resize can still be queued, and committing them raises
+      // the revision without the child having reacted at all — which the wait
+      // below would then accept as its answer. That is how a resize could
+      // report a repaint that had not happened yet. Draining first cannot
+      // swallow the reaction, because the reaction can only follow the resize.
+      await this.#vt.drain();
       this.#pty?.resize(size.columns, size.rows);
       this.#vt.resize(size.columns, size.rows);
       const localResizeRevision = this.#vt.revision;
