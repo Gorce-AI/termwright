@@ -292,6 +292,30 @@ function pickleArgument(pickle: Pickle['steps'][number]): unknown {
 }
 
 /** Converts one physical feature into native `@termwright/test` declarations entirely in memory. */
+/** The environment variable a CLI uses to add a tag filter to a run. */
+export const GHERKIN_TAGS_ENV = 'TERMWRIGHT_GHERKIN_TAGS';
+
+/**
+ * Combines the project's tag filter with the one a command line asked for.
+ *
+ * Both are Cucumber tag expressions and both are restrictions, so the answer
+ * is their conjunction — a config selecting `@component` and a run asking for
+ * `not @slow` means both, not whichever was read last. Each side is
+ * parenthesised because tag expressions contain `or`, and `a or b and c` is
+ * not what either author wrote.
+ */
+export function composeTagExpressions(
+  configured: string | undefined,
+  requested: string | undefined,
+): string | undefined {
+  const parts = [configured, requested]
+    .map((part) => part?.trim())
+    .filter((part): part is string => part !== undefined && part !== '');
+  if (parts.length === 0) return undefined;
+  if (parts.length === 1) return parts[0];
+  return parts.map((part) => `(${part})`).join(' and ');
+}
+
 export function transformFeature(input: TransformFeatureInput): TransformFeatureResult {
   const newId = IdGenerator.incrementing();
   const parser = new Parser(new AstBuilder(newId), new GherkinClassicTokenMatcher());
@@ -453,7 +477,14 @@ export function gherkinPlugin(options: GherkinPluginOptions = {}): Plugin {
         uri: file,
         glue,
         ...(options.generatedImports === undefined ? {} : { generatedImports: options.generatedImports }),
-        ...(options.tags === undefined ? {} : { tags: options.tags }),
+        // The command line composes with the project's filter rather than
+        // replacing it, and it arrives by environment because the transform
+        // runs inside the runner's workers rather than in the process that
+        // parsed the arguments.
+        ...(() => {
+          const tags = composeTagExpressions(options.tags, process.env[GHERKIN_TAGS_ENV]);
+          return tags === undefined ? {} : { tags };
+        })(),
       });
     },
     async handleHotUpdate(context: HmrContext) {

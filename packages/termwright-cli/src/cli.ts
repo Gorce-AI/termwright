@@ -11,6 +11,7 @@
  * 3 no-session / 4 ipc / 5 internal.
  */
 
+import { GHERKIN_TAGS_ENV } from '@termwright/gherkin';
 import {
   buildAgentContext,
   buildAgentSkill,
@@ -159,7 +160,21 @@ export async function runCli(
   }
 }
 
+/**
+ * Publishes a run's tag filter to the workers that do the filtering.
+ *
+ * The Gherkin transform runs inside the runner's workers, not in the process
+ * that parsed the arguments, and the environment is what those workers
+ * inherit. The plugin composes this with whatever the project configured
+ * rather than replacing it.
+ */
+function applyTagFilter(tags: string | undefined): void {
+  if (tags === undefined) return;
+  process.env[GHERKIN_TAGS_ENV] = tags;
+}
+
 async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
+  applyTagFilter(args.tags);
   const host = await (deps.openTestHost ?? TermwrightTestHost.open)({
     cwd: deps.cwd,
     runsDir: join(deps.cwd, '.termwright', 'runs'),
@@ -224,6 +239,7 @@ function isInfrastructureState(state: RunCompletion['state']): boolean {
 }
 
 async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
+  applyTagFilter(args.tags);
   const host = await (deps.openTestHost ?? TermwrightTestHost.open)({
     cwd: deps.cwd,
     runsDir: join(deps.cwd, '.termwright', 'runs'),

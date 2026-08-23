@@ -198,6 +198,14 @@ void Session::ReaderLoop() {
       Emit(std::move(end));
       return;
     }
+    // The first chunk is the proof the console has a client: ConPTY announces
+    // itself the moment one attaches, before the child writes anything of its
+    // own. That is the signal the release was missing — issuing it at startup
+    // tore the console down before the suspended child could attach, and
+    // issuing it at root exit cut the console's own rendering short. Releasing
+    // here means the host stops holding the console exactly when something
+    // else already is.
+    if (!first_output_seen_.exchange(true)) ReleasePseudoConsoleIfSupported();
     SessionEvent chunk;
     chunk.kind = EventKind::kData;
     chunk.data.assign(buffer.begin(), buffer.begin() + read);
@@ -249,9 +257,8 @@ void Session::WaitForRootExit() {
   if (previous != State::kSourceEof && previous != State::kDisposed) {
     state_.store(State::kRootExited);
   }
-  // Now let go. From here the pseudoconsole outlives only its clients, so once
-  // the last descendant detaches the output pipe ends and the reader sees a
-  // real EOF rather than waiting on a handle the host is itself holding open.
+  // A backstop for a console that never said anything at all. Normally the
+  // reader has already released on the first chunk.
   ReleasePseudoConsoleIfSupported();
   SessionEvent exited;
   exited.kind = EventKind::kExit;

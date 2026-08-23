@@ -119,8 +119,16 @@ describe('parseArgs', () => {
   });
 
   it('does not apply Gherkin tag filtering to unrelated commands', () => {
+    // Filtering belongs to the commands that run scenarios. Reading a trace or
+    // writing a report has nothing to select.
     expect(() => parseArgs(['report', '--trace', 'a.twtrace', '--tags', '@smoke']))
-      .toThrow(/only available with `termwright ui`/u);
+      .toThrow(/only available with `termwright test`/u);
+  });
+
+  it('accepts a tag filter on every command that runs scenarios', () => {
+    expect(parseArgs(['test', '--tags', '@smoke']).tags).toBe('@smoke');
+    expect(parseArgs(['watch', '--tags', 'not @slow']).tags).toBe('not @slow');
+    expect(parseArgs(['ui', '--tags', '@a or @b']).tags).toBe('@a or @b');
   });
 
   it('rejects a flag whose value is missing', () => {

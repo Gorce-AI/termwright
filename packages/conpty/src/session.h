@@ -137,6 +137,7 @@ class Session {
 
   std::atomic<State> state_{State::kCreated};
   std::atomic<bool> released_{false};
+  std::atomic<bool> first_output_seen_{false};
   std::atomic<bool> closed_pseudoconsole_{false};
   std::atomic<bool> writer_stop_{false};
 

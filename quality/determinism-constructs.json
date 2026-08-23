@@ -18,7 +18,7 @@
     "explicit-external-or-ui-source-polling": 184,
     "explicit-test-selection-reviewed-with-platform-registry": 99,
     "managed-or-diagnostic-background-task": 60,
-    "production-process-isolation-review": 26,
+    "production-process-isolation-review": 27,
     "test-observer-or-intentional-background-task": 12,
     "test-process-isolation-review": 48
   },
@@ -2620,6 +2620,12 @@
       "kind": "fire-and-forget",
       "classification": "test-observer-or-intentional-background-task",
       "excerpt": "void run(ids);"
+    },
+    {
+      "path": "packages/termwright-cli/src/cli.ts",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "process.env[GHERKIN_TAGS_ENV] = tags;"
     },
     {
       "path": "packages/termwright-cli/src/doctor.ts",

@@ -60,7 +60,7 @@ export interface CommandDoc {
 export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
   test: {
     headline: 'run the certified Termwright host on the Vitest engine.',
-    synopsis: ['test [--runs N] [--resource-profile <name>] [-- <vitest args>]'],
+    synopsis: ['test [--runs N] [--resource-profile <name>] [--tags <expression>] [-- <vitest args>]'],
     summary: [
       'run the certified Termwright host on the exact Vitest engine.',
       'Termwright owns run identity, attempt scope, events and terminal resources;',
@@ -71,7 +71,7 @@ export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
   },
   watch: {
     headline: 'watch with one persistent certified Termwright host.',
-    synopsis: ['watch [--resource-profile <name>] [-- <vitest args>]'],
+    synopsis: ['watch [--resource-profile <name>] [--tags <expression>] [-- <vitest args>]'],
     summary: [
       'collect and rerun through one persistent Termwright/Vitest engine.',
       'Source changes coalesce while a run is active and every cycle gets a new RunId.',
@@ -390,8 +390,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   if (record && trace !== undefined) {
     throw usageError('--trace and --record are different modes; pass one', 'see `termwright --help`');
   }
-  if (tags !== undefined && resolved !== 'ui') {
-    throw usageError('--tags is only available with `termwright ui`');
+  if (tags !== undefined && resolved !== 'ui' && resolved !== 'test' && resolved !== 'watch') {
+    throw usageError('--tags is only available with `termwright test`, `termwright watch`, or `termwright ui`');
   }
   if (resourceProfile !== 'local' && resolved !== 'test' && resolved !== 'watch' && resolved !== 'ui') {
     throw usageError('--resource-profile is only available with `termwright test`, `termwright watch`, or `termwright ui`');
