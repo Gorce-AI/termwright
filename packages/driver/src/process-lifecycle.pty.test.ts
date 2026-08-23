@@ -1,5 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { resolveDefaultPtyBackend } from './backend-selection.js';
+import { CONPTY_BACKEND_NAME } from './conpty-backend.js';
 import { launchTerminal } from './session.js';
 import type { TerminalHarness } from './api.js';
 
@@ -99,8 +101,15 @@ describe('PTY output lifecycle', { timeout: 20_000 }, () => {
       `bytes delivered to the driver: ${delivered}, ` +
         `the sentinel among them: ${sentinelDelivered}`,
     ).toContain('FINAL OUTPUT SENTINEL');
-    expect(terminal.diagnostics().some((entry) => entry.code === 'degraded-output-drain'))
-      .toBe(process.platform === 'win32');
+    // A property of the backend, not of the operating system. This read
+    // `platform === 'win32'` while Windows had only one implementation, and
+    // the native one ends on the pipe — so the degraded drain is exactly what
+    // it no longer needs, and the old form failed the moment that became true.
+    const { backend } = await resolveDefaultPtyBackend();
+    expect(
+      terminal.diagnostics().some((entry) => entry.code === 'degraded-output-drain'),
+      `backend in use: ${backend.name}`,
+    ).toBe(backend.name !== CONPTY_BACKEND_NAME && process.platform === 'win32');
     await terminal.close();
   });
 

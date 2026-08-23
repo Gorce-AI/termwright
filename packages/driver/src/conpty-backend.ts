@@ -14,6 +14,7 @@
  */
 
 import type { ExitStatus } from './api.js';
+import { ProcessLifecycleError } from './internal/process-supervisor.js';
 import type {
   PtyBackend,
   PtyProcess,
@@ -98,8 +99,13 @@ export function createConPtyBackend(spawn: ConPtySpawn): PtyBackend {
         },
         signal(sig: PtySignal): void {
           if (sig !== 'KILL') {
-            throw new Error(
-              `Windows has no ${sig} to deliver; use terminate() for a graceful request or KILL to end the tree`,
+            // The same refusal the node-pty path makes, and typed the same
+            // way. A caller distinguishing "this platform cannot" from "this
+            // failed" reads the code, not the sentence, and a backend swap
+            // must not quietly change which of those it is saying.
+            throw new ProcessLifecycleError(
+              'unsupported-signal',
+              `ConPTY cannot deliver ${sig}; use terminal input for Ctrl+C or KILL for hard termination`,
             );
           }
           session.terminateTree();

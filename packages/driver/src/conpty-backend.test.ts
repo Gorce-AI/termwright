@@ -92,7 +92,12 @@ describe('the ConPTY backend as the driver sees it', () => {
     // graceful shutdown and got silence is worse off than one told the
     // platform has no such thing.
     for (const sig of ['INT', 'TERM', 'HUP'] as const) {
-      expect(() => pty.signal(sig)).toThrow(/Windows has no/u);
+      // The code, not the wording. A caller separating "this platform cannot"
+      // from "this failed" reads that, and swapping backends must not change
+      // which of the two it is being told.
+      expect(() => pty.signal(sig)).toThrowError(
+        expect.objectContaining({ code: 'unsupported-signal' }),
+      );
     }
     expect(session.terminateTree).toHaveBeenCalledTimes(1);
   });
