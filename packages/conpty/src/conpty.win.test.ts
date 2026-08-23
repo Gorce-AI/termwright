@@ -25,6 +25,47 @@ function node(script: string): readonly string[] {
   return [process.execPath, '-e', script];
 }
 
+/**
+ * Waits for a marker in the stream, giving up after a budget.
+ *
+ * The budget is a diagnostic deadline, never a verdict: a test that reaches it
+ * fails with what it did see, so the report names the missing thing instead of
+ * saying only that time ran out. Nothing here treats elapsed time as evidence
+ * of a state.
+ */
+async function waitForMarker(
+  handle: ConPtyHandle,
+  output: { text(): string },
+  pattern: RegExp,
+  budgetMs: number,
+): Promise<RegExpMatchArray | undefined> {
+  const existing = pattern.exec(output.text());
+  if (existing !== null) return existing;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      release();
+      resolve(undefined);
+    }, budgetMs);
+    const release = handle.onData(() => {
+      const match = pattern.exec(output.text());
+      if (match === null) return;
+      clearTimeout(timer);
+      release();
+      resolve(match);
+    });
+  });
+}
+
+/** Whether the operating system still has this process, asked of the OS. */
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
 const environment = (): Readonly<Record<string, string>> => {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -60,7 +101,12 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     // prints afterwards. A session that finished at root exit would lose it.
     const script = [
       'const { spawn } = require("node:child_process");',
-      'spawn(process.execPath, ["-e", "setTimeout(() => process.stdout.write(\\"FINAL_CHILD_MARKER\\\\r\\\\n\\"), 400)"], { stdio: "inherit", detached: false });',
+      'let report;',
+      'try {',
+      '  const child = spawn(process.execPath, ["-e", "setTimeout(() => process.stdout.write(\\"FINAL_CHILD_MARKER\\\\r\\\\n\\"), 400)"], { stdio: "inherit", detached: false });',
+      '  report = child.pid === undefined ? "SPAWN_PID=none" : "SPAWN_PID=" + child.pid;',
+      '} catch (error) { report = "SPAWN_ERROR=" + error.message.replace(/\\s+/g, "_"); }',
+      'process.stdout.write(report + "\\r\\n");',
       'process.exit(0);',
     ].join('');
     const handle = spawnConPty({
@@ -70,12 +116,22 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       rows: 30,
     });
     const output = collect(handle);
+    // The root says whether the descendant was created at all, and with which
+    // pid. Without that, an empty job and a failed spawn look identical.
+    const spawned = await waitForMarker(handle, output, /SPAWN_(?:PID|ERROR)=(\S+)/u, 10_000);
+    expect(spawned, `root never reported a spawn; saw ${JSON.stringify(output.text())}`).toBeDefined();
+    const childPid = Number(spawned?.[1]);
     const rootExit = new Promise<void>((resolve) => { handle.onExit(() => resolve()); });
     await rootExit;
-    // Asserted before the marker on purpose. If the descendant is not in the
-    // job, the session has no reason to stay open and the missing marker means
-    // something entirely different from a flush that came too late.
-    expect(handle.activeProcesses()).toBeGreaterThan(0);
+    // Asked of the operating system and of the job separately, because the two
+    // answers mean different things. A live descendant outside the job is a
+    // containment bug in this backend; a dead one means the spawn is what
+    // failed, and the missing marker is a consequence rather than the fault.
+    const alive = Number.isFinite(childPid) ? processAlive(childPid) : false;
+    expect(
+      handle.activeProcesses(),
+      `descendant ${spawned?.[0]}, alive in the OS: ${alive}`,
+    ).toBeGreaterThan(0);
     await handle.outputEnded;
     expect(handle.sawRealEof).toBe(true);
     expect(output.text()).toContain('FINAL_CHILD_MARKER');
@@ -92,14 +148,32 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       rows: 24,
     });
     expect(handle.resize(120, 40)).toBe(true);
-    // The console announces itself whether or not the child speaks, so this
-    // separates "the session never came up" from "the child never got the
-    // keystroke" — which the bare timeout could not.
-    await new Promise<void>((resolve) => { handle.onData(() => resolve()); });
-    expect(handle.activeProcesses()).toBeGreaterThan(0);
+    // Whether the console announces itself before the child speaks is recorded
+    // rather than required. It is the fact that separates "the session never
+    // came up" from "the child never got the keystroke", and a bare timeout
+    // reported neither.
+    const spoke = await waitForMarker(handle, collect(handle), /[\s\S]/u, 5_000);
+    const processes = handle.activeProcesses();
+    expect(processes, `console spoke first: ${spoke !== undefined}`).toBeGreaterThan(0);
     handle.write(Buffer.from('x'));
-    const exited = new Promise<void>((resolve) => { handle.onExit(() => resolve()); });
-    await exited;
+    const exited = await new Promise<'exit' | 'budget'>((resolve) => {
+      const timer = setTimeout(() => {
+        release();
+        resolve('budget');
+      }, 10_000);
+      const release = handle.onExit(() => {
+        clearTimeout(timer);
+        release();
+        resolve('exit');
+      });
+    });
+    // Naming which wait ran out is the whole difference between a report that
+    // can be acted on and one that says only that something took too long.
+    expect(
+      exited,
+      `child never exited after input; console spoke first: ${spoke !== undefined}, ` +
+        `job members before the write: ${processes}, now: ${handle.activeProcesses()}`,
+    ).toBe('exit');
     await handle.outputEnded;
     handle.dispose();
   });
