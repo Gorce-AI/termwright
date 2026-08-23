@@ -88,9 +88,12 @@ describe('process hygiene', () => {
     expect(pipes()).toBeGreaterThan(before);
 
     await harness.close();
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(pipes()).toBe(before);
+    // Wait for the handles to be gone rather than for a fixed number of ticks.
+    // close() resolving means the endpoint was shut down; libuv reaps the
+    // handle afterwards, and on Windows a named pipe takes longer to come off
+    // the list than one turn of the loop. A leak still fails this — the count
+    // never comes back down — it just is no longer decided by scheduling.
+    await expect.poll(() => pipes(), { timeout: 5_000 }).toBe(before);
     await expect(harness.exit).resolves.toEqual({ code: 0, signal: null });
   });
 });

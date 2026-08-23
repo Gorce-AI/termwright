@@ -15,7 +15,7 @@
     "deterministic-adversarial-fixture-schedule": 36,
     "display-or-persisted-wall-time-not-correctness-order": 85,
     "explicit-external-file-polling": 3,
-    "explicit-external-or-ui-source-polling": 183,
+    "explicit-external-or-ui-source-polling": 184,
     "explicit-test-selection-reviewed-with-platform-registry": 98,
     "managed-or-diagnostic-background-task": 60,
     "production-process-isolation-review": 26,
@@ -1744,6 +1744,12 @@
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "const timer = setTimeout(() => {"
+    },
+    {
+      "path": "packages/ink/src/dormant.test.tsx",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => pipes(), { timeout: 5_000 }).toBe(before);"
     },
     {
       "path": "packages/ink/src/env-mode.test.tsx",
