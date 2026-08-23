@@ -95,6 +95,29 @@ unclosed ConPTY-side pipe handle makes `ReadFile` block for ever. This code
 closes both as soon as `CreatePseudoConsole` has them, so that hazard is
 already avoided.
 
+## What the instrumented run established
+
+The two remaining failures were made to report an intermediate fact rather
+than a fourth hypothesis. Both answered in one round.
+
+**The descendant was never lost.** The root reported a real pid for it, and
+the operating system said that pid was already gone when the test looked. The
+`exit` event was emitted at the bottom of `WaitForRootExit`, after the job had
+drained and the console had been closed, so every listener asking what the
+tree looked like at root exit was told nothing was left. That was the event
+lying about its own timing, not the job failing to hold a descendant. Root
+exit is now reported when the root exits.
+
+**The silent child is an input-path fault.** The console came up, the job held
+one member before the write and one after it, and the child never saw the
+keystroke. That rules out both explanations the earlier timeout allowed —
+the session did start, and the child did not die. What is not yet known is
+whether the child was handed a standard input that is a terminal at all; it
+now reports that before it waits.
+
+Cost so far: four rounds spent guessing, one round spent asking. Every
+remaining boundary in this backend should be approached the second way.
+
 ## Decision
 
 Finish the current addon to a certified contract. Then revisit this table with

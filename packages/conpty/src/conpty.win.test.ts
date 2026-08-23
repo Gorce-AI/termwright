@@ -103,7 +103,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       'const { spawn } = require("node:child_process");',
       'let report;',
       'try {',
-      '  const child = spawn(process.execPath, ["-e", "setTimeout(() => process.stdout.write(\\"FINAL_CHILD_MARKER\\\\r\\\\n\\"), 400)"], { stdio: "inherit", detached: false });',
+      '  const grandchild = "process.stdout.write(\\"CHILD_UP\\\\r\\\\n\\"); setTimeout(() => process.stdout.write(\\"FINAL_CHILD_MARKER\\\\r\\\\n\\"), 400);";',
+      '  const child = spawn(process.execPath, ["-e", grandchild], { stdio: "inherit", detached: false });',
       '  report = child.pid === undefined ? "SPAWN_PID=none" : "SPAWN_PID=" + child.pid;',
       '} catch (error) { report = "SPAWN_ERROR=" + error.message.replace(/\\s+/g, "_"); }',
       'process.stdout.write(report + "\\r\\n");',
@@ -116,21 +117,36 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       rows: 30,
     });
     const output = collect(handle);
-    // The root says whether the descendant was created at all, and with which
-    // pid. Without that, an empty job and a failed spawn look identical.
-    const spawned = await waitForMarker(handle, output, /SPAWN_(?:PID|ERROR)=(\S+)/u, 10_000);
-    expect(spawned, `root never reported a spawn; saw ${JSON.stringify(output.text())}`).toBeDefined();
-    const childPid = Number(spawned?.[1]);
-    const rootExit = new Promise<void>((resolve) => { handle.onExit(() => resolve()); });
+    // Registered before anything is awaited. The root exits within
+    // milliseconds, so a listener attached after the first await can miss the
+    // event entirely and wait for something that has already happened.
+    let rootExited = false;
+    const rootExit = new Promise<void>((resolve) => {
+      handle.onExit(() => {
+        rootExited = true;
+        resolve();
+      });
+    });
+    // `CHILD_UP` is the descendant's own voice: it proves the grandchild ran
+    // and that its output reaches this pseudoconsole, which is what separates
+    // a descendant that was never heard from one that was never delivered.
+    const up = await waitForMarker(handle, output, /CHILD_UP/u, 10_000);
+    expect(
+      up,
+      `descendant never announced itself; root exited: ${rootExited}, ` +
+        `saw ${JSON.stringify(output.text())}`,
+    ).toBeDefined();
+    const spawned = /SPAWN_(?:PID|ERROR)=(\S+)/u.exec(output.text());
     await rootExit;
     // Asked of the operating system and of the job separately, because the two
     // answers mean different things. A live descendant outside the job is a
-    // containment bug in this backend; a dead one means the spawn is what
-    // failed, and the missing marker is a consequence rather than the fault.
+    // containment bug in this backend; a dead one this early means it did not
+    // survive its parent, and the missing marker follows from that.
+    const childPid = Number(spawned?.[1]);
     const alive = Number.isFinite(childPid) ? processAlive(childPid) : false;
     expect(
       handle.activeProcesses(),
-      `descendant ${spawned?.[0]}, alive in the OS: ${alive}, ` +
+      `descendant ${spawned?.[0] ?? 'unreported'}, alive in the OS: ${alive}, ` +
         `marker already delivered: ${output.text().includes('FINAL_CHILD_MARKER')}`,
     ).toBeGreaterThan(0);
     await handle.outputEnded;
@@ -159,8 +175,15 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     const processes = handle.activeProcesses();
     expect(processes, `child never reported its handles; saw ${JSON.stringify(output.text())}`)
       .toBeGreaterThan(0);
-    handle.write(Buffer.from('x'));
-    const exited = await new Promise<'exit' | 'budget'>((resolve) => {
+    // A whole line, not a bare keystroke. A console that has not been put into
+    // raw mode delivers input a line at a time, so a lone `x` sits in the
+    // line buffer and the child waits for a carriage return that never comes —
+    // which is what a silent child looks like from the outside. Sending the
+    // return makes the input complete under either mode.
+    // Armed before the write, because the child can be gone before the next
+    // line of this test runs and a listener attached afterwards would wait for
+    // an event that already happened.
+    const exit = new Promise<'exit' | 'budget'>((resolve) => {
       const timer = setTimeout(() => {
         release();
         resolve('budget');
@@ -171,6 +194,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
         resolve('exit');
       });
     });
+    handle.write(Buffer.from('x\r'));
+    const exited = await exit;
     // Naming which wait ran out is the whole difference between a report that
     // can be acted on and one that says only that something took too long.
     expect(
