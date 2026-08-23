@@ -59,6 +59,29 @@ async function waitForMarker(
   });
 }
 
+/** Waits for a lifecycle notice matching the pattern, within a budget. */
+async function waitForNotice(
+  handle: ConPtyHandle,
+  pattern: RegExp,
+  budgetMs: number,
+): Promise<RegExpMatchArray | undefined> {
+  const existing = handle.notices.map((notice) => pattern.exec(notice)).find((m) => m !== null);
+  if (existing != null) return existing;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      release();
+      resolve(undefined);
+    }, budgetMs);
+    const release = handle.onNotice((notice) => {
+      const match = pattern.exec(notice);
+      if (match === null) return;
+      clearTimeout(timer);
+      release();
+      resolve(match);
+    });
+  });
+}
+
 /** A fresh directory for a probe's on-disk journal, plus the journal's path. */
 function journalPath(name: string): string {
   const directory = mkdtempSync(join(tmpdir(), `tw-conpty-${name}-`));
@@ -188,6 +211,11 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     // then the console closing at root exit is this backend killing it.
     const membersWithRootAlive = handle.activeProcesses();
     await rootExit;
+    // The session's own count, taken natively at the instant the root left.
+    // The exit event reaches JavaScript first and the notice that describes it
+    // follows, so reading the account inside the exit listener sees the moment
+    // before it — which is how the last run came back with nothing recorded.
+    const atRootExit = await waitForNotice(handle, /root exited with \d+; job members (-?\d+)/u, 5_000);
     // Asked of the operating system and of the job separately, because the two
     // answers mean different things. A live descendant outside the job is a
     // containment bug in this backend; a dead one this early means it did not
@@ -199,6 +227,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       `descendant ${spawned?.[0] ?? 'unreported'}, alive in the OS: ${alive}, ` +
         `job members while the root was alive: ${membersWithRootAlive}, ` +
         `marker already delivered: ${output.text().includes('FINAL_CHILD_MARKER')}, ` +
+        `job members the session counted at root exit: ${atRootExit?.[1] ?? 'unrecorded'}, ` +
         `its own journal says: ${JSON.stringify(readJournal(journal))}, ` +
         `the session says: ${JSON.stringify(handle.notices)}`,
     ).toBeGreaterThan(0);

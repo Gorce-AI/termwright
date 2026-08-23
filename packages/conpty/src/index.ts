@@ -173,6 +173,14 @@ export interface ConPtyHandle {
   onData(listener: (data: Uint8Array) => void): () => void;
   onExit(listener: (status: ConPtyExit) => void): () => void;
   onError(listener: (error: Error) => void): () => void;
+  /**
+   * Lifecycle notices as they are recorded.
+   *
+   * A notice describing an instant arrives after the event it follows, so
+   * reading `notices` inside an exit listener sees the state before it. This
+   * is how a caller waits for the account rather than racing it.
+   */
+  onNotice(listener: (message: string) => void): () => void;
   dispose(): void;
 }
 
@@ -181,6 +189,7 @@ export function spawnConPty(options: ConPtySpawnOptions): ConPtyHandle {
   const dataListeners = new Set<(data: Uint8Array) => void>();
   const exitListeners = new Set<(status: ConPtyExit) => void>();
   const errorListeners = new Set<(error: Error) => void>();
+  const noticeListeners = new Set<(message: string) => void>();
 
   let resolveEnded: (() => void) | undefined;
   const outputEnded = new Promise<void>((resolve) => { resolveEnded = resolve; });
@@ -223,6 +232,7 @@ export function spawnConPty(options: ConPtySpawnOptions): ConPtyHandle {
           // ones are the ones that describe how it ended.
           if (notices.length >= NOTICE_LIMIT) notices.shift();
           notices.push(event.message);
+          for (const listener of [...noticeListeners]) listener(event.message);
           return;
         case 'error': {
           const failure = Object.assign(new Error(event.message), { win32: event.code });
@@ -264,6 +274,10 @@ export function spawnConPty(options: ConPtySpawnOptions): ConPtyHandle {
     onError(listener): () => void {
       errorListeners.add(listener);
       return () => errorListeners.delete(listener);
+    },
+    onNotice(listener): () => void {
+      noticeListeners.add(listener);
+      return () => noticeListeners.delete(listener);
     },
     dispose(): void {
       if (disposed) return;
