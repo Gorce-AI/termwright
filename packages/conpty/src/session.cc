@@ -135,18 +135,21 @@ bool Session::Start(const SpawnOptions& options, EventSink sink, void* context, 
     return false;
   }
 
-  // Released immediately after setup: from here the pseudoconsole outlives
-  // only its clients, so when the last one detaches the output pipe ends and
-  // the reader below sees a real EOF instead of waiting on a handle the host
-  // is itself holding open.
-  ReleasePseudoConsoleIfSupported();
+  // Detected now, released later. Releasing here tears the pseudoconsole down
+  // before the child has attached to it: the first run produced an immediate
+  // EOF with no bytes, no input accepted and no exit, while the job still
+  // showed a live process — a child running against a console that had already
+  // gone. The release happens when the root exits, which is the first moment
+  // the host demonstrably no longer needs to hold it, and descendants that are
+  // still attached keep it alive until the last one detaches.
+  static ReleasePseudoConsoleFn detected = LoadReleasePseudoConsole();
+  release_supported_ = detected != nullptr;
   return true;
 }
 
 void Session::ReleasePseudoConsoleIfSupported() {
   static ReleasePseudoConsoleFn release = LoadReleasePseudoConsole();
-  release_supported_ = release != nullptr;
-  if (!release_supported_ || pseudoconsole_ == nullptr) return;
+  if (release == nullptr || pseudoconsole_ == nullptr) return;
   if (released_.exchange(true)) return;
   release(pseudoconsole_);
   state_.store(State::kReleased);
@@ -179,6 +182,10 @@ void Session::ReaderLoop() {
       state_.store(State::kSourceEof);
       SessionEvent end;
       end.kind = EventKind::kEof;
+      // How the pipe ended, not merely that it did. A stream that ends for the
+      // wrong reason looks identical to one that ended properly, and the
+      // difference is the whole claim this backend makes.
+      end.last_error = ok ? 0 : code;
       Emit(std::move(end));
       return;
     }
@@ -233,6 +240,10 @@ void Session::WaitForRootExit() {
   if (previous != State::kSourceEof && previous != State::kDisposed) {
     state_.store(State::kRootExited);
   }
+  // Now let go. From here the pseudoconsole outlives only its clients, so once
+  // the last descendant detaches the output pipe ends and the reader sees a
+  // real EOF rather than waiting on a handle the host is itself holding open.
+  ReleasePseudoConsoleIfSupported();
   SessionEvent exited;
   exited.kind = EventKind::kExit;
   exited.exit_code = code;

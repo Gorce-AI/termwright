@@ -134,6 +134,7 @@ class ConPtySession : public Napi::ObjectWrap<ConPtySession> {
             }
             case termwright::EventKind::kEof: {
               message.Set("type", Napi::String::New(env, "eof"));
+              message.Set("code", Napi::Number::New(env, static_cast<double>(owned->last_error)));
               break;
             }
             case termwright::EventKind::kError: {

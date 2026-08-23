@@ -47,6 +47,10 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     // The stream ended because the pipe ended, and everything written before
     // that is already here — the ordering is the point of the single channel.
     expect(handle.sawRealEof).toBe(true);
+    // ERROR_BROKEN_PIPE is the ordinary end once the last client detaches; 0
+    // is a clean zero-byte read. Anything else means the stream ended for a
+    // reason, and naming it here is what makes that visible.
+    expect([0, 109]).toContain(handle.endReason);
     expect(output.text()).toContain('FINAL_SENTINEL');
     handle.dispose();
   });

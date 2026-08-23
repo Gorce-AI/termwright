@@ -17,7 +17,7 @@ import { createRequire } from 'node:module';
 type NativeEvent =
   | { readonly type: 'data'; readonly data: Buffer }
   | { readonly type: 'exit'; readonly exitCode: number }
-  | { readonly type: 'eof' }
+  | { readonly type: 'eof'; readonly code: number }
   | { readonly type: 'error'; readonly message: string; readonly code: number };
 
 interface NativeSession {
@@ -144,6 +144,13 @@ export interface ConPtyHandle {
    * separates the two, and nothing but the reader sets it.
    */
   readonly sawRealEof: boolean;
+  /**
+   * The Win32 code the terminating read reported, or 0 for a clean end.
+   *
+   * A stream that ended for the wrong reason looks exactly like one that ended
+   * properly, and telling them apart is the claim this backend exists to make.
+   */
+  readonly endReason: number | undefined;
   write(data: Uint8Array): void;
   resize(columns: number, rows: number): boolean;
   terminateTree(): void;
@@ -163,6 +170,7 @@ export function spawnConPty(options: ConPtySpawnOptions): ConPtyHandle {
   let resolveEnded: (() => void) | undefined;
   const outputEnded = new Promise<void>((resolve) => { resolveEnded = resolve; });
   let ended = false;
+  let endReason: number | undefined;
   let disposed = false;
 
   const session = new binding.ConPtySession(
@@ -186,6 +194,7 @@ export function spawnConPty(options: ConPtySpawnOptions): ConPtyHandle {
           return;
         }
         case 'eof':
+          endReason = event.code;
           // Delivered on the same ordered channel as the data before it, so
           // every chunk has already reached its listeners by now.
           ended = true;
@@ -204,6 +213,7 @@ export function spawnConPty(options: ConPtySpawnOptions): ConPtyHandle {
     get pid(): number { return session.pid; },
     get releaseSupported(): boolean { return session.releaseSupported; },
     get sawRealEof(): boolean { return ended; },
+    get endReason(): number | undefined { return endReason; },
     outputEnded,
     write(data: Uint8Array): void {
       if (disposed) return;
