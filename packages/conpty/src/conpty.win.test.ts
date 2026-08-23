@@ -72,6 +72,10 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     const output = collect(handle);
     const rootExit = new Promise<void>((resolve) => { handle.onExit(() => resolve()); });
     await rootExit;
+    // Asserted before the marker on purpose. If the descendant is not in the
+    // job, the session has no reason to stay open and the missing marker means
+    // something entirely different from a flush that came too late.
+    expect(handle.activeProcesses()).toBeGreaterThan(0);
     await handle.outputEnded;
     expect(handle.sawRealEof).toBe(true);
     expect(output.text()).toContain('FINAL_CHILD_MARKER');
@@ -88,6 +92,11 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       rows: 24,
     });
     expect(handle.resize(120, 40)).toBe(true);
+    // The console announces itself whether or not the child speaks, so this
+    // separates "the session never came up" from "the child never got the
+    // keystroke" — which the bare timeout could not.
+    await new Promise<void>((resolve) => { handle.onData(() => resolve()); });
+    expect(handle.activeProcesses()).toBeGreaterThan(0);
     handle.write(Buffer.from('x'));
     const exited = new Promise<void>((resolve) => { handle.onExit(() => resolve()); });
     await exited;
