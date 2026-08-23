@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { conPtyAvailable, spawnConPty, type ConPtyHandle } from './index.js';
 
@@ -56,6 +59,21 @@ async function waitForMarker(
   });
 }
 
+/** A fresh directory for a probe's on-disk journal, plus the journal's path. */
+function journalPath(name: string): string {
+  const directory = mkdtempSync(join(tmpdir(), `tw-conpty-${name}-`));
+  return join(directory, 'journal.log');
+}
+
+/** What a probe managed to record before it stopped, or why nothing is there. */
+function readJournal(path: string): string {
+  try {
+    return readFileSync(path, 'utf8').trim() || '(empty)';
+  } catch (error) {
+    return `(unreadable: ${(error as NodeJS.ErrnoException).code ?? 'unknown'})`;
+  }
+}
+
 /** Whether the operating system still has this process, asked of the OS. */
 function processAlive(pid: number): boolean {
   try {
@@ -97,20 +115,39 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
   });
 
   it('keeps the stream open for a descendant that outlives its root', async () => {
-    // The root exits immediately; the grandchild holds the pseudoconsole and
-    // prints afterwards. A session that finished at root exit would lose it.
-    // The root outlives the spawn by a short while on purpose. Exiting in the
-    // same tick made every outcome look alike: the descendant's first word,
-    // its death and the console's teardown all landed after the last thing the
-    // test could observe. Staying alive briefly puts the descendant's start on
-    // one side of root exit and its final word on the other, so which of them
-    // survives is a fact about this backend rather than about scheduling.
+    // The root stays alive briefly past the spawn, so the descendant's first
+    // word falls before root exit and its last word after it. Exiting in the
+    // same tick made every outcome look alike: the descendant's start, its
+    // death and the console's teardown all landed after the last thing the
+    // test could see.
+    //
+    // The descendant also keeps a journal on disk. Everything it could say
+    // through the console dies with the console, which is precisely the moment
+    // in question, so the one channel that survives the console is the one
+    // that can report what happened to it.
+    const journal = journalPath('descendant');
+    const grandchild = join(dirname(journal), 'grandchild.cjs');
+    writeFileSync(
+      grandchild,
+      [
+        'const fs = require("node:fs");',
+        'const note = (line) => { try { fs.appendFileSync(process.env.TW_PROBE_JOURNAL, line + "\\n"); } catch {} };',
+        'note("up pid=" + process.pid);',
+        'for (const signal of ["SIGHUP", "SIGINT", "SIGBREAK", "SIGTERM"]) {',
+        '  try { process.on(signal, () => { note("signal " + signal); process.exit(9); }); } catch { note("no handler for " + signal); }',
+        '}',
+        'process.on("exit", (code) => note("exit " + code));',
+        'process.stdout.on("error", (failure) => note("stdout error " + failure.code));',
+        'process.stdout.write("CHILD_UP\\r\\n");',
+        'setTimeout(() => { note("timer fired"); process.stdout.write("FINAL_CHILD_MARKER\\r\\n"); }, 400);',
+      ].join('\n'),
+      'utf8',
+    );
     const script = [
       'const { spawn } = require("node:child_process");',
-      'const grandchild = "process.stdout.write(\\"CHILD_UP\\\\r\\\\n\\"); setTimeout(() => process.stdout.write(\\"FINAL_CHILD_MARKER\\\\r\\\\n\\"), 400);";',
       'let report;',
       'try {',
-      '  const child = spawn(process.execPath, ["-e", grandchild], { stdio: "inherit", detached: false });',
+      '  const child = spawn(process.execPath, [process.env.TW_PROBE_SCRIPT], { stdio: "inherit", detached: false });',
       '  report = child.pid === undefined ? "SPAWN_PID=none" : "SPAWN_PID=" + child.pid;',
       '  child.on("exit", (code, signal) => process.stdout.write("CHILD_EXIT=" + code + "/" + signal + "\\r\\n"));',
       '  child.on("error", (failure) => process.stdout.write("CHILD_ERROR=" + failure.message.replace(/\\s+/g, "_") + "\\r\\n"));',
@@ -120,7 +157,7 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     ].join('');
     const handle = spawnConPty({
       command: node(script),
-      env: environment(),
+      env: { ...environment(), TW_PROBE_JOURNAL: journal, TW_PROBE_SCRIPT: grandchild },
       columns: 100,
       rows: 30,
     });
@@ -161,7 +198,8 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
       handle.activeProcesses(),
       `descendant ${spawned?.[0] ?? 'unreported'}, alive in the OS: ${alive}, ` +
         `job members while the root was alive: ${membersWithRootAlive}, ` +
-        `marker already delivered: ${output.text().includes('FINAL_CHILD_MARKER')}`,
+        `marker already delivered: ${output.text().includes('FINAL_CHILD_MARKER')}, ` +
+        `its own journal says: ${JSON.stringify(readJournal(journal))}`,
     ).toBeGreaterThan(0);
     await handle.outputEnded;
     expect(handle.sawRealEof).toBe(true);
