@@ -149,6 +149,12 @@ describe('TermwrightTestHost', () => {
     engine.blockRun = new Promise(() => undefined);
     const host = TermwrightTestHost.fromEngine(engine, {
       ...hostOptions(),
+      // The budget under test is the one spent executing. Real run-history
+      // I/O is not part of that and is slow enough on a loaded Windows runner
+      // to consume the whole 250 ms before execution starts, which reported
+      // the deadline against "run history startup" instead. An in-memory
+      // writer removes that variable without touching what is asserted.
+      runManifestWriter: MEMORY_RUN_MANIFEST_WRITER,
       timeouts: { runMs: 250, finalizationReserveMs: 100 },
     });
     const started = performance.now();
@@ -471,6 +477,15 @@ describe('TermwrightTestHost', () => {
     await host.close();
   });
 });
+
+/** Run history without disk I/O, for tests measuring something other than it. */
+const MEMORY_RUN_MANIFEST_WRITER = {
+  async mkdir(): Promise<void> {},
+  async exists(): Promise<boolean> { return false; },
+  async writeExclusive(): Promise<void> {},
+  async syncDirectory(): Promise<void> {},
+  async rename(): Promise<void> {},
+};
 
 function hostOptions() {
   return {

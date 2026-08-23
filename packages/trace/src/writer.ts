@@ -746,8 +746,20 @@ async function writeDurable(path: string, body: string): Promise<void> {
 }
 
 async function fsyncDirectory(path: string): Promise<void> {
-  const handle = await open(path, 'r');
-  try { await handle.sync(); } finally { await handle.close(); }
+  let handle;
+  try {
+    handle = await open(path, 'r');
+    await handle.sync();
+  } catch (error) {
+    // Windows does not expose directory fsync through Node — opening the
+    // handle fails with EPERM. Its same-volume MoveFileEx-backed rename is
+    // still atomic, so the durability this call provides elsewhere is not
+    // lost; failing here would report a platform limitation as a trace write
+    // error. This mirrors the same decision in @termwright/run-history.
+    if (process.platform !== 'win32') throw error;
+  } finally {
+    await handle?.close();
+  }
 }
 
 function sha256(body: string): string {
