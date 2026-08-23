@@ -26,6 +26,20 @@ async function launch(props: Record<string, string> = {}): Promise<InkFixtureHar
   return harness;
 }
 
+/**
+ * Why a rerender assertion failed, in the terms that separate the two possible
+ * causes: a revision paired with a screen revision means the emulator had
+ * parsed the frame, so a stale screen would be the emulator's fault; a null
+ * pairedScreenRevision means the revision published without ever being tied to
+ * a terminal frame, and the screen was never promised to be current.
+ */
+function pairing(harness: InkFixtureHarness): string {
+  const stamp = harness.checkpoint();
+  return `semanticRevision=${String(stamp.semanticRevision)} ` +
+    `pairedScreenRevision=${String(stamp.pairedScreenRevision)} ` +
+    `screenRevision=${String(stamp.screenRevision)}`;
+}
+
 describe('fixture rerender', () => {
   it('changes props, and the new frame and tree follow', async () => {
     const harness = await launch({ label: 'Approve' });
@@ -33,8 +47,8 @@ describe('fixture rerender', () => {
 
     await harness.rerender({ label: 'Reject', greeting: 'updated' });
 
-    expect(harness.screen().text()).toContain('Reject');
-    expect(harness.screen().text()).toContain('updated');
+    expect(harness.screen().text(), pairing(harness)).toContain('Reject');
+    expect(harness.screen().text(), pairing(harness)).toContain('updated');
     expect(await harness.getByRole('button', { name: 'Reject' }).count()).toBe(1);
     expect(await harness.getByRole('button', { name: 'Approve' }).count()).toBe(0);
   });
@@ -49,8 +63,8 @@ describe('fixture rerender', () => {
 
     // React reconciles rather than remounting: the press count survives, which
     // is what makes this a prop update and not a relaunch.
-    expect(harness.screen().text()).toContain('pressed 1');
-    expect(harness.screen().text()).toContain('Renamed');
+    expect(harness.screen().text(), pairing(harness)).toContain('pressed 1');
+    expect(harness.screen().text(), pairing(harness)).toContain('Renamed');
   });
 
   it('settles the exact causal publication when an effect immediately adds another frame', async () => {
@@ -60,8 +74,8 @@ describe('fixture rerender', () => {
     await harness.rerender({ label: 'Causal', followup: 'effect frame' });
 
     expect(harness.checkpoint().semanticRevision).toBeGreaterThan(before);
-    expect(harness.screen().text()).toContain('Causal');
-    expect(harness.screen().text()).toContain('followup effect frame');
+    expect(harness.screen().text(), pairing(harness)).toContain('Causal');
+    expect(harness.screen().text(), pairing(harness)).toContain('followup effect frame');
     expect(await harness.getByRole('button', { name: 'Causal' }).count()).toBe(1);
   });
 
@@ -72,7 +86,7 @@ describe('fixture rerender', () => {
 
     // An unrelated title animation keeps producing terminal revisions. The
     // exact semantic marker is nevertheless a complete rerender boundary.
-    expect(harness.screen().text()).toContain('Animated');
+    expect(harness.screen().text(), pairing(harness)).toContain('Animated');
     expect(await harness.getByRole('button', { name: 'Animated' }).count()).toBe(1);
   });
 
@@ -86,7 +100,7 @@ describe('fixture rerender', () => {
     // The id-less reply protocol previously overwrote the first pending
     // command here, causing one promise to time out. Both acknowledgements now
     // correspond to ordered, independently observed commits.
-    expect(harness.screen().text()).toContain('Second');
+    expect(harness.screen().text(), pairing(harness)).toContain('Second');
     expect(await harness.getByRole('button', { name: 'Second' }).count()).toBe(1);
   });
 
@@ -131,7 +145,7 @@ describe('fixture rerender', () => {
     // A second connection to an already-attached channel is dropped, so even a
     // caller that learned the address cannot drive the fixture.
     await harness.rerender({ label: 'Still ours' });
-    expect(harness.screen().text()).toContain('Still ours');
+    expect(harness.screen().text(), pairing(harness)).toContain('Still ours');
   });
 
   it('closes its control channel when the harness closes', async () => {
