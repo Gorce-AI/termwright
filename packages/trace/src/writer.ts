@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { mkdir, mkdtemp, rename, unlink, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { DEFAULT_ARTIFACT_VALUE_POLICY, projectActionReceiptForArtifact, projectSemanticSnapshotForArtifact, type ArtifactValuePolicy, type EffectiveSessionContract, type SemanticSnapshot } from '@termwright/protocol';
 import type { SessionEventRecord, SessionEvents } from '@termwright/driver';
 import { formatCastEvent, formatCastHeader, type CastEventCode, type CastHeader } from './cast.js';
@@ -655,6 +655,19 @@ interface WriteArchiveInput {
 }
 
 /** Applies the timeline transforms and writes the four archive files. */
+/**
+ * The prefix a half-written trace directory carries.
+ *
+ * It leads with the target's basename rather than the staging marker on
+ * purpose: run-history names its own incomplete runs `.staging-<run>` and
+ * reads every directory with that prefix as one, so a trace staged in the same
+ * place would be decoded as a half-written run. Keeping the basename in front
+ * makes the two namespaces unmistakable.
+ */
+export function traceStagingPrefix(target: string): string {
+  return `.${basename(target)}.staging-`;
+}
+
 async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
   const ordered = [...input.castEvents].sort((a, b) => a.wall - b.wall || a.seq - b.seq);
   const idleLimitMs =
@@ -719,11 +732,13 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
   const target = resolve(input.dir);
   const parent = dirname(target);
   await mkdir(parent, { recursive: true });
-  // The staging name deliberately omits the target's basename. Repeating a
-  // name that already carries a slug and two UUIDs pushed the staging path
-  // past the Windows limit and failed the write outright; mkdtemp is what
-  // makes it unique, and .incomplete records which target it belongs to.
-  const staging = await mkdtemp(join(parent, '.staging-'));
+  // Keep the target's basename in front of the marker. A bare `.staging-`
+  // prefix is how run-history names its own incomplete runs, and it treats
+  // every directory with that prefix as one of them — so a trace staged beside
+  // them was read as a half-written run. The Windows path limit that motivated
+  // shortening this is handled where the length actually comes from: the trace
+  // name's slug is bounded (see the test package's traceDir).
+  const staging = await mkdtemp(join(parent, traceStagingPrefix(target)));
   const files: Record<string, string> = {
     [TRACE_FILES.meta]: `${JSON.stringify(meta, null, 2)}\n`,
     [TRACE_FILES.cast]: `${castLines.join('\n')}\n`,

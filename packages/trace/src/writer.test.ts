@@ -6,7 +6,7 @@ import { FakeSession, node, snapshot } from './__fixtures__/fake-session.js';
 import { parseCast } from './cast.js';
 import { openTrace } from './reader.js';
 import { TRACE_FILES, type TraceEvent } from './types.js';
-import { createTraceWriter } from './writer.js';
+import { createTraceWriter, traceStagingPrefix } from './writer.js';
 import { createRunId } from '@termwright/protocol';
 
 const temporaries: string[] = [];
@@ -32,6 +32,19 @@ async function readEvents(dir: string): Promise<TraceEvent[]> {
     .filter((line) => line.trim() !== '')
     .map((line) => JSON.parse(line) as TraceEvent);
 }
+
+describe('trace staging names', () => {
+  it('cannot be mistaken for a half-written run', () => {
+    // run-history names its own incomplete runs `.staging-<run>` and decodes
+    // every directory with that prefix as one. A trace staged in the same
+    // place must not answer to it, or a half-written trace is read back as a
+    // half-written run.
+    const prefix = traceStagingPrefix('/runs/twtrace-abc');
+    expect(prefix.startsWith('.staging-')).toBe(false);
+    expect(prefix).toBe('.twtrace-abc.staging-');
+    expect(prefix).toContain('.staging-');
+  });
+});
 
 describe('createTraceWriter', () => {
   it('replays output, semantic state and exit emitted before the writer attaches', async () => {
