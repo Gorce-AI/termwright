@@ -130,6 +130,33 @@ describe('ProcessSupervisor', () => {
     expect(pty.disposeCount).toBe(1);
   });
 
+  it('still releases the pseudo-terminal when the shutdown budget is already spent', async () => {
+    // An expired deadline means an earlier phase used the budget, not that the
+    // caller made a mistake. Refusing from the argument check leaked the
+    // backend handle at exactly the moment it most needed releasing.
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' } });
+    const rejected = expect(supervisor(pty, clock).shutdown({ deadline: clock.now, gracefulMs: 100 }))
+      .rejects.toMatchObject({
+        name: 'ProcessLifecycleError',
+        message: expect.stringContaining('deadline already expired'),
+      });
+    // The manual clock only fires the already-due deadline timer when it moves.
+    clock.advance(1);
+    await rejected;
+    expect(pty.disposeCount).toBe(1);
+    expect(pty.signals).toEqual(['KILL']);
+  });
+
+  it('rejects an unusable deadline without touching the backend', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' } });
+    await expect(supervisor(pty, clock).shutdown({ deadline: Number.NaN, gracefulMs: 100 }))
+      .rejects.toMatchObject({ name: 'ProcessLifecycleError' });
+    expect(pty.disposeCount).toBe(0);
+    expect(pty.signals).toEqual([]);
+  });
+
   it('does not attempt a hang-up on Windows, where the backend cannot carry one', async () => {
     // ConPTY has no hang-up signal and the backend rejects HUP outright, so
     // sending it recorded a cleanup failure on every teardown down this path.

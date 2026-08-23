@@ -2428,8 +2428,15 @@ describe.skipIf(!ptyAvailable())(
       await terminal.settled();
       await terminal.write("a");
       await terminal.waitForText("name: [a]");
+      // Text on screen is a VT fact; the planner refuses on a causal one. Ask
+      // for the committed observation first, or the click races the pairing
+      // and is refused as stale before it can be refused for the reason under
+      // test — two correct outcomes, one of which is not what this asserts.
+      // The violation may surface from either call, and both are this bug.
       await expect(
-        terminal.getByTestId("approve").click(),
+        terminal
+          .waitForCommittedObservation()
+          .then(() => terminal.getByTestId("approve").click()),
       ).rejects.toMatchObject({
         code: "capability-provider-violation",
         message: expect.stringContaining(

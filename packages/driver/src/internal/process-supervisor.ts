@@ -127,18 +127,29 @@ export class ProcessSupervisor {
   }
 
   async #shutdown(options: ProcessShutdownOptions): Promise<ExitStatus> {
-    if (!Number.isFinite(options.deadline) || options.deadline <= this.#now()) {
-      throw new ProcessLifecycleError('cleanup-failed', 'process shutdown deadline already expired');
+    // A non-finite deadline or a negative grace interval is a caller mistake,
+    // and rejecting one must not release a backend the caller still owns.
+    if (!Number.isFinite(options.deadline)) {
+      throw new ProcessLifecycleError('cleanup-failed', 'process shutdown deadline must be a finite monotonic instant');
     }
     if (!Number.isFinite(options.gracefulMs) || options.gracefulMs < 0) {
       throw new ProcessLifecycleError('cleanup-failed', 'process graceful interval must be non-negative');
     }
+    // An expired deadline is not a caller mistake — it means an earlier phase
+    // consumed the budget — and it used to throw from here, above the block
+    // whose `finally` disposes the pseudo-terminal. That leaked the backend
+    // handle at the one moment it most needed releasing. It is now recorded as
+    // a cleanup failure and drives the escalation below, so the shutdown still
+    // reports the same problem and still hands the handle back.
+    const budgetSpent = options.deadline <= this.#now();
 
     if (options.observedExit !== undefined) this.observeExit(options.observedExit);
     let observed: ExitStatus | null = this.#observedExit;
     let resolveExit: ((status: ExitStatus) => void) | undefined;
     const exit = new Promise<ExitStatus>((resolve) => { resolveExit = resolve; });
-    const failures: unknown[] = [];
+    const failures: unknown[] = budgetSpent
+      ? [new ProcessLifecycleError('cleanup-failed', 'process shutdown deadline already expired')]
+      : [];
     let deadlineTimer: unknown;
     const deadlineExpired = new Promise<null>((resolve) => {
       deadlineTimer = this.#timers.set(() => resolve(null), options.deadline - this.#now());
@@ -159,7 +170,11 @@ export class ProcessSupervisor {
     }
     try {
       const lifecycle = this.#pty.lifecycle;
-      if (observed !== null) {
+      if (budgetSpent && observed === null) {
+        // No time remains for a graceful request or for waiting on one, so the
+        // strongest operation available is the only honest one left.
+        this.#trySignal('KILL', failures);
+      } else if (observed !== null) {
         // The backend already proved exit. Do not signal a dead process or
         // wait for a one-shot event that cannot be replayed.
       } else if (!canObserveExit) {
