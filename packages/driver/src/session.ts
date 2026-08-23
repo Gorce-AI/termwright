@@ -228,7 +228,7 @@ const MAX_DIAGNOSTICS = 200;
  * child that had in fact exited. Nothing is assumed either way: real exit
  * evidence is still required, and its absence is still a cleanup failure.
  */
-const CLOSE_GRACE_MS = process.platform === 'win32' ? 10_000 : 2_000;
+export const CLOSE_GRACE_MS = process.platform === 'win32' ? 10_000 : 2_000;
 
 /** Options accepted by {@link launchTerminal}, plus the injectable backend. */
 export interface LaunchTerminalOptions extends LaunchOptions {

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ENV_ENDPOINT } from '@termwright/protocol';
 import type { ExitStatus } from './api.js';
 import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
-import { launchTerminal } from './session.js';
+import { CLOSE_GRACE_MS, launchTerminal } from './session.js';
 
 class ControlledPty implements PtyProcess {
   readonly pid = 42;
@@ -218,7 +218,10 @@ describe('terminal session resource lifecycle', () => {
       // ResourceScope starts disposers in a microtask. Arm the supervisor's
       // absolute deadline before advancing the manual clock to that boundary.
       await vi.advanceTimersByTimeAsync(0);
-      await vi.advanceTimersByTimeAsync(2_000);
+      // The close deadline is what this test drives to, so it advances by
+      // that budget rather than a copy of it — the budget is larger on
+      // Windows, where a pseudoconsole teardown is confirmed asynchronously.
+      await vi.advanceTimersByTimeAsync(CLOSE_GRACE_MS);
       await closed;
       await Promise.resolve();
 
