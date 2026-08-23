@@ -611,9 +611,18 @@ export class TermwrightTestHost {
           const test = active.catalog?.tests.find((candidate) => candidate.runnerTaskId === task);
           return test === undefined ? task : `${test.file} > ${test.fullName}`;
         };
+        // The last event the run did see for an attempt separates "the worker
+        // stopped talking right after it started" from "it kept reporting and
+        // only the terminal event is missing". Those have different causes and
+        // the barrier is where a reader finds out which one happened.
+        const lastSeen = (attemptId: string): string => {
+          const events = active.recorded.filter((event) => event.identity.attemptId === attemptId);
+          const last = events.at(-1);
+          return last === undefined ? 'no events' : `${events.length} events, last ${last.type}`;
+        };
         const lifecycleFailure = new Error(
           `authoritative attempt journal incomplete: ${unfinished.length} attempts unfinished` +
-          `${unfinished.length === 0 ? '' : ` (${unfinished.slice(0, 8).map(([, attempt]) => named(attempt.task)).join('; ')})`}` +
+          `${unfinished.length === 0 ? '' : ` (${unfinished.slice(0, 8).map(([attemptId, attempt]) => `${named(attempt.task)} [${lastSeen(attemptId)}]`).join('; ')})`}` +
           `, ${missingTasks.length} executed tasks without a finished attempt` +
           `${missingTasks.length === 0 ? '' : ` (${missingTasks.slice(0, 8).map(named).join('; ')})`}`,
         );
