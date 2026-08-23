@@ -138,7 +138,7 @@ Deviation closure policy`.split('\n');
 if (titles.length !== 128) throw new Error(`mission title inventory has ${titles.length} entries, expected 128`);
 
 const partial = new Map([
-  [53, 'The embedded Vitest 3.2.7 API is exact-pinned and the local 3.1.4/3.2.7/4.1.11 pressure comparison is 12/12 green; the Windows comparison still needs a reviewed current Node 22/24 run.'],
+  [53, 'The embedded engine is exact-pinned to Vitest 4.1.11, migrated from 3.2.7 to drop tinypool, whose ProcessWorker.send teardown crash blocked Windows; the local 3.1.4/3.2.7/4.1.11 pressure comparison is 12/12 green and the Windows comparison still needs a reviewed current Node 22/24 run.'],
   [70, 'Infrastructure telemetry and the independent pressure harness exist; the current Windows Node 22/24 matrix result is external execution evidence and is not fabricated locally.'],
   [79, 'POSIX group teardown is proven. ConPTY captures and verifies its console tree on hard kill, but the adversarial natural-root-exit descendant proof still requires the real Windows lane.'],
   [81, 'Unix owns an authoritative EOF boundary. Exact ConPTY beta.15 destroys output after a private timer and therefore remains explicitly degraded rather than falsely EOF-certified.'],
@@ -190,7 +190,7 @@ const report = {
   policy: {
     productMode: 'termwright-native-host-only',
     backwardsCompatibility: false,
-    embeddedEngine: 'vitest@3.2.7',
+    embeddedEngine: 'vitest@4.1.11',
     certificationRule: 'partial sections cannot support the final cross-platform certification claim',
   },
   baselineCiEvidence: {

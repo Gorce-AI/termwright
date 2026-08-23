@@ -57,7 +57,7 @@ npx termwright ui
 ```
 
 All three commands use one certified Termwright host backed by exactly certified
-Vitest 3.2.7. It is embedded as the generic engine, not selected or launched by
+Vitest 4.1.11. It is embedded as the generic engine, not selected or launched by
 the user. Termwright owns run and attempt identity, terminal resource
 budgets, cleanup, event integrity and flaky-run classification; Vitest supplies
 collection, transforms, mocks, assertions and the authoring DSL.

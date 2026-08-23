@@ -5,7 +5,7 @@
   "policy": {
     "productMode": "termwright-native-host-only",
     "backwardsCompatibility": false,
-    "embeddedEngine": "vitest@3.2.7",
+    "embeddedEngine": "vitest@4.1.11",
     "certificationRule": "partial sections cannot support the final cross-platform certification claim"
   },
   "baselineCiEvidence": {
@@ -582,7 +582,7 @@
         "packages/test/src/runner.test.ts",
         "scripts/run-vitest-pty-matrix.mjs"
       ],
-      "remainingEvidence": "The embedded Vitest 3.2.7 API is exact-pinned and the local 3.1.4/3.2.7/4.1.11 pressure comparison is 12/12 green; the Windows comparison still needs a reviewed current Node 22/24 run."
+      "remainingEvidence": "The embedded engine is exact-pinned to Vitest 4.1.11, migrated from 3.2.7 to drop tinypool, whose ProcessWorker.send teardown crash blocked Windows; the local 3.1.4/3.2.7/4.1.11 pressure comparison is 12/12 green and the Windows comparison still needs a reviewed current Node 22/24 run."
     },
     {
       "section": 54,

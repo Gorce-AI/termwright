@@ -179,7 +179,7 @@ output machine-readable, and failures carry a `kind`.
 
 ## Requirements
 
-Node >= 22, ESM only. The native host embeds and certifies exactly Vitest 3.2.7
+Node >= 22, ESM only. The native host embeds and certifies exactly Vitest 4.1.11
 as its collection/transform/assertion engine. It is an implementation surface,
 not a user-selectable runner range.
 

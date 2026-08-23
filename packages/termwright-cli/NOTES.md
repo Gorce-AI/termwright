@@ -5,7 +5,7 @@ Decisions that are not obvious from the code.
 ## One product host
 
 `termwright test`, `termwright watch`, and `termwright ui` are three commands
-over one `TermwrightTestHost`. The host embeds exact-certified Vitest 3.2.7 for
+over one `TermwrightTestHost`. The host embeds exact-certified Vitest 4.1.11 for
 collection, transforms, mocks, assertions and worker execution. Termwright owns
 the run identity, exact runner, EventJournal, ResourceBroker, persistence,
 terminal cleanup and UI projection.

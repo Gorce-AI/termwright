@@ -33,10 +33,10 @@ declared group fails instead of silently falling back to another queue.
 ## Install
 
 ```sh
-pnpm add -D termwright @termwright/test vitest@3.2.7
+pnpm add -D termwright @termwright/test vitest@4.1.11
 ```
 
-Requires a certified Node LTS line and exact Vitest 3.2.7. ESM only. Run with
+Requires a certified Node LTS line and exact Vitest 4.1.11. ESM only. Run with
 `termwright test`; the exact pin is an engine certification surface, not a broad
 peer-compatibility promise.
 
