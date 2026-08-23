@@ -741,7 +741,11 @@ async function writeArchive(input: WriteArchiveInput): Promise<TraceArchive> {
 
 async function writeDurable(path: string, body: string): Promise<void> {
   await writeFile(path, body, 'utf8');
-  const handle = await open(path, 'r');
+  // Open for writing to flush. Windows implements fsync as FlushFileBuffers,
+  // which requires a handle with write access and fails with EPERM on a
+  // read-only one; POSIX does not care. The file was just written, so this is
+  // the same durability guarantee on both, not a platform concession.
+  const handle = await open(path, 'r+');
   try { await handle.sync(); } finally { await handle.close(); }
 }
 
