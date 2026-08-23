@@ -18,8 +18,20 @@ import {
   retainInkFrame,
 } from './frame-capture.js';
 import { instrumentationSentinel } from './instrumentation.js';
+import { registerTerminalInputModeEvidenceProvider } from '@termwright/evidence-provider';
 import { trackTerminal } from './terminal-tracker.js';
 import { onInkAnnotationChange } from './annotations.js';
+
+/**
+ * Shadowing starts when this module is evaluated, not when render() runs.
+ *
+ * Import evaluation precedes the importing module's body, so an application
+ * that arms mouse or focus reporting at module scope — before it renders
+ * anything — is still observed. Starting later would let the probe report
+ * those modes as off while they were on, and "authoritatively off" is a worse
+ * answer than none at all.
+ */
+const processTracker = trackTerminal(process.stdout, process.stderr);
 
 const ADAPTER_NAME = '@termwright/probe-ink';
 const ADAPTER_VERSION = PACKAGE_VERSION;
@@ -84,7 +96,23 @@ function instrumentedRender(
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
   const releaseCapture = installInkCaptureHook();
-  const tracker = trackTerminal(stdout, stderr);
+  // Reuse the shadow that has been running since import when render() writes
+  // to the streams it already watches, which is the default and the only case
+  // where earlier bytes exist to have been missed.
+  const ownsTracker = stdout !== process.stdout || stderr !== process.stderr;
+  const tracker = ownsTracker ? trackTerminal(stdout, stderr) : processTracker;
+  // The shadow parsed the same bytes the application wrote, so the probe knows
+  // which mouse and focus modes are on without asking the terminal. Publishing
+  // that closes the gap where a terminal cannot report its own modes — every
+  // ConPTY session — and pointer actions were refused there not because the
+  // application had mouse tracking off but because nothing could say it was on.
+  const inputModeEvidence = registerTerminalInputModeEvidenceProvider({
+    id: `${ADAPTER_NAME}/terminal-input-modes`,
+    version: ADAPTER_VERSION,
+    method: 'native',
+    family: 'input-mode',
+    observe: () => ({ inputModes: tracker.inputModes() }),
+  });
   const probeRef: { current: DOMElement | null } = { current: null };
   const state: { channel: ProbeChannel | null; session: InkProbeSession | null } = {
     channel: null,
@@ -223,7 +251,8 @@ function instrumentedRender(
     }
     releaseCapture();
     releaseAnnotations();
-    tracker.stop();
+    inputModeEvidence.dispose();
+    if (ownsTracker) tracker.stop();
     state.session?.stop();
     state.channel?.close();
   };

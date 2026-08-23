@@ -411,6 +411,33 @@ describe(
       }
     });
 
+    it("routes a click on a terminal that cannot report its own input modes", async () => {
+      // The ConPTY condition, reproduced on every platform: the terminal hides
+      // its DEC modes, so nothing outside the application can say whether mouse
+      // tracking is on. The probe watched the application arm it and says so,
+      // which is what makes this a real click instead of a refusal. No
+      // synthetic provider here — the shipped adapter is the only witness.
+      const terminal = await launchTerminal({
+        command: [process.execPath, "--import", preload, providerApp],
+        columns: 40,
+        rows: 8,
+        modesObservable: false,
+        requiredCapabilities: ["semantic-tree", "pointer-geometry", "pointer-hit-testing"],
+        semanticNegotiationMs: 5_000,
+      });
+      try {
+        await terminal.settled();
+        expect(terminal.contract()?.capabilities["pointer-input"]).toMatchObject({
+          status: "supported",
+          evidence: { providerId: "@termwright/probe-ink/terminal-input-modes" },
+        });
+        await terminal.getByRole("button", { name: "[Reject]" }).click();
+        await terminal.waitForText("last: reject@");
+      } finally {
+        await terminal.close();
+      }
+    });
+
     it("fails closed when declared regions disagree with the production hit test", async () => {
       const terminal = await launchProvider("disagreement");
       try {

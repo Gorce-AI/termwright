@@ -8,9 +8,24 @@ export interface TerminalPosition {
   readonly buffer: 'normal' | 'alternate';
 }
 
+/**
+ * The mouse and focus reporting the application has actually switched on.
+ *
+ * Read off the shadow terminal, which parsed the very bytes the application
+ * wrote. That makes it an instrumented observation rather than a claim: it is
+ * true even where the driver's own terminal cannot see these modes, which is
+ * every ConPTY session.
+ */
+export interface InkTerminalInputModes {
+  readonly mouseTracking: 'none' | 'x10' | 'vt200' | 'drag' | 'any';
+  readonly mouseEncoding: 'default' | 'utf8' | 'sgr' | 'urxvt';
+  readonly focusReporting: 'on' | 'off';
+}
+
 export interface InkTerminalTracker {
   drain(): Promise<void>;
   position(): TerminalPosition;
+  inputModes(): InkTerminalInputModes;
   resize(columns: number, rows: number): void;
   stop(): void;
 }
@@ -28,6 +43,25 @@ export function trackTerminal(
   let queue: Promise<void> = Promise.resolve();
   let stopped = false;
   const restorers: (() => void)[] = [];
+  // xterm tracks the tracking mode and focus reporting but not which mouse
+  // encoding is active, so that one is followed here from the same sequences.
+  let mouseEncoding: InkTerminalInputModes['mouseEncoding'] = 'default';
+  const setEncoding = (encoding: Exclude<InkTerminalInputModes['mouseEncoding'], 'default'>, enabled: boolean): void => {
+    if (enabled) mouseEncoding = encoding;
+    else if (mouseEncoding === encoding) mouseEncoding = 'default';
+  };
+  const privateModes = (params: (number | number[])[], enabled: boolean): boolean => {
+    for (const param of params) {
+      const code = Array.isArray(param) ? param[0] : param;
+      if (code === 1005) setEncoding('utf8', enabled);
+      else if (code === 1006) setEncoding('sgr', enabled);
+      else if (code === 1015) setEncoding('urxvt', enabled);
+    }
+    // Never exclusive: xterm still applies the modes it knows about.
+    return false;
+  };
+  terminal.parser.registerCsiHandler({ prefix: '?', final: 'h' }, (p) => privateModes(p, true));
+  terminal.parser.registerCsiHandler({ prefix: '?', final: 'l' }, (p) => privateModes(p, false));
 
   const observe = (chunk: unknown, encoding?: unknown): void => {
     if (stopped) return;
@@ -52,6 +86,14 @@ export function trackTerminal(
     position() {
       const buffer = terminal.buffer.active;
       return { row: buffer.cursorY, column: buffer.cursorX, buffer: buffer.type };
+    },
+    inputModes() {
+      const modes = terminal.modes;
+      return Object.freeze({
+        mouseTracking: modes.mouseTrackingMode,
+        mouseEncoding,
+        focusReporting: modes.sendFocusMode ? ('on' as const) : ('off' as const),
+      });
     },
     resize(columns, rows) {
       terminal.resize(columns, rows);
