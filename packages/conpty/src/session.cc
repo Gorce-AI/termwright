@@ -102,8 +102,17 @@ bool Session::Start(const SpawnOptions& options, EventSink sink, void* context, 
                           : const_cast<wchar_t*>(options.environment_block.c_str());
   // Suspended, so the root is inside the job before it can run a single
   // instruction — the alternative is a race the job could never win.
-  const DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT |
-                      CREATE_SUSPENDED | CREATE_NO_WINDOW;
+  //
+  // No CREATE_NO_WINDOW. It says "this process has no console", which is the
+  // opposite of what the pseudoconsole attribute asks for, and the child then
+  // never attaches: it runs — the job still counts it — while producing
+  // nothing into the pseudoconsole and reading nothing from it, and the
+  // console, having no clients, ends the output pipe at once. That is exactly
+  // what the first runs showed: a legitimate EOF code, zero bytes, and input
+  // going nowhere. Microsoft's own sample passes only the extended startup
+  // info for this reason.
+  const DWORD flags =
+      EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED;
   BOOL spawned = CreateProcessW(nullptr, command_line.data(), nullptr, nullptr, FALSE, flags,
                                 environment, cwd, &startup.StartupInfo, &process);
   DWORD spawn_error = GetLastError();
