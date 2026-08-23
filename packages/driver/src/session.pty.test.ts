@@ -1633,7 +1633,13 @@ describe.skipIf(!ptyAvailable())(
         return;
       }
       if (reporting === "unknown") {
-        expect(outcome?.code).toBe("capability-unavailable");
+        // A terminal that hides its modes is not a session without the
+        // capability, and the two want different answers. The mode layer is
+        // the only one that knows which sequence is missing, so it refuses
+        // and names it; "outside the contract" would say less and, because
+        // the contract freezes at negotiation, would say it inconsistently.
+        expect(outcome?.code).toBe("input-mode-disabled");
+        expect(outcome?.diagnostics.suggestion).toContain("1004");
         return;
       }
       expect(outcome).toBeNull();

@@ -11,12 +11,12 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 41,
-    "deadline-or-scheduler-regression-test": 57,
+    "deadline-or-scheduler-regression-test": 61,
     "deterministic-adversarial-fixture-schedule": 36,
     "display-or-persisted-wall-time-not-correctness-order": 85,
     "explicit-external-file-polling": 3,
     "explicit-external-or-ui-source-polling": 184,
-    "explicit-test-selection-reviewed-with-platform-registry": 98,
+    "explicit-test-selection-reviewed-with-platform-registry": 99,
     "managed-or-diagnostic-background-task": 60,
     "production-process-isolation-review": 26,
     "test-observer-or-intentional-background-task": 12,
@@ -574,6 +574,36 @@
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
       "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') {"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'const timer = setInterval(() => {',"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'spawn(process.execPath, [\"-e\", \"setTimeout(() => process.stdout.write(\\\\\"FINAL_CHILD_MARKER\\\\\\\\r\\\\\\\\n\\\\\"), 400)\"], { stdio: \"inherit\", detached: false });',"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "command: node('setInterval(() => {}, 1000);'),"
+    },
+    {
+      "path": "packages/conpty/src/conpty.win.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "command: node('setInterval(() => process.stdout.write(\"f\".repeat(8192)), 1);'),"
     },
     {
       "path": "packages/desktop-host/src/deadline.test.ts",
