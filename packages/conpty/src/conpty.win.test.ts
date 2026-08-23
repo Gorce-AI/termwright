@@ -99,16 +99,24 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
   it('keeps the stream open for a descendant that outlives its root', async () => {
     // The root exits immediately; the grandchild holds the pseudoconsole and
     // prints afterwards. A session that finished at root exit would lose it.
+    // The root outlives the spawn by a short while on purpose. Exiting in the
+    // same tick made every outcome look alike: the descendant's first word,
+    // its death and the console's teardown all landed after the last thing the
+    // test could observe. Staying alive briefly puts the descendant's start on
+    // one side of root exit and its final word on the other, so which of them
+    // survives is a fact about this backend rather than about scheduling.
     const script = [
       'const { spawn } = require("node:child_process");',
+      'const grandchild = "process.stdout.write(\\"CHILD_UP\\\\r\\\\n\\"); setTimeout(() => process.stdout.write(\\"FINAL_CHILD_MARKER\\\\r\\\\n\\"), 400);";',
       'let report;',
       'try {',
-      '  const grandchild = "process.stdout.write(\\"CHILD_UP\\\\r\\\\n\\"); setTimeout(() => process.stdout.write(\\"FINAL_CHILD_MARKER\\\\r\\\\n\\"), 400);";',
       '  const child = spawn(process.execPath, ["-e", grandchild], { stdio: "inherit", detached: false });',
       '  report = child.pid === undefined ? "SPAWN_PID=none" : "SPAWN_PID=" + child.pid;',
+      '  child.on("exit", (code, signal) => process.stdout.write("CHILD_EXIT=" + code + "/" + signal + "\\r\\n"));',
+      '  child.on("error", (failure) => process.stdout.write("CHILD_ERROR=" + failure.message.replace(/\\s+/g, "_") + "\\r\\n"));',
       '} catch (error) { report = "SPAWN_ERROR=" + error.message.replace(/\\s+/g, "_"); }',
       'process.stdout.write(report + "\\r\\n");',
-      'process.exit(0);',
+      'setTimeout(() => process.exit(0), 200);',
     ].join('');
     const handle = spawnConPty({
       command: node(script),
@@ -130,12 +138,12 @@ describe.skipIf(!windows)('ConPTY backend', { timeout: 30_000 }, () => {
     // `CHILD_UP` is the descendant's own voice: it proves the grandchild ran
     // and that its output reaches this pseudoconsole, which is what separates
     // a descendant that was never heard from one that was never delivered.
-    const up = await waitForMarker(handle, output, /CHILD_UP/u, 10_000);
+    const up = await waitForMarker(handle, output, /CHILD_UP|CHILD_(?:EXIT|ERROR)=\S+/u, 10_000);
     expect(
-      up,
+      up?.[0],
       `descendant never announced itself; root exited: ${rootExited}, ` +
         `saw ${JSON.stringify(output.text())}`,
-    ).toBeDefined();
+    ).toBe('CHILD_UP');
     const spawned = /SPAWN_(?:PID|ERROR)=(\S+)/u.exec(output.text());
     await rootExit;
     // Asked of the operating system and of the job separately, because the two
