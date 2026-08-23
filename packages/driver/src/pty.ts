@@ -54,6 +54,15 @@ export interface PtyProcess {
   onExit(cb: (status: ExitStatus) => void): PtyUnsubscribe;
   /** Settles once the backend's output producer can deliver no more bytes. */
   readonly outputEnded?: Promise<void>;
+  /**
+   * Settles once the backend has finished attaching, if it attaches at all.
+   *
+   * ConPTY creates the child from a callback that fires when its output worker
+   * is ready, so a freshly spawned pty has no pid and an empty console process
+   * list until then — the same two values a reaped tree produces. A session
+   * that waits for this before running cannot reach teardown in that state.
+   */
+  readonly attached?: Promise<void>;
   /** Fatal asynchronous failures after write() accepted bytes. */
   onWriteError?(cb: (error: Error) => void): PtyUnsubscribe;
   /** Queue-drained notification; it still does not claim child consumption. */
@@ -236,6 +245,7 @@ export function createNodePtyBackend(): PtyBackend {
         },
         ...(process.platform === 'win32'
           ? {
+              attached: agentAttached(exactWindowsAgent(pty)),
               async hardKillTree(): Promise<void> {
                 if (disposed || exited) return;
                 const agent = exactWindowsAgent(pty);
@@ -653,8 +663,15 @@ export function ownedConsoleTreePids(reported: readonly number[], selfPid: numbe
   ))]);
 }
 
-/** How long teardown waits for ConPTY to attach before inspecting the tree. */
-const CONPTY_ATTACH_TIMEOUT_MS = 2_000;
+/**
+ * How long to wait for ConPTY to attach.
+ *
+ * Above node-pty's own 5 s connection timeout on purpose: until that expires
+ * the connection can still legitimately complete, and giving up earlier turns
+ * a slow start into "no pid, no process list", which teardown can only report
+ * as a tree it could not prove gone.
+ */
+const CONPTY_ATTACH_TIMEOUT_MS = 6_000;
 
 function processAlive(pid: number): boolean {
   try {

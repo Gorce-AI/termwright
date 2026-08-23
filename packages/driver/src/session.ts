@@ -801,6 +801,14 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       (pty) => this.#disposePty(pty),
     );
     this.#assertLaunchTime(deadline, "spawning the pseudo-terminal");
+    // A ConPTY session has no child until its output worker is ready, and until
+    // then it reports no pid and an empty console process list — indistinguishable
+    // from a tree that has already been reaped. Waiting here means no later phase,
+    // teardown included, has to tell those two states apart.
+    if (this.#pty?.attached !== undefined) {
+      await this.#pty.attached;
+      this.#assertLaunchTime(deadline, "attaching the pseudo-terminal");
+    }
     this.#processSupervisor = new ProcessSupervisor(this.#pty);
 
     this.#pty.onData((data) => {
