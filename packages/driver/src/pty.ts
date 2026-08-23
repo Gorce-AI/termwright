@@ -225,9 +225,7 @@ export function createNodePtyBackend(): PtyBackend {
                 // while the child kept running.
                 await agentAttached(agent);
                 const reported = await agent._getConsoleProcessList();
-                conptyTreePids = Object.freeze([...new Set(reported.filter((pid) =>
-                  Number.isSafeInteger(pid) && pid > 0,
-                ))]);
+                conptyTreePids = ownedConsoleTreePids(reported, process.pid);
                 // An empty list while the root is demonstrably alive means
                 // AttachConsole/list enumeration failed. Closing HPCON might
                 // still work, but it cannot certify complete tree ownership.
@@ -615,6 +613,22 @@ function agentAttached(agent: ExactWindowsAgent): Promise<void> {
     };
     ready.once('ready_datapipe', onReady);
   });
+}
+
+/**
+ * The console-tree members a teardown may kill.
+ *
+ * Never the caller. Enumerating a ConPTY's processes means attaching to that
+ * console, and the attaching process is a member of it while it looks — so the
+ * list can name the caller. Killing everything on it then kills the test
+ * worker, which is what "Worker exited unexpectedly" was: no JavaScript ran
+ * afterwards because no process was left to run it. Whatever a tree kill is
+ * for, it is not for the process performing it.
+ */
+export function ownedConsoleTreePids(reported: readonly number[], selfPid: number): readonly number[] {
+  return Object.freeze([...new Set(reported.filter((pid) =>
+    Number.isSafeInteger(pid) && pid > 0 && pid !== selfPid,
+  ))]);
 }
 
 /** How long teardown waits for ConPTY to attach before inspecting the tree. */
