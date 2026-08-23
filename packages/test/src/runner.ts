@@ -319,7 +319,15 @@ export class TermwrightTestRunner extends VitestTestRunner {
             repeat: native.repeats,
             retry: native.retry,
           },
-        }), eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'cleanup')).catch(() => undefined);
+        }), eventDeadline(context, this.#hostContext.journal.acknowledgementTimeoutMs, 'cleanup')).catch((closeError: unknown) => {
+          // Do not swallow this. The previous version did, and the run then
+          // reported an attempt with only its start and no reason anywhere —
+          // the evidence for why was thrown away by the recovery path itself.
+          process.stderr.write(
+            `termwright: attempt ${context.attemptId} (${task.id}) failed setup and could not be closed: ` +
+            `${closeError instanceof Error ? closeError.message : String(closeError)}\n`,
+          );
+        });
       }
       const admitted = await reservationAdmission?.catch(() => undefined);
       await admitted?.release().catch(() => undefined);
@@ -328,7 +336,23 @@ export class TermwrightTestRunner extends VitestTestRunner {
     }
   }
 
-  override onAfterRunTask(test: Parameters<VitestTestRunner['onAfterRunTask']>[0]): void {
+  override async onAfterRunTask(test: Parameters<VitestTestRunner['onAfterRunTask']>[0]): Promise<void> {
+    // Vitest awaits this once per test, after the retry loop, outside every
+    // try. An attempt still open here escaped its own finalizer, and leaving
+    // it open makes the whole run uncertifiable over one test — with nothing
+    // in the report to point at, because a later retry may have passed.
+    const open = openAttempts.get(test as object);
+    if (open !== undefined) {
+      for (const close of [...open.values()]) {
+        await close().catch((error: unknown) => {
+          process.stderr.write(
+            `termwright: an attempt for ${(test as NativeRunnerTask).id} could not be closed at task end: ` +
+            `${error instanceof Error ? error.message : String(error)}\n`,
+          );
+        });
+      }
+      openAttempts.delete(test as object);
+    }
     try {
       super.onAfterRunTask(test);
     } finally {
@@ -539,6 +563,26 @@ function attemptIdentity(context: AttemptContext) {
   });
 }
 
+/**
+ * Closers for attempts that have started and not yet reported an outcome.
+ *
+ * Every path that closes an attempt lives inside one try, and a try can end
+ * without reaching any of them. `onAfterRunTask` is the one boundary Vitest
+ * awaits exactly once per test, after retries, so it is where an attempt that
+ * escaped its own finalizer is still closed.
+ */
+const openAttempts = new WeakMap<object, Map<string, () => Promise<void>>>();
+
+function rememberOpenAttempt(test: object, attemptId: string, close: () => Promise<void>): void {
+  const open = openAttempts.get(test) ?? new Map<string, () => Promise<void>>();
+  open.set(attemptId, close);
+  openAttempts.set(test, open);
+}
+
+function forgetOpenAttempt(test: object, attemptId: string): void {
+  openAttempts.get(test)?.delete(attemptId);
+}
+
 function installAttemptFinalizer(
   test: NativeAttemptTask,
   context: AttemptContext,
@@ -551,6 +595,7 @@ function installAttemptFinalizer(
   const emit = async (state: 'passed' | 'failed' | 'skipped'): Promise<void> => {
     if (finalized) throw new Error(`attempt ${context.attemptId} terminal event was requested more than once`);
     finalized = true;
+    forgetOpenAttempt(test, context.attemptId);
     // This is the authoritative lifecycle commit after all user and fixture
     // cleanup, not optional diagnostics. It consumes the final cleanup reserve;
     // using the earlier diagnostics boundary made ordinary teardown capable of
@@ -646,6 +691,13 @@ function installAttemptFinalizer(
   // onFinished is hard-coded to stack order by Vitest 3.2.7. Inserting first
   // makes the authoritative finalizer execute last, after user callbacks.
   hooks.unshift(afterCleanup);
+  rememberOpenAttempt(test, context.attemptId, async () => {
+    if (finalized) return;
+    process.stderr.write(
+      `termwright: attempt ${context.attemptId} (${context.nativeTaskId}) never reached its finalizer\n`,
+    );
+    await emit('failed');
+  });
 }
 
 function createAttemptEventRecorder(
