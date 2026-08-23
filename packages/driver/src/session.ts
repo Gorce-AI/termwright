@@ -1316,9 +1316,27 @@ class TerminalSession implements TerminalHarness, LocatorContext {
 
   async #windowFocus(focused: boolean): Promise<void> {
     await this.#act(focused ? "window.focus" : "window.blur", async () => {
+      await this.#awaitLiveInputModeEvidence();
       this.#assertInputModeEvidenceLive("focus-input");
       await this.#sendFocus(focused);
     });
+  }
+
+  /**
+   * Waits for provider mode evidence to describe the present again.
+   *
+   * Every input can make the application change its input modes, so the last
+   * provider frame stops describing the terminal the moment one is sent. The
+   * locator path is barriered on the same condition; the raw device API had no
+   * barrier, which let a second `mouse.*` or `window.*` call encode for modes
+   * the application may have just turned off. Waiting is what the evidence
+   * allows: the application publishes a causally newer frame, and only then is
+   * there something fresh to read. Sessions without providers never set the
+   * flag and never wait here.
+   */
+  async #awaitLiveInputModeEvidence(): Promise<void> {
+    if (this.#providerEvidenceInvalidAfterInputRevision === null) return;
+    await this.waitForCommittedObservation();
   }
 
   #point(point: MousePoint): MousePoint {
@@ -1350,6 +1368,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     api: string,
     events: readonly MouseEvent[],
   ): Promise<void> {
+    await this.#awaitLiveInputModeEvidence();
     this.#assertInputModeEvidenceLive("pointer-input");
     const operations = events.map((event): ExecutableDeviceOperation =>
       event.kind === "press"
@@ -2046,6 +2065,16 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     const observed = this.#vt.modes();
     const provided = this.#providerInputModes;
     if (provided === null) return observed;
+    // Provider mode facts describe one committed revision. Any input can make
+    // the application change them, and until it publishes a causally newer
+    // frame the last value is a guess about the present. The locator path is
+    // already barriered on `actionObservationState()`, but the raw device API
+    // (mouse.*, window.focus) is not, so without this a second raw action
+    // encodes for modes the application may have just turned off — and on a
+    // terminal that hides its own modes there is nothing to contradict it.
+    // Reporting the VT view alone leaves the fields "unknown", which is what
+    // makes the encoders refuse rather than emit bytes on a guess.
+    if (this.#providerEvidenceInvalidAfterInputRevision !== null) return observed;
     return Object.freeze({
       ...observed,
       mouseTracking:

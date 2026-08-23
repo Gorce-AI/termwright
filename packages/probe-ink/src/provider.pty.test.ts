@@ -6,6 +6,7 @@ import {
   CapabilityProviderViolationError,
   CapabilityUnavailableError,
   EvidenceConflictError,
+  InputModeDisabledError,
   launchTerminal,
 } from "@termwright/driver";
 
@@ -144,6 +145,33 @@ describe(
         await expect(
           terminal.mouse.click({ row: 1, column: 1 }),
         ).rejects.toBeInstanceOf(CapabilityProviderLostError);
+      } finally {
+        await terminal.close();
+      }
+    });
+
+    it("does not encode a second click from mode evidence the first click invalidated", async () => {
+      const terminal = await launchTerminal({
+        command: [process.execPath, "--import", preload, providerApp],
+        columns: 40,
+        rows: 8,
+        modesObservable: false,
+        requiredCapabilities: ["semantic-tree", "pointer-input"],
+        semanticNegotiationMs: 5_000,
+        env: { TERMWRIGHT_PROVIDER_SCENARIO: "input-mode-revoked" },
+      });
+      try {
+        await terminal.settled();
+        await terminal.mouse.click({ row: 1, column: 1 });
+        // Deliberately no wait between the two clicks. The application turns
+        // mouse tracking off while handling the first one, and the terminal
+        // hides its own modes, so the only thing that can say so is the
+        // provider frame published afterwards. Reading the pre-click evidence
+        // here would encode SGR bytes for a mode the application just
+        // disabled, which the program would print as text.
+        await expect(
+          terminal.mouse.click({ row: 1, column: 1 }),
+        ).rejects.toBeInstanceOf(InputModeDisabledError);
       } finally {
         await terminal.close();
       }

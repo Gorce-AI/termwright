@@ -11,15 +11,15 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 39,
-    "deadline-or-scheduler-regression-test": 56,
+    "deadline-or-scheduler-regression-test": 57,
     "deterministic-adversarial-fixture-schedule": 36,
     "display-or-persisted-wall-time-not-correctness-order": 85,
     "explicit-external-file-polling": 3,
     "explicit-external-or-ui-source-polling": 183,
     "explicit-test-selection-reviewed-with-platform-registry": 98,
-    "managed-or-diagnostic-background-task": 59,
+    "managed-or-diagnostic-background-task": 60,
     "production-process-isolation-review": 26,
-    "test-observer-or-intentional-background-task": 9,
+    "test-observer-or-intentional-background-task": 11,
     "test-process-isolation-review": 48
   },
   "findings": [
@@ -576,10 +576,34 @@
       "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') {"
     },
     {
-      "path": "packages/desktop-host/src/index.ts",
+      "path": "packages/desktop-host/src/deadline.test.ts",
+      "kind": "fire-and-forget",
+      "classification": "test-observer-or-intentional-background-task",
+      "excerpt": "const record = (reason: unknown): void => void seen.push(reason);"
+    },
+    {
+      "path": "packages/desktop-host/src/deadline.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void promise.catch(() => undefined);"
+    },
+    {
+      "path": "packages/desktop-host/src/deadline.ts",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "timer = setTimeout(() => reject(new Error(typeof detail === 'function' ? detail() : detail)), remaining);"
+      "excerpt": "timer = setTimeout(() => reject(new Error(describe())), remaining);"
+    },
+    {
+      "path": "packages/desktop-host/src/launch.test.ts",
+      "kind": "fire-and-forget",
+      "classification": "test-observer-or-intentional-background-task",
+      "excerpt": "const record = (reason: unknown): void => void abandoned.push(reason);"
+    },
+    {
+      "path": "packages/desktop-host/src/launch.test.ts",
+      "kind": "timer",
+      "classification": "deadline-or-scheduler-regression-test",
+      "excerpt": "'setInterval(() => undefined, 1_000);',"
     },
     {
       "path": "packages/desktop-host/src/launch.test.ts",

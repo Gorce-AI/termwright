@@ -13,11 +13,18 @@ let wide = process.stdout.columns >= 50;
 
 const approveColumn = 0;
 
+// The "input-mode-revoked" scenario turns mouse tracking off the moment it
+// receives its first mouse report, the way a real application does when a
+// click dismisses the view that wanted the mouse. Everything published after
+// that says so; the value read before it is a fact about a terminal that no
+// longer exists.
+let mouseRevoked = false;
 let inputModeRegistration = null;
 if (
   scenario === "input-mode" ||
   scenario === "input-mode-conflict" ||
-  scenario === "input-mode-focus"
+  scenario === "input-mode-focus" ||
+  scenario === "input-mode-revoked"
 ) {
   inputModeRegistration = registerTerminalInputModeEvidenceProvider({
     id: "permission-production-input-parser",
@@ -26,7 +33,11 @@ if (
     family: "input-mode",
     observe: () => ({
       inputModes: {
-        mouseTracking: scenario === "input-mode-conflict" ? "any" : "drag",
+        mouseTracking: mouseRevoked
+          ? "none"
+          : scenario === "input-mode-conflict"
+            ? "any"
+            : "drag",
         mouseEncoding: "sgr",
         focusReporting: scenario === "input-mode-focus" ? "on" : "off",
       },
@@ -157,6 +168,12 @@ function App() {
       }
       if (text.includes("\u001b[I")) setLast("terminal focused");
       if (text.includes("\u001b[O")) setLast("terminal blurred");
+      if (scenario === "input-mode-revoked" && !mouseRevoked && /\u001b\[</u.test(text)) {
+        mouseRevoked = true;
+        process.stdout.write("\u001b[?1002l");
+        setLast("mouse tracking revoked");
+        rerender((value) => value + 1);
+      }
       for (const match of text.matchAll(/\u001b\[<(\d+);(\d+);(\d+)([Mm])/gu)) {
         const code = Number(match[1]);
         const column = Number(match[2]) - 1;

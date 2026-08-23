@@ -68,8 +68,8 @@ class FakePty implements PtyProcess {
   }
 }
 
-function supervisor(pty: FakePty, clock: ManualClock): ProcessSupervisor {
-  return new ProcessSupervisor(pty, { monotonicNow: () => clock.now, timers: clock.timers });
+function supervisor(pty: FakePty, clock: ManualClock, platform: NodeJS.Platform = 'linux'): ProcessSupervisor {
+  return new ProcessSupervisor(pty, { monotonicNow: () => clock.now, timers: clock.timers, platform });
 }
 
 describe('ProcessSupervisor', () => {
@@ -128,6 +128,34 @@ describe('ProcessSupervisor', () => {
     await expect(shutdown).resolves.toEqual({ code: null, signal: 'SIGHUP' });
     expect(pty.signals).toEqual(['HUP']);
     expect(pty.disposeCount).toBe(1);
+  });
+
+  it('does not attempt a hang-up on Windows, where the backend cannot carry one', async () => {
+    // ConPTY has no hang-up signal and the backend rejects HUP outright, so
+    // sending it recorded a cleanup failure on every teardown down this path.
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' } });
+    pty.signal = (signal): void => {
+      pty.signals.push(signal);
+      if (signal === 'HUP') throw new Error('ConPTY cannot deliver SIGHUP');
+      queueMicrotask(() => pty.emit({ code: 0, signal: null }));
+    };
+    const shutdown = supervisor(pty, clock, 'win32').shutdown({ deadline: clock.now + 1_000, gracefulMs: 100 });
+    clock.advance(100);
+    await expect(shutdown).resolves.toEqual({ code: 0, signal: null });
+    expect(pty.signals).toEqual(['KILL']);
+  });
+
+  it('still lets Windows exit on its own before escalating to a hard kill', async () => {
+    // Skipping the signal must not skip the grace window: the process may
+    // already be exiting from the Ctrl+C the caller sent through terminal
+    // input, and killing it there would turn a graceful exit into a hard one.
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' } });
+    const shutdown = supervisor(pty, clock, 'win32').shutdown({ deadline: clock.now + 1_000, gracefulMs: 100 });
+    pty.emit({ code: 0, signal: null });
+    await expect(shutdown).resolves.toEqual({ code: 0, signal: null });
+    expect(pty.signals).toEqual([]);
   });
 
   it('treats EPERM as stale PGID only after real exit proves the owned group gone', async () => {

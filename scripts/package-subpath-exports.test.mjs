@@ -33,11 +33,17 @@ describe('published protocol subpath exports', () => {
     await exec(PNPM, ['--dir', 'packages/protocol', 'pack', '--pack-destination', archiveDirectory], { cwd: root, ...PNPM_OPTIONS });
     const archive = (await readdir(archiveDirectory)).find((name) => name.endsWith('.tgz'));
     expect(archive).toBeDefined();
-    // GNU tar reads `host:path` in the archive argument as a remote transfer,
-    // so an absolute Windows path makes it try to resolve the drive letter as a
-    // hostname. Naming the archive relative to its own directory keeps the
-    // colon out of that argument; -C is not parsed that way.
-    await exec('tar', ['-xzf', archive, '--strip-components=1', '-C', packageDirectory], { cwd: archiveDirectory });
+    // The tar on Windows runners is GNU tar, which reads a colon in a path
+    // argument as a remote `host:path` transfer and escapes what follows. An
+    // absolute Windows path therefore fails in both the archive argument
+    // ("Cannot connect to C:") and the -C argument ("C\:\\Users..."). Running
+    // from the scratch directory keeps every path it sees relative.
+    await exec(
+      'tar',
+      // Forward slashes: tar reads a backslash as an escape, not a separator.
+      ['-xzf', `archives/${archive}`, '--strip-components=1', '-C', 'node_modules/@termwright/protocol'],
+      { cwd: directory },
+    );
 
     const consumer = join(directory, 'consumer.mjs');
     await writeFile(consumer, [

@@ -16,6 +16,7 @@ import {
   validateRunnerUrl,
   type DesktopHostMessage,
 } from './protocol.js';
+import { withinDeadline } from './deadline.js';
 
 export { DESKTOP_HOST_PROTOCOL, validateRunnerUrl } from './protocol.js';
 export { SECURE_WEB_PREFERENCES, contentSecurityPolicy, isAllowedNavigation, isAllowedRequest } from './security.js';
@@ -361,24 +362,6 @@ function positiveTimeout(value: number, name: string): number {
   return value;
 }
 
-async function withinDeadline<T>(
-  promise: Promise<T>,
-  deadline: number,
-  detail: string | (() => string),
-): Promise<T> {
-  const remaining = deadline - performance.now();
-  if (remaining <= 0) throw new Error(typeof detail === 'function' ? detail() : detail);
-  let timer: NodeJS.Timeout | undefined;
-  const expired = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error(typeof detail === 'function' ? detail() : detail)), remaining);
-    timer.unref?.();
-  });
-  try {
-    return await Promise.race([promise, expired]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
-}
 
 async function closeServer(server: Server): Promise<void> {
   if (!server.listening) return;

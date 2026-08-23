@@ -35,6 +35,12 @@ interface TimerApi {
 export interface ProcessSupervisorOptions {
   readonly monotonicNow?: () => number;
   readonly timers?: TimerApi;
+  /**
+   * Which platform's signal repertoire to assume. Defaults to the host's.
+   * Injectable because the Windows branch is otherwise only reachable on
+   * Windows, where a mistake in it costs a full CI round-trip to find.
+   */
+  readonly platform?: NodeJS.Platform;
 }
 
 export interface ProcessShutdownOptions {
@@ -59,6 +65,7 @@ export class ProcessSupervisor {
   readonly #pty: PtyProcess;
   readonly #now: () => number;
   readonly #timers: TimerApi;
+  readonly #platform: NodeJS.Platform;
   #shutdownPromise: Promise<ExitStatus> | null = null;
   #observedExit: ExitStatus | null = null;
   #exitTreeCleanup: Promise<readonly unknown[]> | null = null;
@@ -67,6 +74,7 @@ export class ProcessSupervisor {
     this.#pty = pty;
     this.#now = options.monotonicNow ?? performance.now.bind(performance);
     this.#timers = options.timers ?? DEFAULT_TIMERS;
+    this.#platform = options.platform ?? process.platform;
   }
 
   shutdown(options: ProcessShutdownOptions): Promise<ExitStatus> {
@@ -188,16 +196,16 @@ export class ProcessSupervisor {
           if (observed === null) this.#trySignal('KILL', failures);
         }
       } else {
-        // ConPTY has no hang-up signal — the backend rejects HUP outright, and
-        // sending it anyway turned every Windows teardown into a cleanup
-        // failure. Closing the pseudoconsole is the platform's equivalent, and
-        // KILL is what does that here, so skip straight to it rather than
-        // recording a failure for a signal the platform cannot carry.
-        if (process.platform !== 'win32') {
-          this.#trySignal('HUP', failures);
-          const graceDeadline = Math.min(options.deadline, this.#now() + options.gracefulMs);
-          if (observed === null) observed = await this.#waitForExit(exit, graceDeadline);
-        }
+        // ConPTY has no hang-up signal: the backend rejects HUP outright, so
+        // sending it recorded a cleanup failure on every Windows teardown for
+        // a signal the platform cannot carry. Only the signal is skipped. The
+        // grace window still applies, because the process may already be
+        // exiting on its own — after the Ctrl+C the caller sent through
+        // terminal input, say — and taking that window away would replace a
+        // graceful exit with a hard kill.
+        if (this.#platform !== 'win32') this.#trySignal('HUP', failures);
+        const graceDeadline = Math.min(options.deadline, this.#now() + options.gracefulMs);
+        if (observed === null) observed = await this.#waitForExit(exit, graceDeadline);
         if (observed === null) this.#trySignal('KILL', failures);
       }
 
