@@ -18,7 +18,7 @@
     "explicit-external-or-ui-source-polling": 183,
     "explicit-test-selection-reviewed-with-platform-registry": 98,
     "managed-or-diagnostic-background-task": 59,
-    "production-process-isolation-review": 25,
+    "production-process-isolation-review": 26,
     "test-observer-or-intentional-background-task": 9,
     "test-process-isolation-review": 48
   },
@@ -1873,70 +1873,77 @@
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 38,
+      "line": 42,
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
-      "excerpt": "let loaderVisible = process.env['TERMWRIGHT_FIXTURE_LOADER'] === '1';"
+      "excerpt": "const providerInputModes = process.env['TERMWRIGHT_FIXTURE_INPUT_MODES'] === '1';"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
       "line": 43,
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
+      "excerpt": "let loaderVisible = process.env['TERMWRIGHT_FIXTURE_LOADER'] === '1';"
+    },
+    {
+      "path": "packages/driver/test-fixtures/semantic-app.mjs",
+      "line": 48,
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
       "excerpt": "const staleProviderEvidence = process.env['TERMWRIGHT_FIXTURE_STALE_PROVIDER'] === '1';"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 44,
+      "line": 49,
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
       "excerpt": "const providerActionRecipes = process.env['TERMWRIGHT_FIXTURE_PROVIDER_ACTION_RECIPES'] === '1';"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 45,
+      "line": 50,
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
       "excerpt": "const providerFocusState = process.env['TERMWRIGHT_FIXTURE_PROVIDER_FOCUS_STATE'] === '1';"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 322,
+      "line": 342,
       "kind": "wall-clock",
       "classification": "display-or-persisted-wall-time-not-correctness-order",
       "excerpt": "record: { ts: Date.now(), level, message, seq: logSeq, logger: 'fixture', ...extra },"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 407,
+      "line": 427,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "setTimeout(() => {"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 429,
+      "line": 449,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "setTimeout(publish, unpairedRefreshDelay);"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 441,
+      "line": 461,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "setTimeout(() => {"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 576,
+      "line": 601,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "if (helloDelay > 0) setTimeout(sendHello, helloDelay);"
     },
     {
       "path": "packages/driver/test-fixtures/semantic-app.mjs",
-      "line": 594,
+      "line": 619,
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "if (firstTreeDelay > 0) setTimeout(publish, firstTreeDelay);"
