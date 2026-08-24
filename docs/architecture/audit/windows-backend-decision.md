@@ -1,8 +1,13 @@
 # Windows PTY backend — decision record
 
-Status: **provisional.** The backend is implemented and compiling; its contract
-is not yet certified. This records what has been decided, what the evidence
-says so far, and what would change the decision.
+Status: **accepted and certified.** POSIX retains node-pty. Windows uses the
+Termwright-owned `@termwright/conpty` N-API backend exclusively, with x64 and
+ARM64 prebuild packages. A missing or unloadable addon fails closed; there is
+no node-pty fallback on Windows. CI certifies the real x64 backend on Node 22
+and 24, while ARM64 is cross-compiled and its package layout is verified.
+
+The investigation below is retained as historical decision evidence. Its
+intermediate failures and hypotheses do not describe the current backend.
 
 ## What is being replaced
 
@@ -168,26 +173,23 @@ descendant is still counted by the job and still killed by it.
 
 ## Decision
 
-Finish the current addon to a certified contract. Then revisit this table with
-the numbers this exercise produces — how much plumbing is actually being
-maintained, and whether `portable-pty` would remove it — and treat a switch as
-a decision with evidence rather than another turn.
+Ship the current addon as the mandatory Windows backend. Its ordered pipes give
+an OS-backed output boundary, its job object owns the process tree, and its
+adapter now implements the driver lifecycle surface. Platform prebuilds are
+published as optional dependencies selected by npm; the parent package throws
+a typed error when the matching addon is unavailable.
 
-Revisit immediately if the remaining failures turn out to be in the plumbing
-rather than the contract: that would mean the cost is not a one-off.
+Reconsider the backend only with new evidence that another implementation
+preserves the same EOF, ownership, packaging and fail-closed contracts. A
+smaller implementation is useful only if it does not restore timer-based drain
+or weaken tree cleanup.
 
-Note that the comparison has already shifted once. `portable-pty` looked like
-it would cover "the basics"; reading it shows the basics it covers stop
-exactly where our requirement starts. The plumbing it removes is real, and so
-is the Rust toolchain it adds.
+## Remaining platform boundary
 
-## Open
-
-- Windows support floor (§9): the legacy path is not implemented and no floor
-  has been declared. Deciding this needs the modern path certified first.
-- Packaging (§30): platform-specific optional dependency packages and prebuilds
-  are not built. Today the package is workspace-only and marked `os: win32`,
-  which keeps it off other platforms but is not a distribution model.
-- Adapter surface: `signal`, `treeState`, `hardKillTree`, `terminate`,
-  `attached` and `lifecycle` are not yet mapped onto `PtyProcess`, so the
-  backend cannot be selected by the driver even when it works.
+Certification currently runs on GitHub's `windows-latest` image and does not
+claim a separate legacy-Windows support floor. On the certified platform,
+Windows may terminate console-attached descendants when the root process exits.
+Applications must therefore be launched directly: a wrapper that starts the
+real application and exits cannot promise delivery of the application's later
+output. Termwright records and tests this limitation rather than hiding it with
+a drain timer.

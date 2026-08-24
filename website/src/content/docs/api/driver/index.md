@@ -49,6 +49,7 @@ editUrl: false
 - [CellLink](interfaces/celllink/)
 - [CellSnapshot](interfaces/cellsnapshot/)
 - [ConditionResult](interfaces/conditionresult/)
+- [ConPtySessionHandle](interfaces/conptysessionhandle/)
 - [CrashInput](interfaces/crashinput/)
 - [CrashReport](interfaces/crashreport/)
 - [EffectiveSessionContract](interfaces/effectivesessioncontract/)
@@ -73,6 +74,7 @@ editUrl: false
 - [PhysicalRegion](interfaces/physicalregion/)
 - [PointerOptions](interfaces/pointeroptions/)
 - [PtyBackend](interfaces/ptybackend/)
+- [PtyBackendChoice](interfaces/ptybackendchoice/)
 - [PtyProcess](interfaces/ptyprocess/)
 - [PtySpawnOptions](interfaces/ptyspawnoptions/)
 - [PublicValue](interfaces/publicvalue/)
@@ -120,6 +122,7 @@ editUrl: false
 - [ArtifactValuePolicy](type-aliases/artifactvaluepolicy/)
 - [CellColor](type-aliases/cellcolor/)
 - [Condition](type-aliases/condition/)
+- [ConPtySpawn](type-aliases/conptyspawn/)
 - [DebugCategory](type-aliases/debugcategory/)
 - [DiagnosticCode](type-aliases/diagnosticcode/)
 - [EnvMode](type-aliases/envmode/)
@@ -148,19 +151,27 @@ editUrl: false
 - [TermwrightErrorCode](type-aliases/termwrighterrorcode/)
 - [TextMatcher](type-aliases/textmatcher/)
 
+## Variables
+
+- [CONPTY\_BACKEND\_NAME](variables/conpty_backend_name/)
+
 ## Functions
 
+- [createConPtyBackend](functions/createconptybackend/)
 - [createNodePtyBackend](functions/createnodeptybackend/)
 - [debugMode](functions/debugmode/)
 - [encodeKeys](functions/encodekeys/)
 - [encodeMouse](functions/encodemouse/)
 - [encodePaste](functions/encodepaste/)
 - [encodeText](functions/encodetext/)
+- [inheritedSpawnEnv](functions/inheritedspawnenv/)
 - [launchTerminal](functions/launchterminal/)
 - [normalizeMouseModifiers](functions/normalizemousemodifiers/)
 - [parseRef](functions/parseref/)
 - [parseSelector](functions/parseselector/)
 - [publicValue](functions/publicvalue/)
+- [resetPtyBackendChoice](functions/resetptybackendchoice/)
+- [resolveDefaultPtyBackend](functions/resolvedefaultptybackend/)
 - [semanticNodeId](functions/semanticnodeid/)
 - [sensitive](functions/sensitive/)
 - [textMatcher](functions/textmatcher/)

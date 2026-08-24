@@ -88,6 +88,11 @@ const recorder = await startUiServer({
 });
 ```
 
+Every server launch generates its own 192-bit token with `node:crypto`; callers
+cannot replace it with a predictable secret. Use the tokenized `server.url` or
+the returned `server.token` when connecting an embedded client, especially
+when `host` exposes the server beyond loopback.
+
 `termwright ui` uses the same persistent native host, Run Coordinator, journal
 and Resource Broker as `termwright test` and `termwright watch`; it does not
 spawn a sibling Vitest universe. A server started directly as a library has no

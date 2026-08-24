@@ -13,7 +13,7 @@ editUrl: false
 
 > **ptyAvailable**(): `Promise`\<`boolean`\>
 
-Defined in: [test/src/pty-available.ts:40](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/pty-available.ts#L40)
+Defined in: [test/src/pty-available.ts:55](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/pty-available.ts#L55)
 
 Whether this machine can open a pseudo-terminal.
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
 import {
+  CI_JOB_CONTRACT,
   CI_JOBS,
+  REQUIRED_BRANCH_CHECKS,
   assertReleaseStateQuiescent,
   compatibilitySourceRunId,
   nextHeartbeatRecord,
@@ -23,6 +26,104 @@ const repository = 'owner/repo';
 const defaultBranch = 'main';
 const base = 'a'.repeat(40);
 const head = 'b'.repeat(40);
+
+function scalar(value) {
+  const trimmed = value.trim();
+  if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+/**
+ * Read the deliberately small declarative surface which controls GitHub check
+ * names. This is not a general YAML parser: job IDs, names, inline matrix axes
+ * and include rows are the only fields the release coordinator trusts.
+ */
+function ciWorkflowSurface(source) {
+  const lines = source.split(/\r?\n/u);
+  const jobs = {};
+  let seenJobs = false;
+  let current;
+  let inMatrix = false;
+  let inInclude = false;
+  let includeRow;
+
+  for (const line of lines) {
+    if (line === 'jobs:') {
+      seenJobs = true;
+      continue;
+    }
+    if (!seenJobs) continue;
+    const job = /^  ([A-Za-z0-9_-]+):\s*$/u.exec(line);
+    if (job !== null) {
+      current = { workflowName: undefined, matrix: undefined };
+      jobs[job[1]] = current;
+      inMatrix = false;
+      inInclude = false;
+      includeRow = undefined;
+      continue;
+    }
+    if (current === undefined) continue;
+    const name = /^    name:\s*(.+)$/u.exec(line);
+    if (name !== null) {
+      current.workflowName = scalar(name[1]);
+      continue;
+    }
+    if (/^      matrix:\s*$/u.test(line)) {
+      current.matrix = {};
+      inMatrix = true;
+      inInclude = false;
+      continue;
+    }
+    if (inMatrix && /^      \S/u.test(line)) {
+      inMatrix = false;
+      inInclude = false;
+      includeRow = undefined;
+    }
+    if (!inMatrix) continue;
+    if (/^        include:\s*$/u.test(line)) {
+      current.matrix.include = [];
+      inInclude = true;
+      continue;
+    }
+    const axis = /^        ([A-Za-z0-9_-]+):\s*\[(.*)\]\s*$/u.exec(line);
+    if (axis !== null) {
+      current.matrix[axis[1]] = axis[2].split(',').map(scalar);
+      continue;
+    }
+    if (inInclude) {
+      const first = /^          - ([A-Za-z0-9_-]+):\s*(.+)$/u.exec(line);
+      if (first !== null) {
+        includeRow = { [first[1]]: scalar(first[2]) };
+        current.matrix.include.push(includeRow);
+        continue;
+      }
+      const rest = /^            ([A-Za-z0-9_-]+):\s*(.+)$/u.exec(line);
+      if (rest !== null && includeRow !== undefined) includeRow[rest[1]] = scalar(rest[2]);
+    }
+  }
+  return jobs;
+}
+
+function matrixRows(matrix) {
+  if (matrix === undefined) return [{}];
+  if (matrix.include !== undefined) return matrix.include;
+  return Object.entries(matrix).reduce(
+    (rows, [axis, values]) => rows.flatMap((row) => values.map((value) => ({ ...row, [axis]: value }))),
+    [{}],
+  );
+}
+
+function expandedCheckNames(job) {
+  return matrixRows(job.matrix).map((row) => {
+    const rendered = job.workflowName
+      .replace(/\$\{\{ matrix\.python && format\(' \{0\}', matrix\.python\) \|\| '' \}\}/gu, row.python === undefined ? '' : ` ${row.python}`)
+      .replace(/\$\{\{ matrix\.([A-Za-z0-9_-]+) \}\}/gu, (_expression, axis) => row[axis] ?? '');
+    if (rendered.includes('${{')) throw new Error(`unsupported CI job-name expression: ${rendered}`);
+    return rendered;
+  });
+}
 
 describe('trusted autonomous coordinator', () => {
   it('requires an explicit stable issue owner instead of a scheduler/bot fallback', () => {
@@ -70,6 +171,20 @@ describe('trusted autonomous coordinator', () => {
     expect(() => validateRequiredCiJobs([...CI_JOBS.map((name) => ({ name, conclusion: 'success' })), { name: 'unreviewed new gate', conclusion: 'success' }])).toThrow(/unexpected jobs/u);
   });
 
+  it('keeps the release authorization contract synchronized with every ci.yml job and matrix', async () => {
+    const workflow = ciWorkflowSurface(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
+    const contract = Object.fromEntries(Object.entries(CI_JOB_CONTRACT).map(([id, job]) => [id, {
+      workflowName: job.workflowName,
+      matrix: job.matrix,
+    }]));
+    expect(workflow).toEqual(contract);
+    for (const job of Object.values(CI_JOB_CONTRACT)) {
+      expect(job.requiredChecks).toEqual(expandedCheckNames(job));
+    }
+    expect(new Set(CI_JOBS).size).toBe(CI_JOBS.length);
+    expect(CI_JOBS).toHaveLength(37);
+  });
+
   it('rejects a CI workflow that became green only after a rerun', () => {
     const run = { name: 'CI', path: '.github/workflows/ci.yml', status: 'completed', event: 'workflow_dispatch', conclusion: 'success', run_attempt: 1, head_sha: head, head_repository: { full_name: repository }, repository: { full_name: repository } };
     expect(() => validateTrustedCiRun(run, { repository })).not.toThrow();
@@ -112,7 +227,7 @@ describe('trusted autonomous coordinator', () => {
   });
 
   it('requires strict, non-bypassable branch protection with the exact CI gate set', () => {
-    const protection = { required_status_checks: { strict: true, contexts: CI_JOBS, checks: CI_JOBS.map((context) => ({ context, app_id: 15368 })) }, enforce_admins: { enabled: true }, required_pull_request_reviews: { required_approving_review_count: 0, require_last_push_approval: false, require_code_owner_reviews: false, bypass_pull_request_allowances: { users: [], teams: [], apps: [] } }, restrictions: null, allow_force_pushes: { enabled: false }, allow_deletions: { enabled: false } };
+    const protection = { required_status_checks: { strict: true, contexts: REQUIRED_BRANCH_CHECKS, checks: REQUIRED_BRANCH_CHECKS.map((context) => ({ context, app_id: 15368 })) }, enforce_admins: { enabled: true }, required_pull_request_reviews: { required_approving_review_count: 0, require_last_push_approval: false, require_code_owner_reviews: false, bypass_pull_request_allowances: { users: [], teams: [], apps: [] } }, restrictions: null, allow_force_pushes: { enabled: false }, allow_deletions: { enabled: false } };
     expect(() => validateBranchProtection(protection)).not.toThrow();
     expect(() => validateBranchProtection({ ...protection, required_status_checks: { ...protection.required_status_checks, strict: false } })).toThrow(/current branch/u);
     expect(() => validateBranchProtection({ ...protection, enforce_admins: { enabled: false } })).toThrow(/administrators/u);

@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: ProcessLifecycleError
 
-Defined in: driver/src/internal/process-supervisor.ts:7
+Defined in: [driver/src/internal/process-supervisor.ts:7](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L7)
 
 ## Extends
 
@@ -23,7 +23,7 @@ Defined in: driver/src/internal/process-supervisor.ts:7
 
 > **new ProcessLifecycleError**(`code`, `message`, `options?`): `ProcessLifecycleError`
 
-Defined in: driver/src/internal/process-supervisor.ts:11
+Defined in: [driver/src/internal/process-supervisor.ts:11](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L11)
 
 #### Parameters
 
@@ -53,7 +53,7 @@ Defined in: driver/src/internal/process-supervisor.ts:11
 
 > `readonly` **code**: [`ProcessLifecycleErrorCode`](../../type-aliases/processlifecycleerrorcode/)
 
-Defined in: driver/src/internal/process-supervisor.ts:8
+Defined in: [driver/src/internal/process-supervisor.ts:8](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L8)
 
 ***
 
@@ -61,4 +61,4 @@ Defined in: driver/src/internal/process-supervisor.ts:8
 
 > `readonly` **exitObserved**: `boolean`
 
-Defined in: driver/src/internal/process-supervisor.ts:9
+Defined in: [driver/src/internal/process-supervisor.ts:9](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/internal/process-supervisor.ts#L9)

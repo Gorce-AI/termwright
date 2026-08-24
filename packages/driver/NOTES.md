@@ -21,6 +21,11 @@ spelling.
 
 ## Windows: ConPTY teardown must not stall on AttachConsole
 
+> Historical investigation. This section describes the former node-pty
+> Windows backend and the evidence that caused it to be replaced. Current
+> releases use the Termwright-owned `@termwright/conpty` addon on Windows with
+> no fallback. POSIX continues to use node-pty.
+
 `@lydell/node-pty` forks a helper from `kill()` to enumerate the console process
 list. On a loaded GitHub Actions runner, several helpers can race and Win32's
 `AttachConsole` may temporarily fail. Version 1.1.0 let that helper die without

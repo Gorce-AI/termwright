@@ -29,6 +29,25 @@ function workflowJobBlocks(source) {
   return starts.map((start, index) => body.slice(start, starts[index + 1] ?? body.length));
 }
 
+function expectExactNeed(job, dependency) {
+  expect(job.match(/^    needs:.*$/gmu)).toEqual([`    needs: ${dependency}`]);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+function expectArtifactStep(job, action, name, path) {
+  expect(job).toMatch(new RegExp(
+    `      - uses: actions/${action}@[0-9a-f]{40}[^\\n]*\\n` +
+      '        with:\\n' +
+      `          name: ${escapeRegExp(name)}\\n` +
+      '(?:          #[^\\n]*\\n)*' +
+      `          path: ${escapeRegExp(path)}(?:\\n|$)`,
+    'u',
+  ));
+}
+
 describe('the native host is the only Termwright test entrypoint', () => {
   it('keeps repository and release certification single-attempt', async () => {
     const rootConfig = (await import('../vitest.config.ts')).default;
@@ -64,6 +83,45 @@ describe('the native host is the only Termwright test entrypoint', () => {
       }
     }
     expect(`${ci}\n${release}\n${reliability}\n${JSON.stringify(manifest.scripts)}`).not.toMatch(/--retry(?:=|\s)/u);
+
+    const ciJobs = Object.fromEntries(workflowJobBlocks(ci).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
+    expectArtifactStep(ciJobs['conpty-native-build-x64'], 'upload-artifact', 'conpty-addon-x64', 'packages/conpty-win32-x64/termwright_conpty.node');
+    expectArtifactStep(ciJobs['conpty-native-build-arm64'], 'upload-artifact', 'conpty-addon-arm64', 'packages/conpty-win32-arm64/termwright_conpty.node');
+    expect(ciJobs['conpty-native-build-x64']).toContain('node scripts/check-prebuild.mjs x64');
+    expect(ciJobs['conpty-native-build-arm64']).toContain('node scripts/check-prebuild.mjs arm64');
+    const x64Consumers = {
+      'conpty-native': 'packages/conpty/build/Release',
+      'windows-driver-native': 'packages/conpty-win32-x64',
+      'windows-native-stress': 'packages/conpty-win32-x64',
+      'conformance-windows': 'packages/conpty-win32-x64',
+    };
+    for (const [jobId, path] of Object.entries(x64Consumers)) {
+      expectExactNeed(ciJobs[jobId], 'conpty-native-build-x64');
+      expectArtifactStep(ciJobs[jobId], 'download-artifact', 'conpty-addon-x64', path);
+    }
+    expect(ciJobs['conformance-posix'].match(/^    needs:.*$/gmu)).toBeNull();
+    expect(ciJobs['conformance-posix']).toContain('os: [ubuntu-latest, macos-latest]');
+    expect(ciJobs['conformance-windows']).toContain('name: conformance windows-latest');
+    expect(ciJobs.opentui).toContain("bun-version: '1.2.15'");
+    expect(ciJobs.opentui).not.toContain('bun-version: latest');
+    const certificationNeeds = [...(ciJobs.certification ?? '').matchAll(/^      - ([a-z0-9-]+)$/gmu)]
+      .map((match) => match[1]);
+    expect(certificationNeeds).toEqual(Object.keys(ciJobs).filter((jobId) => jobId !== 'certification'));
+    expect(ciJobs.certification).toContain('if: always()');
+    expect(ciJobs.certification).toContain('select(.value.result != "success")');
+
+    const reliabilityJobs = Object.fromEntries(workflowJobBlocks(reliability).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
+    expect(reliabilityJobs['nightly-soak-posix'].match(/^    needs:.*$/gmu)).toBeNull();
+    expectExactNeed(reliabilityJobs['nightly-soak-windows'], 'conpty-native-build-x64');
+    expectArtifactStep(reliabilityJobs['conpty-native-build-x64'], 'upload-artifact', 'nightly-conpty-addon-x64', 'packages/conpty-win32-x64/termwright_conpty.node');
+    expectArtifactStep(reliabilityJobs['nightly-soak-windows'], 'download-artifact', 'nightly-conpty-addon-x64', 'packages/conpty-win32-x64');
+    expect(reliabilityJobs['conpty-native-build-x64']).toContain('node scripts/check-prebuild.mjs x64');
+    expect(reliabilityJobs['nightly-soak-windows']).toContain('node scripts/check-prebuild.mjs x64');
+    expect(reliabilityJobs['nightly-soak-windows']).toContain('resource-profile windows-ci');
+
+    const releaseJobs = Object.fromEntries(workflowJobBlocks(release).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
+    expect(releaseJobs.prebuilds).toContain('node scripts/check-prebuild.mjs "${{ matrix.arch }}"');
+    expect(releaseJobs.verify).toContain('node scripts/check-prebuild.mjs --all');
 
     const configFiles = ['vitest.config.ts'];
     for (const directory of ['packages', 'examples', 'quality']) {

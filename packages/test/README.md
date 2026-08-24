@@ -571,7 +571,7 @@ import { termwrightRetry } from '@termwright/test/config';
 export default defineConfig({
   test: {
     setupFiles: ['./vitest.setup.ts'],
-    retry: termwrightRetry({ ci: 2, local: 0 }),
+    retry: termwrightRetry({ ci: 0, local: 0 }),
   },
 });
 ```
@@ -579,6 +579,8 @@ export default defineConfig({
 `termwrightRetry` returns the retry value consumed by Termwright's embedded
 Vitest engine; it does not rerun the whole suite. `TERMWRIGHT_RETRIES` means
 additional diagnostic attempts (`2` means at most three total attempts).
+Keep the checked-in certifying configuration at zero; enable a non-zero value
+only for an explicit diagnostic run.
 Product execution always goes through `termwright test`. If `-- --retry=2` is
 used as a diagnostic experiment, attempts retain their distinct identities,
 journals and resources; fail-then-pass is classified `flaky` and remains a

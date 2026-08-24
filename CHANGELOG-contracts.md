@@ -1,5 +1,22 @@
 # Contract changes
 
+- 2026-08-25: trace publication is transactional. Only an archive with a valid
+  `COMMITTED` marker is complete evidence; interrupted and partial writes stay
+  distinguishable from a successful run.
+- 2026-08-25: the native host owns stable run and attempt identities, including
+  UI run history. Reporter text is an output projection and is never a control
+  or identity channel.
+- 2026-08-25: interactive UI control messages carry a `requestId` and receive a
+  correlated `control-result` acknowledgement. Browser input rejects explicit
+  server failures, disconnects and bounded acknowledgement timeouts.
+- 2026-08-25: actionability inspection is a first-class read-only projection;
+  HTTP run, rerun and stop operations are typed, and the MCP surface projects
+  the same expanded session/action contract.
+- 2026-08-25: certifying repository workflows require their first attempt,
+  zero retries and no snapshot updates. A diagnostic fail-then-pass run remains
+  `flaky` and non-zero. Windows certification uses the mandatory own ConPTY
+  backend and fails closed when its matching prebuild is unavailable.
+
 - 2026-08-20: retry remains owned by Vitest's native scheduler.
   `termwrightRetry({ci, local, env?})` resolves a bounded native `test.retry`
   value with `TERMWRIGHT_RETRIES` as an additional-attempt override. Task meta,

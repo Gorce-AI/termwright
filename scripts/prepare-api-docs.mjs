@@ -43,8 +43,16 @@ for (const path of await markdownFiles(root)) {
     const destination = (sourceRoute === '' ? targetRoute : relative(sourceRoute, targetRoute)).replaceAll('\\', '/');
     return `](${destination === '' ? './' : `${destination}/`}${hash})`;
   });
+  // TypeDoc may resolve a re-export through another workspace package's
+  // generated dist/*.d.ts. Those files are build artifacts, not repository
+  // source, so a GitHub URL would be a guaranteed 404. Keep the useful display
+  // location but do not manufacture a dead link.
+  const withValidSourceLinks = withRoutes.replace(
+    /\[([^\]]*\/dist\/[^\]]*)\]\(https:\/\/github\.com\/Gorce-AI\/termwright\/blob\/main\/[^)]*\/dist\/[^)]+\)/gu,
+    '$1',
+  );
   await writeFile(
     path,
-    withRoutes.replace('---\neditUrl: false\n---\n', `---\ntitle: ${title}\neditUrl: false\n---\n`),
+    withValidSourceLinks.replace('---\neditUrl: false\n---\n', `---\ntitle: ${title}\neditUrl: false\n---\n`),
   );
 }

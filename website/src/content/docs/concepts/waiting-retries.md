@@ -63,9 +63,10 @@ Vitest schedules whole-case retries. Configure them with `test.retry`, the
 `--retry` CLI flag, or `termwrightRetry()`:
 
 ```ts
-retry: termwrightRetry({ci: 2, local: 0})
+retry: termwrightRetry({ci: 0, local: 0})
 ```
 
 This is separate from matcher event subscriptions. Reports retain the ordered
 reasons from earlier failed attempts and mark a final pass as flaky. A flaky
-run never satisfies the Native Host's certification result.
+run never satisfies the Native Host's certification result. Use a non-zero
+value only temporarily for diagnosis, not in checked-in certification config.

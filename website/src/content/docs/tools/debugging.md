@@ -88,11 +88,15 @@ failure time.
 ## CI differs from local
 
 Check the Node version, terminal profile, viewport size, environment, and input
-files. Run locally with the same profile and retry count:
+files. First reproduce the certifying configuration with no retries:
 
 ```sh
-CI=true TERMWRIGHT_RETRIES=2 pnpm test
+CI=true TERMWRIGHT_RETRIES=0 pnpm test -- --resource-profile ci
 ```
+
+After reproducing the failure, a non-certifying diagnostic run may use
+`TERMWRIGHT_RETRIES=2`. Termwright preserves every failed attempt and returns a
+non-zero flaky result even if a later attempt passes.
 
 Download the CI HTML report and trace artifacts instead of relying only on the
 terminal log. See [Run tests in CI](../../guides/ci/).

@@ -38,10 +38,15 @@ ordinary `.test.ts` files are discovered.
 - [StepDefinitionBody](type-aliases/stepdefinitionbody/)
 - [StepKeyword](type-aliases/stepkeyword/)
 
+## Variables
+
+- [GHERKIN\_TAGS\_ENV](variables/gherkin_tags_env/)
+
 ## Functions
 
 - [After](functions/after/)
 - [Before](functions/before/)
+- [composeTagExpressions](functions/composetagexpressions/)
 - [defineParameterType](functions/defineparametertype/)
 - [defineSteps](functions/definesteps/)
 - [gherkinPlugin](functions/gherkinplugin/)

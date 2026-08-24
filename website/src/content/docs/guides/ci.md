@@ -15,10 +15,18 @@ on:
   push:
   pull_request:
 
+env:
+  TERMWRIGHT_RETRIES: '0'
+  TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
+  TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
@@ -37,6 +45,7 @@ jobs:
         with:
           name: termwright-runs
           path: .termwright/runs/
+          include-hidden-files: true
 ```
 
 The native host records the resolved resource profile, exact Vitest/Node
@@ -54,7 +63,9 @@ npx termwright test --resource-profile ci -- --retry=2
 Every retry gets a distinct AttemptId and evidence. Certification lanes use
 zero retries. If a diagnostic retry passes after an earlier failure, the host
 classifies the run as `flaky` and exits non-zero; a later pass never erases the
-reliability defect.
+reliability defect. GitHub Actions has no native yellow success state, so this
+is intentionally a red check with an amber/flaky classification in Termwright's
+report and UI.
 
 For a determinism lane, repeat full lifecycle cycles inside one host rather
 than wrapping the command in a shell loop:
@@ -84,7 +95,9 @@ needed.
 - Declare input files through the fixture instead of relying on a repository
   working directory.
 - Upload `.termwright/runs/` with `if: always()` so complete and explicitly
-  incomplete infrastructure artifacts remain distinguishable.
+  incomplete infrastructure artifacts remain distinguishable. GitHub's
+  artifact action ignores dot-directories unless `include-hidden-files: true`
+  is set.
 
 See [Configuration](../../reference/configuration/) for profiles and
 [Traces and reports](../../tools/traces-reports/) for artifact formats.

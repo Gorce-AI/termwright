@@ -8,31 +8,87 @@ const SHA = /^[0-9a-f]{40}$/u;
 const GITHUB_LOGIN = /^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/u;
 const GITHUB_ACTIONS_APP_ID = 15368;
 const HEARTBEAT_INTERVAL_MS = 30 * 24 * 60 * 60 * 1_000;
-export const CI_JOBS = [
-  'package metadata',
-  'build ubuntu-latest / node 22',
-  'build ubuntu-latest / node 24',
-  'build macos-latest / node 22',
-  'build macos-latest / node 24',
-  'build windows-latest / node 22',
-  'build windows-latest / node 24',
-  'hostile input (128 MiB heap)',
-  'conformance ubuntu-latest',
-  'conformance macos-latest',
-  'conformance windows-latest',
-  'runner UI end-to-end (Chromium)',
-  'opentui adapter contract (Bun)',
-  'clients (python 3.9)',
-  'clients (python 3.12)',
-  'clients (go)',
-  'clients (rust)',
-  'release hygiene',
-  'clients (rust MSRV 1.74)',
-  'Ratatui SDK (Rust MSRV 1.88)',
-  'cross-language vectors are current',
-  'examples (dogfooding)',
-  'website builds',
-];
+const ciJob = (workflowName, requiredChecks, matrix) => Object.freeze({
+  workflowName,
+  requiredChecks: Object.freeze(requiredChecks),
+  ...(matrix === undefined ? {} : { matrix: Object.freeze(matrix) }),
+});
+
+/**
+ * The reviewed CI surface used by both autonomous-run validation and branch
+ * protection validation. Keys are workflow job IDs, `workflowName` is the
+ * literal display-name template in ci.yml, and `requiredChecks` are the names
+ * GitHub emits after matrix expansion.
+ *
+ * The coordinator test reads ci.yml and requires its complete job ID/name and
+ * matrix surface to match this object. Adding a green lane without adding it
+ * to the release authorization contract therefore fails locally and in CI.
+ */
+export const CI_JOB_CONTRACT = Object.freeze({
+  'package-metadata': ciJob('package metadata', ['package metadata']),
+  'deterministic-core-coverage': ciJob('deterministic core coverage', ['deterministic core coverage']),
+  build: ciJob('build ${{ matrix.os }} / node ${{ matrix.node }}', [
+    'build ubuntu-latest / node 22',
+    'build ubuntu-latest / node 24',
+    'build macos-latest / node 22',
+    'build macos-latest / node 24',
+  ], { os: ['ubuntu-latest', 'macos-latest'], node: ['22', '24'] }),
+  hostile: ciJob('hostile input (128 MiB heap)', ['hostile input (128 MiB heap)']),
+  'conpty-native-build-x64': ciJob('build the ConPTY addon (x64)', ['build the ConPTY addon (x64)']),
+  'conpty-native-build-arm64': ciJob('build the ConPTY addon (arm64)', ['build the ConPTY addon (arm64)']),
+  'conpty-native': ciJob('native ConPTY backend (Windows / Node ${{ matrix.node }})', [
+    'native ConPTY backend (Windows / Node 22)',
+    'native ConPTY backend (Windows / Node 24)',
+  ], { node: ['22', '24'] }),
+  'windows-driver-native': ciJob('build windows-latest / node ${{ matrix.node }}', [
+    'build windows-latest / node 22',
+    'build windows-latest / node 24',
+  ], { node: ['22', '24'] }),
+  determinism: ciJob('determinism (50 native run cycles, zero retries)', ['determinism (50 native run cycles, zero retries)']),
+  'concurrency-stress': ciJob('concurrency stress (16 owned terminals)', ['concurrency stress (16 owned terminals)']),
+  'resource-leak': ciJob('resource leak barrier (25 lifecycle cycles)', ['resource leak barrier (25 lifecycle cycles)']),
+  'fault-and-jitter': ciJob('fault injection and slow causal boundaries', ['fault injection and slow causal boundaries']),
+  'randomized-race': ciJob('randomized race (recorded seed)', ['randomized race (recorded seed)']),
+  'windows-native-stress': ciJob('Windows native lifecycle stress / Node ${{ matrix.node }}', [
+    'Windows native lifecycle stress / Node 22',
+    'Windows native lifecycle stress / Node 24',
+  ], { node: ['22', '24'] }),
+  'conformance-posix': ciJob('conformance ${{ matrix.os }}', [
+    'conformance ubuntu-latest',
+    'conformance macos-latest',
+  ], { os: ['ubuntu-latest', 'macos-latest'] }),
+  'ui-browser': ciJob('runner UI end-to-end (Chromium)', ['runner UI end-to-end (Chromium)']),
+  'conformance-windows': ciJob('conformance windows-latest', ['conformance windows-latest']),
+  opentui: ciJob('opentui adapter contract (Bun)', ['opentui adapter contract (Bun)']),
+  clients: ciJob("clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})", [
+    'clients (python 3.9)',
+    'clients (python 3.12)',
+    'clients (go)',
+    'clients (rust)',
+  ], { include: [
+    { client: 'python', python: '3.9' },
+    { client: 'python', python: '3.12' },
+    { client: 'go' },
+    { client: 'rust' },
+  ] }),
+  'rust-windows-transport': ciJob('Rust semantic transport (Windows named pipe)', ['Rust semantic transport (Windows named pipe)']),
+  'release-hygiene': ciJob('release hygiene', ['release hygiene']),
+  'rust-msrv': ciJob('clients (rust MSRV 1.74)', ['clients (rust MSRV 1.74)']),
+  'rust-ratatui-msrv': ciJob('Ratatui SDK (Rust MSRV 1.88)', ['Ratatui SDK (Rust MSRV 1.88)']),
+  vectors: ciJob('cross-language vectors are current', ['cross-language vectors are current']),
+  examples: ciJob('examples (dogfooding)', ['examples (dogfooding)']),
+  website: ciJob('website builds', ['website builds']),
+  certification: ciJob('certification gate', ['certification gate']),
+});
+
+export const CI_JOBS = Object.freeze(
+  Object.values(CI_JOB_CONTRACT).flatMap((job) => job.requiredChecks),
+);
+
+// GitHub branch protection requires one stable aggregate context. The
+// coordinator additionally verifies every CI_JOBS entry before autonomous
+// merge, so neither a skipped dependency nor a forged partial result is enough.
+export const REQUIRED_BRANCH_CHECKS = Object.freeze(['certification gate']);
 
 const compatibilityFiles = [
   /^compatibility\/(?:certified-upstreams|registry)\.json$/u,
@@ -203,10 +259,10 @@ export function validateBranchProtection(protection) {
   if (protection?.enforce_admins?.enabled !== true) throw new Error('default branch protections must apply to administrators');
   const checks = protection.required_status_checks.checks ?? [];
   const contexts = new Set(checks.map((check) => check.context));
-  const missing = CI_JOBS.filter((name) => !contexts.has(name));
+  const missing = REQUIRED_BRANCH_CHECKS.filter((name) => !contexts.has(name));
   if (missing.length > 0) throw new Error(`branch protection is missing required CI checks: ${missing.join(', ')}`);
-  const unexpected = [...contexts].filter((name) => !CI_JOBS.includes(name));
-  if (unexpected.length > 0 || checks.length !== CI_JOBS.length) throw new Error(`branch protection has an unexpected required CI check set: ${unexpected.join(', ')}`);
+  const unexpected = [...contexts].filter((name) => !REQUIRED_BRANCH_CHECKS.includes(name));
+  if (unexpected.length > 0 || checks.length !== REQUIRED_BRANCH_CHECKS.length) throw new Error(`branch protection has an unexpected required CI check set: ${unexpected.join(', ')}`);
   if (checks.some((check) => check.app_id !== GITHUB_ACTIONS_APP_ID)) throw new Error('every required CI check must be bound to the GitHub Actions app');
   if (protection.required_pull_request_reviews == null) throw new Error('default branch must require pull requests');
   if (protection.required_pull_request_reviews.required_approving_review_count !== 0) {

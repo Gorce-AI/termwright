@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LaunchFixtureOptions
 
-Defined in: [test/src/fixtures.ts:57](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L57)
+Defined in: [test/src/fixtures.ts:62](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L62)
 
 What a test may override when launching a program.
 
@@ -51,7 +51,7 @@ Defined in: driver/dist/index.d.ts:68
 
 > `readonly` `optional` **command?**: readonly `string`[]
 
-Defined in: [test/src/fixtures.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L59)
+Defined in: [test/src/fixtures.ts:64](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L64)
 
 Defaults to `config.command`.
 
@@ -114,7 +114,7 @@ Defaults to `'replace'`: a test process's secrets are not the child's.
 
 > `readonly` `optional` **files?**: `Readonly`\<`Record`\<`string`, [`SeedFile`](../../type-aliases/seedfile/)\>\>
 
-Defined in: [test/src/fixtures.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L71)
+Defined in: [test/src/fixtures.ts:76](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L76)
 
 Files to create in the working directory before the program starts, keyed
 by relative path. Directories are created as needed.
@@ -232,7 +232,7 @@ command markers. Test authors should normally use `terminal.openShell()`.
 
 > `readonly` `optional` **template?**: `string` \| [`SeedTemplate`](../seedtemplate/)
 
-Defined in: [test/src/fixtures.ts:76](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L76)
+Defined in: [test/src/fixtures.ts:81](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L81)
 
 A directory to copy in first, so a test can start from a whole project and
 change only what it is about. `files` are written over it.
@@ -274,6 +274,6 @@ Defined in: driver/dist/index.d.ts:77
 
 > `readonly` `optional` **trace?**: [`TraceMode`](../../type-aliases/tracemode/)
 
-Defined in: [test/src/fixtures.ts:78](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L78)
+Defined in: [test/src/fixtures.ts:83](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L83)
 
 Trace policy for this session, overriding the file's and the project's.

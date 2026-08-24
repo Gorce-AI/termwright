@@ -24,6 +24,7 @@ env:
   TERMWRIGHT_REQUIRE_GO: '1'
 
 jobs:
+  # Static repository policy and deterministic core.
   package-metadata:
     name: package metadata
     timeout-minutes: 10
@@ -73,6 +74,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # Supported Node and POSIX runtime surface. Windows has its own native row.
   build:
     name: build ${{ matrix.os }} / node ${{ matrix.node }}
     timeout-minutes: 45
@@ -184,8 +186,10 @@ jobs:
           packages/conformance/src/suites/mcp-sessions.test.ts
           packages/ui/src/hostile.test.ts
 
-  conpty-native-build:
-    name: build the ConPTY addon (${{ matrix.arch }})
+  # Windows native artifact DAG: architecture producers are independent and
+  # runnable x64 consumers never wait for the ARM64 release artifact.
+  conpty-native-build-x64:
+    name: build the ConPTY addon (x64)
     # Pinned to the 2022 image on purpose. windows-latest now ships Visual
     # Studio 18, which node-gyp 11 cannot identify — it reports "unknown
     # version undefined" and gives up. Users are never asked to compile this
@@ -194,14 +198,6 @@ jobs:
     # the one where the toolchain is supported.
     runs-on: windows-2022
     timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        # Both architectures users can run Windows on. arm64 is cross-compiled
-        # here: node-gyp fetches that target's node.lib and the image carries
-        # the ARM64 MSVC toolchain, so the binary is produced where the
-        # toolchain is supported rather than where it will eventually run.
-        arch: [x64, arm64]
     steps:
       - name: Reject workflow reruns
         shell: bash
@@ -223,7 +219,7 @@ jobs:
       # twice per architecture would only prove the compiler runs twice.
       - name: Compile
         working-directory: packages/conpty
-        run: pnpm exec node-gyp rebuild --arch=${{ matrix.arch }}
+        run: pnpm exec node-gyp rebuild --arch=x64
 
       # Into the package that publishes it, so the layout the release job packs
       # is the layout every other job already used.
@@ -232,13 +228,52 @@ jobs:
         run: |
           set -euo pipefail
           cp packages/conpty/build/Release/termwright_conpty.node \
-             "packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node"
-          node scripts/check-prebuild.mjs "${{ matrix.arch }}"
+             packages/conpty-win32-x64/termwright_conpty.node
+          node scripts/check-prebuild.mjs x64
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: conpty-addon-${{ matrix.arch }}
-          path: packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node
+          name: conpty-addon-x64
+          path: packages/conpty-win32-x64/termwright_conpty.node
+          if-no-files-found: error
+          retention-days: 1
+
+  conpty-native-build-arm64:
+    name: build the ConPTY addon (arm64)
+    # ARM64 is cross-compiled independently. It is a release artifact, but an
+    # issue in that toolchain must not prevent x64 Windows certification from
+    # consuming the x64 artifact that it actually runs.
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Cross-compile
+        working-directory: packages/conpty
+        run: pnpm exec node-gyp rebuild --arch=arm64
+      - name: Place the binary in its prebuild package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp packages/conpty/build/Release/termwright_conpty.node \
+             packages/conpty-win32-arm64/termwright_conpty.node
+          node scripts/check-prebuild.mjs arm64
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: conpty-addon-arm64
+          path: packages/conpty-win32-arm64/termwright_conpty.node
           if-no-files-found: error
           retention-days: 1
 
@@ -248,7 +283,7 @@ jobs:
     # symbol rather than the version, and this is the image that proves the
     # modern path is the one taken.
     runs-on: windows-latest
-    needs: conpty-native-build
+    needs: conpty-native-build-x64
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -303,7 +338,7 @@ jobs:
     # not confirm a tree was gone, plus settled() and the shell inference;
     # against the certified session, all five pass.
     runs-on: windows-latest
-    needs: conpty-native-build
+    needs: conpty-native-build-x64
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -397,6 +432,8 @@ jobs:
       - name: Run the Getting Started example
         run: pnpm test -- --resource-profile ci --json -- --run examples/getting-started
 
+  # Reliability barriers. Each exercises a distinct production failure mode;
+  # none is retried or treated as a branch-protection substitute.
   determinism:
     name: determinism (50 native run cycles, zero retries)
     runs-on: ubuntu-latest
@@ -533,7 +570,7 @@ jobs:
   windows-native-stress:
     name: Windows native lifecycle stress / Node ${{ matrix.node }}
     runs-on: windows-latest
-    needs: conpty-native-build
+    needs: conpty-native-build-x64
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -574,8 +611,9 @@ jobs:
             --config quality/stress/vitest.config.ts --run \
             quality/stress/terminal-concurrency.test.ts
 
-  conformance:
-    needs: conpty-native-build
+  # Cross-platform behavioral certification. POSIX deliberately has no edge
+  # to the Windows artifact producer.
+  conformance-posix:
     name: conformance ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     # Every suite here spawns a process, a pty and a socket per test, so this
@@ -584,7 +622,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     steps:
       - name: Reject workflow reruns
         shell: bash
@@ -608,20 +646,11 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache-dependency-path: clients/go/go.sum
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
-
-      # Windows has one pseudo-terminal backend and it is a native addon, so
-      # every Windows row needs the compiled binary before it can launch
-      # anything. There is no fallback to run on if it is absent.
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        if: runner.os == 'Windows'
-        with:
-          name: conpty-addon-x64
-          path: packages/conpty-win32-x64
 
       - name: Install the Python client (Textual adapter row)
         shell: bash
@@ -654,6 +683,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # Product and framework-adapter surfaces.
   ui-browser:
     name: runner UI end-to-end (Chromium)
     runs-on: ubuntu-latest
@@ -712,6 +742,73 @@ jobs:
           overwrite: true
           retention-days: 7
 
+  conformance-windows:
+    needs: conpty-native-build-x64
+    name: conformance windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.25'
+          cache-dependency-path: clients/go/go.sum
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' run build
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: conpty-addon-x64
+          path: packages/conpty-win32-x64
+      - name: Install the Python client (Textual adapter row)
+        shell: bash
+        run: |
+          python -m pip install -e "clients/python[dev]"
+          python -c "import termwright, textual"
+      - name: Run the conformance matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @termwright/conformance run conformance --require-declared-skips | tee conformance-matrix.txt
+      - name: Publish the matrix to the job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Conformance matrix — windows-latest"
+            echo
+            echo '```text'
+            cat conformance-matrix.txt 2>/dev/null || echo "matrix did not produce output"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload conformance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: conformance-windows-latest
+          path: |
+            conformance-matrix.txt
+            .termwright/runs
+          if-no-files-found: ignore
+          include-hidden-files: true
+          overwrite: true
+          retention-days: 7
+
   opentui:
     name: opentui adapter contract (Bun)
     runs-on: ubuntu-latest
@@ -736,7 +833,7 @@ jobs:
       # CI would claim adapter coverage it does not have.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest
+          bun-version: '1.2.15'
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
@@ -756,6 +853,7 @@ jobs:
       - run: pnpm --filter @termwright/probe-opentui run test
       - run: pnpm --filter @termwright/probe-ink run test
 
+  # Public clients, release surface, examples and documentation.
   clients:
     name: clients (${{ matrix.client }}${{ matrix.python && format(' {0}', matrix.python) || '' }})
     timeout-minutes: 30
@@ -1143,3 +1241,52 @@ jobs:
       - run: pnpm --filter @termwright/website run check
       - run: pnpm --filter @termwright/website run build
       - run: pnpm --filter @termwright/website run check:links
+
+  certification:
+    name: certification gate
+    if: always()
+    needs:
+      - package-metadata
+      - deterministic-core-coverage
+      - build
+      - hostile
+      - conpty-native-build-x64
+      - conpty-native-build-arm64
+      - conpty-native
+      - windows-driver-native
+      - determinism
+      - concurrency-stress
+      - resource-leak
+      - fault-and-jitter
+      - randomized-race
+      - windows-native-stress
+      - conformance-posix
+      - ui-browser
+      - conformance-windows
+      - opentui
+      - clients
+      - rust-windows-transport
+      - release-hygiene
+      - rust-msrv
+      - rust-ratatui-msrv
+      - vectors
+      - examples
+      - website
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - name: Require the complete certification DAG
+        shell: bash
+        env:
+          CERTIFICATION_NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          failures=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"' <<<"$CERTIFICATION_NEEDS")
+          if [[ -n "$failures" ]]; then
+            echo "Certification dependencies did not all succeed:"
+            echo "$failures"
+            exit 1
+          fi

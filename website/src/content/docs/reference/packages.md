@@ -64,5 +64,11 @@ them, but ordinary test suites should use `termwright` and the framework table
 above. A package being present on npm does not make it an additional setup
 choice.
 
+`@termwright/conpty` is the internal Windows PTY backend. Its optional
+`@termwright/conpty-win32-x64` and `@termwright/conpty-win32-arm64` packages
+carry the prebuilt native addons selected by the package manager. They are not
+user-facing adapters. Windows deliberately has no fallback PTY: a missing or
+unloadable matching prebuild is an actionable startup error.
+
 Do not import internal `src/` or `dist/` paths. Only package `exports` entries
 are public.

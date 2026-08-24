@@ -13,7 +13,7 @@ editUrl: false
 
 > **ResourceAwareTestApi**\<`T`\> = `T` & `object`
 
-Defined in: [test/src/provider.ts:24](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/provider.ts#L24)
+Defined in: [test/src/provider.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/provider.ts#L27)
 
 ## Type Declaration
 

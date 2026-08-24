@@ -31,6 +31,18 @@ import type { RecordedEvent } from './codegen.js';
  */
 export type ServerState = ViewerState;
 
+/** A live control request that the Runner could not complete or certify. */
+export class RunnerControlError extends Error {
+  override readonly name = 'RunnerControlError';
+
+  constructor(
+    readonly kind: 'rejected' | 'disconnected' | 'timeout' | 'protocol',
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 /**
  * Connection to the runner server, and the {@link DataSource} backed by it.
  *
@@ -46,12 +58,22 @@ export class RunnerClient implements DataSource {
   /** Archive selected by this browser tab, never shared through the hub. */
   #archivePath: string | undefined;
   #nextInspection = 0;
+  #nextControl = 0;
+  #reconnect = false;
+  #reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   #activeRunId: string | undefined;
   readonly #inspections = new Map<string, {
     readonly resolve: (results: readonly UiActionability[]) => void;
     readonly reject: (error: Error) => void;
     readonly timer: ReturnType<typeof setTimeout>;
   }>();
+  readonly #controls = new Map<string, {
+    readonly control: 'input';
+    readonly resolve: () => void;
+    readonly reject: (error: Error) => void;
+    readonly timer: ReturnType<typeof setTimeout>;
+  }>();
+  readonly #inputQueues = new Map<string, Promise<void>>();
 
   constructor(token: string = new URLSearchParams(location.search).get('token') ?? '') {
     this.#token = token;
@@ -61,7 +83,27 @@ export class RunnerClient implements DataSource {
   connect(onMessage: (message: ServerMessage) => void, onStatus: (connected: boolean) => void): void {
     this.#onMessage = onMessage;
     this.#onStatus = onStatus;
+    this.#reconnect = true;
+    if (this.#reconnectTimer !== undefined) {
+      clearTimeout(this.#reconnectTimer);
+      this.#reconnectTimer = undefined;
+    }
+    if (this.#socket !== undefined) return;
     this.#open();
+  }
+
+  /** Closes the live transport and rejects work whose server acknowledgement has not arrived. */
+  disconnect(): void {
+    this.#reconnect = false;
+    if (this.#reconnectTimer !== undefined) {
+      clearTimeout(this.#reconnectTimer);
+      this.#reconnectTimer = undefined;
+    }
+    this.#rejectPending(new RunnerControlError('disconnected', 'the Runner is disconnected'));
+    const socket = this.#socket;
+    this.#socket = undefined;
+    socket?.close();
+    this.#onStatus(false);
   }
 
   #open(): void {
@@ -70,8 +112,11 @@ export class RunnerClient implements DataSource {
     url.searchParams.set('token', this.#token);
     const socket = new WebSocket(url);
     this.#socket = socket;
-    socket.addEventListener('open', () => this.#onStatus(true));
+    socket.addEventListener('open', () => {
+      if (this.#socket === socket) this.#onStatus(true);
+    });
     socket.addEventListener('message', (event: MessageEvent<string>) => {
+      if (this.#socket !== socket) return;
       try {
         const message = parseServerMessage(event.data);
         if (message.type === 'actionability-inspection') {
@@ -81,6 +126,20 @@ export class RunnerClient implements DataSource {
           this.#inspections.delete(message.requestId);
           if (message.results !== undefined) pending.resolve(message.results);
           else pending.reject(new Error(message.error ?? 'actionability inspection failed'));
+          return;
+        }
+        if (message.type === 'control-result') {
+          const pending = this.#controls.get(message.requestId);
+          if (pending === undefined) return;
+          clearTimeout(pending.timer);
+          this.#controls.delete(message.requestId);
+          if (message.control !== pending.control) {
+            pending.reject(new RunnerControlError('protocol', `Runner control response mismatch: expected ${pending.control}, received ${message.control}`));
+          } else if (message.ok) {
+            pending.resolve();
+          } else {
+            pending.reject(new RunnerControlError('rejected', message.error ?? `${message.control} failed`));
+          }
           return;
         }
         if (message.type === 'run-end' || message.type === 'run-cancelled' || message.type === 'run-infrastructure-failed') {
@@ -93,8 +152,14 @@ export class RunnerClient implements DataSource {
       }
     });
     socket.addEventListener('close', () => {
+      if (this.#socket !== socket) return;
+      this.#socket = undefined;
       this.#onStatus(false);
-      setTimeout(() => this.#open(), 1_000);
+      this.#rejectPending(new RunnerControlError('disconnected', 'the Runner disconnected before acknowledging the request'));
+      if (this.#reconnect) this.#reconnectTimer = setTimeout(() => {
+        this.#reconnectTimer = undefined;
+        if (this.#reconnect && this.#socket === undefined) this.#open();
+      }, 1_000);
     });
   }
 
@@ -104,9 +169,60 @@ export class RunnerClient implements DataSource {
     this.#socket.send(encodeMessage(message));
   }
 
-  /** Forwards raw terminal bytes (recorder mode). */
-  sendInput(sessionId: string, data: string): void {
-    this.send({ v: 1, type: 'input', sessionId, dataB64: toBase64(new TextEncoder().encode(data)) });
+  /**
+   * Forwards raw terminal bytes and resolves only after the recorder accepted
+   * the write. Writes are serialized per session so acknowledgements also form
+   * a causal input-order barrier.
+   */
+  sendInput(sessionId: string, data: string): Promise<void> {
+    const previous = this.#inputQueues.get(sessionId) ?? Promise.resolve();
+    const delivery = previous.catch((error: unknown) => {
+      // A negative ACK is a definitive boundary for one rejected operation;
+      // later queued bytes are still ordered and safe to attempt. A timeout,
+      // disconnect or protocol mismatch leaves the write outcome unknown, so
+      // the queue fails closed instead of possibly duplicating input.
+      if (error instanceof RunnerControlError && error.kind === 'rejected') return;
+      throw error;
+    }).then(() => this.#sendInput(sessionId, data));
+    this.#inputQueues.set(sessionId, delivery);
+    void delivery.then(
+      () => {
+        if (this.#inputQueues.get(sessionId) === delivery) this.#inputQueues.delete(sessionId);
+      },
+      () => {
+        if (this.#inputQueues.get(sessionId) === delivery) this.#inputQueues.delete(sessionId);
+      },
+    );
+    return delivery;
+  }
+
+  #sendInput(sessionId: string, data: string): Promise<void> {
+    const requestId = `control:input:${++this.#nextControl}`;
+    return new Promise((resolve, reject) => {
+      const socket = this.#socket;
+      if (socket?.readyState !== WebSocket.OPEN) {
+        reject(new RunnerControlError('disconnected', 'the Runner is disconnected'));
+        return;
+      }
+      const timer = setTimeout(() => {
+        this.#controls.delete(requestId);
+        reject(new RunnerControlError('timeout', 'Runner input acknowledgement timed out'));
+      }, 5_000);
+      this.#controls.set(requestId, { control: 'input', resolve, reject, timer });
+      try {
+        socket.send(encodeMessage({
+          v: 1,
+          type: 'input',
+          sessionId,
+          dataB64: toBase64(new TextEncoder().encode(data)),
+          requestId,
+        }));
+      } catch (error) {
+        clearTimeout(timer);
+        this.#controls.delete(requestId);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
   }
 
   /** Reads the live production ActionPlanner without executing an action. */
@@ -126,6 +242,19 @@ export class RunnerClient implements DataSource {
       }
       this.send({ v: 1, type: 'inspect-actionability', requestId, sessionId, nodeId });
     });
+  }
+
+  #rejectPending(error: Error): void {
+    for (const pending of this.#controls.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.#controls.clear();
+    for (const pending of this.#inspections.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.#inspections.clear();
   }
 
   async state(): Promise<ServerState> {

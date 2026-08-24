@@ -64,6 +64,9 @@ const MAX_BODY_BYTES = 1024 * 1024;
 /** Maximum accepted WebSocket frame. */
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 
+/** Secret material generated for each UI server launch. */
+const MIN_TOKEN_BYTES = 24;
+
 /** Options for {@link startUiServer}. */
 export interface UiServerOptions {
   /** Port to listen on. Default 0 — an ephemeral port, printed on the URL. */
@@ -76,8 +79,6 @@ export interface UiServerOptions {
   readonly record?: RecorderOptions;
   /** Directory holding the built browser app. Default `dist/app` in this package. */
   readonly appDir?: string;
-  /** Pre-shared token. Default: 24 random bytes. */
-  readonly token?: string;
   /**
    * Start a native-host run. `runnerTaskIds` are invocation-scoped identities
    * from structured discovery; absent means the complete collected graph.
@@ -151,7 +152,7 @@ export interface UiServer {
  * ```
  */
 export async function startUiServer(options: UiServerOptions = {}): Promise<UiServer> {
-  const token = options.token ?? randomBytes(24).toString('base64url');
+  const token = randomBytes(MIN_TOKEN_BYTES).toString('base64url');
   const hub = new UiHub(options.hub ?? {});
   const sessions = new Map<string, AttachedSession>();
   const appDir = options.appDir ?? fileURLToPath(new URL('../dist/app/', import.meta.url));

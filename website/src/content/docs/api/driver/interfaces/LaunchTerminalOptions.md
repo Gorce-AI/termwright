@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LaunchTerminalOptions
 
-Defined in: [driver/src/session.ts:224](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L224)
+Defined in: [driver/src/session.ts:236](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L236)
 
 Options accepted by [launchTerminal](../../functions/launchterminal/), plus the injectable backend.
 
@@ -39,7 +39,7 @@ Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit op
 
 > `readonly` `optional` **backend?**: [`PtyBackend`](../ptybackend/)
 
-Defined in: [driver/src/session.ts:226](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L226)
+Defined in: [driver/src/session.ts:238](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L238)
 
 Defaults to `@lydell/node-pty`; swapped by component-testing harnesses.
 
@@ -142,7 +142,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **modesObservable?**: `boolean`
 
-Defined in: [driver/src/session.ts:233](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L233)
+Defined in: [driver/src/session.ts:245](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L245)
 
 Whether the child's mouse mode requests are observable. Defaults to the
 platform's answer (false under ConPTY). Overridable so the unobservable

@@ -7,12 +7,13 @@ instrumented source copy.
 
 The sections labelled **Current** describe code and workflows in this
 repository today. Sections labelled **Target** are a design for future work.
-There is currently no upstream-release watcher, AST recipe engine, manifest v2
-writer, candidate-PR opener, signed revocation service, or automatic patch
-publisher in this repository. A bounded local candidate certifier and artifact
-workflow are implemented as described below; they operate only on committed
-patch sets. In particular, this document does not make a new framework version
-supported and does not change the compatibility registry.
+The repository now has daily release discovery, bounded candidate
+certification, trusted artifact reconciliation, an idempotent candidate-PR
+opener, and a coordinator that merges an exact-SHA green candidate before the
+ordinary exact-SHA release path. It still has no general AST recipe engine,
+manifest v2 writer, signed canary/revocation service, or automatic upstream
+patch publisher. Discovery never makes a framework version supported by
+itself; the reviewed compatibility ledger remains authoritative.
 
 ## Policy
 
@@ -408,33 +409,20 @@ and Ratatui must not promote frame-local render calls to stable identity.
 
 ## Candidate PR, canary and stable promotion
 
-The implemented `upstream-candidates.yml` only re-certifies committed patch
-sets and uploads an unsigned artifact. Future release automation should remain
-split from it:
+`upstream-candidates.yml` now discovers unverified registry releases daily,
+binds every candidate to trusted ledger state, certifies a bounded matrix, and
+uploads immutable verdict artifacts. `autonomous-coordinator.yml` runs with the
+write boundary separated from untrusted candidate execution: it reconciles the
+exact successful run, opens or updates the compatibility PR, requires its exact
+SHA to pass the complete CI contract on the first attempt, then merges it. The
+same coordinator sequences the Version PR and `release.yml`; publication is
+bound to the reviewed, green SHA rather than a moving branch name.
 
-1. A proposed `upstream-discovery.yml` discovers a
-   new registry version, authenticates it, runs the recipe and all gates, then
-   opens or updates a candidate PR. Failed and ambiguous candidates produce a
-   report, never a best-effort patch.
-2. `upstream-certify.yml` reruns the candidate from the committed recipe on
-   protected runners, verifies the two-run/two-runner result, stores signed
-   evidence and marks the immutable candidate `behaviorally-certified`.
-3. Only a behaviorally certified commit may enter an opt-in canary channel via
-   `publish-upstream-canary.yml`. The canary is signed and content-addressed;
-   it never moves `latest`, broadens the stable compatibility declaration, or
-   replaces an existing patch-set directory.
-4. `promote-upstream.yml` is manual, protected by an environment approval. It
-   re-verifies source, evidence, signatures and revocations; requires capability
-   review; then opens the ordinary release changes. The Release PR remains the
-   human approval boundary.
-
-`upstream-discovery.yml`, `upstream-certify.yml`,
-`publish-upstream-canary.yml` and `promote-upstream.yml` are proposed and do not
-exist today. `preview-release.yml` publishes PR packages through `pkg-pr-new`,
-not upstream certification evidence. Stable repository publication uses the
-single `release.yml` workflow: a manual run prepares the Version PR, and
-merging that reviewed PR publishes every registry automatically. The target
-design preserves that human boundary.
+This is stable-ledger automation, not a signed canary system. A future canary
+stage must sign content-addressed evidence, never move `latest`, and require a
+protected human promotion with re-verification of sources, capabilities and
+revocations. `preview-release.yml` remains an ordinary PR-package preview and
+does not publish upstream certification evidence.
 
 Candidate PRs must show the upstream release identity, structural match report,
 complete allowlisted diff, state transition evidence, capability diff, private
@@ -501,8 +489,9 @@ The repository already has substantial pieces of the behavioral gate:
   existing suites into one deterministic unsigned artifact for the committed
   static patch sets.
 
-What remains missing is release discovery, structural recipes, manifest v2,
-independent-runner reproducibility, the complete build/behavior matrix, signed
-candidate artifacts, capability approval, immutable promotion and revocation.
-Until those exist, adding an upstream version remains a reviewed, manual
-patch-set change using the current exact-byte manifests and existing tests.
+What remains missing is structural recipe generation, manifest v2,
+independent-runner reproducibility, signed canary artifacts, formal capability
+approval, and a signed revocation ledger. Candidate discovery, certification,
+PR reconciliation and exact-SHA release coordination are implemented, but
+promotion still relies on reviewed exact-byte patch sets and the protected
+compatibility ledger.

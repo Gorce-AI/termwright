@@ -51,7 +51,10 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       (message) => dispatch({ type: 'message', message }),
       (connected) => dispatch({ type: 'connected', connected }),
     );
-    return () => { active = false; };
+    return () => {
+      active = false;
+      client?.disconnect();
+    };
   }, [client, source]);
 
   const openReplay = useCallback(async (execution: ExecutionCase) => {
@@ -281,7 +284,12 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
           dispatch={dispatch}
           onRun={run}
           onStop={stop}
-          onInput={(sessionId, data) => client?.sendInput(sessionId, data)}
+          onInput={(sessionId, data) => {
+            if (client === undefined) return;
+            void client.sendInput(sessionId, data).catch((cause: unknown) => {
+              dispatch({ type: 'toast', tone: 'failure', text: `Terminal input failed: ${describe(cause)}` });
+            });
+          }}
           {...(client === undefined ? {} : { onInspectActionability: (sessionId: string, nodeId: string) => client.inspectActionability(sessionId, nodeId) })}
           onTraceStateAt={(timeMs) => source.traceState(timeMs)}
           onOpenReplay={(executionId) => {

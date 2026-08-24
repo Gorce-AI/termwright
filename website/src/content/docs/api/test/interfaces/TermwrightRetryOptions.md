@@ -21,7 +21,7 @@ Defined in: [test/src/config.ts:182](https://github.com/Gorce-AI/termwright/blob
 
 Defined in: [test/src/config.ts:184](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/config.ts#L184)
 
-Additional attempts on CI. Default 2.
+Additional attempts on CI. Default 0; diagnostics must opt in explicitly.
 
 ***
 

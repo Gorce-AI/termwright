@@ -152,7 +152,12 @@ export {
   type PtyBackendChoice,
 } from './backend-selection.js';
 
-export { createConPtyBackend, CONPTY_BACKEND_NAME } from './conpty-backend.js';
+export {
+  createConPtyBackend,
+  CONPTY_BACKEND_NAME,
+  type ConPtySessionHandle,
+  type ConPtySpawn,
+} from './conpty-backend.js';
 
 export {
   createNodePtyBackend,

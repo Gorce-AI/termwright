@@ -17,3 +17,13 @@ merge and coordinated npm/PyPI/crates.io release.
 Consolidate Ink annotations and component testing into `@termwright/ink` and
 remove the pre-release-only `@termwright/ink-testing` and semantic protocol v1
 compatibility surfaces.
+
+Windows now uses Termwright's own ConPTY backend with x64 and ARM64 prebuild
+packages, authoritative pipe completion, and job-object process ownership.
+There is no weaker fallback: a missing native package fails closed with an
+actionable error.
+
+Repository and release certification run on the first workflow attempt with
+zero retries and snapshot updates disabled. Diagnostic retries retain every
+attempt, classify fail-then-pass as flaky, and remain non-zero rather than
+turning an unstable run green.

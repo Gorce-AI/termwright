@@ -185,6 +185,13 @@ async function waitUntil(
 }
 
 describe("authentication", () => {
+  it("generates a token with 192 bits of secret material by default", async () => {
+    const server = await start();
+    const bytes = Buffer.from(server.token, "base64url");
+    expect(bytes).toHaveLength(24);
+    expect(bytes.toString("base64url")).toBe(server.token);
+  });
+
   it("rejects HTTP without the token", async () => {
     const server = await start();
     const response = await fetch(new URL("/api/state", server.url));

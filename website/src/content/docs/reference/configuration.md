@@ -182,13 +182,15 @@ Vitest owns scheduling. Configure retries with the public helper:
 import {termwrightRetry} from 'termwright/test';
 
 export default defineConfig({
-  test: {retry: termwrightRetry({ci: 2, local: 0})},
+  test: {retry: termwrightRetry({ci: 0, local: 0})},
 });
 ```
 
 `TERMWRIGHT_RETRIES` overrides the number of additional attempts and accepts an
 integer from 0 through 100. Reports retain each earlier failure reason and the
-attempt on which the test passed or finally failed.
+identity of the attempt on which the test passed or finally failed. Use a
+non-zero value only as a diagnostic experiment: a fail-then-pass run is flaky,
+exits non-zero, and is not certifying evidence.
 
 ## Snapshot updates
 

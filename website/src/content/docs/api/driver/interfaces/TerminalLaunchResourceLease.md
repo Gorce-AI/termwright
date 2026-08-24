@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalLaunchResourceLease
 
-Defined in: driver/src/launch-resources.ts:3
+Defined in: [driver/src/launch-resources.ts:3](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/launch-resources.ts#L3)
 
 Host-owned resource admission at the actual terminal allocation boundary.
 
@@ -21,7 +21,7 @@ Host-owned resource admission at the actual terminal allocation boundary.
 
 > **attach**(`sessionId`): `Promise`\<`void`\>
 
-Defined in: driver/src/launch-resources.ts:5
+Defined in: [driver/src/launch-resources.ts:5](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/launch-resources.ts#L5)
 
 Binds admitted capacity to the concrete session before allocation.
 
@@ -41,7 +41,7 @@ Binds admitted capacity to the concrete session before allocation.
 
 > **release**(): `Promise`\<`void`\>
 
-Defined in: driver/src/launch-resources.ts:7
+Defined in: [driver/src/launch-resources.ts:7](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/launch-resources.ts#L7)
 
 Releases capacity only after the driver's verified teardown barrier.
 

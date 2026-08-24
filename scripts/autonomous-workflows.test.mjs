@@ -99,6 +99,7 @@ describe('autonomous workflow security', () => {
       artifactStep(ci, 'ui-browser-artifacts'),
       artifactStep(ci, 'example-termwright-reports'),
       artifactStep(reliability, 'nightly-termwright-runs-${{ matrix.os }}-node-${{ matrix.node }}'),
+      artifactStep(reliability, 'nightly-termwright-runs-windows-latest-node-${{ matrix.node }}'),
     ];
 
     for (const artifact of artifacts) {
