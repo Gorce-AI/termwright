@@ -10,7 +10,7 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { buildAgentContext, buildUsage } from './agent-context.js';
+import { buildAgentContext, buildUsage, TARGETING_GUIDANCE } from './agent-context.js';
 import type { JsonSchema } from './agent-context.js';
 import { TOOLS } from './registry.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
@@ -85,12 +85,12 @@ function renderSkillMarkdown(): string {
     'Stable semantic identities can be resolved again after the screen moves on. Frame-local',
     'identities and grid refs cannot; take a fresh snapshot when they become stale.',
     '',
-    '`semanticTree: unavailable` means the program ships no adapter. Target those by `text`; there',
-    'are no invented roles.',
+    TARGETING_GUIDANCE.semanticUnavailable,
     '',
     '## Targeting',
     '',
-    'Precedence: `ref`, `selector`, `testId`, `role` (+`name`), `label`, `text`. Any name or text may',
+    TARGETING_GUIDANCE.precedence,
+    'Any name or text may',
     'be written `/pattern/flags` to match as a regular expression. Locators are strict — more than one',
     'match fails with `ambiguous-locator` and lists the candidates; pass `nth` to disambiguate, or use',
     '`terminal.query` first to see what matches.',

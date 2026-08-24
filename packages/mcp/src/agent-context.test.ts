@@ -2,7 +2,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildAgentContext, buildUsage } from './agent-context.js';
+import { buildAgentContext, buildUsage, TARGETING_GUIDANCE } from './agent-context.js';
 import { buildAgentSkill } from './agent-skill.js';
 import { EXIT_CODES, exitCodeFor } from './errors.js';
 import { runCli } from './cli.js';
@@ -163,6 +163,17 @@ describe('the agent-skill package', () => {
     expect(skill.startsWith('---\nname: termwright\ndescription: ')).toBe(true);
     expect(skill).toContain('stale-snapshot');
     expect(skill).toContain('terminal.capture_since');
+  });
+
+  it('uses the product targeting model when no semantic tree is available', () => {
+    const skill = files[0]?.contents ?? '';
+    const context = buildAgentContext();
+
+    expect(context.conventions).toContain(TARGETING_GUIDANCE.precedence);
+    expect(context.conventions).toContain(TARGETING_GUIDANCE.semanticUnavailable);
+    expect(skill).toContain(TARGETING_GUIDANCE.precedence);
+    expect(skill).toContain(TARGETING_GUIDANCE.semanticUnavailable);
+    expect(skill).not.toContain('Target those by `text`');
   });
 
   it('documents every tool and its parameters in the reference', () => {

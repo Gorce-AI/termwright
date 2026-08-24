@@ -89,15 +89,22 @@ export const ERROR_KINDS_ARE_COMPLETE: [MissingKind] extends [never]
 
 const ERROR_KINDS: readonly ErrorKind[] = [...DRIVER_ERROR_KINDS, ...MCP_ERROR_KINDS];
 
+/** Shared targeting guidance for every agent-facing surface. */
+export const TARGETING_GUIDANCE = {
+  precedence: 'Targeting precedence is `ref`, `selector`, `testId`, `role` (+`name`), `label`, `text`, `screenText`.',
+  semanticUnavailable:
+    '`semanticTree: unavailable` means the program ships no integration — target physical output with `screenText`, never semantic `text` or `role`.',
+} as const;
+
 const CONVENTIONS = [
   'A semantic ref looks like semantic:n8@42: node id minted at semantic revision 42. A stable semantic identity may ' +
     'be re-resolved in later revisions; frame-local identities and grid refs must be refreshed.',
   'terminal.snapshot returns a screen revision; pass it to terminal.capture_since as cursor to get ' +
     'only the rows and semantic subtrees that changed.',
   'Any name or text argument may be written as "/pattern/flags" to match as a regular expression.',
-  'Targeting precedence is ref, selector, testId, role (+name), label, text, screenText.',
+  TARGETING_GUIDANCE.precedence,
   'Locators are strict: more than one match fails with kind "ambiguous-locator" unless nth is given.',
-  'semanticTree "unavailable" means the program ships no integration — target physical output with screenText, never semantic text or role.',
+  TARGETING_GUIDANCE.semanticUnavailable,
   'Errors are returned as tool results with isError set; _meta["io.termwright/error"].kind is the value to ' +
     'branch on, and that payload\'s suggestion says what to try next. Error results intentionally omit structuredContent because it is success-schema validated.',
 ] as const;
@@ -152,7 +159,7 @@ export function buildUsage(): string {
     '  terminal.capture_since {terminal:"t1", cursor:42} -> only what changed',
     '  terminal.close {terminal:"t1"}',
     '',
-    'targeting  ref | selector | testId | role(+name) | label | text   (+ exact, state, nth)',
+    'targeting  ref | selector | testId | role(+name) | label | text | screenText   (+ exact, state, nth)',
     `roles      ${SEMANTIC_ROLES.join(' ')}`,
     `states     ${STATE_NAMES.join(' ')}`,
     '',
