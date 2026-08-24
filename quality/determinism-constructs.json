@@ -11,11 +11,11 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 41,
-    "deadline-or-scheduler-regression-test": 71,
+    "deadline-or-scheduler-regression-test": 70,
     "deterministic-adversarial-fixture-schedule": 36,
     "display-or-persisted-wall-time-not-correctness-order": 87,
     "explicit-external-file-polling": 3,
-    "explicit-external-or-ui-source-polling": 184,
+    "explicit-external-or-ui-source-polling": 185,
     "explicit-test-selection-reviewed-with-platform-registry": 99,
     "managed-or-diagnostic-background-task": 60,
     "production-process-isolation-review": 27,
@@ -2293,9 +2293,9 @@
     },
     {
       "path": "packages/probe-ink/src/geometry.pty.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 150));"
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(async () => {"
     },
     {
       "path": "packages/probe-ink/src/instrument.ts",

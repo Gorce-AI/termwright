@@ -19,6 +19,7 @@ afterEach(() => {
 describe('termwrightRetry', () => {
   it('uses native Vitest additional-attempt counts for CI, local and env override', () => {
     expect(termwrightRetry({ env: {} })).toBe(0);
+    expect(termwrightRetry({ env: { CI: 'true' } })).toBe(0);
     expect(termwrightRetry({ ci: 3, env: { CI: 'true' } })).toBe(3);
     expect(termwrightRetry({ ci: 3, env: { CI: 'true', TERMWRIGHT_RETRIES: '1' } })).toBe(1);
     expect(termwrightRetry({ local: 2, env: { CI: 'false' } })).toBe(2);

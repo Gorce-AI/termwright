@@ -33,6 +33,10 @@ const configuredExamples = [
 // process fan-out: the Termwright host still owns one RunId and one broker.
 export default defineConfig({
   test: {
+    // Repository certification is always single-attempt. Explicit --retry is
+    // reserved for local diagnosis and still produces a non-certifying flaky
+    // result when a later attempt passes.
+    retry: 0,
     coverage: {
       provider: 'v8',
       reportsDirectory: './coverage',

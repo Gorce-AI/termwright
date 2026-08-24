@@ -180,7 +180,7 @@ const UPDATE_MODES: readonly UpdateSnapshotsMode[] = ['all', 'changed', 'missing
 const MAX_RETRIES = 100;
 
 export interface TermwrightRetryOptions {
-  /** Additional attempts on CI. Default 2. */
+  /** Additional attempts on CI. Default 0; diagnostics must opt in explicitly. */
   readonly ci?: number;
   /** Additional attempts outside CI. Default 0. */
   readonly local?: number;
@@ -204,7 +204,7 @@ export function termwrightRetry(options: TermwrightRetryOptions = {}): number {
   const ci = env['CI'];
   return retryCount(
     ci !== undefined && ci !== '' && ci !== '0' && ci.toLowerCase() !== 'false'
-      ? (options.ci ?? 2)
+      ? (options.ci ?? 0)
       : (options.local ?? 0),
     ci !== undefined ? 'ci' : 'local',
   );

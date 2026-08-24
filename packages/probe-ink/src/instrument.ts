@@ -21,6 +21,7 @@ import { instrumentationSentinel } from './instrumentation.js';
 import { registerTerminalInputModeEvidenceProvider } from '@termwright/evidence-provider';
 import { trackTerminal } from './terminal-tracker.js';
 import { onInkAnnotationChange } from './annotations.js';
+import { RenderBoundaryQueue } from './render-boundary.js';
 
 /**
  * Shadowing starts when this module is evaluated, not when render() runs.
@@ -123,10 +124,7 @@ function instrumentedRender(
     session: null,
   };
   let disposed = false;
-  const renderBoundaries: Array<{
-    readonly resolve: (revision: number) => void;
-    readonly reject: (error: Error) => void;
-  }> = [];
+  const renderBoundaries = new RenderBoundaryQueue();
   const releaseAnnotations = onInkAnnotationChange(() => {
     // React layout-effect cleanup/registration can run while Ink is still
     // committing the host mutation that triggered it. Publishing immediately
@@ -149,7 +147,7 @@ function instrumentedRender(
   const instance = ink.render(wrap(node), {
     ...options,
     onRender(metrics) {
-      const boundary = renderBoundaries.shift();
+      const boundary = renderBoundaries.take();
       try {
         if (!certifiedRuntime) {
           const root = (probeRef.current?.parentNode as InkDomElement | undefined) ?? null;
@@ -251,9 +249,7 @@ function instrumentedRender(
   const stop = (): void => {
     if (disposed) return;
     disposed = true;
-    for (const boundary of renderBoundaries.splice(0)) {
-      boundary.reject(new Error('Ink probe stopped before the render boundary'));
-    }
+    renderBoundaries.stop();
     releaseCapture();
     releaseAnnotations();
     inputModeEvidence.dispose();
@@ -290,17 +286,10 @@ function instrumentedRender(
       instance.cleanup();
     },
     [INK_FLUSH_NEXT_RENDER](mutate: () => void): Promise<number> {
-      return new Promise<number>((resolve, reject) => {
-        const boundary = { resolve, reject };
-        renderBoundaries.push(boundary);
-        try {
-          mutate();
-        } catch (error) {
-          const index = renderBoundaries.indexOf(boundary);
-          if (index !== -1) renderBoundaries.splice(index, 1);
-          reject(error instanceof Error ? error : new Error(String(error)));
-        }
-      });
+      return renderBoundaries.afterCurrentRender(
+        () => instance.waitUntilRenderFlush(),
+        mutate,
+      );
     },
   };
   return wrappedInstance;

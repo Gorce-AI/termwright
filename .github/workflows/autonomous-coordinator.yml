@@ -8,7 +8,7 @@ on:
 
 concurrency:
   # One repository-wide state machine: compatibility merge, Version PR merge,
-  # release retry, and the next cycle may never leapfrog one another.
+  # release failure handling, and the next cycle may never leapfrog one another.
   group: autonomous-coordinator-${{ github.event.repository.full_name }}
   cancel-in-progress: false
 
@@ -382,8 +382,8 @@ jobs:
           AUTOMATION_TREE_VERIFIED: ${{ needs.inspect.outputs.tree-verified }}
         run: node scripts/autonomous-release-coordinator.mjs coordinate-ci "$GITHUB_EVENT_PATH"
 
-  retry-release:
-    name: retry exact transient release failure
+  notify-release-failure:
+    name: require intervention for a failed release
     if: >-
       github.event.workflow_run.name == 'Release' &&
       (github.event.workflow_run.conclusion == 'failure' ||
@@ -392,7 +392,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      actions: write
       contents: read
       issues: write
     env:
@@ -404,14 +403,8 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
       - id: validate
-        run: node scripts/autonomous-release-coordinator.mjs validate-release-retry "$GITHUB_EVENT_PATH"
-      - name: Retry the same run and exact inputs
-        if: steps.validate.outputs.retry == 'true'
-        env:
-          RUN_ID: ${{ github.event.workflow_run.id }}
-        run: gh api --method POST "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/rerun-failed-jobs"
-      - name: Open or update one exhausted-retry issue
-        if: steps.validate.outputs.retry != 'true'
+        run: node scripts/autonomous-release-coordinator.mjs validate-release-failure "$GITHUB_EVENT_PATH"
+      - name: Open or update one release-failure issue
         shell: bash
         env:
           RUN_URL: ${{ github.event.workflow_run.html_url }}
@@ -421,7 +414,7 @@ jobs:
           gh api "/repos/$GITHUB_REPOSITORY/assignees/$ISSUE_OWNER" >/dev/null
           title="[release] unattended publication needs intervention for $RELEASE_SHA"
           body_file=$(mktemp)
-          printf 'The exact SHA-bound release exhausted its automatic retries.\n\nRun: %s\n' "$RUN_URL" > "$body_file"
+          printf 'The exact SHA-bound release failed and was not retried. Certification requires a clean first attempt.\n\nRun: %s\n' "$RUN_URL" > "$body_file"
           number=$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=all&per_page=100" \
             | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .title == $title) | .number' | sed -n '1p')
           if [ -n "$number" ]; then

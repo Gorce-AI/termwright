@@ -96,7 +96,7 @@ async function arm(scenario: string): Promise<TerminalHarness> {
 /** Fires the hostile act and waits until its effect can no longer be in flight. */
 async function fire(terminal: TerminalHarness): Promise<void> {
   await terminal.press('g');
-  await terminal.waitForQuiet({ quietMs: 200 }).catch(() => undefined);
+  await terminal.waitForQuiet({ quietMs: 200 });
 }
 
 /** Arm-before-check wait over the driver's owned diagnostic event source. */
@@ -297,7 +297,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     await expect.poll(() => terminal.semanticTree()?.revision).toBe(3);
 
     // Revision 2 arrived after 3 was published; it must never overwrite it.
-    await terminal.waitForQuiet({ quietMs: 200 }).catch(() => undefined);
+    await terminal.waitForQuiet({ quietMs: 200 });
     expect(terminal.semanticTree()?.revision).toBe(3);
     expect(await terminal.getByRole('button').textContent()).toBe('Third');
 
@@ -528,7 +528,7 @@ describe.skipIf(!ptyAvailable())('a hostile semantic peer', () => {
     const seqs = collectLogs(terminal);
     await fire(terminal);
     await expect.poll(() => codes(terminal)).toContain('log-dropped');
-    await terminal.waitForQuiet({ quietMs: 200 }).catch(() => undefined);
+    await terminal.waitForQuiet({ quietMs: 200 });
 
     const refused = entriesFor(terminal, 'log-dropped')
       .map((entry) => entry.count ?? 0)

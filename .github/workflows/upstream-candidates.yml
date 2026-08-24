@@ -17,6 +17,10 @@ concurrency:
 
 permissions: {}
 
+env:
+  TERMWRIGHT_RETRIES: '0'
+  TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
+
 jobs:
   discovery:
     name: Discover every unverified published version
@@ -28,6 +32,10 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       has-candidates: ${{ steps.matrix.outputs.has-candidates }}
     steps:
+      - &reject-rerun
+        name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
@@ -84,6 +92,7 @@ jobs:
     permissions:
       contents: read
     steps:
+      - *reject-rerun
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false

@@ -35,7 +35,8 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('Version PR differs from the deterministic transformation');
     expect(workflow).toContain('Compatibility PR differs from exact trusted artifact reconciliation');
     expect(workflow).toContain("workflows: ['Framework compatibility candidates', 'CI', 'Release']");
-    expect(workflow).toContain('rerun-failed-jobs');
+    expect(workflow).not.toContain('rerun-failed-jobs');
+    expect(workflow).toContain('validate-release-failure');
     expect(workflow).toContain('gh pr list --state open --head "$BRANCH"');
     expect(workflow).not.toContain('gh pr view "$BRANCH"');
     expect(workflow).toContain('vars.UPSTREAM_COMPATIBILITY_OWNER');

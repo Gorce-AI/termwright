@@ -252,6 +252,7 @@ export class TermwrightTestHost {
   }
 
   static async open(options: TermwrightTestHostOptions): Promise<TermwrightTestHost> {
+    assertFirstWorkflowAttempt(process.env);
     await preflightTestHost(options);
     const timeouts = resolveHostTimeouts(options.timeouts);
     const creation = createCertifiedVitestEngine(options);
@@ -1042,6 +1043,18 @@ export class TermwrightTestHost {
       attempts: Object.freeze(completedAttempts),
       events: Object.freeze([...active.recorded]),
     });
+  }
+}
+
+/** Refuse to turn a failed GitHub certification run into a later green attempt. */
+export function assertFirstWorkflowAttempt(env: Readonly<Record<string, string | undefined>>): void {
+  const required = env['TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT'];
+  if (required === undefined || required === '' || required === '0' || required.toLowerCase() === 'false') return;
+  if (required !== '1' && required.toLowerCase() !== 'true') {
+    throw new Error('TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT must be 0, 1, false, or true');
+  }
+  if (env['GITHUB_RUN_ATTEMPT'] !== '1') {
+    throw new Error('certification requires the first GitHub workflow attempt; start a new run instead of rerunning failed tests');
   }
 }
 

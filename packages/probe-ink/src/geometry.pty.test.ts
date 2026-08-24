@@ -138,11 +138,10 @@ describe("certified Ink geometry over a real PTY", { timeout: 60_000 }, () => {
         value: expect.objectContaining({ width: 20 }),
       });
       await terminal.resize({ columns: 12, rows: 6 });
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      expect((await label.geometry()).intendedRect).toMatchObject({
-        status: "known",
-        value: expect.objectContaining({ width: 12 }),
-      });
+      await expect.poll(async () => {
+        const intended = (await label.geometry()).intendedRect;
+        return intended.status === "known" ? intended.value.width : null;
+      }).toBe(12);
     } finally {
       await terminal.close();
     }

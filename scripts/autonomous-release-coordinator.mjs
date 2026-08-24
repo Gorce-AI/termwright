@@ -103,26 +103,34 @@ export function validateRequiredCiJobs(jobs) {
   if (ungreen.length > 0) throw new Error(`CI has non-success required jobs: ${ungreen.join(', ')}`);
 }
 
+export function validateTrustedCiRun(run, { repository }) {
+  if (run?.name !== 'CI' || run?.status !== 'completed') throw new Error('unexpected coordinator event');
+  if (run.path !== '.github/workflows/ci.yml') throw new Error('CI run used an unexpected workflow file');
+  if (run.event !== 'workflow_dispatch' || run.conclusion !== 'success') throw new Error('automation requires an explicitly dispatched, successful CI run');
+  if (run.run_attempt !== 1) throw new Error('automation requires a clean first-attempt CI run');
+  if (run.head_repository?.full_name !== repository || run.repository?.full_name !== repository || !SHA.test(run.head_sha ?? '')) throw new Error('CI run repository or SHA is untrusted');
+}
+
 export function validateTrustedUpstreamRun(run, { repository, defaultBranch, defaultHead }) {
   if (run?.name !== 'Framework compatibility candidates' || run?.status !== 'completed') throw new Error('unexpected workflow_run source');
   if (run.path !== '.github/workflows/upstream-candidates.yml') throw new Error('compatibility run used an unexpected workflow file');
+  if (run.run_attempt !== 1) throw new Error('compatibility certification requires a clean first workflow attempt');
   if (!['schedule', 'workflow_dispatch'].includes(run.event)) throw new Error(`untrusted compatibility event ${String(run.event)}`);
   if (run.head_repository?.full_name !== repository || run.repository?.full_name !== repository) throw new Error('compatibility run came from another repository');
   if (run.head_branch !== defaultBranch) throw new Error('compatibility run did not execute on the default branch');
   if (!SHA.test(run.head_sha ?? '') || run.head_sha !== defaultHead) throw new Error('stale compatibility workflow SHA');
 }
 
-export function validateRetryableReleaseRun(run, { repository, defaultBranch, maximumAttempts = 3 }) {
+export function validateFailedReleaseRun(run, { repository, defaultBranch }) {
   if (run?.name !== 'Release' || run?.status !== 'completed' || run?.event !== 'workflow_dispatch') throw new Error('unexpected release workflow_run source');
   if (run.path !== '.github/workflows/release.yml') throw new Error('release run used an unexpected workflow file');
   if (run.head_repository?.full_name !== repository || run.repository?.full_name !== repository) throw new Error('release run came from another repository');
   if (run.head_branch !== defaultBranch || !SHA.test(run.head_sha ?? '')) throw new Error('release run did not execute from the trusted default branch');
-  if (!['failure', 'cancelled', 'timed_out'].includes(run.conclusion)) throw new Error(`release run conclusion ${String(run.conclusion)} is not retryable`);
-  if (!Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) throw new Error('release run attempt is invalid');
+  if (!['failure', 'cancelled', 'timed_out'].includes(run.conclusion)) throw new Error(`release run conclusion ${String(run.conclusion)} does not require intervention`);
   const escaped = defaultBranch.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
   const title = new RegExp(`^Release (prepare|publish) ${escaped} @ ([0-9a-f]{40})(?: \\(Version PR ([1-9][0-9]*)\\))?$`, 'u').exec(run.display_title ?? '');
   if (title === null || title[2] !== run.head_sha || (title[1] === 'prepare' && title[3] !== undefined) || (title[1] === 'publish' && title[3] === undefined)) throw new Error('release run title is not bound to its exact mode, branch, SHA and Version PR');
-  return { retry: run.run_attempt < maximumAttempts, mode: title[1], sha: title[2], versionPr: title[3] ?? null };
+  return { mode: title[1], sha: title[2], versionPr: title[3] ?? null };
 }
 
 const prShape = {
@@ -300,10 +308,7 @@ async function inspectCi(event) {
   const run = event.workflow_run;
   const repository = event.repository.full_name;
   const branch = event.repository.default_branch;
-  if (run.name !== 'CI' || run.status !== 'completed') throw new Error('unexpected coordinator event');
-  if (run.path !== '.github/workflows/ci.yml') throw new Error('CI run used an unexpected workflow file');
-  if (run.event !== 'workflow_dispatch' || run.conclusion !== 'success') throw new Error('automation requires an explicitly dispatched, successful CI run');
-  if (run.head_repository?.full_name !== repository || run.repository?.full_name !== repository || !SHA.test(run.head_sha ?? '')) throw new Error('CI run repository or SHA is untrusted');
+  validateTrustedCiRun(run, { repository });
   validateRequiredCiJobs(await paged(`/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest`, 'jobs'));
   const current = await defaultHead(repository, branch);
   const prs = await paged(`/repos/${repository}/commits/${run.head_sha}/pulls`);
@@ -379,7 +384,7 @@ async function dispatchPendingChangesets(event, expectedSha) {
 
 async function main(argv) {
   const command = argv[0];
-  if (['coordinate-ci', 'dispatch-pending-changesets', 'inspect-ci', 'refresh-heartbeat', 'validate-release-retry', 'validate-upstream'].includes(command)) {
+  if (['coordinate-ci', 'dispatch-pending-changesets', 'inspect-ci', 'refresh-heartbeat', 'validate-release-failure', 'validate-upstream'].includes(command)) {
     validateIssueOwner(process.env.ISSUE_OWNER);
   }
   if (command === 'validate-upstream') {
@@ -407,13 +412,13 @@ async function main(argv) {
     await coordinateCi(JSON.parse(await readFile(resolve(argv[1]), 'utf8')));
   } else if (command === 'dispatch-pending-changesets') {
     await dispatchPendingChangesets(JSON.parse(await readFile(resolve(argv[1]), 'utf8')), argv[2]);
-  } else if (command === 'validate-release-retry') {
+  } else if (command === 'validate-release-failure') {
     const event = JSON.parse(await readFile(resolve(argv[1]), 'utf8'));
-    const result = validateRetryableReleaseRun(event.workflow_run, { repository: event.repository.full_name, defaultBranch: event.repository.default_branch });
+    const result = validateFailedReleaseRun(event.workflow_run, { repository: event.repository.full_name, defaultBranch: event.repository.default_branch });
     const output = process.env.GITHUB_OUTPUT;
     if (output !== undefined) {
       const { appendFile } = await import('node:fs/promises');
-      await appendFile(output, `retry=${String(result.retry)}\nmode=${result.mode}\nsha=${result.sha}\nversion-pr=${result.versionPr ?? ''}\n`);
+      await appendFile(output, `mode=${result.mode}\nsha=${result.sha}\nversion-pr=${result.versionPr ?? ''}\n`);
     } else process.stdout.write(`${JSON.stringify(result)}\n`);
   } else if (command === 'inspect-ci') {
     const result = await inspectCi(JSON.parse(await readFile(resolve(argv[1]), 'utf8')));

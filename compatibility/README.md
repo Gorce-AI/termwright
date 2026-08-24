@@ -167,14 +167,13 @@ write-token job never executes the Version PR. Its exact squash result is
 explicitly dispatched to Release in `publish` mode; a push event never
 publishes. Before any tag or OIDC job, Release independently repeats that full
 tree reproduction from the squash parent, so a manual dispatch cannot bypass
-the coordinator's proof. Exact run names make both dispatches idempotent on
-retries.
+the coordinator's proof. Exact run names make both dispatches idempotent
+without duplicating a release.
 
-A failed, cancelled, or timed-out Release run is retried in place with the same
-inputs and SHA. Retries are bounded to avoid an infinite loop; exhaustion opens
-or updates one SHA-keyed issue. Registry publication is idempotent, so a retry
-finishes a partial release without moving an existing tag or overwriting an
-artifact.
+A failed, cancelled, or timed-out Release run is never retried automatically.
+The coordinator opens or updates one SHA-keyed issue for maintainer
+intervention. This keeps a failed certification attempt visible and prevents a
+test flake from becoming a successful publication on a later workflow attempt.
 
 External actions in the certification, CI, coordinator, and release trust path
 are pinned to complete commit SHAs. Certification and CI checkouts do not

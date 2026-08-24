@@ -14,7 +14,8 @@ import {
   validateChangedFileObjects,
   validateIssueOwner,
   validateRequiredCiJobs,
-  validateRetryableReleaseRun,
+  validateTrustedCiRun,
+  validateFailedReleaseRun,
   validateTrustedUpstreamRun,
 } from './autonomous-release-coordinator.mjs';
 
@@ -31,8 +32,9 @@ describe('trusted autonomous coordinator', () => {
     expect(() => validateIssueOwner('owner--name')).toThrow(/explicit valid GitHub user/u);
   });
   it('rejects a stale default-branch certification SHA', () => {
-    const run = { name: 'Framework compatibility candidates', path: '.github/workflows/upstream-candidates.yml', status: 'completed', event: 'schedule', head_repository: { full_name: repository }, repository: { full_name: repository }, head_branch: defaultBranch, head_sha: head };
+    const run = { name: 'Framework compatibility candidates', path: '.github/workflows/upstream-candidates.yml', status: 'completed', event: 'schedule', run_attempt: 1, head_repository: { full_name: repository }, repository: { full_name: repository }, head_branch: defaultBranch, head_sha: head };
     expect(() => validateTrustedUpstreamRun(run, { repository, defaultBranch, defaultHead: base })).toThrow(/stale/u);
+    expect(() => validateTrustedUpstreamRun({ ...run, run_attempt: 2 }, { repository, defaultBranch, defaultHead: head })).toThrow(/clean first workflow attempt/u);
   });
 
   it('rejects malicious paths even when the rest of the compatibility PR is allowed', () => {
@@ -66,6 +68,12 @@ describe('trusted autonomous coordinator', () => {
     const jobs = CI_JOBS.slice(1).map((name) => ({ name, conclusion: 'success' }));
     expect(() => validateRequiredCiJobs(jobs)).toThrow(/missing required jobs/u);
     expect(() => validateRequiredCiJobs([...CI_JOBS.map((name) => ({ name, conclusion: 'success' })), { name: 'unreviewed new gate', conclusion: 'success' }])).toThrow(/unexpected jobs/u);
+  });
+
+  it('rejects a CI workflow that became green only after a rerun', () => {
+    const run = { name: 'CI', path: '.github/workflows/ci.yml', status: 'completed', event: 'workflow_dispatch', conclusion: 'success', run_attempt: 1, head_sha: head, head_repository: { full_name: repository }, repository: { full_name: repository } };
+    expect(() => validateTrustedCiRun(run, { repository })).not.toThrow();
+    expect(() => validateTrustedCiRun({ ...run, run_attempt: 2 }, { repository })).toThrow(/clean first-attempt/u);
   });
 
   it('accepts only the exact automation PR identity and file set', () => {
@@ -127,11 +135,11 @@ describe('trusted autonomous coordinator', () => {
     expect(() => compatibilitySourceRunId('Source certification run: 1\nSource certification run: 2')).toThrow(/exactly one/u);
   });
 
-  it('retries only a failed SHA-bound Release run and stops after a bounded attempt count', () => {
+  it('accepts only a failed SHA-bound Release run for intervention', () => {
     const run = { name: 'Release', path: '.github/workflows/release.yml', status: 'completed', event: 'workflow_dispatch', conclusion: 'failure', run_attempt: 1, display_title: `Release publish main @ ${head} (Version PR 42)`, head_sha: head, head_branch: 'main', head_repository: { full_name: repository }, repository: { full_name: repository } };
-    expect(validateRetryableReleaseRun(run, { repository, defaultBranch })).toMatchObject({ retry: true, mode: 'publish', sha: head, versionPr: '42' });
-    expect(validateRetryableReleaseRun({ ...run, run_attempt: 3 }, { repository, defaultBranch }).retry).toBe(false);
-    expect(() => validateRetryableReleaseRun({ ...run, display_title: `Release publish main @ ${base} (Version PR 42)` }, { repository, defaultBranch })).toThrow(/not bound/u);
-    expect(() => validateRetryableReleaseRun({ ...run, path: '.github/workflows/lookalike.yml' }, { repository, defaultBranch })).toThrow(/workflow file/u);
+    expect(validateFailedReleaseRun(run, { repository, defaultBranch })).toMatchObject({ mode: 'publish', sha: head, versionPr: '42' });
+    expect(() => validateFailedReleaseRun({ ...run, conclusion: 'success' }, { repository, defaultBranch })).toThrow(/does not require intervention/u);
+    expect(() => validateFailedReleaseRun({ ...run, display_title: `Release publish main @ ${base} (Version PR 42)` }, { repository, defaultBranch })).toThrow(/not bound/u);
+    expect(() => validateFailedReleaseRun({ ...run, path: '.github/workflows/lookalike.yml' }, { repository, defaultBranch })).toThrow(/workflow file/u);
   });
 });

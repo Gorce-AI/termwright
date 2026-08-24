@@ -34,6 +34,10 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  TERMWRIGHT_RETRIES: '0'
+  TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
+
 jobs:
   prepare:
     name: prepare Version PR
@@ -44,6 +48,9 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The SHA is verified after checkout; never let an input choose an
@@ -174,6 +181,9 @@ jobs:
       dist_tag: ${{ steps.release.outputs.dist_tag }}
       latest: ${{ steps.release.outputs.latest }}
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.target }}
@@ -246,6 +256,9 @@ jobs:
       matrix:
         arch: [x64, arm64]
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
@@ -282,6 +295,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
@@ -467,6 +483,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
@@ -527,6 +546,9 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
@@ -592,6 +614,9 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
@@ -658,6 +683,9 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
@@ -712,6 +740,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}

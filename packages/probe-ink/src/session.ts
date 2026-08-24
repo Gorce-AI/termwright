@@ -24,7 +24,8 @@ export interface InkSessionOptions {
   readonly resolveRoot: () => InkDomElement | null;
   readonly resolveExcluded?: () => InkDomElement | null;
   readonly resolveCapture: (root: InkDomElement) => InkFrameCapture | undefined;
-  readonly waitForRenderFlush?: () => Promise<void>;
+  /** Resolves after Ink has enqueued and flushed every stdout write for the captured render. */
+  readonly waitForRenderFlush: () => Promise<void>;
   readonly stdout: NodeJS.WriteStream;
   readonly tracker: InkTerminalTracker;
   readonly onGuaranteeViolation?: (error: Error) => void;
@@ -83,7 +84,7 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
     await nextMacrotask();
     // A marker authenticates the terminal bytes for this render, so it must
     // follow Ink's own stdout flush boundary, not just the probe's shadow drain.
-    await options.waitForRenderFlush?.();
+    await options.waitForRenderFlush();
     await options.tracker.drain();
     if (stopped) return null;
     if (!options.channel.isOpen) {
@@ -120,9 +121,11 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
       probeEvents: qualified.objects.length + (qualified.operations?.length ?? 0),
     });
     if (marker === undefined) throw new Error('Ink semantic publication was refused');
-    await drain(options.stdout);
-    if (stopped || frozen.number !== latestFrame) return null;
-    options.stdout.write(marker);
+    // There must be no async gap between the final frame check and enqueueing
+    // its marker: a newer Ink render could otherwise write in between them.
+    // Writable ordering now establishes FRAME -> MARKER; awaiting the marker's
+    // callback makes `flush()` an actual publication boundary for teardown.
+    await writeAndFlush(options.stdout, marker);
     resolvePublications(frozen.number, revision);
     return revision;
   };
@@ -245,9 +248,19 @@ function nextMacrotask(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-function drain(stream: NodeJS.WriteStream): Promise<void> {
-  return new Promise((resolve) => {
-    if (stream.writableEnded || stream.destroyed) return resolve();
-    try { stream.write('', () => resolve()); } catch { resolve(); }
+function writeAndFlush(stream: NodeJS.WriteStream, data: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (stream.writableEnded || stream.destroyed) {
+      reject(new Error('Ink stdout closed before the semantic render marker could be written'));
+      return;
+    }
+    try {
+      stream.write(data, (error?: Error | null) => {
+        if (error instanceof Error) reject(error);
+        else resolve();
+      });
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
   });
 }

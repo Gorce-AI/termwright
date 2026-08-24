@@ -30,6 +30,28 @@ export interface InkTerminalTracker {
   stop(): void;
 }
 
+/** @internal Serial shadow writes that fail closed after the first parser error. */
+export class ShadowWriteQueue {
+  #queue: Promise<void> = Promise.resolve();
+  #failure: Error | undefined;
+
+  enqueue(operation: () => Promise<void>): void {
+    this.#queue = this.#queue.then(async () => {
+      if (this.#failure !== undefined) return;
+      try {
+        await operation();
+      } catch (error) {
+        this.#failure = error instanceof Error ? error : new Error(String(error));
+      }
+    });
+  }
+
+  async drain(): Promise<void> {
+    await this.#queue;
+    if (this.#failure !== undefined) throw this.#failure;
+  }
+}
+
 export function trackTerminal(
   stdout: NodeJS.WriteStream,
   stderr: NodeJS.WriteStream,
@@ -40,7 +62,7 @@ export function trackTerminal(
     scrollback: 100_000,
   });
   const terminal = built.terminal;
-  let queue: Promise<void> = Promise.resolve();
+  const queue = new ShadowWriteQueue();
   let stopped = false;
   const restorers: (() => void)[] = [];
   // xterm tracks the tracking mode and focus reporting but not which mouse
@@ -73,7 +95,7 @@ export function trackTerminal(
     // CRLF after the line discipline. Shadow those committed bytes, not the
     // pre-PTY JavaScript payload. Pipes are deliberately left byte-exact.
     const committed = stdout.isTTY ? withOnlcr(bytes) : bytes;
-    queue = queue.then(() => writeTerminal(terminal, committed)).catch(() => undefined);
+    queue.enqueue(() => writeTerminal(terminal, committed));
   };
 
   for (const stream of new Set([stdout, stderr])) restorers.push(intercept(stream, observe));
@@ -82,7 +104,7 @@ export function trackTerminal(
   restorers.push(() => stdout.off('resize', onResize));
 
   return {
-    drain: () => queue,
+    drain: () => queue.drain(),
     position() {
       const buffer = terminal.buffer.active;
       return { row: buffer.cursorY, column: buffer.cursorX, buffer: buffer.type };

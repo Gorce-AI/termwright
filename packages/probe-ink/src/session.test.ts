@@ -76,9 +76,12 @@ function stream(writes: string[]): NodeJS.WriteStream {
   return target;
 }
 
+const flushedRender = async (): Promise<void> => undefined;
+
 interface DelayedWriteStream extends NodeJS.WriteStream {
   flushOne(): boolean;
   pendingWrites(): number;
+  waitForPendingWrites(count: number): Promise<void>;
 }
 
 function delayedStream(writes: string[]): DelayedWriteStream {
@@ -86,6 +89,7 @@ function delayedStream(writes: string[]): DelayedWriteStream {
     write: (...args: unknown[]) => boolean;
   };
   const pending: Array<() => void> = [];
+  const waiters: Array<{ count: number; resolve: () => void }> = [];
   Object.defineProperties(target, { columns: { value: 20 }, rows: { value: 8 } });
   target.write = ((chunk: unknown, encoding?: unknown, callback?: unknown): boolean => {
     const cb: (() => void) | undefined = typeof encoding === 'function'
@@ -99,6 +103,12 @@ function delayedStream(writes: string[]): DelayedWriteStream {
         : String(chunk));
       cb?.();
     });
+    for (let index = waiters.length - 1; index >= 0; index -= 1) {
+      const waiter = waiters[index];
+      if (waiter === undefined || pending.length < waiter.count) continue;
+      waiters.splice(index, 1);
+      waiter.resolve();
+    }
     return true;
   }) as never;
   target.flushOne = () => {
@@ -108,28 +118,10 @@ function delayedStream(writes: string[]): DelayedWriteStream {
     return true;
   };
   target.pendingWrites = () => pending.length;
+  target.waitForPendingWrites = (count) => pending.length >= count
+    ? Promise.resolve()
+    : new Promise((resolve) => waiters.push({ count, resolve }));
   return target;
-}
-
-async function flushDelayedWritesUntilSettled(stream: DelayedWriteStream, promise: Promise<void>): Promise<void> {
-  let settled = false;
-  let rejected: unknown;
-  promise.then(
-    () => { settled = true; },
-    (error: unknown) => {
-      settled = true;
-      rejected = error;
-    },
-  );
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    while (stream.flushOne()) { /* drain queued delayed writes */ }
-    if (settled) {
-      if (rejected !== undefined) throw rejected;
-      return;
-    }
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-  throw new Error('timed out flushing delayed writes');
 }
 
 async function passMacrotasks(count: number): Promise<void> {
@@ -158,6 +150,7 @@ describe('Ink probe session', () => {
       channel: channel(snapshots, writes),
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
+      waitForRenderFlush: flushedRender,
       stdout: output,
       tracker: fakeTracker(),
     });
@@ -182,6 +175,7 @@ describe('Ink probe session', () => {
       channel: channel(snapshots, []),
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
+      waitForRenderFlush: () => new Promise((resolve) => output.write('', () => resolve())),
       stdout: output,
       tracker,
     });
@@ -193,10 +187,22 @@ describe('Ink probe session', () => {
       expect(writes).toEqual([]);
       expect(output.pendingWrites()).toBe(1);
 
+      await output.waitForPendingWrites(2);
       expect(output.flushOne()).toBe(true);
       expect(writes).toEqual(['FRAME']);
 
-      await flushDelayedWritesUntilSettled(output, flushed);
+      expect(output.flushOne()).toBe(true);
+      await output.waitForPendingWrites(1);
+      expect(writes).toEqual(['FRAME', '']);
+
+      const flushStatus = await Promise.race([
+        flushed.then(() => 'settled' as const),
+        Promise.resolve('pending' as const),
+      ]);
+      expect(flushStatus).toBe('pending');
+
+      expect(output.flushOne()).toBe(true);
+      await flushed;
 
       expect(writes.join('')).toBe('FRAMEMARK:1');
       expect(snapshots).toHaveLength(1);
@@ -247,6 +253,7 @@ describe('Ink probe session', () => {
       channel: channel(snapshots, []),
       resolveRoot: () => tree,
       resolveCapture: () => withStatic,
+      waitForRenderFlush: flushedRender,
       stdout: stream([]),
       tracker: fakeTracker({ row: 3, column: 0, buffer: 'normal' }),
     });
@@ -267,6 +274,7 @@ describe('Ink probe session', () => {
         channel: channel([], []),
         resolveRoot: () => tree,
         resolveCapture: () => mode === 'missing' ? undefined : mode === 'screen-reader' ? { ...base, screenReader: true } : base,
+        waitForRenderFlush: flushedRender,
         stdout: stream([]),
         tracker: fakeTracker(),
         onGuaranteeViolation: violation,
@@ -286,6 +294,7 @@ describe('Ink probe session', () => {
       channel: fakeChannel,
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
+      waitForRenderFlush: flushedRender,
       stdout: stream([]),
       tracker: fakeTracker(),
     });
@@ -305,6 +314,7 @@ describe('Ink probe session', () => {
       channel: channel(snapshots, [], coalesced),
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
+      waitForRenderFlush: flushedRender,
       stdout: stream([]),
       tracker: fakeTracker(),
     });
@@ -324,6 +334,7 @@ describe('Ink probe session', () => {
       channel: channel([], []),
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
+      waitForRenderFlush: flushedRender,
       stdout: stream([]),
       tracker: fakeTracker(),
     });
@@ -341,6 +352,7 @@ describe('Ink probe session', () => {
       channel: fakeChannel,
       resolveRoot: () => tree,
       resolveCapture: () => capture(tree),
+      waitForRenderFlush: flushedRender,
       stdout: stream([]),
       tracker: fakeTracker(),
     });
@@ -359,6 +371,7 @@ describe('Ink probe session', () => {
       channel: channel(snapshots, []),
       resolveRoot: () => tree,
       resolveCapture: () => currentCapture,
+      waitForRenderFlush: flushedRender,
       stdout: stream([]),
       tracker: fakeTracker(),
     });

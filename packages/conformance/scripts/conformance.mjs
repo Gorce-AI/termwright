@@ -14,6 +14,7 @@ const PYTHON_ENV = Object.freeze({
   PYTHONPATH: [PYTHON_SOURCE, process.env.PYTHONPATH].filter(Boolean).join(delimiter),
 });
 const REQUIRE_NO_SKIPPED_AREAS = process.argv.includes('--require-no-skipped-areas');
+const REQUIRE_DECLARED_SKIPS = process.argv.includes('--require-declared-skips');
 const SUITES = [
   ['packages/conformance/src/suites/driver-generic.test.ts', 'generic fallback', '§20.1'],
   ['packages/conformance/src/suites/adversarial.test.ts', 'hostile peer + full snapshots', '§20.3'],
@@ -22,6 +23,11 @@ const SUITES = [
   ['packages/conformance/src/suites/language-adapters.test.ts', 'adapter contract (py/go)', '§7'],
   ['packages/conformance/src/suites/mcp-sessions.test.ts', 'concurrent MCP sessions', '§20.4'],
 ];
+const EXPECTED_SKIPS = REQUIRE_NO_SKIPPED_AREAS
+  ? []
+  : REQUIRE_DECLARED_SKIPS
+    ? declaredPlatformSkips()
+    : null;
 
 if (process.argv.includes('--deviations')) {
   printDeclaredDeviations();
@@ -90,6 +96,13 @@ try {
     const failed = completion.failures.length;
     const passed = Math.max(0, finishedTasks.size - failed);
     const skipped = Math.max(0, runnerTaskIds.length - finishedTasks.size);
+    const skippedTests = runnerTaskIds
+      .filter((runnerTaskId) => !finishedTasks.has(runnerTaskId))
+      .map((runnerTaskId) => {
+        const test = discovery.catalog.tests.find((candidate) => candidate.runnerTaskId === runnerTaskId);
+        if (test === undefined) throw new Error(`conformance task ${runnerTaskId} disappeared from its catalog`);
+        return `${file}::${test.fullName.split(' > ').at(-1)}`;
+      });
     const verdict = completion.state === 'infrastructure-failed' || completion.state === 'incomplete' || completion.state === 'crashed'
       ? 'INFRASTRUCTURE'
       : failed > 0 || completion.state === 'failed' || completion.state === 'flaky'
@@ -100,7 +113,7 @@ try {
             ? `pass, ${skipped} skip`
             : 'pass';
     if (verdict === 'INFRASTRUCTURE') infrastructureFailure = true;
-    rows.push({ area, section, verdict, tests: runnerTaskIds.length, passed,
+    rows.push({ area, section, verdict, tests: runnerTaskIds.length, passed, skipped, skippedTests,
       seconds: ((performance.now() - started) / 1000).toFixed(1), runId: completion.runId });
     for (const failure of completion.failures) {
       process.stdout.write(`FAIL ${basename(failure.file)} › ${failure.fullName}\n`);
@@ -123,13 +136,27 @@ for (const row of rows) {
 process.stdout.write(`${'-'.repeat(width + 82)}\n`);
 printDeclaredDeviations();
 
-const missingRequired = REQUIRE_NO_SKIPPED_AREAS && rows.some((row) => row.verdict !== 'pass');
+const observedSkips = rows.flatMap((row) => row.skippedTests ?? []).sort();
+const expectedSkips = EXPECTED_SKIPS === null ? null : [...EXPECTED_SKIPS].sort();
+const missingRequired = expectedSkips !== null && JSON.stringify(observedSkips) !== JSON.stringify(expectedSkips);
 const broken = infrastructureFailure || missingRequired || rows.some((row) => row.verdict === 'not run' || row.verdict.startsWith('FAIL'));
-if (missingRequired) process.stdout.write('required conformance area skipped or partial: certification is incomplete\n');
+if (missingRequired) {
+  process.stdout.write(`conformance skip mismatch:\n  expected ${JSON.stringify(expectedSkips)}\n  observed ${JSON.stringify(observedSkips)}\n`);
+}
 process.stdout.write(broken ? '\nconformance: FAILED\n\n' : 'conformance: passed\n\n');
 process.exit(broken ? 1 : 0);
 
 function pad(text, width) { return String(text).padEnd(width); }
+
+function declaredPlatformSkips() {
+  const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, 'quality', 'platform-deviations.json'), 'utf8'));
+  const suiteFiles = new Set(SUITES.map(([file]) => file));
+  return registry.deviations
+    .filter(({ predicate }) => predicate === (process.platform === 'win32' ? 'win32' : 'non-win32'))
+    .flatMap(({ tests }) => tests)
+    .filter(([file]) => suiteFiles.has(file))
+    .map(([file, title]) => `${file}::${title}`);
+}
 
 function printDeclaredDeviations() {
   const directory = join(tmpdir(), 'termwright-conformance-conventions');

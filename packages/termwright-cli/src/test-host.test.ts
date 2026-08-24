@@ -17,10 +17,25 @@ import type { TestCase, TestRunResult } from 'vitest/node';
 import {
   TermwrightTestHost,
   TERMWRIGHT_RESOURCE_PROFILES,
+  assertFirstWorkflowAttempt,
   describeFailure,
   type TermwrightVitestEngine,
 } from './test-host.js';
 import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
+
+describe('workflow attempt certification', () => {
+  it('accepts only the first GitHub attempt when certification requires it', () => {
+    expect(() => assertFirstWorkflowAttempt({})).not.toThrow();
+    expect(() => assertFirstWorkflowAttempt({
+      TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1',
+      GITHUB_RUN_ATTEMPT: '1',
+    })).not.toThrow();
+    expect(() => assertFirstWorkflowAttempt({
+      TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1',
+      GITHUB_RUN_ATTEMPT: '2',
+    })).toThrow(/start a new run instead of rerunning/u);
+  });
+});
 
 class FakeEngine implements TermwrightVitestEngine {
   readonly version = CERTIFIED_VITEST_VERSION;
