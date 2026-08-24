@@ -24,6 +24,7 @@ export interface InkSessionOptions {
   readonly resolveRoot: () => InkDomElement | null;
   readonly resolveExcluded?: () => InkDomElement | null;
   readonly resolveCapture: (root: InkDomElement) => InkFrameCapture | undefined;
+  readonly waitForRenderFlush?: () => Promise<void>;
   readonly stdout: NodeJS.WriteStream;
   readonly tracker: InkTerminalTracker;
   readonly onGuaranteeViolation?: (error: Error) => void;
@@ -80,6 +81,9 @@ export function createInkSession(options: InkSessionOptions): InkProbeSession {
 
   const publish = async (frozen: FrozenFrame): Promise<number | null> => {
     await nextMacrotask();
+    // A marker authenticates the terminal bytes for this render, so it must
+    // follow Ink's own stdout flush boundary, not just the probe's shadow drain.
+    await options.waitForRenderFlush?.();
     await options.tracker.drain();
     if (stopped) return null;
     if (!options.channel.isOpen) {

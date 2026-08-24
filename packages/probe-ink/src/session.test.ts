@@ -5,7 +5,7 @@ import type { ProbeChannel } from '@termwright/probe-runtime';
 import type { InkFrameCapture } from './frame-capture.js';
 import { createInkSession, probeInfo } from './session.js';
 import type { InkDomElement } from './observe.js';
-import type { InkTerminalTracker, TerminalPosition } from './terminal-tracker.js';
+import { trackTerminal, type InkTerminalTracker, type TerminalPosition } from './terminal-tracker.js';
 import { INK_VERSION } from './instrumentation.js';
 import { PACKAGE_VERSION } from './version.js';
 
@@ -76,6 +76,55 @@ function stream(writes: string[]): NodeJS.WriteStream {
   return target;
 }
 
+interface DelayedWriteStream extends NodeJS.WriteStream {
+  flushOne(): boolean;
+  pendingWrites(): number;
+}
+
+function delayedStream(writes: string[]): DelayedWriteStream {
+  const target = new PassThrough() as unknown as DelayedWriteStream & {
+    write: (...args: unknown[]) => boolean;
+  };
+  const pending: Array<() => void> = [];
+  Object.defineProperties(target, { columns: { value: 20 }, rows: { value: 8 } });
+  target.write = ((chunk: unknown, encoding?: unknown, callback?: unknown): boolean => {
+    const cb: (() => void) | undefined = typeof encoding === 'function'
+      ? encoding as () => void
+      : typeof callback === 'function'
+        ? callback as () => void
+        : undefined;
+    pending.push(() => {
+      writes.push(Buffer.isBuffer(chunk) || chunk instanceof Uint8Array
+        ? Buffer.from(chunk).toString()
+        : String(chunk));
+      cb?.();
+    });
+    return true;
+  }) as never;
+  target.flushOne = () => {
+    const next = pending.shift();
+    if (next === undefined) return false;
+    next();
+    return true;
+  };
+  target.pendingWrites = () => pending.length;
+  return target;
+}
+
+async function waitForPendingWrite(stream: DelayedWriteStream): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (stream.pendingWrites() > 0) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error('timed out waiting for a pending write');
+}
+
+async function passMacrotasks(count: number): Promise<void> {
+  for (let index = 0; index < count; index += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
 describe('Ink probe session', () => {
   it('advertises the exact certified geometry contract', () => {
     expect(probeInfo()).toEqual({
@@ -108,6 +157,70 @@ describe('Ink probe session', () => {
       intendedRect: { status: 'known', value: { row: 0, column: 0, width: 5, height: 1 } },
       visibleRect: { status: 'known', value: { row: 0, column: 0, width: 5, height: 1 } },
     });
+  });
+
+  it('waits for the forwarded frame write before appending the marker', async () => {
+    const tree = root();
+    const snapshots: SemanticSnapshot[] = [];
+    const writes: string[] = [];
+    const output = delayedStream(writes);
+    const tracker = trackTerminal(output, output);
+    const session = createInkSession({
+      channel: channel(snapshots, []),
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      stdout: output,
+      tracker,
+    });
+    try {
+      session.notifyRender();
+      output.write('FRAME');
+      const flushed = session.flush();
+
+      expect(writes).toEqual([]);
+      expect(output.pendingWrites()).toBe(1);
+
+      expect(output.flushOne()).toBe(true);
+      await waitForPendingWrite(output);
+      expect(writes).toEqual(['FRAME']);
+
+      expect(output.flushOne()).toBe(true);
+      await flushed;
+
+      expect(writes.join('')).toBe('FRAMEMARK:1');
+      expect(snapshots).toHaveLength(1);
+    } finally {
+      session.stop();
+      tracker.stop();
+    }
+  });
+
+  it('waits for Ink render flush before appending the marker', async () => {
+    const tree = root();
+    const snapshots: SemanticSnapshot[] = [];
+    const writes: string[] = [];
+    let releaseFlush: (() => void) | undefined;
+    const renderFlush = new Promise<void>((resolve) => {
+      releaseFlush = resolve;
+    });
+    const session = createInkSession({
+      channel: channel(snapshots, writes),
+      resolveRoot: () => tree,
+      resolveCapture: () => capture(tree),
+      waitForRenderFlush: () => renderFlush,
+      stdout: stream(writes),
+      tracker: fakeTracker(),
+    });
+
+    session.notifyRender();
+    await passMacrotasks(2);
+    expect(writes).toEqual([]);
+    expect(snapshots).toHaveLength(0);
+
+    releaseFlush?.();
+    await session.flush();
+    expect(writes.join('')).toBe('MARK:1');
+    expect(snapshots).toHaveLength(1);
   });
 
   it('maps Static above the live origin without disabling later geometry', async () => {

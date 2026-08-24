@@ -222,6 +222,7 @@ function instrumentedRender(
         resolveRoot: () => (probeRef.current?.parentNode as InkDomElement | undefined) ?? null,
         resolveExcluded: () => probeRef.current as InkDomElement | null,
         resolveCapture: (root) => capturedInkFrame(root),
+        waitForRenderFlush: () => instance.waitUntilRenderFlush(),
         stdout,
         tracker,
         onGuaranteeViolation: () => {
