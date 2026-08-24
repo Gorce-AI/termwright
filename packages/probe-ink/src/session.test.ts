@@ -111,12 +111,25 @@ function delayedStream(writes: string[]): DelayedWriteStream {
   return target;
 }
 
-async function waitForPendingWrite(stream: DelayedWriteStream): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (stream.pendingWrites() > 0) return;
+async function flushDelayedWritesUntilSettled(stream: DelayedWriteStream, promise: Promise<void>): Promise<void> {
+  let settled = false;
+  let rejected: unknown;
+  promise.then(
+    () => { settled = true; },
+    (error: unknown) => {
+      settled = true;
+      rejected = error;
+    },
+  );
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    while (stream.flushOne()) { /* drain queued delayed writes */ }
+    if (settled) {
+      if (rejected !== undefined) throw rejected;
+      return;
+    }
     await new Promise((resolve) => setImmediate(resolve));
   }
-  throw new Error('timed out waiting for a pending write');
+  throw new Error('timed out flushing delayed writes');
 }
 
 async function passMacrotasks(count: number): Promise<void> {
@@ -181,11 +194,9 @@ describe('Ink probe session', () => {
       expect(output.pendingWrites()).toBe(1);
 
       expect(output.flushOne()).toBe(true);
-      await waitForPendingWrite(output);
       expect(writes).toEqual(['FRAME']);
 
-      expect(output.flushOne()).toBe(true);
-      await flushed;
+      await flushDelayedWritesUntilSettled(output, flushed);
 
       expect(writes.join('')).toBe('FRAMEMARK:1');
       expect(snapshots).toHaveLength(1);
