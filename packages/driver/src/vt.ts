@@ -25,6 +25,21 @@ import { MARKER_OSC_CODE, type CursorInfo } from '@termwright/protocol';
 import type { TerminalModes } from './api.js';
 import { captureRows } from './screen.js';
 
+/**
+ * What happened to a screen region between two revisions.
+ *
+ * `styling-changed` is separated from `glyphs-changed` because they answer
+ * different questions. A pointer aims at characters; a repaint that recolours
+ * them has not moved anything, while a character that changed may well have.
+ */
+export type RegionChange =
+  | 'unchanged'
+  | 'styling-changed'
+  | 'glyphs-changed'
+  | 'coordinate-system-moved'
+  | 'span-out-of-range'
+  | 'revision-unknown';
+
 interface ObservableVtState {
   readonly structural: string;
   readonly cells: readonly string[];
@@ -34,6 +49,14 @@ interface ObservableVtState {
   readonly viewportY: number;
   readonly baseY: number;
   readonly retainedFloor: number;
+  /**
+   * Character and width per cell, without styling.
+   *
+   * A repaint that recolours a control leaves its characters where they were,
+   * and a pointer aimed at those characters is still aimed at them. Tracked
+   * apart so a restyle is not indistinguishable from a target that moved.
+   */
+  readonly glyphs: readonly string[];
 }
 
 type PendingObservationEvent =
@@ -153,6 +176,7 @@ export class VtScreen {
   readonly #pendingObservationEvents: PendingObservationEvent[] = [];
   #lastObservedState!: ObservableVtState;
   #cellLastChangedRevision: number[] = [];
+  #cellLastGlyphRevision: number[] = [];
   #globalCoordinateRevision = 0;
   #pendingWriteCount = 0;
   #writeInProgress = false;
@@ -187,6 +211,7 @@ export class VtScreen {
       { length: this.#lastObservedState.cells.length },
       () => this.#revision,
     );
+    this.#cellLastGlyphRevision = [...this.#cellLastChangedRevision];
   }
 
   /** Current screen revision; incremented once per observable VT state change. */
@@ -383,11 +408,12 @@ export class VtScreen {
   regionChangeSince(
     revision: number,
     spans: readonly { readonly row: number; readonly from: number; readonly to: number }[],
-  ): 'unchanged' | 'coordinate-system-moved' | 'cells-changed' | 'span-out-of-range' | 'revision-unknown' {
+  ): RegionChange {
     if (revision < 0 || revision > this.#revision) return 'revision-unknown';
     if (revision < this.#globalCoordinateRevision) return 'coordinate-system-moved';
     const columns = this.terminal.cols;
     const rows = this.terminal.rows;
+    let styled = false;
     for (const span of spans) {
       if (
         span.row < 0
@@ -397,12 +423,12 @@ export class VtScreen {
         || span.to > columns
       ) return 'span-out-of-range';
       for (let column = span.from; column < span.to; column += 1) {
-        if ((this.#cellLastChangedRevision[span.row * columns + column] ?? this.#revision) > revision) {
-          return 'cells-changed';
-        }
+        const index = span.row * columns + column;
+        if ((this.#cellLastGlyphRevision[index] ?? this.#revision) > revision) return 'glyphs-changed';
+        if ((this.#cellLastChangedRevision[index] ?? this.#revision) > revision) styled = true;
       }
     }
-    return 'unchanged';
+    return styled ? 'styling-changed' : 'unchanged';
   }
 
   onMarker(cb: (marker: MarkerSighting) => void): Unsubscribe {
@@ -551,7 +577,14 @@ export class VtScreen {
     const buffer = this.terminal.buffer.active;
     const cursor = this.cursor();
     const modes = this.modes();
-    const cells = captureRows(this).flatMap((row) => row.cells.map((cell) => JSON.stringify(cell)));
+    const captured = captureRows(this);
+    const cells = captured.flatMap((row) => row.cells.map((cell) => JSON.stringify(cell)));
+    // Tracked apart from the full cell. A repaint that restyles a control
+    // leaves its characters exactly where they were, and a pointer aimed at
+    // those characters is still aimed at them; a changed glyph is a different
+    // matter. Collapsing the two makes every recolour look like the target
+    // moved.
+    const glyphs = captured.flatMap((row) => row.cells.map((cell) => `${cell.char}\u0000${cell.width}`));
     const structural = [
       this.terminal.cols,
       this.terminal.rows,
@@ -586,6 +619,7 @@ export class VtScreen {
       viewportY: buffer.viewportY,
       baseY: buffer.baseY,
       retainedFloor: this.#retainedFloor,
+      glyphs: Object.freeze(glyphs),
     });
   }
 
@@ -612,6 +646,7 @@ export class VtScreen {
         { length: after.cells.length },
         () => this.#revision,
       );
+      this.#cellLastGlyphRevision = [...this.#cellLastChangedRevision];
     } else {
       if (this.#cellLastChangedRevision.length !== after.cells.length) {
         // Defensive fail-closed fallback. A cell-count change should have been
@@ -621,8 +656,16 @@ export class VtScreen {
           { length: after.cells.length },
           () => this.#revision,
         );
+        this.#cellLastGlyphRevision = [...this.#cellLastChangedRevision];
       } else {
-        for (const index of changedCells) this.#cellLastChangedRevision[index] = this.#revision;
+        for (const index of changedCells) {
+          this.#cellLastChangedRevision[index] = this.#revision;
+          // Only when the character itself moved. Everything else about a cell
+          // can change without the thing a pointer aims at having changed.
+          if (before.glyphs[index] !== after.glyphs[index]) {
+            this.#cellLastGlyphRevision[index] = this.#revision;
+          }
+        }
       }
     }
     this.#lastObservedState = after;

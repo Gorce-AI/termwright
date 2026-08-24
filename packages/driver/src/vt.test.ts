@@ -87,6 +87,45 @@ describe('VtScreen', () => {
     expect(screen.regionUnchangedSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(false);
   });
 
+  it('tells a recoloured region apart from one whose characters moved', async () => {
+    const screen = createVt(20, 6);
+    await screen.write('\x1b[1;1HTARGET');
+    const targetRevision = screen.revision;
+
+    // Same characters, different colour: a repaint or a focus highlight. The
+    // region is not identical, and nothing a pointer aims at has moved.
+    await screen.write('\x1b[1;1H\x1b[31mTARGET\x1b[m');
+    expect(screen.regionChangeSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(
+      'styling-changed',
+    );
+
+    await screen.write('\x1b[1;1HTARGEX');
+    expect(screen.regionChangeSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(
+      'glyphs-changed',
+    );
+  });
+
+  it('reports an untouched region as unchanged whatever happened elsewhere', async () => {
+    const screen = createVt(20, 6);
+    await screen.write('\x1b[1;1HTARGET\x1b[6;1Hspin 0');
+    const targetRevision = screen.revision;
+    await screen.write('\x1b[6;1H\x1b[33mspin 1\x1b[m');
+    expect(screen.regionChangeSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe('unchanged');
+  });
+
+  it('names a coordinate move rather than blaming the region for it', async () => {
+    const screen = createVt(20, 3);
+    await screen.write('\x1b[1;1HTARGET');
+    const targetRevision = screen.revision;
+    // Scrolling moves every row, so no region's coordinates still mean what
+    // they did. That is a different failure from the target changing, and a
+    // caller that conflates them looks for the fault in the wrong place.
+    await screen.write('\r\n\r\n\r\n\r\npushed');
+    expect(screen.regionChangeSince(targetRevision, [{ row: 0, from: 0, to: 6 }])).toBe(
+      'coordinate-system-moved',
+    );
+  });
+
   it('keeps target-local proof across more status revisions than the former bounded history', async () => {
     const screen = createVt(20, 6);
     await screen.write('\x1b[1;1HTARGET');
