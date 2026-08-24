@@ -19,6 +19,7 @@
     "docs:api": "typedoc && typedoc --options typedoc.driver.json && typedoc --options typedoc.ink.json && typedoc --options typedoc.gherkin.json && node scripts/prepare-api-docs.mjs",
     "generate:mcp-docs": "pnpm --filter @termwright/mcp... build && node scripts/generate-mcp-docs.mjs --write",
     "generate:runtime-docs": "node scripts/generate-runtime-requirements.mjs --write",
+    "pretest": "node scripts/ensure-test-host.mjs",
     "test": "node packages/termwright-cli/dist/bin.js test",
     "pretest:compatibility": "pnpm --filter @termwright/protocol --filter @termwright/recognizers --filter @termwright/evidence-provider --filter @termwright/probe-runtime --filter @termwright/probe-go --filter termwright... build",
     "test:compatibility": "node packages/termwright-cli/dist/bin.js test -- compatibility/registry.test.ts",
