@@ -45,6 +45,7 @@ import type { UserConsoleLog } from 'vitest';
 import { createVitest, parseCLI, type Reporter, type TestCase, type TestRunResult, type Vitest } from 'vitest/node';
 import { uiVitestViteOverrides } from './ui-vitest-config.js';
 import type { TermwrightResourceProfile } from './resource-profiles.js';
+import { preflightTestHost, type TermwrightHostPreflightOptions } from './preflight.js';
 
 const executeFile = promisify(execFile);
 const CI_PROVENANCE_KEYS = [
@@ -146,6 +147,8 @@ export interface TermwrightTestHostOptions {
   /** Best-effort live projection. Canonical persistence never depends on it. */
   readonly eventObserver?: (event: RunEvent) => void;
   readonly timeouts?: Partial<TermwrightHostTimeouts>;
+  /** Cheap, caller-declared prerequisites checked before the engine starts. */
+  readonly preflight?: TermwrightHostPreflightOptions;
 }
 
 interface EngineCollection {
@@ -249,6 +252,7 @@ export class TermwrightTestHost {
   }
 
   static async open(options: TermwrightTestHostOptions): Promise<TermwrightTestHost> {
+    await preflightTestHost(options);
     const timeouts = resolveHostTimeouts(options.timeouts);
     const creation = createCertifiedVitestEngine(options);
     let created;

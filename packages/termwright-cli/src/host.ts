@@ -15,3 +15,11 @@ export {
   type TermwrightResourceProfile,
   type TermwrightResourceProfileName,
 } from './resource-profiles.js';
+export {
+  DEFAULT_MINIMUM_FREE_DISK_BYTES,
+  TermwrightPreflightError,
+  preflightTestHost,
+  type TermwrightHostPreflightOptions,
+  type TermwrightPreflightDeps,
+  type TermwrightToolchainRequirement,
+} from './preflight.js';

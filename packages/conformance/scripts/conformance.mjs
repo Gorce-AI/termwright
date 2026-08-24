@@ -3,12 +3,16 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TermwrightTestHost, TERMWRIGHT_RESOURCE_PROFILES } from '../../termwright-cli/dist/host.js';
 
 const PACKAGE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPOSITORY_ROOT = join(PACKAGE_ROOT, '..', '..');
+const PYTHON_SOURCE = join(REPOSITORY_ROOT, 'clients', 'python', 'src');
+const PYTHON_ENV = Object.freeze({
+  PYTHONPATH: [PYTHON_SOURCE, process.env.PYTHONPATH].filter(Boolean).join(delimiter),
+});
 const REQUIRE_NO_SKIPPED_AREAS = process.argv.includes('--require-no-skipped-areas');
 const SUITES = [
   ['packages/conformance/src/suites/driver-generic.test.ts', 'generic fallback', '§20.1'],
@@ -31,6 +35,19 @@ const host = await TermwrightTestHost.open({
   resourceProfile: process.platform === 'win32'
     ? TERMWRIGHT_RESOURCE_PROFILES['windows-ci']
     : TERMWRIGHT_RESOURCE_PROFILES.ci,
+  preflight: {
+    requiredToolchains: [
+      { name: 'Go', commands: [['go', 'version']] },
+      {
+        name: 'Python with the Termwright and Textual clients',
+        commands: [
+          ['python3', '-c', 'import termwright, textual'],
+          ['python', '-c', 'import termwright, textual'],
+        ],
+        env: PYTHON_ENV,
+      },
+    ],
+  },
   filters: SUITES.map(([file]) => file),
 });
 
