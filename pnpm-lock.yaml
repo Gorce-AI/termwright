@@ -223,10 +223,6 @@ importers:
         version: 19.2.8
 
   packages/conpty:
-    dependencies:
-      node-addon-api:
-        specifier: ^8.3.0
-        version: 8.9.2
     optionalDependencies:
       '@termwright/conpty-win32-arm64':
         specifier: workspace:*
@@ -235,6 +231,9 @@ importers:
         specifier: workspace:*
         version: link:../conpty-win32-x64
     devDependencies:
+      node-addon-api:
+        specifier: ^8.3.0
+        version: 8.9.2
       node-gyp:
         specifier: ^11.0.0
         version: 11.5.0

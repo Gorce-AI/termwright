@@ -23,8 +23,7 @@
   },
   "files": [
     "dist",
-    "src",
-    "binding.gyp"
+    "src"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
@@ -32,14 +31,12 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm --dir ../.. test -- -- --run packages/conpty"
   },
-  "dependencies": {
-    "node-addon-api": "^8.3.0"
-  },
   "optionalDependencies": {
     "@termwright/conpty-win32-x64": "workspace:*",
     "@termwright/conpty-win32-arm64": "workspace:*"
   },
   "devDependencies": {
+    "node-addon-api": "^8.3.0",
     "node-gyp": "^11.0.0",
     "vitest": "4.1.11"
   }

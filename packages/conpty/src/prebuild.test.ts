@@ -63,6 +63,22 @@ describe('the prebuild contract', () => {
     }
   });
 
+  it('publishes no build recipe, because npm would run it', async () => {
+    const parent = await manifest('package.json');
+    const files = parent['files'] as readonly string[];
+    // npm compiles any installed package that has a binding.gyp at its root,
+    // with no script asked for and no toolchain guaranteed. Shipping one made
+    // every install of this package invoke node-gyp and fail on a machine
+    // without Visual Studio — the exact requirement prebuilds remove.
+    expect(files).not.toContain('binding.gyp');
+    for (const hook of ['install', 'preinstall', 'postinstall']) {
+      expect(parent['scripts']).not.toHaveProperty(hook);
+    }
+    // The addon headers are needed to compile and never to run. Leaving them
+    // a runtime dependency makes every consumer fetch a build-time package.
+    expect(parent['dependencies'] ?? {}).not.toHaveProperty('node-addon-api');
+  });
+
   it('keeps the prebuilds at the version of the package that loads them', async () => {
     const parent = await manifest('package.json');
     for (const architecture of ['x64', 'arm64']) {
