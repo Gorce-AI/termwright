@@ -33,6 +33,17 @@ const configuredExamples = [
 // process fan-out: the Termwright host still owns one RunId and one broker.
 export default defineConfig({
   test: {
+    coverage: {
+      provider: 'v8',
+      reportsDirectory: './coverage',
+      reporter: ['text', 'json-summary', 'html'],
+      include: [
+        'packages/protocol/src/**/*.ts',
+        'packages/vt/src/**/*.ts',
+        'packages/recognizers/src/**/*.ts',
+        'packages/evidence-provider/src/**/*.ts',
+      ],
+    },
     projects: [
       {
         root: repositoryRoot,

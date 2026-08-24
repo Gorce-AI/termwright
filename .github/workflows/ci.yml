@@ -35,6 +35,32 @@ jobs:
       - run: node scripts/generate-semantic-completeness.mjs
       - run: node scripts/generate-mission-completion.mjs
 
+  deterministic-core-coverage:
+    name: deterministic core coverage
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:coverage
+      - name: Upload the coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: deterministic-core-coverage
+          path: coverage
+          if-no-files-found: warn
+          retention-days: 7
+
   build:
     name: build ${{ matrix.os }} / node ${{ matrix.node }}
     timeout-minutes: 45
