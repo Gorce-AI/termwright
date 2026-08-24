@@ -3,6 +3,15 @@ import { describe, expect, it } from 'vitest';
 
 const readWorkflow = (name) => readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8');
 
+function artifactStep(workflow, artifactName) {
+  const marker = `          name: ${artifactName}\n`;
+  const markerIndex = workflow.indexOf(marker);
+  expect(markerIndex, `artifact ${artifactName} must exist`).toBeGreaterThan(-1);
+  const start = workflow.lastIndexOf('\n      - ', markerIndex);
+  const end = workflow.indexOf('\n\n', markerIndex);
+  return workflow.slice(start, end === -1 ? workflow.length : end);
+}
+
 describe('autonomous workflow security', () => {
   it('keeps write privileges out of upstream certification', async () => {
     const workflow = await readWorkflow('upstream-candidates.yml');
@@ -80,6 +89,24 @@ describe('autonomous workflow security', () => {
     const checkoutSteps = workflow.match(/- uses: actions\/checkout@[^\n]+\n(?: {8}[^\n]*\n){0,8}/gu) ?? [];
     expect(checkoutSteps.length).toBeGreaterThan(0);
     for (const step of checkoutSteps) expect(step).toContain('persist-credentials: false');
+  });
+
+  it('retains hidden Termwright run evidence from failed main and nightly jobs', async () => {
+    const ci = await readWorkflow('ci.yml');
+    const reliability = await readWorkflow('reliability.yml');
+    const artifacts = [
+      artifactStep(ci, 'ui-browser-artifacts'),
+      artifactStep(ci, 'example-termwright-reports'),
+      artifactStep(reliability, 'nightly-termwright-runs-${{ matrix.os }}-node-${{ matrix.node }}'),
+    ];
+
+    for (const artifact of artifacts) {
+      expect(artifact).toContain('if: ${{ failure() || cancelled() }}');
+      expect(artifact).toContain('uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7');
+      expect(artifact).toContain('.termwright/runs');
+      expect(artifact).toContain('include-hidden-files: true');
+      expect(artifact).toContain('overwrite: true');
+    }
   });
 
   it('fails website CI when generated documentation drifts from its sources', async () => {

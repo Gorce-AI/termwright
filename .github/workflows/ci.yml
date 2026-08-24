@@ -638,14 +638,17 @@ jobs:
       - run: pnpm --filter @termwright/ui run test:browser
 
       - name: Upload the failure evidence
-        if: failure()
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ui-browser-artifacts
           path: |
             packages/ui/test-results
             packages/ui/playwright-report
+            .termwright/runs
           if-no-files-found: ignore
+          include-hidden-files: true
+          overwrite: true
           retention-days: 7
 
   opentui:
@@ -1019,12 +1022,16 @@ jobs:
           examples/tview-menu
 
       - name: Upload failure reports
-        if: failure()
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: example-termwright-reports
-          path: examples/*/termwright-report
+          path: |
+            examples/*/termwright-report
+            .termwright/runs
           if-no-files-found: ignore
+          include-hidden-files: true
+          overwrite: true
           retention-days: 7
 
   website:
