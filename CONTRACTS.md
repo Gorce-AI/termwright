@@ -186,7 +186,9 @@ WebSocket, JSON messages `{ v: 1, type, ... }`:
   (request-scoped reply; `results` contains exactly the live worker's four
   ActionPlanner explanations for click, hover, focus and type, all bound to the
   same committed checkpoint; the server neither reconstructs nor caches these
-  answers, and sends them only to the requesting browser).
+  answers, and sends them only to the requesting browser),
+  `control-result {requestId, control, ok, error?}` (request-scoped completion
+  of `pick` or `input`; `error` is present exactly when `ok` is false).
   Optional fields are exactly those marked `?` above. In particular,
   `test-start.sessionId` may be absent because an attempt can launch zero or
   several terminal sessions; the worker-side bridge sends ownership on
@@ -215,8 +217,10 @@ resolved target: either semantic `semantic:n8@42` or revision-bound screen
 frame-local semantic refs are refused and grid refs expire with their screen
 revision. Receivers build a command log identical to what replay reads from the
 archive.
-- client→server: `pick {sessionId}` (inspector pick-mode),
-  `input {sessionId, dataB64}` (recorder mode only),
+- client→server: `pick {sessionId, enabled?, requestId?}` (inspector
+  pick-mode), `input {sessionId, dataB64, requestId?}` (recorder mode only;
+  when `requestId` is present, the server sends `control-result` only after the
+  operation has completed),
   `inspect-actionability {requestId, sessionId, nodeId}` (live mode only; routed
   to the owning worker's production ActionPlanner, never answered from replay
   or browser-side geometry).

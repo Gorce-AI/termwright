@@ -360,6 +360,25 @@ describe('server messages', () => {
   it('does not accept a client message in the server direction', () => {
     expect(() => parseServerMessage('{"v":1,"type":"stop"}')).toThrow(UiProtocolError);
   });
+
+  it('parses request-scoped control outcomes', () => {
+    expect(parseServerMessage('{"v":1,"type":"control-result","requestId":"pick-1","control":"pick","ok":true}')).toEqual({
+      v: 1,
+      type: 'control-result',
+      requestId: 'pick-1',
+      control: 'pick',
+      ok: true,
+    });
+    expect(parseServerMessage('{"v":1,"type":"control-result","requestId":"input-1","control":"input","ok":false,"error":"closed"}')).toEqual({
+      v: 1,
+      type: 'control-result',
+      requestId: 'input-1',
+      control: 'input',
+      ok: false,
+      error: 'closed',
+    });
+    expect(() => parseServerMessage('{"v":1,"type":"control-result","requestId":"input-1","control":"input","ok":true,"error":"closed"}')).toThrow(/error is required exactly when ok is false/u);
+  });
 });
 
 describe('client messages', () => {
@@ -381,6 +400,13 @@ describe('client messages', () => {
       requestId: 'r1',
       sessionId: 's1',
       nodeId: 'save',
+    });
+    expect(parseClientMessage('{"v":1,"type":"input","sessionId":"s1","dataB64":"DQ==","requestId":"input-1"}')).toEqual({
+      v: 1,
+      type: 'input',
+      sessionId: 's1',
+      dataB64: 'DQ==',
+      requestId: 'input-1',
     });
   });
 

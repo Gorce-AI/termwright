@@ -11,6 +11,35 @@ afterEach(() => {
 });
 
 describe('LogTailer final drain', () => {
+  it('cancels its scheduler and refuses a queued poll after stop', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'termwright-log-stop-'));
+    roots.push(root);
+    const path = join(root, 'app.log');
+    writeFileSync(path, 'old run\n');
+    const lines: string[] = [];
+    let scheduled: (() => Promise<void>) | undefined;
+    let cancelled = false;
+    const tailer = new LogTailer(
+      [{ path }],
+      {
+        onLine: (_source, line) => lines.push(line),
+        onDiagnostic: () => undefined,
+      },
+      (poll) => {
+        scheduled = poll;
+        return () => { cancelled = true; };
+      },
+    );
+    await tailer.start();
+    await tailer.stop();
+
+    appendFileSync(path, 'written after stop\n');
+    await scheduled?.();
+
+    expect(cancelled).toBe(true);
+    expect(lines).toEqual([]);
+  });
+
   it('delivers a complete record appended immediately before stop', async () => {
     const root = mkdtempSync(join(tmpdir(), 'termwright-log-final-'));
     roots.push(root);

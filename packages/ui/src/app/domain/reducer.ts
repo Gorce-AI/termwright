@@ -457,8 +457,9 @@ function reduceMessage(state: AppState, message: ServerMessage): AppState {
       };
     }
     case 'actionability-inspection':
-      // RunnerClient consumes request-scoped inspection replies before they
-      // enter the append-only application event reducer.
+    case 'control-result':
+      // RunnerClient or another request owner consumes request-scoped replies;
+      // they do not enter the append-only application event projection.
       return state;
   }
 }

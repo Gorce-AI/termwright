@@ -471,13 +471,34 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
 
   async function handleClientMessage(message: ClientMessage, viewer: WebSocket): Promise<void> {
     switch (message.type) {
-      case 'pick':
-        sessions.get(message.sessionId)?.setPickMode?.(message.enabled ?? true);
+      case 'pick': {
+        const session = sessions.get(message.sessionId);
+        if (session?.setPickMode === undefined) {
+          sendControlResult(viewer, message, 'the session does not support pick mode');
+          return;
+        }
+        try {
+          session.setPickMode(message.enabled ?? true);
+          sendControlResult(viewer, message);
+        } catch (error) {
+          if (message.requestId === undefined) throw error;
+          sendControlResult(viewer, message, boundedWireError(error));
+        }
         return;
+      }
       case 'input': {
         const session = sessions.get(message.sessionId);
-        if (session?.write === undefined) return;
-        await session.write(fromBase64(message.dataB64));
+        if (session?.write === undefined) {
+          sendControlResult(viewer, message, 'the session does not accept input');
+          return;
+        }
+        try {
+          await session.write(fromBase64(message.dataB64));
+          sendControlResult(viewer, message);
+        } catch (error) {
+          if (message.requestId === undefined) throw error;
+          sendControlResult(viewer, message, boundedWireError(error));
+        }
         return;
       }
       case 'inspect-actionability': {
@@ -501,6 +522,22 @@ export async function startUiServer(options: UiServerOptions = {}): Promise<UiSe
         return;
       }
     }
+  }
+
+  function sendControlResult(
+    viewer: WebSocket,
+    message: Extract<ClientMessage, { readonly type: 'pick' | 'input' }>,
+    error?: string,
+  ): void {
+    if (message.requestId === undefined || viewer.readyState !== WebSocket.OPEN) return;
+    viewer.send(encodeMessage({
+      v: 1,
+      type: 'control-result',
+      requestId: message.requestId,
+      control: message.type,
+      ok: error === undefined,
+      ...(error === undefined ? {} : { error }),
+    }));
   }
 
   async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {

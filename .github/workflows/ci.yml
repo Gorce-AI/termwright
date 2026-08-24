@@ -19,6 +19,9 @@ env:
   # A fail-then-pass run is evidence of a defect, never release certification.
   TERMWRIGHT_RETRIES: '0'
   TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
+  TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
+  # Go-backed probe suites are release evidence, not optional coverage.
+  TERMWRIGHT_REQUIRE_GO: '1'
 
 jobs:
   package-metadata:
@@ -99,6 +102,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.25'
+          cache: false
 
       - run: pnpm install --frozen-lockfile
 
@@ -261,7 +268,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
-
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
@@ -317,6 +323,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.25'
+          cache: false
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build

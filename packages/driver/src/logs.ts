@@ -37,6 +37,14 @@ const FINGERPRINT_BYTES = 64;
 const RATE_WINDOW_MS = 250;
 const MAX_LINES_PER_WINDOW = 250;
 
+type PollScheduler = (poll: () => Promise<void>) => () => void;
+
+const schedulePoll: PollScheduler = (poll) => {
+  const timer = setInterval(() => { void poll(); }, POLL_MS);
+  timer.unref?.();
+  return () => clearInterval(timer);
+};
+
 /** Diagnostic codes this module reports, mirroring `DiagnosticCode`. */
 export type LogDiagnosticCode = 'log-dropped' | 'log-source';
 
@@ -82,13 +90,15 @@ function label(source: AppLogSource): string {
 export class LogTailer {
   readonly #states: SourceState[];
   readonly #hooks: LogTailHooks;
-  #timer: NodeJS.Timeout | null = null;
+  readonly #schedule: PollScheduler;
+  #cancelPoll: (() => void) | null = null;
   #stopped = false;
   #polling: Promise<void> | null = null;
   #closePromise: Promise<void> | null = null;
 
-  constructor(sources: readonly AppLogSource[], hooks: LogTailHooks) {
+  constructor(sources: readonly AppLogSource[], hooks: LogTailHooks, scheduler: PollScheduler = schedulePoll) {
     this.#hooks = hooks;
+    this.#schedule = scheduler;
     this.#states = sources.map((source) => ({
       source,
       handle: null,
@@ -116,15 +126,7 @@ export class LogTailer {
         state.offset = 0;
       }
     }
-    this.#timer = setInterval(() => {
-      if (this.#polling !== null) return;
-      this.#polling = this.#poll()
-        .catch((error: unknown) => {
-          this.#hooks.onDiagnostic('log-source', `log poll failed: ${error instanceof Error ? error.message : String(error)}`);
-        })
-        .finally(() => { this.#polling = null; });
-    }, POLL_MS);
-    this.#timer.unref?.();
+    this.#cancelPoll = this.#schedule(() => this.#runPoll());
   }
 
   /** Stops polling and releases every handle. Idempotent. */
@@ -135,8 +137,8 @@ export class LogTailer {
 
   async #performStop(): Promise<void> {
     this.#stopped = true;
-    if (this.#timer !== null) clearInterval(this.#timer);
-    this.#timer = null;
+    this.#cancelPoll?.();
+    this.#cancelPoll = null;
     await this.#polling;
 
     // The process has ended before session teardown calls us. Read every byte
@@ -182,6 +184,16 @@ export class LogTailer {
       }
     }
     await Promise.all(this.#states.map((state) => this.#pollSource(state)));
+  }
+
+  async #runPoll(): Promise<void> {
+    if (this.#stopped || this.#polling !== null) return;
+    this.#polling = this.#poll()
+      .catch((error: unknown) => {
+        this.#hooks.onDiagnostic('log-source', `log poll failed: ${error instanceof Error ? error.message : String(error)}`);
+      })
+      .finally(() => { this.#polling = null; });
+    await this.#polling;
   }
 
   async #pollSource(state: SourceState, final = false): Promise<void> {

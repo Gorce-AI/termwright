@@ -14,6 +14,7 @@ permissions: {}
 env:
   TERMWRIGHT_RETRIES: '0'
   TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
+  TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
 
 jobs:
   windows-matrix:

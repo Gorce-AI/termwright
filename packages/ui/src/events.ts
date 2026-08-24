@@ -278,12 +278,20 @@ export type ServerMessage =
       readonly nodeId: string;
       readonly results?: readonly UiActionability[];
       readonly error?: string;
+    }
+  | {
+      readonly v: 1;
+      readonly type: 'control-result';
+      readonly requestId: string;
+      readonly control: 'pick' | 'input';
+      readonly ok: boolean;
+      readonly error?: string;
     };
 
 /** client → server. */
 export type ClientMessage =
-  | { readonly v: 1; readonly type: 'pick'; readonly sessionId: string; readonly enabled?: boolean }
-  | { readonly v: 1; readonly type: 'input'; readonly sessionId: string; readonly dataB64: string }
+  | { readonly v: 1; readonly type: 'pick'; readonly sessionId: string; readonly enabled?: boolean; readonly requestId?: string }
+  | { readonly v: 1; readonly type: 'input'; readonly sessionId: string; readonly dataB64: string; readonly requestId?: string }
   | { readonly v: 1; readonly type: 'inspect-actionability'; readonly requestId: string; readonly sessionId: string; readonly nodeId: string };
 
 /** Any message on the socket, in either direction. */
@@ -308,6 +316,7 @@ const SERVER_TYPES = new Set([
   'action-start',
   'action',
   'actionability-inspection',
+  'control-result',
 ]);
 const CLIENT_TYPES = new Set(['pick', 'input', 'inspect-actionability']);
 
@@ -372,6 +381,9 @@ export function parseClientMessage(raw: string | Uint8Array): ClientMessage {
         type: 'pick',
         sessionId: requireString(value, 'sessionId', 'pick'),
         ...(enabled === undefined ? {} : { enabled }),
+        ...(value['requestId'] === undefined
+          ? {}
+          : { requestId: requireBoundedString(value, 'requestId', 'pick') }),
       };
     }
     case 'input':
@@ -380,6 +392,9 @@ export function parseClientMessage(raw: string | Uint8Array): ClientMessage {
         type: 'input',
         sessionId: requireString(value, 'sessionId', 'input'),
         dataB64: requireBase64(value, 'dataB64', 'input'),
+        ...(value['requestId'] === undefined
+          ? {}
+          : { requestId: requireBoundedString(value, 'requestId', 'input') }),
       };
     case 'inspect-actionability':
       return {
@@ -689,6 +704,29 @@ export function parseServerMessage(raw: string | Uint8Array): ServerMessage {
         sessionId: requireBoundedString(value, 'sessionId', 'actionability-inspection'),
         nodeId: requireBoundedString(value, 'nodeId', 'actionability-inspection'),
         ...(results === undefined ? {} : { results }),
+        ...(error === undefined ? {} : { error }),
+      };
+    }
+    case 'control-result': {
+      const control = value['control'];
+      if (control !== 'pick' && control !== 'input') {
+        throw new UiProtocolError('control-result: control must be pick or input');
+      }
+      if (typeof value['ok'] !== 'boolean') {
+        throw new UiProtocolError('control-result: ok must be a boolean');
+      }
+      const error = value['error'] === undefined
+        ? undefined
+        : requireBoundedString(value, 'error', 'control-result');
+      if (value['ok'] === (error !== undefined)) {
+        throw new UiProtocolError('control-result: error is required exactly when ok is false');
+      }
+      return {
+        v: 1,
+        type: 'control-result',
+        requestId: requireBoundedString(value, 'requestId', 'control-result'),
+        control,
+        ok: value['ok'],
         ...(error === undefined ? {} : { error }),
       };
     }

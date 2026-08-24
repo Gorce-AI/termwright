@@ -11,6 +11,16 @@ async function collectVitestConfigs(directory, output) {
   }
 }
 
+async function collectTestSources(directory, output) {
+  const children = await readdir(new URL(`../${directory}/`, import.meta.url), { withFileTypes: true });
+  for (const child of children) {
+    const file = `${directory}/${child.name}`;
+    if (child.isDirectory()) {
+      if (!['node_modules', 'dist', 'target', '.venv'].includes(child.name)) await collectTestSources(file, output);
+    } else if (/\.test\.[cm]?[jt]sx?$/u.test(child.name)) output.push(file);
+  }
+}
+
 function workflowJobBlocks(source) {
   const jobs = source.indexOf('\njobs:\n');
   if (jobs === -1) return [];
@@ -28,6 +38,13 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     expect(rootConfig.test.retry).toBe(0);
     expect(ci).toMatch(/^env:\n(?: {2}.*\n)* {2}TERMWRIGHT_RETRIES: '0'$/mu);
+    expect(ci).toContain("TERMWRIGHT_REQUIRE_GO: '1'");
+    expect(release).toContain("TERMWRIGHT_REQUIRE_GO: '1'");
+    for (const [workflow, jobId] of [[ci, 'build'], [ci, 'windows-driver-native'], [release, 'verify']]) {
+      const job = workflowJobBlocks(workflow).find((block) => block.startsWith(`  ${jobId}:\n`));
+      expect(job, `${jobId} must install the required Go toolchain`).toContain('actions/setup-go@');
+      expect(job, `${jobId} must pin the Go toolchain`).toContain("go-version: '1.25'");
+    }
     expect(release).toMatch(/^env:\n {2}TERMWRIGHT_RETRIES: '0'$/mu);
     for (const workflow of [ci, release, reliability]) {
       expect(workflow).toContain("TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'");
@@ -35,6 +52,9 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const upstream = await readFile(new URL('../.github/workflows/upstream-candidates.yml', import.meta.url), 'utf8');
     const vitestReliability = await readFile(new URL('../.github/workflows/vitest-reliability.yml', import.meta.url), 'utf8');
     for (const [name, workflow] of [['CI', ci], ['Release', release], ['nightly reliability', reliability], ['Vitest reliability', vitestReliability], ['upstream certification', upstream]]) {
+      expect(workflow, `${name} must reject snapshot generation`).toContain(
+        "TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'",
+      );
       const jobs = workflowJobBlocks(workflow);
       expect(jobs.length, `${name} must contain certification jobs`).toBeGreaterThan(0);
       for (const job of jobs) {
@@ -69,10 +89,38 @@ describe('the native host is the only Termwright test entrypoint', () => {
       }
     }
 
+    const testSources = [];
+    await collectTestSources('packages', testSources);
+    const goBackedTests = new Set([
+      'packages/probe-charm/src/detect.test.ts',
+      'packages/probe-charm/src/launch.test.ts',
+      'packages/probe-charm/src/patch-sets.test.ts',
+      'packages/probe-charm/src/zero-config.pty.test.ts',
+      'packages/probe-go/src/patches.test.ts',
+      'packages/probe-go/src/workspace.test.ts',
+      'packages/probe-tview/src/zero-config.pty.test.ts',
+    ]);
+    for (const file of testSources) {
+      const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+      expect(source, `${file} must not implement a private Go skip policy`).not.toContain('TERMWRIGHT_SKIP_GO');
+      if (goBackedTests.has(file) || /\b(?:execFile|spawnSync|run)\s*\(\s*['"]go['"]|\bensureUpstreamModule\s*\(/u.test(source)) {
+        expect(source, `${file} must import the centralized fail-closed Go probe`).toContain('test-support/go-toolchain.mjs');
+        expect(source, `${file} must call the centralized fail-closed Go probe`).toContain('goTestCapability(');
+      }
+    }
+    const goPolicy = await readFile(new URL('./test-support/go-toolchain.mjs', import.meta.url), 'utf8');
+    expect(goPolicy).toContain("env['TERMWRIGHT_SKIP_GO'] === '1'");
+    expect(goPolicy).toContain("env['TERMWRIGHT_REQUIRE_GO'] === '1'");
+
     const workflows = (await readdir(new URL('../.github/workflows/', import.meta.url)))
       .filter((file) => /\.ya?ml$/u.test(file));
     for (const file of workflows) {
       const source = await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8');
+      for (const job of workflowJobBlocks(source)) {
+        expect(job, `${file} job must reject reruns as its first step`).toMatch(
+          /    steps:\n      - name: Reject workflow reruns\n        shell: bash\n        run: test "\$GITHUB_RUN_ATTEMPT" = 1/u,
+        );
+      }
       expect(source, `${file} must not retry tests or failed jobs`).not.toMatch(/--retry(?:=|\s)|rerun-failed-jobs|\bgh run rerun\b/u);
     }
   });

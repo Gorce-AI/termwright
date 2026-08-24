@@ -129,7 +129,8 @@ The socket speaks `§UI events` from [`/CONTRACTS.md`](../../CONTRACTS.md), and
 only that: `tests-discovered`, `run-start`, `session`, `test-start`, `step`,
 `output`, `semantic`, `app-log`, `action-start`, `action`, `test-end`, `run-end`,
 `run-cancelled`, `run-cancel-failed`, `actionability-inspection` from the
-server; `rerun`, `stop`, `pick`, `input`, `inspect-actionability` from the
+server, plus request-scoped `control-result` acknowledgements; `rerun`, `stop`,
+`pick`, `input`, `inspect-actionability` from the
 browser. Actionability inspection is a request-scoped live RPC: the session
 owner evaluates click/hover/focus/type with the same production ActionPlanner
 and committed checkpoint used by real actions. The browser never infers an

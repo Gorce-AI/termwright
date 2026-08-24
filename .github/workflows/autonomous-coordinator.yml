@@ -33,6 +33,9 @@ jobs:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       SOURCE_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - name: Open an idempotent dead-man issue before artifact reconciliation
         shell: bash
         run: |
@@ -76,6 +79,9 @@ jobs:
       SOURCE_RUN_URL: ${{ github.event.workflow_run.html_url }}
       ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       # workflow_run checks out the default branch by default. State it
       # explicitly: this write-token job never checks out the triggering ref or
       # any pull-request branch.
@@ -237,6 +243,9 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
       ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -371,6 +380,9 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -398,6 +410,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
     steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.repository.default_branch }}

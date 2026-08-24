@@ -226,16 +226,6 @@ describe.skipIf(!ptyAvailable())('following a log file', { timeout: 20_000 }, ()
     expect(captured.join('')).toContain('app | hello 1');
   });
 
-  it('stops following once the harness is closed', async () => {
-    const { terminal, lines } = await launchWithLog();
-    await terminal.press('w');
-    await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(1);
-
-    await terminal.close();
-    const afterClose = lines.length;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(lines.length).toBe(afterClose);
-  });
 });
 
 describe.skipIf(!ptyAvailable())('logs from an instrumented adapter', { timeout: 20_000 }, () => {

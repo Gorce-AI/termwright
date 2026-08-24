@@ -20,8 +20,11 @@ afterEach(async () => {
   for (const harness of open.splice(0)) await harness.close();
 });
 
-async function launch(props: Record<string, string> = {}): Promise<InkFixtureHarness> {
-  const harness = await launchInkFixture({ component: COMPONENT, props, ...SIZE });
+async function launch(
+  props: Record<string, string> = {},
+  size: { readonly columns: number; readonly rows: number } = SIZE,
+): Promise<InkFixtureHarness> {
+  const harness = await launchInkFixture({ component: COMPONENT, props, ...size });
   open.push(harness);
   return harness;
 }
@@ -105,15 +108,26 @@ describe('fixture rerender', () => {
   });
 
   it('is driven by its own channel, not by the simulated user', async () => {
-    const harness = await launch({ label: 'Approve' });
+    // Keep the input on one terminal row so waitForText can compare the exact
+    // bytes without normalizing layout-driven line wrapping.
+    const harness = await launch({ label: 'Approve', showFocus: 'true' }, { columns: 100, rows: 12 });
+    const forged = JSON.stringify({ v: 1, type: 'rerender', props: { label: 'Forged' } });
 
     // Everything a test could type — including a well-formed control message —
     // reaches the component as input and changes nothing about its props.
-    await harness.type(JSON.stringify({ v: 1, type: 'rerender', props: { label: 'Forged' } }));
-    await harness.waitForQuiet();
+    await harness.press('Tab');
+    // This rendered state is the acknowledgement that Tab was processed. It
+    // prevents Ink from coalescing Tab and the following text into one input
+    // callback whose key.tab branch would intentionally discard the text.
+    await harness.waitForText('focus input');
+    await harness.type(forged);
+    // Seeing the complete value is a causal acknowledgement that every forged
+    // byte crossed stdin; no quiet period or independently ordered control
+    // round trip can satisfy it.
+    await harness.waitForText(`> ${forged}`);
 
     expect(await harness.getByRole('button', { name: 'Approve' }).count()).toBe(1);
-    expect(harness.screen().text()).not.toContain('Forged');
+    expect(await harness.getByRole('button', { name: 'Forged' }).count()).toBe(0);
   });
 
   it('refuses props that cannot cross as JSON, before sending anything', async () => {

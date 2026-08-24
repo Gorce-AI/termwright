@@ -11,16 +11,16 @@
   },
   "summary": {
     "bounded-deadline-or-managed-background-task": 41,
-    "deadline-or-scheduler-regression-test": 70,
+    "deadline-or-scheduler-regression-test": 67,
     "deterministic-adversarial-fixture-schedule": 36,
     "display-or-persisted-wall-time-not-correctness-order": 87,
-    "explicit-external-file-polling": 3,
-    "explicit-external-or-ui-source-polling": 185,
+    "explicit-external-file-polling": 4,
+    "explicit-external-or-ui-source-polling": 184,
     "explicit-test-selection-reviewed-with-platform-registry": 99,
-    "managed-or-diagnostic-background-task": 60,
-    "production-process-isolation-review": 27,
+    "managed-or-diagnostic-background-task": 61,
+    "production-process-isolation-review": 28,
     "test-observer-or-intentional-background-task": 12,
-    "test-process-isolation-review": 51
+    "test-process-isolation-review": 43
   },
   "findings": [
     {
@@ -112,6 +112,12 @@
       "kind": "process-global-mutation",
       "classification": "production-process-isolation-review",
       "excerpt": "process.env.TERMWRIGHT_RETRIES = '0';"
+    },
+    {
+      "path": "packages/conformance/scripts/conformance.mjs",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "process.env.TERMWRIGHT_UPDATE_SNAPSHOTS = 'none';"
     },
     {
       "path": "packages/conformance/src/adapter-conformance.ts",
@@ -993,12 +999,6 @@
       "path": "packages/driver/src/logs.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(1);"
-    },
-    {
-      "path": "packages/driver/src/logs.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => lines.length, { timeout: 5_000 }).toBe(2);"
     },
     {
@@ -1065,12 +1065,6 @@
       "path": "packages/driver/src/logs.pty.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((resolve) => setTimeout(resolve, 200));"
-    },
-    {
-      "path": "packages/driver/src/logs.pty.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((resolve) => setTimeout(resolve, 250));"
     },
     {
@@ -1087,9 +1081,21 @@
     },
     {
       "path": "packages/driver/src/logs.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "const timer = setInterval(() => { void poll(); }, POLL_MS);"
+    },
+    {
+      "path": "packages/driver/src/logs.ts",
       "kind": "polling",
       "classification": "explicit-external-file-polling",
       "excerpt": "async #poll(): Promise<void> {"
+    },
+    {
+      "path": "packages/driver/src/logs.ts",
+      "kind": "polling",
+      "classification": "explicit-external-file-polling",
+      "excerpt": "const timer = setInterval(() => { void poll(); }, POLL_MS);"
     },
     {
       "path": "packages/driver/src/logs.ts",
@@ -1101,7 +1107,7 @@
       "path": "packages/driver/src/logs.ts",
       "kind": "timer",
       "classification": "explicit-external-file-polling",
-      "excerpt": "this.#timer = setInterval(() => {"
+      "excerpt": "const timer = setInterval(() => { void poll(); }, POLL_MS);"
     },
     {
       "path": "packages/driver/src/pairing.ts",
@@ -2047,12 +2053,6 @@
     },
     {
       "path": "packages/probe-charm/src/detect.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;"
-    },
-    {
-      "path": "packages/probe-charm/src/detect.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!hasGo)('against a real toolchain', () => {"
@@ -2065,12 +2065,6 @@
     },
     {
       "path": "packages/probe-charm/src/launch.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;"
-    },
-    {
-      "path": "packages/probe-charm/src/launch.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {"
@@ -2080,12 +2074,6 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(hasGo)('the launcher Go arm', () => {"
-    },
-    {
-      "path": "packages/probe-charm/src/patch-sets.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;"
     },
     {
       "path": "packages/probe-charm/src/patch-sets.test.ts",
@@ -2199,12 +2187,6 @@
       "path": "packages/probe-charm/src/zero-config.pty.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;"
-    },
-    {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
       "excerpt": "if (process.env['TERMWRIGHT_SKIP_PTY'] === '1') return false;"
     },
     {
@@ -2247,18 +2229,6 @@
       "path": "packages/probe-go/src/patches.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;"
-    },
-    {
-      "path": "packages/probe-go/src/patches.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return null;"
-    },
-    {
-      "path": "packages/probe-go/src/patches.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
       "excerpt": "process.env['GIT_CONFIG_GLOBAL'] = globalConfig;"
     },
     {
@@ -2278,12 +2248,6 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "it.skipIf(upstream !== null)('skips the Go arms because no go toolchain is reachable', () => {"
-    },
-    {
-      "path": "packages/probe-go/src/workspace.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return null;"
     },
     {
       "path": "packages/probe-go/src/workspace.test.ts",
@@ -2584,12 +2548,6 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => app.semanticTree()?.v).toBe(2);"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "if (process.env[\"TERMWRIGHT_SKIP_GO\"] === \"1\") return false;"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
@@ -3897,19 +3855,7 @@
       "path": "packages/ui/src/server.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((done) => setTimeout(done, 100));"
-    },
-    {
-      "path": "packages/ui/src/server.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
       "excerpt": "await new Promise((done) => setTimeout(done, 20));"
-    },
-    {
-      "path": "packages/ui/src/server.test.ts",
-      "kind": "timer",
-      "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "await new Promise((done) => setTimeout(done, 50));"
     },
     {
       "path": "packages/ui/src/server.test.ts",

@@ -23,18 +23,13 @@ const SUITES = [
   ['packages/conformance/src/suites/language-adapters.test.ts', 'adapter contract (py/go)', '§7'],
   ['packages/conformance/src/suites/mcp-sessions.test.ts', 'concurrent MCP sessions', '§20.4'],
 ];
-const EXPECTED_SKIPS = REQUIRE_NO_SKIPPED_AREAS
-  ? []
-  : REQUIRE_DECLARED_SKIPS
-    ? declaredPlatformSkips()
-    : null;
-
 if (process.argv.includes('--deviations')) {
   printDeclaredDeviations();
   process.exit(0);
 }
 
 process.env.TERMWRIGHT_RETRIES = '0';
+process.env.TERMWRIGHT_UPDATE_SNAPSHOTS = 'none';
 const host = await TermwrightTestHost.open({
   cwd: REPOSITORY_ROOT,
   runsDir: join(REPOSITORY_ROOT, '.termwright', 'conformance-runs'),
@@ -58,6 +53,7 @@ const host = await TermwrightTestHost.open({
 });
 
 const rows = [];
+const catalogTests = [];
 let infrastructureFailure = false;
 try {
   const discovery = await host.requestRun({ execute: false }).completed;
@@ -69,6 +65,7 @@ try {
     const normalized = test.file.replaceAll('\\', '/');
     const suite = SUITES.find(([file]) => basename(normalized) === basename(file));
     if (suite === undefined) continue;
+    catalogTests.push({ file: suite[0], fullName: test.fullName });
     const selected = byFile.get(suite[0]) ?? [];
     selected.push(test.runnerTaskId);
     byFile.set(suite[0], selected);
@@ -101,7 +98,7 @@ try {
       .map((runnerTaskId) => {
         const test = discovery.catalog.tests.find((candidate) => candidate.runnerTaskId === runnerTaskId);
         if (test === undefined) throw new Error(`conformance task ${runnerTaskId} disappeared from its catalog`);
-        return `${file}::${test.fullName.split(' > ').at(-1)}`;
+        return `${file}::${test.fullName}`;
       });
     const verdict = completion.state === 'infrastructure-failed' || completion.state === 'incomplete' || completion.state === 'crashed'
       ? 'INFRASTRUCTURE'
@@ -137,7 +134,11 @@ process.stdout.write(`${'-'.repeat(width + 82)}\n`);
 printDeclaredDeviations();
 
 const observedSkips = rows.flatMap((row) => row.skippedTests ?? []).sort();
-const expectedSkips = EXPECTED_SKIPS === null ? null : [...EXPECTED_SKIPS].sort();
+const expectedSkips = REQUIRE_NO_SKIPPED_AREAS
+  ? declaredApplicabilitySkips().sort()
+  : REQUIRE_DECLARED_SKIPS
+    ? [...declaredApplicabilitySkips(), ...declaredPlatformSkips(catalogTests)].sort()
+    : null;
 const missingRequired = expectedSkips !== null && JSON.stringify(observedSkips) !== JSON.stringify(expectedSkips);
 const broken = infrastructureFailure || missingRequired || rows.some((row) => row.verdict === 'not run' || row.verdict.startsWith('FAIL'));
 if (missingRequired) {
@@ -148,14 +149,36 @@ process.exit(broken ? 1 : 0);
 
 function pad(text, width) { return String(text).padEnd(width); }
 
-function declaredPlatformSkips() {
+function declaredPlatformSkips(catalog) {
   const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, 'quality', 'platform-deviations.json'), 'utf8'));
   const suiteFiles = new Set(SUITES.map(([file]) => file));
-  return registry.deviations
+  const platformDeclarations = registry.deviations
     .filter(({ predicate }) => predicate === (process.platform === 'win32' ? 'win32' : 'non-win32'))
     .flatMap(({ tests }) => tests)
-    .filter(([file]) => suiteFiles.has(file))
-    .map(([file, title]) => `${file}::${title}`);
+    .filter(([file]) => suiteFiles.has(file));
+  return platformDeclarations.map(([file, title]) => {
+    const matches = catalog.filter((test) =>
+      test.file === file && test.fullName.split(' > ').at(-1) === title);
+    if (matches.length !== 1) {
+      throw new Error(`declared skip ${file}::${title} matched ${matches.length} catalog tests`);
+    }
+    return `${file}::${matches[0].fullName}`;
+  });
+}
+
+function declaredApplicabilitySkips() {
+  // These are deliberate applicability branches in the reusable adapter
+  // suite, with multiplicity preserved. Exact comparison means removing an
+  // advertised capability or silently adding one changes the observed list
+  // and fails certification instead of shrinking the test catalogue.
+  return [
+    'packages/conformance/src/suites/language-adapters.test.ts::adapter conformance: termwright (Textual) > the dormant rule > produces the same bytes as a build without the adapter',
+    'packages/conformance/src/suites/language-adapters.test.ts::adapter conformance: termwright (Textual) > an instrumented session > carries a log record without printing it',
+    'packages/conformance/src/suites/language-adapters.test.ts::adapter conformance: termwright (tview) > an instrumented session > carries a log record without printing it',
+    ...(process.platform === 'win32'
+      ? []
+      : ['packages/conformance/src/suites/driver-generic.test.ts::a generic session > fails closed when ConPTY hides terminal input modes']),
+  ];
 }
 
 function printDeclaredDeviations() {

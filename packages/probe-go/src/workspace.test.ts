@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
+import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import {
   assertNoVendorMode,
   canaryCheck,
@@ -25,13 +26,10 @@ import {
 const run = promisify(execFile);
 
 async function goAvailable(): Promise<string | null> {
-  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return null;
-  try {
+  return goTestCapability(async () => {
     const { stdout } = await run('go', ['version']);
     return stdout.trim();
-  } catch {
-    return null;
-  }
+  }, null, 'Go certification toolchain');
 }
 
 const toolchain = await goAvailable();

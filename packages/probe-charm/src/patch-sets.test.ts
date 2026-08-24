@@ -19,6 +19,7 @@ import {
   writeWorkspace,
 } from '@termwright/probe-go';
 import { afterAll, describe, expect, it } from 'vitest';
+import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { BUBBLETEA_MODULES, type CharmMajor } from './detect.js';
 
 const run = promisify(execFile);
@@ -42,13 +43,10 @@ const UPSTREAM: Readonly<Record<CharmMajor, { version: string; path: readonly st
 };
 
 async function goAvailable(): Promise<boolean> {
-  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;
-  try {
+  return goTestCapability(async () => {
     await run('go', ['version']);
     return true;
-  } catch {
-    return false;
-  }
+  }, false, 'Go certification toolchain');
 }
 
 const hasGo = await goAvailable();

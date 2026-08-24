@@ -72,12 +72,13 @@ or merge it manually.
 
 ## When publication fails
 
-The trusted coordinator automatically reruns failed jobs in the same exact
-Release run. Registry steps are idempotent: an artifact that already exists is
-verified and skipped. Retries are bounded; if they are exhausted, one issue
-keyed by the release SHA is opened or updated for manual intervention. Never
-move an existing tag, overwrite an artifact, or yank a partial release merely
-to restart the pipeline.
+The trusted coordinator never reruns failed jobs in the same Release run.
+A failed, cancelled, or timed-out first attempt opens or updates one issue keyed
+by the release SHA for manual intervention. Diagnose and fix the cause, then
+start a new workflow run from a new commit; a rerun cannot certify or publish.
+Registry steps remain idempotent so already-correct immutable artifacts are
+verified and skipped. Never move an existing tag, overwrite an artifact, or
+yank a partial release merely to restart the pipeline.
 
 If the published artifact itself is wrong, fix it and release the next patch
 version across every registry.

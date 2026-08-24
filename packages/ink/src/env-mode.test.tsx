@@ -23,6 +23,12 @@ import EnvApp from './testing/env-app.mjs';
 const COMPONENT = new URL('./testing/env-app.mjs', import.meta.url);
 const SIZE = { columns: 60, rows: 6 } as const;
 const PROBE = 'TW_PROBE';
+const INSTRUMENTATION_ENV = [
+  'TERMWRIGHT_ENDPOINT',
+  'TERMWRIGHT_TOKEN',
+  'TERMWRIGHT_FIXTURE_CONTROL',
+  'TERMWRIGHT_FIXTURE_CONTROL_TOKEN',
+] as const;
 
 const open: TerminalHarness[] = [];
 
@@ -86,8 +92,6 @@ describe('mountInk', () => {
     const harness = track(await mountInk(createElement(EnvApp, {}), SIZE));
 
     expect(harness.contract()?.capabilities['semantic-tree'].status).toBe('supported');
-    for (const key of Object.keys(process.env)) {
-      expect(key.startsWith('TERMWRIGHT_')).toBe(false);
-    }
+    for (const key of INSTRUMENTATION_ENV) expect(process.env[key]).toBeUndefined();
   });
 });

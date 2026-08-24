@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { goTestCapability } from "../../../scripts/test-support/go-toolchain.mjs";
 import {
   createNodePtyBackend,
   inheritedSpawnEnv,
@@ -49,13 +50,10 @@ async function intendedRect(locator: SemanticLocator): Promise<Rect | null> {
 }
 
 async function goAvailable(): Promise<boolean> {
-  if (process.env["TERMWRIGHT_SKIP_GO"] === "1") return false;
-  try {
+  return goTestCapability(async () => {
     await run("go", ["version"]);
     return true;
-  } catch {
-    return false;
-  }
+  }, false, "Go certification toolchain");
 }
 
 function ptyAvailable(): boolean {

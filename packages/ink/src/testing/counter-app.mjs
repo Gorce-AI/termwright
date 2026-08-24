@@ -41,9 +41,9 @@ function contains(metrics, point) {
 }
 
 /**
- * @param {{label?: string, greeting?: string, followup?: string, animateOutput?: boolean, onPress?: () => void}} props
+ * @param {{label?: string, greeting?: string, followup?: string, animateOutput?: boolean, showFocus?: boolean, onPress?: () => void}} props
  */
-export default function CounterApp({ label = 'Approve', greeting = 'ready', followup = '', animateOutput = false, onPress }) {
+export default function CounterApp({ label = 'Approve', greeting = 'ready', followup = '', animateOutput = false, showFocus = false, onPress }) {
   const buttonRef = useRef(null);
   const inputRef = useRef(null);
   const [pressed, setPressed] = useState(0);
@@ -137,6 +137,7 @@ export default function CounterApp({ label = 'Approve', greeting = 'ready', foll
     ),
     createElement(Box, { ref: inputRef }, createElement(Text, null, `> ${message}`)),
     createElement(Text, null, `pressed ${pressed}`),
+    showFocus ? createElement(Text, null, `focus ${focus}`) : null,
     followupState.length > 0 ? createElement(Text, null, `followup ${followupState}`) : null,
   );
 }

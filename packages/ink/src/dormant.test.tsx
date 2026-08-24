@@ -18,6 +18,12 @@ import { mountInk } from './mount.js';
 import CounterApp from './testing/counter-app.mjs';
 
 const open: InkHarness[] = [];
+const INSTRUMENTATION_ENV = [
+  'TERMWRIGHT_ENDPOINT',
+  'TERMWRIGHT_TOKEN',
+  'TERMWRIGHT_FIXTURE_CONTROL',
+  'TERMWRIGHT_FIXTURE_CONTROL_TOKEN',
+] as const;
 
 afterEach(async () => {
   for (const harness of open.splice(0)) await harness.close();
@@ -31,9 +37,7 @@ describe('process hygiene', () => {
     open.push(harness);
 
     expect(harness.contract()?.capabilities['semantic-tree'].status).toBe('supported');
-    for (const key of Object.keys(process.env)) {
-      expect(key.startsWith('TERMWRIGHT_')).toBe(false);
-    }
+    for (const key of INSTRUMENTATION_ENV) expect(process.env[key]).toBeUndefined();
     expect({ ...process.env }).toEqual(before);
 
     await harness.close();

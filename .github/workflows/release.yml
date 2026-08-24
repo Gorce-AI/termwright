@@ -37,6 +37,8 @@ permissions:
 env:
   TERMWRIGHT_RETRIES: '0'
   TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
+  TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
+  TERMWRIGHT_REQUIRE_GO: '1'
 
 jobs:
   prepare:
@@ -312,6 +314,10 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.25'
+          cache: false
 
       - name: Independently reproduce the merged Version PR tree
         env:

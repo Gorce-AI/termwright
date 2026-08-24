@@ -1525,17 +1525,76 @@ describe("record mode", () => {
       },
     });
     const viewer = await Viewer.connect(server);
-    viewer.send({ v: 1, type: "pick", sessionId: "rec", enabled: true });
-    await new Promise((done) => setTimeout(done, 50));
+    viewer.send({
+      v: 1,
+      type: "pick",
+      sessionId: "rec",
+      enabled: true,
+      requestId: "pick-on",
+    });
+    await viewer.until(
+      (messages) =>
+        messages.some(
+          (message) =>
+            message.type === "control-result" &&
+            message.requestId === "pick-on" &&
+            message.ok,
+        ),
+      "pick-mode acknowledgement",
+    );
     viewer.send({
       v: 1,
       type: "input",
       sessionId: "rec",
       dataB64: toBase64(new TextEncoder().encode("x")),
+      requestId: "withheld-input",
     });
-    await new Promise((done) => setTimeout(done, 100));
+    await viewer.until(
+      (messages) =>
+        messages.some(
+          (message) =>
+            message.type === "control-result" &&
+            message.requestId === "withheld-input" &&
+            message.ok,
+        ),
+      "input acknowledgement",
+    );
     expect(harness.writtenText()).toBe("");
     viewer.close();
+  });
+
+  it("acknowledges a pick failure instead of stranding its requester", async () => {
+    const harness = new FakeHarness("rec");
+    let receiver: unknown;
+    const attached = {
+      source: harness.asHarness(),
+      setPickMode() {
+        receiver = this;
+        throw new Error("pick unavailable");
+      },
+    };
+    const server = await start();
+    const detach = server.attach(attached);
+    const viewer = await Viewer.connect(server);
+    viewer.send({
+      v: 1,
+      type: "pick",
+      sessionId: "rec",
+      requestId: "pick-failure",
+    });
+    await viewer.until(
+      (messages) =>
+        messages.some(
+          (message) =>
+            message.type === "control-result" &&
+            message.requestId === "pick-failure" &&
+            !message.ok,
+        ),
+      "failed pick-mode acknowledgement",
+    );
+    expect(receiver).toBe(attached);
+    viewer.close();
+    detach();
   });
 
   it("records assertions and steps over HTTP", async () => {
