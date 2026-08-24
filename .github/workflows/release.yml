@@ -233,9 +233,51 @@ jobs:
             echo "latest=$latest"
           } >> "$GITHUB_OUTPUT"
 
+  prebuilds:
+    name: compile the ConPTY prebuild (${{ matrix.arch }})
+    needs: detect
+    if: needs.detect.outputs.release == 'true'
+    # The same 2022 image CI compiles on, for the same reason: node-gyp 11
+    # cannot identify the Visual Studio that windows-latest now ships.
+    runs-on: windows-2022
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.detect.outputs.commit }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: '9.4.0'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Compile
+        working-directory: packages/conpty
+        run: pnpm exec node-gyp rebuild --arch=${{ matrix.arch }}
+      - name: Place the binary in its prebuild package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp packages/conpty/build/Release/termwright_conpty.node \
+             "packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node"
+          node scripts/check-prebuild.mjs "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-conpty-${{ matrix.arch }}
+          path: packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node
+          if-no-files-found: error
+          retention-days: 1
+
   verify:
     name: verify and pack release
-    needs: detect
+    needs: [detect, prebuilds]
     if: needs.detect.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -311,6 +353,19 @@ jobs:
       - name: Run the certified Termwright host
         run: pnpm test -- --resource-profile ci --json
 
+      # The prebuilds are compiled on Windows and published from here, so they
+      # have to arrive before anything is packed. A missing one would otherwise
+      # publish an empty package that installs cleanly and supplies no addon.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-conpty-x64
+          path: packages/conpty-win32-x64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-conpty-arm64
+          path: packages/conpty-win32-arm64
+      - run: node scripts/check-prebuild.mjs --all
+
       - name: Pack npm packages
         shell: bash
         run: |
@@ -331,6 +386,17 @@ jobs:
               echo "::error::$archive does not identify the repository required for npm provenance"
               exit 1
             fi
+            # A prebuild package is nothing but its binary. Packed without it,
+            # it installs without complaint and supplies no addon, and every
+            # Windows session silently runs on the fallback instead.
+            case "$directory" in
+              packages/conpty-win32-*)
+                if ! tar -tf "$archive" | grep -qx 'package/termwright_conpty.node'; then
+                  echo "::error::$archive carries no addon; a prebuild package without its binary is an empty promise"
+                  exit 1
+                fi
+                ;;
+            esac
           done
 
       - name: Verify packed driver without workspace patch state

@@ -46,6 +46,21 @@ interface NativeBinding {
 
 let cachedBinding: { readonly ConPtySession: NativeBinding } | undefined;
 
+/**
+ * Where the addon is looked for, in order.
+ *
+ * The locally compiled binary comes first so that a working tree tests what it
+ * just built rather than a published prebuild that happens to be installed
+ * beside it — the alternative is a change to this addon that CI certifies
+ * against the previous release.
+ */
+export function candidatePaths(architecture: string): readonly string[] {
+  return [
+    '../build/Release/termwright_conpty.node',
+    `@termwright/conpty-win32-${architecture}/termwright_conpty.node`,
+  ];
+}
+
 /** Loads the compiled addon, or explains why this platform has none. */
 export function loadConPtyBinding(): { readonly ConPtySession: NativeBinding } {
   if (cachedBinding !== undefined) return cachedBinding;
@@ -53,10 +68,22 @@ export function loadConPtyBinding(): { readonly ConPtySession: NativeBinding } {
     throw new Error('@termwright/conpty is a Windows backend and has no implementation elsewhere');
   }
   const require = createRequire(import.meta.url);
-  cachedBinding = require('../build/Release/termwright_conpty.node') as {
-    readonly ConPtySession: NativeBinding;
-  };
-  return cachedBinding;
+  const attempts: string[] = [];
+  for (const candidate of candidatePaths(process.arch)) {
+    try {
+      cachedBinding = require(candidate) as { readonly ConPtySession: NativeBinding };
+      return cachedBinding;
+    } catch (error) {
+      // Kept per candidate. "No addon" is the same sentence whether the
+      // prebuild for this architecture was never published, the install
+      // skipped it, or it is present and failed to load — and those are three
+      // different things to do next.
+      attempts.push(`${candidate}: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
+    }
+  }
+  throw new Error(
+    `no termwright ConPTY addon could be loaded for win32-${process.arch}. Tried:\n  ${attempts.join('\n  ')}`,
+  );
 }
 
 let unavailableReason: string | undefined;

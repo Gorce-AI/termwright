@@ -133,7 +133,7 @@ jobs:
           packages/ui/src/hostile.test.ts
 
   conpty-native-build:
-    name: build the ConPTY addon
+    name: build the ConPTY addon (${{ matrix.arch }})
     # Pinned to the 2022 image on purpose. windows-latest now ships Visual
     # Studio 18, which node-gyp 11 cannot identify — it reports "unknown
     # version undefined" and gives up. Users are never asked to compile this
@@ -142,6 +142,14 @@ jobs:
     # the one where the toolchain is supported.
     runs-on: windows-2022
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both architectures users can run Windows on. arm64 is cross-compiled
+        # here: node-gyp fetches that target's node.lib and the image carries
+        # the ARM64 MSVC toolchain, so the binary is produced where the
+        # toolchain is supported rather than where it will eventually run.
+        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -157,15 +165,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Node-API, so one binary serves every supported Node line. Building it
-      # twice would only prove the compiler runs twice.
+      # twice per architecture would only prove the compiler runs twice.
       - name: Compile
         working-directory: packages/conpty
-        run: pnpm run build:native
+        run: pnpm exec node-gyp rebuild --arch=${{ matrix.arch }}
+
+      # Into the package that publishes it, so the layout the release job packs
+      # is the layout every other job already used.
+      - name: Place the binary in its prebuild package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp packages/conpty/build/Release/termwright_conpty.node \
+             "packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node"
+          node scripts/check-prebuild.mjs "${{ matrix.arch }}"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: conpty-addon
-          path: packages/conpty/build/Release/termwright_conpty.node
+          name: conpty-addon-${{ matrix.arch }}
+          path: packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node
           if-no-files-found: error
           retention-days: 1
 
@@ -198,7 +216,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: conpty-addon
+          name: conpty-addon-x64
           path: packages/conpty/build/Release
 
       - name: Record which pseudoconsole path this runner takes
@@ -250,8 +268,12 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: conpty-addon
-          path: packages/conpty/build/Release
+          name: conpty-addon-x64
+          # Into the prebuild package rather than the build directory, so this
+          # job resolves the addon the way an installed copy will. The build
+          # directory is the developer's path and is already covered by the
+          # certification job; this one is the users'.
+          path: packages/conpty-win32-x64
 
       # A selection step, not a smoke test. If this prints the node-pty name
       # the job below proves nothing, and a silent fallback would make it look
@@ -265,6 +287,22 @@ jobs:
             console.log('selected backend:', backend.name);
             if (degradedReason !== undefined) { console.error(degradedReason); process.exit(1); }
           "
+
+      # The consumer's path, end to end: pack the prebuild and its parent,
+      # install them into a clean directory, and make the installed copy open
+      # a real pseudoconsole. Everything before this checks a working tree.
+      - name: Verify a clean install resolves the prebuilt addon
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-conpty-packs"
+          install_dir="$RUNNER_TEMP/termwright-conpty-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          node scripts/check-prebuild.mjs x64
+          pnpm --dir packages/conpty-win32-x64 pack --pack-destination "$pack_dir"
+          pnpm --dir packages/conpty pack --pack-destination "$pack_dir"
+          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
+          node scripts/check-installed-conpty.mjs "$install_dir"
 
       - name: Run the certified Termwright host
         run: pnpm test -- --resource-profile windows-ci --json
