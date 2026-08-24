@@ -11,6 +11,7 @@
     "check:package-metadata": "node scripts/check-package-metadata.mjs",
     "check:platform-deviations": "node scripts/check-platform-deviations.mjs",
     "check:determinism": "node scripts/audit-determinism-constructs.mjs",
+    "check:generated-docs": "pnpm --filter @termwright/mcp... build && node scripts/generate-mcp-docs.mjs && node scripts/generate-runtime-requirements.mjs",
     "check:node-pty": "node scripts/check-node-pty-certification.mjs",
     "check:semantic-completeness": "node scripts/generate-semantic-completeness.mjs",
     "check:mission-completion": "node scripts/generate-mission-completion.mjs",

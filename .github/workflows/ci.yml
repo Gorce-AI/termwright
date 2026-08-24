@@ -1017,6 +1017,8 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Generated documentation matches its sources
+        run: pnpm check:generated-docs
       - run: pnpm --filter @termwright/website run check
       - run: pnpm --filter @termwright/website run build
       - run: pnpm --filter @termwright/website run check:links

@@ -81,4 +81,12 @@ describe('autonomous workflow security', () => {
     expect(checkoutSteps.length).toBeGreaterThan(0);
     for (const step of checkoutSteps) expect(step).toContain('persist-credentials: false');
   });
+
+  it('fails website CI when generated documentation drifts from its sources', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    expect(workflow).toContain('run: pnpm check:generated-docs');
+    expect(manifest.scripts['check:generated-docs']).toContain('generate-mcp-docs.mjs');
+    expect(manifest.scripts['check:generated-docs']).toContain('generate-runtime-requirements.mjs');
+  });
 });
