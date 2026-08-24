@@ -140,12 +140,10 @@ if (titles.length !== 128) throw new Error(`mission title inventory has ${titles
 const partial = new Map([
   [53, 'The embedded engine is exact-pinned to Vitest 4.1.11, migrated from 3.2.7 to drop tinypool, whose ProcessWorker.send teardown crash blocked Windows; the local 3.1.4/3.2.7/4.1.11 pressure comparison is 12/12 green and the Windows comparison still needs a reviewed current Node 22/24 run.'],
   [70, 'Infrastructure telemetry and the independent pressure harness exist; the current Windows Node 22/24 matrix result is external execution evidence and is not fabricated locally.'],
-  [79, 'POSIX group teardown is proven. ConPTY captures and verifies its console tree on hard kill, but the adversarial natural-root-exit descendant proof still requires the real Windows lane.'],
-  [81, 'Unix owns an authoritative EOF boundary. Exact ConPTY beta.15 destroys output after a private timer and therefore remains explicitly degraded rather than falsely EOF-certified.'],
-  [110, 'Every historical Windows issue is categorized and executable lanes exist; the current Windows matrix artifacts are still required before promoting the final certification claim.'],
-  [111, 'Truthful Windows APIs and adversarial tests exist; their current Node 22/24 execution is required for the final supported-platform proof.'],
-  [112, 'ConPTY observability and functional provider-backed input are separated and tested; current Windows execution evidence remains required.'],
-  [113, 'Termwright owns and exact-certifies the private async write boundary without a dependency patch; the Windows artifact is checked in CI but cannot be executed on this host.'],
+  [81, 'Both platforms now own an authoritative boundary: Windows through the native ConPTY session, whose stream ends when the pipe ends and is certified on real Windows, and Unix through the pty master. What remains is a Linux failure that is not yet explained — a megabyte of output followed by a sentinel, with the sentinel absent from the grid while the producer reported a clean end of source, so it is neither the node-pty destroy timer nor a torn-down producer.'],
+  [110, 'Every historical Windows issue is categorized and the lanes execute: the addon builds for x64 and arm64, the ConPTY contract is certified on both Node lines, and conformance and lifecycle stress pass on Windows. The reliability matrix artifacts for the embedded engine are the part still outstanding.'],
+  [112, 'ConPTY observability and functional provider-backed input are separated and tested, and the Windows lane executes them. The pointer case is the one open item: a transport that repaints on its own made every frame look like a moved target, and the planner now confirms the target by the name the tree gives it while keeping a moved coordinate system fatal. Green on this claim awaits the Windows row that carries that change.'],
+  [113, 'Windows no longer has this boundary at all: it runs on the native ConPTY backend, and node-pty is neither loaded nor fallen back to there. The exact-certified private write boundary remains on POSIX, where node-pty is still the backend, and that coupling is what is left to remove.'],
   [114, 'The independent A/B harness covers Vitest versions, pools, workers, file parallelism and PTY pressure and is locally 12/12 green with no channel loss; a reviewed current Windows artifact is the remaining evidence.'],
 ]);
 
@@ -185,8 +183,8 @@ function evidenceFor(section) {
 
 const report = {
   schemaVersion: 1,
-  capturedAt: '2026-08-22',
-  baselineHead: 'a77bafeca83039d9f58ff0d5054da32f71535257',
+  capturedAt: '2026-08-24',
+  baselineHead: 'a796f17244291be08ddf64a519acbd03b23b54c5',
   policy: {
     productMode: 'termwright-native-host-only',
     backwardsCompatibility: false,
@@ -203,6 +201,19 @@ const report = {
       'The current architecture removes those nested package-manager spawns and builds once before the Native Host run.',
       'macOS Node 22 failed a scheduler-polled MCP semantic revision oracle; current MCP waits on the canonical focused Condition and committed-observation barrier.',
       'This baseline does not certify the dirty current workspace; a new Windows Node 22/24 run remains mandatory.',
+    ],
+  },
+  windowsBackendEvidence: {
+    runId: '32723013280',
+    url: 'https://github.com/Gorce-AI/termwright/actions/runs/32723013280',
+    observedAt: '2026-08-24',
+    classification: [
+      'Windows runs on @termwright/conpty, a native session that owns the pseudoconsole, both pipe ends and a job object created before the root could run.',
+      'Certified on real Windows for Node 22 and 24: a stream that ends because the pipe ended with its last byte delivered, a codepoint split byte-by-byte across reads and reassembled, a tree proven empty by the job, a hard kill mid-burst, input reaching a silent child, a descendant delivering its own output in order, and a console-attached descendant not surviving its root.',
+      'A descendant detached from the console does survive its root and is still owned and killable by the job, which is what identifies the console as what ends the other one.',
+      'Prebuilds ship for win32-x64 and win32-arm64; a clean consumer install of the packed tarballs opens a real pseudoconsole with no compiler present.',
+      'There is no fallback: a Windows machine that cannot load the addon raises rather than silently substituting a weaker output boundary.',
+      'Against node-pty the same suites failed three cleanups that could not confirm a tree was gone, plus settled() and the shell inference; against this backend they pass.',
     ],
   },
   localVitestPressureEvidence: {
