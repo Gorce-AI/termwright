@@ -184,7 +184,7 @@ jobs:
              "packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node"
           node scripts/check-prebuild.mjs "${{ matrix.arch }}"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: conpty-addon-${{ matrix.arch }}
           path: packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node
@@ -218,7 +218,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: conpty-addon-x64
           path: packages/conpty/build/Release
@@ -271,7 +271,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: conpty-addon-x64
           # Into the prebuild package rather than the build directory, so this
@@ -474,7 +474,7 @@ jobs:
       # Windows has one pseudo-terminal backend and it is a native addon, so
       # every Windows row needs the compiled binary before it can launch
       # anything. There is no fallback to run on if it is absent.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: conpty-addon-x64
           path: packages/conpty-win32-x64
@@ -533,16 +533,17 @@ jobs:
       # Windows has one pseudo-terminal backend and it is a native addon, so
       # every Windows row needs the compiled binary before it can launch
       # anything. There is no fallback to run on if it is absent.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         if: runner.os == 'Windows'
         with:
           name: conpty-addon-x64
           path: packages/conpty-win32-x64
 
-
-
       - name: Install the Python client (Textual adapter row)
-        run: pip install -e "clients/python[dev]"
+        shell: bash
+        run: |
+          python -m pip install -e "clients/python[dev]"
+          python -c "import termwright, textual"
 
       # Exits 0/1. Where no pty can be opened it skips everything and says so;
       # ubuntu and macOS have one, and Windows is the row to watch for ConPTY.
