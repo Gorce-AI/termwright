@@ -20,6 +20,11 @@ describe('Go test capability policy', () => {
   });
 
   it('maps a local probe failure to the caller-defined unavailable value', async () => {
-    await expect(goTestCapability(async () => { throw new Error('missing'); }, false, 'Go')).resolves.toBe(false);
+    await expect(goTestCapability(
+      async () => { throw new Error('missing'); },
+      false,
+      'Go',
+      {},
+    )).resolves.toBe(false);
   });
 });
