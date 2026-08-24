@@ -48,11 +48,14 @@ describe("certified Ink geometry over a real PTY", { timeout: 60_000 }, () => {
   it("keeps Static above live output while retaining independent geometry", async () => {
     const terminal = await launch("static");
     try {
-      const historyLocator = terminal.getByRole("text", { name: "HISTORY" });
+      const originalHistory = terminal.getByRole("text", {
+        name: "HISTORY",
+        exact: true,
+      });
       const liveLocator = terminal.getByRole("text", { name: "LIVE-0" });
-      await historyLocator.waitFor({ state: "attached" });
+      await originalHistory.waitFor({ state: "attached" });
       await liveLocator.waitFor({ state: "attached" });
-      const history = await historyLocator.geometry();
+      const history = await originalHistory.geometry();
       const live = await liveLocator.geometry();
       expect(history.visibleRect).toMatchObject({
         status: "known",
@@ -64,11 +67,14 @@ describe("certified Ink geometry over a real PTY", { timeout: 60_000 }, () => {
       });
       await terminal.press("n");
       await terminal.waitForText("LIVE-1");
+      // This targets the original Static item, not the later HISTORY-1 node.
       expect(
-        (await terminal.getByRole("text", { name: "HISTORY" }).geometry())
-          .visibleRect,
+        (await originalHistory.geometry()).visibleRect,
       ).toMatchObject({ status: "known" });
-      const nextHistory = terminal.getByRole("text", { name: "HISTORY-1" });
+      const nextHistory = terminal.getByRole("text", {
+        name: "HISTORY-1",
+        exact: true,
+      });
       await nextHistory.waitFor({ state: "attached" });
       expect((await nextHistory.geometry()).visibleRect).toMatchObject({
         status: "known",
