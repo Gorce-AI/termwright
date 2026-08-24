@@ -8,7 +8,11 @@ and keyboard input, so it works without a framework integration.
 
 ## Prerequisites
 
-- Node.js 22 or newer
+<!-- BEGIN GENERATED RUNTIME REQUIREMENTS -->
+<!-- Generated from package.json; do not edit this block by hand. -->
+- Node.js must match `^22.0.0 || ^24.0.0`: supported major lines are 22 and 24; unlisted lines such as 23 and 25 are excluded.
+- Termwright embeds and certifies exactly Vitest 4.1.11.
+<!-- END GENERATED RUNTIME REQUIREMENTS -->
 - an ESM project
 - macOS, Windows, or glibc-based Linux
 
@@ -19,6 +23,12 @@ Linux CI, use a Debian- or Ubuntu-based Node image such as `node:22-slim`.
 
 ```sh
 npm install --save-dev termwright
+```
+
+Verify the runtime, test engine, and native PTY immediately after installation:
+
+```sh
+npx termwright doctor
 ```
 
 Add scripts that use the locally installed binaries:
