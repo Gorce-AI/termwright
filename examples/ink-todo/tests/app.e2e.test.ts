@@ -43,7 +43,7 @@ describe.skipIf(!runnable)('the todo app', () => {
     await expect(app).toMatchCellSnapshot();
   });
 
-  test('filters the list by what is typed into the filter box', async ({ terminal, step }) => {
+  test('filters the list by what is typed into the filter box', async ({ terminal }) => {
     const app = await terminal.launch();
     await app.waitForQuiet();
 

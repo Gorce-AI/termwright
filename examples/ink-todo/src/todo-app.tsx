@@ -164,12 +164,10 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
       </Box>
 
       <Box ref={listRef} flexDirection="column">
-        {visible.map((todo, index) => (
+        {visible.map((todo) => (
           <TodoRow
             key={todo.id}
             todo={todo}
-            index={index}
-            total={visible.length}
             selected={current?.id === todo.id}
           />
         ))}
@@ -209,13 +207,9 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
 
 function TodoRow({
   todo,
-  index,
-  total,
   selected,
 }: {
   readonly todo: Todo;
-  readonly index: number;
-  readonly total: number;
   readonly selected: boolean;
 }) {
   const ref = useRef<DOMElement>(null);

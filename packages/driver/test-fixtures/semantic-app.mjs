@@ -189,7 +189,7 @@ function tree() {
 function stripBounds(snapshot) {
   return {
     ...snapshot,
-    nodes: snapshot.nodes.map(({ bounds, ...node }) => node),
+    nodes: snapshot.nodes.map(({ bounds: _bounds, ...node }) => node),
   };
 }
 

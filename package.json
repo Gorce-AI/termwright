@@ -7,7 +7,9 @@
   },
   "packageManager": "pnpm@9.4.0",
   "scripts": {
-    "build": "pnpm -r --filter './packages/*' run build",
+    "build": "pnpm -r --filter=./packages/* --fail-if-no-match run build",
+    "check:fast": "pnpm lint && pnpm check:package-metadata && pnpm check:platform-deviations && pnpm check:determinism && pnpm check:semantic-completeness && pnpm check:mission-completion && node scripts/sync-protocol-version.mjs --check",
+    "check:full": "pnpm check:fast && pnpm build && node scripts/check-optional-native-externals.mjs && pnpm check:node-pty && pnpm typecheck && pnpm test -- --resource-profile local --json && pnpm test:compatibility && pnpm -r --filter=./examples/* --fail-if-no-match run build && pnpm -r --filter=./examples/* --fail-if-no-match run typecheck && pnpm test:examples && pnpm check:generated-docs && pnpm --filter @termwright/website run check && pnpm --filter @termwright/website run build && pnpm --filter @termwright/website run check:links && pnpm check:vectors",
     "check:package-metadata": "node scripts/check-package-metadata.mjs",
     "check:platform-deviations": "node scripts/check-platform-deviations.mjs",
     "check:determinism": "node scripts/audit-determinism-constructs.mjs",
@@ -15,6 +17,7 @@
     "check:node-pty": "node scripts/check-node-pty-certification.mjs",
     "check:semantic-completeness": "node scripts/generate-semantic-completeness.mjs",
     "check:mission-completion": "node scripts/generate-mission-completion.mjs",
+    "check:vectors": "pnpm --filter @termwright/protocol run build && node clients/test-vectors/generate.mjs && git diff --exit-code -- clients/test-vectors",
     "docs:screenshots": "pnpm --filter @termwright/ui run screenshots:docs",
     "docs:api": "typedoc && typedoc --options typedoc.driver.json && typedoc --options typedoc.ink.json && typedoc --options typedoc.gherkin.json && node scripts/prepare-api-docs.mjs",
     "generate:mcp-docs": "pnpm --filter @termwright/mcp... build && node scripts/generate-mcp-docs.mjs --write",
@@ -23,9 +26,10 @@
     "test": "node packages/termwright-cli/dist/bin.js test",
     "pretest:compatibility": "pnpm --filter @termwright/protocol --filter @termwright/recognizers --filter @termwright/evidence-provider --filter @termwright/probe-runtime --filter @termwright/probe-go --filter termwright... build",
     "test:compatibility": "node packages/termwright-cli/dist/bin.js test -- compatibility/registry.test.ts",
+    "test:examples": "node scripts/run-required-examples.mjs",
     "test:watch": "node packages/termwright-cli/dist/bin.js watch",
-    "typecheck": "pnpm -r --filter './packages/*' run typecheck",
-    "lint": "eslint packages/*/src"
+    "typecheck": "pnpm -r --filter=./packages/* --fail-if-no-match run typecheck",
+    "lint": "eslint ."
   },
   "devDependencies": {
     "@changesets/changelog-github": "^1.0.0",

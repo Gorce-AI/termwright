@@ -28,7 +28,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { safeExtractTarGz } from './safe-tar.mjs';
@@ -443,43 +443,6 @@ async function goModule(root, candidate) {
     await makeTreeOwnerWritable(scratch).catch(() => {});
     await rm(scratch, { recursive: true, force: true }).catch(() => {});
   }
-}
-
-function cargoLockChecksum(lock, name, version) {
-  const sections = lock.split(/^\[\[package\]\]\s*$/mu).slice(1);
-  const matches = sections.filter((section) => {
-    const packageName = /^name = "([^"]+)"$/mu.exec(section)?.[1];
-    const packageVersion = /^version = "([^"]+)"$/mu.exec(section)?.[1];
-    return packageName === name && packageVersion === version;
-  });
-  if (matches.length !== 1) {
-    throw new CertificationError(`Cargo.lock contains ${matches.length} entries for ${name}@${version}`);
-  }
-  const checksum = /^checksum = "([0-9a-f]{64})"$/mu.exec(matches[0])?.[1];
-  if (checksum === undefined) throw new CertificationError(`${name}@${version} has no crates.io checksum in Cargo.lock`);
-  return `sha256:${checksum}`;
-}
-
-async function rustPackages(root) {
-  const manifestPath = join(root, 'clients/rust-ratatui/Cargo.toml');
-  const metadataResult = await run('cargo', ['metadata', '--format-version', '1', '--manifest-path', manifestPath], { cwd: root });
-  const metadata = JSON.parse(metadataResult.stdout);
-  const lock = await readFile(join(root, 'clients/rust-ratatui/Cargo.lock'), 'utf8');
-  return new Map(metadata.packages
-    .filter((entry) => entry.name === 'ratatui-core' || entry.name === 'ratatui-widgets')
-    .map((entry) => {
-      if (entry.source !== 'registry+https://github.com/rust-lang/crates.io-index') {
-        throw new CertificationError(`${entry.name}@${entry.version} is not the crates.io source`);
-      }
-      const sourceDir = dirname(entry.manifest_path);
-      const registryId = basename(dirname(sourceDir));
-      const registryRoot = dirname(dirname(dirname(sourceDir)));
-      return [`${entry.name}@${entry.version}`, {
-        ...entry,
-        checksum: cargoLockChecksum(lock, entry.name, entry.version),
-        archivePath: join(registryRoot, 'cache', registryId, `${entry.name}-${entry.version}.crate`),
-      }];
-    }));
 }
 
 async function rustCrate(root, candidate) {
