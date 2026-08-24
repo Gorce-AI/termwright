@@ -42,7 +42,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Windows is absent on purpose. Its backend is a native addon, and a
+        # row that runs before the addon is compiled would have nothing to run
+        # on now that there is no fallback. The Windows rows live in
+        # windows-driver-native, which waits for the prebuild.
+        os: [ubuntu-latest, macos-latest]
         node: ['22', '24']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -236,14 +240,15 @@ jobs:
         run: pnpm test -- --resource-profile windows-ci --json -- --run packages/conpty/src
 
   windows-driver-native:
-    name: Windows suites on the native backend (Node ${{ matrix.node }})
-    # The Windows rows of the build matrix run on node-pty, because a machine
-    # without the addon still has to work until prebuilds ship. That path has
-    # standing failures — cleanup that cannot confirm a tree is gone, and a
-    # pointer target that moves after its paired frame — and the question is
-    # whether they are the backend's or the driver's. Here the driver gets the
-    # certified session instead, and the answer is the difference between the
-    # two job's results rather than an argument.
+    name: build windows-latest / node ${{ matrix.node }}
+    # The Windows build row. It is separate from the matrix because it has to
+    # wait for the addon: Windows has one backend now, so a row that started
+    # before the prebuild existed would have nothing to run on.
+    #
+    # This began as a comparison against node-pty and settled the question it
+    # was built for. Against node-pty, Windows failed three cleanups that could
+    # not confirm a tree was gone, plus settled() and the shell inference;
+    # against the certified session, all five pass.
     runs-on: windows-latest
     needs: conpty-native-build
     timeout-minutes: 40
@@ -304,8 +309,33 @@ jobs:
           npm install --prefix "$install_dir" "$pack_dir"/*.tgz
           node scripts/check-installed-conpty.mjs "$install_dir"
 
+      - run: pnpm -r --filter './packages/*' run typecheck
+      - name: Verify packed driver on the native PTY backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$RUNNER_TEMP/termwright-driver-packs"
+          install_dir="$RUNNER_TEMP/termwright-driver-install"
+          mkdir -p "$pack_dir" "$install_dir"
+          pnpm --dir packages/protocol pack --pack-destination "$pack_dir"
+          pnpm --dir packages/vt pack --pack-destination "$pack_dir"
+          pnpm --dir packages/driver pack --pack-destination "$pack_dir"
+          # The driver's Windows backend is an optional dependency that is not
+          # published yet, so an install of the packed driver alone would skip
+          # it and leave the installed copy with no backend at all.
+          pnpm --dir packages/conpty-win32-x64 pack --pack-destination "$pack_dir"
+          pnpm --dir packages/conpty pack --pack-destination "$pack_dir"
+          npm install --prefix "$install_dir" "$pack_dir"/*.tgz
+          node scripts/check-installed-driver.mjs "$install_dir"
+
       - name: Run the certified Termwright host
         run: pnpm test -- --resource-profile windows-ci --json
+
+      # The Getting Started source is a real workspace package. This catches
+      # stale imports, launch assumptions and expected output in the primary
+      # documentation path on this row as well.
+      - name: Run the Getting Started example
+        run: pnpm test -- --resource-profile ci --json -- --run examples/getting-started
 
   determinism:
     name: determinism (50 native run cycles, zero retries)
@@ -425,6 +455,7 @@ jobs:
   windows-native-stress:
     name: Windows native lifecycle stress / Node ${{ matrix.node }}
     runs-on: windows-latest
+    needs: conpty-native-build
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -439,6 +470,16 @@ jobs:
         with: { node-version: "${{ matrix.node }}", cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
+
+      # Windows has one pseudo-terminal backend and it is a native addon, so
+      # every Windows row needs the compiled binary before it can launch
+      # anything. There is no fallback to run on if it is absent.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: conpty-addon-x64
+          path: packages/conpty-win32-x64
+
+
       - name: ConPTY process tree, close-under-load and worker pressure
         shell: bash
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -453,6 +494,7 @@ jobs:
             quality/stress/terminal-concurrency.test.ts
 
   conformance:
+    needs: conpty-native-build
     name: conformance ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     # Every suite here spawns a process, a pty and a socket per test, so this
@@ -487,6 +529,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
+
+      # Windows has one pseudo-terminal backend and it is a native addon, so
+      # every Windows row needs the compiled binary before it can launch
+      # anything. There is no fallback to run on if it is absent.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: runner.os == 'Windows'
+        with:
+          name: conpty-addon-x64
+          path: packages/conpty-win32-x64
+
+
 
       - name: Install the Python client (Textual adapter row)
         run: pip install -e "clients/python[dev]"

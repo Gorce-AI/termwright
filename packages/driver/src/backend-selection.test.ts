@@ -26,17 +26,19 @@ describe('choosing a pseudo-terminal backend', () => {
     expect(second).toBe(first);
   });
 
-  it('names the weaker guarantee when Windows falls back', async () => {
-    const choice = await resolveDefaultPtyBackend('win32');
-    if (choice.backend.name === CONPTY_BACKEND_NAME) {
-      // A machine with the addon built. Nothing was given up, so nothing is
-      // reported — asserting a reason here would demand a complaint that
-      // would be false.
-      expect(choice.degradedReason).toBeUndefined();
+  it('gives Windows the native backend or nothing, never a weaker substitute', async () => {
+    // Both architectures Windows runs on ship a prebuild, so a machine that
+    // cannot load one has a broken install rather than an unsupported
+    // toolchain. Substituting node-pty there would hand the caller an output
+    // boundary that looks identical and means something weaker, which is the
+    // one failure a test can never catch afterwards.
+    const attempt = resolveDefaultPtyBackend('win32');
+    if (process.platform === 'win32') {
+      await expect(attempt).resolves.toMatchObject({ backend: { name: CONPTY_BACKEND_NAME } });
       return;
     }
-    // Everywhere else the fallback has to account for itself, and the part
-    // that matters is which guarantee was lost, not which module was missing.
-    expect(choice.degradedReason).toMatch(/bounded flush window rather than on the pipe/u);
+    // Elsewhere the addon genuinely cannot exist, and the refusal has to say
+    // what it tried rather than only that it failed.
+    await expect(attempt).rejects.toMatchObject({ code: 'pty-backend-failed' });
   });
 });
