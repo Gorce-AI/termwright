@@ -34,11 +34,6 @@ same upstream version set, backed by executable claim files.
           <code>{entry.versions.declared}</code><br />
           verified: <code>{entry.versions.verified.join(', ')}</code>
         </td>
-        <td>
-          automatic: <code>{entry.capabilityGraph.automatic.join(', ') || 'none'}</code><br />
-          application-integrated: <code>{entry.capabilityGraph.applicationIntegrated.flatMap((item) => item.capabilities).join(', ') || 'none'}</code><br />
-          unsupported: <code>{entry.capabilityGraph.unsupported.join(', ') || 'none'}</code>
-        </td>
         <td>{entry.runtimes.map((runtime) => <><code>{runtime.name} {runtime.version}</code><br /></>)}</td>
         <td><code>{entry.probe.package} {entry.probe.packageVersion}</code></td>
         <td>
@@ -46,6 +41,11 @@ same upstream version set, backed by executable claim files.
           {entry.probe.capabilities.length === 0
             ? 'none'
             : <code>{entry.probe.capabilities.join(', ')}</code>}
+        </td>
+        <td>
+          automatic: <code>{entry.capabilityGraph.automatic.join(', ') || 'none'}</code><br />
+          application-integrated: <code>{entry.capabilityGraph.applicationIntegrated.flatMap((item) => item.capabilities).join(', ') || 'none'}</code><br />
+          unsupported: <code>{entry.capabilityGraph.unsupported.join(', ') || 'none'}</code>
         </td>
         <td>
           {entry.annotations === null

@@ -447,6 +447,36 @@ describe('machine-readable framework compatibility registry', () => {
     expect(geometryPage).toContain('<!-- geometry-matrices:end -->');
   });
 
+  it('keeps compatibility table cells aligned with their headers', () => {
+    const page = text('website/src/content/docs/reference/compatibility.mdx');
+    expect([...page.matchAll(/<th>([^<]+)<\/th>/gu)].map((match) => match[1])).toEqual([
+      'Framework',
+      'Declared / verified',
+      'Runtime',
+      'Probe',
+      'Automatic probe capabilities',
+      'Effective session graph',
+      'Annotations',
+    ]);
+
+    const body = page.slice(page.indexOf('<tbody>'), page.indexOf('</tbody>'));
+    const fields = [
+      'entry.name',
+      'entry.versions.declared',
+      'entry.runtimes.map',
+      'entry.probe.package',
+      'entry.probe.identityKind',
+      'entry.capabilityGraph.automatic',
+      'entry.annotations',
+    ];
+    let previousOffset = -1;
+    for (const field of fields) {
+      const offset = body.indexOf(field);
+      expect(offset, field).toBeGreaterThan(previousOffset);
+      previousOffset = offset;
+    }
+  });
+
   it('keeps generated cross-language graph vectors byte-for-structure aligned', () => {
     expect(json('clients/test-vectors/capability-graph.json')).toEqual(CAPABILITY_GRAPH);
     const constants = json<Record<string, unknown>>('clients/test-vectors/constants.json');
