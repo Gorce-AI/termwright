@@ -335,12 +335,34 @@ export class ActionPlanner {
         const present = pointerRegion.spans
           .map((span) => (rows[span.row]?.text ?? '').slice(span.from, span.to))
           .join('⏎');
-        throw new StaleSnapshotError(
-          `the pointer target changed after its paired semantic frame (${reason}; ` +
-            `paired screen revision ${checkpoint.pairedScreenRevision}, current ${checkpoint.screenRevision}; ` +
-            `the region now reads ${JSON.stringify(present)})`,
-          diagnostics,
-        );
+        // A repaint is not a move. The revision comparison asks whether
+        // anything was written over the region, which is a proxy for the
+        // question that matters: is the target still the thing at these
+        // coordinates. Under a transport that redraws the screen on its own —
+        // ConPTY does — the proxy says yes to every frame while the target has
+        // not moved at all.
+        //
+        // So when the region still reads the name the tree gives this node,
+        // the plan is about the same thing it was about. Deliberately narrow:
+        // a coordinate system that moved is still fatal, because then these
+        // spans no longer address what they addressed, and a node with no name
+        // has nothing to confirm and stays fatal too.
+        const expected = node.name?.trim();
+        if (
+          (reason === 'glyphs-changed' || reason === 'styling-changed')
+          && expected !== undefined
+          && expected.length > 0
+          && present.includes(expected)
+        ) {
+          this.#remember(requirements);
+        } else {
+          throw new StaleSnapshotError(
+            `the pointer target changed after its paired semantic frame (${reason}; ` +
+              `paired screen revision ${checkpoint.pairedScreenRevision}, current ${checkpoint.screenRevision}; ` +
+              `the region now reads ${JSON.stringify(present)})`,
+            diagnostics,
+          );
+        }
       }
       const hitGrid = this.#ctx.hitGrid();
       if (verifiesOwnership && hitGrid?.status !== 'known') {

@@ -1306,7 +1306,11 @@ async function createCertifiedVitestEngine(options: TermwrightTestHostOptions): 
     },
   }, uiVitestViteOverrides());
   removeEmbeddedDefaultReporter(vitest);
-  await vitest.init();
+  // `standalone()`, not the deprecated `init()`. Both initialise reporters and
+  // coverage without running anything; only one of them still prints a
+  // deprecation notice into the host's own output plane, which Termwright owns
+  // and keeps structured.
+  await vitest.standalone();
   return { engine: new ExactVitestEngine(vitest), filters: parsed.filter };
 }
 

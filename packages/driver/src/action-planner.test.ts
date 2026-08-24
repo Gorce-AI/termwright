@@ -194,6 +194,47 @@ describe('ActionPlanner runtime input requirements', () => {
       .toThrowError(expect.objectContaining({ code: 'stale-snapshot' }));
   });
 
+  it('acts through a repaint that left the target where the tree says it is', () => {
+    // A transport that redraws the screen on its own — ConPTY does — writes
+    // over the region every frame without anything having moved. The revision
+    // comparison cannot tell that from a target being replaced; the text can.
+    const newer = Object.freeze({ ...stamp, sequence: 8, screenRevision: 5, pairedScreenRevision: 4 });
+    const planner = new ActionPlanner(context({ name: 'Name' }, {
+      checkpoint: () => newer,
+      screenRegionUnchangedSince: () => false,
+      screenRegionChangeSince: () => 'glyphs-changed',
+      screenRows: () => [{ text: '' }, { text: '' }, { text: '   Name  ' }],
+    }));
+    expect(planner.planPointer('repainted', { kind: 'click', targetRef: target.ref }, target).plan.checkpoint)
+      .toBe(newer);
+  });
+
+  it('refuses when something else took the target’s place', () => {
+    const newer = Object.freeze({ ...stamp, sequence: 8, screenRevision: 5, pairedScreenRevision: 4 });
+    const planner = new ActionPlanner(context({ name: 'Name' }, {
+      checkpoint: () => newer,
+      screenRegionUnchangedSince: () => false,
+      screenRegionChangeSince: () => 'glyphs-changed',
+      screenRows: () => [{ text: '' }, { text: '' }, { text: '   Other ' }],
+    }));
+    expect(() => planner.planPointer('replaced', { kind: 'click', targetRef: target.ref }, target))
+      .toThrowError(expect.objectContaining({ code: 'stale-snapshot' }));
+  });
+
+  it('still refuses when the coordinate system moved, whatever the region reads', () => {
+    // The spans no longer address what they addressed. Text that matches is a
+    // coincidence of position, not evidence that this is the same target.
+    const newer = Object.freeze({ ...stamp, sequence: 8, screenRevision: 5, pairedScreenRevision: 4 });
+    const planner = new ActionPlanner(context({ name: 'Name' }, {
+      checkpoint: () => newer,
+      screenRegionUnchangedSince: () => false,
+      screenRegionChangeSince: () => 'coordinate-system-moved',
+      screenRows: () => [{ text: '' }, { text: '' }, { text: '   Name  ' }],
+    }));
+    expect(() => planner.planPointer('scrolled', { kind: 'click', targetRef: target.ref }, target))
+      .toThrowError(expect.objectContaining({ code: 'stale-snapshot' }));
+  });
+
   it('accepts an explicit frozen application region contract without inventing a hit test', () => {
     const base = context();
     const baseContract = base.contract();
