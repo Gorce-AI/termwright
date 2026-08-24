@@ -35,16 +35,11 @@ describe('the native host is the only Termwright test entrypoint', () => {
     const upstream = await readFile(new URL('../.github/workflows/upstream-candidates.yml', import.meta.url), 'utf8');
     const vitestReliability = await readFile(new URL('../.github/workflows/vitest-reliability.yml', import.meta.url), 'utf8');
     for (const [name, workflow] of [['CI', ci], ['Release', release], ['nightly reliability', reliability], ['Vitest reliability', vitestReliability], ['upstream certification', upstream]]) {
-      if (workflow.includes('*reject-rerun')) {
-        expect(workflow, `${name} rerun anchor must fail closed`).toMatch(
-          /- &reject-rerun\n        name: Reject workflow reruns\n        shell: bash\n        run: test "\$GITHUB_RUN_ATTEMPT" = 1/u,
-        );
-      }
       const jobs = workflowJobBlocks(workflow);
       expect(jobs.length, `${name} must contain certification jobs`).toBeGreaterThan(0);
       for (const job of jobs) {
         expect(job, `${name} job must reject reruns as its first step`).toMatch(
-          /    steps:\n      - (?:\*reject-rerun|&reject-rerun\n        name: Reject workflow reruns\n        shell: bash\n        run: test "\$GITHUB_RUN_ATTEMPT" = 1|name: Reject workflow reruns\n        shell: bash\n        run: test "\$GITHUB_RUN_ATTEMPT" = 1)/u,
+          /    steps:\n      - name: Reject workflow reruns\n        shell: bash\n        run: test "\$GITHUB_RUN_ATTEMPT" = 1/u,
         );
       }
     }
