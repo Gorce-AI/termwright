@@ -32,6 +32,8 @@ export interface ActionPlannerContext {
   screenRegionUnchangedSince(revision: number, spans: PhysicalRegion['spans']): boolean;
   /** Why the region is unusable at that revision, for the failure to name. */
   screenRegionChangeSince?(revision: number, spans: PhysicalRegion['spans']): string;
+  /** The committed rows, so a stale-target failure can show what is there now. */
+  screenRows?(): readonly { readonly text: string }[];
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics;
 }
 
@@ -325,9 +327,18 @@ export class ActionPlanner {
           checkpoint.pairedScreenRevision,
           pointerRegion.spans,
         ) ?? 'unreported';
+        // What is under the region now. A reader looking at this failure wants
+        // to know whether the target is still there and merely repainted, or
+        // whether something else took its place, and the revisions alone do
+        // not say which.
+        const rows = this.#ctx.screenRows?.() ?? [];
+        const present = pointerRegion.spans
+          .map((span) => (rows[span.row]?.text ?? '').slice(span.from, span.to))
+          .join('⏎');
         throw new StaleSnapshotError(
           `the pointer target changed after its paired semantic frame (${reason}; ` +
-            `paired screen revision ${checkpoint.pairedScreenRevision}, current ${checkpoint.screenRevision})`,
+            `paired screen revision ${checkpoint.pairedScreenRevision}, current ${checkpoint.screenRevision}; ` +
+            `the region now reads ${JSON.stringify(present)})`,
           diagnostics,
         );
       }

@@ -1920,6 +1920,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#vt.regionUnchangedSince(revision, spans);
   }
 
+  screenRows(): readonly { readonly text: string }[] {
+    return captureRows(this.#vt);
+  }
+
   screenRegionChangeSince(
     revision: number,
     spans: import("@termwright/protocol").PhysicalRegion["spans"],
