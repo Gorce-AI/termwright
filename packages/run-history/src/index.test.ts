@@ -19,8 +19,13 @@ import {
 const directories: string[] = [];
 afterEach(async () => Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))));
 
+// These tests deliberately hit real durable filesystem writes. Windows CI can
+// pause those fsyncs under the full host run, so the budget is for the platform
+// operation rather than a product-level timing guarantee.
+const DURABLE_HISTORY_TIMEOUT_MS = process.platform === 'win32' ? 20_000 : 5_000;
+
 describe('native run history transaction', () => {
-  it('prepares durably and becomes complete only after the atomic commit', async () => {
+  it('prepares durably and becomes complete only after the atomic commit', { timeout: DURABLE_HISTORY_TIMEOUT_MS }, async () => {
     const runs = await runsDirectory();
     const start = provenance();
     const transaction = await beginRunManifest(runs, start);
@@ -34,7 +39,7 @@ describe('native run history transaction', () => {
     await expect(transaction.commitPrepared()).rejects.toThrow(/not prepared/u);
   });
 
-  it('surfaces partial, truncated, digest-mismatched and unsupported histories', async () => {
+  it('surfaces partial, truncated, digest-mismatched and unsupported histories', { timeout: DURABLE_HISTORY_TIMEOUT_MS }, async () => {
     const runs = await runsDirectory();
     const partial = provenance();
     await beginRunManifest(runs, partial);
@@ -67,7 +72,7 @@ describe('native run history transaction', () => {
     });
   });
 
-  it('rejects the same RunId concurrently and permits independent canonical IDs', async () => {
+  it('rejects the same RunId concurrently and permits independent canonical IDs', { timeout: DURABLE_HISTORY_TIMEOUT_MS }, async () => {
     const runs = await runsDirectory();
     const same = provenance();
     const collisions = await Promise.allSettled([
@@ -82,7 +87,7 @@ describe('native run history transaction', () => {
     expect((await readRunHistory(runs)).filter((record) => record.state === 'complete')).toHaveLength(2);
   });
 
-  it('leaves an explicit incomplete transaction when finalization hits ENOSPC', async () => {
+  it('leaves an explicit incomplete transaction when finalization hits ENOSPC', { timeout: DURABLE_HISTORY_TIMEOUT_MS }, async () => {
     const runs = await runsDirectory();
     const start = provenance();
     const base = nodeWriter();

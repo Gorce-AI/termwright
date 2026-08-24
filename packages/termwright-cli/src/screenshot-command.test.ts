@@ -8,6 +8,8 @@ import { captureScreenshot, checkRequest } from './screenshot-command.js';
 
 type Listener = (payload: never) => void;
 
+const FONT_SCAN_TIMEOUT_MS = 90_000;
+
 /** The smallest thing the trace writer will record: output, a step, an exit. */
 class Recorded {
   readonly sessionId = 'shot-session';
@@ -164,9 +166,9 @@ describe('capturing a moment of a recording', () => {
   // Enumerating the machine's fonts is the work under test, and a Windows CI
   // runner has thousands of them: this is the one case here that legitimately
   // outlasts the default 5 s. The budget is generous because it is only ever
-  // paid on a slow machine, and a scan that took a minute would be a finding
-  // rather than a flake.
-  it('reports a character the embedded fonts do not cover', { timeout: 60_000 }, async () => {
+  // paid on a slow machine, matching the lower-level screenshot package's
+  // measured Windows Node 24 budget.
+  it('reports a character the embedded fonts do not cover', { timeout: FONT_SCAN_TIMEOUT_MS }, async () => {
     // U+F0000 is in a private-use plane, so no real font claims it: this is the
     // one way to reach the fallback branch on any machine. impl-trace measured
     // that coverage is a property of the *installed* fonts rather than of the
