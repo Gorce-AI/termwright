@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 /**
- * Prove a consumer install resolves the prebuilt addon.
+ * Prove a consumer install resolves the prebuilt addon and runs it.
  *
  * Everything upstream of this checks a working tree: the binary is where the
- * build put it, the manifests say the right things, the packing refuses an
- * empty archive. None of that is what a user gets. This installs the packed
- * tarballs into a clean directory and asks the installed copy to load its
- * addon, which is the first point where the whole chain — optional dependency
- * resolution, the os/cpu filter, the loader's candidate list, the file
- * actually being in the archive — is exercised at once.
+ * build put it, the manifests say the right things, packing refuses an empty
+ * archive. None of that is what a user gets. This installs the packed
+ * tarballs into a clean directory and asks the installed copy to open a real
+ * pseudoconsole — the first point where optional-dependency resolution, the
+ * os/cpu filter, the loader's candidate list and the file actually being in
+ * the archive are all exercised at once.
+ *
+ * The probe runs as a child process with its working directory inside the
+ * install, because that is what makes a bare specifier resolve the way it
+ * will for a consumer. Resolving it from here would ask this repository's
+ * module graph a question about someone else's.
  *
  * Usage: check-installed-conpty.mjs <install-dir>
  */
 
-import { createRequire } from 'node:module';
-import { argv, exit, platform, arch } from 'node:process';
+import { spawnSync } from 'node:child_process';
+import { argv, execPath, exit, platform, arch } from 'node:process';
 
 const installDirectory = argv[2];
 if (installDirectory === undefined) {
@@ -29,28 +34,17 @@ if (platform !== 'win32') {
   exit(0);
 }
 
-const require = createRequire(`${installDirectory}/`);
-let conpty;
-try {
-  conpty = await import(require.resolve('@termwright/conpty'));
-} catch (error) {
-  console.error(`the installed @termwright/conpty could not be imported: ${error?.message ?? error}`);
-  exit(1);
-}
-
+const probe = `
+const conpty = await import('@termwright/conpty');
 if (!conpty.conPtyAvailable()) {
-  console.error(
-    `the installed @termwright/conpty resolved no addon for win32-${arch}: ` +
-      `${conpty.conPtyUnavailableReason?.() ?? 'no reason reported'}`,
-  );
-  exit(1);
+  console.error('resolved no addon: ' + (conpty.conPtyUnavailableReason?.() ?? 'no reason reported'));
+  process.exit(2);
 }
-
 // Loading is not running. A binary that loads and then cannot open a
-// pseudoconsole would still pass a require check, and the point of shipping a
-// prebuild is that the thing works on arrival.
+// pseudoconsole would still satisfy a resolution check, and the point of
+// shipping a prebuild is that it works on arrival.
 const handle = conpty.spawnConPty({
-  command: [process.execPath, '-e', 'process.stdout.write("PREBUILD OK\\r\\n")'],
+  command: [process.execPath, '-e', 'process.stdout.write("PREBUILD OK\\\\r\\\\n")'],
   env: { ...process.env, TERM: 'xterm-256color' },
   columns: 80,
   rows: 24,
@@ -59,14 +53,26 @@ const chunks = [];
 handle.onData((data) => chunks.push(Buffer.from(data)));
 await handle.outputEnded;
 const text = Buffer.concat(chunks).toString('utf8');
+const sawEof = handle.sawRealEof;
 handle.dispose();
-
-if (!handle.sawRealEof) {
-  console.error('the installed addon ended its stream without a real end of output');
-  exit(1);
-}
+if (!sawEof) { console.error('the stream ended without a real end of output'); process.exit(3); }
 if (!text.includes('PREBUILD OK')) {
-  console.error(`the installed addon produced no output from its child; saw ${JSON.stringify(text)}`);
+  console.error('the child produced no output; saw ' + JSON.stringify(text));
+  process.exit(4);
+}
+console.log('ran a real pseudoconsole');
+`;
+
+const result = spawnSync(execPath, ['--input-type=module', '-e', probe], {
+  cwd: installDirectory,
+  encoding: 'utf8',
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+
+if (result.stdout) process.stdout.write(result.stdout);
+if (result.stderr) process.stderr.write(result.stderr);
+if (result.status !== 0) {
+  console.error(`the installed @termwright/conpty failed on win32-${arch} (exit ${result.status})`);
   exit(1);
 }
 console.log(`the installed @termwright/conpty runs a real pseudoconsole on win32-${arch}`);
