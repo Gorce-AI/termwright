@@ -2173,6 +2173,17 @@ describe.skipIf(!ptyAvailable())(
       // stays 'unknown' here; the provider fact belongs to the action path.
       expect(terminal.screen().modes.mouseTracking).toBe("unknown");
 
+      // What the paired frame actually held. A semantic tree paired with a
+      // screen that does not yet show what it describes makes every later
+      // paint look like the target moved, and from the click's failure alone
+      // the two are indistinguishable.
+      const atPairing = terminal.checkpoint();
+      expect(
+        terminal.screen().text(),
+        `paired screen revision ${atPairing.pairedScreenRevision} of ` +
+          `${atPairing.screenRevision}, semantic revision ${atPairing.semanticRevision}`,
+      ).toContain("Reject");
+
       await terminal.getByRole("button", { name: "Reject" }).click();
       await terminal.waitForText("CLICKED reject");
     });
