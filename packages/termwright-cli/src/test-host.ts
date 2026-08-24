@@ -108,6 +108,15 @@ export class TermwrightHostTimeoutError extends Error {
   }
 }
 
+/** @internal A timed-out startup could not prove that its resource was released. */
+export class TermwrightHostStartupCleanupError extends AggregateError {
+  readonly code = 'TW_HOST_STARTUP_CLEANUP';
+  constructor(timeout: TermwrightHostTimeoutError, cleanup: unknown) {
+    super([timeout, cleanup], `${timeout.phase} did not abort cleanly before the host deadline`);
+    this.name = 'TermwrightHostStartupCleanupError';
+  }
+}
+
 export interface RunCompletion {
   readonly invocationId: InvocationId;
   readonly runId: RunId;
@@ -150,6 +159,21 @@ export interface TermwrightTestHostOptions {
   /** Cheap, caller-declared prerequisites checked before the engine starts. */
   readonly preflight?: TermwrightHostPreflightOptions;
 }
+
+/** @internal Controlled only by the in-process engine test seam. */
+export interface TermwrightHostDeadlineRuntime {
+  readonly now: () => number;
+  readonly schedule: (delayMs: number, elapsed: () => void) => () => void;
+}
+
+const SYSTEM_HOST_DEADLINE_RUNTIME: TermwrightHostDeadlineRuntime = Object.freeze({
+  now: () => performance.now(),
+  schedule(delayMs: number, elapsed: () => void) {
+    const timer = setTimeout(elapsed, delayMs);
+    timer.unref?.();
+    return () => clearTimeout(timer);
+  },
+});
 
 interface EngineCollection {
   readonly result: TestRunResult;
@@ -263,6 +287,7 @@ export class TermwrightTestHost {
         performance.now() + timeouts.startupMs,
         'engine startup',
         timeouts.startupMs,
+        SYSTEM_HOST_DEADLINE_RUNTIME,
       );
     } catch (error) {
       // createVitest has no AbortSignal. If it resolves after our public
@@ -399,10 +424,16 @@ export class TermwrightTestHost {
     try {
       history = await active.budget.execution('run history startup', () => active.history);
       const broker = new ResourceBroker({ runId: active.runId, capacities: this.#resourceProfile.capacities });
-      brokerServer = await active.budget.execution('resource broker startup', () => startResourceBrokerServer({ broker, runId: active.runId }));
-      journalServer = await active.budget.execution('run journal startup', () => startRunJournalServer({
-        runId: active.runId,
-        append: (event) => {
+      brokerServer = await active.budget.startResource(
+        'resource broker startup',
+        (signal) => startResourceBrokerServer({ broker, runId: active.runId, signal }),
+      );
+      journalServer = await active.budget.startResource(
+        'run journal startup',
+        (signal) => startRunJournalServer({
+          runId: active.runId,
+          signal,
+          append: (event) => {
           observeAttemptEvent(event, expectedTasks, attempts);
           const appended = active.journal.append(event);
           if (!appended.ok) {
@@ -428,8 +459,9 @@ export class TermwrightTestHost {
                 .then(() => this.#engine.cancel());
             }
           }
-        },
-      }));
+          },
+        }),
+      );
       const brokerContext = {
         endpoint: brokerServer.endpoint,
         token: brokerServer.token,
@@ -563,7 +595,11 @@ export class TermwrightTestHost {
       }
     } catch (error) {
       failure = error;
-      terminal = active.cancellationRequested ? 'cancelled' : isNoSpace(error) ? 'incomplete' : 'infrastructure-failed';
+      terminal = isNoSpace(error) || error instanceof TermwrightHostStartupCleanupError
+        ? 'incomplete'
+        : active.cancellationRequested
+          ? 'cancelled'
+          : 'infrastructure-failed';
       if (canTransitionRunState(active.state, 'finalizing')) this.#transition(active, 'finalizing');
       if (error instanceof TermwrightHostTimeoutError) {
         try { await active.budget.finalization('Vitest timeout cancellation', () => this.#engine.cancel()); }
@@ -649,7 +685,14 @@ export class TermwrightTestHost {
       terminal = 'infrastructure-failed';
     }
 
-    if (failure !== undefined && (terminal === 'infrastructure-failed' || terminal === 'crashed')) {
+    if (
+      failure !== undefined &&
+      (
+        terminal === 'infrastructure-failed' ||
+        terminal === 'crashed' ||
+        failure instanceof TermwrightHostStartupCleanupError
+      )
+    ) {
       this.#recordInfrastructureFailure(active, failure);
     }
 
@@ -1455,30 +1498,81 @@ function splitDiagnosticContent(content: string): readonly (readonly [number, st
   return chunks;
 }
 
-class HostRunBudget {
-  readonly #startedAt = performance.now();
+/** @internal Monotonic run budget, exported only for deterministic unit tests. */
+export class HostRunBudget {
+  readonly #startedAt: number;
   readonly #deadlineAt: number;
   readonly #executionDeadlineAt: number;
 
   constructor(
     readonly totalMs: number,
     readonly finalizationReserveMs: number,
+    readonly runtime: TermwrightHostDeadlineRuntime = SYSTEM_HOST_DEADLINE_RUNTIME,
   ) {
     positiveFinite(totalMs, 'run timeout');
     positiveFinite(finalizationReserveMs, 'host finalization reserve');
     if (finalizationReserveMs >= totalMs) {
       throw new TypeError('host finalization reserve must be smaller than the total run timeout');
     }
+    this.#startedAt = runtime.now();
     this.#deadlineAt = this.#startedAt + totalMs;
     this.#executionDeadlineAt = this.#deadlineAt - finalizationReserveMs;
   }
 
   execution<T>(phase: string, operation: () => Promise<T>): Promise<T> {
-    return startWithinHostDeadline(operation, this.#executionDeadlineAt, phase, this.totalMs);
+    return startWithinHostDeadline(operation, this.#executionDeadlineAt, phase, this.totalMs, this.runtime);
   }
 
   finalization<T>(phase: string, operation: () => Promise<T>): Promise<T> {
-    return startWithinHostDeadline(operation, this.#deadlineAt, phase, this.totalMs);
+    return startWithinHostDeadline(operation, this.#deadlineAt, phase, this.totalMs, this.runtime);
+  }
+
+  async startResource<T extends { close(): Promise<void> }>(
+    phase: string,
+    start: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    let startup: Promise<T> | undefined;
+    try {
+      return await startWithinHostDeadline(
+        () => {
+          startup = start(controller.signal);
+          return startup;
+        },
+        this.#executionDeadlineAt,
+        phase,
+        this.totalMs,
+        this.runtime,
+        () => controller.abort(),
+      );
+    } catch (error) {
+      if (
+        !(error instanceof TermwrightHostTimeoutError) ||
+        !controller.signal.aborted ||
+        startup === undefined
+      ) throw error;
+      const pendingStartup = startup;
+      const cleanup = (async () => {
+        let resource: T;
+        try {
+          resource = await pendingStartup;
+        } catch (startupError) {
+          if (controller.signal.aborted && isAbortError(startupError)) return;
+          throw startupError;
+        }
+        await resource.close();
+      })();
+      // The bounded await below may reject before it invokes its operation if
+      // the event loop wakes after the total deadline. Cleanup must still stay
+      // attached to a late resource, while its failure is observed here.
+      void cleanup.catch(() => undefined);
+      try {
+        await this.finalization(`${phase} abort`, () => cleanup);
+      } catch (cleanupError) {
+        throw new TermwrightHostStartupCleanupError(error, cleanupError);
+      }
+      throw error;
+    }
   }
 }
 
@@ -1498,23 +1592,30 @@ async function withinHostDeadline<T>(
   deadlineAt: number,
   phase: string,
   totalMs: number,
+  runtime: TermwrightHostDeadlineRuntime,
+  onElapsed?: () => void,
 ): Promise<T> {
-  const remaining = deadlineAt - performance.now();
+  const remaining = deadlineAt - runtime.now();
   if (remaining <= 0) {
     void operation.catch(() => undefined);
     throw new TermwrightHostTimeoutError(phase, totalMs);
   }
-  let timer: NodeJS.Timeout | undefined;
+  let cancelTimer: (() => void) | undefined;
   try {
     return await Promise.race([
       operation,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new TermwrightHostTimeoutError(phase, totalMs)), remaining);
-        timer.unref?.();
+        cancelTimer = runtime.schedule(
+          remaining,
+          () => {
+            reject(new TermwrightHostTimeoutError(phase, totalMs));
+            onElapsed?.();
+          },
+        );
       }),
     ]);
   } finally {
-    if (timer !== undefined) clearTimeout(timer);
+    cancelTimer?.();
   }
 }
 
@@ -1523,11 +1624,17 @@ function startWithinHostDeadline<T>(
   deadlineAt: number,
   phase: string,
   totalMs: number,
+  runtime: TermwrightHostDeadlineRuntime,
+  onElapsed?: () => void,
 ): Promise<T> {
-  if (performance.now() >= deadlineAt) {
+  if (runtime.now() >= deadlineAt) {
     return Promise.reject(new TermwrightHostTimeoutError(phase, totalMs));
   }
-  return withinHostDeadline(operation(), deadlineAt, phase, totalMs);
+  return withinHostDeadline(operation(), deadlineAt, phase, totalMs, runtime, onElapsed);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 function positiveFinite(value: number, label: string): void {

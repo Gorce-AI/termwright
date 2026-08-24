@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { RunEventProducer, createRunId, type RunEvent } from '@termwright/protocol/run-events';
 import { connectRunJournalWorker, startRunJournalServer, type RunJournalServer } from './index.js';
@@ -7,6 +11,20 @@ afterEach(async () => { await Promise.all(servers.splice(0).map((server) => serv
 const deadline = () => performance.timeOrigin + performance.now() + 5_000;
 
 describe('run journal worker transport', () => {
+  it('aborts server startup without leaving a listening endpoint', async () => {
+    const controller = new AbortController();
+    const endpoint = testEndpoint('journal-abort');
+    const startup = startRunJournalServer({
+      runId: createRunId('run'),
+      append: () => undefined,
+      endpoint,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(startup).rejects.toMatchObject({ name: 'AbortError' });
+    await expectConnectionRefused(endpoint);
+  });
+
   it('host-binds a producer and appends authenticated ordered events', async () => {
     const runId = createRunId('run');
     const received: RunEvent[] = [];
@@ -77,3 +95,21 @@ describe('run journal worker transport', () => {
     await expect(client.append(event, performance.timeOrigin + performance.now() + 20)).rejects.toMatchObject({ code: 'timeout' });
   });
 });
+
+function testEndpoint(name: string): string {
+  const suffix = randomUUID().slice(0, 8);
+  return process.platform === 'win32'
+    ? `\\\\.\\pipe\\termwright-${name}-${suffix}`
+    : join(tmpdir(), `tw-j-${suffix}.sock`);
+}
+
+async function expectConnectionRefused(endpoint: string): Promise<void> {
+  const socket = connect(endpoint);
+  await new Promise<void>((resolve, reject) => {
+    socket.once('error', () => resolve());
+    socket.once('connect', () => {
+      socket.destroy();
+      reject(new Error(`unexpected listener at ${endpoint}`));
+    });
+  });
+}

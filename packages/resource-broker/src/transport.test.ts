@@ -1,5 +1,8 @@
 import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AttemptId, RunId } from '@termwright/protocol/run-events';
@@ -111,6 +114,16 @@ async function worker(
 }
 
 describe('resource broker transport', () => {
+  it('aborts server startup without leaving a listening endpoint', async () => {
+    const controller = new AbortController();
+    const broker = new ResourceBroker({ runId: RUN, capacities: CAPACITIES });
+    const endpoint = testEndpoint('broker-abort');
+    const startup = startResourceBrokerServer({ broker, runId: RUN, token: TOKEN, endpoint, signal: controller.signal });
+    controller.abort();
+    await expect(startup).rejects.toMatchObject({ name: 'AbortError' });
+    await expectConnectionRefused(endpoint);
+  });
+
   it('authenticates a worker and transports leases, metadata, snapshots, and exact release', async () => {
     const { server } = await harness();
     const client = await worker(server, 'worker-1');
@@ -273,3 +286,21 @@ describe('resource broker transport', () => {
     await once(hostile, 'close');
   });
 });
+
+function testEndpoint(name: string): string {
+  const suffix = randomUUID().slice(0, 8);
+  return process.platform === 'win32'
+    ? `\\\\.\\pipe\\termwright-${name}-${suffix}`
+    : join(tmpdir(), `tw-b-${suffix}.sock`);
+}
+
+async function expectConnectionRefused(endpoint: string): Promise<void> {
+  const socket = connect(endpoint);
+  await new Promise<void>((resolve, reject) => {
+    socket.once('error', () => resolve());
+    socket.once('connect', () => {
+      socket.destroy();
+      reject(new Error(`unexpected listener at ${endpoint}`));
+    });
+  });
+}

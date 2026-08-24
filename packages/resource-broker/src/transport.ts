@@ -53,6 +53,7 @@ export interface ResourceBrokerServerOptions {
   readonly maxConnections?: number;
   readonly maxRequestsPerConnection?: number;
   readonly randomToken?: () => string;
+  readonly signal?: AbortSignal;
 }
 
 export interface ResourceBrokerServer {
@@ -120,6 +121,7 @@ interface PendingClientRequest {
 export async function startResourceBrokerServer(
   options: ResourceBrokerServerOptions,
 ): Promise<ResourceBrokerServer> {
+  options.signal?.throwIfAborted();
   const maxFrameBytes = positiveInteger(options.maxFrameBytes ?? DEFAULT_MAX_FRAME_BYTES, 'maxFrameBytes');
   const handshakeTimeoutMs = positiveInteger(
     options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS,
@@ -135,6 +137,10 @@ export async function startResourceBrokerServer(
     throw new ResourceBrokerTransportError('protocol-error', 'broker token must contain 32..512 characters');
   }
   const allocated = options.endpoint === undefined ? await allocateEndpoint() : { endpoint: options.endpoint };
+  if (options.signal?.aborted === true) {
+    await allocated.cleanup?.();
+    options.signal.throwIfAborted();
+  }
   const sockets = new Set<ServerConnection>();
   const workers = new Map<string, ServerConnection>();
   let closing = false;
@@ -329,7 +335,7 @@ export async function startResourceBrokerServer(
   }
 
   try {
-    await listen(server, allocated.endpoint);
+    await listen(server, allocated.endpoint, options.signal);
   } catch (error) {
     await allocated.cleanup?.();
     throw error;
@@ -738,17 +744,23 @@ async function allocateEndpoint(): Promise<{ endpoint: string; cleanup?: () => P
   return { endpoint: join(directory, 'broker.sock'), cleanup: () => rm(directory, { recursive: true, force: true }) };
 }
 
-function listen(server: Server, endpoint: string): Promise<void> {
+function listen(server: Server, endpoint: string, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (error: Error): void => { cleanup(); reject(error); };
     const onListening = (): void => { cleanup(); resolve(); };
+    const onClose = (): void => {
+      cleanup();
+      reject(signal?.reason ?? new Error('broker server closed before listening'));
+    };
     const cleanup = (): void => {
       server.removeListener('error', onError);
       server.removeListener('listening', onListening);
+      server.removeListener('close', onClose);
     };
     server.once('error', onError);
     server.once('listening', onListening);
-    server.listen(endpoint);
+    server.once('close', onClose);
+    server.listen({ path: endpoint, signal });
   });
 }
 

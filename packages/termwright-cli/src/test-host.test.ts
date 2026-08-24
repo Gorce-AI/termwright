@@ -16,9 +16,13 @@ import type { UserConsoleLog } from 'vitest';
 import type { TestCase, TestRunResult } from 'vitest/node';
 import {
   TermwrightTestHost,
+  HostRunBudget,
   TERMWRIGHT_RESOURCE_PROFILES,
+  TermwrightHostStartupCleanupError,
+  TermwrightHostTimeoutError,
   assertFirstWorkflowAttempt,
   describeFailure,
+  type TermwrightHostDeadlineRuntime,
   type TermwrightVitestEngine,
 } from './test-host.js';
 import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
@@ -46,8 +50,10 @@ class FakeEngine implements TermwrightVitestEngine {
   tests: TestCase[] = [];
   runResult: TestRunResult = result([]);
   blockRun: Promise<void> | undefined;
+  runError: unknown;
   omitFinished = false;
   leakLease = false;
+  runStarted: (() => void) | undefined;
   sourceListener: ((file: string) => void) | undefined;
   consoleListener: ((log: UserConsoleLog) => void) | undefined;
   consoleContent: string | undefined;
@@ -61,6 +67,8 @@ class FakeEngine implements TermwrightVitestEngine {
   }
 
   async run(): Promise<TestRunResult> {
+    this.runStarted?.();
+    if (this.runError !== undefined) throw this.runError;
     await this.blockRun;
     const context = this.contexts.at(-1);
     if (context === undefined) throw new Error('fake engine has no runner context');
@@ -158,22 +166,12 @@ class FakeEngine implements TermwrightVitestEngine {
 }
 
 describe('TermwrightTestHost', () => {
-  it('uses one total host deadline and reserves bounded cancellation/finalization time', async () => {
+  it('cancels and classifies a Vitest execution deadline', async () => {
     const engine = new FakeEngine();
     engine.tests = [testCase('native-hung', 'hung worker')];
     engine.runResult = result(engine.tests);
-    engine.blockRun = new Promise(() => undefined);
-    const host = TermwrightTestHost.fromEngine(engine, {
-      ...hostOptions(),
-      // The budget under test is the one spent executing. Real run-history
-      // I/O is not part of that and is slow enough on a loaded Windows runner
-      // to consume the whole 250 ms before execution starts, which reported
-      // the deadline against "run history startup" instead. An in-memory
-      // writer removes that variable without touching what is asserted.
-      runManifestWriter: MEMORY_RUN_MANIFEST_WRITER,
-      timeouts: { runMs: 250, finalizationReserveMs: 100 },
-    });
-    const started = performance.now();
+    engine.runError = new TermwrightHostTimeoutError('Vitest execution', 250);
+    const host = TermwrightTestHost.fromEngine(engine, hostOptions());
 
     const completion = await host.requestRun().completed;
 
@@ -183,7 +181,6 @@ describe('TermwrightTestHost', () => {
     expect((completion.events.find((event) => event.type === 'run.infrastructure-failed')?.payload as { detail: string }).detail)
       .toContain('Vitest execution');
     expect(engine.cancellations).toBe(1);
-    expect(performance.now() - started).toBeLessThan(1_000);
     await host.close();
   });
 
@@ -533,14 +530,144 @@ describe('TermwrightTestHost', () => {
   });
 });
 
-/** Run history without disk I/O, for tests measuring something other than it. */
-const MEMORY_RUN_MANIFEST_WRITER = {
-  async mkdir(): Promise<void> {},
-  async exists(): Promise<boolean> { return false; },
-  async writeExclusive(): Promise<void> {},
-  async syncDirectory(): Promise<void> {},
-  async rename(): Promise<void> {},
-};
+describe('HostRunBudget', () => {
+  it('uses one execution deadline and preserves the finalization reserve', async () => {
+    const clock = new ManualDeadlineRuntime();
+    const budget = new HostRunBudget(250, 100, clock);
+    const execution = budget.execution('Vitest execution', () => new Promise<never>(() => undefined));
+
+    clock.advance(150);
+    await expect(execution).rejects.toMatchObject({
+      code: 'TW_HOST_TIMEOUT',
+      phase: 'Vitest execution',
+    });
+
+    const finalization = budget.finalization('bounded cleanup', () => new Promise<never>(() => undefined));
+    clock.advance(99);
+    expect(clock.now()).toBe(249);
+    clock.advance(1);
+    await expect(finalization).rejects.toMatchObject({
+      code: 'TW_HOST_TIMEOUT',
+      phase: 'bounded cleanup',
+    });
+  });
+
+  it('aborts transport startup and waits for its cleanup', async () => {
+    const clock = new ManualDeadlineRuntime();
+    const budget = new HostRunBudget(250, 100, clock);
+    let aborted = false;
+    const startup = budget.startResource('resource broker startup', (signal) => new Promise<{ close(): Promise<void> }>((_, reject) => {
+      signal.addEventListener('abort', () => {
+        aborted = true;
+        reject(signal.reason);
+      }, { once: true });
+    }));
+
+    clock.advance(150);
+    await expect(startup).rejects.toMatchObject({
+      code: 'TW_HOST_TIMEOUT',
+      phase: 'resource broker startup',
+    });
+    expect(aborted).toBe(true);
+  });
+
+  it('does not treat a startup-owned timeout as the host scheduler deadline', async () => {
+    const clock = new ManualDeadlineRuntime();
+    const budget = new HostRunBudget(250, 100, clock);
+    const ownedFailure = new TermwrightHostTimeoutError('transport-owned timeout', 25);
+    let signal: AbortSignal | undefined;
+
+    await expect(budget.startResource('resource broker startup', (receivedSignal) => {
+      signal = receivedSignal;
+      return Promise.reject(ownedFailure);
+    })).rejects.toBe(ownedFailure);
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it('closes a resource that resolves after startup was aborted', async () => {
+    const clock = new ManualDeadlineRuntime();
+    const budget = new HostRunBudget(250, 100, clock);
+    let resolveStartup!: (resource: { close(): Promise<void> }) => void;
+    let closes = 0;
+    const startup = budget.startResource('run journal startup', () => new Promise<{ close(): Promise<void> }>((resolve) => {
+      resolveStartup = resolve;
+    }));
+
+    clock.advance(150);
+    resolveStartup({ async close() { closes += 1; } });
+    await expect(startup).rejects.toMatchObject({ code: 'TW_HOST_TIMEOUT' });
+    expect(closes).toBe(1);
+  });
+
+  it('fails cleanup closed when an aborted startup cannot release its resource', async () => {
+    const clock = new ManualDeadlineRuntime();
+    const budget = new HostRunBudget(250, 100, clock);
+    let resolveStartup!: (resource: { close(): Promise<void> }) => void;
+    const startup = budget.startResource('run journal startup', () => new Promise<{ close(): Promise<void> }>((resolve) => {
+      resolveStartup = resolve;
+    }));
+
+    clock.advance(150);
+    resolveStartup({ close: () => new Promise(() => undefined) });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    clock.advance(100);
+    await expect(startup).rejects.toBeInstanceOf(TermwrightHostStartupCleanupError);
+  });
+
+  it('does not mistake a close failure for a successful startup abort', async () => {
+    const clock = new ManualDeadlineRuntime();
+    const budget = new HostRunBudget(250, 100, clock);
+    let resolveStartup!: (resource: { close(): Promise<void> }) => void;
+    const startup = budget.startResource('resource broker startup', () => new Promise<{ close(): Promise<void> }>((resolve) => {
+      resolveStartup = resolve;
+    }));
+
+    clock.advance(150);
+    resolveStartup({ async close() { throw new DOMException('close aborted', 'AbortError'); } });
+    await expect(startup).rejects.toBeInstanceOf(TermwrightHostStartupCleanupError);
+  });
+
+  it('keeps cleanup attached when the event loop wakes after the total deadline', async () => {
+    const clock = new ManualDeadlineRuntime();
+    const budget = new HostRunBudget(250, 100, clock);
+    let resolveStartup!: (resource: { close(): Promise<void> }) => void;
+    let closes = 0;
+    const startup = budget.startResource('resource broker startup', () => new Promise<{ close(): Promise<void> }>((resolve) => {
+      resolveStartup = resolve;
+    }));
+
+    clock.advance(250);
+    await expect(startup).rejects.toBeInstanceOf(TermwrightHostStartupCleanupError);
+    resolveStartup({ async close() { closes += 1; } });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(closes).toBe(1);
+  });
+});
+
+class ManualDeadlineRuntime implements TermwrightHostDeadlineRuntime {
+  #now = 0;
+  #nextId = 0;
+  readonly #scheduled = new Map<number, { readonly at: number; readonly elapsed: () => void }>();
+
+  readonly now = (): number => this.#now;
+
+  readonly schedule = (delayMs: number, elapsed: () => void): (() => void) => {
+    const id = this.#nextId++;
+    this.#scheduled.set(id, { at: this.#now + delayMs, elapsed });
+    return () => { this.#scheduled.delete(id); };
+  };
+
+  advance(ms: number): void {
+    this.#now += ms;
+    const elapsed = [...this.#scheduled.entries()]
+      .filter(([, timer]) => timer.at <= this.#now)
+      .sort((left, right) => left[1].at - right[1].at);
+    for (const [id, timer] of elapsed) {
+      if (!this.#scheduled.delete(id)) continue;
+      timer.elapsed();
+    }
+  }
+}
 
 function hostOptions() {
   return {

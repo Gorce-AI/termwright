@@ -54,6 +54,7 @@ export interface StartRunJournalServerOptions {
   readonly endpoint?: string;
   readonly token?: string;
   readonly append: (event: RunEvent) => void | Promise<void>;
+  readonly signal?: AbortSignal;
 }
 
 interface Connection {
@@ -66,10 +67,15 @@ interface Connection {
 }
 
 export async function startRunJournalServer(options: StartRunJournalServerOptions): Promise<RunJournalServer> {
+  options.signal?.throwIfAborted();
   parseRunId('run', options.runId);
   const token = options.token ?? randomBytes(32).toString('base64url');
   if (token.length < 32 || token.length > 512) throw protocol('journal token must contain 32..512 characters');
   const allocated = options.endpoint === undefined ? await allocateEndpoint() : { endpoint: options.endpoint };
+  if (options.signal?.aborted === true) {
+    await allocated.cleanup?.();
+    options.signal.throwIfAborted();
+  }
   const ids = new RunIdFactory();
   const connections = new Set<Connection>();
   const workers = new Map<string, { readonly epoch: number; readonly connection: Connection }>();
@@ -158,7 +164,7 @@ export async function startRunJournalServer(options: StartRunJournalServerOption
     connections.delete(connection);
   }
 
-  try { await listen(server, allocated.endpoint); }
+  try { await listen(server, allocated.endpoint, options.signal); }
   catch (error) { await allocated.cleanup?.(); throw error; }
   return Object.freeze({
     endpoint: allocated.endpoint,
@@ -332,9 +338,23 @@ async function allocateEndpoint(): Promise<{ endpoint: string; cleanup?: () => P
   const directory = await mkdtemp(join(tmpdir(), 'termwright-journal-'));
   return { endpoint: join(directory, 'journal.sock'), cleanup: () => rm(directory, { recursive: true, force: true }) };
 }
-function listen(server: Server, endpoint: string): Promise<void> {
+function listen(server: Server, endpoint: string, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    server.once('error', reject); server.once('listening', resolve); server.listen(endpoint);
+    const onError = (error: Error): void => { cleanup(); reject(error); };
+    const onListening = (): void => { cleanup(); resolve(); };
+    const onClose = (): void => {
+      cleanup();
+      reject(signal?.reason ?? new Error('journal server closed before listening'));
+    };
+    const cleanup = (): void => {
+      server.removeListener('error', onError);
+      server.removeListener('listening', onListening);
+      server.removeListener('close', onClose);
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.once('close', onClose);
+    server.listen({ path: endpoint, signal });
   });
 }
 function closeServer(server: Server): Promise<void> {

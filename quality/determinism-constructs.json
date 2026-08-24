@@ -17,7 +17,7 @@
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 184,
     "explicit-test-selection-reviewed-with-platform-registry": 99,
-    "managed-or-diagnostic-background-task": 63,
+    "managed-or-diagnostic-background-task": 64,
     "production-process-isolation-review": 28,
     "test-observer-or-intentional-background-task": 14,
     "test-process-isolation-review": 43
@@ -2673,6 +2673,12 @@
       "path": "packages/termwright-cli/src/test-host.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void cleanup.catch(() => undefined);"
+    },
+    {
+      "path": "packages/termwright-cli/src/test-host.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void creation.then(({ engine }) => engine.close()).catch(() => undefined);"
     },
     {
@@ -2697,7 +2703,7 @@
       "path": "packages/termwright-cli/src/test-host.ts",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "timer = setTimeout(() => reject(new TermwrightHostTimeoutError(phase, totalMs)), remaining);"
+      "excerpt": "const timer = setTimeout(elapsed, delayMs);"
     },
     {
       "path": "packages/termwright-cli/src/test-host.ts",
