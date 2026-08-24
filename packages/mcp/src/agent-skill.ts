@@ -46,6 +46,40 @@ function renderParameters(schema: JsonSchema): string {
     .join('\n');
 }
 
+function markdownTableCell(value: string): string {
+  return value.replaceAll('|', '\\|').replace(/\s+/gu, ' ').trim();
+}
+
+/** Renders the committed tool inventories from the same registry the server exposes. */
+export function renderMcpToolSurfaceMarkdown(): string {
+  const context = buildAgentContext();
+  const sections = [
+    ['Live terminal tools', context.tools.filter((tool) => tool.name.startsWith('terminal.'))],
+    ['Trace tools', context.tools.filter((tool) => tool.name.startsWith('trace.'))],
+  ] as const;
+
+  return [
+    '<!-- Generated from packages/mcp/src/registry.ts; do not edit this block by hand. -->',
+    ...sections.flatMap(([heading, tools]) => [
+      `### ${heading}`,
+      '',
+      '| Tool | Purpose |',
+      '| --- | --- |',
+      ...tools.map((tool) => `| \`${tool.name}\` | ${markdownTableCell(tool.description)} |`),
+      '',
+    ]),
+    '### Targeting',
+    '',
+    TARGETING_GUIDANCE.precedence,
+    '',
+    TARGETING_GUIDANCE.semanticUnavailable,
+    '',
+    'Names and text accept `/pattern/flags`. Locators are strict: more than one match returns',
+    '`ambiguous-locator` unless `nth` is explicit.',
+    '',
+  ].join('\n');
+}
+
 /** The skill body an agent reads before its first tool call. */
 function renderSkillMarkdown(): string {
   return [

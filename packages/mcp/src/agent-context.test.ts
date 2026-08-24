@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildAgentContext, buildUsage, TARGETING_GUIDANCE } from './agent-context.js';
-import { buildAgentSkill } from './agent-skill.js';
+import { buildAgentSkill, renderMcpToolSurfaceMarkdown } from './agent-skill.js';
 import { EXIT_CODES, exitCodeFor } from './errors.js';
 import { runCli } from './cli.js';
 import { TOOLS } from './registry.js';
@@ -180,6 +180,12 @@ describe('the agent-skill package', () => {
     const reference = files[1]?.contents ?? '';
     for (const name of ALL_TOOLS) expect(reference).toContain(`## ${name}`);
     expect(reference).toContain('`cursor`: integer — revision returned by an earlier snapshot');
+  });
+
+  it('renders every registered tool into the committed documentation surface', () => {
+    const surface = renderMcpToolSurfaceMarkdown();
+    for (const name of ALL_TOOLS) expect(surface).toContain(`| \`${name}\` |`);
+    expect(surface).toContain(TARGETING_GUIDANCE.semanticUnavailable);
   });
 
   it('ships the same agent-context the CLI prints', () => {
