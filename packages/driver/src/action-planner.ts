@@ -30,6 +30,8 @@ export interface ActionPlannerContext {
   hitGrid(): Observation<PointerHitGrid> | undefined;
   pointerRegion(id: string): { readonly regionBounds: Rect; readonly spans: PhysicalRegion['spans']; readonly evidence: EvidenceProvenance } | undefined;
   screenRegionUnchangedSince(revision: number, spans: PhysicalRegion['spans']): boolean;
+  /** Why the region is unusable at that revision, for the failure to name. */
+  screenRegionChangeSince?(revision: number, spans: PhysicalRegion['spans']): string;
   errorDiagnostics(extra?: Partial<ErrorDiagnostics>): ErrorDiagnostics;
 }
 
@@ -316,7 +318,18 @@ export class ActionPlanner {
         checkpoint.pairedScreenRevision !== checkpoint.screenRevision
         && !this.#ctx.screenRegionUnchangedSince(checkpoint.pairedScreenRevision, pointerRegion.spans)
       ) {
-        throw new StaleSnapshotError('the pointer target changed after its paired semantic frame', diagnostics);
+        // Named, because the three reasons are different problems. A moved
+        // coordinate system invalidates every region at once and says nothing
+        // about this target; changed cells say the target itself moved.
+        const reason = this.#ctx.screenRegionChangeSince?.(
+          checkpoint.pairedScreenRevision,
+          pointerRegion.spans,
+        ) ?? 'unreported';
+        throw new StaleSnapshotError(
+          `the pointer target changed after its paired semantic frame (${reason}; ` +
+            `paired screen revision ${checkpoint.pairedScreenRevision}, current ${checkpoint.screenRevision})`,
+          diagnostics,
+        );
       }
       const hitGrid = this.#ctx.hitGrid();
       if (verifiesOwnership && hitGrid?.status !== 'known') {

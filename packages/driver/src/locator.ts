@@ -112,6 +112,8 @@ export interface LocatorContext {
   hitGrid(): Observation<import('@termwright/protocol').PointerHitGrid> | undefined;
   pointerRegion(id: string): { readonly regionBounds: Rect; readonly spans: import('@termwright/protocol').PhysicalRegion['spans']; readonly evidence: EvidenceProvenance } | undefined;
   screenRegionUnchangedSince(revision: number, spans: import('@termwright/protocol').PhysicalRegion['spans']): boolean;
+  /** Why the region is unusable at that revision; see VtScreen.regionChangeSince. */
+  screenRegionChangeSince?(revision: number, spans: import('@termwright/protocol').PhysicalRegion['spans']): string;
   rows(): readonly CapturedRow[];
   modes(): TerminalModes;
   /** The best identity the attached producer can offer for a node. */

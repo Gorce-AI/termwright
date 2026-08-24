@@ -367,8 +367,25 @@ export class VtScreen {
     revision: number,
     spans: readonly { readonly row: number; readonly from: number; readonly to: number }[],
   ): boolean {
-    if (revision < 0 || revision > this.#revision) return false;
-    if (revision < this.#globalCoordinateRevision) return false;
+    return this.regionChangeSince(revision, spans) === 'unchanged';
+  }
+
+  /**
+   * Why a region is not usable at a past revision, or that it is.
+   *
+   * The three answers call for different work and are indistinguishable from
+   * the boolean. A coordinate system that moved invalidates every region at
+   * once and says nothing about the target; cells that changed say the target
+   * itself is different; a span outside the grid is a caller error. A stale
+   * pointer that reports only "changed" sends the reader looking in the wrong
+   * place, which on Windows it has.
+   */
+  regionChangeSince(
+    revision: number,
+    spans: readonly { readonly row: number; readonly from: number; readonly to: number }[],
+  ): 'unchanged' | 'coordinate-system-moved' | 'cells-changed' | 'span-out-of-range' | 'revision-unknown' {
+    if (revision < 0 || revision > this.#revision) return 'revision-unknown';
+    if (revision < this.#globalCoordinateRevision) return 'coordinate-system-moved';
     const columns = this.terminal.cols;
     const rows = this.terminal.rows;
     for (const span of spans) {
@@ -378,12 +395,14 @@ export class VtScreen {
         || span.from < 0
         || span.to < span.from
         || span.to > columns
-      ) return false;
+      ) return 'span-out-of-range';
       for (let column = span.from; column < span.to; column += 1) {
-        if ((this.#cellLastChangedRevision[span.row * columns + column] ?? this.#revision) > revision) return false;
+        if ((this.#cellLastChangedRevision[span.row * columns + column] ?? this.#revision) > revision) {
+          return 'cells-changed';
+        }
       }
     }
-    return true;
+    return 'unchanged';
   }
 
   onMarker(cb: (marker: MarkerSighting) => void): Unsubscribe {

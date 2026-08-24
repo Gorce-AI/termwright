@@ -1920,6 +1920,13 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     return this.#vt.regionUnchangedSince(revision, spans);
   }
 
+  screenRegionChangeSince(
+    revision: number,
+    spans: import("@termwright/protocol").PhysicalRegion["spans"],
+  ): string {
+    return this.#vt.regionChangeSince(revision, spans);
+  }
+
   hitGrid(): Observation<PointerHitGrid> | undefined {
     return this.#index?.snapshot.hitGrid;
   }
