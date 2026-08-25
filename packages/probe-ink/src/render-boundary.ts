@@ -12,47 +12,58 @@ export interface RenderBoundary {
  */
 export class RenderBoundaryQueue {
   readonly #pending: RenderBoundary[] = [];
-  readonly #stopWaiters = new Set<() => void>();
+  readonly #preparing = new Set<RenderBoundary>();
   #stopped = false;
 
   take(): RenderBoundary | undefined {
     return this.#pending.shift();
   }
 
-  async afterCurrentRender(
+  afterCurrentRender(
     waitForCurrentRender: () => Promise<void>,
     mutate: () => void,
   ): Promise<number> {
-    if (this.#stopped) throw stoppedError();
-    let signalStop: () => void = () => undefined;
-    const stopped = new Promise<void>((resolve) => {
-      signalStop = resolve;
-      this.#stopWaiters.add(signalStop);
-    });
-    try {
-      await Promise.race([waitForCurrentRender(), stopped]);
-    } finally {
-      this.#stopWaiters.delete(signalStop);
-    }
-    if (this.#stopped) throw stoppedError();
+    if (this.#stopped) return Promise.reject(stoppedError());
     return new Promise<number>((resolve, reject) => {
       const boundary = { resolve, reject };
-      this.#pending.push(boundary);
+      this.#preparing.add(boundary);
+      let flush: Promise<void>;
       try {
-        mutate();
+        flush = waitForCurrentRender();
       } catch (error) {
-        const index = this.#pending.indexOf(boundary);
-        if (index !== -1) this.#pending.splice(index, 1);
+        this.#preparing.delete(boundary);
         reject(asError(error));
+        return;
       }
+      // Ink exposes no cancellation API. Keep the uncancellable flush owned
+      // and observed until it settles, while `stop()` rejects the public
+      // operation immediately so teardown cannot hang on an upstream flush.
+      void flush.then(() => {
+        this.#preparing.delete(boundary);
+        if (this.#stopped) return;
+        this.#pending.push(boundary);
+        try {
+          mutate();
+        } catch (error) {
+          const index = this.#pending.indexOf(boundary);
+          if (index !== -1) this.#pending.splice(index, 1);
+          reject(asError(error));
+        }
+      }, (error: unknown) => {
+        this.#preparing.delete(boundary);
+        reject(asError(error));
+      });
     });
   }
 
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
-    for (const signal of this.#stopWaiters) signal();
-    this.#stopWaiters.clear();
+    for (const boundary of this.#preparing) boundary.reject(stoppedError());
+    // Do not erase ownership of an upstream flush that has not settled. Ink's
+    // certified waitUntilRenderFlush() settles when the instance renders or
+    // exits; retaining the record until its reaction runs makes a regression
+    // in that contract visible to --detectAsyncLeaks instead of hiding it.
     for (const boundary of this.#pending.splice(0)) {
       boundary.reject(stoppedError());
     }

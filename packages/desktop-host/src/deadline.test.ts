@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { withinDeadline } from './deadline.js';
+import { createDeadlineDeferred, withinDeadline } from './deadline.js';
 
 /**
  * Collects the rejections Node considers unobserved while `body` runs.
@@ -22,45 +22,45 @@ async function unhandledDuring(body: () => Promise<void>): Promise<readonly unkn
 }
 
 describe('withinDeadline', () => {
-  it('abandons a promise for a spent budget without leaving it unobserved', async () => {
+  it('cancels an operation when the shared budget is already spent', async () => {
     // The startup sequences that use this share one deadline across phases, so
     // a slow earlier phase routinely leaves nothing for a later one. The
-    // abandoned work still settles — a child process that exits after its
-    // launcher gave up — and that rejection must not escape as an unhandled
-    // rejection in the embedding process.
+    // later operation must still be cancelled even though it receives no
+    // execution budget, and cancellation must stay owned by the caller.
     const seen = await unhandledDuring(async () => {
-      let rejectLate: ((error: Error) => void) | undefined;
-      const abandoned = new Promise<never>((_resolve, reject) => { rejectLate = reject; });
+      const abandoned = createDeadlineDeferred<never>();
       await expect(withinDeadline(abandoned, performance.now() - 1, 'budget already spent'))
         .rejects.toThrow('budget already spent');
-      rejectLate?.(new Error('the child exited after the launcher gave up'));
     });
     expect(seen).toEqual([]);
   });
 
-  it('keeps observing a promise that loses the race and rejects afterwards', async () => {
+  it('settles a never-finishing operation when the deadline wins', async () => {
     const seen = await unhandledDuring(async () => {
-      let rejectLate: ((error: Error) => void) | undefined;
-      const slow = new Promise<never>((_resolve, reject) => { rejectLate = reject; });
+      const slow = createDeadlineDeferred<never>();
       await expect(withinDeadline(slow, performance.now() + 5, 'deadline won the race'))
         .rejects.toThrow('deadline won the race');
-      rejectLate?.(new Error('the child exited after the deadline'));
+      await expect(slow.result).rejects.toMatchObject({ name: 'DeadlineOperationCancelledError' });
     });
     expect(seen).toEqual([]);
   });
 
   it('returns the value when the promise settles first', async () => {
-    await expect(withinDeadline(Promise.resolve('ready'), performance.now() + 1_000, 'unused')).resolves.toBe('ready');
+    const operation = createDeadlineDeferred<string>();
+    operation.resolve('ready');
+    await expect(withinDeadline(operation, performance.now() + 1_000, 'unused')).resolves.toBe('ready');
   });
 
   it('reports the failure the promise produced, not the deadline', async () => {
-    await expect(withinDeadline(Promise.reject(new Error('bind refused')), performance.now() + 1_000, 'unused'))
+    const operation = createDeadlineDeferred<never>();
+    operation.reject(new Error('bind refused'));
+    await expect(withinDeadline(operation, performance.now() + 1_000, 'unused'))
       .rejects.toThrow('bind refused');
   });
 
   it('builds its detail lazily so it can name the phase reached', async () => {
     let phase = 'connecting';
-    const pending = new Promise<never>(() => undefined);
+    const pending = createDeadlineDeferred<never>();
     const raced = withinDeadline(pending, performance.now() + 5, () => `stalled while ${phase}`);
     phase = 'loading the runner';
     await expect(raced).rejects.toThrow('stalled while loading the runner');

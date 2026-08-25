@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LaunchTerminalWithBackendOptions
 
-Defined in: [session.ts:240](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L240)
+Defined in: [session.ts:233](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L233)
 
 Low-level integration options exported only from `@termwright/driver/experimental`.
 
@@ -39,7 +39,7 @@ Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit op
 
 > `readonly` **backend**: [`PtyBackend`](../ptybackend/)
 
-Defined in: [session.ts:241](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L241)
+Defined in: [session.ts:234](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L234)
 
 ***
 
@@ -140,7 +140,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **modesObservable?**: `boolean`
 
-Defined in: [session.ts:236](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L236)
+Defined in: [session.ts:229](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L229)
 
 Whether the child's mouse mode requests are observable. Defaults to the
 platform's answer (false under ConPTY). Framework integrations may pin the

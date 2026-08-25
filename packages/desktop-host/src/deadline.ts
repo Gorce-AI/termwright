@@ -1,35 +1,98 @@
+export interface DeadlineOperation<T> {
+  readonly result: Promise<T>;
+  cancel(): void;
+}
+
+export interface DeadlineDeferred<T> extends DeadlineOperation<T> {
+  resolve(value: T): void;
+  reject(error: unknown): void;
+}
+
+class DeadlineOperationCancelledError extends Error {
+  constructor() {
+    super('deadline operation was cancelled');
+    this.name = 'DeadlineOperationCancelledError';
+  }
+}
+
+/** Creates a waiter whose owner can settle it during deadline teardown. */
+export function createDeadlineDeferred<T>(): DeadlineDeferred<T> {
+  let settled = false;
+  let resolveResult!: (value: T) => void;
+  let rejectResult!: (error: unknown) => void;
+  const result = new Promise<T>((resolve, reject) => {
+    resolveResult = resolve;
+    rejectResult = reject;
+  });
+  // Ownership may be cancelled before its consumer starts awaiting (for
+  // example when a synchronous setup step throws). Preserve the rejection for
+  // that consumer while ensuring the owner never emits it as unhandled.
+  void result.catch(() => undefined);
+  return {
+    result,
+    resolve(value): void {
+      if (settled) return;
+      settled = true;
+      resolveResult(value);
+    },
+    reject(error): void {
+      if (settled) return;
+      settled = true;
+      rejectResult(error);
+    },
+    cancel(): void {
+      if (settled) return;
+      settled = true;
+      rejectResult(new DeadlineOperationCancelledError());
+    },
+  };
+}
+
 /**
- * Races a promise against an absolute deadline shared by a whole startup
- * sequence, so an earlier phase that runs long shortens every later one.
- *
- * When the budget is already spent this rejects without ever awaiting
- * `promise`. That promise is still live and may still reject later — a child
- * process that exits after its launcher gave up, for instance — so it is
- * marked handled here. Skipping that turns an expected late failure into an
- * unhandled rejection in whatever process embedded the caller, at a moment
- * when the real error has already been reported.
+ * Runs one owned operation within an absolute deadline shared by a startup or
+ * shutdown sequence. Expiry asks the owner to detach its producers and settle
+ * its result, so no losing promise remains attached after this returns.
  */
 export async function withinDeadline<T>(
-  promise: Promise<T>,
+  operation: DeadlineOperation<T>,
   deadline: number,
   detail: string | (() => string),
 ): Promise<T> {
   const describe = (): string => (typeof detail === 'function' ? detail() : detail);
-  const remaining = deadline - performance.now();
-  if (remaining <= 0) {
-    void promise.catch(() => undefined);
-    throw new Error(describe());
-  }
-  let timer: NodeJS.Timeout | undefined;
-  const expired = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error(describe())), remaining);
-    timer.unref?.();
+  return await new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const remaining = deadline - performance.now();
+    const finish = (settle: () => void): void => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      settle();
+    };
+    const expire = (): void => {
+      const deadlineError = new Error(describe());
+      let cancellationError: unknown;
+      try {
+        operation.cancel();
+      } catch (error) {
+        cancellationError = error;
+      }
+      finish(() => reject(cancellationError === undefined
+        ? deadlineError
+        : new AggregateError([deadlineError, cancellationError], 'deadline expiry and operation cancellation failed', {
+            cause: deadlineError,
+          })));
+    };
+    const timer = remaining > 0 ? setTimeout(expire, remaining) : undefined;
+    timer?.unref?.();
+
+    // Observe before checking the budget: synchronous cancellation may reject
+    // the operation immediately and must already belong to this waiter.
+    void operation.result.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+    if (remaining <= 0) {
+      expire();
+    }
   });
-  try {
-    // Racing attaches a permanent handler to `promise`, so a rejection that
-    // arrives after the deadline won is observed even though it is discarded.
-    return await Promise.race([promise, expired]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
 }

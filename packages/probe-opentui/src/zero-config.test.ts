@@ -6,36 +6,36 @@
  * tree to a driver. Everything else in this package is a piece of that
  * sentence; this is the sentence.
  *
- * Bun only. `bun:ffi` is OpenTUI's supported backend, and these tests skip with
- * the reason in their name where no Bun is reachable rather than pretending to
- * cover it.
+ * Bun only. `bun:ffi` is OpenTUI's supported backend. Local runs may record the
+ * exact Bun-only cases as applicability skips; certifying jobs require Bun and
+ * fail during discovery when it is unavailable.
  */
 
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { ENV_ENDPOINT, ENV_TOKEN, PROTOCOL_ID, verifyMarkerPayload, MARKER_OSC_CODE, MARKER_OSC_PREFIX } from '@termwright/protocol';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { bunAvailable } from './testing/bun-available.js';
 import { runtimePreloadSpecifier } from './launch.js';
+import { requireImmutableBuildInputs } from '../../../scripts/test-support/immutable-build-inputs.mjs';
 
-const run = promisify(execFile);
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(packageRoot, 'src', 'testing', 'vanilla-app.ts');
 const annotatedApp = join(packageRoot, 'src', 'testing', 'annotated-app.ts');
 const geometryApp = join(packageRoot, 'src', 'testing', 'geometry-app.ts');
 const annotationSdkRoot = join(packageRoot, '..', 'opentui');
 
-async function ensureBuilt(): Promise<void> {
-  await run('npm', ['run', 'build'], { cwd: annotationSdkRoot });
-  // Process tests execute dist, so an existing entry is not evidence that it
-  // represents the current source. Always rebuild instead of testing a stale
-  // preload left by an earlier run.
-  await run('npm', ['run', 'build'], { cwd: packageRoot });
+async function requireBuiltInputs(): Promise<void> {
+  await requireImmutableBuildInputs([
+    join(annotationSdkRoot, 'dist', 'index.js'),
+    join(packageRoot, 'dist', 'bun-preload.js'),
+  ], {
+    label: '@termwright/probe-opentui zero-config tests',
+    buildCommand: 'pnpm --filter @termwright/opentui --filter @termwright/probe-opentui build',
+  });
 }
 
 interface Run {
@@ -114,7 +114,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
   const open: FakeDriver[] = [];
 
   beforeAll(async () => {
-    await ensureBuilt();
+    await requireBuiltInputs();
   }, 180_000);
 
   afterEach(async () => {

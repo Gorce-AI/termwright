@@ -280,7 +280,7 @@ async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): P
     worst = worseRunState(worst, initial.state);
     skipPolicyMatched &&= initial.skipPolicy.status === 'matched';
     if (initial.state === 'infrastructure-failed' || initial.state === 'incomplete') return EXIT_CODES.internal;
-    await deps.ui.waitForInterrupt();
+    await deps.ui.waitForInterrupt(new AbortController().signal);
     if (worst === 'infrastructure-failed' || worst === 'incomplete' || worst === 'crashed' || worst === 'cancelled') {
       return EXIT_CODES.internal;
     }

@@ -16,7 +16,7 @@ import {
   validateRunnerUrl,
   type DesktopHostMessage,
 } from './protocol.js';
-import { withinDeadline } from './deadline.js';
+import { createDeadlineDeferred, withinDeadline, type DeadlineOperation } from './deadline.js';
 
 export { DESKTOP_HOST_PROTOCOL, validateRunnerUrl } from './protocol.js';
 export { SECURE_WEB_PREFERENCES, contentSecurityPolicy, isAllowedNavigation, isAllowedRequest } from './security.js';
@@ -187,12 +187,27 @@ async function ensurePackagedHost(main: string): Promise<string> {
   return executable;
 }
 
-function processClosed(child: ChildProcess): Promise<void> {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) return resolve();
-    child.once('exit', () => resolve());
-    child.once('error', () => resolve());
-  });
+function processClosed(child: ChildProcess): DeadlineOperation<void> {
+  const deferred = createDeadlineDeferred<void>();
+  const finish = (): void => {
+    child.off('exit', finish);
+    child.off('error', finish);
+    deferred.resolve();
+  };
+  if (child.exitCode !== null || child.signalCode !== null) {
+    deferred.resolve();
+    return deferred;
+  }
+  child.once('exit', finish);
+  child.once('error', finish);
+  return {
+    result: deferred.result,
+    cancel(): void {
+      child.off('exit', finish);
+      child.off('error', finish);
+      deferred.cancel();
+    },
+  };
 }
 
 /** Start the companion without placing the authenticated URL in argv or the environment. */
@@ -213,7 +228,7 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
     ? `\\\\.\\pipe\\termwright-${randomUUID()}`
     : join(controlDirectory as string, 'control.sock');
   let acceptControl: ((socket: Socket) => void) | undefined;
-  const connected = new Promise<Socket>((resolve) => { acceptControl = resolve; });
+  let detachConnectExit: (() => void) | undefined;
   let acceptedSocket: Socket | undefined;
   const server = createServer((candidate) => {
     if (acceptedSocket !== undefined) {
@@ -221,18 +236,26 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
       return;
     }
     acceptedSocket = candidate;
+    detachConnectExit?.();
     acceptControl?.(candidate);
   });
   let child: ChildProcess | undefined;
   let socket: Socket | undefined;
   try {
-    await withinDeadline(new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(controlAddress, () => {
-        server.removeListener('error', reject);
-        resolve();
-      });
-    }), readyDeadline, 'desktop control endpoint did not bind');
+    const bound = createDeadlineDeferred<void>();
+    const rejectBind = (error: Error): void => bound.reject(error);
+    server.once('error', rejectBind);
+    server.listen(controlAddress, () => {
+      server.removeListener('error', rejectBind);
+      bound.resolve();
+    });
+    await withinDeadline({
+      result: bound.result,
+      cancel(): void {
+        server.removeListener('error', rejectBind);
+        bound.cancel();
+      },
+    }, readyDeadline, 'desktop control endpoint did not bind');
     if (process.platform !== 'win32') await chmod(controlAddress, 0o600);
     child = spawn(executable, options.executable === undefined ? [] : [...desktopHostArguments(main)], {
       stdio: 'ignore',
@@ -240,14 +263,35 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
       env: { ...desktopHostEnvironment(), [DESKTOP_CONTROL_ENV]: controlAddress },
     });
     const spawned = child;
-    const exitedBeforeConnect = processClosed(spawned).then(() => {
-      throw new Error('desktop host exited before connecting');
-    });
-    socket = await withinDeadline(
-      Promise.race([connected, exitedBeforeConnect]),
+    const connected = createDeadlineDeferred<Socket>();
+    acceptControl = (candidate): void => connected.resolve(candidate);
+    const exitBeforeConnect = (): void => {
+      detachConnectExit?.();
+      connected.reject(new Error('desktop host exited before connecting'));
+    };
+    detachConnectExit = (): void => {
+      spawned.off('exit', exitBeforeConnect);
+      spawned.off('error', exitBeforeConnect);
+      detachConnectExit = undefined;
+    };
+    spawned.once('exit', exitBeforeConnect);
+    spawned.once('error', exitBeforeConnect);
+    if (acceptedSocket !== undefined) {
+      detachConnectExit();
+      connected.resolve(acceptedSocket);
+    }
+    socket = await withinDeadline({
+      result: connected.result,
+      cancel(): void {
+        detachConnectExit?.();
+        acceptControl = undefined;
+        connected.cancel();
+      },
+    },
       readyDeadline,
       'desktop host did not connect to its control endpoint',
     );
+    acceptControl = undefined;
     socket.on('error', () => undefined);
     // stop accepting synchronously; its final `close` event follows when the
     // one owned control socket is destroyed during host teardown.
@@ -266,23 +310,19 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
   if (runningChild === undefined || runningSocket === undefined) {
     throw new Error('desktop host startup completed without owned process and control socket');
   }
-  const exited = processClosed(runningChild);
   const input = runningSocket;
   const output = runningSocket;
   let buffer = '';
-  let readyResolve: (() => void) | undefined;
-  let readyReject: ((error: Error) => void) | undefined;
+  const ready = createDeadlineDeferred<void>();
   let didReady = false;
   let lastStage = 'connected';
   let didClose = false;
-  const ready = new Promise<void>((resolve, reject) => {
-    readyResolve = resolve;
-    readyReject = reject;
-  });
   const closed = new Promise<void>((resolve) => {
     const finish = (): void => {
       if (didClose) return;
       didClose = true;
+      runningChild.off('exit', finish);
+      runningChild.off('error', finish);
       resolve();
     };
     runningChild.once('exit', finish);
@@ -294,16 +334,16 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
       lastStage = message.stage;
     } else if (message.type === 'ready') {
       didReady = true;
-      readyResolve?.();
+      ready.resolve();
     } else if (message.type === 'error') {
-      readyReject?.(new Error(message.message));
+      ready.reject(new Error(message.message));
     }
   };
   output.setEncoding('utf8');
   output.on('data', (chunk: string) => {
     buffer += chunk;
     if (Buffer.byteLength(buffer, 'utf8') > MAX_CONTROL_MESSAGE_BYTES * 2) {
-      readyReject?.(new Error('desktop host sent too much control data'));
+      ready.reject(new Error('desktop host sent too much control data'));
       runningChild.kill('SIGKILL');
       return;
     }
@@ -316,13 +356,13 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
         const message = parseControlMessage(line);
         if (message.type === 'stage' || message.type === 'ready' || message.type === 'closed' || message.type === 'error') accept(message);
       } catch {
-        readyReject?.(new Error('desktop host sent an invalid control message'));
+        ready.reject(new Error('desktop host sent an invalid control message'));
       }
     }
   });
-  runningChild.once('error', (error) => readyReject?.(new Error(`could not start desktop host: ${error.message}`)));
+  runningChild.once('error', (error) => ready.reject(new Error(`could not start desktop host: ${error.message}`)));
   runningChild.once('exit', () => {
-    if (!didReady) readyReject?.(new Error('desktop host exited before the runner loaded'));
+    if (!didReady) ready.reject(new Error('desktop host exited before the runner loaded'));
   });
 
   input.write(encodeControlMessage({ protocol: DESKTOP_HOST_PROTOCOL, type: 'bootstrap', url: options.url }));
@@ -350,7 +390,7 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
     close(): Promise<void> {
       if (closePromise === undefined) {
         shutdownRequested = true;
-        closePromise = closeDesktopHost(runningChild, runningSocket, exited, closeTimeoutMs);
+        closePromise = closeDesktopHost(runningChild, runningSocket, closeTimeoutMs);
       }
       return closePromise;
     },
@@ -397,7 +437,6 @@ async function rollbackDesktopLaunch(options: {
 async function closeDesktopHost(
   child: ChildProcess,
   socket: Socket,
-  exited: Promise<void>,
   timeoutMs: number,
 ): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {
@@ -410,11 +449,11 @@ async function closeDesktopHost(
       socket.write(encodeControlMessage({ protocol: DESKTOP_HOST_PROTOCOL, type: 'shutdown' }));
       socket.end();
     }
-    await withinDeadline(exited, deadline, 'desktop host did not acknowledge shutdown');
+    await withinDeadline(processClosed(child), deadline, 'desktop host did not acknowledge shutdown');
   } catch (error) {
     child.kill('SIGKILL');
     try {
-      await withinDeadline(exited, performance.now() + 2_000, 'desktop host remained alive after hard termination');
+      await withinDeadline(processClosed(child), performance.now() + 2_000, 'desktop host remained alive after hard termination');
     } catch (killError) {
       throw new AggregateError([error, killError], 'desktop host cleanup failed', { cause: error });
     }

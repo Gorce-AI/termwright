@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { npmInvocation, vitestInvocation } from './test-support/node-cli-invocation.mjs';
 
 const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -21,7 +22,8 @@ try {
     const project = join(work, `vitest-${version}`);
     await cp(join(root, 'quality', 'experiments'), join(project, 'tests'), { recursive: true });
     await writeFile(join(project, 'package.json'), `${JSON.stringify({ private: true, type: 'module' }, null, 2)}\n`);
-    await execute(npmCommand(), ['install', '--no-audit', '--no-fund', `vitest@${version}`, '@lydell/node-pty@1.2.0-beta.15'], {
+    const npm = npmInvocation();
+    await execute(npm.file, [...npm.args, 'install', '--no-audit', '--no-fund', `vitest@${version}`, '@lydell/node-pty@1.2.0-beta.15'], {
       cwd: project,
       timeout: 120_000,
       windowsHide: true,
@@ -44,7 +46,8 @@ try {
           const workerArgs = version.startsWith('3.')
             ? ['--minWorkers', '1', '--maxWorkers', String(workers)]
             : ['--maxWorkers', String(workers)];
-          const result = await execute(vitestCommand(project), [
+          const vitest = vitestInvocation(project);
+          const result = await execute(vitest.file, [...vitest.args,
             // Vitest 3.1 derives a CPU-sized minWorkers default which can
             // exceed an explicit small maxWorkers on large CI hosts. Pinning
             // the lower bound makes workers=1/2 an actual comparable matrix
@@ -93,10 +96,6 @@ const certifiedFailures = results.filter((result) => result.vitest === '4.1.11' 
 console.log(`Vitest/PTy matrix wrote ${results.length} cells to ${output}; certified failures: ${certifiedFailures.length}`);
 if (certifiedFailures.length > 0) process.exitCode = 1;
 
-function npmCommand() { return process.platform === 'win32' ? 'npm.cmd' : 'npm'; }
-function vitestCommand(project) {
-  return join(project, 'node_modules', '.bin', process.platform === 'win32' ? 'vitest.cmd' : 'vitest');
-}
 function list(name, defaults) {
   const value = process.env[name];
   return value === undefined ? defaults : value.split(',').map((entry) => entry.trim()).filter(Boolean);

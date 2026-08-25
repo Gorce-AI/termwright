@@ -24,7 +24,7 @@ Jobs are grouped conceptually even while they remain in one workflow:
 1. static policy, package metadata and deterministic-core coverage;
 2. supported Node/OS builds and hostile-input checks;
 3. Windows native artifact production and consumers;
-4. determinism, concurrency, leak, fault and randomized-race barriers;
+4. determinism, concurrency, process/resource/async-leak, fault and randomized-race barriers;
 5. platform conformance and UI/framework adapter contracts;
 6. clients, release hygiene, examples, vectors and website documentation.
 
@@ -38,6 +38,21 @@ dedicated OpenTUI lane install Bun 1.2.15 and set
 deliberately disabled Bun runtime into a hard failure in those jobs. Local runs
 may omit Bun; the genuinely Bun-only OpenTUI cases are then reported as exact
 applicability skips, without manufacturing an inverse "Bun unavailable" test.
+
+Workspace production build outputs are immutable inputs once the Native Host
+starts. A complete root build records a content-addressed manifest over runtime
+source, every build-reachable script and config, `dist` output, and declared
+package-root runtime files and native binaries from `files`/`exports`. The root
+`pretest` barrier verifies that whole manifest before starting the host; on a
+fresh clone, or after a runtime
+source/artifact change, it rebuilds the complete graph and records one new
+manifest before any worker exists. CI uses that same root build contract.
+
+Process-level probe tests then verify the current source fingerprint and the
+exact entry files they consume. Missing, stale or post-build-modified inputs
+fail with the required prebuild command. Tests never invoke package builds from
+a Vitest worker: tools such as `tsup --clean` replace a shared directory and can
+otherwise remove a preload while another project or example is executing it.
 
 Job display names are an external contract: branch protection and the trusted
 release coordinator consume them. Changes to the matrix must update the shared

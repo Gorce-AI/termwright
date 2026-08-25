@@ -3,16 +3,18 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validatePerformanceEnvironment } from './performance-environment.mjs';
 
 const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const args = parseArgs(process.argv.slice(2));
-const actualEnvironment = `${process.platform}-${process.arch}-node${process.versions.node.split('.')[0]}`;
-if (args.environment !== actualEnvironment) {
-  throw new Error(
-    `performance environment label does not match this runtime: expected ${actualEnvironment}, received ${args.environment}`,
-  );
-}
+const environmentDescriptor = JSON.parse(await readFile(resolve(args.environmentFile), 'utf8'));
+validatePerformanceEnvironment(environmentDescriptor, {
+  platform: process.platform,
+  arch: process.arch,
+  nodeVersion: process.versions.node,
+});
+const environment = environmentDescriptor.class;
 const runsDir = resolve(root, '.termwright', 'runs');
 const before = new Set(await directories(runsDir));
 
@@ -48,7 +50,7 @@ const leakedProcesses = soak.leakedProcesses + stress.leakedProcesses;
 const leakedFileDescriptors = soak.leakedFileDescriptors + stress.leakedFileDescriptors;
 const observations = {
   generatedAt: new Date().toISOString(),
-  environment: args.environment,
+  environment,
   metrics: {
     startupMs: observation(firstAttemptAt - first.startedAt, 'milliseconds', 'quality/soak first run: manifest start to first attempt'),
     perTestOverheadMs: observation(
@@ -191,18 +193,18 @@ function observation(value, unit, source) { return { value, unit, source }; }
 function average(values) { return values.reduce((sum, value) => sum + value, 0) / values.length; }
 
 function parseArgs(argv) {
-  const options = { cycles: 10, output: 'performance-quality.json', environment: undefined };
+  const options = { cycles: 10, output: 'performance-quality.json', environmentFile: undefined };
   for (let index = 0; index < argv.length; index += 1) {
     const name = argv[index];
     const value = argv[index + 1];
     if (name === '--cycles') options.cycles = Number(value);
     else if (name === '--output') options.output = value;
-    else if (name === '--environment') options.environment = value;
+    else if (name === '--environment-file') options.environmentFile = value;
     else throw new Error(`unknown option ${String(name)}`);
     index += 1;
   }
   if (!Number.isSafeInteger(options.cycles) || options.cycles < 2 || options.cycles > 100) throw new Error('--cycles must be 2..100');
   if (!options.output) throw new Error('--output requires a path');
-  if (!options.environment) throw new Error('--environment requires a runner class');
+  if (!options.environmentFile) throw new Error('--environment-file requires a measured runner descriptor');
   return options;
 }

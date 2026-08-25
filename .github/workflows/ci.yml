@@ -114,7 +114,7 @@ jobs:
         shell: bash
         run: pnpm --filter @termwright/driver exec node -e "import('@lydell/node-pty').then(m => { if (typeof m.spawn !== 'function') process.exit(1); console.log('pty backend loaded'); })"
 
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       # A bundled native dependency resolves its addon beside the wrong file,
       # and the only symptom is a silent fallback to the backend it replaces.
       - run: node scripts/check-optional-native-externals.mjs
@@ -166,7 +166,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js-workspace
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
 
       # Hostile suites still run through the certified host. NODE_OPTIONS is
       # inherited by its exact Vitest workers, so malformed input is tested
@@ -286,7 +286,7 @@ jobs:
       - uses: ./.github/actions/setup-js-workspace
         with:
           node-version: ${{ matrix.node }}
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -351,7 +351,7 @@ jobs:
           go-version: '1.25'
           cache: false
 
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -437,7 +437,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - name: Repeat concurrency-sensitive slices in one persistent host
         env: { TERMWRIGHT_RETRIES: '0' }
         run: >-
@@ -468,7 +468,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - name: Saturate the explicit PTY/process/endpoint budget
         env: { TERMWRIGHT_RETRIES: '0' }
         run: >-
@@ -482,7 +482,7 @@ jobs:
           artifact-name: termwright-runs-${{ github.job }}-${{ runner.os }}-default
 
   resource-leak:
-    name: resource leak barrier (25 lifecycle cycles)
+    name: resource and async leak barrier (25 lifecycle cycles)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -492,13 +492,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - name: Every cycle must finish with zero broker leases and owned processes
         env: { TERMWRIGHT_RETRIES: '0' }
         run: >-
           pnpm test -- --runs 25 --resource-profile ci --json --
           --config quality/soak/vitest.config.ts --run
           quality/soak/terminal-cycle.test.ts
+      - name: Async ownership paths must settle every observed resource
+        env: { TERMWRIGHT_RETRIES: '0' }
+        run: >-
+          pnpm test -- --resource-profile ci --json -- --detectAsyncLeaks --run
+          packages/probe-ink/src/render-boundary.test.ts
+          packages/probe-ink/src/injection.test.ts
+          packages/ink/src/control.test.ts
+          packages/desktop-host/src/deadline.test.ts
+          packages/driver/src/session-lifecycle.test.ts
+          packages/driver/src/internal/session-process-lifecycle.test.ts
+          packages/driver/src/internal/resource-scope.test.ts
+          packages/driver/src/internal/action-retry.test.ts
+          packages/mcp/src/sessions.test.ts
       - name: Upload Termwright failure evidence
         if: ${{ failure() || cancelled() }}
         uses: ./.github/actions/upload-termwright-runs
@@ -516,7 +529,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - name: Acquisition, persistence, handshake and cleanup fault matrix
         env: { TERMWRIGHT_RETRIES: '0' }
         run: >-
@@ -545,7 +558,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-js-workspace
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - name: Shuffle concurrency-sensitive tests with a reproducible seed
         shell: bash
         env: { TERMWRIGHT_RETRIES: '0' }
@@ -582,7 +595,7 @@ jobs:
       - uses: ./.github/actions/setup-js-workspace
         with:
           node-version: ${{ matrix.node }}
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
 
       # Windows has one pseudo-terminal backend and it is a native addon, so
       # every Windows row needs the compiled binary before it can launch
@@ -643,7 +656,7 @@ jobs:
           go-version: '1.25'
           cache-dependency-path: clients/go/go.sum
 
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
 
       - name: Install the Python client (Textual adapter row)
         shell: bash
@@ -699,7 +712,7 @@ jobs:
       # `vite build` produces dist/app, which the server serves. Without it the
       # browser would load nothing and every assertion would fail on an empty
       # page rather than on the thing under test.
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
 
       # `pnpm --filter X run <missing script>` exits 0. This job exists to run
       # one specific suite, so its absence has to be an error — otherwise the
@@ -757,7 +770,7 @@ jobs:
         with:
           go-version: '1.25'
           cache-dependency-path: clients/go/go.sum
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: conpty-addon-x64
@@ -823,7 +836,7 @@ jobs:
         with:
           bun-version: '1.2.15'
 
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
 
       # setup-bun and this explicit probe fail before Vitest can accept the
       # developer-facing "Bun unavailable" skip declarations. The package test
@@ -1168,7 +1181,7 @@ jobs:
           bun-version: '1.2.15'
       - uses: dtolnay/rust-toolchain@2eae45db285e407f22119950686d47e1101e071b # 1.88
 
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - run: pnpm -r --filter './examples/*' run build
 
       - name: Install the Python client for the Textual example

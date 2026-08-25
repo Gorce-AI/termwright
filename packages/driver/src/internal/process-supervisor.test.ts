@@ -16,6 +16,10 @@ class ManualClock {
     clear: (timer: unknown): void => { this.#timers.delete(timer as number); },
   };
 
+  get pendingTimers(): number {
+    return this.#timers.size;
+  }
+
   advance(ms: number): void {
     this.now += ms;
     for (;;) {
@@ -38,10 +42,19 @@ class FakePty implements PtyProcess {
   readonly lifecycle: NonNullable<PtyProcess['lifecycle']>;
   readonly #exitOn: PtySignal | undefined;
   hardKillCount = 0;
+  hardKillCancelCount = 0;
+  killAtExitBoundaryCount = 0;
+  killOwnedTreeAtExitBoundary?: () => void;
+  readonly #hardKillUntilAbort: boolean;
 
-  constructor(options: { lifecycle?: PtyProcess['lifecycle']; exitOn?: PtySignal } = {}) {
+  constructor(options: {
+    lifecycle?: PtyProcess['lifecycle'];
+    exitOn?: PtySignal;
+    hardKillUntilAbort?: boolean;
+  } = {}) {
     this.lifecycle = options.lifecycle ?? { tree: 'delegated', outputDrain: 'bounded-fallback' };
     this.#exitOn = options.exitOn;
+    this.#hardKillUntilAbort = options.hardKillUntilAbort ?? false;
   }
 
   write(): void {}
@@ -58,10 +71,20 @@ class FakePty implements PtyProcess {
   treeState(): 'alive' | 'gone' | 'unsupported' { return this.tree; }
   dispose(): void { this.disposeCount += 1; }
   terminate(): void { this.emit({ code: 0, signal: null }); }
-  async hardKillTree(): Promise<void> {
+  async hardKillTree(signal: AbortSignal): Promise<void> {
     this.hardKillCount += 1;
     this.signals.push('KILL');
     if (this.#exitOn === 'KILL') this.emit({ code: null, signal: 'SIGKILL' });
+    if (!this.#hardKillUntilAbort) return;
+    await new Promise<void>((_resolve, reject) => {
+      const onAbort = (): void => {
+        signal.removeEventListener('abort', onAbort);
+        this.hardKillCancelCount += 1;
+        reject(signal.reason);
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) onAbort();
+    });
   }
   emit(status: ExitStatus): void {
     for (const listener of [...this.#listeners]) listener(status);
@@ -128,6 +151,7 @@ describe('ProcessSupervisor', () => {
     await expect(shutdown).resolves.toEqual({ code: null, signal: 'SIGHUP' });
     expect(pty.signals).toEqual(['HUP']);
     expect(pty.disposeCount).toBe(1);
+    expect(clock.pendingTimers).toBe(0);
   });
 
   it('still releases the pseudo-terminal when the shutdown budget is already spent', async () => {
@@ -213,6 +237,31 @@ describe('ProcessSupervisor', () => {
     const shutdown = supervisor(pty, clock).shutdown({ deadline: clock.now + 100, gracefulMs: 10 });
     clock.advance(100);
     await expect(shutdown).rejects.toMatchObject({ code: 'cleanup-failed', exitObserved: false });
+    expect(clock.pendingTimers).toBe(0);
+  });
+
+  it('clears a deadline handle even when an injected timer fires synchronously', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' } });
+    const pending = new Set<number>();
+    let nextId = 0;
+    const process = new ProcessSupervisor(pty, {
+      monotonicNow: () => clock.now,
+      timers: {
+        set(callback) {
+          const id = ++nextId;
+          callback();
+          pending.add(id);
+          return id;
+        },
+        clear(timer) { pending.delete(timer as number); },
+      },
+      platform: 'linux',
+    });
+
+    await expect(process.shutdown({ deadline: clock.now + 100, gracefulMs: 10 }))
+      .rejects.toMatchObject({ code: 'cleanup-failed', exitObserved: false });
+    expect(pending.size).toBe(0);
   });
 
   it('escalates an ignored graceful request within the same absolute deadline', async () => {
@@ -239,6 +288,22 @@ describe('ProcessSupervisor', () => {
     expect(pty.disposeCount).toBe(1);
   });
 
+  it('cancels and settles a ConPTY hard kill at the caller deadline', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({
+      lifecycle: { tree: 'conpty-console', outputDrain: 'eof' },
+      hardKillUntilAbort: true,
+    });
+    const shutdown = supervisor(pty, clock).shutdown({ deadline: clock.now + 75, gracefulMs: 10 });
+    expect(pty.hardKillCount).toBe(1);
+
+    clock.advance(75);
+    await expect(shutdown).rejects.toMatchObject({ code: 'cleanup-failed', exitObserved: false });
+    expect(pty.hardKillCancelCount).toBe(1);
+    expect(pty.disposeCount).toBe(1);
+    expect(clock.pendingTimers).toBe(0);
+  });
+
   it('hard-kills a POSIX group still alive after the leader exit and verifies it', async () => {
     const clock = new ManualClock();
     const pty = new FakePty({
@@ -253,6 +318,112 @@ describe('ProcessSupervisor', () => {
     };
     await supervisor(pty, clock).shutdown({ deadline: clock.now + 1_000, gracefulMs: 100 });
     expect(pty.signals).toEqual(['HUP', 'KILL']);
+  });
+
+  it('uses the exact root-exit boundary operation for surviving POSIX descendants', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({
+      lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' },
+      exitOn: 'HUP',
+    });
+    pty.tree = 'alive';
+    pty.killOwnedTreeAtExitBoundary = (): void => {
+      pty.killAtExitBoundaryCount += 1;
+      pty.tree = 'gone';
+    };
+
+    await expect(supervisor(pty, clock).shutdown({ deadline: clock.now + 100, gracefulMs: 10 }))
+      .resolves.toEqual({ code: null, signal: 'SIGHUP' });
+    expect(pty.killAtExitBoundaryCount).toBe(1);
+    expect(pty.signals).toEqual(['HUP']);
+  });
+
+  it('does not publish owned-tree exit while a descendant remains alive', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' } });
+    pty.tree = 'alive';
+    const process = supervisor(pty, clock);
+    process.observeExit({ code: 0, signal: null });
+    let settled = false;
+    const ownedExit = process.waitForOwnedTreeExit().then((gone) => {
+      settled = true;
+      return gone;
+    });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    pty.tree = 'gone';
+    clock.advance(10);
+    await expect(ownedExit).resolves.toBe(true);
+    expect(clock.pendingTimers).toBe(0);
+  });
+
+  it('fails closed when a declared tree reports unsupported confirmation', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' } });
+    pty.tree = 'unsupported';
+    const process = supervisor(pty, clock);
+    const status = { code: 0, signal: null } as const;
+    process.observeExit(status);
+
+    await expect(process.waitForOwnedTreeExit()).resolves.toBe(false);
+    await expect(process.shutdown({ deadline: clock.now + 100, gracefulMs: 10, observedExit: status }))
+      .rejects.toMatchObject({ code: 'cleanup-failed', exitObserved: true });
+  });
+
+  it('fails closed when declared tree confirmation throws', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' } });
+    pty.treeState = (): 'gone' => { throw new Error('tree probe failed'); };
+    const process = supervisor(pty, clock);
+    const status = { code: 0, signal: null } as const;
+    process.observeExit(status);
+
+    await expect(process.waitForOwnedTreeExit()).resolves.toBe(false);
+    await expect(process.shutdown({ deadline: clock.now + 100, gracefulMs: 10, observedExit: status }))
+      .rejects.toThrow('tree probe failed');
+  });
+
+  it('fails closed when a tree-owning backend exposes no confirmation primitive', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' } });
+    Object.defineProperty(pty, 'treeState', { value: undefined });
+    const process = supervisor(pty, clock);
+    const status = { code: 0, signal: null } as const;
+    process.observeExit(status);
+
+    await expect(process.waitForOwnedTreeExit()).resolves.toBe(false);
+    await expect(process.shutdown({ deadline: clock.now + 100, gracefulMs: 10, observedExit: status }))
+      .rejects.toThrow('exposes no tree-state confirmation');
+  });
+
+  it('keeps explicit delegated ownership legal without a Termwright tree probe', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({ lifecycle: { tree: 'delegated', outputDrain: 'eof' } });
+    Object.defineProperty(pty, 'treeState', { value: undefined });
+    const process = supervisor(pty, clock);
+    const status = { code: 0, signal: null } as const;
+    process.observeExit(status);
+
+    await expect(process.waitForOwnedTreeExit()).resolves.toBe(true);
+    await expect(process.shutdown({ deadline: clock.now + 100, gracefulMs: 10, observedExit: status }))
+      .resolves.toEqual(status);
+  });
+
+  it('forgives boundary EPERM only when the exact tree snapshot proves gone', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({
+      lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' },
+      exitOn: 'HUP',
+    });
+    pty.tree = 'alive';
+    pty.killOwnedTreeAtExitBoundary = (): void => {
+      pty.tree = 'gone';
+      throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+    };
+
+    await expect(supervisor(pty, clock).shutdown({ deadline: clock.now + 100, gracefulMs: 10 }))
+      .resolves.toEqual({ code: null, signal: 'SIGHUP' });
   });
 
   it('waits within the same deadline for a killed process group to disappear', async () => {
@@ -274,5 +445,57 @@ describe('ProcessSupervisor', () => {
     }
     await expect(shutdown).resolves.toEqual({ code: null, signal: 'SIGHUP' });
     expect(pty.disposeCount).toBe(1);
+  });
+
+  it('does not grant process-tree confirmation a private deadline after root exit', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({
+      lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' },
+      exitOn: 'HUP',
+    });
+    pty.tree = 'alive';
+    const shutdown = supervisor(pty, clock).shutdown({ deadline: clock.now + 40, gracefulMs: 10 });
+
+    await Promise.resolve();
+    clock.advance(40);
+    await expect(shutdown).rejects.toMatchObject({
+      code: 'cleanup-failed',
+      exitObserved: true,
+      message: expect.stringContaining('before the shutdown deadline'),
+    });
+    expect(clock.now).toBe(1_040);
+    expect(clock.pendingTimers).toBe(0);
+    expect(pty.disposeCount).toBe(1);
+  });
+
+  it('clears a synchronously-fired tree confirmation timer handle', async () => {
+    const clock = new ManualClock();
+    const pty = new FakePty({
+      lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' },
+      exitOn: 'HUP',
+    });
+    pty.tree = 'alive';
+    const pending = new Set<number>();
+    let nextId = 0;
+    const process = new ProcessSupervisor(pty, {
+      monotonicNow: () => clock.now,
+      timers: {
+        set(callback, delay) {
+          const id = ++nextId;
+          if (delay <= 10) {
+            pty.tree = 'gone';
+            callback();
+          }
+          pending.add(id);
+          return id;
+        },
+        clear(timer) { pending.delete(timer as number); },
+      },
+      platform: 'linux',
+    });
+
+    await expect(process.shutdown({ deadline: clock.now + 100, gracefulMs: 10 }))
+      .resolves.toEqual({ code: null, signal: 'SIGHUP' });
+    expect(pending.size).toBe(0);
   });
 });

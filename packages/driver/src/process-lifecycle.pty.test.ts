@@ -13,6 +13,7 @@ const fixtures = fileURLToPath(new URL('../test-fixtures/', import.meta.url));
 // infrastructure — turning one wrong assertion into a result that says nothing
 // about which test was wrong.
 const opened: TerminalHarness[] = [];
+const emergencyPids = new Set<number>();
 
 async function open(...args: Parameters<typeof launchTerminal>): Promise<TerminalHarness> {
   const terminal = await launchTerminal(...args);
@@ -22,6 +23,10 @@ async function open(...args: Parameters<typeof launchTerminal>): Promise<Termina
 
 afterEach(async () => {
   while (opened.length > 0) await opened.pop()?.close().catch(() => undefined);
+  for (const pid of emergencyPids) {
+    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+  }
+  emergencyPids.clear();
 });
 
 function alive(pid: number): boolean {
@@ -45,11 +50,13 @@ describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeo
     expect(match).not.toBeNull();
     const parentPid = Number(match?.[1]);
     const grandchildPid = Number(match?.[2]);
+    emergencyPids.add(grandchildPid);
 
     expect(await terminal.waitForExit()).toEqual({ code: 0, signal: null });
-    await terminal.close();
     expect(alive(parentPid)).toBe(false);
     expect(alive(grandchildPid)).toBe(false);
+    emergencyPids.delete(grandchildPid);
+    await terminal.close();
   });
 
   it('escalates and removes a child plus grandchild that ignore graceful shutdown', async () => {
@@ -62,12 +69,14 @@ describe.skipIf(process.platform === 'win32')('POSIX process lifecycle', { timeo
     expect(match).not.toBeNull();
     const parentPid = Number(match?.[1]);
     const grandchildPid = Number(match?.[2]);
+    emergencyPids.add(grandchildPid);
     expect(alive(parentPid)).toBe(true);
     expect(alive(grandchildPid)).toBe(true);
 
     await terminal.close();
     expect(alive(parentPid)).toBe(false);
     expect(alive(grandchildPid)).toBe(false);
+    emergencyPids.delete(grandchildPid);
     expect((await terminal.exit).signal).toBe('SIGKILL');
   });
 });
@@ -130,10 +139,12 @@ describe.skipIf(process.platform !== 'win32')('Windows process lifecycle', { tim
     expect(match).not.toBeNull();
     const parentPid = Number(match?.[1]);
     const grandchildPid = Number(match?.[2]);
+    emergencyPids.add(grandchildPid);
 
     expect(await terminal.waitForExit()).toEqual({ code: 0, signal: null });
     expect(alive(parentPid)).toBe(false);
     expect(alive(grandchildPid)).toBe(false);
+    emergencyPids.delete(grandchildPid);
     await terminal.close();
   });
 
@@ -147,10 +158,12 @@ describe.skipIf(process.platform !== 'win32')('Windows process lifecycle', { tim
     expect(match).not.toBeNull();
     const parentPid = Number(match?.[1]);
     const grandchildPid = Number(match?.[2]);
+    emergencyPids.add(grandchildPid);
 
     await terminal.close();
     expect(alive(parentPid)).toBe(false);
     expect(alive(grandchildPid)).toBe(false);
+    emergencyPids.delete(grandchildPid);
     await terminal.exit;
   });
 

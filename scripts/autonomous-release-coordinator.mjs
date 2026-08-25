@@ -46,7 +46,7 @@ export const CI_JOB_CONTRACT = Object.freeze({
   ], { node: ['22', '24'] }),
   determinism: ciJob('determinism (50 native run cycles, zero retries)', ['determinism (50 native run cycles, zero retries)']),
   'concurrency-stress': ciJob('concurrency stress (16 owned terminals)', ['concurrency stress (16 owned terminals)']),
-  'resource-leak': ciJob('resource leak barrier (25 lifecycle cycles)', ['resource leak barrier (25 lifecycle cycles)']),
+  'resource-leak': ciJob('resource and async leak barrier (25 lifecycle cycles)', ['resource and async leak barrier (25 lifecycle cycles)']),
   'fault-and-jitter': ciJob('fault injection and slow causal boundaries', ['fault injection and slow causal boundaries']),
   'randomized-race': ciJob('randomized race (recorded seed)', ['randomized race (recorded seed)']),
   'windows-native-stress': ciJob('Windows native lifecycle stress / Node ${{ matrix.node }}', [

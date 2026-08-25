@@ -134,7 +134,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: python -m pip install -e 'clients/python[dev]'
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - if: matrix.ecosystem == 'rust'
         run: cargo fetch --locked --manifest-path clients/rust-ratatui/Cargo.toml
 

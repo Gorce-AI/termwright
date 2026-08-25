@@ -10,16 +10,17 @@
     "platformSkips": "additionally governed by quality/platform-deviations.json"
   },
   "summary": {
-    "bounded-deadline-or-managed-background-task": 44,
+    "bounded-deadline-or-managed-background-task": 40,
     "deadline-or-scheduler-regression-test": 63,
-    "deterministic-adversarial-fixture-schedule": 35,
+    "deterministic-adversarial-fixture-schedule": 34,
     "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 204,
     "explicit-test-selection-reviewed-with-platform-registry": 96,
-    "managed-or-diagnostic-background-task": 68,
+    "managed-or-diagnostic-background-task": 71,
+    "production-polling-review": 1,
     "production-process-isolation-review": 27,
-    "test-observer-or-intentional-background-task": 14,
+    "test-observer-or-intentional-background-task": 13,
     "test-process-isolation-review": 44
   },
   "findings": [
@@ -693,13 +694,19 @@
       "path": "packages/desktop-host/src/deadline.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void promise.catch(() => undefined);"
+      "excerpt": "void operation.result.then("
+    },
+    {
+      "path": "packages/desktop-host/src/deadline.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void result.catch(() => undefined);"
     },
     {
       "path": "packages/desktop-host/src/deadline.ts",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "timer = setTimeout(() => reject(new Error(describe())), remaining);"
+      "excerpt": "const timer = remaining > 0 ? setTimeout(expire, remaining) : undefined;"
     },
     {
       "path": "packages/desktop-host/src/launch.test.ts",
@@ -853,6 +860,12 @@
     },
     {
       "path": "packages/driver/src/internal/process-supervisor.ts",
+      "kind": "polling",
+      "classification": "production-polling-review",
+      "excerpt": "poll();"
+    },
+    {
+      "path": "packages/driver/src/internal/process-supervisor.ts",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "set: (callback, delayMs) => setTimeout(callback, delayMs),"
@@ -880,6 +893,18 @@
       "kind": "delay-helper",
       "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "sleep(ms: number): Promise<void>;"
+    },
+    {
+      "path": "packages/driver/src/internal/session-process-lifecycle.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void failed.catch(() => undefined);"
+    },
+    {
+      "path": "packages/driver/src/internal/session-process-lifecycle.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void this.#exit.catch(() => undefined);"
     },
     {
       "path": "packages/driver/src/internal/socket.test.ts",
@@ -1137,12 +1162,6 @@
       "path": "packages/driver/src/pty-upstream-boundary.test.ts",
       "kind": "timer",
       "classification": "deadline-or-scheduler-regression-test",
-      "excerpt": "timer = setTimeout(() => reject(new Error('PTY write boundary test timed out')), 5_000);"
-    },
-    {
-      "path": "packages/driver/src/pty.ts",
-      "kind": "timer",
-      "classification": "bounded-deadline-or-managed-background-task",
       "excerpt": "const timer = setTimeout(() => {"
     },
     {
@@ -1228,12 +1247,6 @@
       "kind": "fire-and-forget",
       "classification": "test-observer-or-intentional-background-task",
       "excerpt": "void launched.then("
-    },
-    {
-      "path": "packages/driver/src/session-lifecycle.test.ts",
-      "kind": "fire-and-forget",
-      "classification": "test-observer-or-intentional-background-task",
-      "excerpt": "void terminal.exit.then(() => {"
     },
     {
       "path": "packages/driver/src/session.pty.test.ts",
@@ -1543,30 +1556,6 @@
     },
     {
       "path": "packages/driver/src/session.ts",
-      "kind": "delay-helper",
-      "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "await Promise.race([this.#vt.drain(), delay(CRASH_DRAIN_MS)]);"
-    },
-    {
-      "path": "packages/driver/src/session.ts",
-      "kind": "delay-helper",
-      "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "function delay(ms: number): Promise<void> {"
-    },
-    {
-      "path": "packages/driver/src/session.ts",
-      "kind": "delay-helper",
-      "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "if (producerEnded !== undefined) await Promise.race([producerEnded, delay(CRASH_DRAIN_MS)]);"
-    },
-    {
-      "path": "packages/driver/src/session.ts",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void this.#finishExit(status);"
-    },
-    {
-      "path": "packages/driver/src/session.ts",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void this.#vt.write(data).finally(() => {"
@@ -1575,7 +1564,7 @@
       "path": "packages/driver/src/session.ts",
       "kind": "timer",
       "classification": "bounded-deadline-or-managed-background-task",
-      "excerpt": "const timer = setTimeout(resolve, ms);"
+      "excerpt": "const timeout = setTimeout(() => {"
     },
     {
       "path": "packages/driver/src/session.ts",
@@ -1677,13 +1666,7 @@
       "path": "packages/driver/test-fixtures/process-tree-natural-exit.mjs",
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "setTimeout(() => process.exit(0), 100);"
-    },
-    {
-      "path": "packages/driver/test-fixtures/process-tree-natural-exit.mjs",
-      "kind": "timer",
-      "classification": "deterministic-adversarial-fixture-schedule",
-      "excerpt": "setTimeout(() => process.exit(0), 1000);"
+      "excerpt": "setInterval(() => {}, 60000);"
     },
     {
       "path": "packages/driver/test-fixtures/prompt-app.mjs",
@@ -2254,6 +2237,12 @@
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
       "excerpt": "process.env['GITHUB_SHA'] = 'stale-sha';"
+    },
+    {
+      "path": "packages/probe-ink/src/render-boundary.ts",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void flush.then(() => {"
     },
     {
       "path": "packages/probe-ink/src/testing/annotated-app.mjs",

@@ -1,5 +1,7 @@
 export const PERFORMANCE_BASELINE_KIND = 'termwright-performance-baseline' as const;
-export const PERFORMANCE_BASELINE_VERSION = 1 as const;
+export const PERFORMANCE_BASELINE_VERSION = 2 as const;
+export const PERFORMANCE_BASELINE_POLICY_KIND = 'termwright-performance-baseline-policy' as const;
+export const PERFORMANCE_BASELINE_POLICY_VERSION = 1 as const;
 
 export type BaselineUnit = 'milliseconds' | 'bytes' | 'count' | 'microseconds/frame' | 'ratio';
 const BASELINE_UNITS: readonly BaselineUnit[] = [
@@ -18,6 +20,32 @@ export interface PerformanceObservationSet {
   readonly metrics: Readonly<Record<string, PerformanceObservation>>;
 }
 
+export interface PerformanceEnvironmentDescriptor {
+  readonly kind: 'termwright-performance-environment';
+  readonly schemaVersion: 1;
+  readonly class: string;
+  readonly runner: {
+    readonly image: string;
+    readonly platform: string;
+    readonly arch: string;
+  };
+  readonly toolchains: {
+    readonly node: { readonly qualified: string; readonly resolved: string };
+    readonly go: { readonly qualified: string; readonly resolved: string };
+    readonly bun: { readonly qualified: string; readonly resolved: string };
+  };
+}
+
+export interface PerformanceBaselineProvenance {
+  readonly environment: PerformanceEnvironmentDescriptor;
+  readonly rawInputs: {
+    readonly quality: string;
+    readonly semantic: string;
+    readonly charm: string;
+    readonly opentui: string;
+  };
+}
+
 export interface BaselineMetric extends PerformanceObservation {
   /** A lower value is better for ceilings; exact metrics are cleanup invariants. */
   readonly direction: 'lower' | 'exact';
@@ -32,12 +60,29 @@ export interface PerformanceBaseline {
   readonly schemaVersion: typeof PERFORMANCE_BASELINE_VERSION;
   readonly recordedAt: string;
   readonly environment: string;
+  readonly provenance: PerformanceBaselineProvenance;
   readonly history: {
     readonly samples: number;
     readonly blockingAfterSamples: number;
     readonly decision: 'annotate';
   };
   readonly metrics: Readonly<Record<string, BaselineMetric>>;
+}
+
+export interface BaselineMetricPolicy {
+  readonly unit: BaselineUnit;
+  readonly direction: 'lower' | 'exact';
+  readonly relativeTolerance: number;
+  readonly absoluteTolerance: number;
+}
+
+/** Stable review policy used to turn a measured runner-class observation into a baseline. */
+export interface PerformanceBaselinePolicy {
+  readonly kind: typeof PERFORMANCE_BASELINE_POLICY_KIND;
+  readonly schemaVersion: typeof PERFORMANCE_BASELINE_POLICY_VERSION;
+  readonly environment: string;
+  readonly history: PerformanceBaseline['history'];
+  readonly metrics: Readonly<Record<string, BaselineMetricPolicy>>;
 }
 
 export interface BaselineComparison {
@@ -107,6 +152,50 @@ export function comparePerformanceBaseline(
   });
 }
 
+/**
+ * Capture a new runner-class baseline from measurements, never from an older
+ * baseline's values. Exact metrics are cleanup invariants, so a leaking
+ * capture is rejected instead of becoming the new normal.
+ */
+export function capturePerformanceBaseline(
+  policy: PerformanceBaselinePolicy,
+  current: PerformanceObservationSet,
+  provenance: PerformanceBaselineProvenance,
+): PerformanceBaseline {
+  validateBaselinePolicy(policy);
+  validateObservationSet(current);
+  if (policy.environment !== current.environment) {
+    throw new Error(
+      `performance environments differ: policy=${policy.environment}, current=${current.environment}`,
+    );
+  }
+  validateProvenance(provenance, current.environment);
+
+  const metrics = Object.fromEntries(Object.entries(policy.metrics).map(([name, expected]) => {
+    const observed = current.metrics[name];
+    if (observed === undefined) throw new Error(`current observations are missing ${name}`);
+    if (observed.unit !== expected.unit) {
+      throw new Error(`${name} unit changed from ${expected.unit} to ${observed.unit}`);
+    }
+    if (expected.direction === 'exact' && observed.value !== 0) {
+      throw new Error(`${name} violated its exact cleanup invariant during baseline capture: ${observed.value}`);
+    }
+    return [name, { ...observed, ...expected }];
+  }));
+
+  const baseline: PerformanceBaseline = {
+    kind: PERFORMANCE_BASELINE_KIND,
+    schemaVersion: PERFORMANCE_BASELINE_VERSION,
+    recordedAt: current.generatedAt,
+    environment: current.environment,
+    provenance,
+    history: policy.history,
+    metrics,
+  };
+  validateBaseline(baseline);
+  return baseline;
+}
+
 export function validateBaseline(value: unknown): asserts value is PerformanceBaseline {
   if (!record(value)) throw new Error('baseline must be an object');
   if (value.kind !== PERFORMANCE_BASELINE_KIND || value.schemaVersion !== PERFORMANCE_BASELINE_VERSION) {
@@ -114,41 +203,145 @@ export function validateBaseline(value: unknown): asserts value is PerformanceBa
   }
   date(value.recordedAt, 'baseline recordedAt');
   nonEmpty(value.environment, 'baseline environment');
-  if (!record(value.history)) throw new Error('baseline history is missing');
-  integer(value.history.samples, 'baseline history samples', 1);
-  integer(value.history.blockingAfterSamples, 'baseline blockingAfterSamples', 1);
-  if (value.history.decision !== 'annotate') throw new Error('performance baseline must remain annotate-only');
-  validateMetrics(value.metrics, true);
+  validateProvenance(value.provenance, value.environment);
+  validateHistory(value.history, 'baseline');
+  validateMetrics(value.metrics, true, true);
+  validateRequiredCleanupMetrics(value.metrics, true);
+}
+
+export function validateBaselinePolicy(value: unknown): asserts value is PerformanceBaselinePolicy {
+  if (!record(value)) throw new Error('baseline policy must be an object');
+  if (value.kind !== PERFORMANCE_BASELINE_POLICY_KIND || value.schemaVersion !== PERFORMANCE_BASELINE_POLICY_VERSION) {
+    throw new Error('unsupported performance baseline policy kind or version');
+  }
+  nonEmpty(value.environment, 'baseline policy environment');
+  validateHistory(value.history, 'baseline policy');
+  validateMetrics(value.metrics, true, false);
+  validateRequiredCleanupMetrics(value.metrics, false);
 }
 
 export function validateObservationSet(value: unknown): asserts value is PerformanceObservationSet {
   if (!record(value)) throw new Error('observations must be an object');
   date(value.generatedAt, 'observations generatedAt');
   nonEmpty(value.environment, 'observations environment');
-  validateMetrics(value.metrics, false);
+  validateMetrics(value.metrics, false, true);
+  validateRequiredCleanupObservations(value.metrics);
 }
 
-function validateMetrics(value: unknown, baseline: boolean): void {
+const REQUIRED_CLEANUP_METRICS = ['leakedFileDescriptors', 'leakedProcesses'] as const;
+
+function validateRequiredCleanupMetrics(value: unknown, values: boolean): void {
+  if (!record(value)) throw new Error('cleanup metrics are missing');
+  for (const name of REQUIRED_CLEANUP_METRICS) {
+    const metric = value[name];
+    if (!record(metric)) throw new Error(`${name} is a required exact cleanup invariant`);
+    if (metric.unit !== 'count' || metric.direction !== 'exact'
+      || metric.relativeTolerance !== 0 || metric.absoluteTolerance !== 0) {
+      throw new Error(`${name} must be an exact count invariant with zero tolerance`);
+    }
+    if (values && metric.value !== 0) throw new Error(`${name} exact cleanup baseline must be zero`);
+  }
+}
+
+function validateRequiredCleanupObservations(value: unknown): void {
+  if (!record(value)) throw new Error('cleanup observations are missing');
+  for (const name of REQUIRED_CLEANUP_METRICS) {
+    const metric = value[name];
+    if (!record(metric) || metric.unit !== 'count') {
+      throw new Error(`${name} is a required count cleanup observation`);
+    }
+  }
+}
+
+function validateProvenance(value: unknown, environment: string): asserts value is PerformanceBaselineProvenance {
+  if (!record(value) || !record(value.environment) || !record(value.rawInputs)) {
+    throw new Error('baseline provenance is missing');
+  }
+  const descriptor = value.environment;
+  if (descriptor.kind !== 'termwright-performance-environment' || descriptor.schemaVersion !== 1) {
+    throw new Error('baseline provenance environment descriptor is unsupported');
+  }
+  if (descriptor.class !== environment) throw new Error('baseline provenance environment class differs from baseline');
+  if (!record(descriptor.runner) || !record(descriptor.toolchains)) {
+    throw new Error('baseline provenance environment descriptor is incomplete');
+  }
+  nonEmpty(descriptor.runner.image, 'baseline provenance runner image');
+  nonEmpty(descriptor.runner.platform, 'baseline provenance runner platform');
+  nonEmpty(descriptor.runner.arch, 'baseline provenance runner architecture');
+  for (const name of ['node', 'go', 'bun'] as const) {
+    const toolchain = descriptor.toolchains[name];
+    if (!record(toolchain)) throw new Error(`baseline provenance ${name} toolchain is missing`);
+    nonEmpty(toolchain.qualified, `baseline provenance ${name} qualification`);
+    nonEmpty(toolchain.resolved, `baseline provenance ${name} resolution`);
+  }
+  const runnerClass = /^(darwin|linux)-(arm64|x64)-node(\d+)-go(\d+\.\d+)-bun(\d+\.\d+\.\d+)$/u
+    .exec(environment);
+  if (runnerClass === null) throw new Error('baseline provenance runner class is invalid');
+  const [, platform, arch, nodeMajor, goLine, bunVersion] = runnerClass;
+  if (descriptor.runner.platform !== platform || descriptor.runner.arch !== arch) {
+    throw new Error('baseline provenance runner does not match its class');
+  }
+  const node = descriptor.toolchains.node as Record<string, unknown>;
+  const go = descriptor.toolchains.go as Record<string, unknown>;
+  const bun = descriptor.toolchains.bun as Record<string, unknown>;
+  if (node.qualified !== nodeMajor || major(node.resolved) !== nodeMajor
+    || go.qualified !== goLine || majorMinor(go.resolved) !== goLine
+    || bun.qualified !== bunVersion || bun.resolved !== bunVersion) {
+    throw new Error('baseline provenance toolchains do not match their runner class');
+  }
+  for (const name of ['quality', 'semantic', 'charm', 'opentui'] as const) {
+    const digest = value.rawInputs[name];
+    if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/u.test(digest)) {
+      throw new Error(`baseline provenance ${name} SHA-256 is invalid`);
+    }
+  }
+}
+
+function major(value: unknown): string | undefined {
+  return typeof value === 'string' ? /^(\d+)\./u.exec(value)?.[1] : undefined;
+}
+
+function majorMinor(value: unknown): string | undefined {
+  return typeof value === 'string' ? /^(\d+\.\d+)(?:\.|$)/u.exec(value)?.[1] : undefined;
+}
+
+function validateHistory(value: unknown, owner: string): void {
+  if (!record(value)) throw new Error(`${owner} history is missing`);
+  integer(value.samples, `${owner} history samples`, 1);
+  integer(value.blockingAfterSamples, `${owner} blockingAfterSamples`, 1);
+  if (value.decision !== 'annotate') throw new Error('performance baseline must remain annotate-only');
+}
+
+function validateMetrics(value: unknown, policy: boolean, values: boolean): void {
   if (!record(value) || Object.keys(value).length === 0) throw new Error('metrics must be a non-empty object');
   for (const [name, candidate] of Object.entries(value)) {
     nonEmpty(name, 'metric name');
     if (!record(candidate)) throw new Error(`${name} must be an object`);
-    finite(candidate.value, `${name}.value`);
+    if (values) {
+      finite(candidate.value, `${name}.value`);
+      nonEmpty(candidate.source, `${name}.source`);
+    } else {
+      if ('value' in candidate) throw new Error(`${name} policy must not contain a measured value`);
+      if ('source' in candidate) throw new Error(`${name} policy must not contain an observation source`);
+    }
     if (!BASELINE_UNITS.includes(candidate.unit as BaselineUnit)) {
       throw new Error(`${name}.unit is unsupported`);
     }
-    nonEmpty(candidate.source, `${name}.source`);
-    if (!baseline) continue;
+    if (!policy) continue;
     if (candidate.direction !== 'lower' && candidate.direction !== 'exact') {
       throw new Error(`${name}.direction must be lower or exact`);
     }
-    if (candidate.direction === 'exact' && candidate.value !== 0) {
+    if (values && candidate.direction === 'exact' && candidate.value !== 0) {
       throw new Error(`${name}.direction exact is reserved for zero-leak invariants`);
     }
     finite(candidate.relativeTolerance, `${name}.relativeTolerance`);
     finite(candidate.absoluteTolerance, `${name}.absoluteTolerance`);
     if ((candidate.relativeTolerance as number) < 0 || (candidate.absoluteTolerance as number) < 0) {
       throw new Error(`${name} tolerances must be non-negative`);
+    }
+    if (candidate.direction === 'exact'
+      && (candidate.relativeTolerance !== 0 || candidate.absoluteTolerance !== 0)) {
+      throw new Error(`${name} exact cleanup policy must have zero tolerance`);
     }
   }
 }

@@ -55,5 +55,23 @@ describe('Ink render boundary', () => {
     expect(mutate).not.toHaveBeenCalled();
     expect(boundaries.take()).toBeUndefined();
     releaseCurrentRender?.();
+    await currentRender;
+  });
+
+  it('observes a flush rejection that arrives after stop instead of abandoning it', async () => {
+    const boundaries = new RenderBoundaryQueue();
+    let rejectCurrentRender: ((error: Error) => void) | undefined;
+    const currentRender = new Promise<void>((_resolve, reject) => {
+      rejectCurrentRender = reject;
+    });
+    const mutate = vi.fn();
+    const revision = boundaries.afterCurrentRender(() => currentRender, mutate);
+
+    boundaries.stop();
+    rejectCurrentRender?.(new Error('flush failed during cleanup'));
+
+    await expect(revision).rejects.toThrow('stopped before the render boundary');
+    expect(mutate).not.toHaveBeenCalled();
+    expect(boundaries.take()).toBeUndefined();
   });
 });

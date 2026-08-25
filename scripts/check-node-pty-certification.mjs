@@ -34,7 +34,9 @@ if (process.platform === 'win32') {
     throw new Error(`${platformName}: certified ConPTY deferral gate changed; re-check the write/kill barrier`);
   }
   const agentImplementation = await readFile(join(root, 'lib', 'windowsPtyAgent.js'), 'utf8');
+  const consoleListHelper = await readFile(join(root, 'lib', 'conpty_console_list_agent.js'), 'utf8');
   if (!agentImplementation.includes('WindowsPtyAgent.prototype._getConsoleProcessList = function') ||
+      !agentImplementation.includes('Object.defineProperty(WindowsPtyAgent.prototype, "innerPid"') ||
       !agentImplementation.includes('consoleProcessList.forEach(function (pid)') ||
       !agentImplementation.includes('this._closeTimeout = setTimeout(function ()') ||
       !agentImplementation.includes('this._outSocket.destroy()')) {
@@ -45,6 +47,11 @@ if (process.platform === 'win32') {
   if (!agentImplementation.includes('WindowsPtyAgent.prototype.kill = function') ||
       !agentImplementation.includes("_this._outSocket.emit('ready_datapipe')")) {
     throw new Error(`${platformName}: certified ConPTY readiness/kill boundary changed`);
+  }
+  if (!consoleListHelper.includes("loadNativeModule)('conpty_console_list')") ||
+      !consoleListHelper.includes('process.send({ consoleProcessList: consoleProcessList })') ||
+      !consoleListHelper.includes('process.exit(0)')) {
+    throw new Error(`${platformName}: certified ConPTY console-list helper boundary changed`);
   }
 } else if (!implementation.includes('_this._fd = term.fd') ||
            !implementation.includes('Object.defineProperty(UnixTerminal.prototype, "fd"') ||

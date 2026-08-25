@@ -20,19 +20,27 @@ export type { CharmBenchmarkOptions, CharmDebugMetrics } from './charm.js';
 export { runOpenTuiMarkerBenchmark } from './opentui-marker.js';
 export type { MarkerRouteSample, OpenTuiMarkerOptions } from './opentui-marker.js';
 export {
+  capturePerformanceBaseline,
   comparePerformanceBaseline,
   formatGitHubError,
   formatGitHubWarning,
   PERFORMANCE_BASELINE_KIND,
+  PERFORMANCE_BASELINE_POLICY_KIND,
+  PERFORMANCE_BASELINE_POLICY_VERSION,
   PERFORMANCE_BASELINE_VERSION,
   validateBaseline,
+  validateBaselinePolicy,
   validateObservationSet,
 } from './baseline.js';
 export type {
   BaselineComparison,
   BaselineMetric,
+  BaselineMetricPolicy,
   BaselineUnit,
   PerformanceBaseline,
+  PerformanceBaselineProvenance,
+  PerformanceBaselinePolicy,
+  PerformanceEnvironmentDescriptor,
   PerformanceObservation,
   PerformanceObservationSet,
 } from './baseline.js';

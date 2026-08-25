@@ -13,7 +13,7 @@ editUrl: false
 
 > **createNodePtyBackend**(): [`PtyBackend`](../../interfaces/ptybackend/)
 
-Defined in: [pty.ts:120](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L120)
+Defined in: [pty.ts:126](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/pty.ts#L126)
 
 The production backend: `@lydell/node-pty` pinned to 1.2.0-beta.15 (prebuilds for all
 six platforms). The pty is opened with `encoding: null` so output arrives as

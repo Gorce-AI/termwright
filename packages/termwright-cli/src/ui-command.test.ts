@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRunId, RunEventProducer, type RunEvent, type RunId, type RunnerTaskId } from '@termwright/protocol';
 import { UiHub, type DiscoveredTest } from '@termwright/ui';
-import { runUi, type NativeHostHandle, type UiRuntime } from './ui-command.js';
+import { runUi, waitForInterrupt, type NativeHostHandle, type UiRuntime } from './ui-command.js';
+
+function waitUntilAborted(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+}
 
 function nativeHost(): NativeHostHandle & {
   stopped: RunId[];
@@ -32,6 +37,21 @@ function nativeHost(): NativeHostHandle & {
 }
 
 describe('native UI host', () => {
+  it('removes process signal listeners when an interrupt wait is cancelled', async () => {
+    const sigintListeners = process.listenerCount('SIGINT');
+    const sigtermListeners = process.listenerCount('SIGTERM');
+    const controller = new AbortController();
+    const waiting = waitForInterrupt(controller.signal);
+    expect(process.listenerCount('SIGINT')).toBe(sigintListeners + 1);
+    expect(process.listenerCount('SIGTERM')).toBe(sigtermListeners + 1);
+
+    controller.abort();
+    await waiting;
+
+    expect(process.listenerCount('SIGINT')).toBe(sigintListeners);
+    expect(process.listenerCount('SIGTERM')).toBe(sigtermListeners);
+  });
+
   it('uses one host for structured discovery, reruns and exact RunId cancellation', async () => {
     const host = nativeHost();
     let workerUiUrl: string | undefined;
@@ -91,6 +111,7 @@ describe('native UI host', () => {
   it('projects exact Run, Task, Execution and Attempt identity from the live host journal', async () => {
     const host = nativeHost();
     const hub = new UiHub();
+    let interruptSignal: AbortSignal | undefined;
     const runtime: UiRuntime = {
       startHost: async () => host,
       startUi: async () => ({
@@ -99,7 +120,10 @@ describe('native UI host', () => {
         recorder: undefined, trace: undefined, attach: () => () => undefined,
         close: async () => undefined,
       }),
-      waitForInterrupt: () => new Promise<void>(() => undefined),
+      waitForInterrupt: (signal) => {
+        interruptSignal = signal;
+        return waitUntilAborted(signal);
+      },
     };
     const ids = {
       invocationId: createRunId('invocation'),
@@ -122,6 +146,7 @@ describe('native UI host', () => {
       return { closed: Promise.resolve(), close: async () => undefined };
     });
     await running;
+    expect(interruptSignal?.aborted).toBe(true);
 
     expect(hub.backlog).toMatchObject([
       { type: 'run-start', runId: ids.runId },
@@ -150,7 +175,7 @@ describe('native UI host', () => {
         recorder: undefined, trace: undefined, attach: () => () => undefined,
         close: async () => undefined,
       }),
-      waitForInterrupt: () => new Promise<void>(() => undefined),
+      waitForInterrupt: waitUntilAborted,
     };
     await runUi({
       trace: undefined, record: undefined, outFile: undefined, port: undefined,

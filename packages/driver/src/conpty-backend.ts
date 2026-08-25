@@ -110,7 +110,8 @@ export function createConPtyBackend(spawn: ConPtySpawn): PtyBackend {
           }
           session.terminateTree();
         },
-        async hardKillTree(): Promise<void> {
+        async hardKillTree(signal: AbortSignal): Promise<void> {
+          signal.throwIfAborted();
           session.terminateTree();
         },
         onData(cb): PtyUnsubscribe {
@@ -127,7 +128,9 @@ export function createConPtyBackend(spawn: ConPtySpawn): PtyBackend {
         // The session exists the moment spawn returns: the pseudoconsole, the
         // job and the root are all created before it does. There is nothing to
         // wait for, which is itself the difference from the node-pty path.
-        attached: Promise.resolve(),
+        async attach(signal: AbortSignal): Promise<void> {
+          signal.throwIfAborted();
+        },
         onWriteError(cb): PtyUnsubscribe {
           errorListeners.add(cb);
           return () => errorListeners.delete(cb);

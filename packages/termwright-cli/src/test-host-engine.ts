@@ -48,6 +48,13 @@ type VitestSchedulerOverrides = Readonly<{
   fileParallelism?: false;
 }>;
 
+interface VitestAsyncLeak {
+  readonly type: string;
+  readonly filename: string;
+  readonly projectName?: string;
+  readonly stack: string;
+}
+
 /**
  * Applies the host's resource ceilings without enabling concurrency that the
  * loaded Vitest project deliberately disabled. A profile value of `true`
@@ -203,6 +210,9 @@ export class ExactVitestEngine implements TermwrightVitestEngine {
     } };
     const reporters = (vitest as Vitest & { readonly reporters?: Reporter[] }).reporters;
     if (!Array.isArray(reporters)) throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} reporter surface changed`);
+    if (!(vitest.state.leakSet instanceof Set)) {
+      throw new Error(`Vitest ${CERTIFIED_VITEST_VERSION} async-leak state surface changed`);
+    }
     reporters.push(reporter);
   }
 
@@ -269,7 +279,27 @@ export class ExactVitestEngine implements TermwrightVitestEngine {
     // drains runner.stop(). The native result took its error snapshot before
     // that barrier, so refresh it after the barrier instead of certifying a
     // teardown failure as green.
-    const unhandledErrors = this.#vitest.state.getUnhandledErrors();
+    const observedLeaks = new Map<string, VitestAsyncLeak>();
+    for (const leak of this.#vitest.state.leakSet) {
+      const evidence = leak as VitestAsyncLeak;
+      observedLeaks.set(`${evidence.type}\0${evidence.filename}\0${evidence.projectName ?? ''}`, evidence);
+    }
+    // Vitest owns the detailed stack reporter. Keep canonical host evidence
+    // bounded: embedding every captured async-hook stack in an AggregateError
+    // can exceed the protocol's maximum event string and hide the leak behind
+    // a secondary journal validation failure.
+    const leakGroups = [...observedLeaks.values()];
+    const reportedGroups = leakGroups.slice(0, 8);
+    const asyncLeakErrors = observedLeaks.size === 0 ? [] : [new Error(
+      `Vitest detected ${this.#vitest.state.leakSet.size} async leak(s) across ` +
+      reportedGroups.map((evidence) => {
+        const project = evidence.projectName === undefined ? '' : ` in project ${evidence.projectName}`;
+        return `${evidence.type} from ${evidence.filename}${project}`;
+      }).join('; ') + (leakGroups.length > reportedGroups.length
+        ? `; ${leakGroups.length - reportedGroups.length} additional source group(s)`
+        : ''),
+    )];
+    const unhandledErrors = [...this.#vitest.state.getUnhandledErrors(), ...asyncLeakErrors];
     if (unhandledErrors.length === result.unhandledErrors.length &&
         unhandledErrors.every((error, index) => error === result.unhandledErrors[index])) {
       return result;

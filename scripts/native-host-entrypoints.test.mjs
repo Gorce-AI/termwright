@@ -116,6 +116,14 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(certificationNeeds).toEqual(Object.keys(ciJobs).filter((jobId) => jobId !== 'certification'));
     expect(ciJobs.certification).toContain('if: always()');
     expect(ciJobs.certification).toContain('select(.value.result != "success")');
+    expect(ciJobs['resource-leak']).toContain('--detectAsyncLeaks');
+    expect(ciJobs['resource-leak']).toContain('packages/probe-ink/src/render-boundary.test.ts');
+    expect(ciJobs['resource-leak']).toContain('packages/desktop-host/src/deadline.test.ts');
+    expect(ciJobs['resource-leak']).toContain('packages/driver/src/session-lifecycle.test.ts');
+    expect(ciJobs['resource-leak']).toContain('packages/driver/src/internal/session-process-lifecycle.test.ts');
+    expect(ciJobs['resource-leak']).toContain('packages/driver/src/internal/resource-scope.test.ts');
+    expect(ciJobs['resource-leak']).toContain('packages/driver/src/internal/action-retry.test.ts');
+    expect(ciJobs['resource-leak']).toContain('packages/mcp/src/sessions.test.ts');
 
     const reliabilityJobs = Object.fromEntries(workflowJobBlocks(reliability).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
     expect(reliabilityJobs['nightly-soak-posix'].match(/^    needs:.*$/gmu)).toBeNull();
@@ -216,6 +224,35 @@ describe('the native host is the only Termwright test entrypoint', () => {
       readFile(new URL('../packages/probe-opentui/src/zero-config.test.ts', import.meta.url), 'utf8'),
     ]);
     expect(opentuiTests.join('\n')).not.toMatch(/skips the Bun arms|coverage note|no bun binary is reachable/u);
+  });
+
+  it('keeps shared workspace build outputs immutable after the native host starts', async () => {
+    const rootManifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    const pretest = await readFile(new URL('./ensure-test-host.mjs', import.meta.url), 'utf8');
+    expect(rootManifest.scripts.build).toContain('immutable-build-manifest.mjs --write');
+    expect(pretest).toContain('verifyImmutableWorkspaceBuild()');
+    const workflowFiles = (await readdir(new URL('../.github/workflows/', import.meta.url)))
+      .filter((file) => file.endsWith('.yml'));
+    for (const file of workflowFiles) {
+      const source = await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8');
+      expect(source, `${file} must not bypass the post-build fingerprint`).not.toContain(
+        "pnpm -r --filter './packages/*' run build",
+      );
+    }
+    const consumers = [
+      'packages/probe-ink/src/zero-config.test.ts',
+      'packages/probe-opentui/src/injection.test.ts',
+      'packages/probe-opentui/src/zero-config.test.ts',
+    ];
+    for (const file of consumers) {
+      const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+      expect(source, `${file} must validate prebuilt inputs`).toContain(
+        'test-support/immutable-build-inputs.mjs',
+      );
+      expect(source, `${file} must not build shared dist from a test worker`).not.toMatch(
+        /\b(?:exec|execFile|spawn|run)\s*\(\s*['"](?:npm|pnpm|yarn)['"][\s\S]{0,160}\bbuild\b/u,
+      );
+    }
   });
 
   it('keeps every package test script on the root native host', async () => {
