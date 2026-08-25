@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { vitestInvocation } from './test-support/node-cli-invocation.mjs';
+import { hasClosedChannelDiagnostic, isVitestPtyCellFailure } from './test-support/vitest-pty-diagnostics.mjs';
 import { validateVitestPtyTelemetry } from './test-support/vitest-pty-telemetry.mjs';
 
 const execute = promisify(execFile);
@@ -100,8 +101,7 @@ try {
           telemetryValid: telemetryVerdict.valid,
           telemetryErrors: telemetryVerdict.errors,
           peakRss: Math.max(0, ...records.map((record) => record.memory?.rss ?? 0)),
-          channelClosed: /channel (?:closed|is closed)|ERR_IPC_CHANNEL_CLOSED/iu.test(`${stdout}\n${stderr}`),
-          ipcChannelClosed: /\bERR_IPC_CHANNEL_CLOSED\b/u.test(`${stdout}\n${stderr}`),
+          channelClosed: hasClosedChannelDiagnostic(`${stdout}\n${stderr}`),
           stdout: stdout.slice(-32_768), stderr: stderr.slice(-32_768),
         });
       }
@@ -112,8 +112,7 @@ try {
   await rm(work, { recursive: true, force: true });
 }
 
-const certifiedFailures = results.filter((result) =>
-  result.code !== 0 || !result.telemetryValid || result.ipcChannelClosed);
+const certifiedFailures = results.filter(isVitestPtyCellFailure);
 if (process.env.TERMWRIGHT_MATRIX_CERTIFY === '1') validateCertifiedMatrix(results);
 console.log(`Vitest/PTy matrix wrote ${results.length} cells to ${output}; certified failures: ${certifiedFailures.length}`);
 if (certifiedFailures.length > 0) process.exitCode = 1;

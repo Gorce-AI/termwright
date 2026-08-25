@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { hasClosedChannelDiagnostic, isVitestPtyCellFailure } from './vitest-pty-diagnostics.mjs';
 import { validateVitestPtyTelemetry } from './vitest-pty-telemetry.mjs';
 
 function completeRecords(files = 2, casesPerFile = 2) {
@@ -80,14 +81,26 @@ describe('Vitest PTY telemetry certification', () => {
     expect(verdict.errors.some((error) => error.includes('inconsistent active PTY count'))).toBe(true);
   });
 
-  it('keeps the exact IPC-channel failure and complete matrix certifying', async () => {
+  it('fails certification for every detected closed-channel diagnostic and requires the complete matrix', async () => {
     const harness = await readFile(new URL('../run-vitest-pty-matrix.mjs', import.meta.url), 'utf8');
     const workflow = await readFile(new URL('../../.github/workflows/vitest-reliability.yml', import.meta.url), 'utf8');
-    expect(harness).toContain('result.ipcChannelClosed');
+    expect(harness).toContain('results.filter(isVitestPtyCellFailure)');
     expect(harness).toContain('certified.length !== expected.size');
     expect(harness).toContain("const versions = [embeddedVitest]");
     expect(harness).not.toContain("'npm', [...");
     expect(workflow).toContain("TERMWRIGHT_MATRIX_CERTIFY: '1'");
     expect(workflow).toContain('uses: ./.github/actions/setup-js-workspace');
+
+    for (const diagnostic of [
+      'channel closed',
+      'channel is closed',
+      'Error [ERR_IPC_CHANNEL_CLOSED]: Channel closed',
+    ]) {
+      expect(hasClosedChannelDiagnostic(diagnostic)).toBe(true);
+      expect(isVitestPtyCellFailure({ code: 0, telemetryValid: true, channelClosed: true })).toBe(true);
+    }
+    expect(hasClosedChannelDiagnostic('subchannel closed normally')).toBe(false);
+    expect(hasClosedChannelDiagnostic('all worker channels closed normally')).toBe(false);
+    expect(isVitestPtyCellFailure({ code: 0, telemetryValid: true, channelClosed: false })).toBe(false);
   });
 });

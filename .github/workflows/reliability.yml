@@ -1,4 +1,4 @@
-name: Reliability certification
+name: Node host reliability certification
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       cycles:
-        description: Complete terminal lifecycle cycles
+        description: Complete terminal lifecycle cycles (certifying minimum 250)
         required: false
         default: '250'
 
@@ -65,6 +65,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         node: ['22', '24']
+    # This soak exercises Termwright's Node/Vitest host against native PTYs.
+    # Bun application execution is independently mandatory in CI's full
+    # catalogue/OpenTUI rows and in the real OpenTUI performance workload;
+    # installing Bun here would not make this Node host execute under Bun.
     steps:
       - name: Reject workflow reruns
         shell: bash
@@ -88,9 +92,7 @@ jobs:
           REQUESTED_CYCLES: ${{ inputs.cycles }}
         run: |
           set -euo pipefail
-          cycles=${REQUESTED_CYCLES:-250}
-          case "$cycles" in (*[!0-9]*|'') echo "cycles must be a positive integer"; exit 2;; esac
-          if (( cycles < 1 || cycles > 10000 )); then echo "cycles must be 1..10000"; exit 2; fi
+          cycles=$(node scripts/resolve-reliability-cycles.mjs "$REQUESTED_CYCLES")
           pnpm test -- --runs "$cycles" --resource-profile ci --json -- \
             --config quality/soak/vitest.config.ts --run quality/soak/terminal-cycle.test.ts
 
@@ -139,9 +141,7 @@ jobs:
           REQUESTED_CYCLES: ${{ inputs.cycles }}
         run: |
           set -euo pipefail
-          cycles=${REQUESTED_CYCLES:-250}
-          case "$cycles" in (*[!0-9]*|'') echo "cycles must be a positive integer"; exit 2;; esac
-          if (( cycles < 1 || cycles > 10000 )); then echo "cycles must be 1..10000"; exit 2; fi
+          cycles=$(node scripts/resolve-reliability-cycles.mjs "$REQUESTED_CYCLES")
           pnpm test -- --runs "$cycles" --resource-profile windows-ci --json -- \
             --config quality/soak/vitest.config.ts --run quality/soak/terminal-cycle.test.ts
       - name: Upload Termwright failure evidence

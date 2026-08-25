@@ -2,6 +2,7 @@
 "@termwright/driver": patch
 "@termwright/desktop-host": patch
 "@termwright/probe-ink": patch
+"@termwright/run-history": patch
 "termwright": patch
 ---
 
@@ -12,12 +13,16 @@ workers. Settle deadline, process-exit and Ink render race branches during
 teardown, and promote Vitest
 async-handle leak evidence into a non-certifying infrastructure result.
 
-Qualify performance baselines by their complete runtime toolchain and add a
-value-free policy for capturing a reviewed Go 1.25 baseline from real CI
-measurements. Captured baselines retain the verified environment descriptor and
-SHA-256 provenance for every raw report, while process and file-descriptor leak
-metrics remain mandatory exact-zero schema invariants in capture and observe.
+Compare exact reference and candidate revisions on one macOS runner in a fixed
+reference/candidate/candidate/reference sequence. The paired gate binds the
+toolchain, measurement harness, controller, round order, subject commit, CI
+attempt and every raw report with SHA-256 provenance; Bun/OpenTUI is mandatory,
+and process and file-descriptor leaks remain exact-zero invariants.
 
-The independent Windows Vitest/PTY reliability harness now invokes npm and
-Vitest directly through Node instead of relying on non-executable `.cmd` shell
-shims.
+Move native run manifests to schema v3 with host-monotonic total duration and
+per-attempt start/finish offsets. Validate those intervals against the run
+boundary and reject v2 or internally inconsistent timing evidence.
+
+The independent Windows Vitest/PTY reliability harness now invokes the exact
+lockfile-backed Vitest entry point directly through Node instead of relying on
+non-executable `.cmd` shell shims.
