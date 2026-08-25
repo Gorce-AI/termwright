@@ -19,10 +19,39 @@ import {
   TextTableRenderable,
   white,
 } from '@opentui/core';
+import { writeSync } from 'node:fs';
+import { PassThrough } from 'node:stream';
 
 const steps = Number(process.env['TW_APP_STEPS'] ?? 2);
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+let wrappedWriteCalls = 0;
+let wrappedWrite: typeof process.stdout.write | undefined;
+if (process.env['TW_WRAP_STDOUT_WRITE'] === '1') {
+  wrappedWrite = function (...args: Parameters<typeof process.stdout.write>) {
+    wrappedWriteCalls += 1;
+    return Reflect.apply(originalStdoutWrite, process.stdout, args) as boolean;
+  } as typeof process.stdout.write;
+  process.stdout.write = wrappedWrite;
+}
+const applicationStdout = process.env['TW_CUSTOM_STDOUT'] === '1'
+  ? Object.assign(new PassThrough(), { isTTY: true, columns: 80, rows: 24 })
+  : undefined;
+applicationStdout?.pipe(process.stdout);
 
-const renderer = await createCliRenderer({ exitOnCtrlC: false, targetFps: 30 });
+const renderer = await createCliRenderer({
+  exitOnCtrlC: false,
+  targetFps: 30,
+  ...(applicationStdout === undefined ? {} : { stdout: applicationStdout as unknown as NodeJS.WriteStream }),
+});
+
+if (process.env['TW_STDOUT_IDENTITY_ORACLE'] === '1') {
+  const observable = renderer as unknown as { readonly stdout: unknown };
+  writeSync(3, `${JSON.stringify({ stdoutIsProcessStdout: observable.stdout === process.stdout })}\n`);
+}
+if (process.env['TW_WRAP_STDOUT_WRITE'] === '1') {
+  const observable = renderer as unknown as { readonly realStdoutWrite: unknown };
+  writeSync(3, `${JSON.stringify({ rendererCapturedWrapper: observable.realStdoutWrite === wrappedWrite })}\n`);
+}
 
 const panel = new BoxRenderable(renderer, {
   id: 'panel',
@@ -81,7 +110,15 @@ const tick = (): void => {
   step += 1;
   if (step > steps) {
     renderer.destroy();
-    process.stdout.write('', () => process.exit(0));
+    process.stdout.write('', () => {
+      if (process.env['TW_WRAP_STDOUT_WRITE'] === '1') {
+        writeSync(3, `${JSON.stringify({
+          wrapperRestoredAfterDestroy: process.stdout.write === wrappedWrite,
+          wrappedWriteCalls,
+        })}\n`);
+      }
+      process.exit(0);
+    });
     return;
   }
   // Things an application would plausibly do: edit, change the highlighted

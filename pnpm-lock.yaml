@@ -488,6 +488,9 @@ importers:
       '@termwright/recognizers':
         specifier: workspace:^
         version: link:../recognizers
+      acorn:
+        specifier: ^8.15.0
+        version: 8.18.0
     devDependencies:
       '@opentui/core':
         specifier: ^0.5.3

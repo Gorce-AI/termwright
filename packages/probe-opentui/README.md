@@ -75,9 +75,16 @@ type. Nothing is lost that was not already unknowable, but the names get worse.
 
 **Geometry is runtime-observed.** A runtime observer records render-command
 identity, intended rectangles, ancestor scissors, culling, and the committed
-frame boundary without rewriting OpenTUI source or generated chunks. Exact
-package-version certification and runtime capability checks fail closed before
-the adapter connects; there is no source-transform fallback.
+frame boundary. Geometry no longer depends on generated-source instrumentation.
+
+**Output causality uses a narrow structural transform.** OpenTUI's public
+renderer hooks expose `FRAME`, but with threaded native output they do not
+expose whether frame bytes were successfully accepted by the terminal stream.
+The preload therefore parses package JavaScript as an AST and instruments only
+the renderer constructor's stdout/feed ownership path. It does not match exact
+source text, chunk names or bundle digests; an absent, duplicate or changed
+structural anchor fails closed. Runtime capability and behavioral conformance
+remain mandatory before the adapter connects.
 
 Split-footer has one precise upstream capability gap: OpenTUI applies a mutable
 native `renderOffset` below `root`, render-list, hit-grid, and `FRAME`; none of

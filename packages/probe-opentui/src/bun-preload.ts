@@ -14,10 +14,13 @@
  * its own output, since the pattern is anchored on the filename.
  */
 
-import { buildShimSource, shouldShim, OPENTUI_ENTRY_PATTERN } from './shim.js';
+import { buildShimSource, shouldShim } from './shim.js';
 import { certifyOpenTuiEntry } from './certification.js';
 import { isInstrumented } from './runtime.js';
 import { bootstrap } from './bootstrap.js';
+import { instrumentOpenTuiOutput, OPENTUI_MODULE_PATTERN } from './output-instrumentation.js';
+import { readFile } from 'node:fs/promises';
+import { ENV_TOKEN } from '@termwright/protocol';
 
 interface BunPluginBuild {
   onLoad(
@@ -44,12 +47,18 @@ export function installBunPreload(env: Record<string, string | undefined> = proc
   bun.plugin({
     name: 'termwright-opentui',
     setup(build) {
-      build.onLoad({ filter: OPENTUI_ENTRY_PATTERN }, async (args) => {
-        if (!shouldShim(args.path)) return undefined;
+      build.onLoad({ filter: OPENTUI_MODULE_PATTERN }, async (args) => {
         const certification = certifyOpenTuiEntry(args.path, env);
-        return certification === undefined
-          ? undefined
-          : { loader: 'js', contents: buildShimSource(args.path, certification) };
+        const source = await readFile(args.path, 'utf8');
+        // Bun 1.2.15 treats `undefined` from this broad onLoad hook as an
+        // invalid module mock instead of delegating. Returning the exact bytes
+        // is the measured transparent path for unsupported/root sibling files.
+        if (certification === undefined) return { loader: 'js', contents: source };
+        if (shouldShim(args.path)) {
+          return { loader: 'js', contents: buildShimSource(args.path, certification) };
+        }
+        const transformed = instrumentOpenTuiOutput(source, certification.version, env[ENV_TOKEN] ?? '');
+        return { loader: 'js', contents: transformed ?? source };
       });
     },
   });

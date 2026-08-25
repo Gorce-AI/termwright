@@ -106,6 +106,8 @@ describe('shim guards', () => {
     expect(source).toContain('try {');
     expect(source).toContain('"version":"0.5.3"');
     expect(source).toContain('let effective = config ?? {}');
+    expect(source).toContain('__termwright_onRendererFailure?.(effective)');
+    expect(source).toContain('throw error');
   });
 });
 
