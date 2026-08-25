@@ -83,6 +83,10 @@ then installs and builds two isolated exact-SHA checkouts: the reference and the
 candidate at `github.sha`. The reviewed reference seed is
 `bea638edc4589b3d4b15c4f87ed397de878ae40d`; a manual dispatch may replace it
 only with another exact 40-character commit SHA.
+The non-release annotated tag `termwright-performance-baseline-0.3.0` keeps
+that exact commit reachable after the linear-history merge which introduced
+the gate. The workflow remains SHA-bound; the tag is durability evidence, not
+a mutable selector.
 
 Both subjects first complete a discarded R,C,C,R calibration block, then are
 measured twice on that same runner in fixed R,C,C,R order. Calibration executes

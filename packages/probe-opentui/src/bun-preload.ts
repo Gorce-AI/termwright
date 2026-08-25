@@ -15,8 +15,7 @@
  */
 
 import { buildShimSource, shouldShim, OPENTUI_ENTRY_PATTERN } from './shim.js';
-import { readFile } from 'node:fs/promises';
-import { instrumentOpenTuiChunk, OPENTUI_CHUNK_PATTERN } from './instrumentation.js';
+import { certifyOpenTuiEntry } from './certification.js';
 import { isInstrumented } from './runtime.js';
 import { bootstrap } from './bootstrap.js';
 
@@ -47,17 +46,10 @@ export function installBunPreload(env: Record<string, string | undefined> = proc
     setup(build) {
       build.onLoad({ filter: OPENTUI_ENTRY_PATTERN }, async (args) => {
         if (!shouldShim(args.path)) return undefined;
-        return { loader: 'js', contents: buildShimSource(args.path) };
-      });
-      build.onLoad({ filter: OPENTUI_CHUNK_PATTERN }, async (args) => {
-        const source = await readFile(args.path, 'utf8');
-        const contents = instrumentOpenTuiChunk(args.path, source);
-        // Bun 1.2 treats `undefined` from a matching onLoad callback as an
-        // invalid module mock. OpenTUI ships additional same-shaped chunks
-        // which are deliberately outside the certified transform, so return
-        // their exact bytes unchanged while still instrumenting the pinned
-        // render chunk.
-        return { loader: 'js', contents: contents ?? source };
+        const certification = certifyOpenTuiEntry(args.path, env);
+        return certification === undefined
+          ? undefined
+          : { loader: 'js', contents: buildShimSource(args.path, certification) };
       });
     },
   });

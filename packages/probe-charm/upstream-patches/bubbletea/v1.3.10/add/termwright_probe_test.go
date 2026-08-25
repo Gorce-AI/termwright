@@ -8,6 +8,57 @@ import (
 	"github.com/gorce-ai/termwright/clients/go/protocol"
 )
 
+type termwrightShortWriter struct{}
+
+func (termwrightShortWriter) Write(value []byte) (int, error) {
+	if len(value) == 0 {
+		return 0, nil
+	}
+	return len(value) - 1, nil
+}
+
+func TestTermwrightRendererFailureClosesSemanticChannel(t *testing.T) {
+	renderer := &standardRenderer{}
+	frame := &termwrightStagedFrame{sequence: 1}
+	var code, detail string
+	probe := &termwrightProbeState{
+		queued: map[*standardRenderer]*termwrightStagedFrame{renderer: frame},
+		fail: func(gotCode, gotDetail string) error {
+			code, detail = gotCode, gotDetail
+			return nil
+		},
+	}
+	previous := termwrightProbe
+	termwrightProbe = probe
+	t.Cleanup(func() { termwrightProbe = previous })
+
+	termwrightAfterRendererFlush(renderer, false)
+
+	if probe.queued[renderer] != nil {
+		t.Fatal("failed renderer output left staged semantics for a later flush")
+	}
+	if code != "adapter-guarantee-violation" || detail != "Bubble Tea renderer did not commit the complete terminal frame" {
+		t.Fatalf("renderer failure was not terminal: code=%q detail=%q", code, detail)
+	}
+	if probe.dropped.Load() != 1 {
+		t.Fatalf("dropped frames = %d, want 1", probe.dropped.Load())
+	}
+}
+
+func TestTermwrightShortMarkerWriteClosesSemanticChannel(t *testing.T) {
+	var code string
+	probe := &termwrightProbeState{fail: func(gotCode, _ string) error {
+		code = gotCode
+		return nil
+	}}
+	if probe.writeMarker(termwrightShortWriter{}, "marker") {
+		t.Fatal("short marker write reported success")
+	}
+	if code != "adapter-guarantee-violation" || probe.frames.Load() != 0 || probe.dropped.Load() != 1 {
+		t.Fatalf("short write did not fail closed: code=%q frames=%d dropped=%d", code, probe.frames.Load(), probe.dropped.Load())
+	}
+}
+
 func TestTermwrightSemanticKeysStabiliseIDsAndResolveRelations(t *testing.T) {
 	probe := &termwrightProbeState{ids: make(map[string]string)}
 	rootID := probe.identity("root")

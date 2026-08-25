@@ -165,14 +165,6 @@ jobs:
                 --assignee "$ISSUE_OWNER" --body-file "$body_file"
             fi
           done
-          jq -r '.green[]' "$PUBLISH_PLAN" | while IFS= read -r candidate; do
-            title="[compatibility] $candidate"
-            number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=open&labels=upstream-compatibility&per_page=100" \
-              | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .user.login == "github-actions[bot]" and .title == $title) | .number' | sed -n '1p')"
-            if [ -n "$number" ]; then
-              gh issue close "$number" --comment "Certified by $SOURCE_RUN_URL."
-            fi
-          done
           deadman='[compatibility] daily certification workflow failed'
           deadman_number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=open&labels=upstream-compatibility&per_page=100" \
             | jq -r --arg title "$deadman" '.[] | select((.pull_request | not) and .user.login == "github-actions[bot]" and .title == $title) | .number' | sed -n '1p')"
@@ -253,6 +245,8 @@ jobs:
       head-sha: ${{ steps.inspect.outputs.head-sha }}
       base-sha: ${{ steps.inspect.outputs.base-sha }}
       pr-number: ${{ steps.inspect.outputs.pr-number }}
+      source-run-id: ${{ steps.inspect.outputs.source-run-id }}
+      green-candidates: ${{ steps.reproduce-compatibility.outputs.green-candidates || '[]' }}
       tree-verified: ${{ steps.reproduce.outputs.verified || steps.reproduce-compatibility.outputs.verified || steps.reproduce-heartbeat.outputs.verified || 'false' }}
     env:
       GITHUB_TOKEN: ${{ github.token }}
@@ -338,6 +332,7 @@ jobs:
             --verdicts "$verdicts" \
             --ledger compatibility/certified-upstreams.json \
             --plan "$plan"
+          echo "green-candidates=$(jq -c '.green' "$plan")" >> "$GITHUB_OUTPUT"
           git add -A
           expected_tree=$(git write-tree)
           actual_tree=$(git rev-parse "$HEAD_SHA^{tree}")
@@ -393,6 +388,7 @@ jobs:
     permissions:
       actions: write
       contents: write
+      issues: write
       pull-requests: write
     steps:
       - name: Reject workflow reruns
@@ -408,6 +404,25 @@ jobs:
           ISSUE_OWNER: ${{ vars.UPSTREAM_COMPATIBILITY_OWNER }}
           AUTOMATION_TREE_VERIFIED: ${{ needs.inspect.outputs.tree-verified }}
         run: node scripts/autonomous-release-coordinator.mjs coordinate-ci "$GITHUB_EVENT_PATH"
+
+      - name: Close candidate issues only after the compatibility allowlist merged
+        if: needs.inspect.outputs.kind == 'compatibility'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GREEN_CANDIDATES: ${{ needs.inspect.outputs.green-candidates }}
+          SOURCE_RUN_ID: ${{ needs.inspect.outputs.source-run-id }}
+        run: |
+          set -euo pipefail
+          jq -r '.[]' <<<"$GREEN_CANDIDATES" | while IFS= read -r candidate; do
+            title="[compatibility] $candidate"
+            number="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=open&labels=upstream-compatibility&per_page=100" \
+              | jq -r --arg title "$title" '.[] | select((.pull_request | not) and .user.login == "github-actions[bot]" and .title == $title) | .number' | sed -n '1p')"
+            if [ -n "$number" ]; then
+              gh issue close "$number" --comment \
+                "Certified by https://github.com/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID and closed only after the compatibility allowlist merged."
+            fi
+          done
 
   notify-release-failure:
     name: require intervention for a failed release

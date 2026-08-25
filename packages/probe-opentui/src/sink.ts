@@ -29,6 +29,8 @@ export interface MarkerSink extends Writable {
    * tests and diagnostics.
    */
   readonly forwarded: number;
+  /** Observe a terminal stream failure without leaving an uncaught error event. */
+  onFailure(handler: (error: Error) => void): () => void;
 }
 
 /**
@@ -63,17 +65,45 @@ export function createMarkerSink(target: NodeJS.WriteStream): MarkerSink {
   sink.rows = target.rows ?? 24;
 
   Object.defineProperty(sink, 'forwarded', { get: () => forwarded - markerBytes });
-  (sink as MarkerSink).writeMarker = (marker: string): void => {
-    try {
-      // Through the sink, not around it. Writing straight to the target jumps
-      // the stream's own queue, and a marker that overtakes the frame it
-      // commits is worse than no marker: the receiver pairs a tree with the
-      // screen that came before it. A test caught exactly that.
-      markerBytes += Buffer.byteLength(marker, 'utf8');
-      sink.write(marker);
-    } catch {
-      // A closed stream during teardown is not the application's problem.
+  const failureHandlers = new Set<(error: Error) => void>();
+  let firstFailure: Error | undefined;
+  const notifyFailure = (error: Error): void => {
+    if (firstFailure !== undefined) return;
+    firstFailure = error;
+    for (const handler of [...failureHandlers]) {
+      try {
+        handler(error);
+      } catch {
+        // A diagnostic consumer must not turn a contained stream failure into
+        // an application-level uncaught exception.
+      }
     }
+  };
+  // A Writable whose _write callback fails emits `error` on the target even
+  // when the callback supplied to target.write receives the same error. The
+  // sink owns this target for the rest of the renderer lifetime, so it must
+  // consume that event and route it through the adapter's typed failure path.
+  // Keeping the listener for the sink lifetime is intentional: stopping the
+  // probe does not replace the stdout object already installed in OpenTUI.
+  target.on('error', notifyFailure);
+  sink.on('error', (error: Error) => {
+    notifyFailure(error);
+  });
+  (sink as MarkerSink).onFailure = (handler): (() => void) => {
+    failureHandlers.add(handler);
+    if (firstFailure !== undefined) {
+      try { handler(firstFailure); } catch { /* diagnostic consumers are contained */ }
+    }
+    return () => failureHandlers.delete(handler);
+  };
+  (sink as MarkerSink).writeMarker = (marker: string): void => {
+    // Through the sink, not around it. Writing straight to the target jumps
+    // the stream's own queue, and a marker that overtakes the frame it
+    // commits is worse than no marker: the receiver pairs a tree with the
+    // screen that came before it. Synchronous refusal propagates to the
+    // session, which converts it into a typed adapter failure.
+    markerBytes += Buffer.byteLength(marker, 'utf8');
+    sink.write(marker);
   };
 
   return sink;

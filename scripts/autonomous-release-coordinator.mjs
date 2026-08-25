@@ -96,7 +96,8 @@ const compatibilityFiles = [
   /^packages\/(?:probe-tview|probe-charm)\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
   /^clients\/rust-probe\/upstream-patches\/[A-Za-z0-9@._/+\-]+$/u,
   /^clients\/python\/src\/termwright_probe\/certified_textual\.py$/u,
-  /^packages\/(?:probe-ink|probe-opentui)\/src\/certified-instrumentation\.json$/u,
+  /^packages\/probe-ink\/src\/certified-instrumentation\.json$/u,
+  /^packages\/probe-opentui\/src\/certified-runtime\.json$/u,
   /^packages\/(?:ink|probe-ink)\/package\.json$/u,
 ];
 

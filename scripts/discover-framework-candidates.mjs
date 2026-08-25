@@ -108,6 +108,9 @@ export async function selectCandidates({ rootDir = root, config, ledger, catalog
   if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 32) throw new Error('maximum must be between 1 and 32');
   const pending = [];
   for (const stream of [...config.streams].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (stream.mode === 'hook' && !['exact-source', 'runtime'].includes(stream.hookStrategy)) {
+      throw new Error(`${stream.id}: hook mode requires an explicit exact-source or runtime strategy`);
+    }
     const seen = new Map((ledger.streams?.[stream.id] ?? []).map((entry) => [entry.version, entry]));
     const minimum = parseVersion(stream.minimumVersion);
     if (minimum === null) throw new Error(`${stream.id}: invalid minimumVersion`);
@@ -140,6 +143,7 @@ export async function selectCandidates({ rootDir = root, config, ledger, catalog
         source: resolvedSource,
         monitorDependencyClosure: stream.registry === 'npm' && stream.monitorDependencyClosure === true,
         mode: patchMode ? 'patch' : 'hook',
+        ...(patchMode ? {} : { hookStrategy: stream.hookStrategy }),
         patch: patchMode
           ? { status: ready ? 'ready' : 'needs-patch', path: `${stream.patchRoot}/${entry.version}/manifest.json`, manifestDigest }
           : { status: 'not-applicable', path: null, manifestDigest: null },

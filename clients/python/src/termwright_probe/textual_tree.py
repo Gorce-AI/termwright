@@ -31,6 +31,8 @@ from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from weakref import WeakKeyDictionary
 
+from textual.errors import NoWidget
+
 from termwright.textual import ResolvedAnnotation, resolve_annotation
 from termwright.tree import (
     NodeGeometryObservations,
@@ -138,6 +140,10 @@ class DuplicateSemanticKeyError(ValueError):
     """An explicit application identity was not unique in one frame."""
 
 
+class TextualObservationError(RuntimeError):
+    """A certified Textual tree API broke its advertised contract."""
+
+
 def role_for(widget: Any, annotation: Optional[ResolvedAnnotation] = None) -> str:
     """Semantic role: the SDK annotation, then the class ancestry."""
     resolved = annotation if annotation is not None else resolve_annotation(widget)
@@ -168,8 +174,10 @@ def name_from_content(widget: Any) -> str:
     """Join the text of a widget's descendants, as ARIA names from content."""
     try:
         descendants = widget.query("*")
-    except Exception:
-        return ""
+    except Exception as error:
+        raise TextualObservationError(
+            f"Textual Widget.query failed: {type(error).__name__}: {error}"
+        ) from error
     parts: List[str] = []
     for child in descendants:
         text = _first_text(
@@ -264,8 +272,10 @@ def _rect(region: Any) -> Optional[Rect]:
             width=max(0, int(region.width)),
             height=max(0, int(region.height)),
         )
-    except (AttributeError, TypeError, ValueError):
-        return None
+    except (AttributeError, TypeError, ValueError) as error:
+        raise TextualObservationError(
+            f"Textual returned malformed geometry: {type(error).__name__}: {error}"
+        ) from error
 
 
 class WidgetObservation:
@@ -280,18 +290,49 @@ class WidgetObservation:
         self.paint_order: Optional[int] = None
 
 
-def observe(app: Any) -> List[WidgetObservation]:
+def observe(app: Any, screen: Any) -> List[WidgetObservation]:
     """Read the active screen: every widget, its geometry and its display flag.
 
     Called from `post_display_hook`, where the compositor has finished, so the
     geometry is this frame's rather than the previous one's.
     """
-    screen = app.screen
+    if app.screen is not screen:
+        raise TextualObservationError("Textual active screen changed before observation")
     widgets = [screen]
     try:
         widgets.extend(screen.query("*"))
-    except Exception:
-        pass
+    except Exception as error:
+        raise TextualObservationError(
+            f"Textual Screen.query failed: {type(error).__name__}: {error}"
+        ) from error
+
+    # Textual deliberately excludes system widgets (notably ScrollBar) from
+    # DOM queries, while its public hit-test API can still return them. Include
+    # every actual pointer recipient so the advertised hit grid remains total.
+    lookup = getattr(screen, "get_widget_at", None)
+    if not callable(lookup):
+        raise TextualObservationError("Textual Screen.get_widget_at is unavailable")
+    known = {id(widget) for widget in widgets}
+    try:
+        width = max(0, int(screen.size.width))
+        height = max(0, int(screen.size.height))
+    except (AttributeError, TypeError, ValueError) as error:
+        raise TextualObservationError(
+            f"Textual returned malformed screen size: {type(error).__name__}: {error}"
+        ) from error
+    for row in range(height):
+        for column in range(width):
+            try:
+                widget, _region = lookup(column, row)
+            except NoWidget:
+                continue
+            except Exception as error:
+                raise TextualObservationError(
+                    f"Textual Screen.get_widget_at failed: {type(error).__name__}: {error}"
+                ) from error
+            if id(widget) not in known and not bool(getattr(widget, "loading", False)):
+                widgets.append(widget)
+                known.add(id(widget))
 
     observations: List[WidgetObservation] = []
     for widget in widgets:
@@ -305,11 +346,15 @@ def observe(app: Any) -> List[WidgetObservation]:
         geometry = None
         try:
             geometry = screen.find_widget(widget)
-        except Exception:
+        except NoWidget:
             # A widget the compositor does not know about — mid-mount, or on a
             # screen that is no longer active. It has no geometry this frame,
             # which is a fact rather than an error.
             geometry = None
+        except Exception as error:
+            raise TextualObservationError(
+                f"Textual Screen.find_widget failed: {type(error).__name__}: {error}"
+            ) from error
         observations.append(WidgetObservation(widget, geometry, displayed))
 
     _rank_paint_order(observations)
@@ -331,23 +376,24 @@ def _rank_paint_order(observations: List[WidgetObservation]) -> None:
     ]
     try:
         ordered.sort(key=lambda item: item.geometry.order)
-    except TypeError:
-        # Mixed key shapes across Textual versions: no honest ranking, so no
-        # claim of one. Pointer ownership still comes from `get_widget_at`.
-        return
+    except TypeError as error:
+        raise TextualObservationError(
+            f"Textual compositor returned incomparable paint order: {error}"
+        ) from error
     for rank, item in enumerate(ordered):
         item.paint_order = rank
 
 
 def build_snapshot(
     app: Any,
+    screen: Any,
     identities: Identities,
     *,
     session_id: str,
     revision: int,
 ) -> SemanticSnapshot:
     """The semantic tree for the frame that just landed."""
-    observations = observe(app)
+    observations = observe(app, screen)
     included = {id(item.widget) for item in observations}
     annotations = {id(item.widget): _probe_annotation(item.widget) for item in observations}
     key_counts = Counter(
@@ -362,7 +408,8 @@ def build_snapshot(
         widget_id: annotation.key
         for widget_id, annotation in annotations.items()
     }
-    screen = app.screen
+    if app.screen is not screen:
+        raise TextualObservationError("Textual active screen changed during observation")
     focused = getattr(app, "focused", None)
 
     nodes: List[SemanticNode] = []
@@ -444,20 +491,24 @@ def build_snapshot(
 
     hit_regions = _hit_regions(screen, observations, identities, semantic_keys)
 
+    try:
+        columns = int(app.size.width)
+        rows = int(app.size.height)
+    except (AttributeError, TypeError, ValueError) as error:
+        raise TextualObservationError(
+            f"Textual returned malformed app size: {type(error).__name__}: {error}"
+        ) from error
+
     return SemanticSnapshot(
         sessionId=session_id,
         revision=revision,
-        columns=int(getattr(app, "size", _Size()).width),
-        rows=int(getattr(app, "size", _Size()).height),
+        columns=columns,
+        rows=rows,
         rootIds=root_ids,
         nodes=nodes,
         v=2,
         coordinateSpace=WireObservation(status="known", value="viewport-cells", evidence=framework_evidence("textual-probe")),
-        hitGrid=(
-            WireObservation(status="known", value={"regions": hit_regions}, evidence=framework_evidence("textual-compositor-hit-grid"))
-            if hit_regions is not None
-            else WireObservation(status="unsupported", capability="pointer-hit-grid", reason="framework-unobservable")
-        ),
+        hitGrid=WireObservation(status="known", value={"regions": hit_regions}, evidence=framework_evidence("textual-compositor-hit-grid")),
     )
 
 
@@ -466,15 +517,20 @@ def _hit_regions(
     observations: Sequence[WidgetObservation],
     identities: Identities,
     semantic_keys: Dict[int, Optional[str]],
-) -> Optional[List[Dict[str, Any]]]:
+) -> List[Dict[str, Any]]:
     """Compress Textual's exact fresh-pointer recipient map into row runs."""
     by_object = {id(item.widget): identities.of(item.widget, semantic_keys[id(item.widget)]) for item in observations}
-    width = max(0, int(getattr(getattr(screen, "size", None), "width", 0)))
-    height = max(0, int(getattr(getattr(screen, "size", None), "height", 0)))
+    try:
+        width = max(0, int(screen.size.width))
+        height = max(0, int(screen.size.height))
+    except (AttributeError, TypeError, ValueError) as error:
+        raise TextualObservationError(
+            f"Textual returned malformed screen size: {type(error).__name__}: {error}"
+        ) from error
     regions: List[Dict[str, Any]] = []
     lookup = getattr(screen, "get_widget_at", None)
     if not callable(lookup):
-        return None
+        raise TextualObservationError("Textual Screen.get_widget_at is unavailable")
     for row in range(height):
         run_owner: Optional[str] = None
         run_start = 0
@@ -489,8 +545,10 @@ def _hit_regions(
                             # A known framework recipient without a semantic id
                             # is not "no recipient". Refuse the entire complete
                             # map rather than manufacture a false empty cell.
-                            return None
-                except Exception:
+                            raise TextualObservationError(
+                                "Textual hit grid returned a widget outside the committed tree"
+                            )
+                except NoWidget:
                     owner = None
             if owner == run_owner:
                 continue
@@ -499,13 +557,6 @@ def _hit_regions(
             run_owner = owner
             run_start = column
     return regions
-
-
-class _Size:
-    """Fallback when the app has no size yet — an unstarted app has none."""
-
-    width = 80
-    height = 24
 
 
 def _app_name(app: Any) -> str:

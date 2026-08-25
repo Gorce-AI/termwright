@@ -9,10 +9,8 @@ Textual already knows about its own UI and how a probe could reach it without
 the application changing a line. It proposes no design; where a fact rules an
 approach in or out, it says so and stops.
 
-**Version audited:** Textual 8.2.8 on CPython 3.12.11, the version pinned in
-this repository's development environment (`clients/python/pyproject.toml`
-declares `textual>=0.60`, which is a floor, not a pin — see
-[Version sensitivity](#7-version-sensitivity)).
+**Version audited:** Textual 8.2.8 on CPython 3.12.11, the exact version pinned
+in this repository's development environment and runtime certification.
 
 Paths below are relative to the installed package root, i.e.
 `site-packages/textual/`. Line numbers are from 8.2.8 and will move.
@@ -149,27 +147,26 @@ Candidates, in the order the frame reaches them:
    is needed and resumes the update timer; runs *before* layout is settled, so
    geometry read here may be stale.
 
-**`post_display_hook` is the correct attachment point**, for three reasons the
-source makes explicit:
+**Phase 0 identified `post_display_hook` as the observation point**, for two
+reasons the source makes explicit:
 
 - it runs after `root.Draw(...)`-equivalent work, so the compositor map is
   fresh and `find_widget` answers with the geometry that was just painted;
-- it is called unconditionally in a `finally` (`app.py:3888-3890`), so it fires
-  even when rendering raised, which prevents an instrumented app from silently
-  going quiet after one bad frame;
 - it exists as an override point, so a probe replacing it is using the seam the
   framework offers rather than monkey-patching a private method.
 
-**One ordering fact the campaign must not lose.** Inside `_display` the
+**The later commit-boundary implementation corrected the Phase 0 ordering
+assumption.** Inside `_display` the
 sequence is: write the frame to the driver (`app.py:3883`), `_end_update()` in
 a `finally` (`app.py:3885`), `self._driver.flush()` (`app.py:3887`), and only
-then `post_display_hook()` in the outer `finally` (`app.py:3890`). The hook
-therefore runs **after the frame's last byte has been flushed**, which is
-exactly what a render-commit marker requires.
-
-This is the opposite of tview, where `SetAfterDrawFunc` runs *before*
-`screen.Show()` and the Go adapter has to wrap the screen to write its marker
-after the flush. Textual needs no such wrapper, and a probe inherits that.
+then `post_display_hook()` in the outer `finally` (`app.py:3890`). In Textual
+8.2.8 the built-in driver's `flush()` does not prove physical output: bytes are
+queued to its `WriterThread`. The production probe therefore preflights the
+exact built-in driver/writer, wraps the concrete write, proves enqueue into the
+same FIFO, and appends the marker to that FIFO. `_display` plus
+`post_display_hook` delimit the attempt and fresh DOM observation; the hook
+alone is not a causal output-commit guarantee. A render exception produces no
+semantic commit.
 
 **Deadlock hazard.** Reading `App.focused` from inside the hook is safe, but
 calling anything that takes the app's lock (`App.Draw`, `QueueUpdate`) from
@@ -257,11 +254,9 @@ Ordered by how much of the design would move if it broke.
 | `Compositor.visible_widgets` | **private** (`_compositor.py`) | the cheap bulk read is off the supported path |
 | `DOMNode._nodes` | **private** | `children` is the public equivalent; prefer it |
 
-The optional Python extra accepts `textual>=0.60` for annotation-only and
-generic-terminal use, but that install range is not a semantic certification.
-Strong instrumentation is allowlisted by exact version (currently 8.2.8),
-then additionally shape-checked at attach time. Unknown versions remain
-generic until the daily exact candidate suite certifies them and regenerates
+The Python package pins Textual 8.2.8 exactly. Strong instrumentation is also
+allowlisted by exact version and shape-checked at attach time. Unknown versions
+fail closed until the daily exact candidate suite certifies them and regenerates
 the bundled allowlist.
 
 ## 8. Summary of findings that change the design
@@ -272,8 +267,9 @@ the bundled allowlist.
    registration is needed and none should be invented.
 3. `region` is the wrong rectangle. **`visible_region` (`clip ∩ region`)** is
    what the user sees, and the current adapter is wrong here.
-4. `post_display_hook` is the attachment point: fresh geometry, runs in a
-   `finally`, and is an intended override.
+4. `post_display_hook` supplies fresh geometry, but causal commit additionally
+   requires the exact `_display` attempt and built-in WriterThread FIFO wrappers;
+   the hook alone does not prove terminal output.
 5. `sitecustomize` injection covers every invocation style measured except the
    two that opt out by flag (`-S`, `-E`), and **must chain to the
    `sitecustomize` it displaces** — Homebrew's Python ships one that does real

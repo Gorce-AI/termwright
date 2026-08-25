@@ -144,6 +144,11 @@ describe('trusted autonomous coordinator', () => {
       'packages/probe-ink/package.json',
       'packages/ink/package.json',
     ])).not.toThrow();
+    expect(() => validateChangedFiles('compatibility', [
+      'packages/probe-opentui/src/certified-runtime.json',
+      'compatibility/registry.json',
+    ])).not.toThrow();
+    expect(() => validateChangedFiles('compatibility', ['packages/probe-opentui/src/certified-instrumentation.json'])).toThrow(/forbidden path/u);
     expect(() => validateChangedFiles('compatibility', ['compatibility/registry.json', '.github/workflows/pwn.yml'])).toThrow(/forbidden path/u);
     expect(() => validateChangedFiles('compatibility', ['packages/probe-tview/upstream-patches/../../scripts/pwn.mjs'])).toThrow(/forbidden path/u);
     expect(() => validateChangedFiles('heartbeat', ['compatibility/workflow-heartbeat.json'])).not.toThrow();

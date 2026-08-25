@@ -97,13 +97,13 @@ const targets = [
 	},
 	{
 		file: 'packages/probe-tview/src/launch.ts',
-		pattern: /(?<=export const PROBE_VERSION = ')([^']+)(?=';)/,
+		pattern: /(?<=export const PROBE_VERSION = ['"])([^'"]+)(?=['"];)/,
 		render: (version) => version,
 		whole: true,
 	},
 	{
 		file: 'packages/probe-charm/src/launch.ts',
-		pattern: /(?<=export const PROBE_VERSION = ')([^']+)(?=';)/,
+		pattern: /(?<=export const PROBE_VERSION = ['"])([^'"]+)(?=['"];)/,
 		render: (version) => version,
 		whole: true,
 	},

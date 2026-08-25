@@ -7,11 +7,11 @@
  * live, and there is exactly one correct one.
  */
 
-import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import {
   applyPatchSet,
   assertNoVendorMode,
@@ -27,18 +27,21 @@ import {
   writeProvenance,
   writeWorkspace,
   type CopyKeyInput,
-} from '@termwright/probe-go';
+} from "@termwright/probe-go";
 
 const run = promisify(execFile);
 
 /** Module path of the framework this probe instruments. */
-export const FRAMEWORK = 'github.com/rivo/tview';
+export const FRAMEWORK = "github.com/rivo/tview";
+
+const TCELL_FRAMEWORK = "github.com/gdamore/tcell/v2";
+const TCELL_VERSION = "v2.8.1";
 
 /** Module path of the protocol client the injected probe imports. */
-export const CLIENT_MODULE = 'github.com/gorce-ai/termwright/clients/go';
+export const CLIENT_MODULE = "github.com/gorce-ai/termwright/clients/go";
 
 /** Version of this probe; part of the cache key, so a new patch set invalidates copies. */
-export const PROBE_VERSION = '0.2.0';
+export const PROBE_VERSION = "0.2.0";
 
 export interface PrepareOptions {
   /** Directory of the Go module to build. */
@@ -58,6 +61,8 @@ export interface PreparedBuild {
   readonly workspaceFile: string;
   /** The instrumented copy, for a canary check or for diagnosis. */
   readonly copyDir: string;
+  /** Exact tcell companion copy providing the Windows same-handle marker hook. */
+  readonly tcellCopyDir: string;
   /** Environment to build with: the caller's, plus GOWORK. */
   readonly env: NodeJS.ProcessEnv;
   /** True when the copy was built during this call rather than reused. */
@@ -80,9 +85,31 @@ export async function prepareInstrumentedBuild(
   // build would change what compiles, behind the user's back.
   assertNoVendorMode(env);
 
-  const frameworkVersion = options.frameworkVersion ?? (await detectFrameworkVersion(options.moduleDir, env));
+  const frameworkResolution = await resolvedOfficialModule(
+    options.moduleDir,
+    FRAMEWORK,
+    env,
+  );
+  const frameworkVersion =
+    options.frameworkVersion ?? frameworkResolution.version;
+  if (frameworkVersion !== frameworkResolution.version) {
+    throw new Error(
+      `@termwright/probe-tview was asked to instrument ${FRAMEWORK} ${frameworkVersion}, ` +
+        `but the application resolves ${frameworkResolution.version || "no version"}`,
+    );
+  }
   const patchSetDir = patchSetFor(frameworkVersion);
   const manifest = await readManifest(patchSetDir);
+
+  const tcellVersion = (
+    await resolvedOfficialModule(options.moduleDir, TCELL_FRAMEWORK, env)
+  ).version;
+  if (tcellVersion !== TCELL_VERSION) {
+    throw new Error(
+      `@termwright/probe-tview supports ${TCELL_FRAMEWORK} ${TCELL_VERSION}, ` +
+        `but the application resolves ${tcellVersion || "no version"}`,
+    );
+  }
 
   const key: CopyKeyInput = {
     framework: FRAMEWORK,
@@ -103,17 +130,86 @@ export async function prepareInstrumentedBuild(
     await markComplete(copy, key);
   }
 
-  const workspaceFile = await writeWorkspace(options.workspaceFile ?? join(copy, '..', 'generated.work'), {
-    moduleDir: options.moduleDir,
-    inherited: await readWorkspace(options.moduleDir),
-    suppliedUses: await clientWorkspaceUses(options, env),
-    replaces: [
-      { from: FRAMEWORK, to: copy },
-      ...(await clientVersionReplacements(options, env)),
-    ],
-  });
+  const tcellPatchSet = join(
+    packageRoot(),
+    "upstream-patches",
+    "tcell",
+    TCELL_VERSION,
+  );
+  const tcellManifest = await readManifest(tcellPatchSet);
+  const tcellKey: CopyKeyInput = {
+    framework: TCELL_FRAMEWORK,
+    frameworkVersion: TCELL_VERSION,
+    probeVersion: PROBE_VERSION,
+    toolchain: await toolchain(env),
+    patchDigest: await digestPatchSet(tcellPatchSet),
+  };
+  const tcellCopy = copyDir(tcellKey, env);
+  const tcellBuilt = !(await isComplete(tcellCopy));
+  if (tcellBuilt) {
+    await prepareCopyDir(tcellCopy);
+    await materializeUpstream(
+      await ensureUpstreamModule({
+        module: TCELL_FRAMEWORK,
+        version: TCELL_VERSION,
+        cachePath: moduleCachePath(TCELL_FRAMEWORK, TCELL_VERSION),
+        env,
+      }),
+      tcellCopy,
+    );
+    await applyPatchSet(tcellCopy, tcellPatchSet);
+    await writeProvenance(tcellCopy, tcellManifest);
+    await markComplete(tcellCopy, tcellKey);
+  }
 
-  return { workspaceFile, copyDir: copy, env: { ...env, GOWORK: workspaceFile }, built };
+  const workspaceFile = await writeWorkspace(
+    options.workspaceFile ?? join(copy, "..", "generated.work"),
+    {
+      moduleDir: options.moduleDir,
+      inherited: await readWorkspace(options.moduleDir),
+      suppliedUses: await clientWorkspaceUses(options, env),
+      replaces: [
+        { from: FRAMEWORK, to: copy },
+        { from: TCELL_FRAMEWORK, to: tcellCopy },
+        ...(await clientVersionReplacements(options, env)),
+      ],
+    },
+  );
+
+  return {
+    workspaceFile,
+    copyDir: copy,
+    tcellCopyDir: tcellCopy,
+    env: { ...env, GOWORK: workspaceFile },
+    built: built || tcellBuilt,
+  };
+}
+
+async function resolvedOfficialModule(
+  moduleDir: string,
+  module: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ version: string }> {
+  const { stdout } = await run("go", ["list", "-m", "-json", module], {
+    cwd: moduleDir,
+    env: { ...env, GOWORK: "off" },
+  });
+  const resolved = JSON.parse(stdout) as {
+    readonly Path?: string;
+    readonly Version?: string;
+    readonly Replace?: unknown;
+  };
+  if (resolved.Replace != null) {
+    throw new Error(
+      `@termwright/probe-tview refuses replaced ${module}; exact certification requires the official ${module} module source`,
+    );
+  }
+  if (resolved.Path !== module) {
+    throw new Error(
+      `@termwright/probe-tview expected ${module}, but go list resolved ${resolved.Path ?? "no module path"}`,
+    );
+  }
+  return { version: resolved.Version ?? "" };
 }
 
 async function clientWorkspaceUses(
@@ -121,7 +217,12 @@ async function clientWorkspaceUses(
   env: NodeJS.ProcessEnv,
 ): Promise<{ dir: string; module: string }[]> {
   if ((await modulePath(options.moduleDir, env)) === CLIENT_MODULE) return [];
-  return [{ dir: options.clientDir ?? (await defaultClientDir(env)), module: CLIENT_MODULE }];
+  return [
+    {
+      dir: options.clientDir ?? (await defaultClientDir(env)),
+      module: CLIENT_MODULE,
+    },
+  ];
 }
 
 async function clientVersionReplacements(
@@ -130,13 +231,17 @@ async function clientVersionReplacements(
 ): Promise<{ from: string; to: string; version: string }[]> {
   if ((await modulePath(options.moduleDir, env)) === CLIENT_MODULE) return [];
   const to = options.clientDir ?? (await defaultClientDir(env));
-  const versions = new Set(['v0.0.0']);
+  const versions = new Set(["v0.0.0"]);
   try {
-    const { stdout } = await run('go', ['list', '-m', '-f', '{{.Version}}', CLIENT_MODULE], {
-      cwd: options.moduleDir,
-      env: { ...env, GOWORK: 'off' },
-    });
-    if (stdout.trim() !== '') versions.add(stdout.trim());
+    const { stdout } = await run(
+      "go",
+      ["list", "-m", "-f", "{{.Version}}", CLIENT_MODULE],
+      {
+        cwd: options.moduleDir,
+        env: { ...env, GOWORK: "off" },
+      },
+    );
+    if (stdout.trim() !== "") versions.add(stdout.trim());
   } catch {
     // A project need not import annotations itself. The injected copy still
     // carries v0.0.0, which is the only version that must be redirected then.
@@ -144,49 +249,44 @@ async function clientVersionReplacements(
   return [...versions].map((version) => ({ from: CLIENT_MODULE, to, version }));
 }
 
-/** Reads the framework version the module actually resolves to. */
-async function detectFrameworkVersion(moduleDir: string, env: NodeJS.ProcessEnv): Promise<string> {
-  const { stdout } = await run('go', ['list', '-m', '-f', '{{.Version}}', FRAMEWORK], {
+async function modulePath(
+  moduleDir: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
+  const { stdout } = await run("go", ["list", "-m", "-f", "{{.Path}}"], {
     cwd: moduleDir,
-    // Without this a workspace already in effect could report a replaced
-    // version, and the patch set would be chosen for the wrong source.
-    env: { ...env, GOWORK: 'off' },
-  });
-  return stdout.trim();
-}
-
-async function modulePath(moduleDir: string, env: NodeJS.ProcessEnv): Promise<string> {
-  const { stdout } = await run('go', ['list', '-m', '-f', '{{.Path}}'], {
-    cwd: moduleDir,
-    env: { ...env, GOWORK: 'off' },
+    env: { ...env, GOWORK: "off" },
   });
   return stdout.trim();
 }
 
 /** Locates the pristine module, fetching it when the cache is cold. */
-async function upstreamDir(version: string, env: NodeJS.ProcessEnv): Promise<string> {
+async function upstreamDir(
+  version: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
   return ensureUpstreamModule({
     module: FRAMEWORK,
     version,
-    cachePath: ['github.com', 'rivo', `tview@${version}`],
+    cachePath: ["github.com", "rivo", `tview@${version}`],
     env,
   });
 }
 
 async function toolchain(env: NodeJS.ProcessEnv): Promise<string> {
-  const { stdout } = await run('go', ['version'], { env });
+  const { stdout } = await run("go", ["version"], { env });
   return stdout.trim();
 }
 
 /** Directory layout used by Go for the lowercase client module path. */
 function moduleCachePath(module: string, version: string): readonly string[] {
-  const parts = module.split('/');
+  const parts = module.split("/");
   const last = parts.pop();
   return last === undefined ? [] : [...parts, `${last}@${version}`];
 }
 
 function patchSetFor(version: string): string {
-  return join(packageRoot(), 'upstream-patches', 'tview', version);
+  return join(packageRoot(), "upstream-patches", "tview", version);
 }
 
 /**
@@ -198,11 +298,11 @@ function patchSetFor(version: string): string {
  * release strategy as probe-charm.
  */
 async function defaultClientDir(env: NodeJS.ProcessEnv): Promise<string> {
-  const vendored = join(packageRoot(), 'go-client');
-  if (existsSync(join(vendored, 'go.mod'))) return vendored;
+  const vendored = join(packageRoot(), "go-client");
+  if (existsSync(join(vendored, "go.mod"))) return vendored;
 
-  const inRepo = join(packageRoot(), '..', '..', 'clients', 'go');
-  if (existsSync(join(inRepo, 'go.mod'))) return inRepo;
+  const inRepo = join(packageRoot(), "..", "..", "clients", "go");
+  if (existsSync(join(inRepo, "go.mod"))) return inRepo;
 
   // Published probes and the Go client are released from one versioned
   // commit. Outside the monorepo, materialise that exact module version in the
@@ -217,5 +317,5 @@ async function defaultClientDir(env: NodeJS.ProcessEnv): Promise<string> {
 }
 
 function packageRoot(): string {
-  return join(fileURLToPath(new URL('.', import.meta.url)), '..');
+  return join(fileURLToPath(new URL(".", import.meta.url)), "..");
 }

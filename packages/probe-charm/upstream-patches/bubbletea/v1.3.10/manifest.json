@@ -1,9 +1,15 @@
 {
   "framework": "github.com/charmbracelet/bubbletea",
   "frameworkVersion": "v1.3.10",
-  "patchSetVersion": 15,
-  "note": "Three anchors, because v1 only has the model in scope where View() is called; renderer.write receives a string and would give the probe nothing to read.",
+  "patchSetVersion": 17,
+  "note": "Three model-aware capture anchors stage observations; standardRenderer.flush commits them only after a complete same-writer terminal write and closes the semantic channel on output failure.",
   "patched": [
+    {
+      "path": "standard_renderer.go",
+      "patch": "patches/standard_renderer.go.patch",
+      "sha256Before": "sha256:fe30321708716b962f78965cab407c4edccac2bc22f9dd5e72ac506420a1b4d6",
+      "sha256After": "sha256:91ee1e6dd7fa2f7278bac94665f22a7e335ce6005822af8e5a58fbed4885f57e"
+    },
     {
       "path": "tea.go",
       "patch": "patches/tea.go.patch",
@@ -21,12 +27,12 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:d0e615bdd0da9f6d6421b9986cf22ff8e09b9a8abfa9256bccee7f2af10861fd"
+      "sha256": "sha256:4eecead8206fbca1780902d66e8d52607b177f7f119ec35864445fbd01a52732"
     },
     {
       "path": "termwright_probe_test.go",
       "source": "add/termwright_probe_test.go",
-      "sha256": "sha256:58cff1243dc108ed238cf5ba5fe539c88ae28edf5161d1d03d9d1ffb4d1c23fc"
+      "sha256": "sha256:b69aeb1b63d8df61f8333b21d7f5ba1e3f9969995d7437c1aeed32fd225df030"
     }
   ]
 }

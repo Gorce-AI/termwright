@@ -9,7 +9,8 @@
       "registry": "npm",
       "package": "ink",
       "minimumVersion": "7.1.1",
-      "mode": "hook"
+      "mode": "hook",
+      "hookStrategy": "exact-source"
     },
     {
       "id": "opentui",
@@ -19,6 +20,7 @@
       "package": "@opentui/core",
       "minimumVersion": "0.5.3",
       "mode": "hook",
+      "hookStrategy": "runtime",
       "monitorDependencyClosure": true
     },
     {
@@ -28,7 +30,8 @@
       "registry": "pypi",
       "package": "textual",
       "minimumVersion": "8.2.8",
-      "mode": "hook"
+      "mode": "hook",
+      "hookStrategy": "runtime"
     },
     {
       "id": "tview",
@@ -39,6 +42,17 @@
       "minimumVersion": "v0.42.0",
       "mode": "patch",
       "patchRoot": "packages/probe-tview/upstream-patches/tview"
+    },
+    {
+      "id": "tcell-v2",
+      "frameworkId": "tview",
+      "ecosystem": "go",
+      "registry": "go",
+      "package": "github.com/gdamore/tcell/v2",
+      "minimumVersion": "v2.8.1",
+      "major": 2,
+      "mode": "patch",
+      "patchRoot": "packages/probe-tview/upstream-patches/tcell"
     },
     {
       "id": "bubbletea-v3",

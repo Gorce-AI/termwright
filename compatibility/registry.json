@@ -289,7 +289,7 @@
         ]
       },
       "instrumentation": {
-        "strategy": "module preload verifies and instruments the checksummed OpenTUI 0.5.3 render-command loop, wraps createCliRenderer and installs a JavaScript stdout sink",
+        "strategy": "module preload accepts an exact behaviorally certified OpenTUI version, wraps createCliRenderer, observes the live root/render-list/buffer/hit-grid pass, and installs a same-writer JavaScript stdout sink without transforming framework source",
         "patchSets": [],
         "variants": [
           {
@@ -314,14 +314,15 @@
       "certification": {
         "ids": ["opentui@0.5.3/0.2.0"],
         "adapterVersion": "0.2.0",
-        "strategy": "checksummed-instrumentation",
+        "strategy": "runtime-capability-and-behavior",
         "checksumSources": [
-          "packages/probe-opentui/src/certified-instrumentation.json"
+          "packages/probe-opentui/src/certified-runtime.json"
         ]
       },
       "limitations": [
         "frameworkType comes from constructor.name and may be mangled by bundling or minification.",
-        "Only the exact checksummed OpenTUI 0.5.3 Node and Bun builds are attached; any changed artifact fails closed before capability negotiation.",
+        "Only exact allowlisted OpenTUI package versions are attached; each new version must pass real-Bun capability and behavioral conformance before admission.",
+        "renderList and split-footer renderOffset remain version-sensitive runtime shapes; missing or changed capabilities fail closed without a source-transform fallback.",
         "OpenTUI has no native role or state annotation channel; framework semantics come from types and observable state, with optional developer intent from @termwright/opentui.",
         "The renderer's native output thread must be redirected through the probe sink for marker ordering."
       ],
@@ -401,49 +402,49 @@
             "id": "claim.semantic-tree-authoritative",
             "files": [
               "packages/probe-opentui/src/zero-config.test.ts",
-              "packages/probe-opentui/src/instrumentation.test.ts"
+              "packages/probe-opentui/src/runtime-observer.test.ts"
             ]
           },
           {
             "id": "claim.stable-identity-authoritative",
             "files": [
               "packages/probe-opentui/src/zero-config.test.ts",
-              "packages/probe-opentui/src/instrumentation.test.ts"
+              "packages/probe-opentui/src/runtime-observer.test.ts"
             ]
           },
           {
             "id": "claim.intended-geometry-authoritative",
             "files": [
               "packages/probe-opentui/src/zero-config.test.ts",
-              "packages/probe-opentui/src/instrumentation.test.ts"
+              "packages/probe-opentui/src/runtime-observer.test.ts"
             ]
           },
           {
             "id": "claim.clipped-geometry-authoritative",
             "files": [
               "packages/probe-opentui/src/zero-config.test.ts",
-              "packages/probe-opentui/src/instrumentation.test.ts"
+              "packages/probe-opentui/src/runtime-observer.test.ts"
             ]
           },
           {
             "id": "claim.pointer-region-authoritative",
             "files": [
               "packages/probe-opentui/src/zero-config.test.ts",
-              "packages/probe-opentui/src/instrumentation.test.ts"
+              "packages/probe-opentui/src/runtime-observer.test.ts"
             ]
           },
           {
             "id": "claim.pointer-hit-test-authoritative",
             "files": [
               "packages/probe-opentui/src/zero-config.test.ts",
-              "packages/probe-opentui/src/instrumentation.test.ts"
+              "packages/probe-opentui/src/runtime-observer.test.ts"
             ]
           },
           {
             "id": "claim.paired-revisions",
             "files": [
               "packages/probe-opentui/src/zero-config.test.ts",
-              "packages/probe-opentui/src/instrumentation.test.ts"
+              "packages/probe-opentui/src/runtime-observer.test.ts"
             ]
           },
           {
@@ -531,7 +532,7 @@
         ]
       },
       "instrumentation": {
-        "strategy": "ephemeral sitecustomize on PYTHONPATH attaches to App.post_display_hook",
+        "strategy": "ephemeral sitecustomize on PYTHONPATH installs exact-version runtime wrappers around App._display, the concrete Driver.write path and post_display_hook; frame bytes and the semantic marker are enqueued FIFO on the same WriterThread",
         "patchSets": [],
         "variants": []
       },
@@ -553,7 +554,8 @@
         "Poetry launch is unverified; plain scripts, -m, -c, console scripts and uv run were measured.",
         "PYTHONPATH is inherited, so child processes are instrumented unless the application scrubs it.",
         "Inactive screens are absent rather than represented as hidden nodes.",
-        "No frame-begin capability exists because post_display_hook runs after the frame flush.",
+        "No frame-begin capability is advertised: the exact display attempt is staged internally and becomes semantic evidence only after its successful same-writer FIFO enqueue reaches post_display_hook.",
+        "The Textual 8.2.8 Driver.flush method is a no-op; certification proves causal WriterThread queue order rather than claiming a physical terminal flush. A full writer queue fails semantic publication immediately instead of blocking the application.",
         "A Static subclass with custom render() is named from stored content, not the final rendered segments."
       ],
       "documentation": "/reference/compatibility/#textual",
@@ -765,12 +767,17 @@
         ]
       },
       "instrumentation": {
-        "strategy": "ephemeral Go workspace redirects the exact framework module to a checksummed patched copy",
+        "strategy": "ephemeral Go workspace redirects the exact tview and tcell modules to checksummed patched copies; frame publication follows a successful screen Show and the marker uses the same terminal writer or Windows console handle",
         "patchSets": [
+          {
+            "name": "github.com/gdamore/tcell/v2",
+            "version": "v2.8.1",
+            "patchSetVersion": 2
+          },
           {
             "name": "github.com/rivo/tview",
             "version": "v0.42.0",
-            "patchSetVersion": 17
+            "patchSetVersion": 18
           }
         ],
         "variants": [
@@ -778,6 +785,10 @@
             "id": "tview-v0.42.0",
             "frameworkVersion": "v0.42.0",
             "modules": [
+              {
+                "name": "github.com/gdamore/tcell/v2",
+                "version": "v2.8.1"
+              },
               {
                 "name": "github.com/rivo/tview",
                 "version": "v0.42.0"
@@ -803,6 +814,7 @@
         "adapterVersion": "0.2.0",
         "strategy": "checksummed-replacement",
         "checksumSources": [
+          "packages/probe-tview/upstream-patches/tcell/v2.8.1/manifest.json",
           "packages/probe-tview/upstream-patches/tview/v0.42.0/manifest.json"
         ]
       },
@@ -810,7 +822,8 @@
         "Only exact versions with shipped patch manifests are instrumented.",
         "GOFLAGS=-mod=vendor is refused because an ephemeral workspace and vendor mode are incompatible.",
         "Grid hierarchy is available only because the exact-version patch reads tview's private item list; unsupported versions are refused.",
-        "Publication occurs under tview's application write lock, so the probe drops instead of blocking when the driver is slow.",
+        "Publication occurs only after tview's screen Show returns; the probe drops instead of blocking when the driver is slow.",
+        "Unix markers use tcell's public Tty writer. Windows requires the exact certified tcell v2.8.1 add-only companion so the marker is written through cScreen's console handle; absence of either capability fails closed.",
         "tview GetRect values do not prove pointer ownership; high-level pointer actions require an application provider exposing the production router."
       ],
       "documentation": "/reference/compatibility/#tview",
@@ -1218,7 +1231,7 @@
         ]
       },
       "instrumentation": {
-        "strategy": "ephemeral Go workspace redirects Bubble Tea and supported Bubbles modules to checksummed patched copies",
+        "strategy": "ephemeral Go workspace redirects Bubble Tea and supported Bubbles modules to checksummed patched copies; model-aware hooks stage semantic state and renderer-flush hooks commit only after the terminal bytes reach the same writer",
         "patchSets": [
           {
             "name": "charm.land/bubbles/v2",
@@ -1228,7 +1241,7 @@
           {
             "name": "charm.land/bubbletea/v2",
             "version": "v2.0.8",
-            "patchSetVersion": 15
+            "patchSetVersion": 17
           },
           {
             "name": "github.com/charmbracelet/bubbles",
@@ -1238,7 +1251,7 @@
           {
             "name": "github.com/charmbracelet/bubbletea",
             "version": "v1.3.10",
-            "patchSetVersion": 15
+            "patchSetVersion": 17
           }
         ],
         "variants": [
@@ -1300,6 +1313,7 @@
         "Bubble Tea produces a styled string, so automatic component geometry is unavailable; a registered production pointer router provides application-integrated pointer geometry and hit testing.",
         "Identity is frame-local by default because Update copies model values; a unique author SemanticKey stabilizes only its annotated node.",
         "Only the exact Bubble Tea versions above have frame-hook patch sets.",
+        "A semantic revision is committed only after the exact renderer flush succeeds; failed or partial flushes cannot publish, while a successful no-output flush may commit a staged semantic change and marker when terminal bytes are unchanged.",
         "A detected Bubbles companion must match its exact certified version; unknown companions are refused instead of changing semantic breadth.",
         "Masked text input values are intentionally withheld from trees, traces and reports.",
         "A project requiring both Bubble Tea majors is refused because frames cannot be attributed safely."

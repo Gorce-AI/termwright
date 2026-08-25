@@ -269,10 +269,11 @@ live objects without any module interception.
 
 ### Node and Bun module hooks
 
-Identical to the Ink audit — see `ink.md`, *Interception mechanism*: verified
-empirically that `module.registerHooks` (Node 22.22.0+, absent on 22.9.0),
-`module.register` (whole `>=22` range) and Bun's `--preload` plus
-`Bun.plugin().onLoad` each replace a bare package import with patched source.
+The runtime entry mechanisms were verified empirically: `module.registerHooks`
+(Node 22.22.0+, absent on 22.9.0), `module.register` (whole `>=22` range) and
+Bun's `--preload` plus `Bun.plugin().onLoad` intercept the public package entry
+and return a shim around its real exports. Unlike Ink, OpenTUI does not transform
+the intercepted package source.
 
 One OpenTUI-specific consequence: **Bun is the likely runtime here**, since
 `bun:ffi` is the supported FFI backend while `node:ffi` needs Node 26.1+ or an
@@ -280,3 +281,42 @@ experimental flag (`chunk-node-aj3n20gq.js:234-245`). The Bun path —
 `bun --preload <probe> <entry>`, flag before the entry, no `bunfig.toml`, filter
 on the resolved path rather than the bare specifier — is therefore the primary
 one to support, not the fallback.
+
+## Runtime-observer refactor evidence (2026-08-25)
+
+The generated-source investigation above remains upstream audit evidence, not
+the production integration. The shipped probe now intercepts only the public
+package entry and `createCliRenderer()`. It wraps the live renderer/root/buffer
+lifecycle, samples the exact-version-certified `renderOffset` at the same
+`root.render()` boundary, commits geometry on `CliRenderEvents.FRAME`, and uses
+the renderer's native `hitTest()` for pointer ownership. It never discovers,
+hashes or transforms an OpenTUI chunk.
+
+Before removing the source transform, the old exact observer and the runtime
+observer were run together against `@opentui/core@0.5.3` under real Bun. The
+comparison covered nested clipping and overflow, scrolling and culling,
+overlapping ownership, buffered and custom renderables, custom local scissor
+activity, resize, dynamic mount/unmount, consecutive frames, hit-grid results,
+identity, intended/visible bounds, ordering and frame revision. The public
+runtime surfaces matched except for split-footer surface origin: the public
+tree and hit grid are surface-local while private `renderOffset` identifies the
+terminal row. Reading that field at the same render pass restored exact parity;
+estimating `terminalHeight - height` did not (observed origin 1 versus estimate
+12 in the adversarial case).
+
+The production invariant is therefore:
+
+```text
+exact allowlisted package version
+  -> createCliRenderer wrapper
+  -> capability-check renderer/root/renderList/renderOffset/hit APIs
+  -> observe one synchronous root render pass
+  -> FRAME commits the complete observation
+  -> session publishes and appends the marker on the same sink
+```
+
+Any missing capability, partial/unbalanced pass, render-list replacement,
+unknown command, missing same-writer sink or mismatched frame ID terminates the
+adapter with `adapter-guarantee-violation`. Candidate admission reruns the real
+Bun behavior and full conformance suites and records only the accepted package
+version in `certified-runtime.json`.

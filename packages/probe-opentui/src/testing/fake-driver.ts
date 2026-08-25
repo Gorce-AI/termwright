@@ -21,6 +21,7 @@ import {
   DEFAULT_LIMITS,
   PROTOCOL_ID,
   type HelloMessage,
+  type ProtocolErrorMessage,
   type SemanticSnapshot,
 } from '@termwright/protocol';
 
@@ -34,6 +35,7 @@ export interface FakeDriver {
   readonly sessionId: string;
   readonly hello: HelloMessage | undefined;
   readonly snapshots: readonly SemanticSnapshot[];
+  readonly errors: readonly ProtocolErrorMessage[];
   waitForSnapshots(count: number, timeoutMs?: number): Promise<readonly SemanticSnapshot[]>;
   waitForHandshake(timeoutMs?: number): Promise<HelloMessage>;
   close(): Promise<void>;
@@ -51,6 +53,7 @@ export async function startFakeDriver(): Promise<FakeDriver> {
   const limits = DEFAULT_LIMITS;
 
   const snapshots: SemanticSnapshot[] = [];
+  const errors: ProtocolErrorMessage[] = [];
   const waiters: (() => void)[] = [];
   let hello: HelloMessage | undefined;
   let rejection: string | undefined;
@@ -105,6 +108,9 @@ export async function startFakeDriver(): Promise<FakeDriver> {
         } else if (message.type === 'snapshot') {
           snapshots.push(message.snapshot);
           notify();
+        } else if (message.type === 'error') {
+          errors.push(message);
+          notify();
         }
       }
     });
@@ -146,6 +152,9 @@ export async function startFakeDriver(): Promise<FakeDriver> {
     },
     get snapshots() {
       return snapshots;
+    },
+    get errors() {
+      return errors;
     },
     async waitForSnapshots(count, timeoutMs = DEFAULT_WAIT_MS) {
       await until(() => snapshots.length >= count, timeoutMs, `${count} snapshot(s)`);

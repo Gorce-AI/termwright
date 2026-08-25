@@ -24,12 +24,13 @@ import { recognize } from '@termwright/recognizers';
 import { observeTree, type ObservableNode } from './observe.js';
 import type { MarkerSink } from './sink.js';
 import { PACKAGE_VERSION } from './version.js';
-import { geometryProvider, type CommittedFrameGeometry } from './instrumentation.js';
+import type { CommittedFrameGeometry, FrameGeometryProvider } from './geometry.js';
 
 /** The renderer surface the session uses. Structural, so tests need no framework. */
 export interface ObservableRenderer {
   readonly root: ObservableNode;
   on(event: string, handler: (event?: { readonly frameId?: number }) => void): void;
+  off(event: string, handler: (event?: { readonly frameId?: number }) => void): void;
   readonly width?: number;
   readonly height?: number;
   readonly terminalWidth?: number;
@@ -64,6 +65,8 @@ export interface SessionOptions {
   readonly limits?: ProtocolLimits | (() => ProtocolLimits);
   /** Called once when a negotiated authoritative observation cannot be supplied. */
   readonly onGuaranteeViolation?: (error: Error) => void;
+  /** The sole production geometry authority: the same-pass runtime observer. */
+  readonly authoritativeProvider: FrameGeometryProvider;
 }
 
 /** A running session. */
@@ -117,6 +120,24 @@ export function startSession(options: SessionOptions): ProbeSession {
   let revision = 0;
   let frames = 0;
   let stopped = false;
+  let listenerAttached = false;
+  let releaseSinkFailure = (): void => undefined;
+
+  const halt = (): void => {
+    if (listenerAttached) {
+      try { renderer.off('frame', frameListener); } catch { /* do not turn teardown into an app failure */ }
+      listenerAttached = false;
+    }
+    releaseSinkFailure();
+    releaseSinkFailure = () => undefined;
+    stopped = true;
+  };
+
+  const failGuarantee = (error: unknown): void => {
+    if (stopped) return;
+    halt();
+    options.onGuaranteeViolation?.(error instanceof Error ? error : new Error(String(error)));
+  };
 
   const captureCommitted = (requestedFrameId?: number): void => {
     if (stopped) return;
@@ -125,9 +146,9 @@ export function startSession(options: SessionOptions): ProbeSession {
     let snapshot: SemanticSnapshot;
     let marker: string | undefined;
     try {
-      const provider = geometryProvider(renderer);
+      const provider = options.authoritativeProvider;
       const frameId = requestedFrameId ?? renderer.frameId;
-      if (provider === undefined || frameId === undefined) {
+      if (frameId === undefined) {
         throw new Error('certified OpenTUI frame geometry provider is unavailable');
       }
       const geometry = provider.getCommitted(frameId);
@@ -155,20 +176,37 @@ export function startSession(options: SessionOptions): ProbeSession {
         probeEvents: observation.frame.objects.length + (observation.frame.operations?.length ?? 0),
       });
     } catch (error) {
-      // Observation must never take the application down. A failed frame is a
-      // frame the driver does not hear about, which the protocol already
-      // tolerates — revisions are strictly increasing, not contiguous.
-      stopped = true;
+      // Observation must never take the application down. It does, however,
+      // terminate this adapter: continuing after losing an authoritative frame
+      // would turn a negotiated guarantee into best effort.
+      halt();
       options.onGuaranteeViolation?.(error instanceof Error ? error : new Error(String(error)));
       return;
     }
 
     // Last, and only here: the bytes for this frame have already been forwarded
-    // by the sink, so the marker lands after them.
-    if (marker !== undefined) sink?.writeMarker(marker);
+    // by the sink, so the marker lands after them. A failed marker write is a
+    // terminal adapter violation, never an exception in the application.
+    if (marker !== undefined) {
+      try {
+        if (sink === undefined) throw new Error('OpenTUI commit marker has no same-writer sink');
+        sink.writeMarker(marker);
+      } catch (error) {
+        failGuarantee(error);
+      }
+    }
   };
 
-  renderer.on('frame', (event) => captureCommitted(event?.frameId));
+  const frameListener = (event?: { readonly frameId?: number }): void => captureCommitted(event?.frameId);
+  renderer.on('frame', frameListener);
+  listenerAttached = true;
+  if (sink !== undefined) {
+    const release = sink.onFailure(failGuarantee);
+    // A sink can deliver a failure latched before session startup synchronously.
+    // Do not leave its just-added handler behind when failGuarantee halted us.
+    if (stopped) release();
+    else releaseSinkFailure = release;
+  }
 
   return {
     get revision() {
@@ -179,12 +217,12 @@ export function startSession(options: SessionOptions): ProbeSession {
     },
     capture: () => captureCommitted(),
     stop() {
-      stopped = true;
+      halt();
     },
   };
 }
 
-function qualifyFrame(
+export function qualifyFrame(
   frame: import('@termwright/protocol').ProbeFrame,
   geometry: CommittedFrameGeometry,
 ): import('@termwright/protocol').ProbeFrame {
@@ -229,7 +267,7 @@ function qualifySnapshot(
       strength: 'authoritative' as const,
     });
     if (object === undefined || typeof displayed !== 'boolean') {
-      throw new Error(`certified OpenTUI instrumentation omitted display evidence for ${node.id}`);
+      throw new Error(`certified OpenTUI runtime observation omitted display evidence for ${node.id}`);
     }
     return {
       ...node,

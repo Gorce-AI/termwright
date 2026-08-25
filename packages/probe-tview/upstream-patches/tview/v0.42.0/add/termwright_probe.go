@@ -29,14 +29,12 @@ package tview
 
 import (
 	"errors"
-	"os"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/gdamore/tcell/v2"
 
@@ -65,7 +63,11 @@ type termwrightProbeState struct {
 	dropped       atomic.Uint64
 	timedOut      atomic.Uint64
 	frames        atomic.Uint64
-	redrawPending atomic.Bool
+	ready         atomic.Bool
+	redrawQueued  atomic.Bool
+	published     atomic.Bool
+	applicationMu sync.Mutex
+	application   *Application
 }
 
 // TermwrightProbeStats reports what the probe did and failed to do.
@@ -136,13 +138,24 @@ func newTermwrightProbe() *termwrightProbeState {
 	}
 	// Do not freeze providers during package initialization: application main
 	// has not had a chance to register its production router yet. The first
-	// post-flush hook starts synchronously, then publishes that same frame.
+	// post-flush hook starts the handshake without blocking the draw lock.
 	return &termwrightProbeState{client: client, ids: make(map[Primitive]string)}
 }
 
-func (p *termwrightProbeState) ensureStarted() bool {
-	p.start.Do(func() { _ = p.client.Start(protocol.DialTimeout) })
-	return p.client.Connected()
+func (p *termwrightProbeState) startAsync(a *Application) {
+	p.applicationMu.Lock()
+	p.application = a
+	p.applicationMu.Unlock()
+
+	p.start.Do(func() {
+		go func() {
+			if p.client.Start(protocol.DialTimeout) != nil {
+				return
+			}
+			p.ready.Store(true)
+			p.enqueueHandshakeRedraw()
+		}()
+	})
 }
 
 // termwrightAfterFrame is called from draw(), after screen.Show() has flushed
@@ -159,11 +172,10 @@ func (p *termwrightProbeState) afterFrame(a *Application, screen tcell.Screen) {
 	if screen == nil || a == nil {
 		return
 	}
-	if !p.ensureStarted() {
-		p.redrawAfterHandshake(a)
+	p.startAsync(a)
+	if !p.client.Connected() {
 		return
 	}
-
 	columns, rows := screen.Size()
 	if columns <= 0 || rows <= 0 {
 		return
@@ -179,30 +191,60 @@ func (p *termwrightProbeState) afterFrame(a *Application, screen tcell.Screen) {
 		p.onPublishFailed(err)
 		return
 	}
-	// After the bytes, which is the whole reason this call site exists.
-	_, _ = os.Stdout.WriteString(marker)
-	p.frames.Add(1)
-}
-
-// redrawAfterHandshake closes the startup race for applications whose first
-// frame is also their last frame until input arrives. The initial draw must not
-// block on the driver, so the handshake remains asynchronous; once connected,
-// one queued draw publishes the current tree without requiring synthetic user
-// input. QueueUpdateDraw is the framework's supported cross-goroutine path.
-func (p *termwrightProbeState) redrawAfterHandshake(a *Application) {
-	if !p.redrawPending.CompareAndSwap(false, true) {
+	// Show and the marker use the same terminal writer. Publication is only a
+	// committed frame once all marker bytes have followed the screen bytes.
+	if writeErr := termwrightWriteMarker(screen, marker); writeErr != nil {
+		p.dropped.Add(1)
+		_ = p.client.Fail("adapter-guarantee-violation", "tview could not write the complete render marker through the screen commit writer")
 		return
 	}
-	go func() {
-		defer p.redrawPending.Store(false)
-		deadline := time.Now().Add(2 * time.Second)
-		for !p.client.Connected() && time.Now().Before(deadline) {
-			time.Sleep(5 * time.Millisecond)
+	p.frames.Add(1)
+	p.published.Store(true)
+	p.redrawQueued.Store(false)
+}
+
+type termwrightWindowsMarkerScreen interface {
+	TermwrightWriteMarker(string) error
+}
+
+func termwrightWriteMarker(screen tcell.Screen, marker string) error {
+	if terminal, ok := screen.Tty(); ok && terminal != nil {
+		written, err := terminal.Write([]byte(marker))
+		if err != nil {
+			return err
 		}
-		if p.client.Connected() {
-			a.QueueUpdateDraw(func() {})
+		if written != len(marker) {
+			return errors.New("tcell terminal accepted a partial render marker")
 		}
-	}()
+		return nil
+	}
+	if windows, ok := screen.(termwrightWindowsMarkerScreen); ok {
+		return windows.TermwrightWriteMarker(marker)
+	}
+	return errors.New("tcell screen exposes no writer used by Show")
+}
+
+// enqueueHandshakeRedraw closes the startup race for applications whose first
+// frame is also their last frame until input arrives. Start invokes this
+// exactly when hello-ack arrives: no polling, sleeps, or guessed deadline.
+func (p *termwrightProbeState) enqueueHandshakeRedraw() {
+	if p.published.Load() || !p.redrawQueued.CompareAndSwap(false, true) {
+		return
+	}
+	p.applicationMu.Lock()
+	a := p.application
+	p.applicationMu.Unlock()
+	if a == nil {
+		p.redrawQueued.Store(false)
+		return
+	}
+
+	a.updates <- queuedUpdate{f: func() {
+		defer p.redrawQueued.Store(false)
+		if !p.published.Load() && p.ready.Load() && p.client.Connected() {
+			a.draw()
+		}
+	}}
 }
 
 // onPublishFailed records a frame the driver will never see.
@@ -467,19 +509,19 @@ func termwrightApplyAnnotation(meta annotate.Semantics, node *protocol.Node) {
 	for _, action := range node.Actions {
 		seenActions[action] = struct{}{}
 	}
-	annotationAddedAction := false
+	annotationDeclaredAction := false
 	for _, action := range meta.Actions {
 		if !protocol.ValidAction(action) {
 			continue
 		}
+		annotationDeclaredAction = true
 		if _, duplicate := seenActions[action]; duplicate {
 			continue
 		}
 		seenActions[action] = struct{}{}
 		node.Actions = append(node.Actions, action)
-		annotationAddedAction = true
 	}
-	if annotationAddedAction {
+	if annotationDeclaredAction {
 		termwrightProvenance(node, "actions", protocol.ProvenanceAnnotation)
 	}
 }

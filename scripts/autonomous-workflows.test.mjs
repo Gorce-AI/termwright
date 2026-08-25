@@ -23,7 +23,7 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('--candidate "$CANDIDATE_ID"');
     expect(workflow).not.toContain('continue-on-error');
     const certificationStep = workflow.slice(
-      workflow.indexOf('      - name: Certify exact source, deterministic patching and conformance'),
+      workflow.indexOf('      - name: Certify artifact identity and behavioral conformance'),
       workflow.indexOf('      - name: Candidate summary'),
     );
     expect(certificationStep).not.toContain('if:');
@@ -53,8 +53,6 @@ describe('autonomous workflow security', () => {
     expect(workflow).toContain('gh api --paginate "/repos/$GITHUB_REPOSITORY/issues?state=all');
     expect(workflow).not.toContain('gh issue list --state all --search');
     expect(workflow).toContain('.user.login == "github-actions[bot]"');
-    expect(workflow).toContain("jq -r '.green[]' \"$PUBLISH_PLAN\"");
-    expect(workflow).toContain('gh issue close "$number" --comment "Certified by $SOURCE_RUN_URL."');
     expect(workflow).toContain('dispatch-pending-changesets');
     expect(workflow).toContain('refresh-heartbeat');
     expect(workflow).toContain('automation/workflow-heartbeat');
@@ -70,12 +68,21 @@ describe('autonomous workflow security', () => {
     const reconcile = jobBlock(workflow, 'reconcile');
     expect(reconcile).not.toContain("github.event.workflow_run.conclusion == 'success'");
     expect(reconcile).toContain('Typed candidate artifacts reconciled from $SOURCE_RUN_URL.');
+    expect(reconcile).not.toContain('Close candidate issues only after the compatibility allowlist merged');
     const publish = reconcile.slice(reconcile.indexOf('      - name: Commit only the compatibility allowlist'));
     expect(publish).toContain('Source certification run: $SOURCE_RUN_ID');
     expect(publish).not.toContain('Source certification run: $RUN_ID');
-    expect(coordinator).toContain('probe-ink|probe-opentui');
+    expect(coordinator).toContain('probe-ink\\/src\\/certified-instrumentation');
+    expect(coordinator).toContain('probe-opentui\\/src\\/certified-runtime');
     expect(coordinator).toContain('release dispatch intentionally suppressed');
     expect(workflow).toContain('"https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"');
+    const merge = jobBlock(workflow, 'merge');
+    expect(merge).toContain('issues: write');
+    expect(merge).toContain('Close candidate issues only after the compatibility allowlist merged');
+    expect(merge.indexOf('coordinate-ci "$GITHUB_EVENT_PATH"')).toBeLessThan(
+      merge.indexOf('gh issue close "$number"'),
+    );
+    expect(merge).toContain('closed only after the compatibility allowlist merged');
   });
 
   it('makes release prepare and publish explicit, SHA-bound dispatch modes with no push trigger', async () => {
@@ -177,6 +184,7 @@ describe('autonomous workflow security', () => {
   it('requires Bun in every certifying workflow job that intentionally installs it', async () => {
     const ci = await readWorkflow('ci.yml');
     const release = await readWorkflow('release.yml');
+    const upstreamCandidates = await readWorkflow('upstream-candidates.yml');
     for (const job of ['build', 'windows-driver-native', 'opentui', 'examples']) {
       const block = jobBlock(ci, job);
       expect(block).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
@@ -187,6 +195,13 @@ describe('autonomous workflow security', () => {
     expect(verify).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
     expect(verify).toContain("bun-version: '1.2.15'");
     expect(verify).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
+    const candidateCertification = jobBlock(upstreamCandidates, 'certify');
+    expect(candidateCertification).toContain('oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2');
+    expect(candidateCertification).toContain("bun-version: '1.2.15'");
+    expect(candidateCertification).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
+    expect(candidateCertification.indexOf('oven-sh/setup-bun@')).toBeLessThan(
+      candidateCertification.indexOf('name: Certify artifact identity and behavioral conformance'),
+    );
   });
 
   it('uses only reviewed Node 24 artifact actions in release automation', async () => {

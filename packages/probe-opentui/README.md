@@ -14,8 +14,9 @@ untouched.
 npm install --save-dev @termwright/probe-opentui
 ```
 
-Certified target: `@opentui/core 0.5.3`. Node >= 22, or Bun. Other OpenTUI
-artifacts fail closed before the probe advertises semantic capabilities.
+The exact certified versions are generated in `src/certified-runtime.json` and
+published in the compatibility registry. Node >= 22, or Bun. Other OpenTUI
+versions fail closed before the probe advertises semantic capabilities.
 
 ## Usage
 
@@ -72,12 +73,20 @@ layer at all, so a class name is the only signal there is. It does not survive
 minification: a bundled application's widgets arrive as `generic` with a mangled
 type. Nothing is lost that was not already unknowable, but the names get worse.
 
-**Geometry requires the certified render-command instrumentation.** The exact
-0.5.3 Node and Bun artifacts are checksum-verified before their render loop is
-instrumented. That hook records intended rectangles, ancestor scissor
-intersections, and native pointer recipients at the committed frame boundary.
-If the artifact does not match, the probe does not attach and does not advertise
-those guarantees.
+**Geometry is runtime-observed.** A runtime observer records render-command
+identity, intended rectangles, ancestor scissors, culling, and the committed
+frame boundary without rewriting OpenTUI source or generated chunks. Exact
+package-version certification and runtime capability checks fail closed before
+the adapter connects; there is no source-transform fallback.
+
+Split-footer has one precise upstream capability gap: OpenTUI applies a mutable
+native `renderOffset` below `root`, render-list, hit-grid, and `FRAME`; none of
+those public surfaces reports the terminal row where the footer was actually
+painted. `terminalHeight - height` is not equivalent during split scrollback or
+resize. The certified runtime wrapper therefore reads this one private field at
+the same-pass `FRAME` commit boundary, after native rendering. Missing or
+invalid origin evidence fails closed. This read remains necessary unless OpenTUI
+publishes the value.
 
 **`paint-order` is announced but omitted per tree where it cannot be honoured.**
 The z-order child list is a protected field upstream; when a version stops
@@ -86,8 +95,9 @@ entirely rather than passing one off as the other.
 
 ## Runtime notes
 
-Both are measured against `@opentui/core@0.5.3`, Bun 1.2.15 and Node 22/24; see
-`docs/architecture/audit/opentui.md`.
+The initial differential baseline used `@opentui/core@0.5.3`, Bun 1.2.15 and
+Node 22/24. Every additionally listed version must pass the same runtime
+capability and behavioral certification.
 
 - **Bun** is the primary runtime: `bun:ffi` is OpenTUI's supported FFI backend,
   while `node:ffi` needs Node 26.1+ or an experimental flag. The flag must sit

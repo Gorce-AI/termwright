@@ -1,14 +1,20 @@
 {
   "framework": "charm.land/bubbletea/v2",
   "frameworkVersion": "v2.0.8",
-  "patchSetVersion": 15,
-  "note": "One anchor: Program.render, which v2 consolidated from v1's three call sites. See docs/architecture/audit/charm.md §1.",
+  "patchSetVersion": 17,
+  "note": "Program.render stages the model-aware observation; cursedRenderer.flush commits it only after both screen flush and complete same-writer output succeed, and closes the semantic channel on either failure.",
   "patched": [
     {
       "path": "tea.go",
       "patch": "patches/tea.go.patch",
       "sha256Before": "sha256:013060126f31e115184a6b9cba1cf5f31345d3048a98e432e450f011adb78ac9",
-      "sha256After": "sha256:92b58f42de139c8526628f637b376f24b37bcfece3845ede1bb5bcde40a520ec"
+      "sha256After": "sha256:2f2bd22e3cdc660182ce77f1834c93699dc529e39a96eb5e23d16225fdec3c30"
+    },
+    {
+      "path": "cursed_renderer.go",
+      "patch": "patches/cursed_renderer.go.patch",
+      "sha256Before": "sha256:902812594251a2896b1e5041521cc39aec358f05885083c9aac50d267b679b51",
+      "sha256After": "sha256:bf7bfd8c96c4c1775f681c221abf1e2e8e65ef77423b4e9c1389425266f58ce4"
     },
     {
       "path": "go.mod",
@@ -21,12 +27,12 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:4d42218bc8e4abdf838c6c47263e712fd467bcd7746e8172ea4d4109274009cb"
+      "sha256": "sha256:023f4efde50b94bfef42f9d93f2da885356c6f4e1abd8e82680ed4c2c86f8451"
     },
     {
       "path": "termwright_probe_test.go",
       "source": "add/termwright_probe_test.go",
-      "sha256": "sha256:58cff1243dc108ed238cf5ba5fe539c88ae28edf5161d1d03d9d1ffb4d1c23fc"
+      "sha256": "sha256:b1ffb8ca436524311546843b05f41635e020433e8695fb762050c86bd6559407"
     }
   ]
 }

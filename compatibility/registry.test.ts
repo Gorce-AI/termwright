@@ -81,7 +81,7 @@ interface RegistryFramework {
   readonly certification: {
     readonly ids: readonly string[];
     readonly adapterVersion: string;
-    readonly strategy: 'native-hook' | 'checksummed-instrumentation' | 'checksummed-replacement';
+    readonly strategy: 'native-hook' | 'runtime-capability-and-behavior' | 'checksummed-instrumentation' | 'checksummed-replacement';
     readonly checksumSources: readonly string[];
   };
   readonly capabilityGraph: {
@@ -347,7 +347,9 @@ describe('machine-readable framework compatibility registry', () => {
       }
       for (const source of entry.certification.checksumSources) {
         expect(existsSync(join(root, source)), `${entry.id}: ${source}`).toBe(true);
-        expect(text(source), `${entry.id}: ${source} carries sha256 evidence`).toMatch(/sha256/iu);
+        if (entry.certification.strategy !== 'runtime-capability-and-behavior') {
+          expect(text(source), `${entry.id}: ${source} carries sha256 evidence`).toMatch(/sha256/iu);
+        }
       }
       const claims = new Map(entry.capabilityGraph.claims.map((claim) => [claim.id, claim.files]));
       const guaranteed = [
@@ -604,19 +606,20 @@ describe('machine-readable framework compatibility registry', () => {
       readonly devDependencies: Readonly<Record<string, string>>;
     }>('packages/probe-opentui/package.json');
     const certifiedOpenTui = json<{ readonly profiles: readonly { readonly version: string }[] }>(
-      'packages/probe-opentui/src/certified-instrumentation.json',
-    ).profiles[0]?.version;
+      'packages/probe-opentui/src/certified-runtime.json',
+    ).profiles.map((profile) => profile.version);
     expect(framework('opentui').versions).toMatchObject({
       policy: 'exact',
-      declared: certifiedOpenTui,
-      verified: [openTuiManifest.devDependencies['@opentui/core']?.replace(/^\^/u, '')],
+      declared: certifiedOpenTui.join(' or '),
+      verified: certifiedOpenTui,
     });
+    expect(certifiedOpenTui).toContain(openTuiManifest.devDependencies['@opentui/core']?.replace(/^\^/u, ''));
 
     const pythonProject = text('clients/python/pyproject.toml');
     const declaredTextual = /textual = \["textual([^"\]]+)"\]/u.exec(pythonProject)?.[1];
     const textualAudit = text('docs/architecture/audit/textual.md');
     const verifiedTextual = /\*\*Version audited:\*\* Textual ([0-9.]+)/u.exec(textualAudit)?.[1];
-    expect(declaredTextual).toBe('>=0.60');
+    expect(declaredTextual).toBe(`==${verifiedTextual}`);
     expect(framework('textual').versions).toMatchObject({
       policy: 'exact',
       declared: verifiedTextual,
@@ -637,7 +640,7 @@ describe('machine-readable framework compatibility registry', () => {
     const entry = framework('tview');
     expect(entry.probe.packageVersion).toBe(TVIEW_PROBE_VERSION);
     const variant = entry.instrumentation.variants[0];
-    expect(variant?.modules[0]?.name).toBe(TVIEW_FRAMEWORK);
+    expect(variant?.modules).toContainEqual(expect.objectContaining({ name: TVIEW_FRAMEWORK }));
     const source = text(
       'packages/probe-tview/upstream-patches/tview/v0.42.0/add/termwright_probe.go',
     );

@@ -26,7 +26,7 @@ package tea
 // without a position rather than inventing coordinates.
 
 import (
-	"os"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -50,11 +50,22 @@ type termwrightProbeState struct {
 	mu        sync.Mutex
 	ids       map[string]string
 	nextID    int
-	pendingMu sync.Mutex
-	pending   *protocol.Snapshot
+	renderMu  sync.Mutex
+	frameMu   sync.Mutex
+	nextFrame uint64
+	latest    map[*cursedRenderer]*termwrightStagedFrame
+	queued    map[*cursedRenderer]*termwrightStagedFrame
+	published map[*cursedRenderer]uint64
 	publishMu sync.Mutex
+	fail      func(string, string) error
 	frames    atomic.Uint64
 	dropped   atomic.Uint64
+}
+
+type termwrightStagedFrame struct {
+	sequence uint64
+	view     View
+	snapshot *protocol.Snapshot
 }
 
 var (
@@ -92,76 +103,124 @@ func newTermwrightProbe() *termwrightProbeState {
 			protocol.CapActions,
 			protocol.CapRenderRevisions,
 		},
-		// The publish happens on the event-loop goroutine, between Update and
-		// the renderer. An unbounded write would stall the loop whenever the
-		// driver stops reading.
+		// Publication happens inside the renderer's flush boundary, after its
+		// terminal write. The side channel remains bounded so a stalled driver
+		// cannot freeze future renders.
 		WriteTimeout:      protocol.DefaultWriteTimeout,
 		EvidenceProviders: evidence.DefaultRegistry(),
 	})
 	if client == nil {
 		return nil
 	}
-	p := &termwrightProbeState{client: client, ids: make(map[string]string)}
+	p := &termwrightProbeState{
+		client:    client,
+		ids:       make(map[string]string),
+		latest:    make(map[*cursedRenderer]*termwrightStagedFrame),
+		queued:    make(map[*cursedRenderer]*termwrightStagedFrame),
+		published: make(map[*cursedRenderer]uint64),
+		fail:      client.Fail,
+	}
 	go func() {
 		if client.Start(protocol.DialTimeout) != nil {
 			return
 		}
-		p.pendingMu.Lock()
-		pending := p.pending
-		p.pending = nil
-		p.pendingMu.Unlock()
-		if pending != nil {
-			p.publish(pending)
-		}
+		p.replayLatestFrames()
 	}()
 	return p
 }
 
-// termwrightAfterView is called from Program.render, with the model that
-// produced this frame.
-//
-// One call site, unlike v1's three: v2 consolidated the loop, initial and
-// final frames into this wrapper, which is why the v2 patch is a single hunk.
-func termwrightAfterView(program *Program, model Model, view View) {
-	p := termwrightCurrentProbe()
+func (p *termwrightProbeState) publish(writer io.Writer, frame *termwrightStagedFrame) bool {
+	p.publishMu.Lock()
+	defer p.publishMu.Unlock()
+	marker, err := p.client.Publish(frame.snapshot)
+	if err != nil || marker == "" {
+		p.dropped.Add(1)
+		return false
+	}
+	return p.writeMarker(writer, marker)
+}
+
+func (p *termwrightProbeState) writeMarker(writer io.Writer, marker string) bool {
+	written, writeErr := io.WriteString(writer, marker)
+	if writeErr != nil || written != len(marker) {
+		p.failOutput("Bubble Tea renderer output did not accept the complete revision marker")
+		return false
+	}
+	p.frames.Add(1)
+	return true
+}
+
+func (p *termwrightProbeState) failOutput(message string) {
+	p.dropped.Add(1)
+	if p.fail != nil {
+		_ = p.fail("adapter-guarantee-violation", message)
+	}
+}
+
+// termwrightAfterRendererFlush is injected into cursedRenderer.flush while it
+// still owns s.mu. Only a completed renderer flush may publish its semantics.
+func termwrightAfterRendererFlush(renderer *cursedRenderer, outputOK bool) {
+	p := termwrightProbe
 	if p == nil {
 		return
 	}
-
-	// The viewport size comes from the Program, which learns it from the
-	// terminal. Before the first WindowSizeMsg it is zero, and a zero is not a
-	// smaller number — it is "not known yet". Publishing it gets the whole
-	// snapshot refused by validation, so the frame is skipped instead.
-	columns, rows := program.width, program.height
-	if columns <= 0 || rows <= 0 {
+	p.frameMu.Lock()
+	frame := p.queued[renderer]
+	delete(p.queued, renderer)
+	p.frameMu.Unlock()
+	if frame == nil {
 		return
 	}
-
-	snapshot, duplicateKey := p.snapshot(model, view, columns, rows)
-	if duplicateKey != "" {
-		_ = p.client.Fail("duplicate-semantic-key", "duplicate SemanticKey: "+string(duplicateKey))
+	if !outputOK {
+		p.failOutput("Bubble Tea renderer did not commit the complete terminal frame")
 		return
 	}
-	p.pendingMu.Lock()
 	if !p.client.Connected() {
-		p.pending = snapshot
-		p.pendingMu.Unlock()
 		return
 	}
-	p.pendingMu.Unlock()
-	p.publish(snapshot)
+	if p.publish(renderer.w, frame) {
+		p.frameMu.Lock()
+		p.published[renderer] = frame.sequence
+		p.frameMu.Unlock()
+	}
 }
 
-func (p *termwrightProbeState) publish(snapshot *protocol.Snapshot) {
-	p.publishMu.Lock()
-	defer p.publishMu.Unlock()
-	marker, err := p.client.Publish(snapshot)
-	if err != nil || marker == "" {
-		p.dropped.Add(1)
-		return
+func (p *termwrightProbeState) queueFrame(renderer *cursedRenderer, frame *termwrightStagedFrame) {
+	renderer.mu.Lock()
+	renderer.view = frame.view
+	p.frameMu.Lock()
+	p.latest[renderer] = frame
+	p.queued[renderer] = frame
+	p.frameMu.Unlock()
+	renderer.mu.Unlock()
+}
+
+func (p *termwrightProbeState) replayLatestFrames() {
+	p.renderMu.Lock()
+	defer p.renderMu.Unlock()
+	p.frameMu.Lock()
+	renderers := make([]*cursedRenderer, 0, len(p.latest))
+	for renderer := range p.latest {
+		renderers = append(renderers, renderer)
 	}
-	_, _ = os.Stdout.WriteString(marker)
-	p.frames.Add(1)
+	p.frameMu.Unlock()
+	for _, renderer := range renderers {
+		// flush owns the same mutex. Re-read publication state only after any
+		// in-flight flush has completed, then reserve and queue under that one
+		// renderer boundary so the handshake can never replay a committed frame.
+		renderer.mu.Lock()
+		p.frameMu.Lock()
+		frame := p.latest[renderer]
+		shouldQueue := frame != nil && frame.sequence > p.published[renderer]
+		if shouldQueue {
+			p.queued[renderer] = frame
+		}
+		p.frameMu.Unlock()
+		if shouldQueue {
+			renderer.view = frame.view
+		}
+		renderer.mu.Unlock()
+	}
 }
 
 // snapshot reflects over the user's model and reports what it recognises.
@@ -739,4 +798,34 @@ func termwrightTypeName(value any) string {
 		kind = kind.Elem()
 	}
 	return kind.Name()
+}
+
+// termwrightRenderAndObserve captures the model at the View call and queues it
+// together with the concrete renderer state. The ticker's successful flush is
+// the only place that can publish the revision and its in-band marker.
+func termwrightRenderAndObserve(program *Program, model Model) {
+	view := model.View()
+	probe := termwrightCurrentProbe()
+	renderer, supported := program.renderer.(*cursedRenderer)
+	if probe == nil || !supported || renderer == nil {
+		program.renderer.render(view)
+		return
+	}
+	probe.renderMu.Lock()
+	defer probe.renderMu.Unlock()
+	if program.width <= 0 || program.height <= 0 {
+		renderer.render(view)
+		return
+	}
+	snapshot, duplicateKey := probe.snapshot(model, view, program.width, program.height)
+	if duplicateKey != "" {
+		_ = probe.client.Fail("duplicate-semantic-key", "duplicate SemanticKey: "+string(duplicateKey))
+		renderer.render(view)
+		return
+	}
+	probe.frameMu.Lock()
+	probe.nextFrame++
+	frame := &termwrightStagedFrame{sequence: probe.nextFrame, view: view, snapshot: snapshot}
+	probe.frameMu.Unlock()
+	probe.queueFrame(renderer, frame)
 }
