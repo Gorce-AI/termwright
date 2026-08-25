@@ -101,7 +101,7 @@ describe('Vitest PTY telemetry certification', () => {
     expect(harness).not.toContain("'npm', [...");
     expect(workflow).toContain("TERMWRIGHT_MATRIX_CERTIFY: '1'");
     expect(workflow).toContain('uses: ./.github/actions/setup-js-workspace');
-    expect(workflow).toContain('pnpm --filter @termwright/driver build');
+    expect(workflow).toContain('pnpm --filter @termwright/driver... build');
     expect(harness).toContain("packages', 'driver', 'dist', 'experimental.js'");
     expect(pressure).toContain('context.onTestFinished');
     expect(pressure).toContain("import { createNodePtyBackend } from '../driver-backend.mjs'");
