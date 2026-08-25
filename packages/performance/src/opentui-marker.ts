@@ -1,7 +1,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
@@ -14,6 +15,7 @@ const BENCHMARK = fileURLToPath(
   new URL('../../probe-opentui/bench/marker-route.ts', import.meta.url),
 );
 const run = promisify(execFile);
+const requireFromBenchmark = createRequire(BENCHMARK);
 
 type MarkerArm = 'native' | 'feed-quiet' | 'feed';
 
@@ -111,7 +113,7 @@ export async function runOpenTuiMarkerBenchmark(
       id: 'opentui-threaded-marker-route',
       framework: 'opentui',
       renderingMode: 'retained',
-      description: 'real OpenTUI 0.5.3 threaded renderer with a changing frame and three stdout/marker routes',
+      description: 'real resolved OpenTUI threaded renderer with a changing frame and three stdout/marker routes',
       workload: {
         frames: feed.reduce((total, entry) => total + entry.frames, 0),
         warmupFrames: 0,
@@ -144,12 +146,23 @@ export async function runOpenTuiMarkerBenchmark(
       },
     };
 
+    const coreEntry = requireFromBenchmark.resolve('@opentui/core');
+    const corePackage = JSON.parse(await readFile(join(dirname(coreEntry), 'package.json'), 'utf8')) as {
+      name?: unknown;
+      version?: unknown;
+    };
+    if (corePackage.name !== '@opentui/core'
+      || typeof corePackage.version !== 'string'
+      || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(corePackage.version)) {
+      throw new Error('cannot resolve exact @opentui/core package provenance');
+    }
+
     return {
       kind: 'termwright-performance-report',
       schemaVersion: PERFORMANCE_REPORT_VERSION,
       generatedAt: new Date().toISOString(),
       environment: {
-        runtime: `bun ${(await run('bun', ['--version'])).stdout.trim()}; @opentui/core 0.5.3`,
+        runtime: `bun ${(await run('bun', ['--version'])).stdout.trim()}; @opentui/core ${corePackage.version}`,
         platform: process.platform,
         architecture: process.arch,
       },

@@ -77,51 +77,66 @@ portable semantic-pipeline benchmark.
 
 ## Recorded cadence and regression policy
 
-The `Performance observations` workflow runs every Monday and on manual
-dispatch on the `macos-15` arm64 runner with Node 24, Go 1.25 and Bun 1.2.15.
-That complete `darwin-arm64-node24-go1.25-bun1.2.15` class is verified before
-measurement; the artifact also records the resolved Node, Go and Bun patch
-versions. It runs all three benchmarks above, then runs the real `quality/soak`
-lifecycle suite repeatedly and the `quality/stress` concurrency suite once
-through the certified host. One artifact contains the raw reports, resource
-observations and comparison.
+The `Paired performance gate` workflow runs every Monday and on manual dispatch
+on one `macos-15` arm64 runner. It installs Node 24, Go 1.25 and Bun 1.2.15 once,
+then installs and builds two isolated exact-SHA checkouts: the reference and the
+candidate at `github.sha`. The reviewed reference seed is
+`19e5df81758e229b42825d6ccbe46997770c6fbf`; a manual dispatch may replace it
+only with another exact 40-character commit SHA.
 
-To bootstrap the required Go 1.25 baseline from a pushed branch containing
-this workflow:
+Both subjects first complete a discarded R,C,C,R calibration block, then are
+measured twice on that same runner in fixed R,C,C,R order. Calibration executes
+the real lifecycle path once per slot, so neither subject's first retained
+startup sample pays the runner's one-time dependency/page-cache step. It is not
+a retry and never becomes measurement evidence.
+Every round independently records the resolved
+`darwin-arm64-node24-go1.25-bun1.2.15` descriptor, all three benchmarks above,
+the repeated real `quality/soak` lifecycle suite and the `quality/stress`
+concurrency suite. `GITHUB_SHA` is rebound to the checkout being measured, so
+the quality provenance must name the exact subject rather than the workflow's
+default checkout. After each round, a first-attempt-only envelope binds the
+subject, round and workflow run to the SHA-256 digest of the environment,
+quality, semantic, Charm and OpenTUI reports. The paired comparator requires
+exactly two distinct, complete samples per subject and rejects different
+toolchains, metric sets, units, sources or subject provenance.
+The retained report provenance records the exact resolved `@opentui/core`
+version. It must be stable across both rounds of one subject, while a reviewed
+dependency upgrade remains part of the candidate being compared.
 
-1. Dispatch `Performance observations` with `mode=capture`.
-2. Download `performance-baseline-candidate-darwin-arm64-node24-go1.25-bun1.2.15`.
-3. Review its raw reports, runner descriptor and candidate values, then commit
-   the candidate as
-   `baselines/darwin-arm64-node24-go1.25-bun1.2.15.json` unchanged.
-4. Dispatch `mode=observe`; this is the first normal proof against the newly
-   committed, toolchain-qualified baseline.
+Before measurement, a candidate-controlled script fingerprints the closed
+measurement-harness file set in both checkouts. The workflow and final
+comparator require byte-identical fingerprints, preventing a harness or policy
+change from being mistaken for a product regression or improvement.
 
-Capture reads reviewed tolerances from the value-free `.policy.json`; every
-baseline value and source comes from that
-dispatch's measurements. A non-zero process or descriptor cleanup observation
-fails capture and produces no candidate baseline. The schema requires both
-cleanup metrics as exact zero-count invariants independently of the policy
-file, so removing a policy entry cannot disable the gate. Each candidate embeds
-the verified runner descriptor, including resolved toolchain versions, and the
-SHA-256 digest of every raw quality and benchmark input. The quality input also
-binds the timing, instrumented lifecycle-soak and stress roles to one exact host
-invocation and to the SHA-256 digest of every committed `manifest.json`. Its
-provenance records the collector digest and measured Git commit; on GitHub
-Actions it additionally requires the exact workflow run id, first-attempt number
-and `GITHUB_SHA`. Capture and observation recompute the collector digest and Git
-identity and reject missing, corrupt, unsupported or cross-run evidence before
-using any metric. They also validate each report's schema, platform,
-architecture and runtime against the runner descriptor.
+The comparison derives its reference values from the two reference rounds in
+the current job; there is no static measured baseline, capture mode or
+annotate-only observation mode. Reviewed tolerances remain in the value-free
+`.policy.json`. Timing and throughput metrics use the mean of their two fixed
+samples; resource peaks and exact cleanup invariants use the worse sample.
+Every raw report, committed native-run history, paired aggregation and
+comparison is retained in one artifact even when collection or comparison
+fails. The artifact also retains the exact built controller module closure whose
+digests appear in comparison provenance. A workflow rerun is rejected rather
+than becoming another sample.
+
+The quality input binds the timing, instrumented lifecycle-soak and stress
+roles to one exact host invocation and to the SHA-256 digest of every committed
+`manifest.json`. Its provenance records the collector digest and measured Git
+commit; on GitHub Actions it additionally requires the exact workflow run id,
+first-attempt number and subject-specific `GITHUB_SHA`. Collection and paired
+comparison recompute the collector digest and Git identity and reject missing,
+corrupt, unsupported or cross-run evidence before using any metric. They also
+validate every report's schema, platform, architecture and runtime against its
+round's runner descriptor.
 
 The quality observation records first-run pre-attempt time and the mean
 post-startup run orchestration time outside the recorded attempt: collection,
-scheduling and finalization, with the controlled test workload subtracted. Both
-the run duration and the attempt offset are measured by the host's monotonic
-clock; wall timestamps remain provenance only. Runs are ordered by the host's
-logical configuration-event sequence, not their wall timestamps. This timing
-phase runs without external process-table,
-memory or descriptor samplers, so the observation does not measure its own
+scheduling and finalization, with the controlled test workload subtracted. The
+run duration and attempt start/finish offsets are measured by the same host
+monotonic clock; wall timestamps remain provenance only. Runs are ordered by
+the host's logical configuration-event sequence, not their wall timestamps.
+This timing phase runs without external process-table, memory or descriptor
+samplers, so the observation does not measure its own
 resource probes. Resource evidence is collected in a separate instrumented
 lifecycle soak, preserving detection of leaks accumulated across persistent-host
 cycles, and in the certified 16-session stress phase. On macOS that process-tree
@@ -136,27 +151,28 @@ it retains ownership until the collector records either a successful snapshot
 or a terminal failure. A failed or incomplete snapshot fails the test and the
 collector, while fixture teardown still closes every session. The raw quality
 report retains the validated snapshot method, expected session count and exact
-process count, and baseline capture rejects an incomplete record. Cleanup is the
+process count, and paired comparison rejects an incomplete record. Cleanup is the
 number of observed descendant processes, and the descriptors they still own,
-after the certified host exits; both have an exact zero baseline. The host
+after the certified host exits; both have an exact zero invariant. The host
 itself also fails closed if its resource broker
 or run finalization barrier finds a leak.
 
-Every timing or footprint regression beyond its recorded tolerance emits a
+Every timing or footprint regression beyond its reviewed tolerance emits a
 native GitHub error and fails the scheduled/manual workflow. Process or file
 descriptor cleanup above its exact zero allowance is handled by the same hard
-gate. Invalid reports, failed suites, retries/reruns, missing measurements and a
-runner-class mismatch also fail because there is no trustworthy observation to
-compare. The workflow is intentionally scheduled/manual because it is an
+gate. Invalid reports, failed suites, retries/reruns, missing rounds and a
+runner-class mismatch also fail because there is no trustworthy paired evidence
+to compare. The workflow is intentionally scheduled/manual because it is an
 expensive, runner-class-qualified observation; when it runs, there is no
 annotate-only or green-with-warning state.
 
 The tolerances are data, not hidden workflow constants: first-run pre-attempt
-time allows 50%, post-startup orchestration and physical footprint 35%, peak descriptors 25%,
-the semantic p95 50%, and the framework ratios 35% (Charm) and 25% (OpenTUI),
-each with the small absolute allowance recorded beside it. Cleanup allows no
-leak at all.
+time allows 50%; post-startup orchestration and physical footprint allow 35%;
+peak descriptors allow 25%; semantic p95 allows 50%; and framework ratios allow
+35% for Charm and 25% for OpenTUI. Each also has the small absolute allowance
+recorded beside it. Cleanup allows no leak at all.
 
-Changing a tolerance requires a reviewed policy change and a fresh baseline
-capture. Old annotate-only policy fields are rejected rather than retained as
-backward compatibility.
+Changing a tolerance or the default reference seed requires a reviewed change.
+A manual reference override is explicit, applies only to that dispatch and is
+retained in the artifact. Old annotate-only or static-baseline workflow fields
+are rejected rather than retained as backward compatibility.

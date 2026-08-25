@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 )
 
 type model struct {
@@ -22,16 +22,24 @@ type model struct {
 func initialModel() model {
 	name := textinput.New()
 	name.Placeholder = "name"
+	nameStyles := name.Styles()
+	nameStyles.Cursor.Blink = false
+	name.SetStyles(nameStyles)
 	name.Focus()
 
 	secret := textinput.New()
 	secret.Placeholder = "password"
 	secret.EchoMode = textinput.EchoPassword
+	secretStyles := secret.Styles()
+	secretStyles.Cursor.Blink = false
+	secret.SetStyles(secretStyles)
 
 	return model{Name: name, Password: secret, Status: "ready"}
 }
 
-func (m model) Init() tea.Cmd { return textinput.Blink }
+// The performance fixture has no periodic producer: every publication must be
+// caused by the measured input batch, so correlation can be sampled exactly.
+func (m model) Init() tea.Cmd { return nil }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := msg.(type) {
