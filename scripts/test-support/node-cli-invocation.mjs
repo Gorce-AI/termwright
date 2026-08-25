@@ -1,4 +1,4 @@
-import { join, posix, win32 } from 'node:path';
+import { posix, win32 } from 'node:path';
 
 /**
  * Resolve npm as JavaScript on Windows instead of spawning npm.cmd.
@@ -19,9 +19,10 @@ export function npmInvocation(options = {}) {
 }
 
 /** Invoke the installed Vitest entry point without a platform shell shim. */
-export function vitestInvocation(project, execPath = process.execPath) {
+export function vitestInvocation(project, execPath = process.execPath, platform = process.platform) {
+  const path = platform === 'win32' ? win32 : posix;
   return {
     file: execPath,
-    args: [join(project, 'node_modules', 'vitest', 'vitest.mjs')],
+    args: [path.join(project, 'node_modules', 'vitest', 'vitest.mjs')],
   };
 }

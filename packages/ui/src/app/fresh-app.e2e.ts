@@ -815,8 +815,8 @@ describe('fresh React runner', () => {
 
     const actionless = page.locator('.tw-case-button').filter({ hasText: 'records an actionless business rule' });
     await actionless.click();
-    expect(await page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count()).toBe(1);
-    expect(await page.locator('.tw-section-row').filter({ hasText: 'Given the policy already permits the request' }).count()).toBe(1);
+    await expect.poll(() => page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count()).toBe(1);
+    await expect.poll(() => page.locator('.tw-section-row').filter({ hasText: 'Given the policy already permits the request' }).count()).toBe(1);
     expect(await page.locator('.tw-command-row').count()).toBe(0);
     expect(await page.getByText('No driver actions were recorded for this case.', { exact: false }).count()).toBe(0);
     const expandInspector = page.getByRole('button', { name: 'Expand inspector' });

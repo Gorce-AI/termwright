@@ -17,9 +17,13 @@ describe('shell-free Node CLI invocation', () => {
   });
 
   it('runs Vitest through Node on every platform', () => {
-    expect(vitestInvocation('/work/project', '/node/bin/node')).toEqual({
+    expect(vitestInvocation('/work/project', '/node/bin/node', 'linux')).toEqual({
       file: '/node/bin/node',
       args: ['/work/project/node_modules/vitest/vitest.mjs'],
+    });
+    expect(vitestInvocation('D:\\work\\project', 'C:\\node\\node.exe', 'win32')).toEqual({
+      file: 'C:\\node\\node.exe',
+      args: ['D:\\work\\project\\node_modules\\vitest\\vitest.mjs'],
     });
   });
 });

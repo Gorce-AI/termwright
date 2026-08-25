@@ -17,6 +17,7 @@ import { catalogCases, selectedCase } from './domain/selectors.js';
 import { usePreferences } from './preferences.js';
 import { Tooltip } from './components/Tooltip.js';
 import { parseAppUrl, shareableAppUrl, urlStateFromApp, type AppUrlState } from './url-state.js';
+import { bootstrapRunner } from './bootstrap.js';
 
 export function TermwrightApp({ source, client }: { readonly source: DataSource; readonly client?: RunnerClient }) {
   const { preferences } = usePreferences();
@@ -36,30 +37,35 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
 
   useEffect(() => {
     let active = true;
-    void source.state().then((viewer) => {
-      if (!active) return;
-      initialViewer.current = viewer;
-      activeTrace.current = viewer.trace === null ? null : { ref: viewer.trace.path, overview: viewer.trace };
-      if (viewer.record !== null) {
-        setRecordDraft((draft) => ({
-          ...draft,
-          command: commandForForm(viewer.record?.command ?? []),
-          outFile: viewer.record?.outFile ?? '',
-        }));
-      }
-      dispatch({ type: 'boot-ready', viewer });
-    }).catch((cause: unknown) => {
-      if (active) dispatch({ type: 'boot-error', error: describe(cause) });
+    void bootstrapRunner(source, client, {
+      active: () => active,
+      ready: (viewer) => {
+        initialViewer.current = viewer;
+        activeTrace.current = viewer.trace === null ? null : { ref: viewer.trace.path, overview: viewer.trace };
+        if (viewer.record !== null) {
+          setRecordDraft((draft) => ({
+            ...draft,
+            command: commandForForm(viewer.record?.command ?? []),
+            outFile: viewer.record?.outFile ?? '',
+          }));
+        }
+        dispatch({ type: 'boot-ready', viewer });
+      },
+      failed: (cause) => dispatch({ type: 'boot-error', error: describe(cause) }),
+      message: (message) => dispatch({ type: 'message', message }),
+      status: (connected) => dispatch({ type: 'connected', connected }),
     });
-    client?.connect(
-      (message) => dispatch({ type: 'message', message }),
-      (connected) => dispatch({ type: 'connected', connected }),
-    );
     return () => {
       active = false;
       client?.disconnect();
     };
   }, [client, source]);
+
+  const inspectActionability = useCallback(
+    (sessionId: string, nodeId: string) => client?.inspectActionability(sessionId, nodeId)
+      ?? Promise.reject(new Error('live actionability requires a Runner connection')),
+    [client],
+  );
 
   const openReplay = useCallback(async (execution: ExecutionCase, requestedTimeMs = 0) => {
     if (execution.traceRef === undefined) return;
@@ -377,7 +383,7 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
               dispatch({ type: 'toast', tone: 'failure', text: `Terminal input failed: ${describe(cause)}` });
             });
           }}
-          {...(client === undefined ? {} : { onInspectActionability: (sessionId: string, nodeId: string) => client.inspectActionability(sessionId, nodeId) })}
+          {...(client === undefined ? {} : { onInspectActionability: inspectActionability })}
           onTraceStateAt={(timeMs) => source.traceState(timeMs)}
           onOpenReplay={(executionId) => {
             const execution = state.executions.find((test) => test.executionId === executionId)
