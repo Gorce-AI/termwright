@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { candidateToolchainBlock, verifyCandidateEvidence } from './certify-framework-candidate.mjs';
+import { assertCandidateSemanticSession, candidateToolchainBlock, canonicalOpenTuiBuilds, verifyCandidateEvidence } from './certify-framework-candidate.mjs';
 
 describe('framework candidate evidence binding', () => {
+  it('canonicalizes OpenTUI build pairs independently of filesystem order', () => {
+    expect(canonicalOpenTuiBuilds([
+      { id: 'bun-b', file: 'chunk-bun-b.js' },
+      { id: 'node-a', file: 'chunk-node-a.js' },
+    ]).map((entry) => entry.id)).toEqual(['node-a', 'bun-b']);
+  });
+
+  it('uses the frozen contract instead of the removed provisional capabilities API', async () => {
+    const session = {
+      settled: async () => ({ capabilities: { 'semantic-tree': { status: 'supported' } } }),
+      semanticTree: () => ({ v: 2 }),
+    };
+    await expect(assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9')).resolves.toBeUndefined();
+  });
+
+  it('rejects a session whose frozen contract lacks semantic support', async () => {
+    const session = {
+      settled: async () => ({ capabilities: { 'semantic-tree': { status: 'unsupported' } } }),
+      semanticTree: () => ({ v: 2 }),
+    };
+    await expect(assertCandidateSemanticSession(session, 'bubbletea-v2@v2.0.9')).rejects.toThrow(/no supported semantic tree/u);
+  });
+
   it('classifies a newer upstream Go floor as a typed red candidate outcome', () => {
     expect(candidateToolchainBlock({
       id: 'bubbletea-v2@v2.1.0',

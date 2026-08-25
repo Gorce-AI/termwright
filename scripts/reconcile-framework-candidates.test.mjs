@@ -5,11 +5,18 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { digestTree } from './prepare-framework-candidate.mjs';
 import { canonicalJson } from './discover-framework-candidates.mjs';
-import { reconcile, recordVerifiedFrameworkVersion, renderCertifiedTextualVersions, renderExactPeerRange, verifyGeneratedHookProfile, verifyGeneratedUpdate } from './reconcile-framework-candidates.mjs';
+import { reconcile, recordVerifiedFrameworkVersion, renderCertifiedTextualVersions, renderExactPeerRange, sameHookProfile, verifyGeneratedHookProfile, verifyGeneratedUpdate } from './reconcile-framework-candidates.mjs';
 
 const candidate = { id: 'example@2.1.1', streamId: 'example', package: 'example', version: '2.1.1', publishedAt: '2026-01-03T00:00:00Z', source: { checksum: 'a'.repeat(64) }, patch: { status: 'ready', path: 'patches/2.1.1/manifest.json', manifestDigest: `sha256:${'b'.repeat(64)}` }, candidateDigest: `sha256:${'c'.repeat(64)}` };
 
 describe('framework candidate reconciliation', () => {
+  it('treats hook build order as non-semantic while preserving immutable bytes', () => {
+    const node = { id: 'node-a', file: 'chunk-node-a.js', sha256: 'a'.repeat(64) };
+    const bun = { id: 'bun-b', file: 'chunk-bun-b.js', sha256: 'b'.repeat(64) };
+    expect(sameHookProfile({ version: '0.5.3', builds: [node, bun] }, { version: '0.5.3', builds: [bun, node] })).toBe(true);
+    expect(sameHookProfile({ version: '0.5.3', builds: [node, bun] }, { version: '0.5.3', builds: [bun, { ...node, sha256: 'c'.repeat(64) }] })).toBe(false);
+  });
+
   it('renders a deterministic exact peer range for every certified hook version', () => {
     expect(renderExactPeerRange(['7.2.0', '7.1.1', '7.1.2', '7.1.1'])).toBe('7.1.1 || 7.1.2 || 7.2.0');
     expect(() => renderExactPeerRange([])).toThrow(/at least one version/u);

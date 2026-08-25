@@ -80,7 +80,12 @@ export async function deriveHookInstrumentationProfile(candidate, archiveBytes, 
   if (builds.length !== 2 || new Set(builds.map((entry) => entry.id.split('-')[0])).size !== 2) {
     throw new Error(`${candidate.id}: expected exactly one Node and one Bun OpenTUI chunk, found ${builds.map((entry) => entry.file).join(', ')}`);
   }
-  return { ...binding, builds };
+  return { ...binding, builds: canonicalOpenTuiBuilds(builds) };
+}
+
+export function canonicalOpenTuiBuilds(builds) {
+  const rank = (entry) => entry.id.startsWith('node-') ? 0 : entry.id.startsWith('bun-') ? 1 : 2;
+  return [...builds].sort((left, right) => rank(left) - rank(right) || left.id.localeCompare(right.id) || left.file.localeCompare(right.file));
 }
 
 async function writeHookUpdate(output, candidate, profile, sourceRevision) {
@@ -145,6 +150,13 @@ export function candidateToolchainBlock(candidate, approvedGoVersion) {
   return `${candidate.id}: requires Go >= ${candidate.source.requiredGoVersion}; trusted certification is pinned to Go ${approvedGoVersion}`;
 }
 
+export async function assertCandidateSemanticSession(session, candidateId) {
+  const contract = await session.settled();
+  if (contract.capabilities['semantic-tree'].status !== 'supported' || session.semanticTree()?.v !== 2) {
+    throw new Error(`${candidateId}: exact application produced no supported semantic tree`);
+  }
+}
+
 export async function certifyGoCandidateBehavior(candidate) {
   const scratch = await mkdtemp(join(tmpdir(), 'termwright-go-behavior-'));
   const app = join(scratch, 'app');
@@ -188,10 +200,15 @@ export async function certifyGoCandidateBehavior(candidate) {
   const binary = join(scratch, 'candidate-app');
   await run('go', ['build', '-o', binary, '.'], prepared.env, app);
   const driver = await import(pathToFileURL(join(root, 'packages/driver/dist/index.js')).href);
-  const session = await driver.launchTerminal({ command: [binary], columns: 80, rows: 24 });
+  const session = await driver.launchTerminal({
+    command: [binary],
+    columns: 80,
+    rows: 24,
+    requiredCapabilities: ['semantic-tree'],
+  });
   try {
     await session.waitForText(candidate.frameworkId === 'tview' ? 'readme.md' : candidate.package.includes('bubbles') ? 'candidate' : 'ready');
-    await eventually(() => session.semanticTree()?.v === 2 && session.capabilities().semanticTree === true, `${candidate.id}: exact application produced no semantic tree`);
+    await assertCandidateSemanticSession(session, candidate.id);
     if (candidate.frameworkId === 'tview') {
       await eventually(async () => await session.getByRole('button', { name: 'Save' }).count() === 1, `${candidate.id}: exact tview button semantics missing`);
       await session.press('Tab');

@@ -117,6 +117,16 @@ export async function verifyGeneratedHookProfile({ candidate, verdict, updateDir
   return metadata.profile;
 }
 
+export function sameHookProfile(left, right) {
+  const normalized = (profile) => ({
+    ...profile,
+    builds: Array.isArray(profile?.builds)
+      ? [...profile.builds].sort((a, b) => a.id.localeCompare(b.id) || a.file.localeCompare(b.file))
+      : profile?.builds,
+  });
+  return canonicalJson(normalized(left)) === canonicalJson(normalized(right));
+}
+
 export function recordVerifiedFrameworkVersion(registry, candidate) {
   const framework = registry.frameworks?.find((entry) => entry.id === candidate.frameworkId);
   if (framework === undefined) throw new Error(`${candidate.id}: compatibility framework row is missing`);
@@ -201,7 +211,7 @@ async function main(argv) {
       const document = JSON.parse(await readFile(profilePath, 'utf8'));
       const existing = document.profiles.find((entry) => entry.version === candidate.version);
       if (existing === undefined) document.profiles.push(profile);
-      else if (canonicalJson(existing) !== canonicalJson(profile)) throw new Error(`${candidate.id}: certified hook profile is immutable`);
+      else if (!sameHookProfile(existing, profile)) throw new Error(`${candidate.id}: certified hook profile is immutable`);
       document.profiles.sort((left, right) => compareVersions(left.version, right.version));
       await writeFile(profilePath, canonicalJson(document));
       await updateCertifiedHookPeerRanges(candidate.frameworkId, document.profiles.map((entry) => entry.version));
