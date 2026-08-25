@@ -102,6 +102,10 @@ function installedDeclarations(manifest) {
   return [...declarations.values()].sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type));
 }
 
+export function packageContentDigestForEntries(files) {
+  return `sha256:${sha256(canonicalJson(files))}`;
+}
+
 async function packageContentDigest(directory) {
   const files = [];
   const visit = async (current) => {
@@ -123,7 +127,7 @@ async function packageContentDigest(directory) {
     }
   };
   await visit(directory);
-  return `sha256:${sha256(canonicalJson(files))}`;
+  return packageContentDigestForEntries(files);
 }
 
 function declaredBinNames(manifest) {
