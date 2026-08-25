@@ -17,6 +17,7 @@ import {
   type DesktopHostMessage,
 } from './protocol.js';
 import { createDeadlineDeferred, withinDeadline, type DeadlineOperation } from './deadline.js';
+import { bindControlServer, type ControlServerBind } from './control-server.js';
 
 export { DESKTOP_HOST_PROTOCOL, validateRunnerUrl } from './protocol.js';
 export { SECURE_WEB_PREFERENCES, contentSecurityPolicy, isAllowedNavigation, isAllowedRequest } from './security.js';
@@ -241,21 +242,10 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
   });
   let child: ChildProcess | undefined;
   let socket: Socket | undefined;
+  let controlBind: ControlServerBind | undefined;
   try {
-    const bound = createDeadlineDeferred<void>();
-    const rejectBind = (error: Error): void => bound.reject(error);
-    server.once('error', rejectBind);
-    server.listen(controlAddress, () => {
-      server.removeListener('error', rejectBind);
-      bound.resolve();
-    });
-    await withinDeadline({
-      result: bound.result,
-      cancel(): void {
-        server.removeListener('error', rejectBind);
-        bound.cancel();
-      },
-    }, readyDeadline, 'desktop control endpoint did not bind');
+    controlBind = bindControlServer(server, controlAddress);
+    await withinDeadline(controlBind, readyDeadline, 'desktop control endpoint did not bind');
     if (process.platform !== 'win32') await chmod(controlAddress, 0o600);
     child = spawn(executable, options.executable === undefined ? [] : [...desktopHostArguments(main)], {
       stdio: 'ignore',
@@ -301,7 +291,7 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
       controlDirectory = undefined;
     }
   } catch (error) {
-    await rollbackDesktopLaunch({ server, child, socket: socket ?? acceptedSocket, controlDirectory, error });
+    await rollbackDesktopLaunch({ server, controlBind, child, socket: socket ?? acceptedSocket, controlDirectory, error });
     throw error;
   }
 
@@ -369,7 +359,7 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
   try {
     await withinDeadline(ready, readyDeadline, () => `desktop host did not become ready (last stage: ${lastStage})`);
   } catch (error) {
-    await rollbackDesktopLaunch({ server, child: runningChild, socket: runningSocket, controlDirectory, error });
+    await rollbackDesktopLaunch({ server, controlBind, child: runningChild, socket: runningSocket, controlDirectory, error });
     throw error;
   }
 
@@ -410,6 +400,7 @@ async function closeServer(server: Server): Promise<void> {
 
 async function rollbackDesktopLaunch(options: {
   readonly server: Server;
+  readonly controlBind: ControlServerBind | undefined;
   readonly child: ChildProcess | undefined;
   readonly socket: Socket | undefined;
   readonly controlDirectory: string | undefined;
@@ -417,7 +408,10 @@ async function rollbackDesktopLaunch(options: {
 }): Promise<void> {
   const failures: unknown[] = [];
   options.socket?.destroy();
-  try { await closeServer(options.server); } catch (error) { failures.push(error); }
+  try {
+    if (options.controlBind === undefined) await closeServer(options.server);
+    else await options.controlBind.rollback();
+  } catch (error) { failures.push(error); }
   if (options.child !== undefined && options.child.exitCode === null && options.child.signalCode === null) {
     options.child.kill('SIGKILL');
     try {
