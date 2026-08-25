@@ -56,6 +56,12 @@ describe('performance baseline capture command', () => {
     await expect(stat(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('rejects quality evidence that did not snapshot the complete stress tree', async () => {
+    const fixture = await reports(0, { stressProcessCount: 17 });
+    await expect(execute(process.execPath, command(fixture))).rejects.toThrow(/complete 16-session process tree/u);
+    await expect(stat(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('rejects a mislabeled scenario even when its id and metric are expected', async () => {
     const fixture = await reports(0, { charmFramework: 'opentui' });
     await expect(execute(process.execPath, command(fixture))).rejects.toThrow(
@@ -119,10 +125,16 @@ async function reports(leakedProcesses, options = {}) {
     writeFile(paths.quality, JSON.stringify({
       generatedAt: '2026-08-25T03:00:00.000Z',
       environment: 'darwin-arm64-node24-go1.25-bun1.2.15',
+      resourceSnapshot: {
+        kind: 'termwright-quality-resource-snapshot',
+        schemaVersion: 1,
+        memoryMeasurement: 'darwin-summary-footprint',
+        stress: { expectedSessions: 16, processCount: options.stressProcessCount ?? 18 },
+      },
       metrics: {
         startupMs: metric(701, 'milliseconds'),
         perTestOverheadMs: metric(402, 'milliseconds'),
-        peakRssBytes: metric(400_000_000, 'bytes'),
+        peakMemoryFootprintBytes: metric(400_000_000, 'bytes'),
         peakOpenFileDescriptors: metric(60, 'count'),
         leakedFileDescriptors: metric(0, 'count'),
         leakedProcesses: metric(leakedProcesses, 'count'),

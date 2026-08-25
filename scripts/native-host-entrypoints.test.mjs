@@ -124,10 +124,15 @@ describe('the native host is the only Termwright test entrypoint', () => {
     expect(ciJobs['resource-leak']).toContain('packages/driver/src/internal/resource-scope.test.ts');
     expect(ciJobs['resource-leak']).toContain('packages/driver/src/internal/action-retry.test.ts');
     expect(ciJobs['resource-leak']).toContain('packages/mcp/src/sessions.test.ts');
+    expect(ciJobs['windows-driver-native'].indexOf('actions/download-artifact@'))
+      .toBeLessThan(ciJobs['windows-driver-native'].indexOf('- run: pnpm build'));
 
     const reliabilityJobs = Object.fromEntries(workflowJobBlocks(reliability).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
     expect(reliabilityJobs['nightly-soak-posix'].match(/^    needs:.*$/gmu)).toBeNull();
     expectExactNeed(reliabilityJobs['nightly-soak-windows'], 'conpty-native-build-x64');
+    const windowsSoak = reliabilityJobs['nightly-soak-windows'];
+    expect(windowsSoak.indexOf('actions/download-artifact@')).toBeLessThan(windowsSoak.indexOf('- run: pnpm build'));
+    expect(vitestReliability).toContain('node scripts/run-vitest-pty-matrix.mjs');
     expectArtifactStep(reliabilityJobs['conpty-native-build-x64'], 'upload-artifact', 'nightly-conpty-addon-x64', 'packages/conpty-win32-x64/termwright_conpty.node');
     expectArtifactStep(reliabilityJobs['nightly-soak-windows'], 'download-artifact', 'nightly-conpty-addon-x64', 'packages/conpty-win32-x64');
     expect(reliabilityJobs['conpty-native-build-x64']).toContain('node scripts/check-prebuild.mjs x64');

@@ -1,20 +1,32 @@
 import { execFile } from 'node:child_process';
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { npmInvocation, vitestInvocation } from './test-support/node-cli-invocation.mjs';
+import { vitestInvocation } from './test-support/node-cli-invocation.mjs';
+import { validateVitestPtyTelemetry } from './test-support/vitest-pty-telemetry.mjs';
 
 const execute = promisify(execFile);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const output = resolve(process.argv[2] ?? join(root, 'vitest-pty-matrix.json'));
-const versions = list('TERMWRIGHT_MATRIX_VITEST', ['3.1.4', '3.2.7', '4.1.11']);
+const rootPackage = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+const embeddedVitest = rootPackage.devDependencies?.vitest;
+if (embeddedVitest !== '4.1.11') {
+  throw new Error(`reliability matrix requires exact embedded Vitest 4.1.11, observed ${String(embeddedVitest)}`);
+}
+const casesPerFile = 8;
+const filesPerCell = 8;
+const versions = [embeddedVitest];
 const pools = list('TERMWRIGHT_MATRIX_POOLS', ['forks', 'threads']);
 const workerCounts = list('TERMWRIGHT_MATRIX_WORKERS', ['1', '2', '4']).map(Number);
 const ptyConcurrency = list('TERMWRIGHT_MATRIX_PTYS', ['1', '2', '4', '8']).map(Number);
 const fileParallelism = booleanList('TERMWRIGHT_MATRIX_FILE_PARALLELISM', ['true', 'false']);
-const work = await mkdtemp(join(tmpdir(), 'termwright-vitest-matrix-'));
+// The pressure fixture imports the POSIX PTY backend that is pinned by the
+// driver workspace package. Nesting under that package makes normal Node
+// resolution use pnpm's frozen-lockfile link without a second install.
+const workRoot = join(root, 'packages', 'driver', '.termwright', 'vitest-matrix');
+await mkdir(workRoot, { recursive: true });
+const work = await mkdtemp(join(workRoot, 'run-'));
 const results = [];
 
 try {
@@ -22,13 +34,9 @@ try {
     const project = join(work, `vitest-${version}`);
     await cp(join(root, 'quality', 'experiments'), join(project, 'tests'), { recursive: true });
     await writeFile(join(project, 'package.json'), `${JSON.stringify({ private: true, type: 'module' }, null, 2)}\n`);
-    const npm = npmInvocation();
-    await execute(npm.file, [...npm.args, 'install', '--no-audit', '--no-fund', `vitest@${version}`, '@lydell/node-pty@1.2.0-beta.15'], {
-      cwd: project,
-      timeout: 120_000,
-      windowsHide: true,
-      maxBuffer: 8 * 1024 * 1024,
-    });
+    // Prevent Vitest from walking up into Termwright's product runner config:
+    // this harness intentionally exercises the stock embedded engine directly.
+    await writeFile(join(project, 'vitest.config.mjs'), 'export default { test: {} };\n');
     // Multiple files are required to exercise the worker pool itself; test
     // concurrency inside one file alone can never reveal cross-worker IPC loss.
     const source = join(project, 'tests', 'vitest-pty-pressure.test.mjs');
@@ -37,28 +45,35 @@ try {
     }
     for (const pool of pools) for (const workers of workerCounts) for (const terminals of ptyConcurrency) {
       for (const parallelFiles of fileParallelism) {
-        const telemetry = join(project, `telemetry-${pool}-${workers}-${terminals}-files-${parallelFiles}.jsonl`);
+        const telemetry = join(project, `telemetry-${pool}-${workers}-${terminals}-files-${parallelFiles}`);
+        await mkdir(telemetry);
         const started = performance.now();
         let code = 0;
         let stdout = '';
         let stderr = '';
         try {
-          const workerArgs = version.startsWith('3.')
-            ? ['--minWorkers', '1', '--maxWorkers', String(workers)]
-            : ['--maxWorkers', String(workers)];
-          const vitest = vitestInvocation(project);
+          const workerArgs = ['--maxWorkers', String(workers)];
+          // Execute the exact lockfile-backed workspace engine. Keeping the
+          // temporary project under the repository also makes its test imports
+          // resolve through that same immutable dependency closure.
+          const vitest = vitestInvocation(root);
           const result = await execute(vitest.file, [...vitest.args,
-            // Vitest 3.1 derives a CPU-sized minWorkers default which can
-            // exceed an explicit small maxWorkers on large CI hosts. Pinning
-            // the lower bound makes workers=1/2 an actual comparable matrix
-            // cell instead of a Tinypool configuration error.
-            'run', '--pool', pool, ...workerArgs,
+            // Vitest 4.1 exposes maxWorkers (minWorkers was removed). The
+            // fixture rendezvous and exact overlap validator independently
+            // require the declared number of real workers to become active.
+            'run', '--config', 'vitest.config.mjs', '--pool', pool, ...workerArgs,
             '--maxConcurrency', String(terminals),
             parallelFiles ? '--fileParallelism' : '--no-file-parallelism',
             'tests',
           ], {
             cwd: project,
-            env: { ...process.env, TERMWRIGHT_MATRIX_CASES: '8', TERMWRIGHT_MATRIX_TELEMETRY: telemetry },
+            env: {
+              ...process.env,
+              TERMWRIGHT_MATRIX_CASES: String(casesPerFile),
+              TERMWRIGHT_MATRIX_FILE_PARALLELISM: String(parallelFiles),
+              TERMWRIGHT_MATRIX_TELEMETRY: telemetry,
+              TERMWRIGHT_MATRIX_WORKERS: String(workers),
+            },
             timeout: 120_000,
             windowsHide: true,
             maxBuffer: 16 * 1024 * 1024,
@@ -70,18 +85,23 @@ try {
           stdout = typeof error === 'object' && error !== null && typeof error.stdout === 'string' ? error.stdout : '';
           stderr = typeof error === 'object' && error !== null && typeof error.stderr === 'string' ? error.stderr : String(error);
         }
-        let records = [];
-        try {
-          records = (await readFile(telemetry, 'utf8')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
-        } catch { /* absence is itself evidence in the result */ }
+        const { records, errors: telemetryReadErrors } = await readTelemetryShards(telemetry, parallelFiles);
+        const telemetryVerdict = validateVitestPtyTelemetry(records, {
+          files: filesPerCell, casesPerFile, terminals, workers, fileParallelism: parallelFiles,
+          node: process.version, platform: process.platform, arch: process.arch, readErrors: telemetryReadErrors,
+        });
         results.push({
           vitest: version, node: process.version, os: `${process.platform}-${process.arch}`,
-          kind: 'single-pool', pool, workers, terminals, fileParallelism: parallelFiles,
+          kind: 'single-pool', pool, configuredMaxWorkers: workers,
+          terminals, fileParallelism: parallelFiles,
           code, durationMs: performance.now() - started,
           telemetryRecords: records.length,
-          workerPids: [...new Set(records.map((record) => record.pid))].sort((a, b) => a - b),
+          workersObserved: [...new Set(records.map((record) => `${String(record.pid)}:${String(record.threadId)}`))].sort(),
+          telemetryValid: telemetryVerdict.valid,
+          telemetryErrors: telemetryVerdict.errors,
           peakRss: Math.max(0, ...records.map((record) => record.memory?.rss ?? 0)),
           channelClosed: /channel (?:closed|is closed)|ERR_IPC_CHANNEL_CLOSED/iu.test(`${stdout}\n${stderr}`),
+          ipcChannelClosed: /\bERR_IPC_CHANNEL_CLOSED\b/u.test(`${stdout}\n${stderr}`),
           stdout: stdout.slice(-32_768), stderr: stderr.slice(-32_768),
         });
       }
@@ -92,9 +112,59 @@ try {
   await rm(work, { recursive: true, force: true });
 }
 
-const certifiedFailures = results.filter((result) => result.vitest === '4.1.11' && result.code !== 0);
+const certifiedFailures = results.filter((result) =>
+  result.code !== 0 || !result.telemetryValid || result.ipcChannelClosed);
+if (process.env.TERMWRIGHT_MATRIX_CERTIFY === '1') validateCertifiedMatrix(results);
 console.log(`Vitest/PTy matrix wrote ${results.length} cells to ${output}; certified failures: ${certifiedFailures.length}`);
 if (certifiedFailures.length > 0) process.exitCode = 1;
+
+async function readTelemetryShards(directory, parallelFiles) {
+  const records = [];
+  const errors = [];
+  const sources = ['vitest-pty-pressure.test.mjs', ...Array.from(
+    { length: filesPerCell - 1 }, (_, index) => `vitest-pty-pressure-${index + 1}.test.mjs`,
+  )];
+  const expectedNames = new Set(sources.flatMap((source) => [
+    `${source}.jsonl`,
+    ...(parallelFiles ? [`${source}.ready`] : []),
+  ]));
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || !expectedNames.delete(entry.name)) {
+      errors.push(`unexpected telemetry shard ${entry.name}`);
+    }
+  }
+  for (const missing of expectedNames) errors.push(`missing telemetry shard ${missing}`);
+  for (const source of sources) {
+    const path = join(directory, `${source}.jsonl`);
+    try {
+      const lines = (await readFile(path, 'utf8')).trim().split('\n').filter(Boolean);
+      const shard = lines.map((line) => JSON.parse(line));
+      if (shard.some((record) => record?.source !== source)) {
+        errors.push(`${source}: shard contains a foreign source identity`);
+      }
+      records.push(...shard);
+    } catch (error) {
+      errors.push(`${source}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return { records, errors };
+}
+
+function validateCertifiedMatrix(entries) {
+  const certified = entries.filter((entry) => entry.vitest === '4.1.11');
+  const expected = new Set();
+  for (const pool of ['forks', 'threads']) for (const workers of [1, 2, 4]) {
+    for (const terminals of [1, 2, 4, 8]) for (const fileParallelism of [true, false]) {
+      expected.add(`${pool}:${workers}:${terminals}:${fileParallelism}`);
+    }
+  }
+  const actual = new Set(certified.map((entry) =>
+    `${entry.pool}:${entry.configuredMaxWorkers}:${entry.terminals}:${entry.fileParallelism}`));
+  if (certified.length !== expected.size || actual.size !== expected.size || [...expected].some((key) => !actual.has(key))) {
+    throw new Error(`certified Vitest matrix is incomplete: expected ${expected.size} exact cells, observed ${actual.size}`);
+  }
+}
 
 function list(name, defaults) {
   const value = process.env[name];

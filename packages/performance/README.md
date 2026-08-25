@@ -82,10 +82,8 @@ lifecycle suite repeatedly and the `quality/stress` concurrency suite once
 through the certified host. One artifact contains the raw reports, resource
 observations and comparison.
 
-The former `baselines/darwin-arm64-node24.json` seed was measured with Go
-1.24.4 and is retained only as historical evidence. The scheduled and normal
-manual modes never compare against it. To bootstrap the required Go 1.25
-baseline from a pushed branch containing this workflow:
+To bootstrap the required Go 1.25 baseline from a pushed branch containing
+this workflow:
 
 1. Dispatch `Performance observations` with `mode=capture`.
 2. Download `performance-baseline-candidate-darwin-arm64-node24-go1.25-bun1.2.15`.
@@ -109,10 +107,21 @@ that descriptor before using any metric.
 The quality observation defines startup as run-manifest creation to the first
 attempt. Per-test overhead is the mean post-startup run duration outside the
 recorded attempt: collection, scheduling and finalization, with the controlled
-test workload subtracted. A process-tree sampler records aggregate peak RSS and
-open descriptors. Cleanup is the number of observed descendant processes, and
-the descriptors they still own, after the certified host exits; both have an
-exact zero baseline. The host itself also fails closed if its resource broker
+test workload subtracted. On macOS the process-tree sampler records the maximum
+sampled process-tree `Summary Footprint` reported by `/usr/bin/footprint`,
+rather than summing per-process RSS or `phys_footprint` values that count shared
+pages more than once. Memory-footprint and descriptor observation run
+independently, so the slower descriptor probe cannot suppress memory samples.
+The 16-session stress fixture publishes an
+atomically written, nonce-bound READY record only after every terminal is live;
+it retains ownership until the collector records either a successful snapshot
+or a terminal failure. A failed or incomplete snapshot fails the test and the
+collector, while fixture teardown still closes every session. The raw quality
+report retains the validated snapshot method, expected session count and exact
+process count, and baseline capture rejects an incomplete record. Cleanup is the
+number of observed descendant processes, and the descriptors they still own,
+after the certified host exits; both have an exact zero baseline. The host
+itself also fails closed if its resource broker
 or run finalization barrier finds a leak.
 
 Timing and footprint regressions beyond their recorded tolerance emit native
@@ -124,9 +133,10 @@ suites, retries/reruns, missing measurements and a runner-class mismatch also
 fail because there is no trustworthy observation to compare.
 
 The tolerances are data, not hidden workflow constants: startup allows 50%,
-post-startup orchestration and RSS 35%, peak descriptors 25%, the semantic p95
-50%, and the framework ratios 35% (Charm) and 25% (OpenTUI), each with the small
-absolute allowance recorded beside it. Cleanup allows no leak at all.
+post-startup orchestration and physical footprint 35%, peak descriptors 25%,
+the semantic p95 50%, and the framework ratios 35% (Charm) and 25% (OpenTUI),
+each with the small absolute allowance recorded beside it. Cleanup allows no
+leak at all.
 
 The performance comparison may become merge-blocking only after at least 12
 successful weekly samples from the same runner class have been retained and
