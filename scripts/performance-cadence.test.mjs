@@ -11,6 +11,8 @@ const stressFixture = await readFile(
 const comparator = await readFile(new URL('./compare-performance-baseline.mjs', import.meta.url), 'utf8');
 const capture = await readFile(new URL('./capture-performance-baseline.mjs', import.meta.url), 'utf8');
 const environment = await readFile(new URL('./performance-environment.mjs', import.meta.url), 'utf8');
+const observations = await readFile(new URL('./performance-observations.mjs', import.meta.url), 'utf8');
+const timing = await readFile(new URL('./quality-performance-timing.mjs', import.meta.url), 'utf8');
 const policy = await readFile(
   new URL('../packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json', import.meta.url),
   'utf8',
@@ -45,7 +47,7 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain('test -f "$PERFORMANCE_BASELINE"');
     expect(workflow).toContain('packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.json');
     expect(capture).toContain('capturePerformanceBaseline(policy, observations, provenance)');
-    expect(JSON.parse(policy)).not.toHaveProperty('metrics.startupMs.value');
+    expect(JSON.parse(policy)).not.toHaveProperty('metrics.firstRunPreAttemptMs.value');
   });
 
   it('runs every existing benchmark plus the soak and stress observations', () => {
@@ -58,11 +60,32 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain('collect-quality-performance.mjs');
     expect(collector).toContain('quality/soak/vitest.config.ts');
     expect(collector).toContain('quality/stress/vitest.config.ts');
+    expect(collector).toContain('await observeTiming(soakArgs, args.cycles)');
+    expect(collector).toContain('const resourceSoak = await observeResources(soakArgs, undefined, args.cycles)');
+    expect(collector).toContain('stress = await observeResources([');
     expect(collector).toContain('createQualityCheckpoint(16)');
     expect(collector).toContain('waitForQualityReady(checkpoint');
     expect(collector).toContain("publishQualityTerminal(checkpoint, { status: 'failure'");
     expect(collector).toContain("execute('/usr/bin/footprint'");
     expect(collector).toContain('peakMemoryFootprintBytes');
+    expect(collector).toContain('Math.max(resourceSoak.peakMemoryFootprintBytes, stress.peakMemoryFootprintBytes)');
+    expect(collector).toContain('summarizeQualityTiming(timingManifests)');
+    expect(collector).toContain('hostReportRunIds(stdout, expectedRuns)');
+    expect(collector).toContain('await readRunManifest(runsDir, runId)');
+    expect(collector).toContain("record.state !== 'complete'");
+    expect(collector).toContain('const manifestSha256 = sha256(raw)');
+    expect(collector).toContain('RUN_HISTORY_COMMIT_VERSION} sha256:${manifestSha256}');
+    expect(collector).toContain("collectorSha256: sha256(collector)");
+    expect(collector).toContain('githubCiProvenance(process.env, gitCommit)');
+    expect(observations).toContain('await validateQualityProvenance(quality.provenance)');
+    expect(observations).toContain('quality provenance collector SHA-256 differs');
+    expect(observations).toContain('quality provenance roles must use distinct host invocations');
+    expect(collector).toContain('runDirectoryName(runId)');
+    expect(collector).not.toContain('filter((name) => !before.has(name))');
+    expect(timing).toContain('attempts[0].startedAfterRunMs');
+    expect(timing).toContain('attempt.finishedAfterRunMs - attempt.startedAfterRunMs');
+    expect(collector).not.toContain('manifest.finishedAt - manifest.startedAt');
+    expect(collector).not.toContain('event.wallTime');
     expect(collector).not.toContain('peakRssBytes');
     expect(collector).not.toContain('pids.reduce((sum, pid) => sum + (table.get(pid)?.rssBytes');
     expect(collector).toContain('discoverProcesses');

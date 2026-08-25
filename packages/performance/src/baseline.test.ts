@@ -15,7 +15,7 @@ import {
 
 const policy: PerformanceBaselinePolicy = {
   kind: 'termwright-performance-baseline-policy',
-  schemaVersion: 2,
+  schemaVersion: 3,
   environment: 'darwin-arm64-node24-go1.25-bun1.2.15',
   metrics: {
     startupMs: {
@@ -75,7 +75,7 @@ const captureProvenance: PerformanceBaselineProvenance = {
 
 const baseline: PerformanceBaseline = {
   kind: 'termwright-performance-baseline',
-  schemaVersion: 3,
+  schemaVersion: 4,
   recordedAt: '2026-08-25T00:00:00.000Z',
   environment: 'linux-x64-node22-go1.25-bun1.2.15',
   provenance,
@@ -146,6 +146,16 @@ describe('performance baseline comparator', () => {
       ...observations(1_000),
       environment: 'darwin-arm64-node24',
     })).toThrow(/environments differ/u);
+  });
+
+  it('refuses a changed measurement source even when name and unit still match', () => {
+    expect(() => comparePerformanceBaseline(baseline, {
+      ...observations(1_000),
+      metrics: {
+        ...observations(1_000).metrics,
+        startupMs: { value: 1_000, unit: 'milliseconds', source: 'different methodology' },
+      },
+    })).toThrow(/measurement source changed/u);
   });
 
   it('refuses to go green when a baseline metric disappeared', () => {
@@ -251,9 +261,9 @@ describe('performance baseline comparator', () => {
   });
 
   it('rejects the previous baseline and policy schema versions', () => {
-    expect(() => validateBaseline({ ...baseline, schemaVersion: 2 }))
+    expect(() => validateBaseline({ ...baseline, schemaVersion: 3 }))
       .toThrow(/unsupported performance baseline kind or version/u);
-    expect(() => validateBaselinePolicy({ ...policy, schemaVersion: 1 }))
+    expect(() => validateBaselinePolicy({ ...policy, schemaVersion: 2 }))
       .toThrow(/unsupported performance baseline policy kind or version/u);
   });
 
@@ -266,8 +276,8 @@ describe('performance baseline comparator', () => {
     expect(() => validateBaselinePolicy(value)).not.toThrow();
     expect(JSON.stringify(value)).not.toMatch(/"value"/u);
     expect(Object.keys((value as PerformanceBaselinePolicy).metrics)).toEqual([
-      'startupMs',
-      'perTestOverheadMs',
+      'firstRunPreAttemptMs',
+      'postStartupRunOrchestrationMs',
       'peakMemoryFootprintBytes',
       'peakOpenFileDescriptors',
       'leakedFileDescriptors',

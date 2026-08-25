@@ -1,15 +1,15 @@
 {
   "kind": "termwright-performance-baseline-policy",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "environment": "darwin-arm64-node24-go1.25-bun1.2.15",
   "metrics": {
-    "startupMs": {
+    "firstRunPreAttemptMs": {
       "unit": "milliseconds",
       "direction": "lower",
       "relativeTolerance": 0.5,
       "absoluteTolerance": 250
     },
-    "perTestOverheadMs": {
+    "postStartupRunOrchestrationMs": {
       "unit": "milliseconds",
       "direction": "lower",
       "relativeTolerance": 0.35,

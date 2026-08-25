@@ -1,7 +1,7 @@
 export const PERFORMANCE_BASELINE_KIND = 'termwright-performance-baseline' as const;
-export const PERFORMANCE_BASELINE_VERSION = 3 as const;
+export const PERFORMANCE_BASELINE_VERSION = 4 as const;
 export const PERFORMANCE_BASELINE_POLICY_KIND = 'termwright-performance-baseline-policy' as const;
-export const PERFORMANCE_BASELINE_POLICY_VERSION = 2 as const;
+export const PERFORMANCE_BASELINE_POLICY_VERSION = 3 as const;
 
 export type BaselineUnit = 'milliseconds' | 'bytes' | 'count' | 'microseconds/frame' | 'ratio';
 const BASELINE_UNITS: readonly BaselineUnit[] = [
@@ -114,6 +114,9 @@ export function comparePerformanceBaseline(
     if (observed === undefined) throw new Error(`current observations are missing ${name}`);
     if (observed.unit !== expected.unit) {
       throw new Error(`${name} unit changed from ${expected.unit} to ${observed.unit}`);
+    }
+    if (observed.source !== expected.source) {
+      throw new Error(`${name} measurement source changed from ${expected.source} to ${observed.source}`);
     }
     const allowedMaximum = expected.direction === 'exact'
       ? expected.value + expected.absoluteTolerance

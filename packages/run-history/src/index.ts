@@ -15,7 +15,7 @@ import {
   type SpecId,
 } from '@termwright/protocol/run-events';
 
-export const RUN_MANIFEST_VERSION = 2 as const;
+export const RUN_MANIFEST_VERSION = 3 as const;
 export const RUN_HISTORY_COMMIT_VERSION = 1 as const;
 const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 
@@ -53,6 +53,10 @@ export interface NativeRunAttempt {
   readonly repeat: number;
   readonly retry: number;
   readonly status: 'passed' | 'failed' | 'skipped' | 'incomplete';
+  /** Host-monotonic offset at which the authoritative attempt start was accepted. */
+  readonly startedAfterRunMs: number;
+  /** Host-monotonic offset at which the authoritative attempt finish was accepted. */
+  readonly finishedAfterRunMs: number | null;
   readonly durationMs: number | null;
 }
 export interface NativeRunSpec {
@@ -66,6 +70,8 @@ export interface NativeRunSpec {
 export interface RunManifest extends RunStartProvenance {
   readonly v: typeof RUN_MANIFEST_VERSION;
   readonly finishedAt: number;
+  /** Host-monotonic elapsed time immediately before durable history preparation. */
+  readonly durationMs: number;
   readonly status: NativeRunStatus;
   readonly specs: readonly NativeRunSpec[];
   readonly attempts: readonly NativeRunAttempt[];
@@ -253,6 +259,7 @@ function validateManifest(value: RunManifest): void {
   validateStart(value);
   if (value.v !== RUN_MANIFEST_VERSION) throw new TypeError('unsupported manifest version');
   finite(value.finishedAt, 'finishedAt');
+  finite(value.durationMs, 'durationMs');
   if (!['passed','passed-with-skips','failed','flaky','skipped','cancelled','crashed','infrastructure-failed','incomplete'].includes(value.status)) throw new TypeError('invalid run status');
   if (!Array.isArray(value.specs) || !Array.isArray(value.attempts) || !Array.isArray(value.events)) {
     throw new TypeError('specs/attempts/events must be arrays');
@@ -271,6 +278,19 @@ function validateManifest(value: RunManifest): void {
     parseRunId('runner-task', attempt.runnerTaskId); parseRunId('project', attempt.projectId); parseRunId('spec', attempt.specId);
     if (!text(attempt.nativeTaskId) || !nonNegativeInteger(attempt.repeat) || !nonNegativeInteger(attempt.retry) ||
         !['passed','failed','skipped','incomplete'].includes(attempt.status)) throw new TypeError('invalid attempt');
+    finite(attempt.startedAfterRunMs, 'attempt.startedAfterRunMs');
+    if (attempt.startedAfterRunMs > value.durationMs) {
+      throw new TypeError('attempt.startedAfterRunMs exceeds run durationMs');
+    }
+    if (attempt.finishedAfterRunMs !== null) {
+      finite(attempt.finishedAfterRunMs, 'attempt.finishedAfterRunMs');
+      if (attempt.finishedAfterRunMs < attempt.startedAfterRunMs) {
+        throw new TypeError('attempt.finishedAfterRunMs precedes attempt.startedAfterRunMs');
+      }
+      if (attempt.finishedAfterRunMs > value.durationMs) {
+        throw new TypeError('attempt.finishedAfterRunMs exceeds run durationMs');
+      }
+    }
     if (attempt.durationMs !== null) finite(attempt.durationMs, 'attempt.durationMs');
     if (attemptIds.has(attempt.attemptId)) throw new TypeError('duplicate AttemptId');
     attemptIds.add(attempt.attemptId);
@@ -462,7 +482,7 @@ function validateAttemptAgainstJournal(
   }
   const finish = observed.finish;
   if (finish === undefined) {
-    if (attempt.status !== 'incomplete' || attempt.durationMs !== null) {
+    if (attempt.status !== 'incomplete' || attempt.finishedAfterRunMs !== null || attempt.durationMs !== null) {
       throw new TypeError(`unfinished attempt ${attempt.attemptId} is not indexed as incomplete`);
     }
     return;
@@ -472,6 +492,7 @@ function validateAttemptAgainstJournal(
       finish.identity.projectId !== attempt.projectId || finish.identity.specId !== attempt.specId ||
       finishPayload['nativeTaskId'] !== attempt.nativeTaskId || finishPayload['repeat'] !== attempt.repeat ||
       finishPayload['retry'] !== attempt.retry || finishPayload['state'] !== attempt.status ||
+      attempt.finishedAfterRunMs === null ||
       attempt.durationMs !== Math.max(0, finish.monotonicTime - start.monotonicTime)) {
     throw new TypeError(`attempt ${attempt.attemptId} terminal index differs from canonical journal`);
   }

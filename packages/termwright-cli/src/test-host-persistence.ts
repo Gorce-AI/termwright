@@ -62,6 +62,7 @@ export class TermwrightHostStartupCleanupError extends AggregateError {
 
 /** One monotonic run deadline split into execution and reserved finalization phases. */
 export class HostRunBudget {
+  readonly #startedAt: number;
   readonly #deadlineAt: number;
   readonly #executionDeadlineAt: number;
 
@@ -73,9 +74,18 @@ export class HostRunBudget {
     positiveFinite(totalMs, 'run timeout');
     positiveFinite(finalizationReserveMs, 'host finalization reserve');
     if (finalizationReserveMs >= totalMs) throw new TypeError('host finalization reserve must be smaller than the total run timeout');
-    const startedAt = runtime.now();
-    this.#deadlineAt = startedAt + totalMs;
+    this.#startedAt = runtime.now();
+    this.#deadlineAt = this.#startedAt + totalMs;
     this.#executionDeadlineAt = this.#deadlineAt - finalizationReserveMs;
+  }
+
+  /** Elapsed time on the same monotonic clock that owns the run deadline. */
+  elapsedMs(): number {
+    const elapsed = this.runtime.now() - this.#startedAt;
+    if (!Number.isFinite(elapsed) || elapsed < 0) {
+      throw new Error('host monotonic clock regressed during the run');
+    }
+    return elapsed;
   }
 
   execution<T>(phase: string, operation: () => Promise<T>): Promise<T> {
@@ -211,6 +221,7 @@ export class RunHistoryPersistence {
     readonly specs: readonly PersistedSpec[];
     readonly attempts: readonly PersistedAttempt[];
     readonly events: readonly RunEvent[];
+    readonly durationMs: number;
     readonly finishedAt?: number;
   }): Promise<void> {
     return this.#transaction.prepare(createRunManifest(this.start, input));
@@ -226,6 +237,7 @@ export function createRunManifest(
     readonly specs: readonly PersistedSpec[];
     readonly attempts: readonly PersistedAttempt[];
     readonly events: readonly RunEvent[];
+    readonly durationMs: number;
     readonly finishedAt?: number;
   },
 ): RunManifest {
@@ -233,6 +245,7 @@ export function createRunManifest(
     ...start,
     v: RUN_MANIFEST_VERSION,
     finishedAt: input.finishedAt ?? Date.now(),
+    durationMs: input.durationMs,
     status: input.status,
     specs: Object.freeze(input.specs.map((spec) => Object.freeze({ ...spec }))),
     attempts: Object.freeze(input.attempts.map((attempt) => Object.freeze({ ...attempt }))),
