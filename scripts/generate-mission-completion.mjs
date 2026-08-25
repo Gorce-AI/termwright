@@ -153,14 +153,14 @@ const obsolete = new Map([
 
 const exactEvidence = new Map([
   [53, ['packages/test/src/vitest-engine.ts', 'packages/test/src/runner.test.ts', 'scripts/run-vitest-pty-matrix.mjs']],
-  [70, ['.github/workflows/vitest-reliability.yml', 'scripts/run-vitest-pty-matrix.mjs', 'quality/experiments/vitest-pty-pressure.test.mjs']],
+  [70, ['.github/workflows/vitest-reliability.yml', 'scripts/run-vitest-pty-matrix.mjs', 'quality/experiments/vitest-pty-pressure.test.mjs', 'quality/experiments/pty-lease.mjs']],
   [79, ['packages/driver/src/internal/process-supervisor.ts', 'packages/driver/src/process-lifecycle.pty.test.ts', '.github/workflows/ci.yml']],
   [81, ['packages/driver/src/pty.ts', 'packages/driver/src/pty-upstream-boundary.test.ts', 'scripts/check-node-pty-certification.mjs']],
   [110, ['docs/architecture/audit/platform-completion-baseline.json', '.github/workflows/vitest-reliability.yml', 'quality/platform-deviations.json']],
   [111, ['packages/driver/src/internal/process-supervisor.ts', 'packages/driver/src/process-lifecycle.pty.test.ts', '.github/workflows/ci.yml']],
   [112, ['packages/driver/src/session.pty.test.ts', 'packages/conformance/src/suites/interaction.test.ts', 'quality/platform-deviations.json']],
   [113, ['packages/driver/src/pty-upstream-boundary.test.ts', 'scripts/check-node-pty-certification.mjs', 'packages/driver/src/pty.ts']],
-  [114, ['scripts/run-vitest-pty-matrix.mjs', 'quality/experiments/vitest-pty-pressure.test.mjs', '.github/workflows/vitest-reliability.yml']],
+  [114, ['scripts/run-vitest-pty-matrix.mjs', 'quality/experiments/vitest-pty-pressure.test.mjs', 'quality/experiments/pty-lease.mjs', '.github/workflows/vitest-reliability.yml']],
 ]);
 
 function evidenceFor(section) {

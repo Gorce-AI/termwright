@@ -27,6 +27,12 @@ export function validateVitestPtyTelemetry(records, expected) {
       errors.push(`${source}:${index}:${phase} has invalid runtime telemetry`);
       continue;
     }
+    if (phase === 'finish' && (record.readyObserved !== true || record.releaseSent !== true
+      || record.doneObserved !== true || record.exited !== true)) {
+      errors.push(`${source}:${index}:finish lacks a complete READY -> release -> DONE -> exit lifecycle ` +
+        `(ready=${String(record.readyObserved)}, release=${String(record.releaseSent)}, ` +
+        `done=${String(record.doneObserved)}, exit=${String(record.exited)})`);
+    }
     validRecords.push(record);
     const key = `${source}:${index}`;
     const phases = transitions.get(key) ?? [];

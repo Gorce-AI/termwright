@@ -71,6 +71,7 @@ try {
             env: {
               ...process.env,
               TERMWRIGHT_MATRIX_CASES: String(casesPerFile),
+              TERMWRIGHT_MATRIX_CELL_PTYS: String(terminals),
               TERMWRIGHT_MATRIX_FILE_PARALLELISM: String(parallelFiles),
               TERMWRIGHT_MATRIX_TELEMETRY: telemetry,
               TERMWRIGHT_MATRIX_WORKERS: String(workers),
