@@ -77,15 +77,32 @@ function focusRecipe(target) {
   }];
 }
 
-function draw() {
-  process.stdout.write('\x1b[2J\x1b[H');
-  process.stdout.write('Permission required\r\n');
+function render() {
   const approve = focused === 'approve' ? '[Approve]' : ' Approve ';
   const reject = focused === 'reject' ? '[Reject]' : ' Reject ';
-  process.stdout.write(`  ${approve}   ${reject}\r\n`);
-  process.stdout.write(`name: [${typed}]\r\n`);
   // The status line lives inside the frame so it survives the next repaint.
-  process.stdout.write(`last: ${lastEvent}\r\n`);
+  return `\x1b[2J\x1b[HPermission required\r\n  ${approve}   ${reject}\r\nname: [${typed}]\r\nlast: ${lastEvent}\r\n`;
+}
+
+let outputQueue = Promise.resolve();
+
+function writeAndFlush(data) {
+  return new Promise((resolve, reject) => {
+    process.stdout.write(data, (error) => {
+      if (error instanceof Error) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function enqueueOutput(task) {
+  outputQueue = outputQueue.then(task);
+  void outputQueue.catch(() => process.exit(4));
+}
+
+function draw() {
+  const frame = render();
+  enqueueOutput(() => writeAndFlush(frame));
 }
 
 function tree() {
@@ -356,17 +373,28 @@ function fullSnapshot() {
 
 function publish() {
   revision += 1;
-  draw();
-  if (socket === null || sessionId === null) return;
+  const publishedRevision = revision;
+  const frame = render();
+  if (socket === null || sessionId === null) {
+    enqueueOutput(() => writeAndFlush(frame));
+    return;
+  }
   const snapshot = fullSnapshot();
-  socket.write(encodeFrame({ type: 'snapshot', snapshot }, 1024 * 1024));
-  socket.write(encodeFrame({ type: 'revision-commit', revision }, 1024 * 1024));
-  // The marker commits the render: it must follow the last byte of the frame.
-  process.stdout.write(encodeMarker(token, sessionId, revision));
-  // A plain-text receipt for the marker, printed only when a test asks for it:
-  // an extra line changes the screen, and other packages hold cell snapshots of
-  // this fixture.
-  if (markProbe) process.stdout.write(`MARKED ${revision}\r\n`);
+  const publicationSocket = socket;
+  const publicationSessionId = sessionId;
+  enqueueOutput(async () => {
+    // ConPTY is an emulator and re-emitter, not a transparent byte pipe. Wait
+    // for the complete frame write to flush before the separate marker write,
+    // exactly as production adapters are required to do. Serializing this
+    // task also prevents frame N+1 from entering between frame N and marker N.
+    await writeAndFlush(frame);
+    publicationSocket.write(encodeFrame({ type: 'snapshot', snapshot }, 1024 * 1024));
+    publicationSocket.write(encodeFrame({ type: 'revision-commit', revision: publishedRevision }, 1024 * 1024));
+    const marker = encodeMarker(token, publicationSessionId, publishedRevision);
+    // A plain-text receipt for the marker, printed only when a test asks for
+    // it. It follows the marker and therefore belongs to a later observation.
+    await writeAndFlush(`${marker}${markProbe ? `MARKED ${publishedRevision}\r\n` : ''}`);
+  });
 }
 
 // A real TUI repaints after its PTY changes size. Keep the fixture honest:
@@ -457,14 +485,20 @@ process.stdin.on('data', (chunk) => {
     // tree must not authorize a keyboard action while this related semantic
     // change is explicitly in flight.
     revision += 1;
+    const pendingRevision = revision;
     focused = 'reject';
-    socket?.write(encodeFrame({ type: 'frame-begin', revision }, 1024 * 1024));
-    draw();
-    socket?.write(encodeFrame({ type: 'snapshot', snapshot: fullSnapshot() }, 1024 * 1024));
-    setTimeout(() => {
-      socket?.write(encodeFrame({ type: 'revision-commit', revision }, 1024 * 1024));
-      process.stdout.write(encodeMarker(token, sessionId, revision));
-    }, 150);
+    const pendingFrame = render();
+    const pendingSnapshot = fullSnapshot();
+    const pendingSocket = socket;
+    const pendingSessionId = sessionId;
+    pendingSocket?.write(encodeFrame({ type: 'frame-begin', revision: pendingRevision }, 1024 * 1024));
+    pendingSocket?.write(encodeFrame({ type: 'snapshot', snapshot: pendingSnapshot }, 1024 * 1024));
+    enqueueOutput(async () => {
+      await writeAndFlush(pendingFrame);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      pendingSocket?.write(encodeFrame({ type: 'revision-commit', revision: pendingRevision }, 1024 * 1024));
+      await writeAndFlush(encodeMarker(token, pendingSessionId, pendingRevision));
+    });
     return;
   }
   if (text === 'R') {
