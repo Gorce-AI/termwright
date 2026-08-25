@@ -4,42 +4,131 @@ import { fileURLToPath } from 'node:url';
 import { threadId } from 'node:worker_threads';
 import nodePty from '@lydell/node-pty';
 import { expect, test } from 'vitest';
+import { createPtyLeasePool } from './pty-lease.mjs';
 
 const cases = Number(process.env.TERMWRIGHT_MATRIX_CASES ?? 8);
 const telemetryDirectory = process.env.TERMWRIGHT_MATRIX_TELEMETRY;
 const source = basename(fileURLToPath(import.meta.url));
 const telemetry = telemetryDirectory === undefined ? undefined : join(telemetryDirectory, `${source}.jsonl`);
 if (telemetryDirectory !== undefined) mkdirSync(telemetryDirectory, { recursive: true });
+const ptyLeases = createPtyLeasePool(Number(process.env.TERMWRIGHT_MATRIX_CELL_PTYS));
 let activePtys = 0;
 
 if (telemetryDirectory !== undefined && process.env.TERMWRIGHT_MATRIX_FILE_PARALLELISM === 'true') {
   await workerRendezvous(telemetryDirectory, Number(process.env.TERMWRIGHT_MATRIX_WORKERS));
 }
 
-test.concurrent.each(Array.from({ length: cases }, (_, index) => index))('PTY pressure %i', async (index) => {
-  const started = performance.now();
-  activePtys += 1;
-  record({ phase: 'start', index, activePtys, pid: process.pid, ppid: process.ppid, memory: process.memoryUsage() });
-  const pty = nodePty.spawn(process.execPath, ['-e', `process.stdout.write(${JSON.stringify(`pty-${index}`)});process.exit(0)`], {
-    encoding: null,
-    cols: 40,
-    rows: 4,
-    env: process.env,
+test.concurrent.for(Array.from({ length: cases }, (_, index) => index))('PTY pressure %i', async (index, context) => {
+  const leaseRequest = ptyLeases.request();
+  let cleanup;
+  const abort = () => {
+    leaseRequest.cancel();
+    if (cleanup !== undefined) void cleanup();
+  };
+  context.signal.addEventListener('abort', abort, { once: true });
+  context.onTestFinished(async () => {
+    abort();
+    if (cleanup !== undefined) await cleanup();
+    context.signal.removeEventListener('abort', abort);
   });
-  let timer;
+  const releaseLease = (await leaseRequest.promise).claim();
+  if (context.signal.aborted) {
+    releaseLease();
+    throw context.signal.reason;
+  }
+  const started = performance.now();
+  const readyOutput = `pty-ready-${index}`;
+  const doneOutput = `pty-done-${index}`;
+  // READY is level-triggered so observers cannot miss it. It must precede
+  // parent input because node-pty defers Windows writes and kills until its
+  // first ConPTY output. This models a real interactive terminal handshake
+  // without relying on a scheduling delay.
+  const child = [
+    `const ready = ${JSON.stringify(readyOutput)};`,
+    'const advertise = () => process.stdout.write(ready);',
+    'const advertisement = setInterval(advertise, 25);',
+    "process.stdin.once('data', () => {",
+    '  clearInterval(advertisement);',
+    '  process.stdin.pause();',
+    `  process.stdout.write(${JSON.stringify(doneOutput)}, () => process.exit(0));`,
+    '});',
+    'process.stdin.resume();',
+    'advertise();',
+  ].join('\n');
+  let pty;
   try {
-    const status = await Promise.race([
-      new Promise((resolve) => pty.onExit(resolve)),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`PTY ${index} exit timed out`)), 15_000);
-      }),
-    ]);
+    pty = nodePty.spawn(process.execPath, ['-e', child], {
+      cols: 40,
+      rows: 4,
+      env: process.env,
+    });
+  } catch (error) {
+    releaseLease();
+    throw error;
+  }
+  let output = '';
+  let dataSubscription;
+  let exitSubscription;
+  let exited = false;
+  let releaseSent = false;
+  let rejectOutput;
+  const outputReady = new Promise((resolve, reject) => {
+    rejectOutput = reject;
+    dataSubscription = pty.onData((chunk) => {
+      output += chunk;
+      if (!releaseSent && output.includes(readyOutput)) {
+        releaseSent = true;
+        pty.write('release\r');
+      }
+      if (output.includes(doneOutput)) resolve();
+    });
+  });
+  const exitReady = new Promise((resolve) => {
+    exitSubscription = pty.onExit((status) => {
+      exited = true;
+      if (!output.includes(doneOutput)) {
+        rejectOutput(new Error(`PTY ${index} exited before DONE (${status.exitCode}): ${JSON.stringify(output.slice(-512))}`));
+      }
+      resolve(status);
+    });
+  });
+  let startedRecorded = false;
+  let cleanupPromise;
+  cleanup = () => {
+    if (cleanupPromise !== undefined) return cleanupPromise;
+    if (!exited) {
+      try { pty.kill(); } catch { /* process already reaped */ }
+    }
+    cleanupPromise = (async () => {
+      try {
+        await exitReady;
+        dataSubscription?.dispose();
+        exitSubscription?.dispose();
+        if (startedRecorded) {
+          activePtys -= 1;
+          record({
+            phase: 'finish', index, activePtys, pid: process.pid, ppid: process.ppid,
+            durationMs: performance.now() - started, memory: process.memoryUsage(),
+            readyObserved: output.includes(readyOutput), releaseSent,
+            doneObserved: output.includes(doneOutput), exited,
+          });
+        }
+      } finally {
+        releaseLease();
+      }
+    })();
+    return cleanupPromise;
+  };
+  try {
+    activePtys += 1;
+    startedRecorded = true;
+    record({ phase: 'start', index, activePtys, pid: process.pid, ppid: process.ppid, memory: process.memoryUsage() });
+    const [status] = await Promise.all([exitReady, outputReady]);
     expect(status.exitCode).toBe(0);
+    expect(releaseSent).toBe(true);
+    expect(output).toContain(doneOutput);
   } finally {
-    clearTimeout(timer);
-    try { pty.kill(); } catch { /* process already reaped */ }
-    activePtys -= 1;
-    record({ phase: 'finish', index, activePtys, pid: process.pid, ppid: process.ppid, durationMs: performance.now() - started, memory: process.memoryUsage() });
+    await cleanup();
   }
 });
 

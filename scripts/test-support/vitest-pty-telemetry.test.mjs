@@ -12,6 +12,7 @@ function completeRecords(files = 2, casesPerFile = 2) {
     })).concat(Array.from({ length: casesPerFile }, (_, index) => ({
       source, index, phase: 'finish', activePtys: casesPerFile - index - 1, pid: file + 1, threadId: 0,
       timeMs: casesPerFile + index, node: process.version, platform: process.platform, arch: process.arch, memory: { rss: 1 },
+      readyObserved: true, releaseSent: true, doneObserved: true, exited: true,
     })));
   }).flat();
 }
@@ -61,6 +62,14 @@ describe('Vitest PTY telemetry certification', () => {
     expect(verdict.errors).toContain('observed 1 overlapping test files, expected 2');
   });
 
+  it('rejects a PTY that exits without the complete causal handshake', () => {
+    const records = completeRecords();
+    records.at(-1).doneObserved = false;
+    const verdict = validateVitestPtyTelemetry(records, expected);
+    expect(verdict.valid).toBe(false);
+    expect(verdict.errors.some((error) => error.includes('READY -> release -> DONE -> exit'))).toBe(true);
+  });
+
   it('rejects a cell that exceeds the exact configured worker overlap', () => {
     const records = completeRecords(3).map((record) => ({
       ...record,
@@ -83,13 +92,18 @@ describe('Vitest PTY telemetry certification', () => {
 
   it('fails certification for every detected closed-channel diagnostic and requires the complete matrix', async () => {
     const harness = await readFile(new URL('../run-vitest-pty-matrix.mjs', import.meta.url), 'utf8');
+    const pressure = await readFile(new URL('../../quality/experiments/vitest-pty-pressure.test.mjs', import.meta.url), 'utf8');
     const workflow = await readFile(new URL('../../.github/workflows/vitest-reliability.yml', import.meta.url), 'utf8');
     expect(harness).toContain('results.filter(isVitestPtyCellFailure)');
     expect(harness).toContain('certified.length !== expected.size');
     expect(harness).toContain("const versions = [embeddedVitest]");
+    expect(harness).toContain('TERMWRIGHT_MATRIX_CELL_PTYS: String(terminals)');
     expect(harness).not.toContain("'npm', [...");
     expect(workflow).toContain("TERMWRIGHT_MATRIX_CERTIFY: '1'");
     expect(workflow).toContain('uses: ./.github/actions/setup-js-workspace');
+    expect(pressure).toContain('context.onTestFinished');
+    expect(pressure).toContain('const advertisement = setInterval(advertise, 25)');
+    expect(pressure.indexOf('output.includes(readyOutput)')).toBeLessThan(pressure.indexOf("pty.write('release\\r')"));
 
     for (const diagnostic of [
       'channel closed',

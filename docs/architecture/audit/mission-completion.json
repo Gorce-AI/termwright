@@ -762,7 +762,8 @@
       "evidence": [
         ".github/workflows/vitest-reliability.yml",
         "scripts/run-vitest-pty-matrix.mjs",
-        "quality/experiments/vitest-pty-pressure.test.mjs"
+        "quality/experiments/vitest-pty-pressure.test.mjs",
+        "quality/experiments/pty-lease.mjs"
       ],
       "remainingEvidence": "Infrastructure telemetry and the independent pressure harness exist; the current Windows Node 22/24 matrix result is external execution evidence and is not fabricated locally."
     },
@@ -1207,6 +1208,7 @@
       "evidence": [
         "scripts/run-vitest-pty-matrix.mjs",
         "quality/experiments/vitest-pty-pressure.test.mjs",
+        "quality/experiments/pty-lease.mjs",
         ".github/workflows/vitest-reliability.yml"
       ],
       "remainingEvidence": "The independent harness covers the exact embedded Vitest, pools, workers, file parallelism and PTY pressure from the repository lockfile; a reviewed current Windows artifact is the remaining evidence."
