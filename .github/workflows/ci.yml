@@ -1013,7 +1013,18 @@ jobs:
           pnpm check:packed-private-boundaries
 
       - name: Every Version PR package already exists on npm
-        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release')
+        # The `release` label also exempts docs/tests-only package changes from
+        # changesets. Registry readiness belongs only to the bot-owned Version
+        # PR branch, never to every PR carrying that label. The release bot
+        # dispatches CI explicitly because a GITHUB_TOKEN-created PR does not
+        # emit pull_request workflows, while the PR form remains useful for a
+        # trusted manually opened replacement.
+        if: >-
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.head.ref == 'release-pr/main') ||
+          (github.event_name == 'workflow_dispatch' &&
+           github.ref == 'refs/heads/release-pr/main')
         run: pnpm check:npm-release-readiness
 
       # A change to a published package without a changeset is a change that

@@ -92,6 +92,20 @@ describe('autonomous workflow security', () => {
     for (const step of checkoutSteps) expect(step).toContain('persist-credentials: false');
   });
 
+  it('runs npm registry readiness only for the trusted Version PR branch', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const marker = '      - name: Every Version PR package already exists on npm\n';
+    const start = workflow.indexOf(marker);
+    expect(start).toBeGreaterThan(-1);
+    const step = workflow.slice(start, workflow.indexOf('\n\n', start));
+    expect(step).toContain("github.event_name == 'pull_request'");
+    expect(step).toContain('github.event.pull_request.head.repo.full_name == github.repository');
+    expect(step).toContain("github.event.pull_request.head.ref == 'release-pr/main'");
+    expect(step).toContain("github.event_name == 'workflow_dispatch'");
+    expect(step).toContain("github.ref == 'refs/heads/release-pr/main'");
+    expect(step).not.toContain("contains(github.event.pull_request.labels.*.name, 'release')");
+  });
+
   it('retains hidden Termwright run evidence from failed main and nightly jobs', async () => {
     const ci = await readWorkflow('ci.yml');
     const reliability = await readWorkflow('reliability.yml');
