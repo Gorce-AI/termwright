@@ -23,7 +23,6 @@ export {
   capturePerformanceBaseline,
   comparePerformanceBaseline,
   formatGitHubError,
-  formatGitHubWarning,
   PERFORMANCE_BASELINE_KIND,
   PERFORMANCE_BASELINE_POLICY_KIND,
   PERFORMANCE_BASELINE_POLICY_VERSION,

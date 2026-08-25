@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 const execute = promisify(execFile);
 const roots = [];
 const script = new URL('./capture-performance-baseline.mjs', import.meta.url);
+const comparator = new URL('./compare-performance-baseline.mjs', import.meta.url);
 const policy = new URL(
   '../packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json',
   import.meta.url,
@@ -50,8 +51,38 @@ describe('performance baseline capture command', () => {
     await expect(stat(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('exits non-zero and records a failure when a timing threshold regresses', async () => {
+    const fixture = await reports(0);
+    await execute(process.execPath, command(fixture));
+    const quality = JSON.parse(await readFile(fixture.quality, 'utf8'));
+    quality.metrics.startupMs.value = 2_000;
+    await writeFile(fixture.quality, JSON.stringify(quality));
+    const comparison = `${fixture.output}.comparison.json`;
+    await expect(execute(process.execPath, [
+      fileURLToPath(comparator),
+      '--baseline', fixture.output,
+      '--environment', fixture.environment,
+      '--quality', fixture.quality,
+      '--semantic', fixture.semantic,
+      '--charm', fixture.charm,
+      '--opentui', fixture.opentui,
+      '--output', comparison,
+    ])).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining('title=Performance baseline failed'),
+    });
+    const result = JSON.parse(await readFile(comparison, 'utf8'));
+    expect(result).toMatchObject({
+      schemaVersion: 2,
+      gate: 'performance-regression-fail',
+      comparisons: expect.arrayContaining([
+        expect.objectContaining({ metric: 'startupMs', status: 'failure' }),
+      ]),
+    });
+  });
+
   it('rejects a raw report from a different qualified toolchain', async () => {
-    const fixture = await reports(0, { charmRuntime: 'node v24.1.0; go version go1.24.4 darwin/arm64' });
+    const fixture = await reports(0, { charmRuntime: 'node v24.1.0; go compiler go1.24.4' });
     await expect(execute(process.execPath, command(fixture))).rejects.toThrow(/charm report Node\/Go runtime/u);
     await expect(stat(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
   });
@@ -65,14 +96,14 @@ describe('performance baseline capture command', () => {
   it('rejects a mislabeled scenario even when its id and metric are expected', async () => {
     const fixture = await reports(0, { charmFramework: 'opentui' });
     await expect(execute(process.execPath, command(fixture))).rejects.toThrow(
-      /charm report scenario must be charm-v2-immediate-e2e\/charm\/immediate/u,
+      /charm report scenario must be charm-v2-burst-e2e\/charm\/immediate/u,
     );
     await expect(stat(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('rejects a secondary expected Go token appended to the wrong runtime', async () => {
     const fixture = await reports(0, {
-      charmRuntime: 'node v24.1.0; go version go1.24.4 darwin/arm64; expected go1.25.1 ',
+      charmRuntime: 'node v24.1.0; go compiler go1.24.4; expected go1.25.1 ',
     });
     await expect(execute(process.execPath, command(fixture))).rejects.toThrow(/charm report Node\/Go runtime/u);
     await expect(stat(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -146,12 +177,17 @@ async function reports(leakedProcesses, options = {}) {
       probeHotPathTime: { status: 'measured', value: 40, p95: 44, unit: 'microseconds/frame' },
     }, options.semanticRuntime ?? 'node v24.1.0'))),
     writeFile(paths.charm, JSON.stringify(report({
-      id: 'charm-v2-immediate-e2e',
+      id: 'charm-v2-burst-e2e',
       framework: options.charmFramework ?? 'charm',
       renderingMode: 'immediate',
     }, {
-      applicationOverheadRatio: { status: 'measured', value: 1.2, unit: 'ratio' },
-    }, options.charmRuntime ?? 'node v24.1.0; go version go1.25.1 darwin/arm64'))),
+      fullSnapshots: { status: 'measured', value: 2_048, unit: 'count' },
+      droppedEvents: { status: 'measured', value: 0, unit: 'count' },
+      renderCorrelationRate: { status: 'measured', value: 1, unit: 'ratio' },
+      applicationOverheadRatio: {
+        status: 'measured', value: 1.2, unit: 'ratio', samples: Array(8).fill(1.2),
+      },
+    }, options.charmRuntime ?? 'node v24.1.0; go compiler go1.25.1'))),
     writeFile(paths.opentui, JSON.stringify(report({
       id: 'opentui-threaded-marker-route', framework: 'opentui', renderingMode: 'retained',
     }, {
@@ -178,13 +214,29 @@ function report(identity, overrides, runtime) {
     name, { status: 'unavailable', value: null, unit, reason: 'not measured by fixture' },
   ]));
   Object.assign(metrics, overrides);
+  const charm = identity.id === 'charm-v2-burst-e2e';
   return {
-    kind: 'termwright-performance-report', schemaVersion: 2,
+    kind: 'termwright-performance-report', schemaVersion: 3,
     generatedAt: '2026-08-25T03:00:00.000Z',
     environment: { runtime, platform: 'darwin', architecture: 'arm64' },
     scenarios: [{
       ...identity, description: 'fixture',
-      workload: { frames: 1, warmupFrames: 0, targetNodesPerFrame: 1 }, metrics,
+      workload: charm
+        ? { frames: 2_048, warmupFrames: 256, targetNodesPerFrame: 1 }
+        : { frames: 1, warmupFrames: 0, targetNodesPerFrame: 1 },
+      metrics,
+      ...(charm ? {
+        timingSamples: Array.from({ length: 8 }, (_, block) => ({
+          block,
+          order: [
+            'reference-first', 'instrumented-first', 'instrumented-first', 'reference-first',
+            'instrumented-first', 'reference-first', 'reference-first', 'instrumented-first',
+          ][block],
+          referenceDurationMs: 100 + block,
+          instrumentedDurationMs: (100 + block) * 1.2,
+          frames: 256,
+        })),
+      } : {}),
     }],
     caveats: [],
   };

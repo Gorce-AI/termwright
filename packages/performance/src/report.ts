@@ -12,7 +12,17 @@ import { recognize } from '@termwright/recognizers';
 import { PERFORMANCE_SCENARIOS, type RenderingMode } from './fixtures.js';
 
 export const PERFORMANCE_REPORT_KIND = 'termwright-performance-report' as const;
-export const PERFORMANCE_REPORT_VERSION = 2 as const;
+export const PERFORMANCE_REPORT_VERSION = 3 as const;
+const CHARM_MEASUREMENT_ORDER = [
+  'reference-first',
+  'instrumented-first',
+  'instrumented-first',
+  'reference-first',
+  'instrumented-first',
+  'reference-first',
+  'reference-first',
+  'instrumented-first',
+] as const;
 
 export type MetricUnit =
   | 'count'
@@ -27,6 +37,8 @@ export interface MeasuredMetric {
   readonly unit: MetricUnit;
   readonly value: number;
   readonly p95?: number;
+  /** Raw same-unit samples retained when a metric is a statistical estimate. */
+  readonly samples?: readonly number[];
   readonly note?: string;
 }
 
@@ -67,6 +79,13 @@ export interface ScenarioReport {
     readonly targetNodesPerFrame: number;
   };
   readonly metrics: ScenarioMetrics;
+  readonly timingSamples?: readonly {
+    readonly block: number;
+    readonly order: 'reference-first' | 'instrumented-first';
+    readonly referenceDurationMs: number;
+    readonly instrumentedDurationMs: number;
+    readonly frames: number;
+  }[];
 }
 
 export interface PerformanceReport {
@@ -406,6 +425,10 @@ export function validatePerformanceReport(value: unknown): asserts value is Perf
         if (metric.p95 !== undefined && (!Number.isFinite(metric.p95) || metric.p95 < 0)) {
           throw new Error(`metric ${name} has an invalid p95`);
         }
+        if (metric.samples !== undefined && (metric.samples.length === 0
+          || metric.samples.some((sample) => !Number.isFinite(sample) || sample < 0))) {
+          throw new Error(`metric ${name} has invalid raw samples`);
+        }
       } else if (
         metric.status !== 'unavailable'
         || metric.value !== null
@@ -414,5 +437,71 @@ export function validatePerformanceReport(value: unknown): asserts value is Perf
         throw new Error(`metric ${name} has an invalid availability marker`);
       }
     }
+    if (candidate.timingSamples !== undefined && (candidate.timingSamples.length === 0
+      || candidate.timingSamples.some((sample) => !Number.isSafeInteger(sample.block) || sample.block < 0
+        || (sample.order !== 'reference-first' && sample.order !== 'instrumented-first')
+        || !Number.isFinite(sample.referenceDurationMs) || sample.referenceDurationMs <= 0
+        || !Number.isFinite(sample.instrumentedDurationMs) || sample.instrumentedDurationMs <= 0
+        || !Number.isSafeInteger(sample.frames) || sample.frames <= 0))) {
+      throw new Error('scenario has invalid raw timing samples');
+    }
+    if (candidate.id === 'charm-v2-burst-e2e') validateCharmTiming(candidate as ScenarioReport);
   }
+}
+
+function validateCharmTiming(scenario: ScenarioReport): void {
+  const timing = scenario.timingSamples;
+  if (timing === undefined || (timing.length !== 8 && timing.length !== 16)) {
+    throw new Error('Charm burst report requires 8 or 16 raw timing samples');
+  }
+  for (let index = 0; index < timing.length; index += 1) {
+    const sample = timing[index] as (typeof timing)[number];
+    if (sample.block !== index
+      || sample.order !== CHARM_MEASUREMENT_ORDER[index % CHARM_MEASUREMENT_ORDER.length]
+      || sample.frames < 256) {
+      throw new Error('Charm burst timing blocks, order or frame evidence are incomplete');
+    }
+  }
+  const totalFrames = timing.reduce((total, sample) => total + sample.frames, 0);
+  if (scenario.workload.frames !== totalFrames || scenario.workload.warmupFrames < 256) {
+    throw new Error('Charm burst workload does not match its raw frame evidence');
+  }
+
+  const overhead = scenario.metrics.applicationOverheadRatio;
+  if (overhead.status !== 'measured' || overhead.p95 !== undefined
+    || overhead.samples === undefined || overhead.samples.length !== timing.length) {
+    throw new Error('Charm burst overhead requires complete raw ratio evidence');
+  }
+  const expectedSamples = timing.map(
+    (sample) => sample.instrumentedDurationMs / sample.referenceDurationMs,
+  );
+  if (overhead.samples.some((sample, index) => !nearlyEqual(sample, expectedSamples[index] as number))) {
+    throw new Error('Charm burst paired ratios differ from raw durations');
+  }
+  const expectedRatio = sampleMedian(timing.map((sample) => sample.instrumentedDurationMs))
+    / sampleMedian(timing.map((sample) => sample.referenceDurationMs));
+  if (!nearlyEqual(overhead.value, expectedRatio)) {
+    throw new Error('Charm burst ratio differs from the ratio of arm medians');
+  }
+
+  const snapshots = scenario.metrics.fullSnapshots;
+  const drops = scenario.metrics.droppedEvents;
+  const correlation = scenario.metrics.renderCorrelationRate;
+  if (snapshots.status !== 'measured' || snapshots.value !== totalFrames
+    || drops.status !== 'measured' || drops.value !== 0
+    || correlation.status !== 'measured' || correlation.value !== 1) {
+    throw new Error('Charm burst publication evidence is incomplete');
+  }
+}
+
+function sampleMedian(values: readonly number[]): number {
+  const ordered = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(ordered.length / 2);
+  return ordered.length % 2 === 1
+    ? ordered[middle] as number
+    : ((ordered[middle - 1] as number) + (ordered[middle] as number)) / 2;
+}
+
+function nearlyEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) <= Number.EPSILON * Math.max(1, Math.abs(left), Math.abs(right)) * 8;
 }

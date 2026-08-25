@@ -16,6 +16,7 @@ type model struct {
 	Name     textinput.Model
 	Password textinput.Model
 	Status   string
+	KeyCount int
 }
 
 func initialModel() model {
@@ -48,6 +49,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		m.KeyCount += len([]rune(message.String()))
+		m.Status = fmt.Sprintf("batch-complete:%d", m.KeyCount)
 	}
 
 	var command tea.Cmd

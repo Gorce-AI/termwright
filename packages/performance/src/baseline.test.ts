@@ -4,7 +4,6 @@ import {
   capturePerformanceBaseline,
   comparePerformanceBaseline,
   formatGitHubError,
-  formatGitHubWarning,
   validateBaseline,
   validateBaselinePolicy,
   validateObservationSet,
@@ -16,9 +15,8 @@ import {
 
 const policy: PerformanceBaselinePolicy = {
   kind: 'termwright-performance-baseline-policy',
-  schemaVersion: 1,
+  schemaVersion: 2,
   environment: 'darwin-arm64-node24-go1.25-bun1.2.15',
-  history: { samples: 1, blockingAfterSamples: 12, decision: 'annotate' },
   metrics: {
     startupMs: {
       unit: 'milliseconds',
@@ -77,11 +75,10 @@ const captureProvenance: PerformanceBaselineProvenance = {
 
 const baseline: PerformanceBaseline = {
   kind: 'termwright-performance-baseline',
-  schemaVersion: 2,
+  schemaVersion: 3,
   recordedAt: '2026-08-25T00:00:00.000Z',
   environment: 'linux-x64-node22-go1.25-bun1.2.15',
   provenance,
-  history: { samples: 1, blockingAfterSamples: 12, decision: 'annotate' },
   metrics: {
     startupMs: {
       value: 1_000,
@@ -131,17 +128,17 @@ describe('performance baseline comparator', () => {
     ]);
   });
 
-  it('turns a deliberate slowdown into a visible warning without throwing', () => {
+  it('turns a deliberate slowdown into a blocking failure', () => {
     const comparison = comparePerformanceBaseline(baseline, observations(1_500));
     expect(comparison[0]).toMatchObject({
       metric: 'startupMs',
-      status: 'warning',
+      status: 'failure',
       baseline: 1_000,
       current: 1_500,
       allowedMaximum: 1_200,
     });
-    expect(formatGitHubWarning(comparison[0]!, 'packages/performance/baselines/ubuntu.json'))
-      .toContain('::warning file=packages/performance/baselines/ubuntu.json,title=Performance regression::startupMs regressed%3A');
+    expect(formatGitHubError(comparison[0]!, 'packages/performance/baselines/ubuntu.json'))
+      .toContain('::error file=packages/performance/baselines/ubuntu.json,title=Performance baseline failed::startupMs regressed%3A');
   });
 
   it('refuses comparisons across runner classes', () => {
@@ -149,6 +146,13 @@ describe('performance baseline comparator', () => {
       ...observations(1_000),
       environment: 'darwin-arm64-node24',
     })).toThrow(/environments differ/u);
+  });
+
+  it('refuses to go green when a baseline metric disappeared', () => {
+    const metrics = { ...baseline.metrics };
+    delete (metrics as Partial<typeof metrics>).startupMs;
+    expect(() => comparePerformanceBaseline({ ...baseline, metrics }, observations(1_000)))
+      .toThrow(/same metric set/u);
   });
 
   it('fails a violated exact cleanup invariant instead of hiding it as noise', () => {
@@ -170,7 +174,7 @@ describe('performance baseline comparator', () => {
       allowedMaximum: 0,
     });
     expect(formatGitHubError(comparison[1]!, 'packages/performance/baselines/ubuntu.json'))
-      .toContain('::error file=packages/performance/baselines/ubuntu.json,title=Cleanup invariant failed::');
+      .toContain('::error file=packages/performance/baselines/ubuntu.json,title=Performance baseline failed::');
   });
 
   it('captures a new runner class entirely from measured values and retained policy', () => {
@@ -196,6 +200,7 @@ describe('performance baseline comparator', () => {
       },
     });
     expect(() => validateBaseline(captured)).not.toThrow();
+    expect(captured).not.toHaveProperty('history');
   });
 
   it('refuses to bless non-zero exact cleanup as a baseline', () => {
@@ -210,6 +215,20 @@ describe('performance baseline comparator', () => {
     }, captureProvenance)).toThrow(/exact cleanup invariant during baseline capture/u);
   });
 
+  it('refuses capture when policy and observation metric sets differ', () => {
+    const metrics = { ...policy.metrics };
+    delete (metrics as Partial<typeof metrics>).startupMs;
+    expect(() => capturePerformanceBaseline({ ...policy, metrics }, {
+      generatedAt: '2026-08-25T02:00:00.000Z',
+      environment: policy.environment,
+      metrics: {
+        startupMs: { value: 777, unit: 'milliseconds', source: 'new measured run' },
+        leakedProcesses: { value: 0, unit: 'count', source: 'new measured cleanup' },
+        leakedFileDescriptors: { value: 0, unit: 'count', source: 'new measured cleanup' },
+      },
+    }, captureProvenance)).toThrow(/same metric set/u);
+  });
+
   it('requires both exact cleanup invariants independently of policy data', () => {
     const metrics = { ...policy.metrics };
     delete (metrics as Partial<typeof metrics>).leakedProcesses;
@@ -218,6 +237,24 @@ describe('performance baseline comparator', () => {
       ...observations(1_000),
       metrics: { startupMs: observations(1_000).metrics.startupMs! },
     })).toThrow(/required count cleanup observation/u);
+  });
+
+  it('rejects legacy annotate-only history instead of accepting dead compatibility data', () => {
+    expect(() => validateBaseline({
+      ...baseline,
+      history: { samples: 1, blockingAfterSamples: 12, decision: 'annotate' },
+    })).toThrow(/must contain exactly/u);
+    expect(() => validateBaselinePolicy({
+      ...policy,
+      history: { samples: 1, blockingAfterSamples: 12, decision: 'annotate' },
+    })).toThrow(/must contain exactly/u);
+  });
+
+  it('rejects the previous baseline and policy schema versions', () => {
+    expect(() => validateBaseline({ ...baseline, schemaVersion: 2 }))
+      .toThrow(/unsupported performance baseline kind or version/u);
+    expect(() => validateBaselinePolicy({ ...policy, schemaVersion: 1 }))
+      .toThrow(/unsupported performance baseline policy kind or version/u);
   });
 
   it('keeps the checked-in capture policy complete, machine-readable and value-free', async () => {

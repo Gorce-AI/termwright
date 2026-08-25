@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 import {
   comparePerformanceBaseline,
   formatGitHubError,
-  formatGitHubWarning,
 } from '../packages/performance/dist/index.js';
 import { loadPerformanceObservations } from './performance-observations.mjs';
 
@@ -12,33 +11,30 @@ const baseline = JSON.parse(await readFile(resolve(options.baseline), 'utf8'));
 const { observations, provenance } = await loadPerformanceObservations(options);
 const comparisons = comparePerformanceBaseline(baseline, observations);
 for (const comparison of comparisons) {
-  if (comparison.status === 'warning') process.stdout.write(`${formatGitHubWarning(comparison, options.baseline)}\n`);
   if (comparison.status === 'failure') process.stdout.write(`${formatGitHubError(comparison, options.baseline)}\n`);
 }
 
 const output = {
   kind: 'termwright-performance-comparison',
-  schemaVersion: 1,
-  gate: 'performance-annotate-cleanup-fail',
+  schemaVersion: 2,
+  gate: 'performance-regression-fail',
   baseline: options.baseline,
   generatedAt: new Date().toISOString(),
   provenance,
   comparisons,
 };
 await writeFile(resolve(options.output), `${JSON.stringify(output, null, 2)}\n`, 'utf8');
-const warningCount = comparisons.filter((entry) => entry.status === 'warning').length;
 const failureCount = comparisons.filter((entry) => entry.status === 'failure').length;
 const summary = [
   '## Performance baseline observation',
   '',
-  `Gate mode: **annotate-only** (${baseline.history.samples}/${baseline.history.blockingAfterSamples} historical samples required before reconsidering blocking).`,
+  'Gate mode: **blocking** for every reviewed-threshold regression.',
   '',
   '| Metric | Current | Baseline | Allowed | Result |',
   '|---|---:|---:|---:|---|',
   ...comparisons.map((entry) => `| ${entry.metric} | ${entry.current} ${entry.unit} | ${entry.baseline} | ${entry.allowedMaximum} | ${entry.status} |`),
   '',
-  warningCount === 0 ? 'No performance regression warnings.' : `${warningCount} performance regression warning(s); timing and footprint observations remain non-blocking by policy.`,
-  failureCount === 0 ? 'Cleanup invariants passed.' : `${failureCount} exact cleanup invariant(s) failed; this observation is not green.`,
+  failureCount === 0 ? 'All performance thresholds and cleanup invariants passed.' : `${failureCount} performance threshold or cleanup invariant failure(s); this observation is not green.`,
   '',
 ].join('\n');
 if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary, 'utf8');

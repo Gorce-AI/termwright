@@ -1,21 +1,21 @@
 {
   "kind": "termwright-performance-report",
-  "schemaVersion": 2,
-  "generatedAt": "2026-08-20T10:40:12.594Z",
+  "schemaVersion": 3,
+  "generatedAt": "2026-08-25T15:20:53.033Z",
   "environment": {
-    "runtime": "node v24.1.0; go version go1.24.4 darwin/arm64",
+    "runtime": "node v24.1.0; go compiler go1.25.0",
     "platform": "darwin",
     "architecture": "arm64"
   },
   "scenarios": [
     {
-      "id": "charm-v2-immediate-e2e",
+      "id": "charm-v2-burst-e2e",
       "framework": "charm",
       "renderingMode": "immediate",
-      "description": "real zero-config Bubble Tea v2 fixture, vanilla and instrumented builds, driven through PTYs",
+      "description": "real zero-config Bubble Tea v2 fixture, vanilla and instrumented builds, driven through PTYs with a deterministic 256-key burst",
       "workload": {
-        "frames": 87,
-        "warmupFrames": 0,
+        "frames": 4120,
+        "warmupFrames": 515,
         "targetNodesPerFrame": 3
       },
       "metrics": {
@@ -28,13 +28,13 @@
         "bytesPerFrame": {
           "status": "measured",
           "unit": "bytes/frame",
-          "value": 472.67816091954023,
+          "value": 2274.0303398058254,
           "note": "Actual canonical Go snapshot envelope bytes including the four-byte frame header."
         },
         "fullSnapshots": {
           "status": "measured",
           "unit": "count",
-          "value": 87,
+          "value": 4120,
           "note": "Adapter debug counters across instrumented runs."
         },
         "droppedEvents": {
@@ -70,7 +70,7 @@
         "probeSerializationTime": {
           "status": "measured",
           "unit": "microseconds/frame",
-          "value": 7.24813793103448,
+          "value": 6.804324514563124,
           "note": "Actual Go canonical snapshot plus wire-envelope encoding time."
         },
         "parentNormalizationTime": {
@@ -94,15 +94,83 @@
         "applicationOverheadRatio": {
           "status": "measured",
           "unit": "ratio",
-          "value": 1.0273030881980876,
-          "note": "Median instrumented/vanilla wall-time ratio; 1.0 means equal."
+          "value": 19.215707203352974,
+          "note": "Ratio of median instrumented and vanilla 256-key burst wall times after one explicit warmup per arm; 1.0 means equal.",
+          "samples": [
+            21.91467015477503,
+            20.135714008654066,
+            19.232503791600365,
+            19.139523654076733,
+            18.910917403319196,
+            19.913047678120478,
+            17.806120725468407,
+            20.231416595738658
+          ]
         }
-      }
+      },
+      "timingSamples": [
+        {
+          "block": 0,
+          "order": "reference-first",
+          "referenceDurationMs": 25.156708000000435,
+          "instrumentedDurationMs": 551.3009579999998,
+          "frames": 515
+        },
+        {
+          "block": 1,
+          "order": "instrumented-first",
+          "referenceDurationMs": 25.909875000001193,
+          "instrumentedDurationMs": 521.7138329999998,
+          "frames": 515
+        },
+        {
+          "block": 2,
+          "order": "instrumented-first",
+          "referenceDurationMs": 26.209249999999884,
+          "instrumentedDurationMs": 504.0694999999996,
+          "frames": 515
+        },
+        {
+          "block": 3,
+          "order": "reference-first",
+          "referenceDurationMs": 26.534834000000046,
+          "instrumentedDurationMs": 507.8640830000004,
+          "frames": 515
+        },
+        {
+          "block": 4,
+          "order": "instrumented-first",
+          "referenceDurationMs": 25.801290999999765,
+          "instrumentedDurationMs": 487.92608299999847,
+          "frames": 515
+        },
+        {
+          "block": 5,
+          "order": "reference-first",
+          "referenceDurationMs": 24.586749999998574,
+          "instrumentedDurationMs": 489.59712500000023,
+          "frames": 515
+        },
+        {
+          "block": 6,
+          "order": "reference-first",
+          "referenceDurationMs": 27.38237499999741,
+          "instrumentedDurationMs": 487.57387500000186,
+          "frames": 515
+        },
+        {
+          "block": 7,
+          "order": "instrumented-first",
+          "referenceDurationMs": 23.655542000000423,
+          "instrumentedDurationMs": 478.5851250000014,
+          "frames": 515
+        }
+      ]
     }
   ],
   "caveats": [
     "Wall-clock overhead includes the driver and PTY because that is the behaviour users experience in an instrumented test run.",
-    "Compare applicationOverheadRatio only on the same machine and with the same iteration count.",
+    "Raw durations, execution order and paired ratios are retained so estimator stability is reviewable.",
     "Unavailable values remain null with a reason; no zero is inferred from an unobservable framework counter."
   ]
 }
