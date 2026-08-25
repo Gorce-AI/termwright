@@ -32,6 +32,14 @@ describe('exact Vitest adapter seams', () => {
     expect(reporters).toEqual([first, second]);
   });
 
+  it('fails closed if the exact-certified async-leak state surface changes', () => {
+    expect(() => new ExactVitestEngine({
+      version: CERTIFIED_VITEST_VERSION,
+      reporters: [],
+      state: { getUnhandledErrors: () => [] },
+    } as unknown as Vitest)).toThrow(/async-leak state surface changed/u);
+  });
+
   it('treats profile file parallelism as permission and preserves stricter project config', () => {
     expect(vitestSchedulerOverrides({ pool: 'forks', maxWorkers: 4, fileParallelism: true })).toEqual({
       pool: 'forks',
@@ -115,7 +123,7 @@ describe('exact Vitest adapter seams', () => {
       globTestSpecifications,
       runTestSpecifications,
       pool: { close: closePool },
-      state: { getUnhandledErrors: () => nativeResult.unhandledErrors },
+      state: { getUnhandledErrors: () => nativeResult.unhandledErrors, leakSet: new Set() },
       vite: { watcher: { on: vi.fn(), off: vi.fn() } },
       cancelCurrentRun: vi.fn(),
       close: vi.fn(),
@@ -149,7 +157,7 @@ describe('exact Vitest adapter seams', () => {
         order.push('drain');
         drained = true;
       }) },
-      state: { getUnhandledErrors: vi.fn(() => {
+      state: { leakSet: new Set(), getUnhandledErrors: vi.fn(() => {
         order.push('errors');
         return drained ? [teardownError] : [];
       }) },
@@ -175,7 +183,7 @@ describe('exact Vitest adapter seams', () => {
       provide: vi.fn(),
       collect: vi.fn(async () => { throw operationError; }),
       pool: { close: vi.fn(async () => { throw teardownError; }) },
-      state: { getUnhandledErrors: vi.fn(() => []) },
+      state: { getUnhandledErrors: vi.fn(() => []), leakSet: new Set() },
       vite: { watcher: { on: vi.fn(), off: vi.fn() } },
       cancelCurrentRun: vi.fn(),
       close: vi.fn(),
@@ -187,6 +195,36 @@ describe('exact Vitest adapter seams', () => {
     expect((failure as AggregateError).errors).toEqual([operationError, teardownError]);
     expect((failure as Error).cause).toBe(operationError);
     expect((vitest as unknown as { pool?: unknown }).pool).toBeUndefined();
+  });
+
+  it('promotes Vitest async-leak evidence into a non-certifying engine result', async () => {
+    const nativeResult = result([test('passed')]);
+    const leak = {
+      type: 'Timeout',
+      filename: '/workspace/leaky.test.ts',
+      projectName: 'core',
+      stack: 'Error: VITEST_DETECT_ASYNC_LEAKS\n    at leaky.test.ts:4:3',
+    };
+    const vitest = {
+      version: CERTIFIED_VITEST_VERSION,
+      reporters: [],
+      provide: vi.fn(),
+      globTestSpecifications: vi.fn(async () => [{ moduleId: '/workspace/leaky.test.ts' }]),
+      runTestSpecifications: vi.fn(async () => nativeResult),
+      pool: { close: vi.fn(async () => undefined) },
+      state: { getUnhandledErrors: vi.fn(() => []), leakSet: new Set([leak]) },
+      vite: { watcher: { on: vi.fn(), off: vi.fn() } },
+      cancelCurrentRun: vi.fn(),
+      close: vi.fn(),
+    } as unknown as Vitest;
+
+    const resultWithLeak = await new ExactVitestEngine(vitest).run(new Set(['/workspace/leaky.test.ts']));
+
+    expect(resultWithLeak.unhandledErrors).toHaveLength(1);
+    expect(String(resultWithLeak.unhandledErrors[0])).toContain(
+      'Vitest detected 1 async leak(s) across Timeout from /workspace/leaky.test.ts in project core',
+    );
+    expect(classifyVitestResult(resultWithLeak, new Set(['selected']))).toBe('infrastructure-failed');
   });
 });
 

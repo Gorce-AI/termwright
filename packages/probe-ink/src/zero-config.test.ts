@@ -16,6 +16,7 @@ import {
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { PACKAGE_VERSION } from './version.js';
 import { bunTestCapability } from '../../../scripts/test-support/bun-runtime.mjs';
+import { requireImmutableBuildInputs } from '../../../scripts/test-support/immutable-build-inputs.mjs';
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(packageRoot, 'src', 'testing', 'vanilla-app.mjs');
@@ -128,7 +129,16 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     // directories and could delete the Ink preload while another project was
     // spawning it. Build is a host prerequisite, never a concurrent test-side
     // mutation of another attempt's executable inputs.
-    const built = await import(join(packageRoot, 'dist', 'index.js')) as {
+    const entry = join(packageRoot, 'dist', 'index.js');
+    await requireImmutableBuildInputs([
+      entry,
+      join(packageRoot, 'dist', 'bun-preload.js'),
+      join(packageRoot, 'dist', 'node-hook.js'),
+    ], {
+      label: '@termwright/probe-ink zero-config tests',
+      buildCommand: 'pnpm --filter @termwright/probe-ink build',
+    });
+    const built = await import(entry) as {
       readonly withProbe: BuiltWithProbe;
     };
     builtWithProbe = built.withProbe;

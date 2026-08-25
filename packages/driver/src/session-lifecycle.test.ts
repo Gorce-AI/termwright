@@ -4,16 +4,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { ENV_ENDPOINT } from '@termwright/protocol';
 import type { ExitStatus } from './api.js';
 import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
+import { installTerminalLaunchResourceProvider } from './launch-resources.js';
 import { CLOSE_GRACE_MS, launchTerminalWithBackend } from './session.js';
 
 class ControlledPty implements PtyProcess {
   readonly pid = 42;
+  readonly lifecycle: NonNullable<PtyProcess['lifecycle']>;
   disposeCount = 0;
+  readonly resizeCalls: Array<{ columns: number; rows: number }> = [];
+  readonly signalCalls: PtySignal[] = [];
   readonly #failExitRegistration: boolean;
   readonly #failDispose: boolean;
   readonly #emitExitOnDispose: boolean;
   readonly #failSignal: PtySignal | undefined;
   readonly #status: ExitStatus;
+  readonly #neverAttach: boolean;
+  readonly #treeState: 'gone' | 'unsupported' | 'throw';
   readonly #exitListeners = new Set<(status: ExitStatus) => void>();
   readonly #writeErrorListeners = new Set<(error: Error) => void>();
 
@@ -23,18 +29,30 @@ class ControlledPty implements PtyProcess {
     readonly emitExitOnDispose?: boolean;
     readonly failSignal?: PtySignal;
     readonly status?: ExitStatus;
+    readonly neverAttach?: boolean;
+    readonly lifecycle?: PtyProcess['lifecycle'];
+    readonly treeState?: 'gone' | 'unsupported' | 'throw';
   } = {}) {
     this.#failExitRegistration = options.failExitRegistration ?? false;
     this.#failDispose = options.failDispose ?? false;
     this.#emitExitOnDispose = options.emitExitOnDispose ?? true;
     this.#failSignal = options.failSignal;
     this.#status = options.status ?? { code: 0, signal: null };
+    this.#neverAttach = options.neverAttach ?? false;
+    this.lifecycle = options.lifecycle ?? { tree: 'posix-process-group', outputDrain: 'eof' };
+    this.#treeState = options.treeState ?? 'gone';
   }
 
   write(_data: Uint8Array): void {}
-  resize(_columns: number, _rows: number): void {}
-  treeState(): 'gone' { return 'gone'; }
+  resize(columns: number, rows: number): void {
+    this.resizeCalls.push({ columns, rows });
+  }
+  treeState(): 'gone' | 'unsupported' {
+    if (this.#treeState === 'throw') throw new Error('tree confirmation failed');
+    return this.#treeState;
+  }
   signal(sig: PtySignal): void {
+    this.signalCalls.push(sig);
     if (sig === this.#failSignal) throw new Error(`${sig} is unsupported`);
     if (this.#emitExitOnDispose) {
       for (const listener of [...this.#exitListeners]) listener(this.#status);
@@ -52,6 +70,19 @@ class ControlledPty implements PtyProcess {
     this.#writeErrorListeners.add(cb);
     return () => this.#writeErrorListeners.delete(cb);
   }
+  attachCancelCount = 0;
+  async attach(signal: AbortSignal): Promise<void> {
+    if (!this.#neverAttach) return;
+    await new Promise<void>((_resolve, reject) => {
+      const onAbort = (): void => {
+        signal.removeEventListener('abort', onAbort);
+        this.attachCancelCount += 1;
+        reject(signal.reason);
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) onAbort();
+    });
+  }
   dispose(): void {
     this.disposeCount += 1;
     if (this.#emitExitOnDispose) {
@@ -67,11 +98,16 @@ class ControlledPty implements PtyProcess {
   }
 }
 
-function backendFor(pty: ControlledPty, endpoint: { value: string | undefined }): PtyBackend {
+function backendFor(
+  pty: ControlledPty,
+  endpoint: { value: string | undefined },
+  onSpawn?: () => void,
+): PtyBackend {
   return {
     name: 'controlled',
     spawn(options: PtySpawnOptions): PtyProcess {
       endpoint.value = options.env[ENV_ENDPOINT];
+      onSpawn?.();
       return pty;
     },
   };
@@ -159,6 +195,117 @@ describe('terminal session resource lifecycle', () => {
     await expectEndpointClosed(endpoint.value!);
   });
 
+  it.each([
+    ['unsupported', 'could not confirm its declared process tree'],
+    ['throw', 'tree confirmation failed'],
+  ] as const)('propagates %s tree confirmation failure to current and future exit waiters', async (treeState, detail) => {
+    let releaseCount = 0;
+    const restoreProvider = installTerminalLaunchResourceProvider(async () => ({
+      async attach(): Promise<void> {},
+      async release(): Promise<void> { releaseCount += 1; },
+    }));
+    try {
+      const endpoint: { value: string | undefined } = { value: undefined };
+      const pty = new ControlledPty({
+        lifecycle: { tree: 'posix-process-group', outputDrain: 'eof' },
+        treeState,
+      });
+      const terminal = await launchTerminalWithBackend({
+        command: ['controlled-app'],
+        backend: backendFor(pty, endpoint),
+      });
+      const currentExit = expect(terminal.exit).rejects.toMatchObject({
+        name: 'ProcessLifecycleError',
+        code: 'cleanup-failed',
+        message: expect.stringContaining(detail),
+      });
+
+      pty.emitExit();
+      await currentExit;
+      await expect(terminal.exit).rejects.toMatchObject({
+        name: 'ProcessLifecycleError',
+        message: expect.stringContaining(detail),
+      });
+      await expect(terminal.waitForExit()).rejects.toMatchObject({
+        name: 'ProcessLifecycleError',
+        message: expect.stringContaining(detail),
+      });
+      await expect(terminal.write('input after failed tree confirmation')).rejects.toMatchObject({
+        name: 'ProcessLifecycleError',
+        message: expect.stringContaining(detail),
+      });
+      await expect(terminal.press('Enter')).rejects.toMatchObject({
+        name: 'ProcessLifecycleError',
+        message: expect.stringContaining(detail),
+      });
+      const retainedFailure = await terminal.exit.catch((error: unknown) => error);
+      const dimensions = terminal.terminalState.snapshot().dimensions;
+      const checkpoint = terminal.checkpoint();
+      await expect(terminal.signal('TERM')).rejects.toBe(retainedFailure);
+      await expect(terminal.resize({ columns: 80, rows: 24 })).rejects.toBe(retainedFailure);
+      expect(pty.signalCalls).toEqual([]);
+      expect(pty.resizeCalls).toEqual([]);
+      expect(terminal.terminalState.snapshot().dimensions).toEqual(dimensions);
+
+      const liveWaits = [
+        () => terminal.waitForText(''),
+        () => terminal.waitForTitle(''),
+        () => terminal.waitForRender({ after: -1 }),
+        () => terminal.waitForQuiet({ quietMs: 0 }),
+        () => terminal.settled(),
+        () => terminal.waitForCheckpointChange({ after: checkpoint }),
+        () => terminal.waitForCommittedObservation(),
+        () => terminal.waitForShellPrompt(),
+      ];
+      for (const wait of liveWaits) await expect(wait()).rejects.toBe(retainedFailure);
+
+      // Post-exit diagnostics and frozen observations remain available.
+      expect(terminal.screen()).toBeDefined();
+      expect(terminal.diagnostics()).toBeDefined();
+      await expect(terminal.close()).rejects.toMatchObject({ name: 'ResourceCleanupError' });
+      expect(pty.disposeCount).toBe(1);
+      expect(releaseCount).toBe(0);
+      await expectEndpointClosed(endpoint.value!);
+    } finally {
+      restoreProvider();
+    }
+  });
+
+  it('cancels a never-attaching PTY at the shared launch deadline and rolls it back', async () => {
+    vi.useFakeTimers();
+    const restoreProvider = installTerminalLaunchResourceProvider(async () => ({
+      async attach(): Promise<void> {},
+      async release(): Promise<void> {},
+    }));
+    try {
+      const endpoint: { value: string | undefined } = { value: undefined };
+      const pty = new ControlledPty({ neverAttach: true });
+      let markSpawned!: () => void;
+      const spawned = new Promise<void>((resolve) => { markSpawned = resolve; });
+      const launched = launchTerminalWithBackend({
+        command: ['controlled-app'],
+        backend: backendFor(pty, endpoint, markSpawned),
+        timeouts: { ready: 40 },
+      });
+      const outcome = launched.then(
+        () => ({ error: undefined }),
+        (error: unknown) => ({ error }),
+      );
+
+      await spawned;
+      expect(endpoint.value).toBeDefined();
+      await vi.advanceTimersByTimeAsync(40);
+      expect(pty.attachCancelCount).toBe(1);
+      await expect(outcome).resolves.toMatchObject({ error: { code: 'timeout' } });
+
+      expect(pty.disposeCount).toBe(1);
+      await expectEndpointClosed(endpoint.value!);
+    } finally {
+      restoreProvider();
+      vi.useRealTimers();
+    }
+  });
+
   it('shares concurrent close and preserves only the backend exit status', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ status: { code: 17, signal: null } });
@@ -203,11 +350,7 @@ describe('terminal session resource lifecycle', () => {
         command: ['controlled-app'],
         backend: backendFor(pty, endpoint),
       });
-      let exitSettled = false;
-      void terminal.exit.then(() => {
-        exitSettled = true;
-      });
-
+      const exited = expect(terminal.exit).rejects.toMatchObject({ name: 'ResourceCleanupError' });
       // Assert before advancing, not after. close() rejects somewhere inside
       // the timer advancement below, and a rejection with no handler attached
       // yet is an unhandled rejection — Node reports it the moment it happens
@@ -223,9 +366,7 @@ describe('terminal session resource lifecycle', () => {
       // Windows, where a pseudoconsole teardown is confirmed asynchronously.
       await vi.advanceTimersByTimeAsync(CLOSE_GRACE_MS);
       await closed;
-      await Promise.resolve();
-
-      expect(exitSettled).toBe(false);
+      await exited;
       expect(pty.disposeCount).toBe(1);
       await expectEndpointClosed(endpoint.value!);
     } finally {
@@ -244,4 +385,5 @@ describe('terminal session resource lifecycle', () => {
     expect(terminal.crashReport()).not.toBeNull();
     await terminal.close();
   });
+
 });

@@ -20,17 +20,22 @@ import { buildShimSource, originalUrl, shouldShim, toModuleUrl, ORIGINAL_MARKER 
 import { bunAvailable } from './testing/bun-available.js';
 import { runtimePreloadSpecifier, withProbe } from './launch.js';
 import { isInstrumented } from './runtime.js';
+import { requireImmutableBuildInputs } from '../../../scripts/test-support/immutable-build-inputs.mjs';
 
 const run = promisify(execFile);
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixture = join(packageRoot, 'src', 'testing', 'zero-config-app.mjs');
 
-/** Build once: the process tests need real `.js` entry points. */
-async function ensureBuilt(): Promise<void> {
-  const entry = join(packageRoot, 'dist', 'bun-preload.js');
-  const built = await stat(entry).catch(() => null);
-  if (built !== null) return;
-  await run('npm', ['run', 'build'], { cwd: packageRoot });
+/** Require the immutable `.js` entry points prepared before test discovery. */
+async function requireBuiltInputs(): Promise<void> {
+  await requireImmutableBuildInputs([
+    join(packageRoot, 'dist', 'index.js'),
+    join(packageRoot, 'dist', 'bun-preload.js'),
+    join(packageRoot, 'dist', 'node-hook.js'),
+  ], {
+    label: '@termwright/probe-opentui injection tests',
+    buildCommand: 'pnpm --filter @termwright/probe-opentui build',
+  });
 }
 
 interface Report {
@@ -142,7 +147,7 @@ describe('a real application, in a real process', () => {
   let workDir: string;
 
   beforeAll(async () => {
-    await ensureBuilt();
+    await requireBuiltInputs();
     workDir = await mkdtemp(join(tmpdir(), 'termwright-probe-'));
   }, 180_000);
 

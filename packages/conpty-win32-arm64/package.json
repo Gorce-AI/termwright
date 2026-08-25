@@ -23,6 +23,11 @@
   "files": [
     "termwright_conpty.node"
   ],
+  "termwrightBuild": {
+    "optionalArtifacts": [
+      "termwright_conpty.node"
+    ]
+  },
   "scripts": {
     "build": "node ../../scripts/check-prebuild.mjs arm64 --allow-missing",
     "typecheck": "node --version"

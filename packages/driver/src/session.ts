@@ -194,13 +194,6 @@ const IDLE_QUIET_MS = 100;
 const PAIRING_TIMEOUT_MS = 1_000;
 
 /**
- * Bounded last-output drain for a PTY backend without a public EOF contract.
- * This is deliberately generous for saturated CI; a drained VT resolves
- * immediately, while an unbounded/stuck producer cannot hang teardown.
- */
-const CRASH_DRAIN_MS = 10_000;
-
-/**
  * Budget offered to an adapter that announced the `logs` capability.
  *
  * The adapter enforces it at the source — that is what keeps a log storm from
@@ -290,11 +283,15 @@ export async function launchTerminal(
 }
 
 /** Launches through an explicitly owned PTY backend for framework integrations. */
-export async function launchTerminalWithBackend(
+export function launchTerminalWithBackend(
   options: LaunchTerminalWithBackendOptions,
 ): Promise<TerminalHarness> {
-  const admission = await prepareTerminalLaunch(options);
-  return launchAdmittedTerminal(options, admission);
+  // Return the admission continuation itself. An async wrapper creates a
+  // second adoption promise before admission has settled; when admission
+  // rejects at the launch deadline that wrapper has no independent lifecycle
+  // to cancel and is reported as a leaked startup operation.
+  return prepareTerminalLaunch(options).then((admission) =>
+    launchAdmittedTerminal(options, admission));
 }
 
 async function prepareTerminalLaunch(options: LaunchTerminalOptions): Promise<{
@@ -458,7 +455,6 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   readonly events: SessionEvents;
   readonly scrollback: ScrollbackApi;
   readonly selection: SelectionApi;
-  readonly exit: Promise<ExitStatus>;
 
   readonly #options: LaunchTerminalWithBackendOptions;
   readonly #emitter: SessionEventEmitter;
@@ -486,6 +482,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   #negotiationTimer: NodeJS.Timeout | null = null;
   #closed = false;
   #closePromise: Promise<void> | null = null;
+  #exitProcessing: Promise<void> | null = null;
   #lastOutputAt = performance.now();
   #violation: ProtocolViolationError | null = null;
   #providerFailure: TermwrightError | null = null;
@@ -564,7 +561,6 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         this.#diagnostic(code, detail, { revision }),
     });
     this.#resources.defer("revision pairing", () => this.#pairing.dispose());
-    this.exit = this.#lifecycle.exit;
     this.scrollback = this.#createScrollbackApi();
     this.selection = this.#createSelectionApi();
     this.shell = Object.freeze<ShellApi>({
@@ -828,14 +824,6 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       (pty) => this.#disposePty(pty),
     );
     this.#assertLaunchTime(deadline, "spawning the pseudo-terminal");
-    // A ConPTY session has no child until its output worker is ready, and until
-    // then it reports no pid and an empty console process list — indistinguishable
-    // from a tree that has already been reaped. Waiting here means no later phase,
-    // teardown included, has to tell those two states apart.
-    if (this.#pty?.attached !== undefined) {
-      await this.#pty.attached;
-      this.#assertLaunchTime(deadline, "attaching the pseudo-terminal");
-    }
     this.#processSupervisor = new ProcessSupervisor(this.#pty);
 
     this.#pty.onData((data) => {
@@ -854,7 +842,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       // close() may begin in that interval and must not subscribe too late.
       this.#processSupervisor?.observeExit(status);
       this.#lifecycle.observeBackendExit(status);
-      void this.#finishExit(status);
+      this.#exitProcessing ??= this.#finishExit(status);
     });
     const detachWriteError = this.#pty.onWriteError?.((error) => {
       this.#ptyFailure ??= new PtyBackendError(
@@ -869,6 +857,15 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     });
     if (detachWriteError !== undefined) {
       this.#resources.defer("PTY asynchronous write observer", detachWriteError);
+    }
+
+    // Own exit evidence before waiting for ConPTY attachment. A failed attach
+    // rolls the resource scope back, and that rollback still needs the same
+    // lifecycle observer to settle `exit`; registering it after the wait made
+    // a never-attaching backend impossible to dispose.
+    if (this.#pty.attach !== undefined) {
+      await this.#attachPty(this.#pty, deadline);
+      this.#assertLaunchTime(deadline, "attaching the pseudo-terminal");
     }
 
     this.#negotiationTimer = setTimeout(() => {
@@ -912,6 +909,27 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     );
   }
 
+  async #attachPty(pty: PtyProcess, deadline: Deadline): Promise<void> {
+    this.#assertLaunchTime(deadline, "attaching the pseudo-terminal");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort(new TimeoutError(
+        "terminal launch exhausted its total ready budget while attaching the pseudo-terminal",
+        this.errorDiagnostics(),
+      ));
+    }, deadline.remaining());
+    timeout.unref?.();
+    try {
+      await pty.attach?.(controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) throw controller.signal.reason;
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      controller.abort();
+    }
+  }
+
   async awaitLaunchNegotiation(deadline: Deadline): Promise<void> {
     for (;;) {
       if (this.#settled) return;
@@ -950,6 +968,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   async waitForCheckpointChange(
     options: { readonly after: ObservationStamp } & WaitOptions,
   ): Promise<ObservationStamp> {
+    this.#lifecycle.throwIfFailed();
     const { after } = options;
     const contract = this.#contract;
     if (
@@ -970,6 +989,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       ),
     );
     for (;;) {
+      this.#lifecycle.throwIfFailed();
       const arm = this.armChange(deadline.at);
       const current = this.checkpoint();
       if (current.sequence > after.sequence) {
@@ -1585,6 +1605,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   async signal(sig: "INT" | "TERM" | "KILL" | "HUP"): Promise<void> {
     await this.#act("signal", async () => {
       this.assertOpen();
+      this.#lifecycle.throwIfFailed();
       this.#pty?.signal(sig);
       // Set only after the backend accepted the operation. An unsupported
       // Windows signal must not suppress a later genuine crash report.
@@ -1599,6 +1620,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }): Promise<import("./api.js").ResizeReceipt> {
     return this.#act("resize", async () => {
       this.assertOpen();
+      this.#lifecycle.throwIfFailed();
       const deadline = Deadline.after(
         this.operationTimeout(this.timeouts.action, "resize"),
       );
@@ -1691,6 +1713,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       return screenText.includes(matcher.text);
     };
     for (;;) {
+      this.#lifecycle.throwIfFailed();
       if (matches()) return;
       if (deadline.expired()) {
         throw new TimeoutError(
@@ -1707,6 +1730,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   async waitForRender(opts: { after: number } & WaitOptions): Promise<void> {
+    this.#lifecycle.throwIfFailed();
     const deadline = Deadline.after(
       this.operationTimeout(
         opts.timeout ?? this.timeouts.action,
@@ -1714,6 +1738,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       ),
     );
     while (this.#vt.revision <= opts.after) {
+      this.#lifecycle.throwIfFailed();
       if (deadline.expired()) {
         throw new TimeoutError(
           `no render after revision ${opts.after} (still at ${this.#vt.revision})`,
@@ -1726,6 +1751,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   async waitForQuiet(opts?: { quietMs?: number } & WaitOptions): Promise<void> {
+    this.#lifecycle.throwIfFailed();
     const quiet = opts?.quietMs ?? IDLE_QUIET_MS;
     if (!Number.isFinite(quiet) || quiet < 0)
       throw new RangeError("quietMs must be a finite non-negative number");
@@ -1736,9 +1762,11 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       ),
     );
     for (;;) {
+      this.#lifecycle.throwIfFailed();
       const before = this.#vt.revision;
       const semanticBefore = this.#pairing.revision;
       await this.waitForChange(deadline.cap(quiet));
+      this.#lifecycle.throwIfFailed();
       const unchanged =
         this.#vt.revision === before &&
         this.#pairing.revision === semanticBefore;
@@ -1770,6 +1798,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     );
     for (;;) {
       if (this.#lifecycle.status !== null) return this.#lifecycle.status;
+      this.#lifecycle.throwIfFailed();
       if (deadline.expired()) {
         throw new TimeoutError(
           `the program was still running after ${opts?.timeout ?? this.timeouts.exit} ms`,
@@ -1783,6 +1812,10 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     }
   }
 
+  get exit(): Promise<ExitStatus> {
+    return this.#lifecycle.exit;
+  }
+
   async waitForTitle(text: string | RegExp, opts?: WaitOptions): Promise<void> {
     const matcher = textMatcher(text, false);
     const deadline = Deadline.after(
@@ -1792,6 +1825,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       ),
     );
     for (;;) {
+      this.#lifecycle.throwIfFailed();
       const title = this.#vt.title;
       const hit =
         matcher.kind === "regex"
@@ -1834,12 +1868,14 @@ class TerminalSession implements TerminalHarness, LocatorContext {
    */
   async settled(opts?: WaitOptions): Promise<EffectiveSessionContract> {
     this.assertOpen();
+    this.#lifecycle.throwIfFailed();
     const deadline = Deadline.after(
       this.operationTimeout(opts?.timeout ?? this.timeouts.action, "settled"),
     );
     await this.negotiationSettled();
 
     for (;;) {
+      this.#lifecycle.throwIfFailed();
       const semanticFailure = this.semanticViolation();
       if (semanticFailure !== null) throw semanticFailure;
       const attached = this.#attachment !== null;
@@ -2247,6 +2283,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     kind: "key" | "mouse" | "paste" | "raw",
   ): Promise<void> {
     this.assertOpen();
+    this.#lifecycle.throwIfFailed();
     if (this.#lifecycle.status !== null) {
       throw new ProcessExitedError(
         `cannot send input: the program exited with code ${String(this.#lifecycle.status.code)}`,
@@ -2460,6 +2497,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       // semantic endpoint itself closed. Only that conjunction permits safe
       // capacity reuse. Unknown/alive trees and endpoint failures stay held
       // until the host reclaims the poisoned worker epoch.
+      let failure = error;
       if (
         this.#launchLease !== null &&
         this.#brokerResourcesVerifiedGone(error)
@@ -2467,7 +2505,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
         try {
           await this.#launchLease.release();
         } catch (releaseError) {
-          throw new AggregateError(
+          failure = new AggregateError(
             [error, releaseError],
             "terminal cleanup and broker release failed",
             {
@@ -2476,7 +2514,8 @@ class TerminalSession implements TerminalHarness, LocatorContext {
           );
         }
       }
-      throw error;
+      this.#lifecycle.fail(failure);
+      throw failure;
     } finally {
       for (const waiter of [...this.#changeWaiters]) waiter.resolve();
       this.#emitter.clear();
@@ -2508,7 +2547,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       // A real PTY exit closes the producer, but #finishExit still has to parse
       // its already-enqueued bytes before ResourceScope may dispose the VT.
       if (error instanceof ProcessLifecycleError && error.exitObserved)
-        await this.exit;
+        await this.#exitProcessing;
       throw error;
     }
     await this.exit;
@@ -2946,6 +2985,19 @@ class TerminalSession implements TerminalHarness, LocatorContext {
    */
   async #finishExit(status: ExitStatus): Promise<void> {
     if (this.#lifecycle.status !== null) return;
+    // Root exit is not process-tree exit. POSIX descendants can retain the
+    // session and its resources after the leader is reaped; publish the public
+    // exit only after the supervisor has proven that exact owned group gone.
+    // close() cancels this same owned confirmation at its absolute deadline.
+    if (await this.#processSupervisor?.waitForOwnedTreeExit() === false) {
+      const failure = this.#processSupervisor?.ownedTreeExitFailure() ?? new ProcessLifecycleError(
+        'cleanup-failed',
+        'process tree exit could not be confirmed',
+        { exitObserved: true },
+      );
+      if (this.#lifecycle.fail(failure)) this.#notifyChange();
+      return;
+    }
     if (this.#pty?.lifecycle?.outputDrain === "eof") {
       // Wait for the producer, then the parser. The pty reports the exit as
       // soon as the process is gone, so the last chunk it wrote can still be
@@ -2955,10 +3007,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
       // Only on this branch. A backend without EOF coupling has no moment at
       // which its producer is known to be finished — ConPTY's socket closes on
       // a timer during teardown, not at the child's exit — so waiting here
-      // would spend the whole bound on every natural exit and push close()
-      // past the budget its caller allows.
+      // would wait for teardown on every natural exit and delay publication.
       const producerEnded = this.#pty.outputEnded;
-      if (producerEnded !== undefined) await Promise.race([producerEnded, delay(CRASH_DRAIN_MS)]);
+      if (producerEnded !== undefined) await producerEnded;
       await this.#vt.drain();
       // Settling is not ending. A producer torn down with bytes still unread
       // settles the same promise as one whose source ended, and the screen
@@ -2975,9 +3026,9 @@ class TerminalSession implements TerminalHarness, LocatorContext {
     } else {
       this.#diagnostic(
         "degraded-output-drain",
-        `PTY backend ${this.#backend.name} does not expose an EOF-coupled exit; final output drain is bounded to ${CRASH_DRAIN_MS} ms`,
+        `PTY backend ${this.#backend.name} does not expose an EOF-coupled exit; final output drain covers bytes already delivered to the parser`,
       );
-      await Promise.race([this.#vt.drain(), delay(CRASH_DRAIN_MS)]);
+      await this.#vt.drain();
     }
     this.#onExit(status);
   }
@@ -3009,6 +3060,7 @@ class TerminalSession implements TerminalHarness, LocatorContext {
   }
 
   #assertAlive(operation: string): void {
+    this.#lifecycle.throwIfFailed();
     if (this.#ptyFailure !== null) throw this.#ptyFailure;
     const status = this.#lifecycle.status;
     if (status === null) return;
@@ -3332,13 +3384,6 @@ const CRASH_EXCERPT_LINES = 20;
 function actionErrorCode(error: unknown): string {
   if (error instanceof TermwrightError) return error.code;
   return error instanceof Error ? error.name : "unknown";
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    timer.unref?.();
-  });
 }
 
 /** Converts a Windows file-URI pathname back to the native path exposed by the fixture. */

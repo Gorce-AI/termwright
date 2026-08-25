@@ -40,7 +40,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
 
       # pkg-pr-new serves each package straight from the build, so a reviewer
       # installs the PR with `npm i https://pkg.pr.new/@termwright/driver@<pr>`.

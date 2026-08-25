@@ -68,7 +68,11 @@ export class ProcessSupervisor {
   readonly #platform: NodeJS.Platform;
   #shutdownPromise: Promise<ExitStatus> | null = null;
   #observedExit: ExitStatus | null = null;
-  #exitTreeCleanup: Promise<readonly unknown[]> | null = null;
+  #exitTreeFailures: unknown[] | null = null;
+  #exitTreeNeedsConfirmation = false;
+  #exitTreeConfirmedGone = false;
+  #exitTreeConfirmation: Promise<boolean> | null = null;
+  #cancelExitTreeConfirmation: (() => void) | null = null;
 
   constructor(pty: PtyProcess, options: ProcessSupervisorOptions = {}) {
     this.#pty = pty;
@@ -88,6 +92,29 @@ export class ProcessSupervisor {
     return this.#shutdownPromise;
   }
 
+  /** Settles only after descendants owned at the root-exit boundary are gone. */
+  waitForOwnedTreeExit(): Promise<boolean> {
+    return this.#exitTreeConfirmation ?? Promise.resolve(false);
+  }
+
+  ownedTreeExitFailure(): ProcessLifecycleError {
+    const failures = this.#exitTreeFailures ?? [];
+    const evidence = failures.length > 0
+      ? failures
+      : [new ProcessLifecycleError(
+          'cleanup-failed',
+          `process tree ${this.#pty.pid} was not confirmed gone`,
+        )];
+    return new ProcessLifecycleError(
+      'cleanup-failed',
+      `failed to confirm cleanup of process tree ${this.#pty.pid}: ${evidence.map(describeFailure).join('; ')}`,
+      {
+        cause: new AggregateError(evidence, 'process tree exit confirmation failed'),
+        exitObserved: this.#observedExit !== null,
+      },
+    );
+  }
+
   /**
    * Captures process-group ownership at the exact root-exit boundary.
    *
@@ -102,27 +129,58 @@ export class ProcessSupervisor {
     const failures: unknown[] = [];
     const treeState = this.#pty.treeState;
     if (treeState === undefined) {
-      this.#exitTreeCleanup = Promise.resolve(failures);
+      const treeClaim = this.#pty.lifecycle?.tree;
+      if (treeClaim === 'posix-process-group' || treeClaim === 'conpty-console') {
+        failures.push(new ProcessLifecycleError(
+          'cleanup-failed',
+          `${treeClaim} backend for process ${this.#pty.pid} exposes no tree-state confirmation`,
+        ));
+        this.#exitTreeNeedsConfirmation = true;
+        this.#exitTreeConfirmation = Promise.resolve(false);
+      } else {
+        // A delegated backend owns its lifecycle behind terminate(); a legacy
+        // backend made no process-tree claim that Termwright could confirm.
+        this.#exitTreeConfirmedGone = true;
+        this.#exitTreeConfirmation = Promise.resolve(true);
+      }
+      this.#exitTreeFailures = failures;
       return;
     }
     try {
       const state = treeState.call(this.#pty);
       if (state !== 'alive') {
-        this.#exitTreeCleanup = Promise.resolve(failures);
+        this.#exitTreeConfirmedGone = state === 'gone';
+        if (state === 'unsupported') {
+          failures.push(new ProcessLifecycleError(
+            'cleanup-failed',
+            `backend for process ${this.#pty.pid} could not confirm its declared process tree`,
+          ));
+          this.#exitTreeNeedsConfirmation = true;
+        }
+        this.#exitTreeConfirmation = Promise.resolve(state === 'gone');
+        this.#exitTreeFailures = failures;
         return;
       }
-      this.#trySignal('KILL', failures);
-      const deadline = this.#now() + 2_000;
-      this.#exitTreeCleanup = this.#waitForTreeGone(deadline).then((gone) => {
-        if (!gone) failures.push(new ProcessLifecycleError(
-          'cleanup-failed',
-          `process group ${this.#pty.pid} remained alive after root exit and hard kill`,
-        ));
-        return failures;
-      });
+      try {
+        if (this.#pty.killOwnedTreeAtExitBoundary !== undefined) {
+          this.#pty.killOwnedTreeAtExitBoundary();
+        } else {
+          this.#trySignal('KILL', failures);
+        }
+      } catch (error) {
+        failures.push(isErrno(error, 'EPERM') ? new ProcessSignalPermissionError('KILL', error) : error);
+      }
+      // Preserve the exact ownership snapshot and begin one owned confirmation
+      // now. Natural exit waits without an invented timeout; close() can cancel
+      // this same operation when its absolute cleanup deadline is exhausted.
+      this.#exitTreeFailures = failures;
+      this.#exitTreeNeedsConfirmation = true;
+      this.#exitTreeConfirmation = this.#startExitTreeConfirmation();
     } catch (error) {
       failures.push(error);
-      this.#exitTreeCleanup = Promise.resolve(failures);
+      this.#exitTreeFailures = failures;
+      this.#exitTreeNeedsConfirmation = true;
+      this.#exitTreeConfirmation = Promise.resolve(false);
     }
   }
 
@@ -145,15 +203,25 @@ export class ProcessSupervisor {
 
     if (options.observedExit !== undefined) this.observeExit(options.observedExit);
     let observed: ExitStatus | null = this.#observedExit;
-    let resolveExit: ((status: ExitStatus) => void) | undefined;
-    const exit = new Promise<ExitStatus>((resolve) => { resolveExit = resolve; });
+    let activeExitWaiter: ((status: ExitStatus | null) => void) | undefined;
     const failures: unknown[] = budgetSpent
       ? [new ProcessLifecycleError('cleanup-failed', 'process shutdown deadline already expired')]
       : [];
-    let deadlineTimer: unknown;
-    const deadlineExpired = new Promise<null>((resolve) => {
-      deadlineTimer = this.#timers.set(() => resolve(null), options.deadline - this.#now());
-    });
+    let deadlineReached = budgetSpent;
+    let hardKillController: AbortController | undefined;
+    const deadlineTimer = { value: undefined as unknown, assigned: false, clearAfterAssign: false };
+    const expireDeadline = (): void => {
+      deadlineReached = true;
+      hardKillController?.abort();
+      this.#cancelExitTreeConfirmation?.();
+      if (!deadlineTimer.assigned) deadlineTimer.clearAfterAssign = true;
+      activeExitWaiter?.(null);
+    };
+    if (!budgetSpent) {
+      deadlineTimer.value = this.#timers.set(expireDeadline, options.deadline - this.#now());
+      deadlineTimer.assigned = true;
+      if (deadlineTimer.clearAfterAssign) this.#timers.clear(deadlineTimer.value);
+    }
     let unsubscribe = (): void => undefined;
     let canObserveExit = observed !== null;
     if (observed === null) {
@@ -161,13 +229,53 @@ export class ProcessSupervisor {
         unsubscribe = this.#pty.onExit((status) => {
           this.observeExit(status);
           observed = status;
-          resolveExit?.(status);
+          activeExitWaiter?.(status);
         });
         canObserveExit = true;
       } catch (error) {
         failures.push(error);
       }
     }
+    const waitForExit = (deadline: number): Promise<ExitStatus | null> => {
+      const remaining = deadline - this.#now();
+      if (remaining <= 0) return Promise.resolve(null);
+      return new Promise<ExitStatus | null>((resolve) => {
+        const timer = { value: undefined as unknown, assigned: false, clearAfterAssign: false };
+        let timerAssigned = false;
+        let clearAfterAssign = false;
+        let settled = false;
+        const settle = (status: ExitStatus | null): void => {
+          if (settled) return;
+          settled = true;
+          if (timerAssigned) this.#timers.clear(timer.value);
+          else clearAfterAssign = true;
+          if (activeExitWaiter === settle) activeExitWaiter = undefined;
+          resolve(status);
+        };
+        activeExitWaiter = settle;
+        timer.value = this.#timers.set(() => settle(null), remaining);
+        timer.assigned = true;
+        timerAssigned = true;
+        if (clearAfterAssign) this.#timers.clear(timer.value);
+        // onExit cannot interleave synchronous JavaScript, but an injected
+        // timer is allowed to fire immediately. Re-read the shared evidence so
+        // neither kind of implementation can lose a proven exit.
+        if (observed !== null) settle(observed);
+      });
+    };
+    const waitForDeadlineExit = (): Promise<ExitStatus | null> => {
+      if (observed !== null) return Promise.resolve(observed);
+      if (deadlineReached || this.#now() >= options.deadline) return Promise.resolve(null);
+      return new Promise<ExitStatus | null>((resolve) => {
+        const settle = (status: ExitStatus | null): void => {
+          if (activeExitWaiter === settle) activeExitWaiter = undefined;
+          resolve(status);
+        };
+        activeExitWaiter = settle;
+        if (observed !== null) settle(observed);
+        else if (deadlineReached) settle(null);
+      });
+    };
     try {
       const lifecycle = this.#pty.lifecycle;
       if (budgetSpent && observed === null) {
@@ -193,7 +301,9 @@ export class ProcessSupervisor {
           this.#trySignal('KILL', failures);
         } else {
           try {
-            await this.#pty.hardKillTree();
+            hardKillController = new AbortController();
+            if (deadlineReached) hardKillController.abort();
+            await this.#pty.hardKillTree(hardKillController.signal);
           } catch (error) {
             failures.push(error);
             this.#trySignal('KILL', failures);
@@ -213,7 +323,7 @@ export class ProcessSupervisor {
             failures.push(error);
           }
           const graceDeadline = Math.min(options.deadline, this.#now() + options.gracefulMs);
-          if (observed === null) observed = await this.#waitForExit(exit, graceDeadline);
+          if (observed === null) observed = await waitForExit(graceDeadline);
           if (observed === null) this.#trySignal('KILL', failures);
         }
       } else {
@@ -226,11 +336,11 @@ export class ProcessSupervisor {
         // graceful exit with a hard kill.
         if (this.#platform !== 'win32') this.#trySignal('HUP', failures);
         const graceDeadline = Math.min(options.deadline, this.#now() + options.gracefulMs);
-        if (observed === null) observed = await this.#waitForExit(exit, graceDeadline);
+        if (observed === null) observed = await waitForExit(graceDeadline);
         if (observed === null) this.#trySignal('KILL', failures);
       }
 
-      if (canObserveExit && observed === null) observed = await Promise.race([exit, deadlineExpired]);
+      if (canObserveExit && observed === null) observed = await waitForDeadlineExit();
       if (canObserveExit && observed === null) {
         failures.push(new ProcessLifecycleError(
           'cleanup-failed',
@@ -238,12 +348,18 @@ export class ProcessSupervisor {
         ));
       }
 
-      let exitTreeFailures: readonly unknown[] = [];
-      if (observed !== null && this.#exitTreeCleanup !== null) {
-        exitTreeFailures = await this.#exitTreeCleanup;
-        failures.push(...exitTreeFailures);
+      const exitTreeFailures = this.#exitTreeFailures ?? [];
+      if (observed !== null && this.#exitTreeNeedsConfirmation) {
+        if (deadlineReached) this.#cancelExitTreeConfirmation?.();
+        const gone = await this.waitForOwnedTreeExit();
+        this.#exitTreeConfirmedGone = gone;
+        if (!gone) exitTreeFailures.push(new ProcessLifecycleError(
+          'cleanup-failed',
+          `process group ${this.#pty.pid} remained alive after root exit and hard kill before the shutdown deadline`,
+        ));
       }
-      if (observed !== null && exitTreeFailures.length === 0) {
+      failures.push(...exitTreeFailures);
+      if (observed !== null && this.#exitTreeConfirmedGone) {
         // An EPERM from a numeric PGID followed by real root-exit evidence and
         // a `gone` snapshot at that exact boundary means the number was reused
         // by a foreign process before node-pty delivered its callback. Keeping
@@ -254,7 +370,10 @@ export class ProcessSupervisor {
         }
       }
     } finally {
-      this.#timers.clear(deadlineTimer);
+      activeExitWaiter = undefined;
+      hardKillController?.abort();
+      if (deadlineTimer.assigned) this.#timers.clear(deadlineTimer.value);
+      else deadlineTimer.clearAfterAssign = true;
       unsubscribe();
       try {
         this.#pty.dispose();
@@ -284,29 +403,50 @@ export class ProcessSupervisor {
     }
   }
 
-  async #waitForExit(exit: Promise<ExitStatus>, deadline: number): Promise<ExitStatus | null> {
-    const remaining = deadline - this.#now();
-    if (remaining <= 0) return null;
-    let timer: unknown;
-    const timeout = new Promise<null>((resolve) => {
-      timer = this.#timers.set(() => resolve(null), remaining);
+  #startExitTreeConfirmation(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      let timer: unknown;
+      let timerAssigned = false;
+      let clearAfterAssign = false;
+      const clearTimer = (): void => {
+        if (timerAssigned) this.#timers.clear(timer);
+        else clearAfterAssign = true;
+      };
+      const settle = (gone: boolean): void => {
+        if (settled) return;
+        settled = true;
+        clearTimer();
+        this.#cancelExitTreeConfirmation = null;
+        resolve(gone);
+      };
+      const poll = (): void => {
+        if (settled) return;
+        timerAssigned = false;
+        clearAfterAssign = false;
+        let state: ReturnType<NonNullable<PtyProcess['treeState']>>;
+        try {
+          state = this.#pty.treeState?.() ?? 'unsupported';
+        } catch (error) {
+          this.#exitTreeFailures?.push(error);
+          settle(false);
+          return;
+        }
+        if (state === 'gone') {
+          settle(true);
+          return;
+        }
+        if (state === 'unsupported') {
+          settle(false);
+          return;
+        }
+        timer = this.#timers.set(poll, 10);
+        timerAssigned = true;
+        if (clearAfterAssign) this.#timers.clear(timer);
+      };
+      this.#cancelExitTreeConfirmation = () => settle(false);
+      poll();
     });
-    try {
-      return await Promise.race([exit, timeout]);
-    } finally {
-      this.#timers.clear(timer);
-    }
-  }
-
-  async #waitForTreeGone(deadline: number): Promise<boolean> {
-    for (;;) {
-      const state = this.#pty.treeState?.();
-      if (state === 'gone') return true;
-      if (state === 'unsupported' || this.#now() >= deadline) return false;
-      await new Promise<void>((resolve) => {
-        this.#timers.set(resolve, Math.min(10, Math.max(0, deadline - this.#now())));
-      });
-    }
   }
 }
 

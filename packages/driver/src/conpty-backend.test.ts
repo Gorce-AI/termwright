@@ -167,7 +167,7 @@ describe('the ConPTY backend as the driver sees it', () => {
       columns: 80,
       rows: 24,
     });
-    await expect(pty.attached).resolves.toBeUndefined();
+    await expect(pty.attach?.(new AbortController().signal)).resolves.toBeUndefined();
   });
 
   it('disposes once, however many times it is asked', () => {

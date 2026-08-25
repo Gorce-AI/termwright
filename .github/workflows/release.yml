@@ -380,7 +380,7 @@ jobs:
         run: pnpm check:npm-release-readiness
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - run: pnpm check:packed-private-boundaries
       - run: pnpm check:node-pty
       - run: pnpm -r --filter './packages/*' run typecheck

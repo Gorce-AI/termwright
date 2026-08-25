@@ -74,12 +74,38 @@ portable semantic-pipeline benchmark.
 ## Recorded cadence and regression policy
 
 The `Performance observations` workflow runs every Monday and on manual
-dispatch on the pinned `macos-15` arm64 runner with Node 24. It runs all three
-benchmarks above, then runs the real `quality/soak` lifecycle suite repeatedly
-and the `quality/stress` concurrency suite once through the certified host. One
-artifact contains the raw reports, resource observations and comparison.
+dispatch on the `macos-15` arm64 runner with Node 24, Go 1.25 and Bun 1.2.15.
+That complete `darwin-arm64-node24-go1.25-bun1.2.15` class is verified before
+measurement; the artifact also records the resolved Node, Go and Bun patch
+versions. It runs all three benchmarks above, then runs the real `quality/soak`
+lifecycle suite repeatedly and the `quality/stress` concurrency suite once
+through the certified host. One artifact contains the raw reports, resource
+observations and comparison.
 
-`baselines/darwin-arm64-node24.json` records the initial same-platform sample.
+The former `baselines/darwin-arm64-node24.json` seed was measured with Go
+1.24.4 and is retained only as historical evidence. The scheduled and normal
+manual modes never compare against it. To bootstrap the required Go 1.25
+baseline from a pushed branch containing this workflow:
+
+1. Dispatch `Performance observations` with `mode=capture`.
+2. Download `performance-baseline-candidate-darwin-arm64-node24-go1.25-bun1.2.15`.
+3. Review its raw reports, runner descriptor and candidate values, then commit
+   the candidate as
+   `baselines/darwin-arm64-node24-go1.25-bun1.2.15.json` unchanged.
+4. Dispatch `mode=observe`; this is the first normal proof against the newly
+   committed, toolchain-qualified baseline.
+
+Capture reads tolerances and the annotate-only history policy from the
+value-free `.policy.json`; every baseline value and source comes from that
+dispatch's measurements. A non-zero process or descriptor cleanup observation
+fails capture and produces no candidate baseline. The schema requires both
+cleanup metrics as exact zero-count invariants independently of the policy
+file, so removing a policy entry cannot disable the gate. Each candidate embeds
+the verified runner descriptor, including resolved toolchain versions, and the
+SHA-256 digest of every raw quality and benchmark input. Capture and observation
+also validate each report's schema, platform, architecture and runtime against
+that descriptor before using any metric.
+
 The quality observation defines startup as run-manifest creation to the first
 attempt. Per-test overhead is the mean post-startup run duration outside the
 recorded attempt: collection, scheduling and finalization, with the controlled

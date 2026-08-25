@@ -4,6 +4,7 @@ import { access } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyImmutableWorkspaceBuild } from './immutable-build-manifest.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 export const testHostEntrypoint = fileURLToPath(
@@ -25,29 +26,55 @@ function run(command, args) {
 async function buildTestHost() {
   const pnpmCli = process.env['npm_execpath'];
   if (pnpmCli !== undefined && pnpmCli.length > 0) {
-    await run(process.execPath, [pnpmCli, '--filter', 'termwright...', 'build']);
+    await run(process.execPath, [pnpmCli, 'run', 'build']);
     return;
   }
-  await run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['--filter', 'termwright...', 'build']);
+  await run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['run', 'build']);
 }
 
-/** Ensures the root test script has a runnable host, building it only when absent. */
+/** Ensures every worker will consume one fresh, fingerprinted workspace build. */
 export async function ensureTestHost(options = {}) {
   const accessFile = options.accessFile ?? access;
   const build = options.build ?? buildTestHost;
+  const verify = options.verify ?? (() => verifyImmutableWorkspaceBuild());
+  let rebuild = false;
   try {
     await accessFile(testHostEntrypoint);
-    return false;
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
+    rebuild = true;
   }
+  if (!rebuild) {
+    try {
+      rebuild = (await verify()).length > 0;
+    } catch (error) {
+      if (!recoverableManifestError(error)) throw error;
+      rebuild = true;
+    }
+  }
+  if (!rebuild) return false;
 
-  process.stdout.write('Termwright test host is not built; building its workspace dependency closure...\n');
+  process.stdout.write('Termwright workspace build is missing or stale; rebuilding before the Native Host starts...\n');
   await build();
   await accessFile(testHostEntrypoint).catch((error) => {
     throw new Error(`test-host build completed without creating ${testHostEntrypoint}`, { cause: error });
   });
+  let issues;
+  try {
+    issues = await verify();
+  } catch (error) {
+    throw new Error('workspace build completed without a readable supported immutable manifest', { cause: error });
+  }
+  if (issues.length > 0) {
+    throw new Error(`workspace build completed without a fresh immutable manifest: ${issues.join('; ')}`);
+  }
   return true;
+}
+
+function recoverableManifestError(error) {
+  if (error?.code === 'ENOENT' || error instanceof SyntaxError) return true;
+  return error instanceof Error && /^(?:unsupported immutable build manifest|invalid immutable build artifact fingerprint|declared production artifact is missing:)/u
+    .test(error.message);
 }
 
 if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

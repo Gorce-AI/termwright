@@ -7,6 +7,7 @@
 import { spawn as spawnPty } from '@lydell/node-pty';
 import { write as writeFd } from 'node:fs';
 import type { ExitStatus } from './api.js';
+import { enumerateConptyProcesses } from './internal/conpty-process-list.js';
 import { EarlyPtyOutput } from './internal/early-pty-output.js';
 import { ProcessLifecycleError } from './internal/process-supervisor.js';
 
@@ -42,14 +43,18 @@ export interface PtyProcess {
   resize(columns: number, rows: number): void;
   /** Delivers a POSIX signal. On Windows only `KILL` is honored (TerminateProcess). */
   signal(sig: PtySignal): void;
+  /** Synchronously kills the owned POSIX group at the root-exit callback boundary. */
+  killOwnedTreeAtExitBoundary?(): void;
   /** Backend-native graceful lifecycle request; required when tree is delegated. */
   terminate?(): void;
   /**
    * Hard-kills an owned process tree and captures the exact members that must
    * subsequently be proven gone. Backends that claim tree ownership should
-   * expose this when the preparation step is asynchronous.
+   * expose this when the preparation step is asynchronous. The operation must
+   * reject and settle promptly when `signal` is aborted; dispose must settle
+   * any backend work started by it.
    */
-  hardKillTree?(): Promise<void>;
+  hardKillTree?(signal: AbortSignal): Promise<void>;
   onData(cb: (data: Uint8Array) => void): PtyUnsubscribe;
   onExit(cb: (status: ExitStatus) => void): PtyUnsubscribe;
   /** Settles once the backend's output producer can deliver no more bytes. */
@@ -73,8 +78,9 @@ export interface PtyProcess {
    * is ready, so a freshly spawned pty has no pid and an empty console process
    * list until then — the same two values a reaped tree produces. A session
    * that waits for this before running cannot reach teardown in that state.
+   * The operation must reject and settle promptly when `signal` is aborted.
    */
-  readonly attached?: Promise<void>;
+  attach?(signal: AbortSignal): Promise<void>;
   /** Fatal asynchronous failures after write() accepted bytes. */
   onWriteError?(cb: (error: Error) => void): PtyUnsubscribe;
   /** Queue-drained notification; it still does not claim child consumption. */
@@ -180,6 +186,16 @@ export function createNodePtyBackend(): PtyBackend {
 
       let conptyTreePids: readonly number[] | undefined;
       let agentKilled = false;
+      const windowsAgent = process.platform === 'win32' ? exactWindowsAgent(pty) : undefined;
+      if (windowsAgent !== undefined) {
+        // node-pty's kill() starts an unowned console-list helper with its own
+        // five-second timer. Termwright performs and drains that enumeration
+        // itself; prevent every later agent kill/dispose from spawning another.
+        Object.defineProperty(windowsAgent, '_getConsoleProcessList', {
+          configurable: true,
+          value: () => Promise.resolve(conptyTreePids ?? []),
+        });
+      }
       /**
        * The agent's immediate kill, at most once.
        *
@@ -191,15 +207,9 @@ export function createNodePtyBackend(): PtyBackend {
        * the process disappears without a JavaScript frame to show for it.
        */
       const killAgentOnce = (): void => {
-        if (agentKilled) {
-          // TEMPORARY (remove once Windows CI is green): confirms from the
-          // lane whether teardown really reached the agent kill more than
-          // once, which is the diagnosis this guard is based on.
-          process.stderr.write(`termwright-debug: suppressed a repeat ConPTY agent kill for pid ${pty.pid}\n`);
-          return;
-        }
+        if (agentKilled) return;
         agentKilled = true;
-        exactWindowsAgent(pty).kill();
+        windowsAgent!.kill();
       };
       const proc: PtyProcess = {
         // ConPTY connects asynchronously in node-pty 1.2. Reading this lazily
@@ -257,20 +267,36 @@ export function createNodePtyBackend(): PtyBackend {
             if (!isErrno(error, 'ESRCH')) throw error;
           }
         },
+        ...(process.platform !== 'win32'
+          ? {
+              killOwnedTreeAtExitBoundary(): void {
+                // This method is invoked synchronously from node-pty's root
+                // exit callback, before its numeric PGID can be reused. Unlike
+                // ordinary signal(), it deliberately remains valid after the
+                // wrapper has recorded root exit.
+                try {
+                  process.kill(-pty.pid, 'SIGKILL');
+                } catch (error) {
+                  if (!isErrno(error, 'ESRCH')) throw error;
+                }
+              },
+            }
+          : {}),
         ...(process.platform === 'win32'
           ? {
-              attached: agentAttached(exactWindowsAgent(pty)),
-              async hardKillTree(): Promise<void> {
+              attach: (signal: AbortSignal) => agentAttached(exactWindowsAgent(pty), signal),
+              async hardKillTree(signal: AbortSignal): Promise<void> {
                 if (disposed || exited) return;
-                const agent = exactWindowsAgent(pty);
+                signal.throwIfAborted();
+                const agent = windowsAgent!;
                 // Wait for ConPTY to attach before asking it anything. Until
                 // then the agent has no child and reports pid 0 with an empty
                 // process list, which reads exactly like "the tree is already
                 // gone" — so a session closed early killed nothing, waited for
                 // an exit that could never arrive, and failed its own teardown
                 // while the child kept running.
-                await agentAttached(agent);
-                const reported = await agent._getConsoleProcessList();
+                await agentAttached(agent, signal);
+                const reported = await enumerateConptyProcesses(agent.innerPid, signal);
                 conptyTreePids = ownedConsoleTreePids(reported, process.pid);
                 // An empty list while the root is demonstrably alive means
                 // AttachConsole/list enumeration failed. Closing HPCON might
@@ -297,9 +323,10 @@ export function createNodePtyBackend(): PtyBackend {
                     if (!isErrno(error, 'ESRCH')) throw error;
                   }
                 }
-                // Close HPCON and let node-pty reap its agent. Its own second
-                // enumeration is redundant but harmless and exact-version
-                // certified; our captured set is the verification boundary.
+                // Close HPCON and let node-pty reap its agent. Its internal
+                // enumeration hook was shadowed with our resolved snapshot,
+                // so this cannot fork a second unowned helper; our captured
+                // set remains the verification boundary.
                 // Again the agent's immediate kill: WindowsTerminal's would
                 // queue behind first output and leave the HPCON and the conout
                 // worker alive after the tree was already gone.
@@ -410,6 +437,7 @@ interface ExactWindowsAgent {
   readonly outSocket: ExactWindowsReadySocket;
   /** Immediate teardown; unlike WindowsTerminal.kill it is never deferred. */
   kill(): void;
+  readonly innerPid: number;
   _getConsoleProcessList(): Promise<readonly number[]>;
 }
 
@@ -423,7 +451,7 @@ interface ExactWindowsReadySocket {
 function exactWindowsAgent(value: unknown): ExactWindowsAgent {
   const agent = (value as Partial<ExactWindowsPty>)._agent;
   if (agent === undefined || typeof agent._getConsoleProcessList !== 'function' ||
-      typeof agent.kill !== 'function') {
+      typeof agent.kill !== 'function' || typeof agent.innerPid !== 'number') {
     throw new Error('certified @lydell/node-pty ConPTY process-list boundary changed');
   }
   return agent;
@@ -591,24 +619,22 @@ function createWindowsWriteChannel(
  * produces, so anything that inspects the tree earlier cannot tell "not
  * started yet" from "already gone".
  */
-function agentAttached(agent: ExactWindowsAgent): Promise<void> {
+function agentAttached(agent: ExactWindowsAgent, signal: AbortSignal): Promise<void> {
   const ready = agent.outSocket;
+  signal.throwIfAborted();
   if (!ready.connecting && ready.readyState === 'open') return Promise.resolve();
-  return new Promise<void>((resolve) => {
-    // Bounded, because teardown owns a deadline of its own and an agent that
-    // never attaches must not hold it open. Giving up here is not a verdict:
-    // the tree checks that follow still have to prove what they claim, and
-    // with no pid and no process list they will refuse to.
-    const timer = setTimeout(() => {
-      ready.removeListener('ready_datapipe', onReady);
-      resolve();
-    }, CONPTY_ATTACH_TIMEOUT_MS);
-    timer.unref?.();
+  return new Promise<void>((resolve, reject) => {
     const onReady = (): void => {
-      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
       resolve();
     };
+    const onAbort = (): void => {
+      ready.removeListener('ready_datapipe', onReady);
+      reject(signal.reason);
+    };
     ready.once('ready_datapipe', onReady);
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
   });
 }
 
@@ -627,16 +653,6 @@ export function ownedConsoleTreePids(reported: readonly number[], selfPid: numbe
     Number.isSafeInteger(pid) && pid > 0 && pid !== selfPid,
   ))]);
 }
-
-/**
- * How long to wait for ConPTY to attach.
- *
- * Above node-pty's own 5 s connection timeout on purpose: until that expires
- * the connection can still legitimately complete, and giving up earlier turns
- * a slow start into "no pid, no process list", which teardown can only report
- * as a tree it could not prove gone.
- */
-const CONPTY_ATTACH_TIMEOUT_MS = 6_000;
 
 function processAlive(pid: number): boolean {
   try {

@@ -100,7 +100,7 @@ function parseProvider(value: unknown): DiscoveredTest['provider'] {
 export interface UiRuntime {
   readonly startUi: (options: UiServerOptions) => Promise<UiServer>;
   readonly startHost: (run: NativeHostRun) => Promise<NativeHostHandle>;
-  readonly waitForInterrupt: () => Promise<void>;
+  readonly waitForInterrupt: (signal: AbortSignal) => Promise<void>;
 }
 
 export interface UiRequest {
@@ -188,8 +188,20 @@ export async function runUi(
       resolveHost(host);
     }
     surface = (await onReady({ url: server.url, port: server.port, mode: server.mode })) ?? undefined;
-    if (surface === undefined) await runtime.waitForInterrupt();
-    else await Promise.race([runtime.waitForInterrupt(), surface.closed]);
+    if (surface === undefined) await runtime.waitForInterrupt(new AbortController().signal);
+    else {
+      const interruptController = new AbortController();
+      const interrupt = runtime.waitForInterrupt(interruptController.signal);
+      try {
+        await Promise.race([interrupt, surface.closed]);
+      } finally {
+        // surface.closed can win without a signal ever arriving. Cancel and
+        // settle the losing waiter before teardown so its process listeners do
+        // not survive this UI invocation.
+        interruptController.abort();
+        await interrupt;
+      }
+    }
     return { url: server.url, port: server.port, mode: server.mode, runnerExitCode: undefined };
   } finally {
     if (live && !hostReadySettled) {
@@ -337,14 +349,20 @@ function isTerminalProjectionState(value: string): value is TerminalRunState {
     value === 'crashed' || value === 'incomplete';
 }
 
-export function waitForInterrupt(): Promise<void> {
+export function waitForInterrupt(signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const done = (): void => {
       process.off('SIGINT', done);
       process.off('SIGTERM', done);
+      signal.removeEventListener('abort', done);
       resolve();
     };
+    if (signal.aborted) {
+      done();
+      return;
+    }
     process.once('SIGINT', done);
     process.once('SIGTERM', done);
+    signal.addEventListener('abort', done, { once: true });
   });
 }

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: LaunchTerminalOptions
 
-Defined in: [driver/src/session.ts:230](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L230)
+Defined in: [driver/src/session.ts:223](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L223)
 
 Stable application-facing options accepted by [launchTerminal](../../functions/launchterminal/).
 
@@ -132,7 +132,7 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **modesObservable?**: `boolean`
 
-Defined in: [driver/src/session.ts:236](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L236)
+Defined in: [driver/src/session.ts:229](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L229)
 
 Whether the child's mouse mode requests are observable. Defaults to the
 platform's answer (false under ConPTY). Framework integrations may pin the

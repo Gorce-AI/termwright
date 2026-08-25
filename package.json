@@ -7,7 +7,7 @@
   },
   "packageManager": "pnpm@9.4.0",
   "scripts": {
-    "build": "pnpm -r --filter=./packages/* --fail-if-no-match run build",
+    "build": "pnpm -r --filter=./packages/* --fail-if-no-match run build && node scripts/immutable-build-manifest.mjs --write",
     "check:fast": "pnpm lint && pnpm check:package-metadata && pnpm check:platform-deviations && pnpm check:determinism && pnpm check:semantic-completeness && pnpm check:mission-completion && node scripts/sync-protocol-version.mjs --check",
     "check:local": "pnpm check:fast && pnpm build && node scripts/check-optional-native-externals.mjs && pnpm check:packed-private-boundaries && pnpm check:node-pty && pnpm typecheck && pnpm -r --filter=./examples/* --fail-if-no-match run build && pnpm -r --filter=./examples/* --fail-if-no-match run typecheck && pnpm test -- --resource-profile local --json && pnpm test:coverage && pnpm test:compatibility && pnpm test:examples && pnpm check:generated-docs && pnpm docs:api && git diff --exit-code -- website/src/content/docs/api && pnpm --filter @termwright/website run check && pnpm --filter @termwright/website run build && pnpm --filter @termwright/website run check:links && pnpm check:vectors",
     "check:package-metadata": "node scripts/check-package-metadata.mjs",

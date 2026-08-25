@@ -15,13 +15,23 @@ describe('pinned node-pty write boundary', () => {
     proc.onData((data) => { output += Buffer.from(data).toString('utf8'); });
     proc.onWriteError?.((error) => { writeError = error; });
     proc.write(Buffer.from('x'));
-    let timer: NodeJS.Timeout | undefined;
-    const status = await Promise.race([
-      new Promise<{ code: number | null; signal: string | null }>((resolve) => proc.onExit(resolve)),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('PTY write boundary test timed out')), 5_000);
-      }),
-    ]).finally(() => clearTimeout(timer));
+    const status = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
+      let settled = false;
+      let release = (): void => undefined;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        release();
+        reject(new Error('PTY write boundary test timed out'));
+      }, 5_000);
+      release = proc.onExit((exit) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        release();
+        resolve(exit);
+      });
+    });
     proc.dispose();
 
     expect(writeError).toBeUndefined();

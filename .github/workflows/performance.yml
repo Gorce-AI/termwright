@@ -5,6 +5,14 @@ on:
     - cron: '17 4 * * 1'
   workflow_dispatch:
     inputs:
+      mode:
+        description: Observe against the committed baseline or capture a reviewed candidate
+        required: true
+        default: observe
+        type: choice
+        options:
+          - observe
+          - capture
       cycles:
         description: Complete lifecycle observations (2..100)
         required: false
@@ -19,6 +27,9 @@ permissions:
 
 env:
   PNPM_VERSION: '9.4.0'
+  PERFORMANCE_RUNNER_CLASS: 'darwin-arm64-node24-go1.25-bun1.2.15'
+  PERFORMANCE_BASELINE: 'packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.json'
+  PERFORMANCE_BASELINE_POLICY: 'packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json'
   TERMWRIGHT_RETRIES: '0'
   TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
   TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
@@ -35,6 +46,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - name: Require the qualified baseline in normal observation mode
+        if: github.event_name == 'schedule' || inputs.mode == 'observe'
+        shell: bash
+        run: test -f "$PERFORMANCE_BASELINE"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -44,16 +59,22 @@ jobs:
           cache: pnpm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          # The recorded Charm baseline used this compiler; changing it starts
-          # a new runner class rather than silently moving the comparison.
-          go-version: '1.24.4'
+          # Bubble Tea v2 declares Go 1.25. The benchmark compares vanilla and
+          # instrumented binaries built by this same qualified Go line, and the
+          # runner descriptor records the exact resolved patch version.
+          go-version: '1.25'
           cache: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: '1.2.15'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm build
       - run: mkdir -p performance-results
+      - name: Record and verify the toolchain-qualified runner class
+        run: >-
+          node scripts/performance-environment.mjs
+          --class "$PERFORMANCE_RUNNER_CLASS" --runner macos-15
+          --output performance-results/environment.json
       - name: Collect the semantic pipeline benchmark
         run: >-
           pnpm --filter @termwright/performance benchmark --iterations 1000 --warmup 100
@@ -77,22 +98,46 @@ jobs:
           if (( cycles < 2 || cycles > 100 )); then echo "cycles must be 2..100"; exit 2; fi
           node scripts/collect-quality-performance.mjs \
             --cycles "$cycles" \
-            --environment darwin-arm64-node24 \
+            --environment-file performance-results/environment.json \
             --output performance-results/quality.json
-      - name: Compare with the recorded baseline
+      - name: Capture a measured baseline candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'capture'
+        run: >-
+          node scripts/capture-performance-baseline.mjs
+          --policy "$PERFORMANCE_BASELINE_POLICY"
+          --environment performance-results/environment.json
+          --quality performance-results/quality.json
+          --semantic performance-results/semantic-pipeline.json
+          --charm performance-results/charm-immediate.json
+          --opentui performance-results/opentui-marker-route.json
+          --output "performance-results/baseline-candidate/$PERFORMANCE_RUNNER_CLASS.json"
+      - name: Compare with the qualified recorded baseline
+        if: github.event_name == 'schedule' || inputs.mode == 'observe'
         run: >-
           node scripts/compare-performance-baseline.mjs
-          --baseline packages/performance/baselines/darwin-arm64-node24.json
+          --baseline "$PERFORMANCE_BASELINE"
+          --environment performance-results/environment.json
           --quality performance-results/quality.json
           --semantic performance-results/semantic-pipeline.json
           --charm performance-results/charm-immediate.json
           --opentui performance-results/opentui-marker-route.json
           --output performance-results/comparison.json
-      - name: Upload comparable observations
-        if: always()
+      - name: Upload measured baseline candidate and raw observations
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.mode == 'capture'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: performance-observations-darwin-arm64-node24
+          name: performance-baseline-candidate-darwin-arm64-node24-go1.25-bun1.2.15
+          path: |
+            performance-results
+            .termwright/runs
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 90
+      - name: Upload comparable observations
+        if: always() && (github.event_name == 'schedule' || inputs.mode == 'observe')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: performance-observations-darwin-arm64-node24-go1.25-bun1.2.15
           path: |
             performance-results
             .termwright/runs
