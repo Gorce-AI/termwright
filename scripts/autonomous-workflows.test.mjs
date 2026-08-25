@@ -288,6 +288,13 @@ describe('autonomous workflow security', () => {
     }
   });
 
+  it('does not label reduced lifecycle samples as reliability certification', async () => {
+    const reliability = await readWorkflow('reliability.yml');
+    expect(reliability).toContain('name: Node host reliability certification');
+    expect(reliability).toContain('certifying minimum 250');
+    expect(reliability.match(/node scripts\/resolve-reliability-cycles\.mjs/gu)).toHaveLength(2);
+  });
+
   it('fails website CI when generated documentation drifts from its sources', async () => {
     const workflow = await readWorkflow('ci.yml');
     const website = jobBlock(workflow, 'website');
