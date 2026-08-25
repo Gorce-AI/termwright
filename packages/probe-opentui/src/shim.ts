@@ -24,6 +24,7 @@
  */
 
 import { pathToFileURL } from 'node:url';
+import type { RuntimeCertification } from './certification.js';
 
 /** Query marker appended to the real module's URL. */
 export const ORIGINAL_MARKER = 'termwright-original=1';
@@ -90,24 +91,29 @@ export function originalUrl(urlOrPath: string): string {
  *
  * @param target - URL or path of the real entry, without the marker.
  */
-export function buildShimSource(target: string): string {
+export function buildShimSource(target: string, certification: RuntimeCertification): string {
   const original = JSON.stringify(originalUrl(target));
+  const certified = JSON.stringify(certification);
   return `import * as __termwright_original from ${original};
 export * from ${original};
 
+const __termwright_certification = Object.freeze(${certified});
+
 const __termwright_wrapped = async function createCliRenderer(config) {
-  let effective = config;
+  // OpenTUI's public config is optional. Normalize only inside the intercepted
+  // path so the probe can install its same-writer sink for createCliRenderer().
+  let effective = config ?? {};
   try {
     // The probe gets to amend the config before the renderer exists. This is
     // the only moment a custom stdout can be installed, and a custom stdout is
     // what routes frame bytes back into JS — the measured marker route.
-    effective = globalThis.__termwright_onConfig?.(config) ?? config;
+    effective = globalThis.__termwright_onConfig?.(effective) ?? effective;
   } catch {
-    effective = config;
+    effective = config ?? {};
   }
   const renderer = await __termwright_original.createCliRenderer(effective);
   try {
-    globalThis.__termwright_onRenderer?.(renderer);
+    globalThis.__termwright_onRenderer?.(renderer, __termwright_certification);
   } catch {
     // The probe is never allowed to break the application it observes.
   }

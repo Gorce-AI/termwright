@@ -121,9 +121,3 @@ describe.skipIf(!hasGo)('against a real toolchain', () => {
     await expect(detectCharmFlavour(dir)).rejects.toThrow(/requires both Bubble Tea majors/u);
   }, 300_000);
 });
-
-describe.skipIf(hasGo)('the Go arms', () => {
-  it('skips because no go toolchain is reachable', () => {
-    expect(hasGo).toBe(false);
-  });
-});

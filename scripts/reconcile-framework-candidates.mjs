@@ -83,8 +83,12 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
           '',
           `Candidate digest: \`${candidate.candidateDigest}\``,
           `Published: ${candidate.publishedAt}`,
-          `Patch status: \`${candidate.patch.status}\``,
-          `Expected manifest: \`${candidate.patch.path}\``,
+          `Integration mode: \`${candidate.mode}\``,
+          ...(candidate.mode === 'hook' ? [`Hook strategy: \`${candidate.hookStrategy}\``] : []),
+          ...(candidate.mode === 'patch' ? [
+            `Patch status: \`${candidate.patch.status}\``,
+            `Expected manifest: \`${candidate.patch.path}\``,
+          ] : []),
           '',
           `Certification result: ${verdict?.detail ?? 'No verdict artifact was produced.'}`,
           '',
@@ -92,7 +96,11 @@ export function reconcile(registry, ledger, verdicts, context = {}) {
           '',
           candidate.source?.toolchainSupported === false
             ? `The compatibility registry is unchanged. Review and explicitly repin the trusted Go toolchain to >= ${candidate.source.requiredGoVersion}; automatic toolchain downloads remain disabled.`
-            : 'The compatibility registry is unchanged. Prepare an exact checksummed patch, then rerun the workflow. A PR is created only after all gates pass without a missing conformance area.',
+            : candidate.mode === 'hook'
+              ? `The compatibility registry is unchanged. Review the failed capability and behavioral evidence; ${candidate.hookStrategy === 'exact-source' ? 'do not add fuzzy support or bypass exact instrumentation where the framework still requires it' : 'do not allowlist the version until the public/runtime contract reaches full semantic parity'}. Rerun only after the adapter or certifier genuinely supports this artifact. A PR is created only after every gate passes without a missing conformance area.`
+              : candidate.patch.status === 'needs-patch'
+                ? 'The compatibility registry is unchanged. Prepare an exact checksummed structural patch, then rerun the workflow. A PR is created only after every gate passes without a missing conformance area.'
+                : 'The compatibility registry is unchanged. Review the existing exact patch and behavioral failure, then rerun only after the incompatibility is fixed. A PR is created only after every gate passes without a missing conformance area.',
         ].join('\n'),
       });
     }
@@ -113,7 +121,8 @@ export async function verifyGeneratedUpdate({ candidate, verdict, updateDirector
 export async function verifyGeneratedHookProfile({ candidate, verdict, updateDirectory, expectedRevision }) {
   const metadata = JSON.parse(await readFile(join(updateDirectory, 'bundle.json'), 'utf8'));
   if (
-    metadata.kind !== 'termwright-generated-hook-profile'
+    metadata.schemaVersion !== 1
+    || metadata.kind !== 'termwright-generated-hook-profile'
     || verdict.state !== 'green'
     || metadata.candidateId !== candidate.id
     || metadata.candidateDigest !== candidate.candidateDigest
@@ -127,14 +136,39 @@ export async function verifyGeneratedHookProfile({ candidate, verdict, updateDir
   return metadata.profile;
 }
 
+export async function verifyGeneratedRuntimeProfile({ candidate, verdict, updateDirectory, expectedRevision }) {
+  const metadata = JSON.parse(await readFile(join(updateDirectory, 'bundle.json'), 'utf8'));
+  if (
+    metadata.schemaVersion !== 1
+    || metadata.kind !== 'termwright-generated-runtime-profile'
+    || candidate.hookStrategy !== 'runtime'
+    || verdict.state !== 'green'
+    || metadata.candidateId !== candidate.id
+    || metadata.candidateDigest !== candidate.candidateDigest
+    || verdict.sourceRevision !== expectedRevision
+    || metadata.sourceRevision !== expectedRevision
+    || metadata.framework !== candidate.frameworkId
+    || metadata.profile?.version !== candidate.version
+    || Object.keys(metadata.profile).sort().join(',') !== 'version'
+  ) throw new Error(`${candidate.id}: generated runtime profile is not bound to the green candidate`);
+  const digest = `sha256:${createHash('sha256').update(canonicalJson(metadata.profile)).digest('hex')}`;
+  if (metadata.profileDigest !== digest) throw new Error(`${candidate.id}: generated runtime profile digest mismatch`);
+  return metadata.profile;
+}
+
 export function sameHookProfile(left, right) {
-  const normalized = (profile) => ({
-    ...profile,
-    builds: Array.isArray(profile?.builds)
-      ? [...profile.builds].sort((a, b) => a.id.localeCompare(b.id) || a.file.localeCompare(b.file))
-      : profile?.builds,
-  });
-  return canonicalJson(normalized(left)) === canonicalJson(normalized(right));
+  return canonicalJson(left) === canonicalJson(right);
+}
+
+export function addCertifiedRuntimeProfile(document, candidate, profile) {
+  if (candidate.frameworkId !== 'opentui' || candidate.hookStrategy !== 'runtime' || profile.version !== candidate.version) {
+    throw new Error(`${candidate.id}: runtime profile targets another framework or version`);
+  }
+  const existing = document.profiles.find((entry) => entry.version === candidate.version);
+  if (existing === undefined) document.profiles.push(profile);
+  else if (canonicalJson(existing) !== canonicalJson(profile)) throw new Error(`${candidate.id}: certified runtime profile is immutable`);
+  document.profiles.sort((left, right) => compareVersions(left.version, right.version));
+  return document;
 }
 
 export function recordVerifiedFrameworkVersion(registry, candidate) {
@@ -213,16 +247,29 @@ async function main(argv) {
         recordVerifiedFrameworkVersion(compatibility, candidate);
         continue;
       }
+      if (candidate.hookStrategy === 'runtime') {
+        const matched = (await Promise.all(updates.map(async (path) => ({ path, metadata: JSON.parse(await readFile(join(path, 'bundle.json'), 'utf8')) }))))
+          .find((entry) => entry.metadata.kind === 'termwright-generated-runtime-profile' && entry.metadata.candidateId === candidate.id)?.path;
+        if (matched === undefined) throw new Error(`${candidate.id}: green runtime-hook verdict has no generated capability profile`);
+        const profile = await verifyGeneratedRuntimeProfile({ candidate, verdict, updateDirectory: matched, expectedRevision });
+        const profilePath = candidate.frameworkId === 'opentui'
+          ? join(root, 'packages/probe-opentui/src/certified-runtime.json')
+          : undefined;
+        if (profilePath === undefined) throw new Error(`${candidate.id}: unsupported runtime-hook profile framework`);
+        const document = JSON.parse(await readFile(profilePath, 'utf8'));
+        addCertifiedRuntimeProfile(document, candidate, profile);
+        await writeFile(profilePath, canonicalJson(document));
+        recordVerifiedFrameworkVersion(compatibility, candidate);
+        continue;
+      }
+      if (candidate.hookStrategy !== 'exact-source' || candidate.frameworkId !== 'ink') {
+        throw new Error(`${candidate.id}: unsupported exact-source hook profile framework`);
+      }
       const matched = (await Promise.all(updates.map(async (path) => ({ path, metadata: JSON.parse(await readFile(join(path, 'bundle.json'), 'utf8')) }))))
         .find((entry) => entry.metadata.kind === 'termwright-generated-hook-profile' && entry.metadata.candidateId === candidate.id)?.path;
       if (matched === undefined) throw new Error(`${candidate.id}: green hook verdict has no generated instrumentation profile`);
       const profile = await verifyGeneratedHookProfile({ candidate, verdict, updateDirectory: matched, expectedRevision });
-      const profilePath = candidate.frameworkId === 'ink'
-        ? join(root, 'packages/probe-ink/src/certified-instrumentation.json')
-        : candidate.frameworkId === 'opentui'
-          ? join(root, 'packages/probe-opentui/src/certified-instrumentation.json')
-          : undefined;
-      if (profilePath === undefined) throw new Error(`${candidate.id}: unsupported hook profile framework`);
+      const profilePath = join(root, 'packages/probe-ink/src/certified-instrumentation.json');
       const document = JSON.parse(await readFile(profilePath, 'utf8'));
       const existing = document.profiles.find((entry) => entry.version === candidate.version);
       if (existing === undefined) document.profiles.push(profile);

@@ -26,7 +26,7 @@ package tea
 // without a position rather than inventing coordinates.
 
 import (
-	"os"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
@@ -50,11 +50,22 @@ type termwrightProbeState struct {
 	mu        sync.Mutex
 	ids       map[string]string
 	nextID    int
-	pendingMu sync.Mutex
-	pending   *protocol.Snapshot
+	renderMu  sync.Mutex
+	frameMu   sync.Mutex
+	nextFrame uint64
+	latest    map[*standardRenderer]*termwrightStagedFrame
+	queued    map[*standardRenderer]*termwrightStagedFrame
+	published map[*standardRenderer]uint64
 	publishMu sync.Mutex
+	fail      func(string, string) error
 	frames    atomic.Uint64
 	dropped   atomic.Uint64
+}
+
+type termwrightStagedFrame struct {
+	sequence uint64
+	view     string
+	snapshot *protocol.Snapshot
 }
 
 var (
@@ -92,81 +103,138 @@ func newTermwrightProbe() *termwrightProbeState {
 			protocol.CapActions,
 			protocol.CapRenderRevisions,
 		},
-		// The publish happens on the event-loop goroutine, between Update and
-		// the renderer. An unbounded write would stall the loop whenever the
-		// driver stops reading.
+		// Publication happens inside the renderer's flush boundary, after its
+		// terminal write. The side channel remains bounded so a stalled driver
+		// cannot freeze future renders.
 		WriteTimeout:      protocol.DefaultWriteTimeout,
 		EvidenceProviders: evidence.DefaultRegistry(),
 	})
 	if client == nil {
 		return nil
 	}
-	p := &termwrightProbeState{client: client, ids: make(map[string]string)}
+	p := &termwrightProbeState{
+		client:    client,
+		ids:       make(map[string]string),
+		latest:    make(map[*standardRenderer]*termwrightStagedFrame),
+		queued:    make(map[*standardRenderer]*termwrightStagedFrame),
+		published: make(map[*standardRenderer]uint64),
+		fail:      client.Fail,
+	}
 	go func() {
 		if client.Start(protocol.DialTimeout) != nil {
 			return
 		}
-		p.pendingMu.Lock()
-		pending := p.pending
-		p.pending = nil
-		p.pendingMu.Unlock()
-		if pending != nil {
-			p.publish(pending)
-		}
+		p.replayLatestFrames()
 	}()
 	return p
 }
 
-// termwrightAfterView is called with the model that produced this frame.
-//
-// Three call sites here, where v2 has one. It is not a style choice: v1 hands
-// the renderer a plain string through `renderer.write`, and a probe anchored
-// there would receive the frame without the model — with nothing to read. The
-// model is only in scope at the three places that call View(), so the patch
-// touches all three.
-func termwrightAfterView(program *Program, model Model, view string) {
-	p := termwrightCurrentProbe()
+func (p *termwrightProbeState) publish(writer io.Writer, frame *termwrightStagedFrame) bool {
+	p.publishMu.Lock()
+	defer p.publishMu.Unlock()
+	marker, err := p.client.Publish(frame.snapshot)
+	if err != nil || marker == "" {
+		p.dropped.Add(1)
+		return false
+	}
+	return p.writeMarker(writer, marker)
+}
+
+func (p *termwrightProbeState) writeMarker(writer io.Writer, marker string) bool {
+	written, writeErr := io.WriteString(writer, marker)
+	if writeErr != nil || written != len(marker) {
+		p.failOutput("Bubble Tea renderer output did not accept the complete revision marker")
+		return false
+	}
+	p.frames.Add(1)
+	return true
+}
+
+func (p *termwrightProbeState) failOutput(message string) {
+	p.dropped.Add(1)
+	if p.fail != nil {
+		_ = p.fail("adapter-guarantee-violation", message)
+	}
+}
+
+// termwrightAfterRendererFlush is injected into standardRenderer.flush while
+// that renderer still owns r.mtx. It is the only publication boundary: the
+// semantic revision and marker cannot overtake the bytes they describe.
+func termwrightAfterRendererFlush(r *standardRenderer, outputOK bool) {
+	p := termwrightProbe
 	if p == nil {
 		return
 	}
-
-	// v1 keeps the terminal size on the renderer, not on the Program — the
-	// symmetry with v2 that looks obvious is not there, and assuming it cost a
-	// compile. Zero means "the size has not arrived yet", not "a tiny
-	// terminal": validation refuses a snapshot without positive dimensions, so
-	// the frame is skipped rather than published as a lie.
-	columns, rows := termwrightViewport(program)
-	if columns <= 0 || rows <= 0 {
+	p.frameMu.Lock()
+	frame := p.queued[r]
+	delete(p.queued, r)
+	p.frameMu.Unlock()
+	if frame == nil {
 		return
 	}
-
-	snapshot, duplicateKey := p.snapshot(model, view, columns, rows)
-	if duplicateKey != "" {
-		_ = p.client.Fail("duplicate-semantic-key", "duplicate SemanticKey: "+string(duplicateKey))
+	if !outputOK {
+		p.failOutput("Bubble Tea renderer did not commit the complete terminal frame")
 		return
 	}
-	p.pendingMu.Lock()
 	if !p.client.Connected() {
-		p.pending = snapshot
-		p.pendingMu.Unlock()
 		return
 	}
-	p.pendingMu.Unlock()
-	p.publish(snapshot)
+	if p.publish(r.out, frame) {
+		p.frameMu.Lock()
+		p.published[r] = frame.sequence
+		p.frameMu.Unlock()
+	}
 }
 
-func (p *termwrightProbeState) publish(snapshot *protocol.Snapshot) {
-	p.publishMu.Lock()
-	defer p.publishMu.Unlock()
-	marker, err := p.client.Publish(snapshot)
-	if err != nil || marker == "" {
-		p.dropped.Add(1)
-		// A dropped frame means this probe lost part of its own fact stream,
-		// so the next publication owes the driver a whole tree.
-		return
+func (p *termwrightProbeState) queueFrame(r *standardRenderer, frame *termwrightStagedFrame) {
+	r.mtx.Lock()
+	r.buf.Reset()
+	view := frame.view
+	if view == "" {
+		view = " "
 	}
-	_, _ = os.Stdout.WriteString(marker)
-	p.frames.Add(1)
+	_, _ = r.buf.WriteString(view)
+	p.frameMu.Lock()
+	p.latest[r] = frame
+	p.queued[r] = frame
+	p.frameMu.Unlock()
+	r.mtx.Unlock()
+}
+
+// replayLatestFrames closes the first-frame handshake race without publishing
+// stale pending semantics. A successful handshake re-enters the ordinary
+// renderer queue; its next real flush owns both the bytes and the marker.
+func (p *termwrightProbeState) replayLatestFrames() {
+	p.renderMu.Lock()
+	defer p.renderMu.Unlock()
+	p.frameMu.Lock()
+	renderers := make([]*standardRenderer, 0, len(p.latest))
+	for renderer := range p.latest {
+		renderers = append(renderers, renderer)
+	}
+	p.frameMu.Unlock()
+	for _, renderer := range renderers {
+		// flush owns the same mutex. Re-read publication state only after any
+		// in-flight flush has completed, then reserve and queue under that one
+		// renderer boundary so the handshake can never replay a committed frame.
+		renderer.mtx.Lock()
+		p.frameMu.Lock()
+		frame := p.latest[renderer]
+		shouldQueue := frame != nil && frame.sequence > p.published[renderer]
+		if shouldQueue {
+			p.queued[renderer] = frame
+		}
+		p.frameMu.Unlock()
+		if shouldQueue {
+			renderer.buf.Reset()
+			view := frame.view
+			if view == "" {
+				view = " "
+			}
+			_, _ = renderer.buf.WriteString(view)
+		}
+		renderer.mtx.Unlock()
+	}
 }
 
 // snapshot reflects over the user's model and reports what it recognises.
@@ -764,13 +832,33 @@ func termwrightTypeName(value any) string {
 	return kind.Name()
 }
 
-// termwrightRenderAndObserve renders the frame and then reports it.
-//
-// It exists so each of the three patch hunks is one line. A smaller hunk has
-// fewer lines of context to drift on the next upstream bump, which is the only
-// lever available when the anchor count is fixed by the framework's shape.
+// termwrightRenderAndObserve captures the model at the View call, then binds it
+// atomically to the standard renderer's queued bytes. Publication happens only
+// from standardRenderer.flush.
 func termwrightRenderAndObserve(p *Program, model Model) {
 	view := model.View()
-	p.renderer.write(view) // send view to renderer
-	termwrightAfterView(p, model, view)
+	probe := termwrightCurrentProbe()
+	renderer, supported := p.renderer.(*standardRenderer)
+	if probe == nil || !supported || renderer == nil {
+		p.renderer.write(view)
+		return
+	}
+	probe.renderMu.Lock()
+	defer probe.renderMu.Unlock()
+	columns, rows := termwrightViewport(p)
+	if columns <= 0 || rows <= 0 {
+		renderer.write(view)
+		return
+	}
+	snapshot, duplicateKey := probe.snapshot(model, view, columns, rows)
+	if duplicateKey != "" {
+		_ = probe.client.Fail("duplicate-semantic-key", "duplicate SemanticKey: "+string(duplicateKey))
+		renderer.write(view)
+		return
+	}
+	probe.frameMu.Lock()
+	probe.nextFrame++
+	frame := &termwrightStagedFrame{sequence: probe.nextFrame, view: view, snapshot: snapshot}
+	probe.frameMu.Unlock()
+	probe.queueFrame(renderer, frame)
 }

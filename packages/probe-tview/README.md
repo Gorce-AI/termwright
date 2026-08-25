@@ -4,9 +4,9 @@ Semantics from a [tview](https://github.com/rivo/tview) application that
 **imports nothing of ours**.
 
 The application is built through an ephemeral Go workspace that redirects
-`github.com/rivo/tview` to an instrumented copy. Nothing is written into the
-project: its `go.mod`, its `go.sum` and any `go.work` of its own come out of the
-build byte-identical.
+exact tview and tcell versions to instrumented copies. Nothing is written into
+the project: its `go.mod`, its `go.sum` and any `go.work` of its own come out of
+the build byte-identical.
 
 ## Install
 
@@ -47,6 +47,13 @@ Identity is the primitive's pointer: tview retains its widget tree, so the same
 `identityKind: 'stable'` and only the probe capabilities it earns:
 `stable-identity` and `annotations`. Its `frameworkVersion` is the exact
 version selected by the verified patch set, not the Go runtime version.
+
+The tree is staged while tview holds its draw lock and committed only after
+`screen.Show()` succeeds. On Unix the marker follows through tcell's public
+`Tty()` writer. On Windows the exact tcell v2.8.1 companion forwards through
+the real `baseScreen` to `cScreen` and writes under the same lock and console
+handle used by `Show`; virtual-terminal mode is required. There is no stdout
+fallback, and a missing writer capability fails the semantic session closed.
 
 ## Describing what the probe cannot see
 
@@ -111,6 +118,9 @@ to be byte-identical.
   compiles.
 - A framework version with no patch set is named as such — "this is not
   tview v0.42.0" — instead of failing somewhere inside a diff.
+- The resolved tcell version must have its own exact companion patch set;
+  currently that is v2.8.1. This is required for causal Windows marker output,
+  not merely a transitive dependency preference.
 
 ## Development
 

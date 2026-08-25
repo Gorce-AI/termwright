@@ -8,6 +8,7 @@ package tview
 // and never the application's ability to draw.
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -103,7 +105,12 @@ func probeAgainst(t *testing.T, endpoint string) *termwrightProbeState {
 		t.Fatal("the probe stayed dormant with the handshake variables set")
 	}
 	t.Cleanup(func() { _ = probe.client.Close() })
-	probe.ensureStarted()
+	var startErr error
+	probe.start.Do(func() { startErr = probe.client.Start(protocol.DialTimeout) })
+	if startErr != nil {
+		t.Fatal(startErr)
+	}
+	probe.ready.Store(true)
 
 	deadline := time.Now().Add(2 * time.Second)
 	for !probe.client.Connected() && time.Now().Before(deadline) {
@@ -116,7 +123,37 @@ func probeAgainst(t *testing.T, endpoint string) *termwrightProbeState {
 }
 
 // sampleApplication builds a tree with enough in it to be worth publishing.
-func sampleApplication(t *testing.T) (*Application, tcell.Screen, *List) {
+type markerTTY struct {
+	bytes.Buffer
+	sync.Mutex
+}
+
+func (t *markerTTY) Write(data []byte) (int, error) {
+	t.Lock()
+	defer t.Unlock()
+	return t.Buffer.Write(data)
+}
+func (t *markerTTY) Read([]byte) (int, error)              { return 0, io.EOF }
+func (t *markerTTY) Close() error                          { return nil }
+func (t *markerTTY) Start() error                          { return nil }
+func (t *markerTTY) Stop() error                           { return nil }
+func (t *markerTTY) Drain() error                          { return nil }
+func (t *markerTTY) NotifyResize(func())                   {}
+func (t *markerTTY) WindowSize() (tcell.WindowSize, error) { return tcell.WindowSize{}, nil }
+func (t *markerTTY) String() string {
+	t.Lock()
+	defer t.Unlock()
+	return t.Buffer.String()
+}
+
+type markerScreen struct {
+	tcell.Screen
+	tty *markerTTY
+}
+
+func (s *markerScreen) Tty() (tcell.Tty, bool) { return s.tty, true }
+
+func sampleApplication(t *testing.T) (*Application, *markerScreen, *List) {
 	t.Helper()
 	screen := tcell.NewSimulationScreen("UTF-8")
 	if err := screen.Init(); err != nil {
@@ -140,7 +177,7 @@ func sampleApplication(t *testing.T) (*Application, tcell.Screen, *List) {
 	app := NewApplication()
 	app.root = root
 	root.SetRect(0, 0, 80, 24)
-	return app, screen, list
+	return app, &markerScreen{Screen: screen, tty: &markerTTY{}}, list
 }
 
 // churn rewrites every label so each attempted publication represents a new
@@ -225,23 +262,11 @@ func TestAFailedPublishWritesNoMarker(t *testing.T) {
 	probe := probeAgainst(t, path)
 	app, screen, list := sampleApplication(t)
 
-	read, write, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	original := os.Stdout
-	os.Stdout = write
-	t.Cleanup(func() { os.Stdout = original })
-
 	for attempt := 0; attempt < 400 && probe.timedOut.Load() == 0; attempt++ {
 		churn(list, attempt)
 		probe.afterFrame(app, screen)
 	}
-	_ = write.Close()
-
-	buffer := make([]byte, 64*1024)
-	n, _ := read.Read(buffer)
-	written := string(buffer[:n])
+	written := screen.tty.String()
 
 	if probe.timedOut.Load() == 0 {
 		t.Fatal("the bounded socket accepted every frame; the failed-publish path was not exercised")

@@ -109,6 +109,7 @@
         "strategy": {
           "enum": [
             "native-hook",
+            "runtime-capability-and-behavior",
             "checksummed-instrumentation",
             "checksummed-replacement"
           ]

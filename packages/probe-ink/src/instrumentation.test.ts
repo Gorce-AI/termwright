@@ -4,10 +4,13 @@ import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import {
+  INK_INSTRUMENTATION_SENTINEL,
   INK_VERSION,
   instrumentInkCore,
   instrumentInkRenderer,
+  instrumentationSentinel,
 } from './instrumentation.js';
+import certified from './certified-instrumentation.json' with { type: 'json' };
 
 const inkBuild = dirname(createRequire(import.meta.url).resolve('ink'));
 
@@ -28,6 +31,41 @@ describe('certified Ink instrumentation', () => {
     const corePath = join(inkBuild, 'ink.js');
     expect(instrumentInkRenderer(rendererPath, `${await readFile(rendererPath, 'utf8')}\n// changed`)).toBeUndefined();
     expect(instrumentInkCore(corePath, `${await readFile(corePath, 'utf8')}\n// changed`)).toBeUndefined();
+  });
+
+  it('requires one matching renderer and core profile before enabling capture', () => {
+    const profile = certified.profiles.find((entry) => entry.version === INK_VERSION);
+    expect(profile).toBeDefined();
+    const globals = globalThis as Record<PropertyKey, unknown>;
+    const prior = globals[INK_INSTRUMENTATION_SENTINEL];
+    try {
+      globals[INK_INSTRUMENTATION_SENTINEL] = Object.freeze({
+        version: 1,
+        frameworkVersion: profile!.version,
+        rendererChecksum: profile!.rendererSha256,
+      });
+      expect(instrumentationSentinel()).toBeUndefined();
+
+      globals[INK_INSTRUMENTATION_SENTINEL] = Object.freeze({
+        version: 1,
+        frameworkVersion: profile!.version,
+        coreChecksum: profile!.coreSha256,
+      });
+      expect(instrumentationSentinel()).toBeUndefined();
+
+      globals[INK_INSTRUMENTATION_SENTINEL] = Object.freeze({
+        version: 1,
+        frameworkVersion: profile!.version,
+        rendererChecksum: profile!.rendererSha256,
+        coreChecksum: profile!.coreSha256,
+      });
+      expect(instrumentationSentinel()).toEqual(expect.objectContaining({
+        frameworkVersion: INK_VERSION,
+      }));
+    } finally {
+      if (prior === undefined) delete globals[INK_INSTRUMENTATION_SENTINEL];
+      else globals[INK_INSTRUMENTATION_SENTINEL] = prior;
+    }
   });
 
   it('does not patch matching-looking files outside Ink', () => {

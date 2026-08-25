@@ -52,7 +52,7 @@ async def test_custom_widget_merges_intent_with_observed_geometry_and_focus():
         widget = app.query_one(DeploymentWidget)
         widget.focus()
         await pilot.pause()
-        snapshot = build_snapshot(app, Identities(), session_id="sdk", revision=1).to_wire()
+        snapshot = build_snapshot(app, app.screen, Identities(), session_id="sdk", revision=1).to_wire()
 
     node = next(item for item in snapshot["nodes"] if item.get("testId") == "deploy")
     label = next(
@@ -91,7 +91,7 @@ async def test_semantic_key_survives_widget_recreation():
         app = AnnotatedApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            snapshot = build_snapshot(app, identities, session_id="sdk", revision=1).to_wire()
+            snapshot = build_snapshot(app, app.screen, identities, session_id="sdk", revision=1).to_wire()
         ids.append(next(item["id"] for item in snapshot["nodes"] if item.get("testId") == "deploy"))
     assert ids == ["k:deployment:production", "k:deployment:production"]
 
@@ -109,7 +109,7 @@ async def test_duplicate_semantic_keys_fail_closed():
     async with DuplicateApp().run_test() as pilot:
         await pilot.pause()
         with pytest.raises(DuplicateSemanticKeyError, match="duplicate SemanticKey"):
-            build_snapshot(pilot.app, Identities(), session_id="sdk", revision=1)
+            build_snapshot(pilot.app, pilot.app.screen, Identities(), session_id="sdk", revision=1)
 
 
 async def test_instance_annotation_supports_a_third_party_widget():
@@ -123,7 +123,7 @@ async def test_instance_annotation_supports_a_third_party_widget():
     async with VendorApp().run_test() as pilot:
         await pilot.pause()
         snapshot = build_snapshot(
-            pilot.app, Identities(), session_id="sdk", revision=1
+            pilot.app, pilot.app.screen, Identities(), session_id="sdk", revision=1
         ).to_wire()
     node = next(item for item in snapshot["nodes"] if item.get("testId") == "vendor")
     assert (node["role"], node["name"], node["extended"]) == (
@@ -147,7 +147,7 @@ async def test_subclass_inherits_intent_and_can_override_one_field():
     async with SpecializedApp().run_test() as pilot:
         await pilot.pause()
         snapshot = build_snapshot(
-            pilot.app, Identities(), session_id="sdk", revision=1
+            pilot.app, pilot.app.screen, Identities(), session_id="sdk", revision=1
         ).to_wire()
 
     node = next(item for item in snapshot["nodes"] if item.get("testId") == "deploy")
@@ -186,7 +186,7 @@ async def test_a_faulty_dynamic_annotation_does_not_remove_the_widget():
     async with FaultyApp().run_test() as pilot:
         await pilot.pause()
         snapshot = build_snapshot(
-            pilot.app, Identities(), session_id="sdk", revision=1
+            pilot.app, pilot.app.screen, Identities(), session_id="sdk", revision=1
         ).to_wire()
     node = next(item for item in snapshot["nodes"] if item.get("testId") == "faulty")
     assert node["role"] == "text"

@@ -16,6 +16,13 @@ export const CONFIG_HOOK = '__termwright_onConfig';
 /** Minimal shape the probe needs; the real type lives in `@opentui/core`. */
 export type ObservedRenderer = object;
 
+export interface ObservedRuntimeCertification {
+  readonly version: string;
+  readonly source: 'builtin' | 'candidate';
+  readonly candidateDigest?: string;
+  readonly sourceRevision?: string;
+}
+
 /**
  * Register the callback that may amend a renderer config before it is built.
  *
@@ -43,7 +50,9 @@ export function onRendererConfig(
  *
  * @returns a disposer that removes the hook again.
  */
-export function onRendererCreated(handler: (renderer: ObservedRenderer) => void): () => void {
+export function onRendererCreated(
+  handler: (renderer: ObservedRenderer, certification: ObservedRuntimeCertification) => void,
+): () => void {
   const scope = globalThis as Record<string, unknown>;
   const previous = scope[RENDERER_HOOK];
   scope[RENDERER_HOOK] = handler;

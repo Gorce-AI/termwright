@@ -54,16 +54,20 @@ one certified profile never changes semantic breadth with the dependency graph.
 
 ## What it gives you
 
-The patch set puts a hook where the frame is produced — one call site in v2's
-`Program.render`, three in v1, which is the difference between the two designs
-rather than an accident. From there the probe walks the user's model by
-reflection and reports the components it recognises.
+The patch set stages a model observation where the frame is produced — one
+call site in v2's `Program.render`, three in v1. It commits that staged tree and
+writes the marker only after the exact renderer flush successfully sends the
+terminal bytes through the same writer. A failed or partial flush cannot publish
+a semantic revision. A successful no-output flush may still commit a staged
+semantic change and its marker when the terminal bytes are unchanged. From the staged model the probe walks the user's values
+by reflection and reports the components it recognises.
 
 Recognition is by package path and type, and it reads **public accessors
 only**. Bubbles is a separate module from Bubble Tea, so patching Bubble Tea
-buys the frame hook and nothing about the widgets; the optional Bubbles patch
-set adds accessor files (it edits nothing) and the probe finds them by name. An
-unpatched Bubbles therefore reports less rather than failing to build.
+buys the frame hook and nothing about the widgets; the Bubbles patch set adds
+accessor files without editing upstream files, and the probe finds them by
+name. A detected Bubbles version without its exact certified add-only set is
+refused rather than silently changing semantic breadth.
 
 Those accessors exist because the public API answers a slightly different
 question than a test asks:

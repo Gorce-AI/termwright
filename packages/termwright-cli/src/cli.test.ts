@@ -233,12 +233,20 @@ describe('mcp delegation', () => {
 });
 
 describe('the native test command', () => {
-  it('projects only Bun policy controls into test workers', async () => {
+  it('projects only explicit test and certification controls into test workers', async () => {
     const h = harness();
     Object.assign(h.deps.processContext.env, {
       TERMWRIGHT_REQUIRE_BUN: '1',
       TERMWRIGHT_SKIP_BUN: '0',
-      SECRET_FROM_CLI_PROCESS: 'must-not-leak',
+      TERMWRIGHT_REQUIRE_GO: '1',
+      TERMWRIGHT_SKIP_PTY: '0',
+      TERMWRIGHT_REQUIRE_EXAMPLES: '1',
+      TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: `sha256:${'a'.repeat(64)}`,
+      TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: 'b'.repeat(40),
+      TERMWRIGHT_CERTIFICATION_HOOK_PROFILE: '{"framework":"opentui"}',
+      GITHUB_ACTIONS: 'true',
+      GITHUB_SHA: 'b'.repeat(40),
+      UNRELATED_PROCESS_ENV: 'not-projected-into-explicit-overlay',
     });
     const value = completion('passed', 1);
     const options: unknown[] = [];
@@ -256,10 +264,21 @@ describe('the native test command', () => {
     expect(await runCli(['test'], h.deps)).toBe(EXIT_CODES.ok);
     expect(options).toHaveLength(1);
     expect(options[0]).toMatchObject({
-      workerEnv: { TERMWRIGHT_REQUIRE_BUN: '1', TERMWRIGHT_SKIP_BUN: '0' },
+      workerEnv: {
+        TERMWRIGHT_REQUIRE_BUN: '1',
+        TERMWRIGHT_SKIP_BUN: '0',
+        TERMWRIGHT_REQUIRE_GO: '1',
+        TERMWRIGHT_SKIP_PTY: '0',
+        TERMWRIGHT_REQUIRE_EXAMPLES: '1',
+        TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST: `sha256:${'a'.repeat(64)}`,
+        TERMWRIGHT_CERTIFICATION_SOURCE_REVISION: 'b'.repeat(40),
+        TERMWRIGHT_CERTIFICATION_HOOK_PROFILE: '{"framework":"opentui"}',
+        GITHUB_ACTIONS: 'true',
+        GITHUB_SHA: 'b'.repeat(40),
+      },
     });
     expect((options[0] as { workerEnv: Record<string, string> }).workerEnv)
-      .not.toHaveProperty('SECRET_FROM_CLI_PROCESS');
+      .not.toHaveProperty('UNRELATED_PROCESS_ENV');
   });
 
   it('repeats complete cycles in one host and fails on the worst run', async () => {
@@ -366,11 +385,11 @@ describe('the native test command', () => {
 });
 
 describe('the native watch command', () => {
-  it('projects only Bun policy controls into watch workers', async () => {
+  it('projects only supported test controls into watch workers', async () => {
     const h = harness();
     Object.assign(h.deps.processContext.env, {
       TERMWRIGHT_REQUIRE_BUN: '1',
-      SECRET_FROM_CLI_PROCESS: 'must-not-leak',
+      UNRELATED_PROCESS_ENV: 'not-projected-into-explicit-overlay',
     });
     const value = completion('passed', 1);
     const options: unknown[] = [];
@@ -391,7 +410,7 @@ describe('the native watch command', () => {
     expect(await runCli(['watch'], h.deps)).toBe(EXIT_CODES.ok);
     expect(options[0]).toMatchObject({ workerEnv: { TERMWRIGHT_REQUIRE_BUN: '1' } });
     expect((options[0] as { workerEnv: Record<string, string> }).workerEnv)
-      .not.toHaveProperty('SECRET_FROM_CLI_PROCESS');
+      .not.toHaveProperty('UNRELATED_PROCESS_ENV');
   });
 
   it('does not certify an all-skipped initial cycle', async () => {
@@ -443,7 +462,7 @@ describe('the ui command', () => {
     const h = harness();
     Object.assign(h.deps.processContext.env, {
       TERMWRIGHT_REQUIRE_BUN: '1',
-      SECRET_FROM_CLI_PROCESS: 'must-not-leak',
+      UNRELATED_PROCESS_ENV: 'not-projected-into-explicit-overlay',
     });
     expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.ok);
 
@@ -453,7 +472,7 @@ describe('the ui command', () => {
       args: [], cwd: '/workspace', resourceProfile: 'local',
       workerEnv: { TERMWRIGHT_REQUIRE_BUN: '1' },
     });
-    expect(h.runs[0]?.workerEnv).not.toHaveProperty('SECRET_FROM_CLI_PROCESS');
+    expect(h.runs[0]?.workerEnv).not.toHaveProperty('UNRELATED_PROCESS_ENV');
     expect(h.closed()).toBe(1);
   });
 

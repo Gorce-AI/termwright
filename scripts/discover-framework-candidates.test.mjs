@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -90,11 +90,25 @@ describe('framework candidate discovery', () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
     const hookConfig = {
       maxCandidatesPerRun: 2,
-      streams: [{ id: 'ink', frameworkId: 'ink', ecosystem: 'npm', registry: 'npm', package: 'ink', minimumVersion: '7.1.1', major: 7, mode: 'hook' }],
+      streams: [{ id: 'ink', frameworkId: 'ink', ecosystem: 'npm', registry: 'npm', package: 'ink', minimumVersion: '7.1.1', major: 7, mode: 'hook', hookStrategy: 'exact-source' }],
     };
     const npmSource = { integrity: `sha512-${Buffer.alloc(64).toString('base64')}`, shasum: 'a'.repeat(40), tarballSha256: 'b'.repeat(64), dependencyClosure: [] };
     const result = await selectCandidates({ rootDir: directory, config: hookConfig, ledger: { streams: {} }, catalogs: { ink: [{ version: '7.1.2', publishedAt: '2026-03-01T00:00:00Z', source: npmSource }] } });
-    expect(result.candidates[0]).toMatchObject({ mode: 'hook', patch: { status: 'not-applicable', path: null, manifestDigest: null } });
+    expect(result.candidates[0]).toMatchObject({ mode: 'hook', hookStrategy: 'exact-source', patch: { status: 'not-applicable', path: null, manifestDigest: null } });
+  });
+
+  it('refuses a hook stream whose certification mechanism is implicit', async () => {
+    await expect(selectCandidates({
+      config: { maxCandidatesPerRun: 1, streams: [{ id: 'implicit', mode: 'hook', minimumVersion: '1.0.0' }] },
+      ledger: { streams: {} },
+      catalogs: { implicit: [] },
+    })).rejects.toThrow(/explicit exact-source or runtime strategy/u);
+  });
+
+  it('keeps the repository hook strategies explicit and framework-specific', async () => {
+    const config = JSON.parse(await readFile(new URL('../compatibility/upstream-patches.json', import.meta.url), 'utf8'));
+    const strategies = Object.fromEntries(config.streams.filter((stream) => stream.mode === 'hook').map((stream) => [stream.frameworkId, stream.hookStrategy]));
+    expect(strategies).toEqual({ ink: 'exact-source', opentui: 'runtime', textual: 'runtime' });
   });
 
   it('uses npm release time and preserves registry integrity plus dependency metadata', async () => {
@@ -152,7 +166,7 @@ describe('framework candidate discovery', () => {
 
   it('reselects the same npm root version when its transitive closure digest changes', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
-    const npmConfig = { maxCandidatesPerRun: 2, streams: [{ id: 'native', frameworkId: 'native', ecosystem: 'npm', registry: 'npm', package: 'native', minimumVersion: '1.0.0', mode: 'hook', monitorDependencyClosure: true }] };
+    const npmConfig = { maxCandidatesPerRun: 2, streams: [{ id: 'native', frameworkId: 'native', ecosystem: 'npm', registry: 'npm', package: 'native', minimumVersion: '1.0.0', mode: 'hook', hookStrategy: 'runtime', monitorDependencyClosure: true }] };
     const complete = (version) => {
       const dependencyRoots = [{ name: 'platform', packageName: 'platform', requested: '^1', type: 'optional', optionalPeer: false, version }];
       const dependencyClosure = [{ name: 'platform', version, integrity: `sha512-${Buffer.alloc(64).toString('base64')}`, tarball: `https://registry.invalid/platform-${version}.tgz`, tarballSha256: 'e'.repeat(64), platform: { os: [], cpu: [], libc: [] }, dependencies: [] }];
@@ -165,7 +179,7 @@ describe('framework candidate discovery', () => {
 
   it('reselects the same npm root version when its own immutable artifact evidence drifts', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'tw-discovery-'));
-    const npmConfig = { maxCandidatesPerRun: 2, streams: [{ id: 'native', frameworkId: 'native', ecosystem: 'npm', registry: 'npm', package: 'native', minimumVersion: '1.0.0', mode: 'hook', monitorDependencyClosure: true }] };
+    const npmConfig = { maxCandidatesPerRun: 2, streams: [{ id: 'native', frameworkId: 'native', ecosystem: 'npm', registry: 'npm', package: 'native', minimumVersion: '1.0.0', mode: 'hook', hookStrategy: 'runtime', monitorDependencyClosure: true }] };
     const dependencyRoots = [];
     const dependencyClosure = [];
     const closureDigest = `sha256:${createHash('sha256').update(canonicalJson({ dependencyRoots, dependencyClosure })).digest('hex')}`;

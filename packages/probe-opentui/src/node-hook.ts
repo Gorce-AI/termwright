@@ -16,7 +16,7 @@
 import * as nodeModule from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { buildShimSource, shouldShim } from './shim.js';
-import { instrumentOpenTuiChunk, OPENTUI_CHUNK_PATTERN } from './instrumentation.js';
+import { certifyOpenTuiEntry } from './certification.js';
 import { isInstrumented } from './runtime.js';
 import { bootstrap } from './bootstrap.js';
 
@@ -25,18 +25,13 @@ type NextLoad = (url: string, context: unknown) => LoadResult;
 
 /** The `load` hook, shared by both installation paths. */
 function load(url: string, context: unknown, nextLoad: NextLoad): LoadResult {
-  if (shouldShim(url)) return { format: 'module', shortCircuit: true, source: buildShimSource(url) };
-  const loaded = nextLoad(url, context);
-  if (!OPENTUI_CHUNK_PATTERN.test(url.split('?')[0] ?? '')) return loaded;
-  const source = sourceText(loaded.source);
-  const instrumented = source === undefined ? undefined : instrumentOpenTuiChunk(url, source);
-  return instrumented === undefined ? loaded : { ...loaded, format: 'module', shortCircuit: true, source: instrumented };
-}
-
-function sourceText(source: LoadResult['source']): string | undefined {
-  if (typeof source === 'string') return source;
-  if (source === undefined) return undefined;
-  return Buffer.from(source.buffer, source.byteOffset, source.byteLength).toString('utf8');
+  if (shouldShim(url)) {
+    const certification = certifyOpenTuiEntry(url);
+    if (certification !== undefined) {
+      return { format: 'module', shortCircuit: true, source: buildShimSource(url, certification) };
+    }
+  }
+  return nextLoad(url, context);
 }
 
 /**
@@ -70,12 +65,13 @@ export async function loadHook(
   context: unknown,
   nextLoad: (url: string, context: unknown) => Promise<LoadResult>,
 ): Promise<LoadResult> {
-  if (shouldShim(url)) return { format: 'module', shortCircuit: true, source: buildShimSource(url) };
-  const loaded = await nextLoad(url, context);
-  if (!OPENTUI_CHUNK_PATTERN.test(url.split('?')[0] ?? '')) return loaded;
-  const source = sourceText(loaded.source);
-  const instrumented = source === undefined ? undefined : instrumentOpenTuiChunk(url, source);
-  return instrumented === undefined ? loaded : { ...loaded, format: 'module', shortCircuit: true, source: instrumented };
+  if (shouldShim(url)) {
+    const certification = certifyOpenTuiEntry(url);
+    if (certification !== undefined) {
+      return { format: 'module', shortCircuit: true, source: buildShimSource(url, certification) };
+    }
+  }
+  return nextLoad(url, context);
 }
 
 export { loadHook as load };

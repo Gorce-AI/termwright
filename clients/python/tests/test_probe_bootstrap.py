@@ -538,9 +538,6 @@ def test_it_attaches_to_a_vanilla_textual_app(tmp_path):
     log = tmp_path / "probe.log"
     with write_bootstrap(package_root=SRC) as bootstrap:
         env = bootstrap.env(instrumented_env(tmp_path, TERMWRIGHT_DEBUG_FILE=str(log)))
-        # A driver, because there is no terminal here. The application does not
-        # know: it is chosen from the environment, like everything else.
-        env["TEXTUAL_DRIVER"] = "textual.drivers.headless_driver:HeadlessDriver"
         result = subprocess.run(
             [sys.executable, str(FIXTURE)],
             env=env,

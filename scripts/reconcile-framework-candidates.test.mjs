@@ -5,16 +5,15 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { digestTree } from './prepare-framework-candidate.mjs';
 import { canonicalJson } from './discover-framework-candidates.mjs';
-import { reconcile, recordVerifiedFrameworkVersion, renderCertifiedTextualVersions, renderExactPeerRange, sameHookProfile, verifyGeneratedHookProfile, verifyGeneratedUpdate } from './reconcile-framework-candidates.mjs';
+import { addCertifiedRuntimeProfile, reconcile, recordVerifiedFrameworkVersion, renderCertifiedTextualVersions, renderExactPeerRange, sameHookProfile, verifyGeneratedHookProfile, verifyGeneratedRuntimeProfile, verifyGeneratedUpdate } from './reconcile-framework-candidates.mjs';
 
 const candidate = { id: 'example@2.1.1', streamId: 'example', package: 'example', version: '2.1.1', publishedAt: '2026-01-03T00:00:00Z', source: { checksum: 'a'.repeat(64) }, patch: { status: 'ready', path: 'patches/2.1.1/manifest.json', manifestDigest: `sha256:${'b'.repeat(64)}` }, candidateDigest: `sha256:${'c'.repeat(64)}` };
 
 describe('framework candidate reconciliation', () => {
-  it('treats hook build order as non-semantic while preserving immutable bytes', () => {
-    const node = { id: 'node-a', file: 'chunk-node-a.js', sha256: 'a'.repeat(64) };
-    const bun = { id: 'bun-b', file: 'chunk-bun-b.js', sha256: 'b'.repeat(64) };
-    expect(sameHookProfile({ version: '0.5.3', builds: [node, bun] }, { version: '0.5.3', builds: [bun, node] })).toBe(true);
-    expect(sameHookProfile({ version: '0.5.3', builds: [node, bun] }, { version: '0.5.3', builds: [bun, { ...node, sha256: 'c'.repeat(64) }] })).toBe(false);
+  it('compares exact-source Ink profiles canonically without OpenTUI chunk machinery', () => {
+    const left = { version: '7.1.1', rendererSha256: 'a'.repeat(64), coreSha256: 'b'.repeat(64) };
+    expect(sameHookProfile(left, { coreSha256: 'b'.repeat(64), rendererSha256: 'a'.repeat(64), version: '7.1.1' })).toBe(true);
+    expect(sameHookProfile(left, { ...left, coreSha256: 'c'.repeat(64) })).toBe(false);
   });
 
   it('renders a deterministic exact peer range for every certified hook version', () => {
@@ -63,6 +62,17 @@ describe('framework candidate reconciliation', () => {
     expect(result.plan.issues[0].key).toBe(candidate.id);
     expect(result.plan.issues[0]).toMatchObject({ owner: 'owner' });
     expect(result.plan.issues[0].body).toContain('https://github.com/owner/repo/actions/runs/1');
+  });
+
+  it('does not prescribe a source patch for a runtime or hook candidate', () => {
+    const hook = { ...candidate, mode: 'hook', hookStrategy: 'runtime', patch: { status: 'not-applicable', path: null, manifestDigest: null } };
+    const result = reconcile({ candidates: [hook] }, { schemaVersion: 1, streams: {} }, [{ candidateId: hook.id, candidateDigest: hook.candidateDigest, state: 'red', detail: 'missing capability' }], { runUrl: 'https://github.com/owner/repo/actions/runs/1', owner: 'owner' });
+    expect(result.plan.issues[0].body).toContain('Review the failed capability and behavioral evidence');
+    expect(result.plan.issues[0].body).toContain('Integration mode: `hook`');
+    expect(result.plan.issues[0].body).toContain('Hook strategy: `runtime`');
+    expect(result.plan.issues[0].body).toContain('do not allowlist the version');
+    expect(result.plan.issues[0].body).not.toContain('Patch status:');
+    expect(result.plan.issues[0].body).not.toContain('Prepare an exact checksummed patch');
   });
 
   it('reports the trusted-toolchain remediation for a blocked Go candidate', () => {
@@ -137,6 +147,7 @@ describe('framework candidate reconciliation', () => {
     const hookCandidate = { ...candidate, id: 'ink@7.2.0', frameworkId: 'ink', version: '7.2.0' };
     const profile = { version: '7.2.0', rendererSha256: 'd'.repeat(64), coreSha256: 'e'.repeat(64) };
     await writeFile(join(directory, 'bundle.json'), JSON.stringify({
+      schemaVersion: 1,
       kind: 'termwright-generated-hook-profile',
       candidateId: hookCandidate.id,
       candidateDigest: hookCandidate.candidateDigest,
@@ -150,5 +161,34 @@ describe('framework candidate reconciliation', () => {
     tampered.profile.coreSha256 = 'f'.repeat(64);
     await writeFile(join(directory, 'bundle.json'), JSON.stringify(tampered));
     await expect(verifyGeneratedHookProfile({ candidate: hookCandidate, verdict: { state: 'green', sourceRevision: 'same-sha' }, updateDirectory: directory, expectedRevision: 'same-sha' })).rejects.toThrow(/digest mismatch/u);
+  });
+
+  it('accepts a runtime profile only for the exact green candidate and no source identity fields', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'tw-runtime-reconcile-'));
+    const runtimeCandidate = { ...candidate, id: 'opentui@0.5.4', frameworkId: 'opentui', version: '0.5.4', hookStrategy: 'runtime' };
+    const profile = { version: '0.5.4' };
+    await writeFile(join(directory, 'bundle.json'), JSON.stringify({
+      schemaVersion: 1,
+      kind: 'termwright-generated-runtime-profile',
+      candidateId: runtimeCandidate.id,
+      candidateDigest: runtimeCandidate.candidateDigest,
+      sourceRevision: 'same-sha',
+      framework: 'opentui',
+      profile,
+      profileDigest: `sha256:${createHash('sha256').update(canonicalJson(profile)).digest('hex')}`,
+    }));
+    await expect(verifyGeneratedRuntimeProfile({ candidate: runtimeCandidate, verdict: { state: 'green', sourceRevision: 'same-sha' }, updateDirectory: directory, expectedRevision: 'same-sha' })).resolves.toEqual(profile);
+    const tampered = JSON.parse(await readFile(join(directory, 'bundle.json'), 'utf8'));
+    tampered.profile.chunkSha256 = 'f'.repeat(64);
+    await writeFile(join(directory, 'bundle.json'), JSON.stringify(tampered));
+    await expect(verifyGeneratedRuntimeProfile({ candidate: runtimeCandidate, verdict: { state: 'green', sourceRevision: 'same-sha' }, updateDirectory: directory, expectedRevision: 'same-sha' })).rejects.toThrow(/not bound/u);
+  });
+
+  it('adds only a version-only OpenTUI runtime profile and keeps it immutable', () => {
+    const runtimeCandidate = { id: 'opentui@0.5.4', frameworkId: 'opentui', version: '0.5.4', hookStrategy: 'runtime' };
+    const document = { schemaVersion: 1, framework: 'opentui', profiles: [{ version: '0.5.3' }] };
+    expect(addCertifiedRuntimeProfile(document, runtimeCandidate, { version: '0.5.4' }).profiles).toEqual([{ version: '0.5.3' }, { version: '0.5.4' }]);
+    expect(() => addCertifiedRuntimeProfile(document, runtimeCandidate, { version: '0.5.4', chunkSha256: 'legacy' })).toThrow(/immutable/u);
+    expect(() => addCertifiedRuntimeProfile(document, { ...runtimeCandidate, frameworkId: 'ink' }, { version: '0.5.4' })).toThrow(/another framework/u);
   });
 });

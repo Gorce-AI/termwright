@@ -173,10 +173,27 @@ function applyTagFilter(tags: string | undefined): void {
   process.env[GHERKIN_TAGS_ENV] = tags;
 }
 
-/** Only policy controls intentionally supported inside native test workers. */
-function bunWorkerEnv(env: Readonly<Record<string, string | undefined>>): Readonly<Record<string, string>> {
+/**
+ * Projects recognized controls into Vitest's explicit worker overlay.
+ *
+ * This is configuration, not a secret boundary: Vitest workers intentionally
+ * inherit the CLI process environment as well (including PATH/toolchains).
+ */
+function testWorkerEnv(env: Readonly<Record<string, string | undefined>>): Readonly<Record<string, string>> {
   const workerEnv: Record<string, string> = {};
-  for (const key of ['TERMWRIGHT_REQUIRE_BUN', 'TERMWRIGHT_SKIP_BUN'] as const) {
+  for (const key of [
+    'TERMWRIGHT_REQUIRE_BUN',
+    'TERMWRIGHT_SKIP_BUN',
+    'TERMWRIGHT_REQUIRE_GO',
+    'TERMWRIGHT_SKIP_GO',
+    'TERMWRIGHT_SKIP_PTY',
+    'TERMWRIGHT_REQUIRE_EXAMPLES',
+    'TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST',
+    'TERMWRIGHT_CERTIFICATION_SOURCE_REVISION',
+    'TERMWRIGHT_CERTIFICATION_HOOK_PROFILE',
+    'GITHUB_ACTIONS',
+    'GITHUB_SHA',
+  ] as const) {
     const value = env[key];
     if (value !== undefined) workerEnv[key] = value;
   }
@@ -189,7 +206,7 @@ async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): P
     cwd: deps.cwd,
     runsDir: join(deps.cwd, '.termwright', 'runs'),
     vitestArgs: args.rest,
-    workerEnv: bunWorkerEnv(deps.processContext.env),
+    workerEnv: testWorkerEnv(deps.processContext.env),
     resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[args.resourceProfile],
   });
   const completions: RunCompletion[] = [];
@@ -263,7 +280,7 @@ async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): P
     cwd: deps.cwd,
     runsDir: join(deps.cwd, '.termwright', 'runs'),
     vitestArgs: args.rest,
-    workerEnv: bunWorkerEnv(deps.processContext.env),
+    workerEnv: testWorkerEnv(deps.processContext.env),
     resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[args.resourceProfile],
   });
   let worst: RunCompletion['state'] = 'passed';
@@ -547,7 +564,7 @@ async function launch(
     // In record mode `rest` is the recorded command, not runner arguments.
     rest: args.record ? [] : args.rest,
     resourceProfile: args.resourceProfile,
-    workerEnv: bunWorkerEnv(deps.processContext.env),
+    workerEnv: testWorkerEnv(deps.processContext.env),
     cwd: deps.cwd,
   };
   if (args.trace === undefined) return runUi(request, deps.ui, announce);

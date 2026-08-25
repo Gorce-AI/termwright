@@ -7,6 +7,8 @@ and a distinction between "not displayed" and "scrolled out of view".
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 pytest.importorskip("textual", reason="the probe needs Textual to observe")
@@ -21,6 +23,7 @@ from termwright.textual import semantic  # noqa: E402
 import termwright_probe.textual_tree as textual_tree  # noqa: E402
 from termwright_probe.textual_tree import (  # noqa: E402
     Identities,
+    TextualObservationError,
     build_snapshot,
     observe,
     role_for,
@@ -86,12 +89,34 @@ async def snapshot_of(app: App, *, size=(80, 24)) -> dict:
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
         return build_snapshot(
-            app, Identities(), session_id="s-test", revision=1
+            app, app.screen, Identities(), session_id="s-test", revision=1
         ).to_wire()
 
 
 def by_test_id(snapshot: dict) -> dict:
     return {node.get("testId"): node for node in snapshot["nodes"]}
+
+
+def test_tree_api_failures_are_not_relabelled_as_absent_data():
+    class BrokenScreen:
+        def query(self, _selector):
+            raise RuntimeError("query contract broke")
+
+    screen = BrokenScreen()
+    app = SimpleNamespace(screen=screen)
+    with pytest.raises(TextualObservationError, match="Screen.query failed"):
+        observe(app, screen)
+
+
+def test_malformed_non_absent_geometry_fails_closed():
+    with pytest.raises(TextualObservationError, match="malformed geometry"):
+        textual_tree._rect(SimpleNamespace(x="not-an-int", y=0, width=1, height=1))
+
+
+def test_missing_pointer_api_fails_closed():
+    screen = SimpleNamespace(size=SimpleNamespace(width=1, height=1))
+    with pytest.raises(TextualObservationError, match="get_widget_at is unavailable"):
+        textual_tree._hit_regions(screen, [], Identities(), {})
 
 
 # -- the tree is a legal tree ----------------------------------------------
@@ -157,7 +182,7 @@ async def test_visible_rect_is_clipped_to_the_viewport():
     async with app.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
         screen = app.screen
-        rows = [item for item in observe(app) if type(item.widget).__name__ == "Label"]
+        rows = [item for item in observe(app, screen) if type(item.widget).__name__ == "Label"]
         clipped = [
             item
             for item in rows
@@ -168,7 +193,7 @@ async def test_visible_rect_is_clipped_to_the_viewport():
         assert clipped, "the fixture no longer scrolls anything out of view"
 
         snapshot = build_snapshot(
-            app, Identities(), session_id="s", revision=1
+            app, app.screen, Identities(), session_id="s", revision=1
         ).to_wire()
 
     # No published rectangle may claim rows outside the 10-row viewport.
@@ -188,15 +213,15 @@ async def test_a_mounted_widget_missing_from_the_committed_layout_is_authoritati
         await pilot.pause()
         original_observe = textual_tree.observe
 
-        def without_input_layout(current_app):
-            observations = original_observe(current_app)
+        def without_input_layout(current_app, current_screen):
+            observations = original_observe(current_app, current_screen)
             for item in observations:
                 if getattr(item.widget, "id", None) == "reason":
                     item.geometry = None
             return observations
 
         monkeypatch.setattr(textual_tree, "observe", without_input_layout)
-        snapshot = build_snapshot(app, Identities(), session_id="s", revision=1).to_wire()
+        snapshot = build_snapshot(app, app.screen, Identities(), session_id="s", revision=1).to_wire()
 
     reason = by_test_id(snapshot)["reason"]
     assert reason["geometry"]["intendedRect"]["status"] == "absent"
@@ -219,7 +244,7 @@ async def test_clipped_away_and_not_displayed_are_told_apart():
     app = HiddenApp()
     async with app.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
-        undisplayed = build_snapshot(app, Identities(), session_id="s", revision=1).to_wire()
+        undisplayed = build_snapshot(app, app.screen, Identities(), session_id="s", revision=1).to_wire()
     gone = by_test_id(undisplayed)["gone"]
     assert gone["state"]["hidden"] is True
     assert "offscreen" not in gone["state"], (
@@ -233,7 +258,7 @@ async def test_clipped_away_and_not_displayed_are_told_apart():
     app = ScrollingApp()
     async with app.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
-        scrolled = build_snapshot(app, Identities(), session_id="s", revision=1).to_wire()
+        scrolled = build_snapshot(app, app.screen, Identities(), session_id="s", revision=1).to_wire()
     clipped = [
         node
         for node in scrolled["nodes"]
@@ -255,7 +280,7 @@ async def test_paint_order_comes_from_textuals_own_compositor():
     app = DemoApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        observations = observe(app)
+        observations = observe(app, app.screen)
         ranked = [item for item in observations if item.paint_order is not None]
         assert len(ranked) == len(
             [item for item in observations if item.geometry is not None]
@@ -272,7 +297,7 @@ async def test_publishes_qualified_geometry_and_exact_hit_grid():
     app = DemoApp()
     async with app.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
-        snapshot = build_snapshot(app, Identities(), session_id="s", revision=1).to_wire()
+        snapshot = build_snapshot(app, app.screen, Identities(), session_id="s", revision=1).to_wire()
     assert snapshot["v"] == 2
     assert snapshot["coordinateSpace"]["value"] == "viewport-cells"
     assert snapshot["hitGrid"]["status"] == "known"
@@ -290,7 +315,7 @@ async def test_distinguishes_hidden_from_fully_clipped():
     hidden = HiddenApp()
     async with hidden.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
-        hidden_snapshot = build_snapshot(hidden, Identities(), session_id="s", revision=1).to_wire()
+        hidden_snapshot = build_snapshot(hidden, hidden.screen, Identities(), session_id="s", revision=1).to_wire()
     gone = by_test_id(hidden_snapshot)["gone"]["geometry"]
     assert gone["displayed"] == {
         "status": "known",
@@ -310,7 +335,7 @@ async def test_distinguishes_hidden_from_fully_clipped():
     scrolling = ScrollingApp()
     async with scrolling.run_test(size=(40, 10)) as pilot:
         await pilot.pause()
-        clipped_snapshot = build_snapshot(scrolling, Identities(), session_id="s", revision=1).to_wire()
+        clipped_snapshot = build_snapshot(scrolling, scrolling.screen, Identities(), session_id="s", revision=1).to_wire()
     clipped = [
         node for node in clipped_snapshot["nodes"]
         if node["geometry"]["displayed"].get("value") is True
@@ -326,7 +351,7 @@ async def test_hit_grid_names_the_cover_not_the_covered_target():
     app = OverlayApp()
     async with app.run_test(size=(30, 8)) as pilot:
         await pilot.pause()
-        snapshot = build_snapshot(app, Identities(), session_id="s", revision=1).to_wire()
+        snapshot = build_snapshot(app, app.screen, Identities(), session_id="s", revision=1).to_wire()
 
     nodes = by_test_id(snapshot)
     target = nodes["target"]
@@ -354,9 +379,9 @@ async def test_identity_survives_between_frames():
     identities = Identities()
     async with app.run_test() as pilot:
         await pilot.pause()
-        first = build_snapshot(app, identities, session_id="s", revision=1).to_wire()
+        first = build_snapshot(app, app.screen, identities, session_id="s", revision=1).to_wire()
         await pilot.pause()
-        second = build_snapshot(app, identities, session_id="s", revision=2).to_wire()
+        second = build_snapshot(app, app.screen, identities, session_id="s", revision=2).to_wire()
 
     def ids(snapshot):
         return {node["testId"]: node["id"] for node in snapshot["nodes"] if node.get("testId")}

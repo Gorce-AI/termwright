@@ -1,9 +1,9 @@
 """One instrumented Textual application: connect, publish, commit.
 
 The session lives between the frame hook and the protocol client. Each
-completed frame becomes a snapshot, the snapshot's revision becomes a marker,
-and the marker is written after the frame's last byte — which is what lets the
-driver match a tree to the pixels that were on screen when it was true.
+completed frame becomes a snapshot and its marker is appended to the exact
+WriterThread FIFO after the frame. That causal order lets the driver match the
+tree to the terminal bytes without blocking Textual's event loop.
 
 Everything here is written to fail quietly. The application under test owns
 the terminal and the exit code; a side channel that cannot connect, cannot
@@ -15,19 +15,24 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 from typing import Any, Dict, Optional
 
 from termwright.client import SemanticClient, client_from_env
 
 from . import __version__
-from .textual_tree import DuplicateSemanticKeyError, Identities, build_snapshot
+from .textual_probe import CommittedTextualFrame, TextualCommitFailure, TextualFrameEvent
+from .textual_tree import (
+    DuplicateSemanticKeyError,
+    Identities,
+    TextualObservationError,
+    build_snapshot,
+)
 
 #: What this probe tells the driver it can do.
 #:
 #: `frame-begin` is deliberately absent: `post_display_hook` runs after the
-#: flush, so there is no moment we could honestly report as the start of a
-#: frame. `paint-order` and `visible-rect` are claimed because Textual
+#: frame enqueue, so there is no moment we could honestly report as the start
+#: of a frame. `paint-order` and `visible-rect` are claimed because Textual
 #: computes both and we read them rather than deriving them.
 PROBE_CAPABILITIES = (
     "stable-identity",
@@ -73,70 +78,70 @@ class ProbeSession:
         self._identities = Identities()
         self._starting = False
         self._started = False
-        # Coalesced snapshot of the latest *completed* frame seen while the
-        # handshake is in flight. It is not an event queue: one immutable
-        # terminal state is retained so a stationary application still gets a
-        # semantic tree after connecting, without waiting for an unrelated
-        # future repaint.
-        self._pending_snapshot = None
-        self._fatal_error: Optional[str] = None
-        #: Frames that arrived before the handshake finished, or while a
-        #: previous publish was still in flight. Counted, never queued: at most
-        #: one coalesced observation of the latest completed frame is retained.
+        self._fatal_error: Optional[tuple[str, str]] = None
+        #: Frames before the handshake or after disconnect are counted and
+        #: discarded. A snapshot is never retained across the handshake: its
+        #: terminal bytes may no longer be current when the socket is ready.
         self.frames_dropped = 0
 
     @property
     def client(self) -> SemanticClient:
         return self._client
 
-    def on_frame(self) -> None:
+    def on_frame(self, event: TextualFrameEvent) -> None:
         """Called once per completed frame. Never raises into Textual."""
         if os.getpid() != self._owner_pid:
             return
         try:
-            self._on_frame()
+            if isinstance(event, TextualCommitFailure):
+                self._fatal("adapter-guarantee-violation", event.detail)
+                if not self._started:
+                    self._begin()
+                return
+            self._on_frame(event)
         except DuplicateSemanticKeyError as error:
-            self._fatal_error = str(error)
-            self._client.fail_nowait("duplicate-semantic-key", self._fatal_error)
-            _log("diag", f"fatal semantic identity violation: {error}")
+            self._fatal("duplicate-semantic-key", str(error))
+        except TextualObservationError as error:
+            self._fatal("adapter-guarantee-violation", str(error))
         except Exception as error:  # pragma: no cover - defensive
-            _log("diag", f"frame handling failed: {type(error).__name__}: {error}")
+            self._fatal(
+                "internal", f"unexpected Textual frame failure: {type(error).__name__}: {error}"
+            )
 
-    def _on_frame(self) -> None:
+    def _on_frame(self, commit: CommittedTextualFrame) -> None:
+        if self._fatal_error is not None:
+            self._drop()
+            return
         if not self._started:
             self._begin()
-            self._capture_pending()
             self._drop()
             return
         if not self._client.connected:
-            self._capture_pending()
             self._drop()
             return
 
-        snapshot = self._snapshot()
+        try:
+            commit.preflight_marker()
+        except Exception as error:
+            self._fatal(
+                "adapter-guarantee-violation",
+                f"Textual commit marker preflight failed: {type(error).__name__}: {error}",
+            )
+            return
+
+        snapshot = self._snapshot(commit)
         marker = self._client.publish_nowait(snapshot)
         if marker:
-            self._write(marker)
+            self._write(commit, marker)
 
-    def _snapshot(self):
+    def _snapshot(self, commit: CommittedTextualFrame):
         return build_snapshot(
             self._app,
+            commit.screen,
             self._identities,
             session_id=self._client.session_id or "pending",
             revision=self._client.revision + 1,
         )
-
-    def _capture_pending(self) -> None:
-        """Retain only the newest completed frame while connecting."""
-        self._pending_snapshot = self._snapshot()
-
-    def _publish_pending(self) -> None:
-        snapshot, self._pending_snapshot = self._pending_snapshot, None
-        if snapshot is None or not self._client.connected:
-            return
-        marker = self._client.publish_nowait(snapshot)
-        if marker:
-            self._write(marker)
 
     def _drop(self) -> None:
         """Record a frame that never reached the driver."""
@@ -153,9 +158,18 @@ class ProbeSession:
             self._started = ok
             if ok:
                 if self._fatal_error is not None:
-                    self._client.fail_nowait("duplicate-semantic-key", self._fatal_error)
+                    self._client.fail_nowait(*self._fatal_error)
                 else:
-                    self._publish_pending()
+                    try:
+                        # Public Textual API: request a new render after the
+                        # handshake. Only that future committed frame may be
+                        # paired with a semantic snapshot.
+                        self._app.refresh()
+                    except Exception as error:
+                        self._fatal(
+                            "adapter-guarantee-violation",
+                            f"Textual refresh after handshake failed: {type(error).__name__}: {error}",
+                        )
             else:
                 _log("diag", "probe session did not start; publishing nothing")
 
@@ -166,27 +180,33 @@ class ProbeSession:
             # either. The application keeps its terminal.
             self._starting = False
 
-    def _write(self, text: str) -> None:
-        """Emit the marker on the same stream the frame went out on.
-
-        Textual's driver is preferred: writing through it keeps our bytes in
-        the same ordering as the frame's, which is the whole point of a marker
-        that commits the bytes before it.
-        """
-        driver = getattr(self._app, "_driver", None)
-        if driver is not None and hasattr(driver, "write"):
-            try:
-                driver.write(text)
-                driver.flush()
-                return
-            except Exception:
-                pass
-        stream = sys.__stdout__ or sys.stdout
+    def _write(self, commit: CommittedTextualFrame, text: str) -> None:
+        """Non-blockingly enqueue after the frame on its exact FIFO writer."""
         try:
-            stream.write(text)
-            stream.flush()
-        except Exception:
-            pass
+            commit.enqueue_marker(text)
+        except Exception as error:
+            try:
+                from queue import Full
+
+                queue_full = isinstance(error, Full)
+            except ImportError:  # pragma: no cover - Python always provides queue
+                queue_full = False
+            detail = (
+                "Textual WriterThread queue became full after snapshot publication"
+                if queue_full
+                else f"Textual commit marker write failed: {type(error).__name__}: {error}"
+            )
+            self._fatal(
+                "adapter-guarantee-violation",
+                detail,
+            )
+
+    def _fatal(self, code: str, message: str) -> None:
+        if self._fatal_error is not None:
+            return
+        self._fatal_error = (code, message)
+        self._client.fail_nowait(code, message)
+        _log("diag", f"fatal Textual probe violation: {message}")
 
 
 def session_for(app: Any, framework_version: Optional[str] = None) -> Optional[ProbeSession]:

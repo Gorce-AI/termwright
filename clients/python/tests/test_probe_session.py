@@ -8,6 +8,7 @@ it can observe, and publishes trees the driver can validate.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,6 +21,10 @@ from textual.widgets import Button, Input, Label  # noqa: E402
 from termwright import DEFAULT_LIMITS, validate_snapshot  # noqa: E402
 from termwright.client import SemanticClient  # noqa: E402
 from termwright_probe.session import PROBE_CAPABILITIES, ProbeSession, probe_info  # noqa: E402
+from termwright_probe.textual_probe import (  # noqa: E402
+    CommittedTextualFrame,
+    TextualCommitFailure,
+)
 
 from test_client import FakeDriver, TOKEN  # noqa: E402
 
@@ -30,6 +35,54 @@ class DemoApp(App):
             yield Label("Permission required", id="prompt")
             yield Button("Approve", id="approve")
             yield Input(placeholder="Reason", id="reason")
+
+
+def commit_for(app: App) -> CommittedTextualFrame:
+    driver = app._driver
+    return CommittedTextualFrame(
+        app=app,
+        screen=app.screen,
+        driver=driver,
+        preflight_marker=lambda: None,
+        enqueue_marker=driver.write,
+    )
+
+
+class UnitClient:
+    def __init__(self, marker="marker"):
+        self.connected = True
+        self.session_id = "unit"
+        self.revision = 0
+        self.marker = marker
+        self.published = []
+        self.failures = []
+
+    def publish_nowait(self, snapshot):
+        self.published.append(snapshot)
+        self.revision += 1
+        return self.marker
+
+    def fail_nowait(self, code, message):
+        self.failures.append((code, message))
+
+
+class GatedClient(UnitClient):
+    def __init__(self):
+        super().__init__()
+        self.connected = False
+        self.start_entered = asyncio.Event()
+        self.allow_start = asyncio.Event()
+        self.failed = asyncio.Event()
+
+    async def start(self):
+        self.start_entered.set()
+        await self.allow_start.wait()
+        self.connected = True
+        return True
+
+    def fail_nowait(self, code, message):
+        super().fail_nowait(code, message)
+        self.failed.set()
 
 
 async def wait_for(predicate, *, timeout: float = 3.0) -> None:
@@ -78,7 +131,7 @@ async def test_the_handshake_carries_the_probe_declaration(endpoint):
             probe=probe_info("8.2.8"),
         )
         session = ProbeSession(app, client)
-        session.on_frame()  # starts the handshake
+        session.on_frame(commit_for(app))  # starts the handshake
         await wait_for(lambda: driver.hello is not None)
         await pilot.pause()
         await client.close()
@@ -106,8 +159,9 @@ async def test_it_publishes_a_valid_tree_for_a_real_app(endpoint):
             probe=probe_info(),
         )
         session = ProbeSession(app, client)
-        session.on_frame()
+        session.on_frame(commit_for(app))
         await wait_for(lambda: client.connected)
+        session.on_frame(commit_for(app))
         await wait_for(
             lambda: any(m.get("type") == "snapshot" for m in driver.received)
         )
@@ -126,12 +180,7 @@ async def test_it_publishes_a_valid_tree_for_a_real_app(endpoint):
     assert snapshot["hitGrid"]["status"] == "known"
 
 
-async def test_frames_before_the_handshake_are_counted_and_coalesced(endpoint):
-    """A dropped frame is a fact worth having; an event queue is not.
-
-    Exactly the newest completed frame is retained, so a stationary app gets a
-    tree as soon as the handshake finishes without replaying stale frames.
-    """
+async def test_frames_before_the_handshake_are_dropped_and_refresh_requests_a_fresh_one(endpoint):
     driver = FakeDriver(endpoint)
     await driver.start()
     app = DemoApp()
@@ -140,11 +189,13 @@ async def test_frames_before_the_handshake_are_counted_and_coalesced(endpoint):
             endpoint, TOKEN, adapter_name="textual-probe", adapter_version="0.1.0"
         )
         session = ProbeSession(app, client)
-        session.on_frame()
-        session.on_frame()
-        session.on_frame()
+        session.on_frame(commit_for(app))
+        session.on_frame(commit_for(app))
+        session.on_frame(commit_for(app))
         assert session.frames_dropped >= 2
         await wait_for(lambda: client.connected)
+        assert client.snapshots_sent == 0
+        session.on_frame(commit_for(app))
         await wait_for(lambda: client.snapshots_sent == 1)
         await pilot.pause()
         await client.close()
@@ -162,10 +213,163 @@ async def test_a_broken_session_never_reaches_the_application(endpoint):
         )
         session = ProbeSession(app, client)
         for _ in range(3):
-            session.on_frame()  # must not raise
+            session.on_frame(commit_for(app))  # must not raise
         await pilot.pause()
         await client.close()
     assert session.frames_dropped >= 3
+
+
+def test_marker_uses_captured_writer_even_if_app_driver_changes(monkeypatch):
+    app = SimpleNamespace(_driver=None)
+    client = UnitClient()
+    session = ProbeSession(app, client)
+    session._started = True
+    monkeypatch.setattr(session, "_snapshot", lambda _commit: object())
+    first = []
+    second = []
+    commit = CommittedTextualFrame(app, object(), object(), lambda: None, first.append)
+    app._driver = SimpleNamespace(
+        write=second.append, flush=lambda: second.append("flush")
+    )
+
+    session.on_frame(commit)
+
+    assert first == ["marker"]
+    assert second == []
+
+
+def test_marker_failure_is_fatal_and_has_no_fallback(monkeypatch):
+    app = SimpleNamespace(_driver=None)
+    client = UnitClient()
+    session = ProbeSession(app, client)
+    session._started = True
+    monkeypatch.setattr(session, "_snapshot", lambda _commit: object())
+
+    def broken_write(_text):
+        raise OSError("closed writer")
+
+    commit = CommittedTextualFrame(app, object(), object(), lambda: None, broken_write)
+    session.on_frame(commit)
+
+    assert client.failures == [
+        (
+            "adapter-guarantee-violation",
+            "Textual commit marker write failed: OSError: closed writer",
+        )
+    ]
+
+
+async def test_handshake_discards_old_frame_and_requests_new_refresh(monkeypatch):
+    refreshed = asyncio.Event()
+    app = SimpleNamespace(refresh=refreshed.set)
+    client = GatedClient()
+    session = ProbeSession(app, client)
+    monkeypatch.setattr(session, "_snapshot", lambda _commit: object())
+    writes = []
+    commit = CommittedTextualFrame(app, object(), object(), lambda: None, writes.append)
+
+    session.on_frame(commit)
+    await client.start_entered.wait()
+    session.on_frame(commit)
+    assert client.published == []
+    client.allow_start.set()
+    await refreshed.wait()
+    assert client.published == []
+
+    session.on_frame(commit)
+
+    assert len(client.published) == 1
+    assert writes == ["marker"]
+
+
+async def test_failed_post_handshake_refresh_fails_closed():
+    def broken_refresh():
+        raise RuntimeError("refresh rejected")
+
+    app = SimpleNamespace(refresh=broken_refresh)
+    client = GatedClient()
+    session = ProbeSession(app, client)
+    commit = CommittedTextualFrame(
+        app, object(), object(), lambda: None, lambda _text: None
+    )
+
+    session.on_frame(commit)
+    await client.start_entered.wait()
+    client.allow_start.set()
+    await client.failed.wait()
+
+    assert client.failures == [
+        (
+            "adapter-guarantee-violation",
+            "Textual refresh after handshake failed: RuntimeError: refresh rejected",
+        )
+    ]
+
+
+def test_typed_commit_failure_precedes_snapshot_build_and_publication(monkeypatch):
+    app = SimpleNamespace(refresh=lambda: None)
+    client = UnitClient()
+    session = ProbeSession(app, client)
+    session._started = True
+    built = []
+    monkeypatch.setattr(session, "_snapshot", lambda _commit: built.append(True))
+
+    session.on_frame(TextualCommitFailure(app, "certified writer disappeared"))
+
+    assert built == []
+    assert client.published == []
+    assert client.failures == [
+        ("adapter-guarantee-violation", "certified writer disappeared")
+    ]
+
+
+def test_marker_preflight_failure_precedes_snapshot_publication(monkeypatch):
+    app = SimpleNamespace()
+    client = UnitClient()
+    session = ProbeSession(app, client)
+    session._started = True
+    built = []
+
+    def full():
+        raise RuntimeError("queue full")
+
+    monkeypatch.setattr(session, "_snapshot", lambda _commit: built.append(True))
+    commit = CommittedTextualFrame(app, object(), object(), full, lambda _text: None)
+
+    session.on_frame(commit)
+
+    assert built == []
+    assert client.published == []
+    assert client.failures == [
+        (
+            "adapter-guarantee-violation",
+            "Textual commit marker preflight failed: RuntimeError: queue full",
+        )
+    ]
+
+
+def test_queue_full_race_after_publication_fails_channel_with_detail(monkeypatch):
+    from queue import Full
+
+    app = SimpleNamespace()
+    client = UnitClient()
+    session = ProbeSession(app, client)
+    session._started = True
+    monkeypatch.setattr(session, "_snapshot", lambda _commit: object())
+
+    def raced_full(_text):
+        raise Full
+
+    commit = CommittedTextualFrame(app, object(), object(), lambda: None, raced_full)
+    session.on_frame(commit)
+
+    assert len(client.published) == 1
+    assert client.failures == [
+        (
+            "adapter-guarantee-violation",
+            "Textual WriterThread queue became full after snapshot publication",
+        )
+    ]
 
 
 # -- the definition of done, in one test ------------------------------------
@@ -197,7 +401,6 @@ async def test_a_vanilla_app_in_a_child_process_publishes_a_tree(endpoint, tmp_p
                 **os.environ,
                 "TERMWRIGHT_ENDPOINT": endpoint,
                 "TERMWRIGHT_TOKEN": TOKEN,
-                "TEXTUAL_DRIVER": "textual.drivers.headless_driver:HeadlessDriver",
             }
         )
         child = await asyncio.create_subprocess_exec(

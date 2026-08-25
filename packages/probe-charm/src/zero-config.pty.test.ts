@@ -371,12 +371,6 @@ describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {
   }, 900_000);
 });
 
-describe.skipIf(runnable)('the Charm zero-config arms', () => {
-  it('skip because no Go toolchain or no pseudo-terminal is reachable', () => {
-    expect(runnable).toBe(false);
-  });
-});
-
 it('the fixture imports nothing of ours', async () => {
   const source = await readFile(join(FIXTURE, 'main.go'), 'utf8');
   const imports = source.slice(source.indexOf('import ('), source.indexOf('\n)'));

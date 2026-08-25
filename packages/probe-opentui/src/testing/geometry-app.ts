@@ -1,4 +1,4 @@
-/** Adversarial real-renderer fixture for the checksummed OpenTUI hook. */
+/** Adversarial real-renderer fixture for the certified OpenTUI runtime observer. */
 import { BoxRenderable, TextRenderable, createCliRenderer } from '@opentui/core';
 
 const renderer = await createCliRenderer({ exitOnCtrlC: false, targetFps: 30 });

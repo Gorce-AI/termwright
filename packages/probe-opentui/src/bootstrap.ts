@@ -11,7 +11,11 @@
  * it would have, minus the semantics.
  */
 
-import { onRendererConfig, onRendererCreated } from './attach.js';
+import {
+  onRendererConfig,
+  onRendererCreated,
+  type ObservedRuntimeCertification,
+} from './attach.js';
 import { createMarkerSink, type MarkerSink } from './sink.js';
 import { probeInfo, startSession, type ObservableRenderer, type ProbeSession } from './session.js';
 import { connectProbe, type ProbeChannel } from '@termwright/probe-runtime';
@@ -19,7 +23,7 @@ import { isInstrumented, type EnvSource } from './runtime.js';
 import type { AdapterCapability } from '@termwright/protocol';
 import { DEFAULT_LIMITS, ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import { PACKAGE_VERSION } from './version.js';
-import { instrumentationSentinel } from './instrumentation.js';
+import { installRuntimeObserver, type RuntimeObserver } from './runtime-observer.js';
 
 const ADAPTER_NAME = '@termwright/probe-opentui';
 const ADAPTER_VERSION = PACKAGE_VERSION;
@@ -58,9 +62,9 @@ export interface BootstrapOptions {
  * Arm the probe.
  *
  * Returns immediately. The hooks are installed synchronously, but the driver
- * connection is deliberately deferred until the imported OpenTUI artifact has
- * passed the exact-version checksum and installed its instrumentation sentinel.
- * An unsupported or modified build keeps running without an adapter attachment;
+ * connection is deliberately deferred until the intercepted OpenTUI package
+ * has passed exact-version certification and its renderer runtime capabilities.
+ * An unsupported package version keeps running without an adapter attachment;
  * no weaker capability set is negotiated as a fallback.
  */
 export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
@@ -75,15 +79,47 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
   let sink: MarkerSink | undefined;
   let connecting: Promise<void> | undefined;
   let stopped = false;
+  let guaranteeFailed = false;
+  let guaranteeDetail: string | undefined;
+  let runtimeObserver: RuntimeObserver | undefined;
+  let observedRenderer: ObservableRenderer | undefined;
+  let certification: ObservedRuntimeCertification | undefined;
+  let releaseConfig = (): void => undefined;
+  let releaseRenderer = (): void => undefined;
+  let releaseDestroy = (): void => undefined;
+
+  const releaseRuntime = (): void => {
+    releaseConfig();
+    releaseConfig = () => undefined;
+    releaseRenderer();
+    releaseRenderer = () => undefined;
+    releaseDestroy();
+    releaseDestroy = () => undefined;
+    runtimeObserver?.dispose();
+    runtimeObserver = undefined;
+    state.session?.stop();
+    state.session = null;
+    observedRenderer = undefined;
+  };
+
+  const abort = (error: Error): void => {
+    if (guaranteeFailed) return;
+    guaranteeFailed = true;
+    guaranteeDetail = error.message;
+    releaseRuntime();
+    if (state.channel !== null) {
+      state.channel.fail('adapter-guarantee-violation', error.message);
+      state.channel = null;
+    }
+  };
 
   const connectCertified = (): void => {
     if (connecting !== undefined || stopped) return;
-    const sentinel = instrumentationSentinel();
-    if (sentinel === undefined) return;
+    if (certification === undefined || (!guaranteeFailed && runtimeObserver === undefined)) return;
     connecting = connectProbe({
       endpoint: env[ENV_ENDPOINT] as string,
       token: env[ENV_TOKEN] as string,
-      probe: probeInfo(sentinel.frameworkVersion),
+      probe: probeInfo(certification.version),
       capabilities: [...BASE_CAPABILITIES, 'clipped-geometry', 'pointer-hit-grid'],
       adapterName: ADAPTER_NAME,
       adapterVersion: ADAPTER_VERSION,
@@ -94,38 +130,79 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
       .then((channel) => {
         if (channel === null) return;
         if (stopped) channel.close();
-        else state.channel = channel;
+        else if (guaranteeFailed) {
+          channel.fail('adapter-guarantee-violation', guaranteeDetail ?? 'OpenTUI runtime guarantee failed');
+        }
+        else {
+          state.channel = channel;
+          // A renderer may have painted its only requested frame while the
+          // handshake was in flight. Ask for one fresh committed frame rather
+          // than publishing a stale pending observation.
+          try {
+            (observedRenderer as ObservableRenderer & { requestRender(): void }).requestRender();
+          } catch (error) {
+            abort(new Error(`OpenTUI requestRender failed: ${error instanceof Error ? error.message : String(error)}`));
+          }
+        }
       })
       .catch(() => undefined);
   };
 
   // The one chance to install a custom stdout. Without it OpenTUI writes frames
   // from a Zig thread and no byte reaches JS, so a marker has nothing to follow.
-  const releaseConfig = onRendererConfig((config) => {
-    connectCertified();
+  releaseConfig = onRendererConfig((config) => {
     if (config['stdout'] !== undefined) return undefined;
     sink = createMarkerSink(target);
     return { ...config, stdout: sink };
   });
 
-  const releaseRenderer = onRendererCreated((renderer) => {
-    if (instrumentationSentinel() === undefined) return;
-    connectCertified();
-    state.session = startSession({
-      renderer: renderer as ObservableRenderer,
-      publisher: {
-        publish: (snapshot, metrics) => state.channel?.publish(snapshot, metrics),
-      },
-      ...(sink === undefined ? {} : { sink }),
-      // Resolved per frame: the renderer can exist before the handshake does.
-      sessionId: () => state.channel?.session.sessionId ?? 'pending',
-      limits: () => state.channel?.session.limits ?? DEFAULT_LIMITS,
-      onGuaranteeViolation: (error) => {
-        state.channel?.fail('adapter-guarantee-violation', error.message);
-        state.session?.stop();
+  releaseRenderer = onRendererCreated((renderer, certified) => {
+    if (stopped || guaranteeFailed) return;
+    if (observedRenderer !== undefined) {
+      abort(new Error('multiple OpenTUI renderers are not certified in one process'));
+      return;
+    }
+    observedRenderer = renderer as ObservableRenderer;
+    certification = certified;
+    if (sink === undefined) {
+      abort(new Error('OpenTUI renderer has a custom stdout; same-writer render markers cannot be certified'));
+      connectCertified();
+      return;
+    }
+    try {
+      runtimeObserver = installRuntimeObserver(observedRenderer, (error) => {
+        abort(error);
+      });
+      const lifecycleRenderer = observedRenderer;
+      const destroyListener = (): void => {
+        if (stopped) return;
+        stopped = true;
+        releaseRuntime();
+        state.channel?.close();
         state.channel = null;
-      },
-    });
+      };
+      lifecycleRenderer.on('destroy', destroyListener);
+      releaseDestroy = () => {
+        try { lifecycleRenderer.off('destroy', destroyListener); } catch { /* teardown must not break the application */ }
+      };
+      state.session = startSession({
+        renderer: observedRenderer,
+        publisher: {
+          publish: (snapshot, metrics) => state.channel?.publish(snapshot, metrics),
+        },
+        sink,
+        // Resolved per frame: the renderer can exist before the handshake does.
+        sessionId: () => state.channel?.session.sessionId ?? 'pending',
+        limits: () => state.channel?.session.limits ?? DEFAULT_LIMITS,
+        authoritativeProvider: runtimeObserver.provider,
+        onGuaranteeViolation: abort,
+      });
+    } catch (error) {
+      abort(error instanceof Error ? error : new Error(String(error)));
+      connectCertified();
+      return;
+    }
+    connectCertified();
   });
 
   return {
@@ -136,11 +213,11 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
       return state.session;
     },
     stop() {
+      if (stopped) return;
       stopped = true;
-      releaseConfig();
-      releaseRenderer();
-      state.session?.stop();
+      releaseRuntime();
       state.channel?.close();
+      state.channel = null;
     },
   };
 }

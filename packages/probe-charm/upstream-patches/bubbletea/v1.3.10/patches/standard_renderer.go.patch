@@ -1,0 +1,12 @@
+--- a/standard_renderer.go
++++ b/standard_renderer.go
+@@ -165,3 +165,4 @@
+ 	if r.buf.Len() == 0 || r.buf.String() == r.lastRender {
+ 		// Nothing to do.
++		termwrightAfterRendererFlush(r, true)
+ 		return
+@@ -283,2 +284,3 @@
+-	_, _ = r.out.Write(buf.Bytes())
++	written, writeErr := r.out.Write(buf.Bytes())
++	termwrightAfterRendererFlush(r, writeErr == nil && written == buf.Len())
+ 	r.lastRender = r.buf.String()

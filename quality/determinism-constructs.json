@@ -16,12 +16,12 @@
     "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
     "explicit-external-or-ui-source-polling": 206,
-    "explicit-test-selection-reviewed-with-platform-registry": 96,
+    "explicit-test-selection-reviewed-with-platform-registry": 92,
     "managed-or-diagnostic-background-task": 71,
     "production-polling-review": 1,
-    "production-process-isolation-review": 27,
+    "production-process-isolation-review": 30,
     "test-observer-or-intentional-background-task": 13,
-    "test-process-isolation-review": 44
+    "test-process-isolation-review": 43
   },
   "findings": [
     {
@@ -2017,40 +2017,22 @@
       "excerpt": "describe.skipIf(!hasGo)('against a real toolchain', () => {"
     },
     {
-      "path": "packages/probe-charm/src/detect.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(hasGo)('the Go arms', () => {"
-    },
-    {
       "path": "packages/probe-charm/src/launch.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {"
     },
     {
-      "path": "packages/probe-charm/src/launch.test.ts",
+      "path": "packages/probe-charm/src/patch-sets.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(hasGo)('the launcher Go arm', () => {"
+      "excerpt": "describe.skipIf(!hasGo)(\"the Bubbles patch sets\", () => {"
     },
     {
       "path": "packages/probe-charm/src/patch-sets.test.ts",
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!hasGo)('the Bubbles patch sets', () => {"
-    },
-    {
-      "path": "packages/probe-charm/src/patch-sets.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(!hasGo)('the patch sets', () => {"
-    },
-    {
-      "path": "packages/probe-charm/src/patch-sets.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(hasGo)('the patch-set arms', () => {"
+      "excerpt": "describe.skipIf(!hasGo)(\"the patch sets\", () => {"
     },
     {
       "path": "packages/probe-charm/src/zero-config.pty.test.ts",
@@ -2173,12 +2155,6 @@
       "excerpt": "describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {"
     },
     {
-      "path": "packages/probe-charm/src/zero-config.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(runnable)('the Charm zero-config arms', () => {"
-    },
-    {
       "path": "packages/probe-go/src/patches.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
@@ -2281,16 +2257,10 @@
       "excerpt": "setTimeout(() => {"
     },
     {
-      "path": "packages/probe-opentui/src/instrumentation.test.ts",
+      "path": "packages/probe-opentui/src/certification.test.ts",
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
-      "excerpt": "process.env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'] = `sha256:${'d'.repeat(64)}`;"
-    },
-    {
-      "path": "packages/probe-opentui/src/instrumentation.test.ts",
-      "kind": "process-global-mutation",
-      "classification": "test-process-isolation-review",
-      "excerpt": "process.env['TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST'] = `sha256:${'d'.repeat(64)}`;"
+      "excerpt": "expect(certification?.source).toBe(process.env['TERMWRIGHT_CERTIFICATION_HOOK_PROFILE'] === undefined ? 'builtin' : 'candidate');"
     },
     {
       "path": "packages/probe-opentui/src/testing/annotated-app.ts",
@@ -2315,6 +2285,24 @@
       "kind": "timer",
       "classification": "deterministic-adversarial-fixture-schedule",
       "excerpt": "setTimeout(() => {"
+    },
+    {
+      "path": "packages/probe-opentui/src/testing/runtime-conformance-app.ts",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "const controlledLifecycle = process.env['TW_RUNTIME_CONTROLLED_LIFECYCLE'] === '1';"
+    },
+    {
+      "path": "packages/probe-opentui/src/testing/runtime-conformance-app.ts",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "const splitFooter = process.env['TW_RUNTIME_SPLIT_FOOTER'] === '1';"
+    },
+    {
+      "path": "packages/probe-opentui/src/testing/runtime-conformance-app.ts",
+      "kind": "process-global-mutation",
+      "classification": "production-process-isolation-review",
+      "excerpt": "if (splitFooter && process.env['TW_RUNTIME_ORACLE_FD'] === '3' && originOracle !== undefined) {"
     },
     {
       "path": "packages/probe-opentui/src/testing/vanilla-app.ts",
@@ -2381,6 +2369,12 @@
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
       "excerpt": ".poll(() =>"
+    },
+    {
+      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": ".poll(() => app.contract()?.capabilities[\"semantic-tree\"].status)"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
@@ -2494,12 +2488,6 @@
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
-      "excerpt": "await expect.poll(() => app.contract()?.capabilities['semantic-tree'].status).toBe('supported');"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "polling",
-      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => app.semanticTree()?.v).toBe(2);"
     },
     {
@@ -2507,6 +2495,12 @@
       "kind": "process-global-mutation",
       "classification": "test-process-isolation-review",
       "excerpt": "if (process.env[\"TERMWRIGHT_SKIP_PTY\"] === \"1\") return false;"
+    },
+    {
+      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
+      "kind": "test-skip",
+      "classification": "explicit-test-selection-reviewed-with-platform-registry",
+      "excerpt": "describe.skipIf(!hasGo)(\"the Windows tcell companion\", () => {"
     },
     {
       "path": "packages/probe-tview/src/zero-config.pty.test.ts",
@@ -2525,12 +2519,6 @@
       "kind": "test-skip",
       "classification": "explicit-test-selection-reviewed-with-platform-registry",
       "excerpt": "describe.skipIf(!runnable)(\"the launcher call\", () => {"
-    },
-    {
-      "path": "packages/probe-tview/src/zero-config.pty.test.ts",
-      "kind": "test-skip",
-      "classification": "explicit-test-selection-reviewed-with-platform-registry",
-      "excerpt": "describe.skipIf(runnable)(\"the zero-config arms\", () => {"
     },
     {
       "path": "packages/protocol/src/env.test.ts",

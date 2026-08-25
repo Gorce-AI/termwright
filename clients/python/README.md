@@ -22,7 +22,8 @@ pip install termwright              # protocol client + probe + annotation SDK
 pip install "termwright[textual]"   # + Textual itself
 ```
 
-Requires Python 3.9+. The protocol modules have no third-party dependencies.
+Requires Python 3.9+. The Textual extra installs the exactly certified Textual
+8.2.8 runtime; the protocol modules have no third-party dependencies.
 
 ## Automatic Textual semantics
 
@@ -50,7 +51,7 @@ useful for a custom runner, is:
 python -m termwright_probe -- python app.py
 ```
 
-Under the driver this publishes, after every flushed frame:
+Under the driver this publishes after every causally ordered frame enqueue:
 
 ```
 application "PermissionApp"
@@ -240,8 +241,14 @@ python -m termwright_probe -- python app.py
 `app.py` imports no termwright, calls nothing of ours, and is not edited. The
 launcher puts a generated `sitecustomize.py` on `PYTHONPATH`; CPython imports
 it during startup, before the script's own directory reaches `sys.path`; the
-probe waits there until the application imports Textual and attaches to
-`App.post_display_hook`. A driver that already sets `TERMWRIGHT_ENDPOINT` and
+probe waits there until the application imports Textual and observes the
+certified `App._display` / driver enqueue / `post_display_hook` boundary. The
+marker is appended without waiting to the same WriterThread FIFO, after the
+frame; a full queue fails the semantic channel instead of blocking Textual's
+event loop. Strong probing is certified only for Textual 8.2.8's exact built-in
+`LinuxDriver` and `WindowsDriver` with their exact `WriterThread`; custom
+`driver_class` values and inline mode fail the semantic channel explicitly
+rather than publishing an unprovable commit. A driver that already sets `TERMWRIGHT_ENDPOINT` and
 `TERMWRIGHT_TOKEN` can compose the same thing itself:
 
 ```python
@@ -312,11 +319,14 @@ not listed here follows them.
   attach to the parent's semantic session. `poetry run` receives a one-hop
   launcher marker so ownership is claimed by its target interpreter, not by
   Poetry's own console process.
-- **The probe does not report `frame-begin`** (probe capability). Textual calls
-  `post_display_hook` from the `finally` of `App._display`, _after_ the frame
-  has been flushed, so there is no instant the probe could honestly call the
-  start of a frame. Consumers must not read a missing `frame-begin` as "no
-  frame in progress".
+- **The probe does not report `frame-begin`** (probe capability). A frame is
+  accepted only when the same `_display` attempt successfully enqueued output
+  through an exact certified non-headless built-in driver before
+  `post_display_hook`. The writer is preflighted before snapshot publication,
+  then its marker is appended to that same FIFO. A full or replaced writer
+  fails closed without blocking on queue capacity. This exposes no instant the
+  probe could honestly call the start of a frame. Consumers must not read a
+  missing `frame-begin` as "no frame in progress".
 - **A `Static` subclass with a custom `render()` is named by its `content`**
   (rule 2), which is the markup it was given rather than what it draws. Textual
   renders to a strip of segments with no text handle the adapter can read.

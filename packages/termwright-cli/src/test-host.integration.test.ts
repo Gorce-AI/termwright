@@ -21,6 +21,10 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
         fileURLToPath(new URL('__fixtures__/native-host.vitest.config.ts', import.meta.url)),
         '--reporter=dot',
       ],
+      workerEnv: {
+        TERMWRIGHT_WORKER_ENV_PROBE: 'exact',
+        TERMWRIGHT_REQUIRE_GO: '1',
+      },
       resourceProfile: TERMWRIGHT_RESOURCE_PROFILES.local,
     });
     hosts.push(host);
@@ -46,6 +50,12 @@ describe('TermwrightTestHost over the exact Vitest engine', () => {
     const output = first.events.filter((event) => event.type === 'test.output');
     expect(output).toHaveLength(2);
     expect(output.map((event) => (event.payload as { stream: string }).stream).sort()).toEqual(['stderr', 'stdout']);
+    const contentByStream = new Map(output.map((event) => {
+      const payload = event.payload as { stream: string; content: string };
+      return [payload.stream, payload.content] as const;
+    }));
+    expect(contentByStream.get('stdout')).toContain('native-host-output:attempt:');
+    expect(contentByStream.get('stderr')).toContain('native-host-stderr-fixture:attempt:');
     // Vitest delivers console output on its own schedule, so a line written
     // just before a test returns can arrive after that attempt has finished,
     // and the journal forbids any event after attempt.finished — the id is

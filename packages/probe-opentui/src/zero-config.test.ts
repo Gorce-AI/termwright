@@ -11,7 +11,9 @@
  * fail during discovery when it is unavailable.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
@@ -26,7 +28,10 @@ const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(packageRoot, 'src', 'testing', 'vanilla-app.ts');
 const annotatedApp = join(packageRoot, 'src', 'testing', 'annotated-app.ts');
 const geometryApp = join(packageRoot, 'src', 'testing', 'geometry-app.ts');
+const runtimeConformanceApp = join(packageRoot, 'src', 'testing', 'runtime-conformance-app.ts');
 const annotationSdkRoot = join(packageRoot, '..', 'opentui');
+const openTuiEntry = createRequire(import.meta.url).resolve('@opentui/core');
+const installedOpenTuiVersion = (JSON.parse(readFileSync(join(dirname(openTuiEntry), 'package.json'), 'utf8')) as { version: string }).version;
 
 async function requireBuiltInputs(): Promise<void> {
   await requireImmutableBuildInputs([
@@ -41,6 +46,7 @@ async function requireBuiltInputs(): Promise<void> {
 interface Run {
   readonly stdout: string;
   readonly stderr: string;
+  readonly oracle: string;
   readonly code: number | null;
 }
 
@@ -48,8 +54,12 @@ interface Run {
 function launch(options: {
   readonly driver?: FakeDriver;
   readonly steps?: number;
-  readonly appPath?: string;
-}): Promise<Run> {
+    readonly appPath?: string;
+    readonly fixtureEnv?: Readonly<Record<string, string>>;
+    readonly controlled?: boolean;
+    readonly captureOracle?: boolean;
+    readonly onSpawn?: (child: ChildProcess) => void;
+  }): Promise<Run> {
   const entry = runtimePreloadSpecifier('bun', join(packageRoot, 'dist', 'bun-preload.js'));
   const targetApp = options.appPath ?? app;
   const argv = options.driver === undefined ? [targetApp] : ['--preload', entry, targetApp];
@@ -59,16 +69,29 @@ function launch(options: {
       cwd: packageRoot,
       env: {
         ...process.env,
+        ...options.fixtureEnv,
         TW_APP_STEPS: String(options.steps ?? 2),
         ...(options.driver === undefined
           ? { [ENV_ENDPOINT]: '', [ENV_TOKEN]: '' }
           : { [ENV_ENDPOINT]: options.driver.endpoint, [ENV_TOKEN]: options.driver.token }),
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [
+        options.controlled === true ? 'pipe' : 'ignore',
+        'pipe',
+        'pipe',
+        options.captureOracle === true ? 'pipe' : 'ignore',
+      ],
     });
+    if (child.stdout === null || child.stderr === null) {
+      child.kill();
+      reject(new Error('OpenTUI fixture process has no captured stdout/stderr'));
+      return;
+    }
+    options.onSpawn?.(child);
 
     let stdout = '';
     let stderr = '';
+    let oracle = '';
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
@@ -77,8 +100,15 @@ function launch(options: {
     child.stderr.on('data', (chunk: string) => {
       stderr += chunk;
     });
+    const oracleStream = child.stdio[3];
+    if (options.captureOracle === true && oracleStream !== undefined && oracleStream !== null && 'setEncoding' in oracleStream) {
+      oracleStream.setEncoding('utf8');
+      oracleStream.on('data', (chunk: string) => {
+        oracle += chunk;
+      });
+    }
     child.on('error', reject);
-    child.on('close', (code) => resolve({ stdout, stderr, code }));
+    child.on('close', (code) => resolve({ stdout, stderr, oracle, code }));
   });
 }
 
@@ -130,7 +160,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
 
     const hello = await driver.waitForHandshake();
     expect(hello.probe?.framework).toBe('opentui');
-    expect(hello.probe?.frameworkVersion).toBe('0.5.3');
+    expect(hello.probe?.frameworkVersion).toBe(installedOpenTuiVersion);
     expect(hello.probe?.identityKind).toBe('stable');
 
     const [snapshot] = await driver.waitForSnapshots(1);
@@ -315,5 +345,132 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
         && column < region.rect.column + region.rect.width)).toBe(true);
     }
     expect(new Set(snapshots.map((candidate) => `${candidate.columns}x${candidate.rows}`)).size).toBeGreaterThan(1);
+  }, 60_000);
+
+  it('runtime-observes custom, buffered, scrolling and dynamic frames', async () => {
+    const driver = await startFakeDriver();
+    open.push(driver);
+    let child: ChildProcess | undefined;
+    const resultPromise = launchInstrumented({
+      driver,
+      appPath: runtimeConformanceApp,
+      controlled: true,
+      onSpawn: (spawned) => { child = spawned; },
+      fixtureEnv: {
+        TW_RUNTIME_CONTROLLED_LIFECYCLE: '1',
+      },
+    });
+    try {
+      await driver.waitForSnapshots(3);
+    } finally {
+      child?.stdin?.end('stop\n');
+    }
+    const result = await resultPromise;
+    expect(result.stderr).toBe('');
+
+    const snapshots = driver.snapshots;
+    expect(driver.errors).toEqual([]);
+    expect(snapshots.length).toBeGreaterThanOrEqual(1);
+    expect(snapshots.some((snapshot) => snapshot.nodes.some(
+      (node) => node.frameworkType === 'NoHitGridRenderable',
+    ))).toBe(true);
+    expect(snapshots.some((snapshot) => snapshot.nodes.some(
+      (node) => node.frameworkType === 'LocalBufferScissorRenderable',
+    ))).toBe(true);
+    expect(snapshots.some((snapshot) => snapshot.nodes.some(
+      (node) => node.name === 'dynamic mounted',
+    ))).toBe(true);
+    expect(snapshots.some((snapshot) => snapshot.nodes.every(
+      (node) => node.name !== 'dynamic mounted',
+    ))).toBe(true);
+    const revisions = snapshots.map((snapshot) => snapshot.revision);
+    expect(revisions).toEqual([...revisions].sort((left, right) => left - right));
+    expect(new Set(revisions).size).toBe(revisions.length);
+    const scrolledRow = snapshots.flatMap((snapshot) => snapshot.nodes).filter(
+      (node) => node.name === 'differential row 7',
+    );
+    expect(scrolledRow.some((node) => node.geometry.visibleRect.status === 'known'
+      && node.geometry.visibleRect.value.width > 0
+      && node.geometry.visibleRect.value.height > 0)).toBe(true);
+    expect(snapshots.some((snapshot) => {
+      const upper = snapshot.nodes.find((node) => node.name === 'upper overlap');
+      return upper !== undefined && snapshot.hitGrid.status === 'known'
+        && snapshot.hitGrid.value.regions.some((region) => region.recipientId === upper.id);
+    })).toBe(true);
+    expect(new Set(snapshots.map((snapshot) => `${snapshot.columns}x${snapshot.rows}`)).size).toBeGreaterThan(1);
+  }, 60_000);
+
+  it('uses the certified same-pass renderOffset in split-footer mode', async () => {
+    const driver = await startFakeDriver();
+    open.push(driver);
+    let child: ChildProcess | undefined;
+    const resultPromise = launchInstrumented({
+      driver,
+      appPath: runtimeConformanceApp,
+      controlled: true,
+      captureOracle: true,
+      onSpawn: (spawned) => { child = spawned; },
+      fixtureEnv: {
+        TW_RUNTIME_SPLIT_FOOTER: '1',
+        TW_RUNTIME_CONTROLLED_LIFECYCLE: '1',
+        TW_RUNTIME_ORACLE_FD: '3',
+      },
+    });
+    try {
+      await driver.waitForSnapshots(4);
+    } finally {
+      child?.stdin?.end('stop\n');
+    }
+    const result = await resultPromise;
+    expect(result.stderr).toBe('');
+    expect(driver.errors).toEqual([]);
+    const oracleByToken = new Map(
+      result.oracle.trim().split('\n').filter(Boolean).map((line) => {
+        const record = JSON.parse(line) as { frameId: number; renderOffset: number; token: string };
+        return [record.token, record] as const;
+      }),
+    );
+    const matchedOrigins: number[] = [];
+    for (const snapshot of driver.snapshots) {
+      const oracleNode = snapshot.nodes.find((node) => node.name?.startsWith('split origin oracle '));
+      const oracle = oracleNode?.name === undefined ? undefined : oracleByToken.get(oracleNode.name);
+      expect(oracle).toBeDefined();
+      if (oracle === undefined) continue;
+      const noHit = snapshot.nodes.find((node) => node.frameworkType === 'NoHitGridRenderable');
+      expect(noHit?.geometry.intendedRect.status).toBe('known');
+      if (noHit?.geometry.intendedRect.status !== 'known') continue;
+      // NoHitGridRenderable has an invariant surface-local top of 1. Its
+      // terminal-space row therefore independently exposes the committed
+      // native surface origin for cross-checking every other observation.
+      const origin = noHit.geometry.intendedRect.value.row - 1;
+      matchedOrigins.push(origin);
+      expect(origin).toBe(oracle.renderOffset);
+      expect(noHit?.geometry.intendedRect).toMatchObject({
+        status: 'known', value: { row: origin + 1, column: 31, width: 9, height: 2 },
+      });
+      expect(noHit?.geometry.visibleRect).toMatchObject({
+        status: 'known', value: { row: origin + 1, column: 31, width: 9, height: 2 },
+      });
+      const clipped = snapshot.nodes.find((node) => node.name === 'differential clipped');
+      expect(clipped?.geometry.intendedRect).toMatchObject({
+        status: 'known', value: { row: origin + 2, column: 6, width: 20, height: 1 },
+      });
+      expect(clipped?.geometry.visibleRect).toMatchObject({
+        status: 'known', value: { row: origin + 2, column: 6, width: 7, height: 1 },
+      });
+      const upper = snapshot.nodes.find((node) => node.name === 'upper overlap');
+      expect(upper?.geometry.visibleRect).toMatchObject({
+        status: 'known', value: { row: origin + 7, column: 21, width: 8, height: 1 },
+      });
+      expect(snapshot.hitGrid.status).toBe('known');
+      if (snapshot.hitGrid.status === 'known' && upper !== undefined) {
+        expect(snapshot.hitGrid.value.regions).toContainEqual({
+          recipientId: upper.id,
+          rect: { row: origin + 7, column: 21, width: 8, height: 1 },
+        });
+      }
+    }
+    expect(matchedOrigins.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(matchedOrigins).size).toBe(matchedOrigins.length);
   }, 60_000);
 });

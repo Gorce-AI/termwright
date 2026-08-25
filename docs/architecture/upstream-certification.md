@@ -49,14 +49,26 @@ an application source change.
 
 | Framework | Current strategy | Why it is the right default | Version-sensitive surface |
 |---|---|---|---|
-| Ink | Runtime module preload shims the ordinary `ink` export and wraps `render` | Node and Bun can intercept the import; Ink exposes `onRender` and `measureElement`, so no framework source copy is needed | The retained host-tree fields (`internal_accessibility`, `internal_static`, `yogaNode` and host-node shape) remain internal. Strong instrumentation is exact-certified for 7.1.1 |
-| OpenTUI | Runtime module preload wraps public `createCliRenderer` and installs a JavaScript stdout sink | The factory is exported and returns the live renderer before its loop starts; the sink is required because native-thread output bypasses `process.stdout` interception | Tree traversal, z-order and several widget values include protected or unpublished fields. Strong instrumentation is exact-certified for 0.5.3 |
-| Textual | An ephemeral `sitecustomize.py` attaches to `App.post_display_hook` | CPython provides a startup injection seam and Textual provides a post-flush observer method; no installed Textual file is copied or edited | `post_display_hook`, `MapGeometry` and per-widget accessors are version-sensitive. The optional dependency range is broad, but strong instrumentation is exact-certified for 8.2.8 and guarded by a generated runtime allowlist |
-| tview | Ephemeral `go.work` redirects v0.42.0 to a checksummed copy | `SetAfterDrawFunc` is before `screen.Show`, can replace an application's callback, and exposes neither the root nor private container state. The required post-Show/root observation cannot be installed from outside a statically linked Go package | `application.go`, `go.mod`, private container fields and the exact after-`Show` anchor. Current patch-set version: 8 |
-| Bubble Tea v1/v2 | Ephemeral `go.work` redirects the exact module to a checksummed copy | Renderer methods receive a flattened view, not the live model. v1 needs initial/update/final call sites; v2 has one `Program.render` seam. Go has no runtime import interception equivalent | v1.3.10 has three `tea.go` anchors; v2.0.8 has one. Both also patch `go.mod`; current patch-set version: 10 |
+| Ink | Runtime module preload shims the ordinary `ink` export, while exact-certified transforms instrument `renderer.js` and `ink.js` | Node and Bun provide a stable interception seam, but `onRender`, `measureElement()` and `useBoxMetrics()` require an application-owned node and cannot expose an arbitrary application's complete committed host/layout tree | Both transformed artifacts must match one Ink 7.1.1 profile or the adapter fails closed. The runtime interception layer is stable; the source transforms and retained host-tree fields remain version-specific |
+| OpenTUI | Runtime module preload wraps public `createCliRenderer`; a same-pass observer wraps renderer/root/buffer/hit-grid lifecycle and commits on `FRAME` | The live renderer exposes the render pass, clipping, hit grid and frame boundary without editing generated chunks; the wrapper reads the version-certified `renderOffset` at the exact `root.render()` boundary for split-footer parity | `renderList` and `renderOffset` are runtime internals, so an exact package version is admitted only after Bun-backed capability and differential behavioral conformance. No chunk name, generated source fragment or bundle digest participates in runtime attachment |
+| Textual | Ephemeral `sitecustomize.py` wraps the display path, exact built-in driver write and `post_display_hook` | CPython provides the injection seam. The wrapper proves that frame bytes entered the built-in WriterThread FIFO, then appends the marker non-blockingly to that same FIFO; no installed Textual file is copied or edited | `_display`, built-in driver/WriterThread identity, `post_display_hook`, DOM geometry and hit-test APIs remain version-sensitive. Strong instrumentation is exact-certified for 8.2.8 and guarded by a generated runtime allowlist; inline and custom drivers fail closed |
+| tview | Ephemeral `go.work` redirects exact tview v0.42.0 and tcell v2.8.1 modules to checksummed copies | Public before/after draw callbacks expose neither the root nor a post-`Show` commit. The patch stages under tview's draw lock, commits after successful `Show`, and uses tcell's exact output writer/Windows console handle for the marker | tview `application.go`/`go.mod`, private container fields and tcell's Windows `cScreen` handle. tview patch-set version 18; add-only tcell companion version 2 |
+| Bubble Tea v1/v2 | Ephemeral `go.work` redirects the exact module to a checksummed copy | Renderer methods receive a flattened view, not the live model. Model-aware hooks stage semantic state, while exact renderer-flush hooks commit only after terminal bytes reach the same writer | v1.3.10 has three `tea.go` capture anchors plus `standard_renderer.go`; v2.0.8 has `Program.render` plus `cursed_renderer.flush`. Both also patch `go.mod`; current patch-set version 17 |
 | Bubbles v1/v2 | Add-only files in independently redirected copies | Public getters do not expose all rendered state, but the missing accessors can be added without editing an upstream file. Bubble Tea discovers them by name, so unsupported optional Bubbles versions degrade to public-getter facts | Private field names and types still matter and must compile. Current add-only sets cover v1.0.0 and v2.1.1, patch-set version 1 |
 | Ratatui | Cargo `--config patch.crates-io` redirects `ratatui-core` and `ratatui-widgets` to checksummed copies | Immediate-mode render calls and the post-flush boundary are inside the crates; Rust has no loader injection seam, and `ratatui-widgets` owns concrete private list state | Ratatui 0.30.2 resolves to `ratatui-core` 0.1.2 (patch-set 3) and `ratatui-widgets` 0.3.2 (patch-set 1). `std`/`no_std`, features and MSRV are part of the contract |
 | Lip Gloss | No independent probe patch | Bubble Tea sees the final styled string. The audited v2 compositor and OSC 8 channels could preserve geometry provenance, but neither is wired today | No bounds capability may be claimed until a channel is implemented and behaviorally certified |
+
+### Refactor outcome
+
+| Framework | New mechanism | Source patching remaining? | Why | Remaining maintenance risk |
+|---|---|---:|---|---|
+| OpenTUI | Module preload wraps `createCliRenderer`; runtime wrappers observe the real root/render-list/buffer/hit-grid pass and `FRAME` commit. Split-footer origin is read at the same runtime boundary and every required shape is capability-checked | No | The runtime instance retains every fact needed for the current semantic contract; generated render operations no longer need rewriting | The unpublished `renderList` and split-footer offset remain version-sensitive runtime shapes, so candidate admission requires exact artifact identity plus behavioral conformance |
+| Ink | Stable Node/Bun module interception plus exact-certified `renderer.js` and `ink.js` transforms | Yes | Public `onRender`, `measureElement()` and `useBoxMetrics()` cannot expose the complete committed host/layout tree of an arbitrary zero-config application | Two exact upstream artifacts and their transform anchors must be reviewed for each candidate |
+| Textual | `sitecustomize` installs exact runtime wrappers around the display attempt, concrete writer enqueue and `post_display_hook`; DOM/geometry are read through framework APIs | No | Python startup injection and the live App/Driver objects provide the observation and injection seams without editing installed files | Commit-boundary internals and concrete writer classes are exact-version certified; unsupported/custom drivers fail closed |
+| Bubble Tea v1/v2 | Exact checksummed model-capture and renderer-flush patches in disposable module copies | Yes | The renderer receives a flattened view, while the live model is required for semantics; Go has no zero-config runtime module hook | Each version needs a manual model/flush/error-order audit and exact before/after hashes |
+| Bubbles v1/v2 | Exact-version add-only accessor files in disposable copies | Yes — add-only | Public getters omit state that affects the rendered frame; no existing upstream file is edited | Private field/type drift is caught by exact artifact binding, compilation and behavior tests |
+| tview/tcell | Exact tview post-`Show` patch plus add-only tcell same-output marker capability for Windows | Yes | Public draw hooks expose neither the root nor a post-output commit, and the Windows screen hides its real console handle behind `baseScreen` | Private widget fields, lock ordering and the tcell screen implementation require exact profiles and native Windows certification |
+| Ratatui | Exact checksummed `Frame::render_widget*`/widget-state and backend-flush instrumentation in disposable crate copies | Yes | Immediate-mode widget identity, type, `Rect` and semantic relations exist during render calls; a custom output backend sees only cells/styles after those facts are erased | Generic render APIs, concrete private widget state, feature/MSRV/no_std variants and flush ordering remain exact-version maintenance surfaces |
 
 Runtime attachment is not inherently safer than copy-and-patch. It avoids
 source-byte anchors, but an internal object field can disappear just as easily.
@@ -64,6 +76,24 @@ Runtime adapters therefore need the same exact-version certification records
 and negative tests as static adapters. Their failure mode remains fail-open for
 the application and fail-closed for semantics: if required shapes are absent,
 decline to attach or withhold the affected capability rather than guess.
+
+### Why the Go patches remain textual in 0.3
+
+The current Go call sites are structurally identifiable, but replacing five
+small exact hunks with a package-local AST transformer would not yet reduce
+maintenance risk. Keeping raw source SHA checks around such a transformer
+would still reject formatting-only drift. Accepting that drift safely requires
+a shared manifest-v2 contract with canonical typed before/after digests,
+zero-or-multiple-match rejection, module-aware type loading, and identical
+execution in the launcher, patch tests and candidate certifier across every
+certified `GOOS`/build-tag variant. Without that shared contract an AST path
+would create a second, non-equivalent certification system while every new
+upstream version would still need a manual flush/error/lock-order audit.
+
+Therefore Charm and tview retain their small exact-version, before/after-hashed
+patches for 0.3. There is no fuzzy matching. Structural instrumentation should
+be revisited only as the shared certification contract described below, not as
+a launcher-only transform.
 
 ### What public upstream hooks would change
 

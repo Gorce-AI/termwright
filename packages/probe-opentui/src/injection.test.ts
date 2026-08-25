@@ -99,11 +99,13 @@ describe('shim guards', () => {
   });
 
   it('re-exports everything and shadows one name', () => {
-    const source = buildShimSource(entry);
+    const source = buildShimSource(entry, { version: '0.5.3', source: 'builtin' });
     expect(source).toContain('export * from');
     expect(source).toContain('export const createCliRenderer');
     // The wrapper must not be able to take the application down with it.
     expect(source).toContain('try {');
+    expect(source).toContain('"version":"0.5.3"');
+    expect(source).toContain('let effective = config ?? {}');
   });
 });
 

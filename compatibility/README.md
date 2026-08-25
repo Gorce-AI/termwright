@@ -49,12 +49,14 @@ runtime handshake declarations. The documentation site imports this JSON to
 render `/reference/compatibility/` and publishes the same data at
 `/compatibility/registry.json` with [`schema.json`](schema.json) beside it.
 
-## Daily upstream patch workflow
+## Daily upstream compatibility workflow
 
-[`upstream-patches.json`](upstream-patches.json) lists every checksummed-copy
-upstream that Termwright patches: tview, both Bubble Tea/Bubbles module lines,
-and the Ratatui core/widget crates. [`certified-upstreams.json`](certified-upstreams.json)
-is the merge-reviewed ledger of releases that completed the workflow.
+[`upstream-patches.json`](upstream-patches.json) lists every monitored upstream
+and its explicit integration strategy. Runtime hooks use capability and
+behavioral certification; exact-source hooks and copied Go/Rust modules retain
+their checksum-bound instrumentation profiles. [`certified-upstreams.json`](certified-upstreams.json)
+is the merge-reviewed ledger of releases that completed the appropriate
+workflow.
 
 The scheduled workflow runs every day and can also be started with
 `workflow_dispatch`. Discovery computes the set difference between every stable
@@ -95,15 +97,20 @@ downloaded source. A transform that no longer applies is red; a successful
 replay still has to compile and pass the candidate-specific real-process and
 conformance gates before its checksummed bundle can be proposed.
 
-For exact hook instrumentation (Ink and OpenTUI), the candidate job extracts
-the checksum-verified npm archive with the safe archive reader, locates the
-Node/Bun production artifacts by their audited render anchors, computes their
-SHA-256 profiles, and proves that the full source transform still applies. The
-temporary profile is revision- and candidate-digest-bound and is accepted only
-inside the GitHub certification job. A green verdict carries a sealed profile
-bundle; trusted reconciliation adds that exact profile to the runtime
-allowlist. Merely changing the dependency and passing generic tests can never
-add a version.
+Ink still requires exact source-hook instrumentation. Its candidate job
+extracts the checksum-verified npm archive, computes both audited artifact
+SHA-256 values and proves both transforms against that exact source. A green,
+revision- and candidate-bound profile is the only way reconciliation may
+extend Ink's instrumentation allowlist.
+
+OpenTUI uses a runtime hook. The candidate job installs the exact verified
+tarball and checksum-bound production dependency closure, requires real Bun,
+passes a version/digest/revision-bound temporary admission to the probe, and
+runs package behavior plus full conformance. A green result contains only a
+version profile for `certified-runtime.json`; no chunk name, source anchor or
+bundle digest is generated or retained. Textual follows the same runtime
+admission principle through its exact Python version allowlist. Merely changing
+a dependency or passing generic tests can never add a version.
 
 Any failure opens or updates one `upstream-compatibility` issue keyed by stream
 and version. A separate dead-man issue covers discovery/setup failures that

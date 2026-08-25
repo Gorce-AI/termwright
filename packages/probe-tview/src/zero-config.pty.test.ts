@@ -43,6 +43,7 @@ import { prepareInstrumentedBuild, PROBE_VERSION } from "./launch.js";
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const PATCH_SET = join(here, "..", "upstream-patches", "tview", "v0.42.0");
+const TCELL_PATCH_SET = join(here, "..", "upstream-patches", "tcell", "v2.8.1");
 const FIXTURE = join(here, "testing", "fixture-app");
 const FIXTURE_ANNOTATED = join(here, "testing", "fixture-annotated");
 const CLIENT = join(here, "..", "..", "..", "clients", "go");
@@ -53,10 +54,14 @@ async function intendedRect(locator: SemanticLocator): Promise<Rect | null> {
 }
 
 async function goAvailable(): Promise<boolean> {
-  return goTestCapability(async () => {
-    await run("go", ["version"]);
-    return true;
-  }, false, "Go certification toolchain");
+  return goTestCapability(
+    async () => {
+      await run("go", ["version"]);
+      return true;
+    },
+    false,
+    "Go certification toolchain",
+  );
 }
 
 function ptyAvailable(): boolean {
@@ -75,9 +80,24 @@ function ptyAvailable(): boolean {
   }
 }
 
-const runnable = (await goAvailable()) && ptyAvailable();
+const hasGo = await goAvailable();
+const runnable = hasGo && ptyAvailable();
 const roots: string[] = [];
 const sessions: TerminalHarness[] = [];
+
+async function instrumentTcell(dir: string): Promise<string> {
+  const copy = join(dir, "tcell");
+  await materializeUpstream(
+    await ensureUpstreamModule({
+      module: "github.com/gdamore/tcell/v2",
+      version: "v2.8.1",
+      cachePath: ["github.com", "gdamore", "tcell", "v2@v2.8.1"],
+    }),
+    copy,
+  );
+  await applyPatchSet(copy, TCELL_PATCH_SET);
+  return copy;
+}
 
 /**
  * Captures the real PTY byte stream without stealing startup chunks from the
@@ -119,7 +139,9 @@ function byteCapturingBackend(): {
           for (const listener of listeners) listener(copy);
         });
         return {
-          get pid() { return process.pid; },
+          get pid() {
+            return process.pid;
+          },
           write: (data) => process.write(data),
           resize: (columns, rows) => process.resize(columns, rows),
           signal: (signal) => process.signal(signal),
@@ -138,9 +160,17 @@ function byteCapturingBackend(): {
 
 afterEach(async () => {
   const owned = sessions.splice(0);
-  const results = await Promise.allSettled(owned.map((session) => session.close()));
-  const failures = results.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
-  if (failures.length > 0) throw new AggregateError(failures, "failed to close test-owned terminal sessions");
+  const results = await Promise.allSettled(
+    owned.map((session) => session.close()),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : [],
+  );
+  if (failures.length > 0)
+    throw new AggregateError(
+      failures,
+      "failed to close test-owned terminal sessions",
+    );
 });
 
 afterAll(async () => {
@@ -174,6 +204,7 @@ async function buildFixture(options: {
       copy,
     );
     await applyPatchSet(copy, PATCH_SET);
+    const tcellCopy = await instrumentTcell(dir);
 
     env["GOWORK"] = await writeWorkspace(join(dir, "generated.work"), {
       moduleDir: app,
@@ -186,6 +217,7 @@ async function buildFixture(options: {
       ],
       replaces: [
         { from: "github.com/rivo/tview", to: copy },
+        { from: "github.com/gdamore/tcell/v2", to: tcellCopy },
         {
           from: "github.com/gorce-ai/termwright/clients/go",
           to: await realpath(CLIENT),
@@ -220,6 +252,7 @@ describe.skipIf(!runnable)("developer annotations", () => {
       copy,
     );
     await applyPatchSet(copy, PATCH_SET);
+    const tcellCopy = await instrumentTcell(dir);
 
     const client = await realpath(
       join(here, "..", "..", "..", "clients", "go"),
@@ -232,6 +265,7 @@ describe.skipIf(!runnable)("developer annotations", () => {
       ],
       replaces: [
         { from: "github.com/rivo/tview", to: copy },
+        { from: "github.com/gdamore/tcell/v2", to: tcellCopy },
         {
           from: "github.com/gorce-ai/termwright/clients/go",
           to: client,
@@ -384,6 +418,48 @@ describe.skipIf(!runnable)("the launcher call", () => {
     ).rejects.toThrow(/-mod=vendor/u);
   }, 120_000);
 
+  it.each([
+    {
+      module: "github.com/rivo/tview",
+      version: "v0.42.0",
+      cachePath: ["github.com", "rivo", "tview@v0.42.0"],
+    },
+    {
+      module: "github.com/gdamore/tcell/v2",
+      version: "v2.8.1",
+      cachePath: ["github.com", "gdamore", "tcell", "v2@v2.8.1"],
+    },
+  ])(
+    "refuses a local replacement masquerading as certified $module",
+    async ({ module, version, cachePath }) => {
+      const dir = await realpath(
+        await mkdtemp(join(tmpdir(), "tw-launch-replace-")),
+      );
+      roots.push(dir);
+      const app = join(dir, "app");
+      const fork = join(dir, "fork");
+      await mkdir(app, { recursive: true });
+      await cp(FIXTURE, app, { recursive: true });
+      await materializeUpstream(
+        await ensureUpstreamModule({ module, version, cachePath }),
+        fork,
+      );
+      await run("go", ["mod", "edit", `-replace=${module}=${fork}`], {
+        cwd: app,
+      });
+
+      await expect(
+        prepareInstrumentedBuild({
+          moduleDir: app,
+          env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, "cache") },
+        }),
+      ).rejects.toThrow(
+        new RegExp(`refuses replaced ${module.replaceAll("/", "\\/")}`, "u"),
+      );
+    },
+    120_000,
+  );
+
   it("does not illegally replace the client when the app is inside that module", async () => {
     const dir = await realpath(
       await mkdtemp(join(tmpdir(), "tw-launch-client-")),
@@ -458,11 +534,17 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
     // never told about us. Terminal output and the side-channel handshake are
     // independent streams, so rendered text is not a semantic readiness
     // barrier on a busy runner.
-    await expect.poll(() => app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
+    await expect
+      .poll(() => app.contract()?.capabilities["semantic-tree"].status)
+      .toBe("supported");
     expect(app.contract()?.framework).toMatchObject({
-      name: "tview", version: "v0.42.0", adapterVersion: PROBE_VERSION,
+      name: "tview",
+      version: "v0.42.0",
+      adapterVersion: PROBE_VERSION,
     });
-    expect(app.contract()?.capabilities['stable-identity'].status).toBe('supported');
+    expect(app.contract()?.capabilities["stable-identity"].status).toBe(
+      "supported",
+    );
 
     // The driver's own API rather than the Native Host's matchers: a probe
     // package should not depend on the host authoring surface to prove it works.
@@ -615,7 +697,10 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
         modes: screen.modes,
         cursor: screen.cursor.visible ? screen.cursor : { visible: false },
         cells: Array.from({ length: screen.rows }, (_, row) =>
-          Array.from({ length: screen.columns }, (_, column) => screen.cell(row, column))),
+          Array.from({ length: screen.columns }, (_, column) =>
+            screen.cell(row, column),
+          ),
+        ),
       });
       // No Termwright render marker may enter stdout at any point. Checking
       // raw bytes catches a probe that attached even when VT consumes its OSC.
@@ -626,10 +711,82 @@ describe.skipIf(!runnable)("a plain tview application under the probe", () => {
   }, 900_000);
 });
 
-describe.skipIf(runnable)("the zero-config arms", () => {
-  it("skips because no Go toolchain or no pseudo-terminal is reachable", () => {
-    expect(runnable).toBe(false);
-  });
+it("uses a causal handshake redraw and the screen's own marker writer", async () => {
+  const source = await readFile(
+    join(PATCH_SET, "add", "termwright_probe.go"),
+    "utf8",
+  );
+  const windows = await readFile(
+    join(TCELL_PATCH_SET, "add", "termwright_marker_windows.go"),
+    "utf8",
+  );
+  const windowsTest = await readFile(
+    join(TCELL_PATCH_SET, "add", "termwright_marker_windows_test.go"),
+    "utf8",
+  );
+
+  expect(source).toContain("p.enqueueHandshakeRedraw()\n");
+  expect(source).toContain(
+    "if terminal, ok := screen.Tty(); ok && terminal != nil",
+  );
+  expect(source).toContain("windows.TermwrightWriteMarker(marker)");
+  expect(source).toContain("p.redrawQueued.Store(false)");
+  expect(source).not.toContain("time.Sleep(");
+  expect(source).not.toContain("time.Now().Add(");
+  expect(source).not.toContain("os.Stdout");
+  expect(windows).toContain(
+    "func (b *baseScreen) TermwrightWriteMarker(marker string) error",
+  );
+  expect(windows).toContain("b.screenImpl.(*cScreen)");
+  expect(windows).toContain("if !s.vten");
+  expect(windows).toContain("syscall.WriteConsole(s.out");
+  expect(windows).not.toContain("os.Stdout");
+  expect(windowsTest).toContain("screen, err := NewConsoleScreen()");
+  expect(windowsTest).toContain("screen.(termwrightMarkerCapability)");
+});
+
+describe.skipIf(!hasGo)("the Windows tcell companion", () => {
+  it("is pinned and enters the generated workspace", async () => {
+    const dir = await realpath(
+      await mkdtemp(join(tmpdir(), "tw-tcell-companion-")),
+    );
+    roots.push(dir);
+    const app = join(dir, "app");
+    await mkdir(app, { recursive: true });
+    await cp(FIXTURE, app, { recursive: true });
+
+    const prepared = await prepareInstrumentedBuild({
+      moduleDir: app,
+      workspaceFile: join(dir, "generated.work"),
+      env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, "cache") },
+    });
+    const workspace = await readFile(prepared.workspaceFile, "utf8");
+    const hook = await readFile(
+      join(prepared.tcellCopyDir, "termwright_marker_windows.go"),
+      "utf8",
+    );
+
+    expect(workspace).toContain("replace github.com/gdamore/tcell/v2 =>");
+    expect(prepared.tcellCopyDir).toContain("v2.8.1");
+    expect(hook).toContain("syscall.WriteConsole(s.out");
+    if (process.platform === "win32") {
+      const { stdout } = await run(
+        "go",
+        [
+          "test",
+          "-run",
+          "TestTermwrightConsoleScreenExposesReachableMarkerCapability",
+          "-count=1",
+          "-v",
+          ".",
+        ],
+        { cwd: prepared.tcellCopyDir, env: { ...process.env, GOWORK: "off" } },
+      );
+      expect(stdout).toContain(
+        "PASS: TestTermwrightConsoleScreenExposesReachableMarkerCapability",
+      );
+    }
+  }, 600_000);
 });
 
 /** Kept for the failure message when the fixture stops being zero-config. */

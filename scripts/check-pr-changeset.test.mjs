@@ -3,7 +3,7 @@ import { changedFiles, changesetDecision, isConsumableChangesetPath, isPublishab
 
 describe('pull-request changeset policy', () => {
   it.each([
-    'packages/probe-opentui/src/instrumentation.test.ts',
+    'packages/probe-opentui/src/runtime-observer.test.ts',
     'packages/ui/src/app/browser-client.spec.ts',
     'packages/driver/tests/session.ts',
     'packages/test/vitest.config.ts',
