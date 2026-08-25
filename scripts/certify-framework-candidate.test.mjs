@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { verifyCandidateEvidence } from './certify-framework-candidate.mjs';
+import { candidateToolchainBlock, verifyCandidateEvidence } from './certify-framework-candidate.mjs';
 
 describe('framework candidate evidence binding', () => {
+  it('classifies a newer upstream Go floor as a typed red candidate outcome', () => {
+    expect(candidateToolchainBlock({
+      id: 'bubbletea-v2@v2.1.0',
+      source: { requiredGoVersion: '1.26.0', toolchainSupported: false },
+    }, '1.25')).toBe('bubbletea-v2@v2.1.0: requires Go >= 1.26.0; trusted certification is pinned to Go 1.25');
+  });
+
   it('accepts an exact Go source binding', () => {
     expect(() => verifyCandidateEvidence({
       id: 'tview@v0.42.0',

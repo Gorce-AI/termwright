@@ -69,6 +69,13 @@ describe('the native host is the only Termwright test entrypoint', () => {
       expect(workflow).toContain("TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'");
     }
     const upstream = await readFile(new URL('../.github/workflows/upstream-candidates.yml', import.meta.url), 'utf8');
+    expect(upstream).toMatch(/^  GOTOOLCHAIN: local$/mu);
+    expect(upstream).toMatch(/^  TERMWRIGHT_UPSTREAM_GO_VERSION: '1\.25'$/mu);
+    const upstreamJobs = Object.fromEntries(workflowJobBlocks(upstream).map((job) => [job.match(/^ {2}([^:]+):/u)?.[1], job]));
+    for (const jobId of ['discovery', 'certify']) {
+      expect(upstreamJobs[jobId], `${jobId} must use the Go floor required by monitored Bubble Tea releases`)
+        .toContain('go-version: ${{ env.TERMWRIGHT_UPSTREAM_GO_VERSION }}');
+    }
     const vitestReliability = await readFile(new URL('../.github/workflows/vitest-reliability.yml', import.meta.url), 'utf8');
     for (const [name, workflow] of [['CI', ci], ['Release', release], ['nightly reliability', reliability], ['Vitest reliability', vitestReliability], ['upstream certification', upstream]]) {
       expect(workflow, `${name} must reject snapshot generation`).toContain(

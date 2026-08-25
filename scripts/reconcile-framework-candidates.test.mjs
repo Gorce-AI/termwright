@@ -58,6 +58,13 @@ describe('framework candidate reconciliation', () => {
     expect(result.plan.issues[0].body).toContain('https://github.com/owner/repo/actions/runs/1');
   });
 
+  it('reports the trusted-toolchain remediation for a blocked Go candidate', () => {
+    const blocked = { ...candidate, source: { ...candidate.source, requiredGoVersion: '1.26.0', toolchainSupported: false } };
+    const result = reconcile({ candidates: [blocked] }, { schemaVersion: 1, streams: {} }, [{ candidateId: blocked.id, candidateDigest: blocked.candidateDigest, state: 'red', detail: 'unsupported Go floor' }], { runUrl: 'https://github.com/owner/repo/actions/runs/2', owner: 'owner' });
+    expect(result.plan.issues[0].body).toContain('explicitly repin the trusted Go toolchain to >= 1.26.0');
+    expect(result.plan.issues[0].body).not.toContain('Prepare an exact checksummed patch');
+  });
+
   it('fails closed instead of opening an unowned issue without a source run URL', () => {
     expect(() => reconcile({ candidates: [candidate] }, { schemaVersion: 1, streams: {} }, [{ candidateId: candidate.id, candidateDigest: candidate.candidateDigest, state: 'red', detail: 'failed' }])).toThrow(/source run URL/u);
   });

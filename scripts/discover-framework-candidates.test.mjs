@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { canonicalJson, compareVersions, npmCatalog, pypiCatalog, resolveNpmDependencyClosure, selectCandidates } from './discover-framework-candidates.mjs';
+import { canonicalJson, compareVersions, npmCatalog, parseGoDownloadResult, pypiCatalog, recoverGoDownloadFailure, resolveNpmDependencyClosure, selectCandidates, trustedGoEnvironment } from './discover-framework-candidates.mjs';
 
 const source = (digit) => ({ checksum: digit.repeat(64), registry: 'https://crates.io' });
 const config = {
@@ -57,6 +57,33 @@ describe('framework candidate discovery', () => {
 
   it('compares prefixed semantic versions numerically', () => {
     expect(compareVersions('v2.10.0', 'v2.9.9')).toBeGreaterThan(0);
+  });
+
+  it('turns an unsupported Go floor into typed candidate evidence', () => {
+    expect(parseGoDownloadResult('example.invalid/framework@v2.0.9', JSON.stringify({
+      Error: 'requires go >= 1.25.0 (running go 1.24.13; GOTOOLCHAIN=local)',
+      Sum: 'h1:source',
+      GoModSum: 'h1:module',
+      Zip: '/cache/framework.zip',
+    }))).toMatchObject({ RequiredGoVersion: '1.25.0' });
+  });
+
+  it('still fails discovery for non-toolchain Go download errors', () => {
+    expect(() => parseGoDownloadResult('example.invalid/framework@v2.0.9', JSON.stringify({
+      Error: 'checksum mismatch',
+    }))).toThrow('example.invalid/framework@v2.0.9: checksum mismatch');
+  });
+
+  it('never accepts a successful-looking payload from a failed Go process', () => {
+    const failure = Object.assign(new Error('go exited nonzero'), {
+      stdout: JSON.stringify({ Sum: 'h1:source', GoModSum: 'h1:module', Zip: '/cache/framework.zip' }),
+    });
+    expect(() => recoverGoDownloadFailure('example.invalid/framework@v2.0.9', failure)).toThrow(failure);
+  });
+
+  it('forces local toolchain selection over inherited or caller-provided auto mode', () => {
+    expect(trustedGoEnvironment({ GOTOOLCHAIN: 'auto', GOWORK: 'off' }, { GOTOOLCHAIN: 'auto' }))
+      .toMatchObject({ GOTOOLCHAIN: 'local', GOWORK: 'off' });
   });
 
   it('discovers hook integrations without inventing a patch requirement', async () => {
