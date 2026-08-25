@@ -1,33 +1,32 @@
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import {
   validateObservationSet,
   validatePerformanceReport,
-} from '../packages/performance/dist/index.js';
+} from '../packages/performance/dist/controller/baseline-controller.js';
 import { validatePerformanceEnvironment } from './performance-environment.mjs';
 
-const execute = promisify(execFile);
-const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const collectorUrl = new URL('./collect-quality-performance.mjs', import.meta.url);
 
 /** Combine the four independently retained raw reports into one comparable observation set. */
-export async function loadPerformanceObservations(options) {
-  const descriptor = JSON.parse(await readFile(resolve(options.environment), 'utf8'));
+export async function loadPerformanceObservations(options, expectedSubjectSha) {
+  if (!/^[0-9a-f]{40}$/u.test(expectedSubjectSha ?? '')) {
+    throw new Error('performance observations require one exact expected subject SHA');
+  }
+  const environment = await readFile(resolve(options.environment));
+  const descriptor = JSON.parse(environment.toString('utf8'));
   validatePerformanceEnvironment(descriptor, {
     platform: process.platform,
     arch: process.arch,
     nodeVersion: process.versions.node,
   });
-  const raw = Object.fromEntries(await Promise.all(
+  const raw = { environment, ...Object.fromEntries(await Promise.all(
     ['quality', 'semantic', 'charm', 'opentui'].map(async (name) => [name, await readFile(resolve(options[name]))]),
-  ));
+  )) };
   const quality = JSON.parse(raw.quality.toString('utf8'));
   validateObservationSet(quality);
-  await validateQualityProvenance(quality.provenance);
+  const qualityProvenance = await validateQualityProvenance(quality.provenance, expectedSubjectSha);
   validateQualityResourceSnapshot(quality.resourceSnapshot, descriptor);
   if (quality.environment !== descriptor.class) {
     throw new Error(`quality environment ${quality.environment} differs from descriptor ${descriptor.class}`);
@@ -40,19 +39,19 @@ export async function loadPerformanceObservations(options) {
     metrics: {
       ...quality.metrics,
       semanticHotPathP95Us: reportMetric(
-        semantic,
+        semantic.metrics,
         'probeHotPathTime',
         'p95',
         'packages/performance benchmark: semantic pipeline',
       ),
       charmOverheadRatio: reportMetric(
-        charm,
+        charm.metrics,
         'applicationOverheadRatio',
         'value',
         'packages/performance benchmark: Charm E2E',
       ),
       opentuiOverheadRatio: reportMetric(
-        opentui,
+        opentui.metrics,
         'applicationOverheadRatio',
         'value',
         'packages/performance benchmark: OpenTUI marker route',
@@ -64,6 +63,12 @@ export async function loadPerformanceObservations(options) {
     observations: current,
     provenance: {
       environment: descriptor,
+      reportRuntimes: {
+        semantic: semantic.runtime,
+        charm: charm.runtime,
+        opentui: opentui.runtime,
+      },
+      quality: qualityProvenance,
       rawInputs: Object.fromEntries(Object.entries(raw).map(([name, bytes]) => [
         name,
         createHash('sha256').update(bytes).digest('hex'),
@@ -72,7 +77,7 @@ export async function loadPerformanceObservations(options) {
   };
 }
 
-async function validateQualityProvenance(value) {
+async function validateQualityProvenance(value, expectedSubjectSha) {
   exactKeys(
     value,
     ['kind', 'schemaVersion', 'collectorSha256', 'gitCommit', 'ci', 'roles'],
@@ -85,12 +90,10 @@ async function validateQualityProvenance(value) {
   if (value.collectorSha256 !== collectorSha256) {
     throw new Error('quality provenance collector SHA-256 differs from the executing collector');
   }
-  const { stdout } = await execute('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: root });
-  const gitCommit = stdout.trim();
-  if (!/^[0-9a-f]{40}$/u.test(value.gitCommit) || value.gitCommit !== gitCommit) {
-    throw new Error('quality provenance Git commit differs from the current checkout');
+  if (!/^[0-9a-f]{40}$/u.test(value.gitCommit) || value.gitCommit !== expectedSubjectSha) {
+    throw new Error('quality provenance Git commit differs from the expected subject SHA');
   }
-  validateQualityCi(value.ci, gitCommit);
+  validateQualityCi(value.ci, expectedSubjectSha);
   exactKeys(value.roles, ['timing', 'resourceSoak', 'stress'], 'quality provenance roles');
   const timing = validateQualityRole(value.roles.timing, 'timing');
   const resourceSoak = validateQualityRole(value.roles.resourceSoak, 'resourceSoak');
@@ -106,6 +109,7 @@ async function validateQualityProvenance(value) {
   if (new Set(allRunIds).size !== allRunIds.length) {
     throw new Error('quality provenance assigns one run to more than one evidence role');
   }
+  return value;
 }
 
 function validateQualityRole(value, role) {
@@ -127,7 +131,7 @@ function validateQualityRole(value, role) {
   return value;
 }
 
-function validateQualityCi(value, gitCommit) {
+function validateQualityCi(value, expectedSubjectSha) {
   if (value === null) {
     if (process.env.GITHUB_ACTIONS === 'true') {
       throw new Error('quality GitHub Actions provenance is missing from a CI observation');
@@ -136,11 +140,11 @@ function validateQualityCi(value, gitCommit) {
   }
   exactKeys(value, ['runId', 'runAttempt', 'sha'], 'quality GitHub Actions provenance');
   if (!/^[1-9][0-9]*$/u.test(value.runId ?? '') || !/^[1-9][0-9]*$/u.test(value.runAttempt ?? '')
-    || value.sha !== gitCommit) {
+    || value.sha !== expectedSubjectSha) {
     throw new Error('recorded quality GitHub Actions provenance is invalid');
   }
   if (process.env.GITHUB_ACTIONS === 'true' && (value.runId !== process.env.GITHUB_RUN_ID
-    || value.runAttempt !== process.env.GITHUB_RUN_ATTEMPT || value.sha !== process.env.GITHUB_SHA)) {
+    || value.runAttempt !== process.env.GITHUB_RUN_ATTEMPT)) {
     throw new Error('quality GitHub Actions provenance is missing or differs from the current run');
   }
 }
@@ -194,7 +198,10 @@ const REPORT_CONTRACTS = {
     id: 'opentui-threaded-marker-route',
     framework: 'opentui',
     renderingMode: 'retained',
-    runtime: (descriptor) => `bun ${descriptor.toolchains.bun.resolved}; @opentui/core 0.5.3`,
+    runtime: (descriptor) => new RegExp(
+      `^bun ${escapeRegex(descriptor.toolchains.bun.resolved)}; @opentui/core \\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$`,
+      'u',
+    ),
   },
 };
 
@@ -214,7 +221,7 @@ function report(bytes, input, descriptor) {
       `${input} report scenario must be ${contract.id}/${contract.framework}/${contract.renderingMode}`,
     );
   }
-  return scenario.metrics;
+  return { metrics: scenario.metrics, runtime: value.environment.runtime };
 }
 
 function correlateReportEnvironment(report, input, descriptor) {
@@ -223,10 +230,18 @@ function correlateReportEnvironment(report, input, descriptor) {
     throw new Error(`${input} report platform does not match the performance environment descriptor`);
   }
   const runtime = report.environment.runtime;
-  if (runtime !== REPORT_CONTRACTS[input].runtime(descriptor)) {
+  const expectedRuntime = REPORT_CONTRACTS[input].runtime(descriptor);
+  const matches = expectedRuntime instanceof RegExp
+    ? expectedRuntime.test(runtime)
+    : runtime === expectedRuntime;
+  if (!matches) {
     const runtimeName = input === 'semantic' ? 'Node' : input === 'charm' ? 'Node/Go' : 'Bun/package';
     throw new Error(`${input} report ${runtimeName} runtime does not match the performance environment descriptor`);
   }
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
 function reportMetric(metrics, name, field, source) {

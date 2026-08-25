@@ -1,25 +1,21 @@
-name: Performance observations
+name: Paired performance gate
 
 on:
   schedule:
     - cron: '17 4 * * 1'
   workflow_dispatch:
     inputs:
-      mode:
-        description: Observe against the committed baseline or capture a reviewed candidate
-        required: true
-        default: observe
-        type: choice
-        options:
-          - observe
-          - capture
+      reference_sha:
+        description: Exact reference commit to measure against the candidate
+        required: false
+        default: 19e5df81758e229b42825d6ccbe46997770c6fbf
       cycles:
-        description: Complete lifecycle observations (2..100)
+        description: Complete lifecycle observations per subject and round (2..100)
         required: false
         default: '10'
 
 concurrency:
-  group: performance-observations
+  group: paired-performance-gate
   cancel-in-progress: false
 
 permissions:
@@ -28,119 +24,220 @@ permissions:
 env:
   PNPM_VERSION: '9.4.0'
   PERFORMANCE_RUNNER_CLASS: 'darwin-arm64-node24-go1.25-bun1.2.15'
-  PERFORMANCE_BASELINE: 'packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.json'
   PERFORMANCE_BASELINE_POLICY: 'packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json'
   TERMWRIGHT_RETRIES: '0'
   TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
+  TERMWRIGHT_REQUIRE_BUN: '1'
   TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
 
 jobs:
-  observe:
-    name: performance regression gate
+  compare:
+    name: paired reference/candidate regression gate
     runs-on: macos-15
     timeout-minutes: 45
+    env:
+      REFERENCE_SHA: ${{ inputs.reference_sha || '19e5df81758e229b42825d6ccbe46997770c6fbf' }}
+      CANDIDATE_SHA: ${{ github.sha }}
+      REQUESTED_CYCLES: ${{ inputs.cycles || '10' }}
     steps:
       - name: Reject workflow reruns
         shell: bash
         run: test "$GITHUB_RUN_ATTEMPT" = 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Check out the exact reference commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ inputs.reference_sha || '19e5df81758e229b42825d6ccbe46997770c6fbf' }}
+          path: reference
           persist-credentials: false
-      - name: Require the qualified baseline in normal observation mode
-        if: github.event_name == 'schedule' || inputs.mode == 'observe'
+
+      - name: Check out the exact candidate commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Initialize retained evidence
+        if: always()
         shell: bash
-        run: test -f "$PERFORMANCE_BASELINE"
+        run: |
+          mkdir -p performance-results
+          printf 'reference=%s\ncandidate=%s\nrun_attempt=%s\n' \
+            "$REFERENCE_SHA" "$CANDIDATE_SHA" "$GITHUB_RUN_ATTEMPT" \
+            > performance-results/workflow-context.txt
+
+      - name: Verify exact commits and bounded measurement count
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$REFERENCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'reference_sha must be an exact lowercase 40-character commit SHA' >&2
+            exit 2
+          fi
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'candidate SHA must be an exact lowercase 40-character commit SHA' >&2
+            exit 2
+          fi
+          test "$(git -C reference rev-parse HEAD)" = "$REFERENCE_SHA"
+          test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
+          case "$REQUESTED_CYCLES" in
+            (*[!0-9]*|'') echo 'cycles must be a positive integer' >&2; exit 2;;
+          esac
+          if (( REQUESTED_CYCLES < 2 || REQUESTED_CYCLES > 100 )); then
+            echo 'cycles must be 2..100' >&2
+            exit 2
+          fi
+
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
           version: ${{ env.PNPM_VERSION }}
+
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
           cache: pnpm
+          cache-dependency-path: |
+            reference/pnpm-lock.yaml
+            candidate/pnpm-lock.yaml
+
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          # Bubble Tea v2 declares Go 1.25. The benchmark compares vanilla and
-          # instrumented binaries built by this same qualified Go line, and the
-          # runner descriptor records the exact resolved patch version.
+          # Bubble Tea v2 requires Go 1.25. Both subjects use this one resolved
+          # toolchain installation, recorded independently in every raw round.
           go-version: '1.25'
           cache: false
+
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: '1.2.15'
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: mkdir -p performance-results
-      - name: Record and verify the toolchain-qualified runner class
-        run: >-
-          node scripts/performance-environment.mjs
-          --class "$PERFORMANCE_RUNNER_CLASS" --runner macos-15
-          --output performance-results/environment.json
-      - name: Collect the semantic pipeline benchmark
-        run: >-
-          pnpm --filter @termwright/performance benchmark --iterations 1000 --warmup 100
-          --nodes 96 --output "$GITHUB_WORKSPACE/performance-results/semantic-pipeline.json"
-      - name: Collect the Charm E2E benchmark
-        run: >-
-          pnpm --filter @termwright/performance benchmark:charm --iterations 8
-          --output "$GITHUB_WORKSPACE/performance-results/charm-immediate.json"
-      - name: Collect the OpenTUI marker-route benchmark
-        run: >-
-          pnpm --filter @termwright/performance benchmark:opentui --repetitions 3
-          --window-ms 1000 --output "$GITHUB_WORKSPACE/performance-results/opentui-marker-route.json"
-      - name: Collect lifecycle and resource observations
-        shell: bash
+
+      - name: Install and build the reference checkout
+        working-directory: reference
         env:
-          REQUESTED_CYCLES: ${{ inputs.cycles }}
+          GITHUB_SHA: ${{ inputs.reference_sha || '19e5df81758e229b42825d6ccbe46997770c6fbf' }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Install and build the candidate checkout
+        working-directory: candidate
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Require an identical measurement harness
+        shell: bash
+        run: |
+          node candidate/scripts/performance-harness-fingerprint.mjs \
+            --root reference \
+            --output performance-results/reference-harness.json
+          node candidate/scripts/performance-harness-fingerprint.mjs \
+            --root candidate \
+            --output performance-results/candidate-harness.json
+          cmp performance-results/reference-harness.json performance-results/candidate-harness.json
+
+      - name: Precondition both subjects without retaining calibration as evidence
+        shell: bash
         run: |
           set -euo pipefail
-          cycles=${REQUESTED_CYCLES:-10}
-          case "$cycles" in (*[!0-9]*|'') echo "cycles must be a positive integer"; exit 2;; esac
-          if (( cycles < 2 || cycles > 100 )); then echo "cycles must be 2..100"; exit 2; fi
-          node scripts/collect-quality-performance.mjs \
-            --cycles "$cycles" \
-            --environment-file performance-results/environment.json \
-            --output performance-results/quality.json
-      - name: Capture a measured baseline candidate
-        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'capture'
+
+          precondition() {
+            local subject=$1
+            local subject_sha=$2
+            (
+              cd "$GITHUB_WORKSPACE/$subject"
+              export GITHUB_SHA="$subject_sha"
+              node packages/termwright-cli/dist/bin.js test --runs 1 \
+                --resource-profile ci --json -- \
+                --config quality/soak/vitest.config.ts --run \
+                quality/soak/terminal-cycle.test.ts >/dev/null
+            )
+          }
+
+          # Discard one complete balanced R,C,C,R calibration block. This
+          # removes the one-time shared page/dependency-cache step before the
+          # firstRunPreAttemptMs evidence begins; it is not a retry or sample.
+          precondition reference "$REFERENCE_SHA"
+          precondition candidate "$CANDIDATE_SHA"
+          precondition candidate "$CANDIDATE_SHA"
+          precondition reference "$REFERENCE_SHA"
+
+      - name: Measure complete paired rounds in R,C,C,R order
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          measure() {
+            local subject=$1
+            local round=$2
+            local subject_sha=$3
+            local sequence=$4
+            local checkout="$GITHUB_WORKSPACE/$subject"
+            local output="$GITHUB_WORKSPACE/performance-results/$subject/$round"
+            mkdir -p "$output"
+            (
+              cd "$checkout"
+              export GITHUB_SHA="$subject_sha"
+              node scripts/performance-environment.mjs \
+                --class "$PERFORMANCE_RUNNER_CLASS" --runner macos-15 \
+                --output "$output/environment.json"
+              pnpm --filter @termwright/performance benchmark \
+                --iterations 1000 --warmup 100 --nodes 96 \
+                --output "$output/semantic-pipeline.json"
+              pnpm --filter @termwright/performance benchmark:charm \
+                --iterations 8 --output "$output/charm-immediate.json"
+              pnpm --filter @termwright/performance benchmark:opentui \
+                --repetitions 3 --window-ms 1000 \
+                --output "$output/opentui-marker-route.json"
+              node scripts/collect-quality-performance.mjs \
+                --cycles "$REQUESTED_CYCLES" \
+                --environment-file "$output/environment.json" \
+                --output "$output/quality.json"
+              node "$GITHUB_WORKSPACE/candidate/scripts/seal-performance-round.mjs" \
+                --directory "$output" --subject "$subject" --round "$round" \
+                --sequence "$sequence" \
+                --subject-sha "$subject_sha" --output "$output/round-seal.json"
+            )
+          }
+
+          measure reference 1 "$REFERENCE_SHA" 1
+          measure candidate 1 "$CANDIDATE_SHA" 2
+          measure candidate 2 "$CANDIDATE_SHA" 3
+          measure reference 2 "$REFERENCE_SHA" 4
+
+      - name: Compare the paired measurement matrix
+        shell: bash
         run: >-
-          node scripts/capture-performance-baseline.mjs
-          --policy "$PERFORMANCE_BASELINE_POLICY"
-          --environment performance-results/environment.json
-          --quality performance-results/quality.json
-          --semantic performance-results/semantic-pipeline.json
-          --charm performance-results/charm-immediate.json
-          --opentui performance-results/opentui-marker-route.json
-          --output "performance-results/baseline-candidate/$PERFORMANCE_RUNNER_CLASS.json"
-      - name: Compare with the qualified recorded baseline
-        if: github.event_name == 'schedule' || inputs.mode == 'observe'
-        run: >-
-          node scripts/compare-performance-baseline.mjs
-          --baseline "$PERFORMANCE_BASELINE"
-          --environment performance-results/environment.json
-          --quality performance-results/quality.json
-          --semantic performance-results/semantic-pipeline.json
-          --charm performance-results/charm-immediate.json
-          --opentui performance-results/opentui-marker-route.json
+          node candidate/scripts/compare-paired-performance.mjs
+          --policy "candidate/$PERFORMANCE_BASELINE_POLICY"
+          --reference-sha "$REFERENCE_SHA"
+          --reference performance-results/reference/1
+          --reference performance-results/reference/2
+          --candidate-sha "$CANDIDATE_SHA"
+          --candidate performance-results/candidate/1
+          --candidate performance-results/candidate/2
+          --reference-harness performance-results/reference-harness.json
+          --candidate-harness performance-results/candidate-harness.json
           --output performance-results/comparison.json
-      - name: Upload measured baseline candidate and raw observations
-        if: always() && github.event_name == 'workflow_dispatch' && inputs.mode == 'capture'
+
+      - name: Upload the paired comparison and all raw evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: performance-baseline-candidate-darwin-arm64-node24-go1.25-bun1.2.15
+          name: paired-performance-darwin-arm64-node24-go1.25-bun1.2.15
           path: |
             performance-results
-            .termwright/runs
-          if-no-files-found: error
-          include-hidden-files: true
-          retention-days: 90
-      - name: Upload comparable observations
-        if: always() && (github.event_name == 'schedule' || inputs.mode == 'observe')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: performance-observations-darwin-arm64-node24-go1.25-bun1.2.15
-          path: |
-            performance-results
-            .termwright/runs
+            reference/.termwright/runs
+            candidate/.termwright/runs
+            candidate/packages/performance/dist
+            candidate/scripts/compare-paired-performance.mjs
+            candidate/scripts/performance-environment.mjs
+            candidate/scripts/performance-harness-fingerprint.mjs
+            candidate/scripts/performance-observations.mjs
+            candidate/scripts/seal-performance-round.mjs
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 90

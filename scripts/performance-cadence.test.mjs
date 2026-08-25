@@ -8,8 +8,7 @@ const stressFixture = await readFile(
   new URL('../quality/stress/terminal-concurrency.test.ts', import.meta.url),
   'utf8',
 );
-const comparator = await readFile(new URL('./compare-performance-baseline.mjs', import.meta.url), 'utf8');
-const capture = await readFile(new URL('./capture-performance-baseline.mjs', import.meta.url), 'utf8');
+const pairedComparator = await readFile(new URL('./compare-paired-performance.mjs', import.meta.url), 'utf8');
 const environment = await readFile(new URL('./performance-environment.mjs', import.meta.url), 'utf8');
 const observations = await readFile(new URL('./performance-observations.mjs', import.meta.url), 'utf8');
 const timing = await readFile(new URL('./quality-performance-timing.mjs', import.meta.url), 'utf8');
@@ -30,33 +29,65 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain("node-version: '24'");
     expect(workflow).toContain("go-version: '1.25'");
     expect(workflow).toContain("bun-version: '1.2.15'");
+    expect(workflow).toContain("TERMWRIGHT_REQUIRE_BUN: '1'");
     expect(workflow).toContain("PERFORMANCE_RUNNER_CLASS: 'darwin-arm64-node24-go1.25-bun1.2.15'");
-    expect(workflow).toContain('--output performance-results/environment.json');
-    expect(workflow).toContain('--environment-file performance-results/environment.json');
+    expect(workflow).toContain('--output "$output/environment.json"');
+    expect(workflow).toContain('--environment-file "$output/environment.json"');
     const requiredGo = /^go (\d+\.\d+)/mu.exec(charmFixture)?.[1];
     expect(requiredGo).toBeDefined();
     expect(workflow).toContain(`go-version: '${requiredGo}'`);
   });
 
-  it('separates explicit baseline capture from normal comparison', () => {
-    expect(workflow).toContain('default: observe');
-    expect(workflow).toContain("inputs.mode == 'capture'");
-    expect(workflow).toContain('capture-performance-baseline.mjs');
-    expect(workflow.match(/--environment performance-results\/environment\.json/gu)).toHaveLength(2);
-    expect(workflow).toContain("inputs.mode == 'observe'");
-    expect(workflow).toContain('test -f "$PERFORMANCE_BASELINE"');
-    expect(workflow).toContain('packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.json');
-    expect(capture).toContain('capturePerformanceBaseline(policy, observations, provenance)');
+  it('measures exact isolated subjects twice in paired R,C,C,R order', () => {
+    const reference = '19e5df81758e229b42825d6ccbe46997770c6fbf';
+    expect(workflow).toContain(`default: ${reference}`);
+    expect(workflow).toContain('path: reference');
+    expect(workflow).toContain('path: candidate');
+    expect(workflow).toContain("REFERENCE_SHA: ${{ inputs.reference_sha || '19e5df81758e229b42825d6ccbe46997770c6fbf' }}");
+    expect(workflow).toContain('CANDIDATE_SHA: ${{ github.sha }}');
+    expect(workflow).toContain('test "$(git -C reference rev-parse HEAD)" = "$REFERENCE_SHA"');
+    expect(workflow).toContain('test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"');
+    expect(workflow).toContain('export GITHUB_SHA="$subject_sha"');
+    expect(workflow).toContain('seal-performance-round.mjs');
+    expect(workflow).toContain('--subject "$subject" --round "$round"');
+    expect(workflow).toContain('Precondition both subjects without retaining calibration as evidence');
+    expect(workflow.match(/precondition reference "\$REFERENCE_SHA"/gu)).toHaveLength(2);
+    expect(workflow.match(/precondition candidate "\$CANDIDATE_SHA"/gu)).toHaveLength(2);
+    const rounds = [
+      'measure reference 1 "$REFERENCE_SHA" 1',
+      'measure candidate 1 "$CANDIDATE_SHA" 2',
+      'measure candidate 2 "$CANDIDATE_SHA" 3',
+      'measure reference 2 "$REFERENCE_SHA" 4',
+    ];
+    for (let index = 1; index < rounds.length; index += 1) {
+      expect(workflow.indexOf(rounds[index - 1])).toBeLessThan(workflow.indexOf(rounds[index]));
+    }
+    expect(workflow.match(/pnpm install --frozen-lockfile/gu)).toHaveLength(2);
+    expect(workflow).toContain('timeout-minutes: 45');
+    expect(workflow).toContain('--root reference \\');
+    expect(workflow).toContain('--root candidate \\');
+    expect(workflow).toContain('cmp performance-results/reference-harness.json performance-results/candidate-harness.json');
+    expect(workflow).toContain('compare-paired-performance.mjs');
+    expect(workflow.match(/--reference performance-results\/reference\//gu)).toHaveLength(2);
+    expect(workflow.match(/--candidate performance-results\/candidate\//gu)).toHaveLength(2);
+    expect(workflow).toContain('--reference-harness performance-results/reference-harness.json');
+    expect(workflow).toContain('--candidate-harness performance-results/candidate-harness.json');
+    expect(workflow).not.toContain('capture-performance-baseline.mjs');
+    expect(workflow).not.toContain('compare-performance-baseline.mjs');
+    expect(workflow).not.toContain('PERFORMANCE_BASELINE:');
     expect(JSON.parse(policy)).not.toHaveProperty('metrics.firstRunPreAttemptMs.value');
   });
 
   it('runs every existing benchmark plus the soak and stress observations', () => {
-    expect(workflow).toContain('benchmark --iterations 1000');
-    expect(workflow).toContain('benchmark:charm --iterations 8');
-    expect(workflow).toContain('benchmark:opentui --repetitions 3');
-    expect(workflow).toContain('$GITHUB_WORKSPACE/performance-results/semantic-pipeline.json');
-    expect(workflow).toContain('$GITHUB_WORKSPACE/performance-results/charm-immediate.json');
-    expect(workflow).toContain('$GITHUB_WORKSPACE/performance-results/opentui-marker-route.json');
+    expect(workflow).toContain('@termwright/performance benchmark \\');
+    expect(workflow).toContain('--iterations 1000 --warmup 100 --nodes 96');
+    expect(workflow).toContain('@termwright/performance benchmark:charm \\');
+    expect(workflow).toContain('--iterations 8 --output "$output/charm-immediate.json"');
+    expect(workflow).toContain('@termwright/performance benchmark:opentui \\');
+    expect(workflow).toContain('--repetitions 3 --window-ms 1000');
+    expect(workflow).toContain('--output "$output/semantic-pipeline.json"');
+    expect(workflow).toContain('--output "$output/charm-immediate.json"');
+    expect(workflow).toContain('--output "$output/opentui-marker-route.json"');
     expect(workflow).toContain('collect-quality-performance.mjs');
     expect(collector).toContain('quality/soak/vitest.config.ts');
     expect(collector).toContain('quality/stress/vitest.config.ts');
@@ -77,7 +108,7 @@ describe('performance observation cadence', () => {
     expect(collector).toContain('RUN_HISTORY_COMMIT_VERSION} sha256:${manifestSha256}');
     expect(collector).toContain("collectorSha256: sha256(collector)");
     expect(collector).toContain('githubCiProvenance(process.env, gitCommit)');
-    expect(observations).toContain('await validateQualityProvenance(quality.provenance)');
+    expect(observations).toContain('await validateQualityProvenance(quality.provenance, expectedSubjectSha)');
     expect(observations).toContain('quality provenance collector SHA-256 differs');
     expect(observations).toContain('quality provenance roles must use distinct host invocations');
     expect(collector).toContain('runDirectoryName(runId)');
@@ -104,7 +135,7 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain("TERMWRIGHT_RETRIES: '0'");
     expect(workflow).toContain("TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'");
     expect(workflow).toContain('test "$GITHUB_RUN_ATTEMPT" = 1');
-    expect(workflow).toContain('compare-performance-baseline.mjs');
+    expect(workflow).toContain('compare-paired-performance.mjs');
     expect(workflow).not.toMatch(/\bretry\s*:/u);
     expect(workflow).not.toContain('continue-on-error');
   });
@@ -127,12 +158,13 @@ describe('performance observation cadence', () => {
     expect(collector).not.toMatch(/catch \{ return 0; \}/u);
   });
 
-  it('fails the observation workflow when any reviewed threshold is violated', () => {
-    expect(comparator).toContain("comparison.status === 'failure'");
-    expect(comparator).toContain('formatGitHubError');
-    expect(comparator).toContain('if (failureCount > 0) process.exitCode = 1');
-    expect(comparator).not.toContain('formatGitHubWarning');
-    expect(comparator).toContain("gate: 'performance-regression-fail'");
-    expect(capture).toContain('capturePerformanceBaseline(policy, observations, provenance)');
+  it('fails the paired workflow when any reviewed threshold is violated', () => {
+    expect(pairedComparator).toContain("comparison.status === 'failure'");
+    expect(pairedComparator).toContain('formatGitHubError');
+    expect(pairedComparator).toContain('if (failureCount > 0) process.exitCode = 1');
+    expect(pairedComparator).not.toContain('formatGitHubWarning');
+    expect(pairedComparator).toContain("gate: 'performance-regression-fail'");
+    expect(pairedComparator).toContain('options.reference.length !== 2');
+    expect(pairedComparator).toContain('options.candidate.length !== 2');
   });
 });
