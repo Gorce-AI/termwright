@@ -13,6 +13,8 @@ class ControlledPty implements PtyProcess {
   disposeCount = 0;
   readonly resizeCalls: Array<{ columns: number; rows: number }> = [];
   readonly signalCalls: PtySignal[] = [];
+  readonly attachStarted: Promise<void>;
+  terminateCount = 0;
   readonly #failExitRegistration: boolean;
   readonly #failDispose: boolean;
   readonly #emitExitOnDispose: boolean;
@@ -22,6 +24,7 @@ class ControlledPty implements PtyProcess {
   readonly #treeState: 'gone' | 'unsupported' | 'throw';
   readonly #exitListeners = new Set<(status: ExitStatus) => void>();
   readonly #writeErrorListeners = new Set<(error: Error) => void>();
+  readonly #markAttachStarted: () => void;
 
   constructor(options: {
     readonly failExitRegistration?: boolean;
@@ -33,6 +36,9 @@ class ControlledPty implements PtyProcess {
     readonly lifecycle?: PtyProcess['lifecycle'];
     readonly treeState?: 'gone' | 'unsupported' | 'throw';
   } = {}) {
+    let markAttachStarted!: () => void;
+    this.attachStarted = new Promise<void>((resolve) => { markAttachStarted = resolve; });
+    this.#markAttachStarted = markAttachStarted;
     this.#failExitRegistration = options.failExitRegistration ?? false;
     this.#failDispose = options.failDispose ?? false;
     this.#emitExitOnDispose = options.emitExitOnDispose ?? true;
@@ -72,6 +78,7 @@ class ControlledPty implements PtyProcess {
   }
   attachCancelCount = 0;
   async attach(signal: AbortSignal): Promise<void> {
+    this.#markAttachStarted();
     if (!this.#neverAttach) return;
     await new Promise<void>((_resolve, reject) => {
       const onAbort = (): void => {
@@ -82,6 +89,10 @@ class ControlledPty implements PtyProcess {
       signal.addEventListener('abort', onAbort, { once: true });
       if (signal.aborted) onAbort();
     });
+  }
+  terminate(): void {
+    this.terminateCount += 1;
+    for (const listener of [...this.#exitListeners]) listener(this.#status);
   }
   dispose(): void {
     this.disposeCount += 1;
@@ -273,13 +284,17 @@ describe('terminal session resource lifecycle', () => {
 
   it('cancels a never-attaching PTY at the shared launch deadline and rolls it back', async () => {
     vi.useFakeTimers();
+    let releaseCount = 0;
     const restoreProvider = installTerminalLaunchResourceProvider(async () => ({
       async attach(): Promise<void> {},
-      async release(): Promise<void> {},
+      async release(): Promise<void> { releaseCount += 1; },
     }));
     try {
       const endpoint: { value: string | undefined } = { value: undefined };
-      const pty = new ControlledPty({ neverAttach: true });
+      const pty = new ControlledPty({
+        neverAttach: true,
+        lifecycle: { tree: 'delegated', outputDrain: 'eof' },
+      });
       let markSpawned!: () => void;
       const spawned = new Promise<void>((resolve) => { markSpawned = resolve; });
       const launched = launchTerminalWithBackend({
@@ -293,12 +308,18 @@ describe('terminal session resource lifecycle', () => {
       );
 
       await spawned;
+      await pty.attachStarted;
       expect(endpoint.value).toBeDefined();
       await vi.advanceTimersByTimeAsync(40);
       expect(pty.attachCancelCount).toBe(1);
       await expect(outcome).resolves.toMatchObject({ error: { code: 'timeout' } });
 
       expect(pty.disposeCount).toBe(1);
+      expect(pty.terminateCount).toBe(1);
+      expect(releaseCount).toBe(1);
+      // The virtual-clock deadline assertion is complete. Restore the real
+      // scheduler before probing the real Unix socket or Windows named pipe.
+      vi.useRealTimers();
       await expectEndpointClosed(endpoint.value!);
     } finally {
       restoreProvider();

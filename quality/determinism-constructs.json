@@ -15,7 +15,7 @@
     "deterministic-adversarial-fixture-schedule": 34,
     "display-or-persisted-wall-time-not-correctness-order": 92,
     "explicit-external-file-polling": 4,
-    "explicit-external-or-ui-source-polling": 204,
+    "explicit-external-or-ui-source-polling": 206,
     "explicit-test-selection-reviewed-with-platform-registry": 96,
     "managed-or-diagnostic-background-task": 71,
     "production-polling-review": 1,
@@ -3490,6 +3490,18 @@
       "path": "packages/ui/src/app/fresh-app.e2e.ts",
       "kind": "polling",
       "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-section-row').filter({ hasText: 'Given the policy already permits the request' }).count()).toBe(1);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
+      "excerpt": "await expect.poll(() => page.locator('.tw-section-row').filter({ hasText: 'Test body' }).count()).toBe(1);"
+    },
+    {
+      "path": "packages/ui/src/app/fresh-app.e2e.ts",
+      "kind": "polling",
+      "classification": "explicit-external-or-ui-source-polling",
       "excerpt": "await expect.poll(() => page.locator('.tw-semantic-node-row').count()).toBeGreaterThan(0);"
     },
     {
@@ -3784,6 +3796,12 @@
       "path": "packages/ui/src/app/TermwrightApp.tsx",
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
+      "excerpt": "void bootstrapRunner(source, client, {"
+    },
+    {
+      "path": "packages/ui/src/app/TermwrightApp.tsx",
+      "kind": "fire-and-forget",
+      "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void client.sendInput(sessionId, data).catch((cause: unknown) => {"
     },
     {
@@ -3845,12 +3863,6 @@
       "kind": "fire-and-forget",
       "classification": "managed-or-diagnostic-background-task",
       "excerpt": "void operation().then(() => dispatch({ type: 'toast', tone: 'success', text: success }))"
-    },
-    {
-      "path": "packages/ui/src/app/TermwrightApp.tsx",
-      "kind": "fire-and-forget",
-      "classification": "managed-or-diagnostic-background-task",
-      "excerpt": "void source.state().then((viewer) => {"
     },
     {
       "path": "packages/ui/src/app/TermwrightApp.tsx",

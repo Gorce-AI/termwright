@@ -3,7 +3,15 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('./performance-environment.mjs', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    validatePerformanceEnvironment: (value) => actual.validatePerformanceEnvironment(value),
+  };
+});
 import {
   aggregateObservations,
   comparePairedPerformance as comparePairedPerformanceImpl,
@@ -17,6 +25,7 @@ const policy = new URL(
   '../packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.policy.json',
   import.meta.url,
 );
+const policyPath = fileURLToPath(policy);
 const reports = new URL('../packages/performance/reports/', import.meta.url);
 const collector = new URL('./collect-quality-performance.mjs', import.meta.url);
 const referenceSha = 'a'.repeat(40);
@@ -39,7 +48,7 @@ describe('paired performance comparator', () => {
     ];
     const harness = await harnessFile();
     const { output, comparisons } = await comparePairedPerformance({
-      policy: policy.pathname,
+      policy: policyPath,
       referenceHarness: harness,
       candidateHarness: harness,
       referenceSha,
@@ -97,7 +106,7 @@ describe('paired performance comparator', () => {
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, { leakedProcesses: 1 })];
     const harness = await harnessFile();
     const { output, comparisons } = await comparePairedPerformance({
-      policy: policy.pathname, referenceSha, reference, referenceHarness: harness,
+      policy: policyPath, referenceSha, reference, referenceHarness: harness,
       candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
     });
     expect(comparisons).toContainEqual(expect.objectContaining({
@@ -112,7 +121,7 @@ describe('paired performance comparator', () => {
     const reference = [await sample(referenceSha, {}), await sample(referenceSha, {})];
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, {})];
     await expect(comparePairedPerformance({
-      policy: policy.pathname, referenceSha, reference, referenceHarness: validPath,
+      policy: policyPath, referenceSha, reference, referenceHarness: validPath,
       candidateSha, candidate, candidateHarness: forgedPath, output: 'unused.json',
     })).rejects.toThrow(/canonical digest is invalid/u);
   });
@@ -123,7 +132,7 @@ describe('paired performance comparator', () => {
     const reference = [await sample(referenceSha, {}), await sample(referenceSha, {})];
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, {})];
     await expect(comparePairedPerformance({
-      policy: policy.pathname, referenceSha, reference, referenceHarness,
+      policy: policyPath, referenceSha, reference, referenceHarness,
       candidateSha, candidate, candidateHarness, output: 'unused.json',
     })).rejects.toThrow(/fingerprints differ/u);
   });
@@ -153,7 +162,7 @@ describe('paired performance comparator', () => {
     await cp(repeated, duplicatedDirectory, { recursive: true });
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, {})];
     await expect(comparePairedPerformance({
-      policy: policy.pathname,
+      policy: policyPath,
       referenceSha,
       reference: [repeated, duplicatedDirectory],
       referenceHarness: harness,
@@ -166,7 +175,7 @@ describe('paired performance comparator', () => {
       await sample(referenceSha, { firstRun: 101, provenanceSeed: reusedIdentity }),
     ];
     await expect(comparePairedPerformance({
-      policy: policy.pathname, referenceSha, reference, referenceHarness: harness,
+      policy: policyPath, referenceSha, reference, referenceHarness: harness,
       candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
     })).rejects.toThrow(/globally distinct host invocations/u);
 
@@ -178,7 +187,7 @@ describe('paired performance comparator', () => {
       firstQuality.provenance.roles.timing.runs[0].runId;
     await writeFile(secondQualityPath, JSON.stringify(secondQuality));
     await expect(comparePairedPerformance({
-      policy: policy.pathname, referenceSha, reference: runReference, referenceHarness: harness,
+      policy: policyPath, referenceSha, reference: runReference, referenceHarness: harness,
       candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
     })).rejects.toThrow(/globally distinct certified runs/u);
   });
@@ -186,7 +195,7 @@ describe('paired performance comparator', () => {
   it('rejects a benchmark report swapped after its subject/round seal', async () => {
     const harness = await harnessFile();
     const options = {
-      policy: policy.pathname,
+      policy: policyPath,
       referenceSha,
       reference: [await sample(referenceSha, {}), await sample(referenceSha, {})],
       referenceHarness: harness,
@@ -206,7 +215,7 @@ describe('paired performance comparator', () => {
     const candidate = [await sample(candidateSha, {}), await sample(candidateSha, {})];
     for (const directory of candidate) await replaceOpenTuiVersion(directory, '0.5.4');
     const options = {
-      policy: policy.pathname, referenceSha, reference, referenceHarness: harness,
+      policy: policyPath, referenceSha, reference, referenceHarness: harness,
       candidateSha, candidate, candidateHarness: harness, output: 'unused.json',
     };
     const { output } = await comparePairedPerformance(options);
