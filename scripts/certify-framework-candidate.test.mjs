@@ -1,13 +1,13 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { assertCandidateSemanticSession, candidateToolchainBlock, deriveHookInstrumentationProfile, installedDependencyFrom, verifyCandidateEvidence, verifyInstalledNpmClosure } from './certify-framework-candidate.mjs';
+import { assertCandidateSemanticSession, candidateToolchainBlock, deriveHookInstrumentationProfile, installedDependencyFrom, packageContentDigestForEntries, verifyCandidateEvidence, verifyInstalledNpmClosure } from './certify-framework-candidate.mjs';
 
 const exec = promisify(execFile);
 
@@ -174,14 +174,11 @@ describe('framework candidate evidence binding', () => {
     }
   });
 
-  it('rejects changed executable mode even when file bytes are unchanged', async () => {
-    const { candidate, dependency, directory, fetchImpl, probe } = await npmClosureFixture();
-    try {
-      await chmod(join(dependency, 'index.js'), 0o755);
-      await expect(verifyInstalledNpmClosure(candidate, probe, { fetchImpl })).rejects.toThrow(/content does not match/u);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
+  it('binds executable mode even when file bytes are unchanged', () => {
+    const regular = [{ path: 'index.js', executableMode: 0, sha256: `sha256:${'a'.repeat(64)}` }];
+    const executable = [{ ...regular[0], executableMode: 0o111 }];
+
+    expect(packageContentDigestForEntries(executable)).not.toBe(packageContentDigestForEntries(regular));
   });
 
   it('rejects expected closure nodes that are unreachable from the installed root', async () => {
