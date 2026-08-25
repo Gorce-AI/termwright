@@ -85,6 +85,7 @@ function render() {
 }
 
 let outputQueue = Promise.resolve();
+let pendingFocusCommit = null;
 
 function writeAndFlush(data) {
   return new Promise((resolve, reject) => {
@@ -96,8 +97,7 @@ function writeAndFlush(data) {
 }
 
 function enqueueOutput(task) {
-  outputQueue = outputQueue.then(task);
-  void outputQueue.catch(() => process.exit(4));
+  outputQueue = outputQueue.then(task).catch(() => process.exit(4));
 }
 
 function draw() {
@@ -433,6 +433,23 @@ process.stdin.on('data', (chunk) => {
     process.stdout.write('BYE\r\n');
     process.exit(0);
   }
+  if (text === 'C' && pendingFocusCommit !== null) {
+    const pending = pendingFocusCommit;
+    pendingFocusCommit = null;
+    enqueueOutput(async () => {
+      pending.socket?.write(
+        encodeFrame({ type: 'revision-commit', revision: pending.revision }, 1024 * 1024),
+      );
+      await writeAndFlush(encodeMarker(token, pending.sessionId, pending.revision));
+    });
+    return;
+  }
+  if (pendingFocusCommit !== null) {
+    // The paired action barrier must emit no recipe input while the fixture
+    // holds this revision open. Any byte other than the explicit test release
+    // proves that the driver crossed the causal boundary early.
+    process.exit(5);
+  }
   if (text === 'g') {
     sendLog('info', 'a single record');
     return;
@@ -489,16 +506,17 @@ process.stdin.on('data', (chunk) => {
     focused = 'reject';
     const pendingFrame = render();
     const pendingSnapshot = fullSnapshot();
-    const pendingSocket = socket;
-    const pendingSessionId = sessionId;
-    pendingSocket?.write(encodeFrame({ type: 'frame-begin', revision: pendingRevision }, 1024 * 1024));
-    pendingSocket?.write(encodeFrame({ type: 'snapshot', snapshot: pendingSnapshot }, 1024 * 1024));
-    enqueueOutput(async () => {
-      await writeAndFlush(pendingFrame);
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      pendingSocket?.write(encodeFrame({ type: 'revision-commit', revision: pendingRevision }, 1024 * 1024));
-      await writeAndFlush(encodeMarker(token, pendingSessionId, pendingRevision));
-    });
+    pendingFocusCommit = {
+      revision: pendingRevision,
+      sessionId,
+      socket,
+    };
+    socket?.write(encodeFrame({ type: 'frame-begin', revision: pendingRevision }, 1024 * 1024));
+    socket?.write(encodeFrame({ type: 'snapshot', snapshot: pendingSnapshot }, 1024 * 1024));
+    // The test releases commit+marker with C only after an action has started.
+    // This causal gate proves the action really waits for pairing; elapsed time
+    // and runner speed cannot decide which branch the test covers.
+    enqueueOutput(() => writeAndFlush(pendingFrame));
     return;
   }
   if (text === 'R') {

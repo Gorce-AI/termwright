@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   ActionEvent,
   ActionStartedEvent,
+  SessionDiagnostic,
   TerminalHarness,
 } from "./api.js";
 import {
@@ -1956,7 +1957,51 @@ describe.skipIf(!ptyAvailable())(
 
       await terminal.write("F");
       await terminal.waitForText("[Reject]");
-      const receipt = await terminal.getByTestId("reject").activate();
+      let startedActionId: string | undefined;
+      const offStarted = terminal.events.on("action-start", (event) => {
+        if (event.api === "activate") startedActionId = event.actionId;
+      });
+      const completed = new Promise<string>((resolve) => {
+        const off = terminal.events.on("action", (event) => {
+          if (event.api !== "activate") return;
+          off();
+          resolve(event.actionId);
+        });
+      });
+      const waiting = new Promise<SessionDiagnostic>((resolve) => {
+        const off = terminal.events.on("diagnostic", (event) => {
+          if (
+            event.code !== "action-observation-wait" ||
+            event.observationState !== "semantic-frame-open"
+          )
+            return;
+          off();
+          resolve(event);
+        });
+      });
+      let activationSettled = false;
+      const activation = terminal
+        .getByTestId("reject")
+        .activate()
+        .finally(() => {
+          activationSettled = true;
+        });
+
+      const waitDiagnostic = await waiting;
+      offStarted();
+      expect(activationSettled).toBe(false);
+      expect(waitDiagnostic.actionId).toBe(startedActionId);
+      expect(terminal.checkpoint()).toMatchObject({
+        semanticRevision: 1,
+        pairedScreenRevision: 1,
+      });
+      expect(terminal.screen().text()).toContain("[Reject]");
+
+      // C is a test-only causal release. The fixture exits non-zero if the
+      // action recipe emits any input before this point.
+      await terminal.write("C");
+      const receipt = await activation;
+      expect(await completed).toBe(waitDiagnostic.actionId);
 
       expect(receipt.plan.strategy).toBe("authoritative-activate");
       expect(receipt.before.semanticRevision).toBe(2);

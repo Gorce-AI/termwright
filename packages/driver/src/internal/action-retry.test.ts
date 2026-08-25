@@ -65,11 +65,17 @@ describe('locator action retry policy', () => {
     const ctx = {
       checkpoint: () => stamp(12),
       actionObservationState: () => state,
+      actionObservationWait: vi.fn(),
       waitForChange: vi.fn(async () => { state = 'settled'; }),
     };
     await controller.retry(stale, ctx);
-    await controller.retry(stale, ctx);
+    await controller.retry(stale, ctx, 'action:pending');
     expect(ctx.waitForChange).toHaveBeenCalledOnce();
+    expect(ctx.actionObservationWait).toHaveBeenCalledOnce();
+    expect(ctx.actionObservationWait).toHaveBeenCalledWith(
+      'action:pending',
+      'parser-in-flight',
+    );
   });
 
   it('checks the monotonic deadline immediately after a wait', async () => {

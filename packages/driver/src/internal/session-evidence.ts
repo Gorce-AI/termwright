@@ -19,6 +19,8 @@ const CRASH_INPUT_PREVIEW = 40;
 /** Optional facts attached to one diagnostic record. */
 export interface SessionDiagnosticContext {
   readonly revision?: number | undefined;
+  readonly actionId?: string | undefined;
+  readonly observationState?: SessionDiagnostic["observationState"];
   readonly wireCode?: SessionDiagnostic["wireCode"];
   readonly count?: number | undefined;
   readonly mode?: SessionDiagnostic["mode"];
@@ -57,6 +59,10 @@ export class SessionEvidenceJournal {
       code,
       detail,
       ...(about?.revision !== undefined ? { revision: about.revision } : {}),
+      ...(about?.actionId !== undefined ? { actionId: about.actionId } : {}),
+      ...(about?.observationState !== undefined
+        ? { observationState: about.observationState }
+        : {}),
       ...(about?.wireCode !== undefined ? { wireCode: about.wireCode } : {}),
       ...(about?.count !== undefined ? { count: about.count } : {}),
       ...(about?.mode !== undefined ? { mode: about.mode } : {}),
