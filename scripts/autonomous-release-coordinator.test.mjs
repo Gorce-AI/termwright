@@ -213,7 +213,7 @@ describe('trusted autonomous coordinator', () => {
   });
 
   it('recognizes only ordinary safe pending changeset files', () => {
-    expect(pendingChangesetFiles(['README.md', 'feature-one.md', 'fix_2.md', '../escape.md', 'nested/file.md', 'not-markdown.txt']))
+    expect(pendingChangesetFiles(['README.md', 'feature-one.md', 'fix_2.md', '.fake.md', '../escape.md', 'nested/file.md', 'not-markdown.txt']))
       .toEqual(['feature-one.md', 'fix_2.md']);
   });
 

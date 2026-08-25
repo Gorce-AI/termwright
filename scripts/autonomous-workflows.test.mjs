@@ -106,6 +106,19 @@ describe('autonomous workflow security', () => {
     expect(step).not.toContain("contains(github.event.pull_request.labels.*.name, 'release')");
   });
 
+  it('delegates publishable-package changeset policy to its tested classifier', async () => {
+    const workflow = await readWorkflow('ci.yml');
+    const marker = '      - name: Publishable package changes need a changeset\n';
+    const start = workflow.indexOf(marker);
+    expect(start).toBeGreaterThan(-1);
+    const step = workflow.slice(start, workflow.indexOf('\n\n', start));
+    expect(step).toContain('run: node scripts/check-pr-changeset.mjs');
+    expect(step).toContain('github.event.pull_request.head.repo.full_name == github.repository');
+    expect(step).toContain("github.event.pull_request.head.ref == 'release-pr/main'");
+    expect(step).not.toContain('github.event.pull_request.labels');
+    expect(step).not.toContain("git diff --name-only");
+  });
+
   it('retains hidden Termwright run evidence from failed main and nightly jobs', async () => {
     const ci = await readWorkflow('ci.yml');
     const reliability = await readWorkflow('reliability.yml');
