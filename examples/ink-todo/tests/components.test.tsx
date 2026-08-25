@@ -19,7 +19,7 @@ test('confirms through terminal input, and reports it once', async () => {
   );
 
   await dialog.press('Tab');
-  await dialog.waitForStable();
+  await dialog.waitForQuiet();
   await dialog.press('Enter');
 
   // Every wait in the harness is driven by rendered frames, and a callback
@@ -63,7 +63,7 @@ test('moves the focus with Tab and activates with Enter', async () => {
   );
 
   await dialog.press('Tab');
-  await dialog.waitForStable();
+  await dialog.waitForQuiet();
   await dialog.press('Enter');
   await vi.waitFor(() => expect(onConfirm).toHaveBeenCalledOnce());
 

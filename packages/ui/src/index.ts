@@ -5,8 +5,8 @@
  *
  * The server talks the `§UI events` protocol from `/CONTRACTS.md` and reads
  * `.twtrace` archives only through `@termwright/trace`. It never imports Vitest:
- * a run reaches the UI through {@link TermwrightUiReporter}, which speaks the
- * same protocol from inside the test process.
+ * live runs arrive from the Termwright Native Host's structured EventJournal,
+ * never from a reporter mixed into test-process stdout or a sibling engine.
  *
  * @example
  * ```ts
@@ -53,6 +53,7 @@ export {
   type AttachedSession,
   type UiServer,
   type UiServerOptions,
+  type UiRunHandle,
 } from './server.js';
 
 export {
@@ -70,12 +71,11 @@ export { readTraceLogs, type LogSourceView, type TraceLogs } from './trace-logs.
 export {
   DEFAULT_RUNS_DIR,
   RUN_MANIFEST_VERSION,
-  parseRunManifest,
   readRunHistory,
   readRunManifest,
-  runId,
-  writeRunManifest,
+  type RunDetail,
   type RunManifest,
+  type RunSummary,
   type RunSummaryEntry,
   type RunTest,
 } from './runs.js';
@@ -83,9 +83,6 @@ export {
 export {
   discoverTests,
   canonicalTestFile,
-  discoveredId,
-  parseDiscoveredId,
-  parseListing,
   type DiscoveredTest,
   type DiscoveredTestAncestor,
   type DiscoveredTestKind,
@@ -213,12 +210,3 @@ export {
   rootsOf,
   statesOf,
 } from './view-model.js';
-
-export {
-  TermwrightUiReporter,
-  UI_SELECTION_ENV,
-  UI_URL_ENV,
-  type UiMessageSink,
-  type UiReporterOptions,
-  type UiReporterSelection,
-} from './reporter.js';

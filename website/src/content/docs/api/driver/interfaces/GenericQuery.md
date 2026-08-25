@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: GenericQuery
 
-Defined in: [selectors.ts:53](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L53)
+Defined in: [driver/src/selectors.ts:51](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L51)
 
 A grid query: literal or regex text plus optional style predicates.
 
@@ -21,7 +21,7 @@ A grid query: literal or regex text plus optional style predicates.
 
 > `readonly` **description**: `string`
 
-Defined in: [selectors.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L59)
+Defined in: [driver/src/selectors.ts:57](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L57)
 
 ***
 
@@ -29,7 +29,7 @@ Defined in: [selectors.ts:59](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` **kind**: `"generic"`
 
-Defined in: [selectors.ts:54](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L54)
+Defined in: [driver/src/selectors.ts:52](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L52)
 
 ***
 
@@ -37,7 +37,7 @@ Defined in: [selectors.ts:54](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` `optional` **occurrence?**: `number`
 
-Defined in: [selectors.ts:57](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L57)
+Defined in: [driver/src/selectors.ts:55](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L55)
 
 1-based selection among all matches; strict mode applies when omitted.
 
@@ -47,7 +47,7 @@ Defined in: [selectors.ts:57](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` `optional` **style?**: [`StylePredicates`](../stylepredicates/)
 
-Defined in: [selectors.ts:58](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L58)
+Defined in: [driver/src/selectors.ts:56](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L56)
 
 ***
 
@@ -55,4 +55,4 @@ Defined in: [selectors.ts:58](https://github.com/Gorce-AI/termwright/blob/main/p
 
 > `readonly` **text**: [`TextMatcher`](../../type-aliases/textmatcher/)
 
-Defined in: [selectors.ts:55](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L55)
+Defined in: [driver/src/selectors.ts:53](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L53)

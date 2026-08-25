@@ -21,6 +21,23 @@ PTY spawn/output/exit cycle, UTF-8 locale, artifact-directory access, and the
 host platform. Warnings describe reduced portability; failed checks produce
 exit code 1. Use `--json` in agents and environment diagnostics.
 
+## `termwright test`
+
+```text
+termwright test [--runs N] [--resource-profile <name>] [-- <vitest args>]
+```
+
+Runs the exact-certified embedded Vitest engine under Termwright's native host.
+`--runs N` executes N complete cycles in that one persistent host, with a new
+RunId and full resource/journal/history barrier for each cycle. The result is
+the worst cycle; infrastructure loss stops subsequent cycles. `skipped`, an
+empty catalogue, and a filtered-zero run remain visible states but exit 1
+because they do not certify a passing suite.
+
+Profiles are explicit: `local`, `ci`, `windows-ci`, or `stress`. Arguments after
+`--` belong to the embedded engine. Retries are diagnostic and any
+fail-then-pass cycle is `flaky`/nonzero.
+
 ## `termwright ui`
 
 ```text
@@ -114,7 +131,8 @@ JSON output, CI, and non-interactive stdout suppress automatic window opening.
 
 Machine-readable errors include a `kind`, message, and applicable suggestion or
 candidates. Library errors include stable kinds such as `timeout`,
-`ambiguous-locator`, `unsupported-action`, `protocol-violation`,
+`ambiguous-locator`, `probe-attach-failed`, `capability-unavailable`, `not-actionable`,
+`input-mode-disabled`, `protocol-violation`,
 `process-exited`, and `session-closed`.
 
 See [Runner UI](../../tools/runner-ui/), [Traces and reports](../../tools/traces-reports/),

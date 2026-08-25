@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: ProcessExitedError
 
-Defined in: [errors.ts:103](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L103)
+Defined in: [driver/src/errors.ts:188](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L188)
 
 The child process exited before the awaited condition could be satisfied.
 
@@ -25,7 +25,7 @@ The child process exited before the awaited condition could be satisfied.
 
 > **new ProcessExitedError**(`message`, `diagnostics`): `ProcessExitedError`
 
-Defined in: [errors.ts:104](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L104)
+Defined in: [driver/src/errors.ts:189](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L189)
 
 #### Parameters
 
@@ -47,11 +47,23 @@ Defined in: [errors.ts:104](https://github.com/Gorce-AI/termwright/blob/main/pac
 
 ## Properties
 
+### actionability?
+
+> `optional` **actionability?**: [`ActionabilityExplanation`](../../interfaces/actionabilityexplanation/)
+
+Defined in: [driver/src/errors.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L22)
+
+#### Inherited from
+
+[`TermwrightError`](../termwrighterror/).[`actionability`](../termwrighterror/#actionability)
+
+***
+
 ### code
 
 > `readonly` **code**: [`TermwrightErrorCode`](../../type-aliases/termwrighterrorcode/)
 
-Defined in: [errors.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L19)
+Defined in: [driver/src/errors.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L20)
 
 #### Inherited from
 
@@ -63,7 +75,7 @@ Defined in: [errors.ts:19](https://github.com/Gorce-AI/termwright/blob/main/pack
 
 > `readonly` **diagnostics**: [`ErrorDiagnostics`](../../interfaces/errordiagnostics/)
 
-Defined in: [errors.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L20)
+Defined in: [driver/src/errors.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L21)
 
 #### Inherited from
 
@@ -75,7 +87,7 @@ Defined in: [errors.ts:20](https://github.com/Gorce-AI/termwright/blob/main/pack
 
 > **toString**(): `string`
 
-Defined in: [errors.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L30)
+Defined in: [driver/src/errors.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L38)
 
 Renders message + diagnostics the way test runners print failures.
 
@@ -86,3 +98,27 @@ Renders message + diagnostics the way test runners print failures.
 #### Inherited from
 
 [`TermwrightError`](../termwrighterror/).[`toString`](../termwrighterror/#tostring)
+
+***
+
+### withActionability()
+
+> **withActionability**(`explanation`): `this`
+
+Defined in: [driver/src/errors.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L32)
+
+Attach the exact failed planner evaluation; never recomputed after state changes.
+
+#### Parameters
+
+##### explanation
+
+[`ActionabilityExplanation`](../../interfaces/actionabilityexplanation/)
+
+#### Returns
+
+`this`
+
+#### Inherited from
+
+[`TermwrightError`](../termwrighterror/).[`withActionability`](../termwrighterror/#withactionability)

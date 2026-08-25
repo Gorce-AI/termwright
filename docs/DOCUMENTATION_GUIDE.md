@@ -235,7 +235,7 @@ Avoid:
 
 State behavior directly. Prefer:
 
-> `click()` throws `UnsupportedActionError` when mouse input is unavailable.
+> `click()` throws `InputModeDisabledError` when the application has not enabled mouse input.
 
 over a paragraph about why Termwright refuses to guess.
 

@@ -4,8 +4,12 @@ Semantic side-channel client and developer annotation SDK for Termwright's
 automatic [tview](https://github.com/rivo/tview) and Charm probes.
 
 An instrumented app publishes its primitive tree over a unix socket and commits
-each frame with a signed OSC marker, so tests assert on *roles and names*
+each frame with a signed OSC marker, so tests assert on _roles and names_
 instead of screen-scraping cells.
+
+The protocol client speaks `termwright/2`. Every published semantic revision
+is a complete v2 snapshot with evidence-qualified geometry and pointer
+observations.
 
 **Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN`, an
 instrumented framework copy opens no socket, writes no marker and produces the
@@ -51,14 +55,14 @@ The application imports no Termwright package. Build it through
 `@termwright/probe-tview`:
 
 ```ts
-import {prepareInstrumentedBuild} from '@termwright/probe-tview';
+import { prepareInstrumentedBuild } from "@termwright/probe-tview";
 
-const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
-await execFile('go', ['build', '-o', 'app-binary', '.'], {
-  cwd: 'path/to/app',
+const build = await prepareInstrumentedBuild({ moduleDir: "path/to/app" });
+await execFile("go", ["build", "-o", "app-binary", "."], {
+  cwd: "path/to/app",
   env: build.env,
 });
-await launchTerminal({command: ['./app-binary']});
+await launchTerminal({ command: ["./app-binary"] });
 ```
 
 The generated `go.work` redirects only tview and the probe client to cached,
@@ -68,9 +72,9 @@ workspace remain byte-identical.
 Under the driver the ordinary application publishes, after every committed frame:
 
 ```
-region "Permission"   bounds=(0,0,80,24)
-  button "Approve"    bounds=(0,0,80,1)  [focused]
-  button "Reject"     bounds=(1,0,80,1)
+region "Permission"   visible=(0,0,80,24)
+  button "Approve"    visible=(0,0,80,1)  [focused]
+  button "Reject"     visible=(1,0,80,1)
 ```
 
 ### Where the marker is emitted
@@ -110,11 +114,24 @@ owns the revision numbers and returns the marker to write after the frame.
 client := protocol.FromEnv(protocol.Options{AdapterName: "my-tui", AdapterVersion: "1.0.0"})
 if client != nil && client.Start(protocol.DialTimeout) == nil {
 	snapshot := protocol.NewSnapshot("", 0, 80, 24) // session and revision are filled in
+	evidence := protocol.DefaultEvidence("my-tui")
+	displayed := true
+	rootRect := protocol.Rect{Row: 0, Column: 0, Width: 80, Height: 24}
+	buttonRect := protocol.Rect{Row: 1, Column: 2, Width: 9, Height: 1}
 	snapshot.RootIDs = []string{"root"}
 	snapshot.Nodes = []protocol.Node{
-		{ID: "root", Role: protocol.RoleDialog, Name: "Permission"},
+		{ID: "root", Role: protocol.RoleDialog, Name: "Permission",
+			Geometry: protocol.NodeGeometryObservations{
+				Displayed: protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: evidence},
+				IntendedRect: protocol.Observation[protocol.Rect]{Status: "known", Value: &rootRect, Evidence: evidence},
+				VisibleRect: protocol.Observation[protocol.Rect]{Status: "known", Value: &rootRect, Evidence: evidence},
+			}},
 		{ID: "ok", ParentID: "root", Role: protocol.RoleButton, Name: "Approve",
-			Bounds: &protocol.Rect{Row: 1, Column: 2, Width: 9, Height: 1}},
+			Geometry: protocol.NodeGeometryObservations{
+				Displayed: protocol.Observation[bool]{Status: "known", Value: &displayed, Evidence: evidence},
+				IntendedRect: protocol.Observation[protocol.Rect]{Status: "known", Value: &buttonRect, Evidence: evidence},
+				VisibleRect: protocol.Observation[protocol.Rect]{Status: "known", Value: &buttonRect, Evidence: evidence},
+			}},
 	}
 	marker, _ := client.Publish(snapshot)
 	os.Stdout.WriteString(marker) // only after the render is fully written
@@ -132,7 +149,7 @@ the wire omits it rather than guessing from the Go runtime.
 The zero-config probes (`@termwright/probe-tview`, `@termwright/probe-charm`)
 observe facts: this is a button, it holds this text, it has the focus, it was
 drawn here. What they cannot observe is intent — that this list is the inbox,
-that a row is *overdue* in the sense your domain means. `annotate` is where the
+that a row is _overdue_ in the sense your domain means. `annotate` is where the
 author supplies that, and it is the only package here that a zero-config
 application imports.
 
@@ -175,7 +192,7 @@ paint the same bytes.
 ### What an annotation may not say
 
 `Semantics` carries `Role`, `Name`, `TestID`, `Description` and `Domain`, and
-nothing else. There is deliberately no field for bounds, focus or rendered
+nothing else. There is deliberately no field for geometry, focus or rendered
 text: the screen is the authority on those, and an annotation able to restate
 them would eventually contradict them — turning a passing test into a lie
 rather than a failure. Physical facts stay with the probe, wording comes from
@@ -218,14 +235,14 @@ or, on a session that came up:
 
 ```text
   tw:sem  [p41207]   0.002s dial unix:/tmp/tw-8f21/s timeout=5000ms
-  tw:sem  [p41207]   0.003s hello sent adapter=tview/1.0.0 caps=tree,bounds,…
-  tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=diffs logs=off
+  tw:sem  [p41207]   0.003s hello sent adapter=tview/1.0.0 caps=tree,intended-geometry,clipped-geometry,…
+  tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=snapshots logs=off
   tw:io   [3f9c1a04]  0.048s r1 snapshot nodes=17
   tw:io   [3f9c1a04]  0.049s performance r1 bytes=3481 nodes=17 unknown=2 serialization_us=44.125
 ```
 
 With the debug log enabled, `Client.PerformanceMetrics()` also returns a
-machine-readable value snapshot: full snapshots, deltas, semantic bytes,
+machine-readable value snapshot: full snapshots, semantic bytes,
 nodes, generic/unknown nodes, failed publications, requested markers and
 serialization time, including per-frame averages. Collection is tied to the
 non-nil debug log so normal render paths do not pay for timers or a second node
@@ -284,6 +301,20 @@ not listed here follows them.
 - **DropDown options other than the current one have positional names** (rule
   2). tview exposes no per-index accessor, so an unselected option is published
   as `option 2` rather than its text.
+
+## Application evidence providers
+
+`clients/go/evidence` exposes closed production pointer, focus, scroll, paint,
+terminal-input-mode, and data-only physical action-recipe families.
+`FocusProvider.Observe` returns the focused semantic id or `nil` for the
+authoritative fact that no node owns focus. Register before the first session
+freeze; provider loss or disagreement fails the frozen contract. Providers
+never receive an action callback—the driver executes every recipe through the
+PTY.
+
+`InputModeProvider.Observe` publishes the production parser's closed
+mouse-tracking, mouse-encoding, and focus-reporting tuple. It can supply truth
+when ConPTY hides DEC modes, but never enables a mode or dispatches input.
 
 ## Conformance
 

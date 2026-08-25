@@ -18,7 +18,8 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
+import { it } from '@termwright/test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { serveHttp, type HttpServerHandle } from '@termwright/mcp';
@@ -144,7 +145,11 @@ afterEach(async () => {
 });
 
 describe.skipIf(!ptyAvailable())('concurrent MCP sessions', { timeout: 60_000 }, () => {
-  it('gives each session its own terminals, launched in parallel', async () => {
+  // Three terminals are live at once here. Acquiring them one at a time would
+  // let this test hold part of the host's terminal capacity while waiting for
+  // the rest, which nothing else can release; the group is declared so the
+  // broker admits it atomically or not at all.
+  it.resources({ terminals: 3 })('gives each session its own terminals, launched in parallel', async () => {
     const handle = await serve();
     const sessions = await Promise.all([connect(handle), connect(handle), connect(handle)]);
     expect(new Set(sessions.map((session) => session.sessionId)).size).toBe(3);

@@ -1,5 +1,22 @@
 # Contract changes
 
+- 2026-08-25: trace publication is transactional. Only an archive with a valid
+  `COMMITTED` marker is complete evidence; interrupted and partial writes stay
+  distinguishable from a successful run.
+- 2026-08-25: the native host owns stable run and attempt identities, including
+  UI run history. Reporter text is an output projection and is never a control
+  or identity channel.
+- 2026-08-25: interactive UI control messages carry a `requestId` and receive a
+  correlated `control-result` acknowledgement. Browser input rejects explicit
+  server failures, disconnects and bounded acknowledgement timeouts.
+- 2026-08-25: actionability inspection is a first-class read-only projection;
+  HTTP run, rerun and stop operations are typed, and the MCP surface projects
+  the same expanded session/action contract.
+- 2026-08-25: certifying repository workflows require their first attempt,
+  zero retries and no snapshot updates. A diagnostic fail-then-pass run remains
+  `flaky` and non-zero. Windows certification uses the mandatory own ConPTY
+  backend and fails closed when its matching prebuild is unavailable.
+
 - 2026-08-20: retry remains owned by Vitest's native scheduler.
   `termwrightRetry({ci, local, env?})` resolves a bounded native `test.retry`
   value with `TERMWRIGHT_RETRIES` as an additional-attempt override. Task meta,
@@ -25,11 +42,12 @@
   option is accepted and ignored by the driver — recording belongs to
   `@termwright/trace` via `SessionEvents`. `capabilities().semanticTree` is
   true from successful handshake (not first tree); semantic locators wait when
-  no tree arrived yet, `unsupported-action` only in settled-generic sessions.
+  no tree arrived yet; settled generic sessions fail semantic queries with
+  `semantic-capability-unavailable`.
   `close()` hangs up the PTY (SIGHUP/TerminateProcess) as part of physical
   cleanup; destructive signals remain explicit. `.class` CSS-dialect semantics
   provisional (matches testId/name token) pending protocol-level classes.
-- 2026-08-15: `waitForReady` (shell prompt) missing from api.ts — deferred
+- 2026-08-15: `waitForQuiet` (shell prompt) missing from api.ts — deferred
   addition before 1.0 (timeout class 'ready' already defined).
 - 2026-08-15 (mcp landed): `mcp` MAY depend on `@termwright/protocol` for
   constants/types (rule relaxed; removes duplicated SEMANTIC_ROLES/limits).
@@ -60,7 +78,7 @@
   markers, pairing expiries).
 - 2026-08-15 (driver round 2, f78174f): api.ts gains — `diagnostic` event +
   `harness.diagnostics()` with CLOSED DiagnosticCode set (13 values; adding one
-  is a contract change), `waitForReady` (OSC 133 preferred, settled-screen
+  is a contract change), `waitForQuiet` (OSC 133 preferred, settled-screen
   fallback, strategy reported via 'ready-strategy' diagnostic),
   `locatorForRef(ref)` (identity-based, semantic `nX@rev` and grid
   `grid:r,c,w,h@rev` refs, stale checked at resolve), `Locator.description`,
@@ -73,7 +91,7 @@
   ''), falling back to `name` only when value is undefined.
 - 2026-08-16: SessionDiagnostic gains optional `wireCode?` on
   'protocol-violation' entries (approved; closes the last indirect
-  conformance assertion). `waitForReady` must check process liveness before
+  conformance assertion). `waitForQuiet` must check process liveness before
   reporting readiness (consistent with other waits).
 - 2026-08-16: DiagnosticCode 'ready-strategy' is REPLACED by two codes:
   'ready-shell-integration' and 'ready-settled-screen' (fact vs heuristic must
@@ -104,7 +122,7 @@
   6f41325. **Blast radius, corrected after impl-ink verified it:** the wire is
   unaffected, because `encodeFrame` is `JSON.stringify`, which has no concept
   of reference identity and flattens an alias into two equal values. Only
-  IN-PROCESS consumers of a snapshot object see it — `@termwright/ink-testing`,
+  IN-PROCESS consumers of a snapshot object see it — `@termwright/ink`,
   the conformance probe's in-memory checks, and `get-tree` answers that hand
   back the retained object. This is therefore a TypeScript-only trap; a Python,
   Go or Rust adapter serialises on the way out and cannot hit it.
@@ -130,7 +148,7 @@
 - 2026-08-16 (approved, driver 7f77ea3): negotiation window says when a session
   STARTS behaving generic; a bounded late-attach grace (default 2 s) says when
   that verdict becomes FINAL. During grace semantic locators wait; after it
-  they throw 'unsupported-action' immediately. Hello after grace expiry is
+  they throw `semantic-capability-unavailable` immediately. Hello after grace expiry is
   REJECTED (wire 'internal' + diagnostic) — §4.1 "late hello never flips a
   selected mode" is now enforced, with the grace as the explicit tolerance.
   api.ts gains LaunchOptions.debug?: boolean (TERMWRIGHT_DEBUG=1|all).
@@ -148,7 +166,7 @@
   'process-exited' diagnostics. "Unexpected" = signal or code!=0 without a
   harness-initiated close()/signal(). `exit` is now published only after the
   VT queue drains (<=250 ms) — waitForExit resolves on a complete screen.
-  waitForReady counts OSC 133 B or D as readiness (A/C are not). screenTail
+  waitForQuiet counts OSC 133 B or D as readiness (A/C are not). screenTail
   is deliberately NOT redacted (a faithful screen record) — consumers must
   treat crash reports like screenshots when storing/transmitting;
   recentInputs records paste only as size.
@@ -253,7 +271,7 @@
   means "this entry does not aggregate", NOT zero.
 - 2026-08-16 (mountOpenTui, task #27b): `@termwright/opentui` gains a
   **`./testing` subpath** that imports `@termwright/driver` and
-  `@termwright/ink-testing`. Read against §Dependency rules ("adapters depend on
+  `@termwright/ink`. Read against §Dependency rules ("adapters depend on
   `protocol` + their framework, never on driver") this is a deviation, and it is
   deliberate: task #27b placed the mount inside the adapter package rather than
   in a sibling `opentui-testing` the way Ink has one. The rule's actual purpose —
@@ -456,7 +474,7 @@
   `paintOrder` opcjonalne z capability (3/6 frameworków); własność komórki
   poza IR.
 - 2026-08-16 (driver, #34 Phase 1): `ResolvedTarget.identity:
-  'stable'|'frame-local'` — `locatorForRef` ODMAWIA (unsupported-action) przy
+  'stable'|'frame-local'` — `locatorForRef` ODMAWIA (`capability-unavailable`) przy
   frame-local zamiast rozwiązywać ref na cokolwiek nosi ten numer; adapter
   bez bloku probe = stabilne (zero zmian dla istniejących).
   `ResolvedTarget.frameworkType?`/`provenance?` przenoszone z węzła;

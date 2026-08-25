@@ -19,7 +19,7 @@ const terminal = await launchTerminal({
   terminalProfile: 'iterm2-ambiguous-wide',
 });
 
-terminal.capabilities().terminalProfile; // what this session actually used
+terminal.terminalProfile; // what this session actually used
 ```
 
 ## What a profile switches

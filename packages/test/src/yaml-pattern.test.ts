@@ -64,7 +64,20 @@ describe('parseSemanticSnapshot', () => {
 
   it('round-trips a name that needed quoting', () => {
     const text = serializeSemanticSnapshot(
-      { ...permissionDialog(), nodes: [{ id: 'n1', role: 'heading', name: 'Issue #12' }], rootIds: ['n1'] },
+      {
+        ...permissionDialog(),
+        nodes: [{
+          id: 'n1',
+          role: 'heading',
+          name: 'Issue #12',
+          geometry: {
+            displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+            intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+            visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+          },
+        }],
+        rootIds: ['n1'],
+      },
     );
     const [pattern] = parseSemanticSnapshot(text);
     expect(pattern?.name?.test('Issue #12')).toBe(true);

@@ -148,8 +148,9 @@ Unknown roles and actions are dropped rather than guessed.
 
 Provider methods are evaluated once into candidates. A second pass counts
 `SemanticKey` values, gives unique keys stable ids, resolves `LabelledBy` and
-`DescribedBy`, and refuses ambiguity: duplicate keys fall back to distinct
-structural frame-local ids and cannot resolve. Relations are bounded by the
+`DescribedBy`, and refuses ambiguity: duplicate non-empty keys terminate the
+semantic session with `duplicate-semantic-key`; no weakened frame escapes.
+Relations are bounded by the
 negotiated session limit. Primary provenance stays `framework`, with role,
 author fields, relationships and key-stabilized ids recorded in `px`.
 
@@ -159,7 +160,7 @@ declared name follows the value without any invalidation step.
 
 ## Traps
 
-- **`waitForStable()` is the wrong instrument for an animating UI.** The
+- **`waitForQuiet()` is the wrong instrument for an animating UI.** The
   spinner fixture never stops redrawing, so waiting for a quiet screen waits
   forever — "the screen never settled for 100 ms". Poll the tree instead. This
   is not a probe limitation: a stability wait asks a question an animation

@@ -6,7 +6,7 @@ description: Supported imports from the Termwright umbrella package and speciali
 Most projects install only the umbrella package:
 
 ```sh
-npm install --save-dev termwright vitest
+npm install --save-dev termwright
 ```
 
 ## Public umbrella exports
@@ -17,8 +17,6 @@ npm install --save-dev termwright vitest
 | `termwright/test` | Vitest fixture, `expect`, matchers, snapshots, config, retries, and seeding. |
 | `termwright/ink` | Ink component-test helpers. |
 | `termwright/gherkin` | Gherkin plugin and step-definition API. |
-| `termwright/reporter` | Trace and CI report integration. |
-| `termwright/ui-reporter` | Live Runner reporter for manually managed hosts. |
 | `termwright/cli` | Programmatic CLI entry. |
 
 Prefer these imports in application test suites. They keep setup consistent and
@@ -50,7 +48,7 @@ The three Ink-related names serve different processes:
 | `@termwright/probe-ink` | launched Ink application | Adding semantic observation to an end-to-end Ink test. |
 | `@termwright/ink` | Ink application | Adding optional roles, names, or domain annotations that Ink does not retain itself. |
 
-`termwright/ink` re-exports the focused `@termwright/ink-testing` package. Most
+`termwright/ink` re-exports the focused `@termwright/ink` package. Most
 projects should not add both dependencies.
 
 ## Specialist and supporting packages
@@ -65,6 +63,12 @@ They must be accessible from npm because other published packages depend on
 them, but ordinary test suites should use `termwright` and the framework table
 above. A package being present on npm does not make it an additional setup
 choice.
+
+`@termwright/conpty` is the internal Windows PTY backend. Its optional
+`@termwright/conpty-win32-x64` and `@termwright/conpty-win32-arm64` packages
+carry the prebuilt native addons selected by the package manager. They are not
+user-facing adapters. Windows deliberately has no fallback PTY: a missing or
+unloadable matching prebuild is an actionable startup error.
 
 Do not import internal `src/` or `dist/` paths. Only package `exports` entries
 are public.

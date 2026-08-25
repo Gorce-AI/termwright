@@ -6,9 +6,16 @@
  */
 
 import { usageError } from '@termwright/mcp';
+import {
+  isTermwrightResourceProfileName,
+  TERMWRIGHT_RESOURCE_PROFILE_NAMES,
+  type TermwrightResourceProfileName,
+} from './resource-profiles.js';
 
 /** Everything the CLI can be asked to do. */
 export type CliCommand =
+  | 'test'
+  | 'watch'
   | 'ui'
   | 'report'
   | 'screenshot'
@@ -51,10 +58,29 @@ export interface CommandDoc {
  * is exactly how `usage` came to describe the MCP server and nothing else.
  */
 export const CLI_COMMANDS: Record<CliCommand, CommandDoc> = {
+  test: {
+    headline: 'run the certified Termwright host on the Vitest engine.',
+    synopsis: ['test [--runs N] [--resource-profile <name>] [--tags <expression>] [-- <vitest args>]'],
+    summary: [
+      'run the certified Termwright host on the exact Vitest engine.',
+      'Termwright owns run identity, attempt scope, events and terminal resources;',
+      'Vitest supplies collection, transforms, mocks, DSL and assertions.',
+      '--runs repeats complete run cycles inside one persistent host; every cycle',
+      'has its own RunId, resource/finalization barrier and durable manifest.',
+    ],
+  },
+  watch: {
+    headline: 'watch with one persistent certified Termwright host.',
+    synopsis: ['watch [--resource-profile <name>] [--tags <expression>] [-- <vitest args>]'],
+    summary: [
+      'collect and rerun through one persistent Termwright/Vitest engine.',
+      'Source changes coalesce while a run is active and every cycle gets a new RunId.',
+    ],
+  },
   ui: {
     headline: 'open the runner: live terminal, semantic inspector, timeline.',
     synopsis: [
-      'ui [--trace <file>] [--tags <expression>] [--port N] [--host H] [--no-watch] [--browser | --no-open] [-- <vitest args>]',
+      'ui [--resource-profile <name>] [--trace <file>] [--tags <expression>] [--port N] [--host H] [--no-watch] [--browser | --no-open] [-- <vitest args>]',
       'ui --record [--out-file <file>] -- <command>',
     ],
     summary: [
@@ -157,6 +183,10 @@ export interface ParsedArgs {
   readonly step: number | undefined;
   /** `screenshot --scale N`: pixel density multiplier. */
   readonly scale: number | undefined;
+  /** Explicit host-wide terminal resource envelope. */
+  readonly resourceProfile: TermwrightResourceProfileName;
+  /** Complete run cycles executed by one persistent native host. */
+  readonly runs: number;
   /**
    * Everything after `--`.
    *
@@ -176,6 +206,8 @@ const NEEDS_VALUE = new Set([
   '--at',
   '--step',
   '--scale',
+  '--resource-profile',
+  '--runs',
 ]);
 
 /**
@@ -221,6 +253,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let atMs: number | undefined;
   let step: number | undefined;
   let scale: number | undefined;
+  let resourceProfile: TermwrightResourceProfileName = 'local';
+  let runs = 1;
   let rest: readonly string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -268,6 +302,22 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         case '--scale':
           scale = numberFlag('--scale', value);
           break;
+        case '--resource-profile':
+          if (!isTermwrightResourceProfileName(value)) {
+            throw usageError(
+              `--resource-profile must be one of ${TERMWRIGHT_RESOURCE_PROFILE_NAMES.join(', ')}, got ${JSON.stringify(value)}`,
+            );
+          }
+          resourceProfile = value;
+          break;
+        case '--runs': {
+          const parsed = Number(value);
+          if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 10_000) {
+            throw usageError('--runs needs an integer between 1 and 10000');
+          }
+          runs = parsed;
+          break;
+        }
         case '--port': {
           const parsed = Number(value);
           if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {
@@ -309,6 +359,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         command = 'version';
         break;
       case 'ui':
+      case 'test':
+      case 'watch':
       case 'report':
       case 'screenshot':
       case 'codegen':
@@ -338,8 +390,14 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   if (record && trace !== undefined) {
     throw usageError('--trace and --record are different modes; pass one', 'see `termwright --help`');
   }
-  if (tags !== undefined && resolved !== 'ui') {
-    throw usageError('--tags is only available with `termwright ui`');
+  if (tags !== undefined && resolved !== 'ui' && resolved !== 'test' && resolved !== 'watch') {
+    throw usageError('--tags is only available with `termwright test`, `termwright watch`, or `termwright ui`');
+  }
+  if (resourceProfile !== 'local' && resolved !== 'test' && resolved !== 'watch' && resolved !== 'ui') {
+    throw usageError('--resource-profile is only available with `termwright test`, `termwright watch`, or `termwright ui`');
+  }
+  if (runs !== 1 && resolved !== 'test') {
+    throw usageError('--runs is only available with `termwright test`');
   }
   if (resolved === 'screenshot' && trace === undefined) {
     throw usageError(
@@ -378,6 +436,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     atMs,
     step,
     scale,
+    resourceProfile,
+    runs,
     rest,
   };
 }

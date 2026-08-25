@@ -13,7 +13,7 @@ editUrl: false
 
 > **encodePaste**(`text`, `bracketed`): `Uint8Array`
 
-Defined in: [keys.ts:209](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L209)
+Defined in: [driver/src/keys.ts:205](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/keys.ts#L205)
 
 Bracketed-paste wrapper (`CSI 200~ … CSI 201~`), used only when the child enabled it.
 

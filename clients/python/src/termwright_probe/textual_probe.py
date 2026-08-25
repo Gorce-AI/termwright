@@ -15,17 +15,21 @@ Two consequences of *when* it runs shape everything downstream:
 - **Geometry read here is fresh**, because the compositor has finished. That
   is what makes `visible_region` trustworthy at this point and nowhere earlier.
 
-Textual is a moving target — the repository declares `textual>=0.60`, which
-spans several renames — so the probe asserts what it needs at attach time and
-declines to attach when an assumption does not hold, rather than publishing a
-tree assembled from guesses.
+Textual is a moving target — the optional install dependency remains broad for
+annotation-only and generic use, but strong instrumentation is exact-version
+certified. The probe checks the generated allowlist before it inspects runtime
+shape and declines unknown versions rather than publishing guesses.
 """
 
 from __future__ import annotations
 
+import os
+import re
 from functools import wraps
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Mapping, Optional
 from weakref import WeakKeyDictionary, WeakSet
+
+from .certified_textual import CERTIFIED_TEXTUAL_VERSIONS
 
 #: Everything the probe touches on Textual's public surface. Checked once, at
 #: attach time, so a version that moved one of them produces a diagnostic
@@ -101,6 +105,11 @@ def attach_to_app_module(module: Any) -> bool:
     second import of the same module — or a second probe install — does not
     stack two hooks.
     """
+    version = _textual_version()
+    if not is_textual_version_certified(version):
+        _log("diag", f"not attaching: Textual {version} has no exact certification")
+        return False
+
     app_class = getattr(module, "App", None)
     if app_class is None:
         _log("diag", "textual.app has no App class; not attaching")
@@ -141,7 +150,7 @@ def attach_to_app_module(module: Any) -> bool:
 
         setattr(app_class, "__init_subclass__", classmethod(init_subclass))
     _attached_modules.append(id(module))
-    _log("sem", f"attached to Textual {_textual_version()}")
+    _log("sem", f"attached to Textual {version}")
     _publish_frames()
     return True
 
@@ -155,6 +164,10 @@ def _publish_frames() -> None:
     """Register the observer that turns frames into published trees."""
 
     def publish(app: Any) -> None:
+        from . import _owns_current_process
+
+        if not _owns_current_process():
+            return
         session = _sessions.get(app)
         if session is None:
             from .session import session_for
@@ -209,6 +222,35 @@ def _textual_version() -> str:
         return "unknown"
 
 
+def is_textual_version_certified(
+    version: str, env: Optional[Mapping[str, str]] = None
+) -> bool:
+    """Whether strong Textual instrumentation is allowed for this process.
+
+    Ordinary sessions accept only the generated exact allowlist. The daily
+    candidate job has a deliberately narrow escape hatch so it can exercise a
+    new exact artifact *before* reconciliation adds it: GitHub Actions must be
+    active, candidate version and digest must be explicit, and the attested
+    trusted source revision must equal ``GITHUB_SHA``. Malformed or stale
+    attestations fail closed.
+    """
+
+    if version in CERTIFIED_TEXTUAL_VERSIONS:
+        return True
+    source = os.environ if env is None else env
+    return bool(
+        source.get("GITHUB_ACTIONS") == "true"
+        and source.get("TERMWRIGHT_CERTIFICATION_TEXTUAL_VERSION") == version
+        and re.fullmatch(
+            r"sha256:[0-9a-f]{64}",
+            source.get("TERMWRIGHT_CERTIFICATION_CANDIDATE_DIGEST", ""),
+        )
+        and re.fullmatch(r"[0-9a-f]{40}", source.get("GITHUB_SHA", ""))
+        and source.get("TERMWRIGHT_CERTIFICATION_SOURCE_REVISION")
+        == source.get("GITHUB_SHA")
+    )
+
+
 _debug: Optional[Any] = None
 
 
@@ -226,8 +268,9 @@ def _log(category: str, message: str) -> None:
             _debug = DebugLog.from_env(adapter="textual-probe") or False
         except Exception:
             _debug = False
-    if _debug:
-        _debug.line(category, message)
+    line = getattr(_debug, "line", None)
+    if line is not None:
+        line(category, message)
 
 
 def reset() -> None:

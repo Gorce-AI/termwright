@@ -7,7 +7,7 @@
  * and exact exit/close semantics.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { TermwrightError, UnsupportedActionError, type Locator } from '@termwright/driver';
+import { SemanticCapabilityUnavailableError, TermwrightError, type AnyLocator } from '@termwright/driver';
 import type { Rect } from '@termwright/protocol';
 import {
   CONFORMANCE_FIXTURES,
@@ -22,7 +22,7 @@ import {
 
 const sessions = createSessionPool();
 
-async function intendedRect(locator: Locator): Promise<Rect | null> {
+async function intendedRect(locator: AnyLocator): Promise<Rect | null> {
   const observation = (await locator.geometry()).intendedRect;
   return observation.status === 'known' ? observation.value : null;
 }
@@ -43,31 +43,25 @@ const launch = async (options = {}) => {
 afterEach(sessions.closeAll);
 
 describe.skipIf(!ptyAvailable())('a generic session', () => {
-  it('waits out the late-attach grace, then refuses semantic locators', async () => {
+  it('freezes the generic contract, then refuses semantic locators', async () => {
     const started = Date.now();
     const terminal = await launch({ semanticNegotiationMs: 250 });
 
-    // The negotiation window bounds when the session starts *behaving*
-    // generically; the late-attach grace bounds when that becomes final. While
-    // an adapter could still attach — a child booting slower than the window is
-    // routine when suites run in parallel — a semantic locator is a wait, so
-    // `count()` answers 0 rather than refusing.
-    expect(await terminal.getByRole('button').count()).toBe(0);
-
-    // Once the verdict is final, a semantic locator against a program that has
-    // no tree is an honest error rather than a silent zero.
+    // Negotiation produces one immutable contract. Semantic queries do not
+    // keep an implicit compatibility window open after that decision.
     await expect
-      .poll(async () => (await rejection(terminal.getByRole('button').count())) instanceof UnsupportedActionError, {
+      .poll(async () => (await rejection(terminal.getByRole('button').count())) instanceof SemanticCapabilityUnavailableError, {
         timeout: 15_000,
       })
       .toBe(true);
 
-    expect(terminal.capabilities().semanticTree).toBe(false);
-    expect(terminal.capabilities().adapter).toBeUndefined();
+    const contract = await terminal.settled();
+    expect(contract.capabilities['semantic-tree'].status).toBe('unsupported');
+    expect(contract.framework).toBeNull();
     expect(terminal.semanticTree()).toBeNull();
     expect(Date.now() - started).toBeLessThan(15_000);
 
-    // The fallback is a decision, and the session records it as one.
+    // The generic frozen contract is a decision, and the session records it.
     expect(terminal.diagnostics().map((entry) => entry.code)).toContain('negotiation-timeout');
     expect(terminal.diagnostics().map((entry) => entry.code)).not.toContain('adapter-attached');
   });
@@ -75,34 +69,33 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
   it('never invents a role for a grid match', async () => {
     const terminal = await launch();
 
-    const target = await terminal.getByText('Alpha').resolve();
+    const target = await terminal.getByScreenText('Alpha').resolve();
     expect(target.semantic).toBe(false);
     expect(target.role).toBeUndefined();
     expect(target.name).toBeUndefined();
-    expect(target.ref).toMatch(/^grid:/u);
-    expect(await terminal.getByText('Alpha').semanticState()).toBeNull();
+    expect(target.ref).toMatch(/^screen:/u);
   });
 
   it('resolves text, regex, occurrence, style and cell locators', async () => {
     const terminal = await launch();
 
-    expect(await intendedRect(terminal.getByText('Alpha'))).toEqual({
+    expect(await intendedRect(terminal.getByScreenText('Alpha'))).toEqual({
       row: 1,
       column: 2,
       width: 5,
       height: 1,
     });
-    expect(await terminal.getByText(/G[a-z]+ma/u).textContent()).toBe('Gamma');
-    expect(await terminal.getByText(/ev: /u).count()).toBe(4);
-    expect(await intendedRect(terminal.getByText(/ev: /u, { occurrence: 1 }))).toMatchObject({ row: 8 });
+    expect(await terminal.getByScreenText(/G[a-z]+ma/u).textContent()).toBe('Gamma');
+    expect(await terminal.getByScreenText(/ev: /u).count()).toBe(4);
+    expect(await intendedRect(terminal.getByScreenText(/ev: /u, { occurrence: 1 }))).toMatchObject({ row: 8 });
 
     // The selected row is the only bold green one, so a style predicate is what
     // separates it from the two plain rows.
-    expect(await terminal.getByText('Alpha', { fg: 'green', attributes: { bold: true } }).count()).toBe(1);
-    expect(await terminal.getByText('Beta', { fg: 'green' }).count()).toBe(0);
-    expect(await terminal.getByText('RED', { fg: 'red' }).count()).toBe(1);
-    expect(await terminal.getByText('ONBLUE', { bg: 'blue' }).count()).toBe(1);
-    expect(await terminal.getByText('UNDER', { attributes: { underline: true } }).count()).toBe(1);
+    expect(await terminal.getByScreenText('Alpha', { fg: 'green', attributes: { bold: true } }).count()).toBe(1);
+    expect(await terminal.getByScreenText('Beta', { fg: 'green' }).count()).toBe(0);
+    expect(await terminal.getByScreenText('RED', { fg: 'red' }).count()).toBe(1);
+    expect(await terminal.getByScreenText('ONBLUE', { bg: 'blue' }).count()).toBe(1);
+    expect(await terminal.getByScreenText('UNDER', { attributes: { underline: true } }).count()).toBe(1);
 
     const cell = terminal.cell({ row: 4, column: 0 });
     expect(cell.char).toBe('R');
@@ -150,16 +143,15 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     await terminal.waitForText('ev: RESIZE:40x12');
   });
 
-  it('sends mouse reports only after the child asks for them', async () => {
+  it.skipIf(process.platform === 'win32')('sends mouse reports only after the child asks for them', async () => {
     const terminal = await launch();
 
-    // Refusing a click is a claim about the child ("it enabled nothing"), and
-    // only a platform that shows the mode can make it. Where the mode is
-    // hidden the driver sends the report instead, which is the honest choice:
-    // 'none' is a reason to refuse, 'unknown' is not.
+    // This positive protocol-delivery proof requires observable DECSET state.
+    // ConPTY consumes that state, so its separate negative tests prove that
+    // Termwright refuses to guess rather than treating unknown as enabled.
     if (!mouseModeHidden(terminal)) {
-      const refused = await rejection(terminal.getByText('Alpha').click());
-      expect((refused as TermwrightError).code).toBe('unsupported-action');
+      const refused = await rejection(terminal.getByScreenText('Alpha').click());
+      expect((refused as TermwrightError).code).toBe('input-mode-disabled');
     }
 
     const observable = await enableMouseReporting(terminal, 'click');
@@ -168,16 +160,16 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     // 'Alpha' sits at row 1, columns 2..6; its centre is cell (1, 4), which SGR
     // reports one-based. A wrong aim would report different coordinates rather
     // than fail, so the assertion is on the numbers.
-    await terminal.getByText('Alpha').click();
+    await terminal.getByScreenText('Alpha').click();
     await terminal.waitForText('ev: MOUSE press b=0 c=5 r=2');
     await terminal.waitForText('ev: MOUSE release b=0 c=5 r=2');
 
-    await terminal.getByText('Gamma').wheel({ deltaY: -1 });
+    await terminal.getByScreenText('Gamma').wheel({ deltaY: -1 });
     await terminal.waitForText('ev: MOUSE wheel b=64');
-    await terminal.getByText('Gamma').wheel({ deltaY: 1 });
+    await terminal.getByScreenText('Gamma').wheel({ deltaY: 1 });
     await terminal.waitForText('ev: MOUSE wheel b=65');
 
-    await terminal.getByText('Alpha').click({ button: 'right' });
+    await terminal.getByScreenText('Alpha').click({ button: 'right' });
     await terminal.waitForText('ev: MOUSE press b=2');
 
     // Whatever the terminal could or could not observe, the bytes reached the
@@ -190,6 +182,44 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     expect(unverifiable).toHaveLength(mouseModeHidden(terminal) ? 1 : 0);
   });
 
+  it.runIf(process.platform === 'win32')('fails closed when ConPTY hides terminal input modes', async () => {
+    const terminal = await launch();
+    expect(await enableMouseReporting(terminal, 'drag')).toBe(false);
+    expect(await enableFocusReporting(terminal)).toBe('unknown');
+
+    const physicalInputs: string[] = [];
+    terminal.events.on('input', ({ kind }) => physicalInputs.push(kind));
+
+    // The contract does leave both input capabilities out on a terminal that
+    // hides its modes, and that fact is worth pinning. It is not, however, what
+    // a refusal should say: the locator path is contract-gated and reports
+    // capability-unavailable, while the raw device API is mode-gated and names
+    // the sequence that was never observed. Both fail closed; they differ in
+    // what they can honestly claim to know.
+    const contract = await terminal.settled();
+    expect(contract.capabilities['pointer-input']).toMatchObject({
+      status: 'unsupported',
+      reason: 'terminal-unobservable',
+    });
+    expect(contract.capabilities['focus-input']).toMatchObject({
+      status: 'unsupported',
+      reason: 'terminal-unobservable',
+    });
+
+    expect(((await rejection(terminal.getByScreenText('Alpha').click())) as TermwrightError).code)
+      .toBe('capability-unavailable');
+    const refusedDrag = (await rejection(terminal.mouse.drag({
+      from: { row: 1, column: 2 },
+      to: { row: 3, column: 2 },
+    }))) as TermwrightError;
+    expect(refusedDrag.code).toBe('input-mode-disabled');
+    expect(refusedDrag.message).toContain('not observable');
+    const refusedFocus = (await rejection(terminal.window.focus())) as TermwrightError;
+    expect(refusedFocus.code).toBe('input-mode-disabled');
+    expect(refusedFocus.message).toContain('not observable');
+    expect(physicalInputs).toEqual([]);
+  });
+
   it('refuses focus reports and drags the child never enabled', async () => {
     const terminal = await launch();
 
@@ -198,42 +228,36 @@ describe.skipIf(!ptyAvailable())('a generic session', () => {
     // — ConPTY has `1004` on for a child that never sent it — there is nothing
     // to refuse from, and the driver says so rather than refusing.
     if (focusMode(terminal) === 'off') {
-      const noFocus = (await rejection(terminal.focus())) as TermwrightError;
-      expect(noFocus.code).toBe('unsupported-action');
+      const noFocus = (await rejection(terminal.window.focus())) as TermwrightError;
+      expect(noFocus.code).toBe('input-mode-disabled');
       expect(noFocus.diagnostics.suggestion).toContain('1004');
     }
 
     const observable = await enableMouseReporting(terminal, 'click'); // clicks only: no motion
-    const drag = terminal.getByText('Alpha').drag({ from: { row: 1, column: 2 }, to: { row: 3, column: 2 } });
+    const drag = terminal.mouse.drag({ from: { row: 1, column: 2 }, to: { row: 3, column: 2 } });
     if (observable) {
       // The mode says motion was never enabled, so the driver can refuse and
       // name the sequence the application would have to send.
       const noDrag = await rejection(drag);
       expect((noDrag as TermwrightError).diagnostics.suggestion).toContain('1002');
     } else {
-      // With the mode hidden there is nothing to refuse *from*: the driver
-      // sends the drag and the child decides. Refusing here would invent a
-      // fact about the child that the platform withheld.
-      await drag;
+      const unavailableDrag = (await rejection(drag)) as TermwrightError;
+      expect(unavailableDrag.code).toBe('input-mode-disabled');
+      expect(unavailableDrag.message).toContain('not observable');
     }
 
     const reporting = await enableFocusReporting(terminal);
     if (reporting === 'unknown') {
-      // The platform reports focus reporting as the host has it, not as the
-      // child asked for it. There is nothing to refuse from, so the report is
-      // sent and the session says once that it could not verify the mode.
-      await terminal.focus();
-      const unverified = terminal
-        .diagnostics()
-        .filter((entry) => entry.code === 'mode-unverifiable' && entry.mode === 'focus');
-      expect(unverified).toHaveLength(1);
+      const unavailableFocus = (await rejection(terminal.window.focus())) as TermwrightError;
+      expect(unavailableFocus.code).toBe('input-mode-disabled');
+      expect(unavailableFocus.message).toContain('not observable');
       return;
     }
 
     expect(reporting).toBe('on');
-    await terminal.focus();
+    await terminal.window.focus();
     await terminal.waitForText('ev: FOCUS:in');
-    await terminal.blur();
+    await terminal.window.blur();
     await terminal.waitForText('ev: FOCUS:out');
   });
 

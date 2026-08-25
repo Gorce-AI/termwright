@@ -1,17 +1,15 @@
 /**
- * Locator queries and the Textual-style CSS dialect that produces them.
+ * Locator queries and the Termwright Semantic Selector Language that produces them.
  *
  * Two query kinds share one engine:
  *
  * - {@link SemanticQuery} — evaluated against the latest accepted semantic
  *   tree: a descendant chain of compound steps (`dialog button.primary:focused`);
- * - {@link GenericQuery} — evaluated against the grid when no semantic tree
- *   exists (or when style predicates are requested), yielding rectangles and
- *   never inventing roles.
+ * - {@link GenericQuery} — explicitly evaluated against the terminal grid,
+ *   yielding rectangles and never inventing roles.
  */
 import type { Rect, SemanticRole, SemanticState } from '@termwright/protocol';
 import type { CellAttributes } from './api.js';
-import { UnsupportedActionError } from './errors.js';
 
 /** How a piece of text is compared. */
 export type TextMatcher =
@@ -74,14 +72,14 @@ export interface RefQuery {
   readonly description: string;
 }
 
-/** Anything a {@link Locator} can be built from. */
+/** Internal query union behind the distinct semantic and screen locator domains. */
 export type LocatorQuery = SemanticQuery | GenericQuery | RefQuery;
 
-/** Matches `grid:{row},{column},{width},{height}@{screenRevision}`. */
-const GRID_REF = /^grid:(\d+),(\d+),(\d+),(\d+)@(\d+)$/u;
+/** Matches `screen:{row},{column},{width},{height}@{screenRevision}`. */
+const GRID_REF = /^screen:(\d+),(\d+),(\d+),(\d+)@(\d+)$/u;
 
-/** Matches `{nodeId}@{semanticRevision}`; node ids never contain '@'. */
-const NODE_REF = /^([^@\s]+)@(\d+)$/u;
+/** Matches `semantic:{nodeId}@{semanticRevision}`; node ids never contain '@'. */
+const NODE_REF = /^semantic:([^@\s]+)@(\d+)$/u;
 
 /**
  * Parses a ref minted by `ResolvedTarget.ref`. Returns `null` for anything
@@ -105,16 +103,22 @@ export function parseRef(ref: string): ParsedRef | null {
   const node = NODE_REF.exec(ref);
   if (node === null) return null;
   const [, nodeId, revision] = node;
-  if (nodeId === undefined || nodeId.startsWith('grid:')) return null;
+  if (nodeId === undefined) return null;
   return { kind: 'node', nodeId, revision: Number(revision) };
+}
+
+/** Extracts a node id only from an explicitly semantic ref. */
+export function semanticNodeId(ref: string): string | null {
+  const parsed = parseRef(ref);
+  return parsed?.kind === 'node' ? parsed.nodeId : null;
 }
 
 /** Builds the query behind `locatorForRef`. */
 export function refQuery(ref: ParsedRef): RefQuery {
   const description =
     ref.kind === 'node'
-      ? `locatorForRef(${JSON.stringify(`${ref.nodeId}@${ref.revision}`)})`
-      : `locatorForRef(${JSON.stringify(`grid:${ref.rect.row},${ref.rect.column},${ref.rect.width},${ref.rect.height}@${ref.revision}`)})`;
+      ? `locatorForRef(${JSON.stringify(`semantic:${ref.nodeId}@${ref.revision}`)})`
+      : `locatorForRef(${JSON.stringify(`screen:${ref.rect.row},${ref.rect.column},${ref.rect.width},${ref.rect.height}@${ref.revision}`)})`;
   return { kind: 'ref', ref, description };
 }
 
@@ -144,7 +148,7 @@ const ROLES: ReadonlySet<string> = new Set<SemanticRole>([
   'generic',
 ]);
 
-/** Pseudo-classes recognized by the CSS dialect, mapped to state flags. */
+/** Pseudo-classes recognized by the Termwright semantic selector language. */
 const PSEUDO_STATES: Readonly<Record<string, keyof SemanticState>> = Object.freeze({
   focused: 'focused',
   disabled: 'disabled',
@@ -158,12 +162,11 @@ const PSEUDO_STATES: Readonly<Record<string, keyof SemanticState>> = Object.free
 });
 
 function syntaxError(selector: string, detail: string): never {
-  throw new UnsupportedActionError(`cannot parse selector ${JSON.stringify(selector)}: ${detail}`, {
-    semanticTree: true,
-    suggestion:
-      "the CSS dialect supports 'role', '#testId', '.class', ':focused', ':disabled', ':selected', " +
-      "':checked', ':expanded', ':modal', ':busy', ':hidden', ':readonly' and descendant combinators",
-  });
+  throw new TypeError(
+    `cannot parse selector ${JSON.stringify(selector)}: ${detail}; Termwright semantic selectors support ` +
+    "'role', '#testId', '.class', ':focused', ':disabled', ':selected', ':checked', ':expanded', " +
+    "':modal', ':busy', ':hidden', ':readonly' and descendant combinators",
+  );
 }
 
 /** Builds a {@link TextMatcher} from the `string | RegExp` public API shape. */
@@ -201,7 +204,7 @@ export function describeMatcher(matcher: TextMatcher): string {
 }
 
 /**
- * Parses the Textual-style CSS dialect into a {@link SemanticQuery}.
+ * Parses the Termwright Semantic Selector Language into a {@link SemanticQuery}.
  *
  * @example
  * ```ts
@@ -309,7 +312,7 @@ export function textQuery(text: TextMatcher): SemanticQuery {
   };
 }
 
-/** Builds the grid query behind `getByText` in generic sessions. */
+/** Builds the explicit terminal-grid query behind `getByScreenText`. */
 export function gridQuery(
   text: TextMatcher,
   occurrence: number | undefined,
@@ -320,6 +323,6 @@ export function gridQuery(
     text,
     ...(occurrence !== undefined ? { occurrence } : {}),
     ...(style !== undefined ? { style } : {}),
-    description: `getByText(${describeMatcher(text)})`,
+    description: `getByScreenText(${describeMatcher(text)})`,
   };
 }

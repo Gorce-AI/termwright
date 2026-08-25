@@ -16,19 +16,37 @@ use std::process::Command;
 use termwright_probe_ratatui::launch::{prepare_instrumented_build, PrepareOptions};
 use termwright_probe_ratatui::patchset::{apply, copy_out, digest_file, read_manifest};
 
-const VERSION: &str = "0.1.2";
-const WIDGETS_VERSION: &str = "0.3.2";
+fn core_version() -> String {
+    std::env::var("TERMWRIGHT_CANDIDATE_RATATUI_CORE").unwrap_or_else(|_| "0.1.2".into())
+}
+
+fn widgets_version() -> String {
+    std::env::var("TERMWRIGHT_CANDIDATE_RATATUI_WIDGETS").unwrap_or_else(|_| "0.3.2".into())
+}
+
+fn framework_version() -> String {
+    std::env::var("TERMWRIGHT_CANDIDATE_RATATUI").unwrap_or_else(|_| "0.30.2".into())
+}
+
+fn app_dependencies() -> String {
+    format!(
+        "ratatui = \"={}\"\nratatui-core = \"={}\"\nratatui-widgets = \"={}\"\n",
+        framework_version(),
+        core_version(),
+        widgets_version()
+    )
+}
 
 fn patch_set_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("upstream-patches/ratatui-core")
-        .join(VERSION)
+        .join(core_version())
 }
 
 fn widgets_patch_set_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("upstream-patches/ratatui-widgets")
-        .join(WIDGETS_VERSION)
+        .join(widgets_version())
 }
 
 fn probe_dir() -> PathBuf {
@@ -41,11 +59,11 @@ fn probe_dir() -> PathBuf {
 /// depending on Ratatui has nothing to patch, and that is not a defect in the
 /// patch set.
 fn registry_source() -> Option<PathBuf> {
-    unpacked(&format!("ratatui-core-{VERSION}"))
+    unpacked(&format!("ratatui-core-{}", core_version()))
 }
 
 fn widgets_source() -> Option<PathBuf> {
-    unpacked(&format!("ratatui-widgets-{WIDGETS_VERSION}"))
+    unpacked(&format!("ratatui-widgets-{}", widgets_version()))
 }
 
 fn unpacked(name: &str) -> Option<PathBuf> {
@@ -85,7 +103,10 @@ fn cargo(args: &[&str], dir: &Path) -> std::process::Output {
 #[test]
 fn the_manifest_pins_the_version_on_disk() {
     let Some(source) = registry_source() else {
-        eprintln!("skipped: ratatui-core {VERSION} is not unpacked in this registry");
+        eprintln!(
+            "skipped: ratatui-core {} is not unpacked in this registry",
+            core_version()
+        );
         return;
     };
     let manifest = read_manifest(&patch_set_dir().join("manifest.json")).expect("manifest");
@@ -102,7 +123,10 @@ fn the_manifest_pins_the_version_on_disk() {
 #[test]
 fn applying_it_produces_exactly_the_pinned_result() {
     let Some(source) = registry_source() else {
-        eprintln!("skipped: ratatui-core {VERSION} is not unpacked in this registry");
+        eprintln!(
+            "skipped: ratatui-core {} is not unpacked in this registry",
+            core_version()
+        );
         return;
     };
     let copy = scratch("apply");
@@ -125,7 +149,10 @@ fn applying_it_produces_exactly_the_pinned_result() {
 #[test]
 fn a_version_mismatch_is_refused_by_name() {
     let Some(source) = registry_source() else {
-        eprintln!("skipped: ratatui-core {VERSION} is not unpacked in this registry");
+        eprintln!(
+            "skipped: ratatui-core {} is not unpacked in this registry",
+            core_version()
+        );
         return;
     };
     let copy = scratch("mismatch");
@@ -157,7 +184,10 @@ fn a_version_mismatch_is_refused_by_name() {
 #[test]
 fn the_patched_copy_still_builds_without_std() {
     let Some(source) = registry_source() else {
-        eprintln!("skipped: ratatui-core {VERSION} is not unpacked in this registry");
+        eprintln!(
+            "skipped: ratatui-core {} is not unpacked in this registry",
+            core_version()
+        );
         return;
     };
     let copy = scratch("nostd");
@@ -194,7 +224,10 @@ fn the_patched_copy_still_builds_without_std() {
 #[test]
 fn the_patched_widgets_still_build_without_std() {
     let Some(source) = widgets_source() else {
-        eprintln!("skipped: ratatui-widgets {WIDGETS_VERSION} is not unpacked in this registry");
+        eprintln!(
+            "skipped: ratatui-widgets {} is not unpacked in this registry",
+            widgets_version()
+        );
         return;
     };
     let copy = scratch("widgets-nostd");
@@ -227,7 +260,10 @@ fn the_patched_widgets_still_build_without_std() {
 #[test]
 fn a_vanilla_ratatui_app_reaches_the_probe() {
     let Some(source) = registry_source() else {
-        eprintln!("skipped: ratatui-core {VERSION} is not unpacked in this registry");
+        eprintln!(
+            "skipped: ratatui-core {} is not unpacked in this registry",
+            core_version()
+        );
         return;
     };
     let copy = scratch("e2e-core");
@@ -240,8 +276,7 @@ fn a_vanilla_ratatui_app_reaches_the_probe() {
     std::fs::create_dir_all(app.join("src")).expect("app dir");
     std::fs::write(
         app.join("Cargo.toml"),
-        "[package]\nname = \"vanilla-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\
-         \n[dependencies]\nratatui = \"0.30\"\n",
+        format!("[package]\nname = \"vanilla-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{}", app_dependencies()),
     )
     .expect("manifest");
     std::fs::write(
@@ -325,13 +360,6 @@ fn a_vanilla_ratatui_app_reaches_the_probe() {
 
 /// A driver end that completes the handshake and records what arrives.
 fn start_driver(path: &str) -> std::sync::mpsc::Receiver<serde_json::Value> {
-    start_driver_for_protocol(path, "termwright/1")
-}
-
-fn start_driver_for_protocol(
-    path: &str,
-    protocol: &'static str,
-) -> std::sync::mpsc::Receiver<serde_json::Value> {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixListener;
 
@@ -360,7 +388,7 @@ fn start_driver_for_protocol(
                 if frame.value.get("type").and_then(serde_json::Value::as_str) == Some("hello") {
                     let ack = serde_json::json!({
                         "type": "hello-ack",
-                        "protocol": protocol,
+                        "protocol": "termwright/2",
                         "sessionId": "s-e2e",
                         "limits": DEFAULT_LIMITS,
                         "subscribe": "snapshots",
@@ -389,7 +417,10 @@ fn a_vanilla_app_publishes_a_validated_tree() {
     use std::time::{Duration, Instant};
 
     let Some(source) = registry_source() else {
-        eprintln!("skipped: ratatui-core {VERSION} is not unpacked in this registry");
+        eprintln!(
+            "skipped: ratatui-core {} is not unpacked in this registry",
+            core_version()
+        );
         return;
     };
     let copy = scratch("publish-core");
@@ -401,8 +432,7 @@ fn a_vanilla_app_publishes_a_validated_tree() {
     std::fs::create_dir_all(app.join("src")).expect("app dir");
     std::fs::write(
         app.join("Cargo.toml"),
-        "[package]\nname = \"publishing-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\
-         \n[dependencies]\nratatui = \"0.30\"\n",
+        format!("[package]\nname = \"publishing-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{}", app_dependencies()),
     )
     .expect("manifest");
     std::fs::write(
@@ -432,7 +462,7 @@ fn main() {
     // accepted.
     let socket = format!("/tmp/tw-ratatui-{}.sock", std::process::id());
     let _ = std::fs::remove_file(&socket);
-    let received = start_driver_for_protocol(&socket, "termwright/2");
+    let received = start_driver(&socket);
 
     let patch = format!("patch.crates-io.ratatui-core.path='{}'", copy.display());
     let run = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
@@ -440,8 +470,7 @@ fn main() {
         .current_dir(&app)
         .env("TERMWRIGHT_ENDPOINT", &socket)
         .env("TERMWRIGHT_TOKEN", "test-token")
-        .env("TERMWRIGHT_PROTOCOL", "termwright/2")
-        .env("TERMWRIGHT_RATATUI_VERSION", "0.30.2")
+        .env("TERMWRIGHT_RATATUI_VERSION", framework_version())
         .output()
         .expect("cargo runs");
     assert!(
@@ -473,14 +502,8 @@ fn main() {
         declared["identityKind"], "frame-local",
         "the probe claimed an identity Ratatui cannot support"
     );
-    assert_eq!(declared["frameworkVersion"], "0.30.2");
+    assert_eq!(declared["frameworkVersion"], framework_version());
     assert_eq!(hello["protocol"], "termwright/2");
-    assert!(hello["capabilities"]
-        .as_array()
-        .expect("capabilities")
-        .iter()
-        .any(|capability| capability == "qualified-observations"));
-
     let snapshot = snapshot.expect("no tree reached the driver");
     let tree = &snapshot["snapshot"];
     let result = termwright_protocol::validate_snapshot(tree, &termwright_protocol::DEFAULT_LIMITS);
@@ -521,7 +544,7 @@ fn main() {
 
 /// Phase 8, end to end: the public annotation SDK adds author intent to a
 /// custom widget while the patched framework remains the source of geometry,
-/// collection state and occlusion. An explicit semantic key is the one
+/// collection state and physical observations. An explicit semantic key is the one
 /// deliberate exception to frame-local identity.
 #[test]
 fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
@@ -590,7 +613,7 @@ fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
     assert_eq!(hello["probe"]["identityKind"], "frame-local");
     assert_eq!(
         hello["probe"]["capabilities"],
-        serde_json::json!(["operations", "annotations"])
+        serde_json::json!(["intended-rect", "operations", "annotations"])
     );
     let adapter_capabilities = hello["capabilities"]
         .as_array()
@@ -612,7 +635,7 @@ fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
     assert_eq!(node["name"], "Deploy");
     assert_eq!(node["description"], "Deploy the current release");
     assert_eq!(
-        node["bounds"],
+        node["geometry"]["intendedRect"]["value"],
         serde_json::json!({
             "row": 2,
             "column": 3,
@@ -620,7 +643,6 @@ fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
             "height": 2,
         })
     );
-    assert_eq!(node["occlusion"], "unknown");
     assert_eq!(node["p"], "framework");
     for field in [
         "id",
@@ -651,6 +673,17 @@ fn an_annotated_custom_widget_merges_full_intent_without_physical_overrides() {
         "the wrapper hid the application's widget type: {node}"
     );
     assert_eq!(node["id"], "k:deployment-control");
+    assert_eq!(node["parentId"], "k:deployment-group");
+    assert_eq!(
+        tree["nodes"]
+            .as_array()
+            .expect("nodes")
+            .iter()
+            .filter(|candidate| candidate["id"] == "k:deployment-control")
+            .count(),
+        1,
+        "direct Annotated render was duplicated: {tree}"
+    );
 
     assert!(
         String::from_utf8_lossy(&run.stdout).contains("\u{1b}]8487;"),
@@ -700,8 +733,7 @@ fn a_list_publishes_its_items_and_the_selected_row() {
     std::fs::create_dir_all(app.join("src")).expect("app dir");
     std::fs::write(
         app.join("Cargo.toml"),
-        "[package]\nname = \"list-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\
-         \n[dependencies]\nratatui = \"0.30\"\n",
+        format!("[package]\nname = \"list-app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{}", app_dependencies()),
     )
     .expect("manifest");
     std::fs::write(

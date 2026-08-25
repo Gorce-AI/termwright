@@ -67,7 +67,14 @@ describe('observeInkTree', () => {
     const button = element('ink-box', [element('ink-text', [text('Run')])], {
       internal_accessibility: {
         role: 'button',
-        state: { disabled: true, busy: false, selected: true, multiline: false },
+        state: {
+          disabled: true,
+          busy: false,
+          selected: true,
+          multiline: false,
+          required: true,
+          multiselectable: true,
+        },
       },
     });
     const root = element('ink-root', [button]);
@@ -76,7 +83,14 @@ describe('observeInkTree', () => {
     expect(observation.frame.objects[1]).toMatchObject({
       frameworkType: 'ink-box',
       accessibility: { role: 'button' },
-      state: { disabled: true, busy: false, selected: true, multiline: false },
+      state: {
+        disabled: true,
+        busy: false,
+        selected: true,
+        multiline: false,
+        required: true,
+        multiselectable: true,
+      },
       unobservable: expect.arrayContaining(['focused']),
     });
     expect(observation.frame.objects[1]?.text).toBeUndefined();

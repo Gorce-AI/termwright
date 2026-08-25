@@ -6,6 +6,7 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Client, StreamableHTTPClientTransport, connectClient } from './sdk-facade.js';
 import { ERROR_META_KEY, serveHttp } from './server.js';
@@ -30,6 +31,22 @@ async function connect(
 }
 
 describe('the Streamable HTTP transport', () => {
+  it('rejects an occupied port and does not leave a background server behind', async () => {
+    const occupied = createServer();
+    await new Promise<void>((resolve) => occupied.listen(0, '127.0.0.1', resolve));
+    const address = occupied.address();
+    if (typeof address !== 'object' || address === null) throw new Error('expected TCP address');
+    try {
+      await expect(serveHttp({ port: address.port })).rejects.toMatchObject({ code: 'EADDRINUSE' });
+    } finally {
+      await new Promise<void>((resolve, reject) => occupied.close((error) => error === undefined ? resolve() : reject(error)));
+    }
+
+    const rebound = await serveHttp({ port: address.port });
+    servers.push(rebound);
+    expect(rebound.port).toBe(address.port);
+  });
+
   it('gives every client its own session and its own terminals', async () => {
     const handle = await serveHttp();
     servers.push(handle);

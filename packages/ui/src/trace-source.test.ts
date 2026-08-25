@@ -47,14 +47,16 @@ describe('publishTraceTimeline', () => {
     publishTraceTimeline(hub, overview);
     expect(hub.backlog.map((message) => message.type)).toEqual([
       'run-start',
+      'session',
       'test-start',
       'step',
       'step',
       'test-end',
       'run-end',
     ]);
-    const [runStart, testStart] = hub.backlog;
+    const [runStart, session, testStart] = hub.backlog;
     expect(runStart?.type === 'run-start' && runStart.mode).toBe('post-mortem');
+    expect(session).toMatchObject({ type: 'session', sessionId: overview.sessionId, columns: 80, rows: 24 });
     expect(testStart?.type === 'test-start' && testStart.title).toBe('node agent.js');
     const testEnd = hub.backlog.find((message) => message.type === 'test-end');
     expect(testEnd?.type === 'test-end' && testEnd.status).toBe('passed');

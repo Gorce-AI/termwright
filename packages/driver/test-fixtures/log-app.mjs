@@ -4,7 +4,7 @@
  * files in the wild: truncation and rotation by rename.
  *
  * Keys: `w` one line, `f` a flood, `l` one very long line, `t` truncate,
- * `r` rotate, `q` quit. Input is read code point by code point, because a pty
+ * `r` rotate, `e` write a final error and exit, `q` quit. Input is read code point by code point, because a pty
  * routinely delivers two keystrokes as one chunk.
  */
 import { appendFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -38,6 +38,9 @@ process.stdin.on('data', (chunk) => {
       renameSync(path, `${path}.1`);
       writeFileSync(path, '');
       process.stdout.write('ROTATED\r\n');
+    } else if (key === 'e') {
+      line('ERROR immediately before exit');
+      process.exit(1);
     } else if (key === 'q') process.exit(0);
   }
 });

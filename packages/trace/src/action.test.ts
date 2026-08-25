@@ -6,7 +6,11 @@ import { FakeSession } from './__fixtures__/fake-session.js';
 import { openTrace } from './reader.js';
 import { generateHtmlReport } from './report.js';
 import { TRACE_FILES, type ActionEvent, type TraceEvent } from './types.js';
+import { rewriteCommittedMember } from './__fixtures__/committed.js';
 import { createTraceWriter } from './writer.js';
+import { SESSION_CAPABILITIES, type ActionabilityExplanation, type EffectiveSessionContract } from '@termwright/protocol';
+
+const stamp = { sessionId: 't1', contractId: 't1:0', epoch: 0, sequence: 42, screenRevision: 7, semanticRevision: 42, pairedScreenRevision: 7 } as const;
 
 const temporaries: string[] = [];
 
@@ -29,6 +33,29 @@ async function readEvents(dir: string): Promise<TraceEvent[]> {
 }
 
 describe('actions from the driver', () => {
+  it('persists and validates the frozen effective session contract for replay', async () => {
+    const root = await workspace();
+    const dir = join(root, 'contract.twtrace');
+    const session = new FakeSession();
+    const evidence = { source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'terminal' } as const;
+    const contract: EffectiveSessionContract = {
+      contractId: 't1:0', sessionId: 't1', epoch: 0, protocol: 'termwright/2', framework: null,
+      providers: [{ id: 'terminal', kind: 'terminal', version: '1' }],
+      capabilities: Object.fromEntries(SESSION_CAPABILITIES.map((id) => [id, id === 'keyboard-input'
+        ? { status: 'supported', evidence }
+        : { status: 'unsupported', reason: 'not-negotiated' }])) as unknown as EffectiveSessionContract['capabilities'],
+      terminal: { profile: 'default', platform: 'linux', mouseModesObservable: true },
+    };
+    session.negotiatedContract = contract;
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    await writer.finalize();
+
+    const trace = await openTrace(dir);
+    expect(trace.meta.contract).toEqual(contract);
+    expect(Object.isFrozen(trace.meta.contract)).toBe(true);
+    await trace.close();
+  });
+
   it('records a successful action with its target', async () => {
     const root = await workspace();
     const dir = join(root, 'ok.twtrace');
@@ -38,8 +65,19 @@ describe('actions from the driver', () => {
     session.tick(50);
     session.action('click', {
       selector: "getByRole('button', { name: 'Submit' })",
-      ref: 'n8@42',
-      observation: { sessionId: 't1', screenRevision: 7, semanticRevision: 42 },
+      ref: 'semantic:n8@42',
+      observation: stamp,
+      receipt: {
+        intent: { kind: 'click', selector: "getByRole('button', { name: 'Submit' })", targetRef: 'semantic:n8@42' },
+        plan: {
+          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click', targetRef: 'semantic:n8@42' },
+          checkpoint: stamp, requirements: [], strategy: 'authoritative-pointer-region', valuePolicy: 'redacted',
+          operations: [{ device: 'mouse', kind: 'down', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }, { device: 'mouse', kind: 'up', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }],
+        },
+        before: stamp, after: { ...stamp, sequence: 43, screenRevision: 8, pairedScreenRevision: 8 },
+        executed: [{ device: 'mouse', kind: 'down', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }, { device: 'mouse', kind: 'up', row: 3, column: 9, button: 'left', modifiers: ['shift', 'control'] }],
+        outcome: 'completed',
+      },
     });
     await writer.finalize();
 
@@ -49,13 +87,102 @@ describe('actions from the driver', () => {
       kind: 'action',
       api: 'click',
       selector: "getByRole('button', { name: 'Submit' })",
-      ref: 'n8@42',
+      ref: 'semantic:n8@42',
       ok: true,
       t: 50,
       castOffset: 50,
-      observation: { sessionId: 't1', screenRevision: 7, semanticRevision: 42 },
+      observation: { sessionId: 't1', contractId: 't1:0', epoch: 0, sequence: 42, screenRevision: 7, semanticRevision: 42, pairedScreenRevision: 7 },
     });
     expect((events[0] as ActionEvent).error).toBeUndefined();
+    const receipt = (events[0] as ActionEvent).receipt;
+    expect(receipt).toMatchObject({ plan: { strategy: 'authoritative-pointer-region' } });
+    expect(receipt?.executed[0]).toMatchObject({
+      device: 'mouse', kind: 'down', row: 3, column: 9, modifiers: ['shift', 'control'],
+    });
+    expect(receipt?.executed).toEqual(receipt?.plan.operations);
+  });
+
+  it('rejects a forged completed receipt whose executed PTY input differs from the plan', async () => {
+    const root = await workspace();
+    const dir = join(root, 'forged-receipt.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.action('click', {
+      ok: true,
+      receipt: {
+        intent: { kind: 'click' },
+        plan: {
+          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click' }, checkpoint: stamp,
+          requirements: [], strategy: 'authoritative-pointer-region', valuePolicy: 'redacted',
+          operations: [{ device: 'mouse', kind: 'down', row: 3, column: 9, button: 'left' }],
+        },
+        before: stamp, after: { ...stamp, sequence: 43 },
+        executed: [{ device: 'mouse', kind: 'down', row: 99, column: 99, button: 'left' }],
+        outcome: 'completed',
+      },
+    });
+    await writer.finalize();
+
+    const trace = await openTrace(dir);
+    const drain = async (): Promise<void> => {
+      for await (const _event of trace.events()) { /* consume */ }
+    };
+    await expect(drain()).rejects.toThrow(/executed input differs/);
+    await trace.close();
+  });
+
+  it('rejects forged mouse modifiers instead of replaying an input the driver cannot encode', async () => {
+    const root = await workspace();
+    const dir = join(root, 'forged-modifier.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    const operation = {
+      device: 'mouse' as const, kind: 'down' as const, row: 3, column: 9,
+      button: 'left' as const, modifiers: ['meta'] as never,
+    };
+    session.action('click', {
+      ok: true,
+      receipt: {
+        intent: { kind: 'click' },
+        plan: {
+          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click' }, checkpoint: stamp,
+          requirements: [], strategy: 'authoritative-pointer-region', valuePolicy: 'redacted', operations: [operation],
+        },
+        before: stamp, after: stamp, executed: [operation], outcome: 'completed',
+      },
+    });
+    await writer.finalize();
+    const trace = await openTrace(dir);
+    const drain = async (): Promise<void> => {
+      for await (const _event of trace.events()) { /* consume */ }
+    };
+    await expect(drain()).rejects.toThrow(/modifiers is invalid/);
+    await trace.close();
+  });
+
+  it('rejects a receipt whose planner checkpoint is from another revision', async () => {
+    const root = await workspace();
+    const dir = join(root, 'stale-receipt.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.action('click', {
+      ok: true,
+      receipt: {
+        intent: { kind: 'click' },
+        plan: {
+          actionId: 'a1', contractId: 't1:0', intent: { kind: 'click' },
+          checkpoint: { ...stamp, sequence: 41 }, requirements: [], strategy: 'pointer', valuePolicy: 'redacted', operations: [],
+        },
+        before: stamp, after: stamp, executed: [], outcome: 'completed',
+      },
+    });
+    await writer.finalize();
+    const trace = await openTrace(dir);
+    const drain = async (): Promise<void> => {
+      for await (const _event of trace.events()) { /* consume */ }
+    };
+    await expect(drain()).rejects.toThrow(/not bound to its before checkpoint/);
+    await trace.close();
   });
 
   it('records a failed action with its error code, not prose', async () => {
@@ -64,15 +191,75 @@ describe('actions from the driver', () => {
     const session = new FakeSession();
     const writer = createTraceWriter(session, { dir, now: session.now });
 
-    session.action('click', { ok: false, error: 'unsupported-action', selector: 'button' });
+    session.action('click', { ok: false, error: 'not-actionable', selector: 'button' });
     await writer.finalize();
 
     expect((await readEvents(dir))[0]).toMatchObject({
       kind: 'action',
       api: 'click',
       ok: false,
-      error: 'unsupported-action',
+      error: 'not-actionable',
     });
+  });
+
+  it('records the exact failed planner explanation for replay diagnostics', async () => {
+    const root = await workspace();
+    const dir = join(root, 'failed-plan.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    const evidence = { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' } as const;
+    const actionability: ActionabilityExplanation = {
+      actionable: false,
+      intent: { kind: 'drag' as const, selector: 'button', targetRef: 'semantic:save@42' },
+      checkpoint: stamp,
+      requirements: [
+        { condition: { kind: 'pointer-input' as const, target: 'save@42' }, checkpoint: stamp, observation: { status: 'known' as const, value: true, evidence }, verdict: 'satisfied' as const },
+        { condition: { kind: 'mouse-input-enabled' as const, target: 'save@42' }, checkpoint: stamp, observation: { status: 'known' as const, value: false, evidence }, verdict: 'unsatisfied' as const },
+      ],
+      reason: { code: 'input-mode-disabled', message: 'Mouse reporting is disabled', targetRef: 'semantic:save@42' },
+    };
+    session.action('drag', { ok: false, error: 'input-mode-disabled', actionability });
+    await writer.finalize();
+
+    const trace = await openTrace(dir);
+    const events: TraceEvent[] = [];
+    for await (const event of trace.events()) events.push(event);
+    await trace.close();
+    expect((events[0] as ActionEvent).actionability).toEqual(actionability);
+  });
+
+  it('rejects a forged failed explanation with invalid evidence', async () => {
+    const root = await workspace();
+    const dir = join(root, 'forged-failed-plan.twtrace');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.action('click', {
+      ok: false,
+      error: 'not-actionable',
+      actionability: {
+        actionable: false,
+        intent: { kind: 'click' },
+        checkpoint: stamp,
+        requirements: [{
+          condition: { kind: 'receives-pointer', target: 'save@42' },
+          checkpoint: stamp,
+          observation: { status: 'known', value: false, evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' } },
+          verdict: 'unsatisfied',
+        }],
+        reason: { code: 'covered-by', message: 'covered' },
+      },
+    });
+    await writer.finalize();
+    const eventsPath = join(dir, TRACE_FILES.events);
+    const event = JSON.parse((await readFile(eventsPath, 'utf8')).trim()) as Record<string, unknown>;
+    const explanation = event['actionability'] as { requirements: Array<{ observation: { evidence: { strength: string } } }> };
+    explanation.requirements[0]!.observation.evidence.strength = 'guessed';
+    await rewriteCommittedMember(dir, TRACE_FILES.events, `${JSON.stringify(event)}\n`);
+
+    const trace = await openTrace(dir);
+    const drain = async (): Promise<void> => { for await (const _event of trace.events()) { /* consume */ } };
+    await expect(drain()).rejects.toThrow(/invalid evidence/);
+    await trace.close();
   });
 
   it('omits selector for a harness action that had no target', async () => {
@@ -166,7 +353,7 @@ describe('failed actions in the report', () => {
 
     const step = writer.addStep('approve');
     session.tick(40);
-    session.action('click', { ok: false, error: 'unsupported-action', selector: 'button.primary' });
+    session.action('click', { ok: false, error: 'not-actionable', selector: 'button.primary' });
     session.tick(10);
     session.action('press', { ok: true, selector: 'button.primary' });
     step.end('failed', 'nothing happened');
@@ -180,7 +367,7 @@ describe('failed actions in the report', () => {
 
     const timeline = html.slice(html.indexOf('<h3>Timeline</h3>'));
     expect(timeline).toContain('<tr class="tw-action-failed">');
-    expect(timeline).toContain('unsupported-action');
+    expect(timeline).toContain('not-actionable');
     expect(timeline).toContain('button.primary');
     expect(timeline).toContain('<td>approve</td>');
     // Successful actions stay out — the timeline is for what went wrong.

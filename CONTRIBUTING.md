@@ -7,12 +7,14 @@ works; the long version is [`CONTRACTS.md`](CONTRACTS.md), which is normative.
 
 ```sh
 pnpm install
-pnpm -r --filter './packages/*' run build
-pnpm -r --filter './packages/*' run typecheck
-pnpm -r --filter './packages/*' run test
+pnpm check:fast
+pnpm check:full
 ```
 
-Node >= 22 and pnpm 9. Most integration suites need a real pseudo-terminal and
+`pnpm install` prepares the workspace; `check:fast` is the review loop and
+`check:full` is the complete local check. Cross-platform, native Windows and
+language-client certification remains the responsibility of the CI workflow.
+Node 22 or 24 and pnpm 9 are required. Most integration suites need a real pseudo-terminal and
 skip themselves where none can be opened; `TERMWRIGHT_SKIP_PTY=1` skips them
 explicitly. A run where everything skipped is not a passing run.
 
@@ -65,7 +67,8 @@ a package boundary are `TermwrightError` subclasses. All I/O is bounded by
 
 A package change is done when:
 
-1. `pnpm build && pnpm typecheck && pnpm test` are green **in that package**;
+1. `pnpm check:fast` and the relevant package tests are green, followed by
+   `pnpm check:full` before handoff;
 2. the public surface is documented and exported through `src/index.ts` only;
 3. unit tests cover the contract obligations, including the error paths;
 4. no TODO or stub is left in an exported code path (internal TODOs belong in
@@ -93,7 +96,7 @@ semantic revision or a process event. A `setTimeout` in a test is a bug report
 about a missing wait.
 
 **Degrade honestly.** Where something cannot be observed, say so in a typed
-error or a diagnostic — `semanticTree: false`, `unsupported-action`,
+error or a diagnostic — `semanticTree: false`, `capability-unavailable`,
 `stale-snapshot`. Never infer a role from rendered text, and never send input
 nothing will read. A locator that silently matches the wrong cell turns a test
 suite into a source of false confidence, which is worse than no suite.
@@ -161,8 +164,8 @@ with no changeset fails `release-hygiene`.
 
 All the npm packages share a version and release together; see
 [`.changeset/README.md`](.changeset/README.md). Adding a changeset does not
-release anything — publishing is a manual, approved pipeline, documented in
-[`RELEASING.md`](RELEASING.md).
+release anything by itself — publishing requires the autonomous exact-SHA,
+full-CI Release PR gates documented in [`RELEASING.md`](RELEASING.md).
 
 ## Writing an adapter
 

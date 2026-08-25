@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PREFERENCES } from '../preferences.js';
 import { initialAppState, type SessionRecord } from '../domain/model.js';
+import { frameworkContract } from '../../__fixtures__/fake-session.js';
 import { buildDiagnosticReport } from './SettingsPage.js';
 
 describe('diagnostic report', () => {
@@ -14,12 +15,11 @@ describe('diagnostic report', () => {
       terminalProfile: 'default',
       command: [sentinel],
       writable: false,
+      contract: frameworkContract(sentinel, 'ink', '5'),
       output: [sentinel],
       logs: [{ t: 1, source: 'file', level: null, message: sentinel }],
       revision: null,
       snapshot: null,
-      adapter: { name: 'ink', version: '5' },
-      capabilities: ['tree'],
     };
     const state = {
       ...initialAppState,

@@ -89,7 +89,9 @@ export class DebugLog {
     mode: 'api' | 'all',
     write: (line: string) => void = (line) => process.stderr.write(line),
   ) {
-    this.#label = sessionId.slice(0, 8);
+    this.#label = sessionId.startsWith('session:')
+      ? sessionId.slice('session:'.length, 'session:'.length + 8)
+      : sessionId.slice(0, 8);
     this.#now = now;
     this.#mode = mode;
     this.#write = write;
@@ -146,7 +148,7 @@ export function instrument<T extends object>(target: T, log: DebugLog, kind: 'ha
         const call = `${kind === 'locator' ? 'locator.' : ''}${property}(${formatArgs(property, args)})`;
         const isWait = property.startsWith('waitFor') || property === 'resolve';
         const category: DebugCategory = isWait ? 'wait' : 'api';
-        const startedAt = Date.now();
+        const startedAt = performance.now();
         let result: unknown;
         try {
           result = method.apply(raw, args);
@@ -164,11 +166,11 @@ export function instrument<T extends object>(target: T, log: DebugLog, kind: 'ha
         log.line(category, `${call} started`);
         return result.then(
           (value_: unknown) => {
-            log.line(category, `${call} succeeded in ${Date.now() - startedAt} ms`);
+            log.line(category, `${call} succeeded in ${Math.round(performance.now() - startedAt)} ms`);
             return value_;
           },
           (error: unknown) => {
-            log.line(category, `${call} failed after ${Date.now() - startedAt} ms: ${errorLabel(error)}`);
+            log.line(category, `${call} failed after ${Math.round(performance.now() - startedAt)} ms: ${errorLabel(error)}`);
             throw error;
           },
         );

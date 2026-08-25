@@ -84,6 +84,8 @@ function commandNode(row: CommandRow, steps: TraceOverview['steps']): ExecutionN
     ...(row.selector === undefined ? {} : { selector: row.selector }),
     ...(row.ref === undefined ? {} : { targetRef: row.ref }),
     ...(row.error === undefined ? {} : { error: row.error }),
+    ...(row.actionPlan === undefined ? {} : { actionPlan: row.actionPlan }),
+    ...(row.actionability === undefined ? {} : { actionability: row.actionability }),
     ...(gherkin === undefined || row.kind !== 'step' ? {} : { gherkin }),
   };
 }

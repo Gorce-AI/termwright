@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { UserConfig } from 'vitest/config';
+// Vitest 4 renamed the re-exported Vite config type to ViteUserConfig.
+import type { ViteUserConfig as UserConfig } from 'vitest/config';
 import {
   XTERM_PALETTE,
   configureTermwright,
@@ -18,6 +19,7 @@ afterEach(() => {
 describe('termwrightRetry', () => {
   it('uses native Vitest additional-attempt counts for CI, local and env override', () => {
     expect(termwrightRetry({ env: {} })).toBe(0);
+    expect(termwrightRetry({ env: { CI: 'true' } })).toBe(0);
     expect(termwrightRetry({ ci: 3, env: { CI: 'true' } })).toBe(3);
     expect(termwrightRetry({ ci: 3, env: { CI: 'true', TERMWRIGHT_RETRIES: '1' } })).toBe(1);
     expect(termwrightRetry({ local: 2, env: { CI: 'false' } })).toBe(2);
@@ -40,6 +42,8 @@ describe('defineTermwrightConfig', () => {
     expect(() => defineTermwrightConfig({ columns: 0 })).toThrow(/columns must be a positive number/u);
     expect(() => defineTermwrightConfig({ timeouts: { expect: -1 } })).toThrow(/timeouts.expect/u);
     expect(() => defineTermwrightConfig({ command: [] })).toThrow(/must not be empty/u);
+    expect(() => defineTermwrightConfig({ requiredCapabilities: ['made-up' as never] })).toThrow(/unknown capability/u);
+    expect(() => defineTermwrightConfig({ requiredCapabilities: ['semantic-tree', 'semantic-tree'] })).toThrow(/duplicate capability/u);
     expect(() => defineTermwrightConfig({ trace: 'sometimes' as never })).toThrow(/config.trace must be one of/u);
     expect(() => defineTermwrightConfig({ profiles: { ci: { rows: -5 } } })).toThrow(/profiles.ci.rows/u);
     expect(() =>
@@ -56,6 +60,7 @@ describe('resolveTermwrightConfig', () => {
     expect(config.trace).toBe('retain-on-failure');
     expect(config.snapshotDir).toBe('__snapshots__');
     expect(config.timeouts.expect).toBe(5_000);
+    expect(config.requiredCapabilities).toEqual([]);
     expect(config.profile).toBeUndefined();
   });
 
@@ -69,6 +74,12 @@ describe('resolveTermwrightConfig', () => {
     expect(config.profile).toBe('ci');
     expect(config.snapshotDir).toBe('__snapshots__/ci');
     expect(config.env['TERM']).toBe('xterm-256color');
+  });
+
+  it('freezes project capability requirements for every fixture launch', () => {
+    const config = resolveTermwrightConfig({ requiredCapabilities: ['semantic-tree', 'paired-revisions'] }, {});
+    expect(config.requiredCapabilities).toEqual(['semantic-tree', 'paired-revisions']);
+    expect(Object.isFrozen(config.requiredCapabilities)).toBe(true);
   });
 
   it('lets explicit env win over the palette env', () => {

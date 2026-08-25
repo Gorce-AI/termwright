@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ErrorDiagnostics
 
-Defined in: [api.ts:797](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L797)
+Defined in: [driver/src/api.ts:1171](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1171)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -34,9 +34,9 @@ await terminal.close();
 
 ### candidates?
 
-> `readonly` `optional` **candidates?**: readonly [`ResolvedTarget`](../resolvedtarget/)[]
+> `readonly` `optional` **candidates?**: readonly [`ResolvedTarget`](../resolvedtarget/)\<[`LocatorDomain`](../../type-aliases/locatordomain/)\>[]
 
-Defined in: [api.ts:800](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L800)
+Defined in: [driver/src/api.ts:1174](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1174)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [api.ts:800](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` `optional` **screenExcerpt?**: `string`
 
-Defined in: [api.ts:798](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L798)
+Defined in: [driver/src/api.ts:1172](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1172)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [api.ts:798](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **semanticTree**: `boolean`
 
-Defined in: [api.ts:799](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L799)
+Defined in: [driver/src/api.ts:1173](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1173)
 
 ***
 
@@ -60,4 +60,4 @@ Defined in: [api.ts:799](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` `optional` **suggestion?**: `string`
 
-Defined in: [api.ts:801](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L801)
+Defined in: [driver/src/api.ts:1175](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L1175)

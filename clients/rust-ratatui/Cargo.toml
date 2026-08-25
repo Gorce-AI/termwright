@@ -15,3 +15,4 @@ categories = ["development-tools::testing", "command-line-interface"]
 ratatui = { version = "=0.30.2", default-features = false, features = ["std"] }
 serde_json = "1"
 termwright-probe-ratatui = { path = "../rust-probe", version = "0.2.0" }
+termwright-protocol = { path = "../rust", version = "0.2.0" }

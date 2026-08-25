@@ -8,10 +8,10 @@
  * @packageDocumentation
  */
 
-import type { DiagnosticCode, SessionEvents } from '@termwright/driver';
-import type { ProbeInfo, SemanticSnapshot } from '@termwright/protocol';
+import type { ActionabilityExplanation, DiagnosticCode, SessionEventRecord, SessionEvents } from '@termwright/driver';
+import { projectSemanticSnapshotForArtifact, type EffectiveSessionContract, type SemanticSnapshot } from '@termwright/protocol';
 import { parseAppLog } from './app-log.js';
-import { toBase64, type ServerMessage, type UiAdapterStatus } from './events.js';
+import { toBase64, type ServerMessage, type UiActionability, type UiAdapterStatus } from './events.js';
 import type { UiHub } from './hub.js';
 
 /** Anything that can receive the session messages produced by this module. */
@@ -33,6 +33,7 @@ export interface UiSessionStreamOptions {
  */
 export interface UiSessionSource {
   readonly sessionId: string;
+  readonly terminalProfile: string;
   readonly events: SessionEvents;
   /**
    * Session facts the browser needs before the first byte arrives: the profile
@@ -40,15 +41,59 @@ export interface UiSessionSource {
    * Required, not optional — a terminal built on a guess is a terminal that
    * disagrees with the session it is showing.
    */
-  capabilities(): {
-    readonly terminalProfile: string;
-    readonly adapter?: { readonly name: string; readonly version: string };
-    readonly probe?: ProbeInfo;
-    readonly capabilities?: readonly string[];
-  };
+  /** Frozen contract once semantic negotiation settles. */
+  contract(): EffectiveSessionContract | null;
   screen(): { readonly columns: number; readonly rows: number };
   /** Current tree, when the session has an adapter. */
   semanticTree?(): SemanticSnapshot | null;
+  /** Resolves the exact live Locator used by tests; never approximate this from node fields. */
+  locatorForRef?(ref: string): {
+    actionability(action: 'click' | 'hover' | 'focus' | 'type'): Promise<ActionabilityExplanation>;
+  };
+}
+
+const INSPECTED_ACTIONS = ['click', 'hover', 'focus', 'type'] as const;
+
+/**
+ * Runs the production ActionPlanner for the four Inspector questions.
+ *
+ * A render between individual plans would make the panel combine different
+ * worlds. Such a batch is rejected and the browser retries on the next live
+ * revision; no diagnostic approximation is substituted.
+ */
+export async function inspectNodeActionability(
+  source: UiSessionSource,
+  nodeId: string,
+): Promise<readonly UiActionability[]> {
+  const snapshot = source.semanticTree?.();
+  if (snapshot === null || snapshot === undefined) throw new Error('the live session has no committed semantic tree');
+  if (!snapshot.nodes.some((node) => node.id === nodeId)) throw new Error(`semantic node ${nodeId} is not attached at revision ${snapshot.revision}`);
+  if (source.locatorForRef === undefined) throw new Error('the live session does not expose production Locator actionability');
+  const locator = source.locatorForRef(`semantic:${nodeId}@${snapshot.revision}`);
+  const explanations = await Promise.all(INSPECTED_ACTIONS.map((action) => locator.actionability(action)));
+  const checkpoint = explanations[0]?.checkpoint;
+  if (checkpoint === undefined || explanations.some((entry) =>
+    entry.checkpoint.contractId !== checkpoint.contractId || entry.checkpoint.sequence !== checkpoint.sequence
+  )) throw new Error('the semantic observation changed while actionability was being inspected');
+  return explanations.map(toUiActionability);
+}
+
+function toUiActionability(explanation: ActionabilityExplanation): UiActionability {
+  return {
+    actionable: explanation.actionable,
+    kind: explanation.intent.kind,
+    contractId: explanation.checkpoint.contractId,
+    sequence: explanation.checkpoint.sequence,
+    requirements: explanation.requirements.map((requirement) => ({
+      kind: requirement.condition.kind,
+      ...('target' in requirement.condition ? { target: requirement.condition.target } : {}),
+      verdict: requirement.verdict,
+      observation: requirement.observation.status,
+      ...('evidence' in requirement.observation ? { evidence: requirement.observation.evidence } : {}),
+    })),
+    ...(explanation.strategy === undefined ? {} : { strategy: explanation.strategy }),
+    ...(explanation.reason === undefined ? {} : { reason: explanation.reason }),
+  };
 }
 
 /**
@@ -86,9 +131,6 @@ export function streamSession(
   options: UiSessionStreamOptions = {},
 ): () => void {
   const sessionId = source.sessionId;
-  let lastAdapter: { readonly name: string; readonly version: string } | undefined;
-  let lastProbe: ProbeInfo | undefined;
-  let lastCapabilities: readonly string[] | undefined;
   let lastStatus: UiAdapterStatus | undefined;
 
   /**
@@ -98,21 +140,16 @@ export function streamSession(
    */
   const announce = (nextStatus?: UiAdapterStatus): void => {
     const screen = source.screen();
-    const capabilities = source.capabilities();
-    if (capabilities.adapter !== undefined) lastAdapter = capabilities.adapter;
-    if (capabilities.probe !== undefined && lastAdapter !== undefined) lastProbe = capabilities.probe;
-    if (capabilities.capabilities !== undefined) lastCapabilities = capabilities.capabilities;
-    if (nextStatus !== undefined && lastAdapter !== undefined) lastStatus = nextStatus;
-    else if (lastAdapter !== undefined && lastStatus === undefined) lastStatus = 'attached';
+    const contract = source.contract();
+    if (nextStatus !== undefined && contract?.framework != null) lastStatus = nextStatus;
+    else if (contract?.framework != null && lastStatus === undefined) lastStatus = 'attached';
     sink.publish({
       v: 1,
       type: 'session',
       sessionId,
       ...(options.testId === undefined ? {} : { testId: options.testId }),
-      terminalProfile: capabilities.terminalProfile,
-      ...(lastAdapter === undefined ? {} : { adapter: lastAdapter }),
-      ...(lastProbe === undefined ? {} : { probe: lastProbe }),
-      ...(lastCapabilities === undefined ? {} : { capabilities: lastCapabilities }),
+      terminalProfile: source.terminalProfile,
+      ...(contract === null ? {} : { contract }),
       ...(lastStatus === undefined ? {} : { adapterStatus: lastStatus }),
       columns: screen.columns,
       rows: screen.rows,
@@ -121,14 +158,26 @@ export function streamSession(
 
   // Announced before any output: the browser builds its terminal from this.
   announce();
-  const offOutput = source.events.on('output', ({ data, timeMs }) => {
+  const lifecycle: Readonly<Partial<Record<DiagnosticCode, UiAdapterStatus>>> = {
+    'adapter-attached': 'attached',
+    'adapter-disconnected': 'disconnected',
+    'protocol-violation': 'error',
+    'endpoint-error': 'error',
+  };
+
+  const consume = (recorded: SessionEventRecord): void => {
+    switch (recorded.type) {
+    case 'output': {
+      const { data, timeMs } = recorded.payload;
     sink.publish({ v: 1, type: 'output', sessionId, dataB64: toBase64(data), t: timeMs });
-  });
-  const offSemantic = source.events.on('semantic-revision', ({ revision }) => {
-    const snapshot = source.semanticTree?.() ?? null;
-    if (snapshot === null || snapshot.revision !== revision) return;
-    sink.publish({ v: 1, type: 'semantic', sessionId, revision, snapshot });
-  });
+      break;
+    }
+    case 'semantic-revision': {
+      const { revision, snapshot } = recorded.payload;
+      if (snapshot.revision !== revision) break;
+      sink.publish({ v: 1, type: 'semantic', sessionId, revision, snapshot: projectSemanticSnapshotForArtifact(snapshot) });
+      break;
+    }
   // Driver actions. The event fires *after* the action finished, so the output
   // it caused is already on the timeline ahead of it — the command log marks
   // when an action completed, never claims the bytes came after it.
@@ -136,7 +185,8 @@ export function streamSession(
   // Failed actions are published too, and are the ones worth watching live: "the
   // click did not land because the app never enabled mouse reporting" beats
   // wondering why nothing happened.
-  const offActionStart = source.events.on('action-start', (event) => {
+    case 'action-start': {
+      const event = recorded.payload;
     const stepId = options.currentStepId?.();
     sink.publish({
       v: 1,
@@ -149,8 +199,10 @@ export function streamSession(
       ...(event.selector === undefined ? {} : { selector: event.selector }),
       ...(stepId === undefined ? {} : { stepId }),
     });
-  });
-  const offAction = source.events.on('action', (event) => {
+      break;
+    }
+    case 'action': {
+      const event = recorded.payload;
     const stepId = options.currentStepId?.();
     sink.publish({
       v: 1,
@@ -165,36 +217,71 @@ export function streamSession(
       ...(event.selector === undefined ? {} : { selector: event.selector }),
       ...(event.ref === undefined ? {} : { ref: event.ref }),
       ...(event.error === undefined ? {} : { error: event.error }),
+      ...(event.receipt === undefined ? {} : {
+        actionPlan: {
+          actionId: event.receipt.plan.actionId,
+          kind: event.receipt.intent.kind,
+          strategy: event.receipt.plan.strategy,
+          contractId: event.receipt.plan.contractId,
+          beforeSequence: event.receipt.before.sequence,
+          afterSequence: event.receipt.after.sequence,
+          operations: event.receipt.executed.map((operation) => ({
+            device: operation.device,
+            kind: operation.kind,
+            ...(operation.device === 'mouse' && operation.modifiers !== undefined ? { modifiers: operation.modifiers } : {}),
+          })),
+          requirements: event.receipt.plan.requirements.map((requirement) => ({
+            kind: requirement.condition.kind,
+            ...('target' in requirement.condition ? { target: requirement.condition.target } : {}),
+            verdict: requirement.verdict,
+            observation: requirement.observation.status,
+            ...('evidence' in requirement.observation ? { evidence: requirement.observation.evidence } : {}),
+          })),
+          ...(event.receipt.plan.physicalRegion === undefined
+            ? {}
+            : { physicalEvidence: event.receipt.plan.physicalRegion.evidence }),
+        },
+      }),
+      ...(event.actionability === undefined ? {} : { actionability: toUiActionability(event.actionability) }),
       ...(stepId === undefined ? {} : { stepId }),
     });
-  });
+      break;
+    }
   // Application logs: a followed file yields a line, an instrumented adapter a
   // structured record. Both flatten into one row; a payload that flattens to
   // nothing is dropped rather than published as an empty line.
-  const offLog = source.events.on('app-log', (event) => {
+    case 'app-log': {
+      const event = recorded.payload;
     const log = parseAppLog(event);
-    if (log === null) return;
-    sink.publish({ v: 1, type: 'app-log', sessionId, ...log });
-  });
-  const lifecycle: Readonly<Partial<Record<DiagnosticCode, UiAdapterStatus>>> = {
-    'adapter-attached': 'attached',
-    'adapter-disconnected': 'disconnected',
-    'protocol-violation': 'error',
-    'endpoint-error': 'error',
-  };
-  const offDiagnostic = source.events.on('diagnostic', (event) => {
+      if (log !== null) sink.publish({ v: 1, type: 'app-log', sessionId, ...log });
+      break;
+    }
+    case 'diagnostic': {
+      const event = recorded.payload;
     const status = lifecycle[event.code];
-    if (status === undefined) return;
+      if (status === undefined) break;
     // A protocol/endpoint failure remains an error when the ensuing socket
     // close emits `adapter-disconnected`; do not make the badge look healthier.
     announce(lastStatus === 'error' && status === 'disconnected' ? 'error' : status);
-  });
-  return () => {
-    offOutput();
-    offSemantic();
-    offActionStart();
-    offAction();
-    offLog();
-    offDiagnostic();
+      break;
+    }
+    case 'crash':
+    case 'exit':
+    case 'input':
+    case 'resize':
+    case 'screen-revision':
+      break;
+    }
   };
+
+  return source.events.subscribe({
+    fromSequence: 1,
+    onGap: (gap) => sink.publish({
+      v: 1,
+      type: 'diagnostic-gap',
+      source: 'live-session-producer',
+      droppedMessages: gap.lostEvents,
+      droppedBytes: gap.lostBytes,
+    }),
+  }, consume);
 }

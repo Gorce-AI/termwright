@@ -7,7 +7,7 @@ snapshot, click a button by its ref, wait on a condition, and ask what changed.
 It is deliberately thin. Every tool validates its arguments with zod, calls the
 public `@termwright/driver` API, and renders the result. There is no locator
 engine, no wait loop and no matching heuristic here — a behaviour that differed
-between this server and the test preset would be a bug in this package.
+between this server and the Native Host would be a bug in this package.
 
 ## Install
 
@@ -47,12 +47,12 @@ process.on('SIGINT', () => void running.close());
 // terminal.snapshot -> the compact format, plus refs / cursor / modes / scroll
 Terminal t1 100x30 revision 42
 semanticTree: available
-dialog "Permission" ref=n7@42 bounds=(8,20,40,9) modal
-  button "Approve" ref=n8@42 bounds=(14,23,11,1) focused
+dialog "Permission" ref=semantic:n7@42 bounds=(8,20,40,9) modal
+  button "Approve" ref=semantic:n8@42 bounds=(14,23,11,1) focused
 visible text:
 …
 
-// terminal.click        { "terminal": "t1", "ref": "n8@42" }
+// terminal.click        { "terminal": "t1", "ref": "semantic:n8@42" }
 // terminal.wait_for     { "terminal": "t1", "wait": "text", "text": "Approved" }
 // terminal.capture_since{ "terminal": "t1", "cursor": 42 }  -> changed rows + subtrees
 // terminal.close        { "terminal": "t1" }
@@ -77,19 +77,57 @@ stderr. stdio has no TTL: there, EOF on the pipe is the signal.
 
 ## Tools
 
-`terminal.launch`, `capabilities`, `snapshot`, `capture_since`, `query`,
-`click`, `double_click`, `press`, `type`, `paste`, `write_raw`, `drag`, `wheel`,
-`resize`, `signal`, `scrollback`, `select_cells`, `copy_selection`, `wait_for`,
-`close` — the surface CONTRACTS.md §MCP defines — plus `trace.open`,
-`trace.overview`, `trace.frame_at` and `trace.diff` for recorded sessions. Every
-one carries an `inputSchema` and an `outputSchema` and returns
-`structuredContent`.
+<!-- BEGIN GENERATED MCP TOOL SURFACE -->
+<!-- Generated from packages/mcp/src/registry.ts; do not edit this block by hand. -->
+### Live terminal tools
 
-Targeting, in precedence order: `ref`, `selector` (the CSS dialect
-`dialog button#approve:focused`), `testId`, `role` (+ `name`), `label`, `text`.
-Any name or text may be written as `/pattern/flags` to match as a regular
-expression. Locators are strict: more than one match fails with
-`ambiguous-locator` unless you pass `nth`.
+| Tool | Purpose |
+| --- | --- |
+| `terminal.launch` | Starts a program in a real pseudo-terminal and returns a terminal handle plus the first snapshot. The child gets a minimal environment unless envMode is "inherit"; values passed in env are never echoed back. |
+| `terminal.capabilities` | What this session supports: whether a semantic tree is published, which adapter publishes it, and the terminal geometry. Call it before relying on role-based targeting. |
+| `terminal.snapshot` | One typed view of the terminal: compact semantic refs, visible text, cursor, terminal modes and scroll position. variant "full" writes the complete dump (text, ANSI, HTML, semantic tree) to disk and returns only refs plus the file path. The returned revision is the cursor for terminal.capture_since. |
+| `terminal.capture_since` | Incremental view: the screen rows that differ and the semantic subtrees that were added, removed or updated since the given cursor. The cursor must be a revision this server handed out earlier (snapshot or capture_since); older cursors fail with history-truncated. |
+| `terminal.query` | Resolves a target to refs without acting on it. Use it to check how many nodes a locator matches before clicking, or to turn a role/name into a ref. |
+| `terminal.checkpoint` | Returns the atomic session/contract/screen/semantic identity used by revision-safe actions and waits. |
+| `terminal.actionability` | Runs the same ActionPlanner used by execution, but sends no input. Reports every authoritative requirement and the chosen strategy or typed rejection. |
+| `terminal.click` | Sends a real click mouse report through the pseudo-terminal. Fails closed with input-mode-disabled when the required tracking mode or encoding is disabled or unobservable. |
+| `terminal.double_click` | Sends a real double-click mouse report through the pseudo-terminal. Fails closed with input-mode-disabled when the required tracking mode or encoding is disabled or unobservable. |
+| `terminal.hover` | Sends a real motion mouse report through the pseudo-terminal. Fails closed with input-mode-disabled when the required tracking mode or encoding is disabled or unobservable. |
+| `terminal.press` | Sends key chords as real bytes, honouring the modes the program enabled (application cursor keys, keypad). Examples: "Enter", "Escape", "Control+K Control+U". With a target, the node must already be focused. |
+| `terminal.type` | Types text as individual keystrokes (not a paste). With a target, the node must already be focused; use terminal.fill for focus + replacement. |
+| `terminal.fill` | Ensures the semantic control receives focus through the real input path, selects its current value, and types the replacement. |
+| `terminal.check` | Uses the central action planner and real terminal input to check a checkbox or radio, then verifies semantic state. |
+| `terminal.uncheck` | Uses the central action planner and real terminal input to uncheck a checkbox or radio, then verifies semantic state. |
+| `terminal.paste` | Pastes text, wrapped in bracketed-paste markers when the program enabled that mode. Use it for multi-line input instead of terminal.type. |
+| `terminal.write_raw` | Writes bytes to the pseudo-terminal verbatim — no newline, no key encoding. The escape hatch for sequences the key encoder does not model. |
+| `terminal.drag` | Drags with real mouse reports: either from one target to another (toTarget), or between two cell positions inside the source target (from/to). |
+| `terminal.wheel` | Sends wheel reports over a target. Positive deltaY scrolls down. |
+| `terminal.resize` | Resizes the pseudo-terminal; the child sees a real SIGWINCH. |
+| `terminal.signal` | Sends INT, TERM, KILL or HUP to the child. Destructive by design: terminal.close cleans up without signalling. |
+| `terminal.scrollback` | Emulator-side history: read a line range, search it, or move the viewport. The child sees nothing — no input is sent. |
+| `terminal.select_cells` | Selects a rectangle in the emulator (like a mouse selection). No input is sent. |
+| `terminal.copy_selection` | Returns the text of the current selection and optionally clears it. |
+| `terminal.wait_for` | Revision-driven waits — never a sleep. "text"/"title" wait for content, locator states use the driver's canonical Conditions, "quiet" explicitly waits for heuristic silence, "render" for a render after a given revision, "exit" for the child to exit. |
+| `terminal.close` | Bounded physical cleanup: hangs up the pseudo-terminal and forgets the handle. Send signals explicitly with terminal.signal if the child must be killed first. |
+
+### Trace tools
+
+| Tool | Purpose |
+| --- | --- |
+| `trace.open` | Validates a .twtrace directory or zip and returns a handle plus its metadata: the recorded command, viewport, duration, exit status and whether the session published a semantic tree. Start every replay investigation here. |
+| `trace.overview` | The shape of a recording: every step with its status and timing, the cast markers, the exit status, and which step failed. Use it to pick the moment worth reconstructing before calling trace.frame_at. |
+| `trace.frame_at` | Rebuilds the screen at a moment — named by timeMs, stepIndex or marker — by replaying the recording into a headless emulator, and pairs it with the semantic tree of the nearest revision at or before that moment. Reads exactly like a live terminal.snapshot. |
+| `trace.diff` | Reconstructs two moments of a recording and reports what moved: changed screen rows and changed semantic subtrees, in the same shape as terminal.capture_since on a live session. |
+
+### Targeting
+
+Targeting precedence is `ref`, `selector`, `testId`, `role` (+`name`), `label`, `text`, `screenText`.
+
+`semanticTree: unavailable` means the program ships no integration — target physical output with `screenText`, never semantic `text` or `role`.
+
+Names and text accept `/pattern/flags`. Locators are strict: more than one match returns
+`ambiguous-locator` unless `nth` is explicit.
+<!-- END GENERATED MCP TOOL SURFACE -->
 
 ## Replaying a recorded failure
 
@@ -102,8 +140,8 @@ same vocabulary as a live session.
 // trace.frame_at  { "traceId": "tr1", "stepIndex": 1 }
 Terminal tr1 40x6 revision 2
 semanticTree: available
-dialog "Permission" ref=n1@2 modal
-  button "Approve" ref=n2@2 disabled
+dialog "Permission" ref=semantic:n1@2 modal
+  button "Approve" ref=semantic:n2@2 disabled
 visible text:
 …
 // trace.diff      { "traceId": "tr1", "fromMs": 0, "toMs": 3000 }  -> changed rows + subtrees
@@ -139,8 +177,8 @@ window; lower `screenshotScale` or resize the terminal.
 
 ## Refs and revisions
 
-A ref is `n8@42`: node id at semantic revision 42 (grid matches get
-`grid:1,2,9,1@7`). Refs go straight to `harness.locatorForRef()`, so they resolve
+A ref is `semantic:n8@42`: node id at semantic revision 42 (screen matches get
+`screen:1,2,9,1@7`). Refs go straight to `harness.locatorForRef()`, so they resolve
 by node *identity* — two buttons with the same name stay distinct. A producer
 which promises stable identity can resolve that node again in later revisions.
 Frame-local identities and grid refs remain revision-bound; take a fresh
@@ -152,7 +190,8 @@ that changed. Cursors the server never handed out fail with `history-truncated`
 (the last 16 captures per terminal are retained).
 
 Programs without a framework probe or custom semantic producer report
-`semanticTree: unavailable`. There are no invented roles: target them by text.
+`semanticTree: unavailable`. There are no invented roles: target physical
+output with `screenText`.
 
 ## Application logs
 
@@ -216,7 +255,7 @@ are the one thing never recorded: the driver keeps their size only.
 Failures come back as tool results with `isError` set. The text content reads
 
 ```
-error stale-snapshot: ref n8@42 no longer exists at semantic revision 43
+error stale-snapshot: ref semantic:n8@42 no longer exists at semantic revision 43
 suggestion: re-resolve the locator; the node identity is no longer present
 semanticTree: true
 ```

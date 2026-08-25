@@ -18,7 +18,6 @@
 
 // Normative types (api.ts declares the contract; the values live below).
 export type {
-  ActivateReceipt,
   CellAttributes,
   CellColor,
   CellLink,
@@ -34,16 +33,30 @@ export type {
   ErrorDiagnostics,
   ExitStatus,
   LaunchOptions,
-  Locator,
+  Keyboard,
+  AnyLocator,
+  LocatorForDomain,
+  SemanticLocator,
+  ScreenLocator,
   LocatorCellSnapshot,
   LocatorCellSnapshotOptions,
+  LocatorDragOptions,
+  SemanticLocatorFilterOptions,
+  ScreenLocatorFilterOptions,
+  LocatorWheelOptions,
+  MouseModifier,
+  MouseModifierOptions,
   PointerOptions,
+  Mouse,
+  MousePoint,
+  OperationBudget,
   RecordingOptions,
   ResizeReceipt,
   ResolvedTarget,
   BoundsExpectation,
   SpatialRelationExpectation,
   RoleLocatorOptions,
+  ScreenTextLocatorOptions,
   ScreenSnapshot,
   ShellApi,
   ShellCommandResult,
@@ -51,11 +64,16 @@ export type {
   ShellStatus,
   ScrollbackApi,
   SelectionApi,
-  SessionCapabilities,
   SessionDiagnostic,
   SessionEventMap,
+  SessionEventGap,
+  SessionEventRecord,
+  SessionEventSubscriptionOptions,
   SessionEvents,
   TerminalHarness,
+  TerminalWindow,
+  TerminalState,
+  TerminalStateSnapshot,
   TerminalModes,
   TermwrightErrorCode,
   TextLocatorOptions,
@@ -63,22 +81,83 @@ export type {
   WaitOptions,
 } from './api.js';
 
-export { launchTerminal, type LaunchTerminalOptions } from './session.js';
+// These protocol-owned types are part of the driver's public planning and
+// observation surface. Re-export them here so users never need a transitive
+// @termwright/protocol import merely to name a value returned by the driver.
+export type {
+  ActionIntent,
+  ActionKind,
+  ActionPlan,
+  ActionReceipt,
+  ActionabilityExplanation,
+  Condition,
+  ConditionResult,
+  ExecutableDeviceOperation,
+  RecordedDeviceOperation,
+  ArtifactValuePolicy,
+  ExecutableValue,
+  PublicValue,
+  RecordedValue,
+  SemanticValueObservation,
+  SensitiveValue,
+  EffectiveSessionContract,
+  EvidenceProvenance,
+  Observation,
+  ObservationStamp,
+  PhysicalRegion,
+  SessionCapabilityId,
+  LocatorDomain,
+  LocatorRef,
+  SemanticLocatorRef,
+  ScreenLocatorRef,
+  ScreenCondition,
+} from '@termwright/protocol';
+
+export { inheritedSpawnEnv, launchTerminal, type LaunchTerminalOptions } from './session.js';
+export { installTerminalLaunchResourceProvider } from './launch-resources.js';
+export type {
+  TerminalLaunchResourceLease,
+  TerminalLaunchResourceProvider,
+} from './launch-resources.js';
+export { publicValue, sensitive } from '@termwright/protocol';
 export { debugMode, type DebugCategory } from './debug.js';
 
 export {
   AmbiguousLocatorError,
+  AdapterGuaranteeViolationError,
+  DuplicateSemanticKeyError,
+  CapabilityProviderLostError,
+  CapabilityProviderViolationError,
+  EvidenceConflictError,
+  CapabilityUnavailableError,
   CapacityError,
   HistoryTruncatedError,
+  InputModeDisabledError,
   NotFoundError,
+  NotActionableError,
+  ProbeAttachFailedError,
   ProcessExitedError,
+  PtyBackendError,
   ProtocolViolationError,
   SessionClosedError,
+  SemanticCapabilityUnavailableError,
   StaleSnapshotError,
   TermwrightError,
   TimeoutError,
-  UnsupportedActionError,
 } from './errors.js';
+
+export {
+  resolveDefaultPtyBackend,
+  resetPtyBackendChoice,
+  type PtyBackendChoice,
+} from './backend-selection.js';
+
+export {
+  createConPtyBackend,
+  CONPTY_BACKEND_NAME,
+  type ConPtySessionHandle,
+  type ConPtySpawn,
+} from './conpty-backend.js';
 
 export {
   createNodePtyBackend,
@@ -89,10 +168,16 @@ export {
   type PtyUnsubscribe,
 } from './pty.js';
 
+export {
+  ProcessLifecycleError,
+  type ProcessLifecycleErrorCode,
+} from './internal/process-supervisor.js';
+
 export { encodeKeys, encodePaste, encodeText, type KeyEncodingModes } from './keys.js';
-export { encodeMouse, type MouseButton, type MouseEvent } from './mouse.js';
+export { encodeMouse, normalizeMouseModifiers, type MouseButton, type MouseEvent } from './mouse.js';
 export {
   parseRef,
+  semanticNodeId,
   parseSelector,
   textMatcher,
   type GenericQuery,

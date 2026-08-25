@@ -14,7 +14,8 @@ untouched.
 npm install --save-dev @termwright/probe-opentui
 ```
 
-Peer: `@opentui/core >= 0.5.0`. Node >= 22, or Bun.
+Certified target: `@opentui/core 0.5.3`. Node >= 22, or Bun. Other OpenTUI
+artifacts fail closed before the probe advertises semantic capabilities.
 
 ## Usage
 
@@ -65,12 +66,12 @@ layer at all, so a class name is the only signal there is. It does not survive
 minification: a bundled application's widgets arrive as `generic` with a mangled
 type. Nothing is lost that was not already unknowable, but the names get worse.
 
-**`visibleRect` is never reported.** OpenTUI clips with ancestor scissor rects
-at render time and exposes no per-node visible rectangle, so those intermediate
-clips remain unobservable. The recognizer does apply the terminal viewport — a
-real outer clip known from the frame itself — to intended bounds. A non-empty
-widget entirely outside that viewport is reported `hidden + offscreen`; an
-intrinsically zero-area widget is only hidden when the framework says it is.
+**Geometry requires the certified render-command instrumentation.** The exact
+0.5.3 Node and Bun artifacts are checksum-verified before their render loop is
+instrumented. That hook records intended rectangles, ancestor scissor
+intersections, and native pointer recipients at the committed frame boundary.
+If the artifact does not match, the probe does not attach and does not advertise
+those guarantees.
 
 **`paint-order` is announced but omitted per tree where it cannot be honoured.**
 The z-order child list is a protected field upstream; when a version stops

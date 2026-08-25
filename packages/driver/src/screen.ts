@@ -140,6 +140,47 @@ export function captureRows(vt: VtScreen): readonly CapturedRow[] {
  * Captures an immutable {@link ScreenSnapshot} of the emulator's viewport.
  * The snapshot's revision is the emulator revision at capture time.
  */
+/**
+ * The viewport as text, without building a single cell.
+ *
+ * captureRows resolves colours, attributes and hyperlinks for every cell in
+ * the viewport and then joins the row strings — and callers that only want to
+ * look for a substring throw all of that away. waitForText does it on every
+ * polling iteration while it waits, which is the worst place for it.
+ */
+export function captureText(vt: VtScreen): string {
+  const buffer = vt.terminal.buffer.active;
+  const lines: string[] = [];
+  for (let y = 0; y < vt.rows; y += 1) {
+    const line = buffer.getLine(buffer.viewportY + y);
+    lines.push(line === undefined ? '' : line.translateToString(true));
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Reads one cell without building the rest of the screen.
+ *
+ * `screen().cell(y, x)` materialises every cell in the viewport, the text of
+ * every row, the cursor and the modes — thousands of frozen objects — and then
+ * returns one of them. Callers that want a single cell are common enough that
+ * the difference is worth having, and the cell it produces is the same object
+ * shape that `captureScreen` would have put at that coordinate.
+ */
+export function captureCell(vt: VtScreen, row: number, column: number): CellSnapshot {
+  if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || column < 0) return EMPTY_CELL;
+  if (row >= vt.rows) return EMPTY_CELL;
+  const buffer = vt.terminal.buffer.active;
+  const line = buffer.getLine(buffer.viewportY + row);
+  if (line === undefined || column >= line.length) return EMPTY_CELL;
+  const cell = line.getCell(column);
+  if (cell === undefined) return EMPTY_CELL;
+  // The link resolver is built per call rather than per screen. It is the one
+  // piece of shared setup captureRows amortises, and for a single cell that
+  // amortisation is the cost being avoided.
+  return readCell(cell, createLinkResolver(vt.terminal)(cell));
+}
+
 export function captureScreen(vt: VtScreen): ScreenSnapshot {
   const revision = vt.revision;
   const rows = captureRows(vt);

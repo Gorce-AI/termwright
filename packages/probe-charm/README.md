@@ -48,11 +48,9 @@ const build = await prepareInstrumentedBuild({moduleDir: 'path/to/app'});
 It detects the major and exact versions, materialises independently cached
 Bubble Tea and (when supported) Bubbles copies, then writes a generated
 workspace outside the application. `build.built` tells whether this call had a
-cold cache; `build.builtModules` names the copies that were created. An exact
-Bubble Tea version without a shipped patch set is refused. An unknown optional
-Bubbles version is listed in `build.unpatchedCompanions` and left untouched,
-so the frame hook and public-getter semantics remain available without claiming
-the private state its accessor patch would have exposed.
+cold cache; `build.builtModules` names the copies that were created. Exact
+Bubble Tea and detected Bubbles versions without shipped patch sets are refused:
+one certified profile never changes semantic breadth with the dependency graph.
 
 ## What it gives you
 
@@ -142,8 +140,9 @@ execution path.
 Relationships are explicit `SemanticKey` strings. The probe evaluates each
 provider once, collects the whole component set, then resolves keys in a second
 pass. A unique key gives that annotated component a stable id even if its Go
-field path changes. Missing keys emit no relationship; duplicate keys keep
-distinct frame-local structural ids and cannot resolve. Nodes use
+field path changes. Missing targets emit no relationship; duplicate non-empty
+keys fail the session with `duplicate-semantic-key` and publish no weakened
+frame. Nodes use
 `p: framework`, with recognised and annotated fields identified in `px`.
 
 ## Current surface

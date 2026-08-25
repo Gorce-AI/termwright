@@ -12,18 +12,20 @@ import type { SemanticNode, SemanticState } from './tree.js';
  * cannot catch — it rejects a schema field missing from the interface, not an
  * interface field missing from the schema.
  */
-const everyNodeField: Record<Exclude<keyof SemanticNode, 'geometry'>, true> = {
+const everyNodeField: Record<keyof SemanticNode, true> = {
   id: true,
   parentId: true,
   role: true,
   name: true,
   description: true,
   value: true,
-  bounds: true,
-  occlusion: true,
+  geometry: true,
+  scroll: true,
+  paintedRegion: true,
   state: true,
   extended: true,
   actions: true,
+  inputRecipes: true,
   labelledBy: true,
   describedBy: true,
   textRanges: true,
@@ -45,12 +47,12 @@ const everyStateField: Record<keyof SemanticState, true> = {
   offscreen: true,
   readonly: true,
   multiline: true,
+  required: true,
+  multiselectable: true,
   orientation: true,
   level: true,
   positionInSet: true,
   setSize: true,
-  scrollOffset: true,
-  scrollExtent: true,
 };
 
 describe('SEMANTIC_NODE_KEYS', () => {
@@ -62,7 +64,7 @@ describe('SEMANTIC_NODE_KEYS', () => {
   });
 
   it('includes the fields that went missing before', () => {
-    for (const key of ['frameworkType', 'occlusion', 'p', 'px'] as const) {
+    for (const key of ['frameworkType', 'geometry', 'p', 'px'] as const) {
       expect(SEMANTIC_NODE_KEYS).toContain(key);
     }
   });

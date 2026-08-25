@@ -1,7 +1,7 @@
 import type { SemanticAction, SemanticRole } from './roles.js';
 import type { ProvenanceSource } from './probe/ir.js';
-import type { OcclusionKnowledge } from './probe/bounds.js';
-import type { CoordinateSpace, Observation } from './observation.js';
+import type { CoordinateSpace, Observation, SemanticValueObservation } from './observation.js';
+import type { EvidenceProvenance } from './contract.js';
 
 /** Zero-based viewport cell coordinates. */
 export interface Rect {
@@ -30,14 +30,8 @@ export interface SemanticState {
    * screen is what it means.
    *
    * **Absent means "not claiming"**, not "on screen". A producer that cannot
-   * observe clipping simply omits it, which is why this is a positive
-   * assertion rather than a tri-state.
-   *
-   * It exists so that `bounds: undefined` keeps its single meaning — "this
-   * producer does not know the geometry". Before this field, an adapter had to
-   * choose between saying "no geometry" and saying "scrolled away", and those
-   * are different facts that a consumer reading a tree generically could not
-   * tell apart.
+   * observe clipping simply omits it. Evidence-qualified geometry remains the
+   * authoritative source for viewport and visibility assertions.
    *
    * Implies {@link SemanticState.hidden}: if every cell is outside the visible
    * area then the node is not visible, and validation refuses the pair
@@ -46,12 +40,31 @@ export interface SemanticState {
   readonly offscreen?: boolean;
   readonly readonly?: boolean;
   readonly multiline?: boolean;
+  readonly required?: boolean;
+  readonly multiselectable?: boolean;
   readonly orientation?: 'horizontal' | 'vertical';
   readonly level?: number;
   readonly positionInSet?: number;
   readonly setSize?: number;
-  readonly scrollOffset?: number;
-  readonly scrollExtent?: number;
+}
+
+/** Authoritative application viewport state in production-defined logical units. */
+export interface SemanticScrollState {
+  readonly axis: 'vertical' | 'horizontal';
+  /** Logical distance from the start of the scrollable content. */
+  readonly offset: number;
+  /** Logical size of the visible application viewport. */
+  readonly viewport: number;
+  /** Logical size of the complete scrollable content. */
+  readonly extent: number;
+}
+
+/** Exact viewport cells painted by one semantic recipient for a committed frame. */
+export interface SemanticPaintedRegion {
+  /** Bounding box of the painted cells; this is not intended layout geometry. */
+  readonly regionBounds: Rect;
+  /** Canonical, non-overlapping half-open row runs. */
+  readonly spans: readonly { readonly row: number; readonly from: number; readonly to: number }[];
 }
 
 /** Maps grapheme offsets of a node's text to cell coordinates (optional capability). */
@@ -90,39 +103,13 @@ export interface SemanticNode {
   readonly role: SemanticRole;
   readonly name: string;
   readonly description?: string;
-  readonly value?: string;
-  /**
-   * The node's **visible** geometry, guaranteed.
-   *
-   * Normalizers resolve this to the best known visible rectangle — the clip
-   * intersection where a framework computes one, `intendedRect ∩ clip` where a
-   * clip is known, and the intended rectangle only as a last resort. A consumer
-   * therefore never has to ask which rectangle it is holding.
-   *
-   * Still optional: class-B/C frameworks publish nodes without trustworthy
-   * coordinates, and one framework hands over a rendered string with no
-   * geometry anywhere. Absent bounds is a normal state, not a degraded one.
-   */
-  readonly bounds?: Rect;
-  /**
-   * Whether it is knowable that something else was painted over this node.
-   *
-   * `bounds` says where the node is; it does not say whether a pointer aimed
-   * there reaches it. Only some frameworks expose paint order, so this is
-   * `'known'` only when the probe reported it. **Absent means `'unknown'`** —
-   * the conservative value is the default, so a producer has to claim
-   * knowledge rather than have it assumed.
-   *
-   * A consumer performing pointer actions should refuse on `'unknown'` rather
-   * than click and hope: the input lands somewhere real, and if it lands on
-   * another widget the result is attributed to this one. That is a silent
-   * false green, which is a worse failure than a refusal.
-   */
-  readonly occlusion?: OcclusionKnowledge;
+  readonly value?: SemanticValueObservation;
   readonly state?: SemanticState;
   /** Application-specific, serializable state; never promoted to portable flags. */
   readonly extended?: SemanticExtendedState;
   readonly actions?: readonly SemanticAction[];
+  /** Authoritative recipe executed only through Termwright's real input devices. */
+  readonly inputRecipes?: readonly import('./roles.js').PhysicalInputRecipe[];
   readonly labelledBy?: readonly string[];
   readonly describedBy?: readonly string[];
   readonly textRanges?: readonly SemanticTextRange[];
@@ -133,7 +120,7 @@ export interface SemanticNode {
    * name, a widget type.
    *
    * **Required when `role` is `generic`.** An unrecognised widget must survive
-   * as a generic node keeping its bounds, text and children, instead of being
+   * as a generic node keeping its geometry, text and children, instead of being
    * dropped with its children reparented. `frameworkType` is what makes such a
    * node identifiable: without it a generic node says only "something was
    * here", which is barely better than the drop it replaced.
@@ -151,11 +138,12 @@ export interface SemanticNode {
   readonly p?: ProvenanceSource;
   /** Per-field provenance, for fields whose source differs from `p`. */
   readonly px?: Readonly<Record<string, ProvenanceSource>>;
-  /**
-   * Protocol v2 qualified layout facts. V1 snapshots MUST omit this field;
-   * their legacy `bounds` projection deliberately remains unchanged.
-   */
-  readonly geometry?: NodeGeometryObservations;
+  /** Evidence-qualified layout facts for this committed observation. */
+  readonly geometry: NodeGeometryObservations;
+  /** Application scroll state; distinct from the terminal emulator's scrollback. */
+  readonly scroll?: Observation<SemanticScrollState>;
+  /** Authoritative paint provenance; distinct from layout, clipping and pointer routing. */
+  readonly paintedRegion?: Observation<SemanticPaintedRegion>;
 }
 
 /** Layout facts reported independently so absence never masquerades as false. */
@@ -177,6 +165,83 @@ export interface PointerHitGrid {
   readonly regions: readonly PointerHitRegion[];
 }
 
+/** One provider-owned target region for a committed application revision. */
+export interface ProviderPointerRegion {
+  readonly recipientId: string;
+  /** Bounding box of the pointer-receiving cells; not layout geometry. */
+  readonly regionBounds: Rect;
+  /** Canonical non-overlapping visible cell runs owned by the target. */
+  readonly spans: readonly { readonly row: number; readonly from: number; readonly to: number }[];
+}
+
+/** Revision-bound application strategy recipes for one semantic recipient. */
+export interface ProviderActionRecipes {
+  readonly recipientId: string;
+  readonly recipes: readonly import('./roles.js').PhysicalInputRecipe[];
+}
+
+/** Revision-bound application viewport state for one semantic recipient. */
+export interface ProviderScrollState extends SemanticScrollState {
+  readonly recipientId: string;
+}
+
+/** Revision-bound application paint provenance for one semantic recipient. */
+export interface ProviderPaintedRegion extends SemanticPaintedRegion {
+  readonly recipientId: string;
+}
+
+/** Production parser configuration hidden by the terminal transport. */
+export interface ProviderTerminalInputModes {
+  readonly mouseTracking: 'none' | 'x10' | 'vt200' | 'drag' | 'any';
+  readonly mouseEncoding: 'default' | 'sgr' | 'urxvt' | 'utf8';
+  readonly focusReporting: 'on' | 'off';
+}
+
+/** Exact production focus-manager result for one committed revision. */
+export type ProviderFocusState =
+  | { readonly status: 'focused'; readonly recipientId: string }
+  | { readonly status: 'none' };
+
+/**
+ * Application evidence bound to the same revision as its containing snapshot.
+ * A provider announced in hello must contribute exactly one entry per frame.
+ */
+export type ProviderRevisionEvidence =
+  | {
+      readonly providerId: string;
+      readonly sessionId: string;
+      readonly revision: number;
+      readonly status: 'available';
+      readonly evidence: EvidenceProvenance;
+      readonly pointerRegions: readonly ProviderPointerRegion[];
+      /** Exact production focus-manager result when `focus-state` was announced. */
+      readonly focusState?: ProviderFocusState;
+      /** Production keybinding recipes when `action-recipes` was announced. */
+      readonly actionRecipes?: readonly ProviderActionRecipes[];
+      /** Complete application viewport facts when `scroll-state` was announced. */
+      readonly scrollStates?: readonly ProviderScrollState[];
+      /** Complete paint attribution when `painted-regions` was announced. */
+      readonly paintedRegions?: readonly ProviderPaintedRegion[];
+      /** Production parser configuration when `terminal-input-modes` was announced. */
+      readonly inputModes?: ProviderTerminalInputModes;
+      /** Complete production-router ownership map when `hit-test` was announced. */
+      readonly hitGrid?: PointerHitGrid;
+    }
+  | {
+      readonly providerId: string;
+      readonly sessionId: string;
+      readonly revision: number;
+      readonly status: 'lost';
+      readonly reason: string;
+    }
+  | {
+      readonly providerId: string;
+      readonly sessionId: string;
+      readonly revision: number;
+      readonly status: 'violation';
+      readonly reason: string;
+    };
+
 export interface CursorInfo {
   readonly row: number;
   readonly column: number;
@@ -185,7 +250,7 @@ export interface CursorInfo {
 }
 
 export interface SemanticSnapshot {
-  readonly v: 1 | 2;
+  readonly v: 2;
   readonly sessionId: string;
   /** Positive, strictly increasing within a semantic session. */
   readonly revision: number;
@@ -194,11 +259,13 @@ export interface SemanticSnapshot {
   readonly cursor?: CursorInfo;
   readonly rootIds: readonly string[];
   readonly nodes: readonly SemanticNode[];
-  /** Required by v2, forbidden by strict v1 validation. */
-  readonly coordinateSpace?: Observation<CoordinateSpace>;
+  /** Coordinate system used by every physical observation in this snapshot. */
+  readonly coordinateSpace: Observation<CoordinateSpace>;
   /**
    * Required by v2. `known` means a complete map, not a sample or paint-order
    * approximation. Cells absent from a known map have no semantic recipient.
    */
-  readonly hitGrid?: Observation<PointerHitGrid>;
+  readonly hitGrid: Observation<PointerHitGrid>;
+  /** Present only when application evidence providers were negotiated in hello. */
+  readonly providerEvidence?: readonly ProviderRevisionEvidence[];
 }

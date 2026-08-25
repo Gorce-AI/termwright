@@ -46,7 +46,7 @@ Avoid `first()` unless position is the intended behavior. See
 - For keyboard input, confirm that the intended control is focused.
 - Send separate interactions as separate `press()` calls.
 - For pointer input, inspect `hitTest()` and the framework capability matrix.
-- Use `waitForStable()` before a geometry-dependent action if layout is moving.
+- Use `waitForQuiet()` before a geometry-dependent action if layout is moving.
 
 ```ts
 await expect(save).toBeFocused();
@@ -88,11 +88,15 @@ failure time.
 ## CI differs from local
 
 Check the Node version, terminal profile, viewport size, environment, and input
-files. Run locally with the same profile and retry count:
+files. First reproduce the certifying configuration with no retries:
 
 ```sh
-CI=true TERMWRIGHT_RETRIES=2 pnpm test
+CI=true TERMWRIGHT_RETRIES=0 pnpm test -- --resource-profile ci
 ```
+
+After reproducing the failure, a non-certifying diagnostic run may use
+`TERMWRIGHT_RETRIES=2`. Termwright preserves every failed attempt and returns a
+non-zero flaky result even if a later attempt passes.
 
 Download the CI HTML report and trace artifacts instead of relying only on the
 terminal log. See [Run tests in CI](../../guides/ci/).
@@ -101,7 +105,7 @@ terminal log. See [Run tests in CI](../../guides/ci/).
 
 - Set `TERMWRIGHT_DEBUG=1` for driver decisions and waits.
 - Use `trace: 'on'` temporarily to retain successful runs.
-- Add the Termwright reporter for a self-contained HTML artifact.
+- Retain a trace and run `termwright report --trace …` for a self-contained HTML artifact.
 - Inspect application logs in the Runner; dropped records are shown explicitly.
 
 [Traces and reports →](../traces-reports/)

@@ -9,8 +9,9 @@ editUrl: false
 
 # @termwright/test
 
-`@termwright/test` — the Vitest preset: fixtures, retry-able matchers,
-semantic YAML snapshots and cell snapshots.
+`@termwright/test` — the authoring surface for the Termwright Native Host:
+Vitest-powered DSL, fixtures, retry-able matchers, semantic YAML snapshots
+and cell snapshots. It is not a direct-Vitest compatibility preset.
 
 Importing this module registers the matchers with `expect`, so a test file
 only ever imports `test` and `expect` from here.
@@ -46,15 +47,17 @@ test('asks before running a command', async ({ terminal }) => {
 - [ColorPalette](interfaces/colorpalette/)
 - [LaunchFixtureOptions](interfaces/launchfixtureoptions/)
 - [LaunchOverrides](interfaces/launchoverrides/)
-- [Locator](interfaces/locator/)
 - [LogCollection](interfaces/logcollection/)
 - [LogQuery](interfaces/logquery/)
 - [LogSource](interfaces/logsource/)
 - [OpenShellFixtureOptions](interfaces/openshellfixtureoptions/)
 - [PollOptions](interfaces/polloptions/)
+- [PtyUnavailableReason](interfaces/ptyunavailablereason/)
 - [ResolvedTermwrightConfig](interfaces/resolvedtermwrightconfig/)
+- [ScreenLocator](interfaces/screenlocator/)
 - [SeedOptions](interfaces/seedoptions/)
 - [SeedTemplate](interfaces/seedtemplate/)
+- [SemanticLocator](interfaces/semanticlocator/)
 - [SemanticSnapshotMatcherOptions](interfaces/semanticsnapshotmatcheroptions/)
 - [SerializeOptions](interfaces/serializeoptions/)
 - [StepOptions](interfaces/stepoptions/)
@@ -66,12 +69,15 @@ test('asks before running a command', async ({ terminal }) => {
 - [TermwrightOptions](interfaces/termwrightoptions/)
 - [TermwrightRetryOptions](interfaces/termwrightretryoptions/)
 - [TermwrightScopeFixture](interfaces/termwrightscopefixture/)
+- [TermwrightTestResources](interfaces/termwrighttestresources/)
 - [TermwrightVitestProject](interfaces/termwrightvitestproject/)
 - [TestTimeoutClasses](interfaces/testtimeoutclasses/)
 - [TextMatcherOptions](interfaces/textmatcheroptions/)
 
 ## Type Aliases
 
+- [AnyLocator](type-aliases/anylocator/)
+- [ResourceAwareTestApi](type-aliases/resourceawaretestapi/)
 - [SeedFile](type-aliases/seedfile/)
 - [SeedFiles](type-aliases/seedfiles/)
 - [StateSelection](type-aliases/stateselection/)
@@ -95,6 +101,7 @@ test('asks before running a command', async ({ terminal }) => {
 - [defineTermwrightConfig](functions/definetermwrightconfig/)
 - [getTermwrightConfig](functions/gettermwrightconfig/)
 - [ptyAvailable](functions/ptyavailable/)
+- [ptyUnavailableReason](functions/ptyunavailablereason/)
 - [registerTermwrightMatchers](functions/registertermwrightmatchers/)
 - [seedDirectory](functions/seeddirectory/)
 - [serializeScreen](functions/serializescreen/)

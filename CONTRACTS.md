@@ -22,15 +22,16 @@ Changing a normative file requires: update it first, note the change in
 
 - `protocol` depends on `zod` only. Never on React, Ink, MCP, PTY, driver.
 - `driver` depends on `protocol` + PTY/VT libs. Never on Ink, Vitest, MCP.
-- `ink`, `opentui` are annotation-only SDKs. They depend on `protocol` and
-  declare their framework as a peer; they never depend on driver or own a
-  semantic transport. Process-local weak registries are the boundary probes
-  read when the SDK is present.
+- `opentui` is an annotation-only SDK. It depends on `protocol`, declares its
+  framework as a peer, and never depends on driver or owns a semantic
+  transport. Its process-local weak registry is the boundary probes read when
+  the SDK is present.
 - `test` depends on `driver`, `trace`, `protocol` constants/types and UI's
   Node-only `live-client`; it declares `vitest` as a peer. The live client is
   fail-open and dormant unless `TERMWRIGHT_UI_URL` is set.
-- `ink-testing` depends on `driver`, the Ink annotation SDK, `probe-ink` and
-  `protocol`; its in-process testing entry is not a public manual adapter.
+- `ink` contains both the annotation SDK and component-test harnesses. It
+  depends on `driver`, `probe-ink` and `protocol`; its in-process testing entry
+  is not a public manual adapter.
 - `mcp` depends on `driver` + MCP SDK behind `src/sdk-facade.ts` (may also import constants/types from `protocol`). No session logic of its own.
 - `trace` depends on `driver` types only (consumes `SessionEvents`) and may
   type-import from `protocol` (it stores `SemanticSnapshot` verbatim).
@@ -84,6 +85,12 @@ masking leaves.
 
 A directory (zipped for transport) containing:
 
+- `COMMITTED` — versioned SHA-256 manifest for every required member. The
+  writer prepares and fsyncs a sibling staging directory, writes this marker
+  last, then atomically renames the directory into place. A staging directory,
+  a missing marker, or a checksum mismatch is never a readable complete trace.
+  `packTrace()` accepts only such a committed directory.
+
 - `meta.json` — `{ v: 1, sessionId, command, columns, rows, startedAt,
   platform, terminalProfile?, semanticTree: boolean, exit?: {code, signal},
   crash?: {t, castOffset, exit, screenTail, lastSemanticRevision,
@@ -103,7 +110,8 @@ A directory (zipped for transport) containing:
   positions the event on the (idle-trimmed, hide-window-adjusted) recording
   timeline. There is no reader fallback — one writer generation exists.
 
-`terminalProfile` is `capabilities().terminalProfile`; absent means
+`terminalProfile` is `TerminalHarness.terminalProfile`; absent in a legacy
+archive means
 `'default'`. Replay MUST construct its emulator through `@termwright/vt`'s
 `createTerminal` with that profile — a session and its replay measuring
 characters differently place wide characters a column apart with nothing
@@ -131,27 +139,29 @@ since session start, monotonic, never resets for the lifetime of a session
   caveat as `crash.screenTail`.
 
 Writer/reader live in `@termwright/trace`; UI and HTML report consume only via
-those readers.
+those readers. Readers classify artifacts as `complete`, `incomplete`,
+`corrupt`, or `unsupported-version`; they never silently treat partial output
+as an older valid trace.
 
 ## §UI events — runner ↔ browser
 
 WebSocket, JSON messages `{ v: 1, type, ... }`:
-- server→client: `tests-discovered {tests: [{id, title, file}]}` (project
-  listing at server start and on file change; `id` is `<file>::<name>` —
-  stable across runs, reconcilable with a started test by file+title; a
-  discovered row is ADOPTED by the run that touches it, never duplicated;
-  discovery never blocks and a failed listing yields an empty list),
-  `run-start {mode, startedAt}` (`mode` is `live | post-mortem | record`),
-  `session {sessionId, terminalProfile, columns, rows, testId?, adapter?,
-  probe?, capabilities?, adapterStatus?}` (sent when a live session attaches;
-  the browser MUST build its terminal via the session's profile or state the
-  widths it renders with; `testId` binds a worker-owned terminal to its Vitest
-  attempt; `adapter` is `{name, version}`; `probe` is the semantic protocol's
-  `ProbeInfo`; `capabilities` is the negotiated adapter capability list;
-  `adapterStatus` is `attached | disconnected | error` and requires `adapter`;
-  `probe` requires `adapter`; a later `session` for the same id replaces its
-  lifecycle facts in the replay backlog),
-  `test-start {id, title, file, startedAt, sessionId?}`,
+- server→client: `tests-discovered {tests: [{id, title, file, ...}]}` (project
+  listing from programmatic native collection; `id` is the invocation-scoped
+  `RunnerTaskId`; duplicate names and parameterized cases remain distinct;
+  collection/config failure emits `collection-failed` and is never rewritten
+  as an empty suite),
+  `run-start {runId, mode, startedAt}` (`runId` is the exact host RunId;
+  `mode` is `live | post-mortem | record`),
+  `session {sessionId, terminalProfile, columns, rows, testId?, contract?,
+  adapterStatus?}` (sent when a live session attaches; the browser MUST build
+  its terminal via the session's profile or state the widths it renders with;
+  `testId` is the owning AttemptId; `contract` is the frozen Effective Session
+  Contract; a later `session` for the same id replaces its lifecycle facts in
+  the recoverable-state backlog),
+  `test-start {id, runnerTaskId?, executionId?, attempt?, title, file,
+  startedAt, sessionId?}` (`id` is AttemptId for native execution; the optional
+  identity fields are absent only for recorder pseudo-cases),
   `step {testId, title, phase, stepId?, t?, status?}`,
   `output {sessionId, dataB64, t}`,
   `semantic {sessionId, revision, snapshot}`,
@@ -160,28 +170,34 @@ WebSocket, JSON messages `{ v: 1, type, ... }`:
   `action-start {actionId, api, t, testId?, sessionId?, selector?, stepId?}`,
   `action {kind, api, t, ok, actionId?, testId?, sessionId?, selector?, ref?,
   error?, stepId?}` (`actionId` correlates a driver completion with its live
-  start edge and is scoped to `sessionId`; assertions and older producers may
-  publish only the completion),
+  start edge and is scoped to `sessionId`; assertions may publish only the
+  completion),
   `test-end {id, status, durationMs, flaky, lostLogRecords, traceRef?,
-  error?, attempt?, priorFailures?}` (`attempt` is the one-based final native
-  Vitest attempt; `priorFailures` is its ordered `{attempt, errors[]}` history;
-  both are absent for pre-retry producers. `lostLogRecords` is REQUIRED — 0 is representable, and "nothing
+  error?, attempt?, priorFailures?}` (`attempt` is the one-based native retry
+  ordinal; `priorFailures` is its ordered `{attempt, errors[]}` history.
+  `lostLogRecords` is REQUIRED — 0 is representable, and "nothing
   was lost" and "nobody counted" are different facts),
   `run-end {summary: {total, passed, failed, skipped, flaky, durationMs}}`,
   `run-cancelled {stoppedAt}` (emitted after the stopped test process exits;
   unfinished rows become cancelled, never silently skipped),
   `run-cancel-failed {error}` (the process could not be stopped; the run stays
-  active).
+  active),
+  `actionability-inspection {requestId, sessionId, nodeId, results|error}`
+  (request-scoped reply; `results` contains exactly the live worker's four
+  ActionPlanner explanations for click, hover, focus and type, all bound to the
+  same committed checkpoint; the server neither reconstructs nor caches these
+  answers, and sends them only to the requesting browser),
+  `control-result {requestId, control, ok, error?}` (request-scoped completion
+  of `pick` or `input`; `error` is present exactly when `ok` is false).
   Optional fields are exactly those marked `?` above. In particular,
-  `test-start.sessionId` may be absent because a Vitest reporter genuinely
-  cannot know a worker's sessions; a worker-side live bridge sends the binding
-  on `session.testId` instead. `traceRef` is absent when no archive was
+  `test-start.sessionId` may be absent because an attempt can launch zero or
+  several terminal sessions; the worker-side bridge sends ownership on
+  `session.testId` instead. `traceRef` is absent when no archive was
   retained, and `test-end.error` is absent on pass.
-  A discovery id is the stable browser/rerun id. `test-start.id`,
-  `test-end.id`, `step.testId`, `action-start.testId`, `action.testId` and
-  `session.testId` carry the current Vitest execution id; the browser reconciles
-  that id with exactly one discovered row by `file + title` and never replaces
-  the row's stable id.
+  `tests-discovered.id` and `test-start.runnerTaskId` are the same native
+  RunnerTaskId. `test-start.id`, `test-end.id`, `step.testId`,
+  `action-start.testId`, `action.testId` and `session.testId` carry AttemptId.
+  No event is reconciled by file/title.
   There are no receiver-side fallbacks — this protocol has exactly one
   producer generation. `summary.flaky` is counted separately from `passed` —
   hiding flaky inside passes is how flaky stays forever.
@@ -196,32 +212,41 @@ level-less entries produce no markers but are always listed.
 `action` carries one driver call (`kind: 'action'`) or one assertion
 (`kind: 'assert'`), exactly as `events.jsonl` records them: `api` is the
 API/matcher name, `t` is session-clock ms, `ok` is the outcome, `ref` is the
-resolved target: either semantic `n8@42` or revision-bound grid
+resolved target: either semantic `semantic:n8@42` or revision-bound screen
 `grid:r,c,w,h@rev`. Stable semantic refs may re-resolve across revisions;
 frame-local semantic refs are refused and grid refs expire with their screen
 revision. Receivers build a command log identical to what replay reads from the
 archive.
-- client→server: `rerun {testIds?}`, `stop`, `pick {sessionId}` (inspector
-  pick-mode), `input {sessionId, dataB64}` (recorder mode only).
-The Vitest bridge is a reporter translating Vitest lifecycle into these
-messages; the browser app never imports Vitest.
+- client→server: `pick {sessionId, enabled?, requestId?}` (inspector
+  pick-mode), `input {sessionId, dataB64, requestId?}` (recorder mode only;
+  when `requestId` is present, the server sends `control-result` only after the
+  operation has completed),
+  `inspect-actionability {requestId, sessionId, nodeId}` (live mode only; routed
+  to the owning worker's production ActionPlanner, never answered from replay
+  or browser-side geometry).
+Run/rerun/stop are typed HTTP requests carrying RunnerTaskIds and exact RunId;
+they return an outcome and are never fire-and-forget WebSocket controls.
+The native host owns the authoritative Run Event Journal. Worker producers use
+an authenticated channel with exact RunId, producer epoch and sequence; UI and
+human reporters are projections and browser code never imports Vitest.
 
-Run history: the reporter (single producer) writes
-`.termwright/runs/<timestamp>/manifest.json` — `{ v: 1, counts, tests,
-trace PATHS (never copies), lostRecords per test, attempts? per test }`.
-`attempts` is additive and ordered; older v1 manifests without it remain valid.
-The UI's Runs view is
-the only consumer; opening an archived test goes through the same
-`openArchive` path as `--trace`. A test without a retained archive says so
-instead of offering a replay.
+Run history is committed by the host under the collision-safe RunId. A staging
+directory contains start-time Git/CI/runtime/resource provenance, the complete
+accepted event journal, native Spec/Task/Execution/Attempt identities and the
+terminal run state. Checksums, fsync and one atomic rename are the certification
+commit. Readers distinguish `complete`, `incomplete`, `corrupt` and
+`unsupported-version`; there is no timestamp identity or legacy manifest
+fallback. Opening a retained trace still goes through the same `openArchive`
+validation path as `--trace`.
 
 ## §MCP — tool surface (all tools validate with zod, return structuredContent)
 
 `terminal.launch`, `terminal.capabilities`, `terminal.snapshot` (compact ref
 format + visible text; `full` variant writes to disk and returns refs),
 `terminal.capture_since {cursor}` (changed rows + changed semantic subtrees),
-`terminal.query {selector|role/name}`, `terminal.click`, `terminal.double_click`,
-`terminal.press`, `terminal.type`, `terminal.paste`, `terminal.write_raw`,
+`terminal.query {selector|role/name}`, `terminal.checkpoint`, `terminal.actionability`,
+`terminal.click`, `terminal.double_click`, `terminal.hover`, `terminal.press`,
+`terminal.type`, `terminal.fill`, `terminal.check`, `terminal.uncheck`, `terminal.paste`, `terminal.write_raw`,
 `terminal.drag`, `terminal.wheel`, `terminal.resize`, `terminal.signal`,
 `terminal.scrollback`, `terminal.select_cells`, `terminal.copy_selection`,
 `terminal.wait_for`, `terminal.close`.
@@ -231,8 +256,8 @@ Compact snapshot format (normative):
 ```
 Terminal t1 100x30 revision 42
 semanticTree: available
-dialog "Permission" ref=n7@42 bounds=(8,20,40,9) modal
-  button "Approve" ref=n8@42 bounds=(14,23,11,1) focused
+dialog "Permission" ref=semantic:n7@42 bounds=(8,20,40,9) modal
+  button "Approve" ref=semantic:n8@42 bounds=(14,23,11,1) focused
 visible text:
 <grid text>
 ```

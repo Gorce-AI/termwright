@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
+import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import {
   BUBBLETEA_MODULES,
   capabilitiesFor,
@@ -23,13 +24,10 @@ import {
 const run = promisify(execFile);
 
 async function goAvailable(): Promise<boolean> {
-  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;
-  try {
+  return goTestCapability(async () => {
     await run('go', ['version']);
     return true;
-  } catch {
-    return false;
-  }
+  }, false, 'Go certification toolchain');
 }
 
 const hasGo = await goAvailable();
@@ -69,9 +67,9 @@ describe('what each major can promise', () => {
     // destroys the fragment→region mapping on the way. v2 has possible future
     // attribution channels, but this patch set has not wired either one.
     for (const major of ['v1', 'v2'] as const) {
-      expect(capabilitiesFor(major)).toEqual(['tree', 'states', 'actions', 'render-revisions']);
-      expect(capabilitiesFor(major)).not.toContain('bounds');
-      expect(capabilitiesFor(major)).not.toContain('absolute-bounds');
+      expect(capabilitiesFor(major)).toEqual(['tree', 'states', 'focus-state', 'actions', 'render-revisions']);
+      expect(capabilitiesFor(major)).not.toContain('intended-geometry');
+      expect(capabilitiesFor(major)).not.toContain('clipped-geometry');
       expect(reportsGeometry(major)).toBe(false);
     }
   });

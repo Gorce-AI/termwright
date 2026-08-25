@@ -4,11 +4,15 @@ Semantic side-channel client for the [termwright](https://github.com/gorce-ai/te
 terminal test driver.
 
 An instrumented TUI publishes its widget tree over a unix socket and commits
-each render with a signed OSC marker, so tests assert on *roles and names*
+each render with a signed OSC marker, so tests assert on _roles and names_
 instead of screen-scraping cells. This crate is the protocol side of that
 contract — framing, the marker, message and snapshot validation, and a blocking
 socket client. It ships **no framework adapter**: wire it into whatever draws
 your screen (ratatui, cursive, a hand-rolled renderer).
+
+The client speaks `termwright/2`. Every published semantic revision is a
+complete v2 snapshot with evidence-qualified geometry and pointer
+observations.
 
 **Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in the
 environment, `Client::from_env` returns `None` and nothing happens at all: no
@@ -104,8 +108,8 @@ or, on a session that came up:
 
 ```text
   tw:sem  [p41207]   0.002s dial unix:/tmp/tw-8f21/s timeout=5000ms
-  tw:sem  [p41207]   0.003s hello sent adapter=my-tui/1.0.0 caps=tree,bounds,…
-  tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=diffs logs=off
+  tw:sem  [p41207]   0.003s hello sent adapter=my-tui/1.0.0 caps=tree,intended-geometry,…
+  tw:sem  [3f9c1a04]  0.011s hello-ack session=3f9c1a04… marker=on subscribe=snapshots logs=off
   tw:io   [3f9c1a04]  0.048s r1 snapshot nodes=17
 ```
 
@@ -137,10 +141,23 @@ are decided by whatever code calls `Client::publish`, which is where those
 rules land instead.
 
 What the crate does carry is the protocol side that has no adapter in it:
-framing, the marker, validation, delta composition and production, and the
+framing, the marker, full-snapshot validation and publication, and the
 `tracing` bridge. Those follow the wire contract exactly and are checked
 against the shared vectors, so there is nothing here to declare an exception
 for.
+
+## Application evidence providers
+
+The `evidence` module exposes closed pointer, focus, scroll, paint, input-mode,
+and action-strategy families. `FocusProvider::observe` returns
+`Some(recipient)` or authoritative
+`None`; wire encoding preserves that distinction as `focused | none`.
+Registration is frozen before the session and recipes remain data executed by
+Termwright's PTY devices, never application callbacks.
+
+`InputModeProvider::observe` reports the application's production parser
+configuration. It can prove modes hidden by ConPTY, while input still crosses
+the real named-pipe/PTY path and conflicting observable VT state fails closed.
 
 ## Conformance
 
@@ -160,9 +177,10 @@ not detectable here. Those cases are marked `"optional": true` in
 
 ## Platform support
 
-Unix domain sockets only. On Windows the driver hands out a named pipe, which
-needs a different transport (`CreateFile` on the pipe path, or a crate such as
-`tokio`'s named-pipe support); this crate does not open one, so a
-`\\.\pipe\…` endpoint simply fails to connect and the application carries on
-without a side channel. The Go and Python clients do reach the pipe, so the
-gap is this crate's, not the protocol's.
+Unix uses a Unix domain socket. Windows uses the exact-certified
+`interprocess` 2.4.2 byte-mode named-pipe transport at the driver's
+`\\.\pipe\…` endpoint. Both preserve the same length-prefixed protocol.
+Windows I/O is nonblocking: polling never stalls the render thread, and a
+whole-frame monotonic deadline bounds writes when the driver stops reading.
+CI executes a real Windows named-pipe handshake and snapshot publication; a
+cross-target build alone is not treated as functional proof.

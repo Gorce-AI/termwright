@@ -75,6 +75,8 @@ export interface AccessKitNode {
   readonly modal?: boolean;
   readonly hidden?: boolean;
   readonly readOnly?: boolean;
+  readonly required?: boolean;
+  readonly multiselectable?: boolean;
   readonly toggled?: AccessKitToggled;
 }
 
@@ -290,16 +292,19 @@ export function toAccessKitTreeUpdate(
     const id = idOf.get(node.id)!;
     const state = node.state;
     if (state?.focused === true && focus === undefined) focus = id;
-    if (node.bounds !== undefined) cellBounds[String(id)] = node.bounds;
+    const visibleRect = node.geometry.visibleRect.status === 'known'
+      ? node.geometry.visibleRect.value
+      : undefined;
+    if (visibleRect !== undefined) cellBounds[String(id)] = visibleRect;
 
     const accessKitNode: AccessKitNode = {
       role: accessKitRoleFor(node),
       ...(node.name === '' ? {} : { label: node.name }),
       ...(node.description === undefined ? {} : { description: node.description }),
-      ...(node.value === undefined ? {} : { value: node.value }),
+      ...(node.value?.status === 'known' && node.value.sensitivity === 'public' ? { value: node.value.value } : {}),
       ...(childrenOf.has(node.id) ? { children: childrenOf.get(node.id)! } : {}),
-      ...(node.bounds !== undefined && options.cellSize !== undefined
-        ? { bounds: boundsFor(node.bounds, options.cellSize) }
+      ...(visibleRect !== undefined && options.cellSize !== undefined
+        ? { bounds: boundsFor(visibleRect, options.cellSize) }
         : {}),
       ...(actionsFor(node.actions) === undefined ? {} : { actions: actionsFor(node.actions)! }),
       ...(relation(node.labelledBy) === undefined ? {} : { labelledBy: relation(node.labelledBy)! }),
@@ -313,6 +318,10 @@ export function toAccessKitTreeUpdate(
       ...(state?.modal === undefined ? {} : { modal: state.modal }),
       ...(state?.hidden === undefined ? {} : { hidden: state.hidden }),
       ...(state?.readonly === undefined ? {} : { readOnly: state.readonly }),
+      ...(state?.required === undefined ? {} : { required: state.required }),
+      ...(state?.multiselectable === undefined
+        ? {}
+        : { multiselectable: state.multiselectable }),
       ...(toggledFor(state?.checked) === undefined
         ? {}
         : { toggled: toggledFor(state?.checked)! }),

@@ -35,7 +35,6 @@ await runAdapterConformance({
   quit: { input: '', exitCode: 0 },
   columns: 80,
   rows: 24,
-  expectAbsoluteBounds: true,
 });
 ```
 
@@ -108,11 +107,10 @@ It checks the five obligations an adapter has:
 | Dormant rule | Without `TERMWRIGHT_ENDPOINT` it opens no channel and writes no marker; with `baseline`, byte-for-byte identical startup output |
 | Tree before input | Once the handshake completes and *before any input*, the tree is non-empty and has at least one node a locator could address. Opt out with `treeBeforeInput: {required: false, reason}` |
 | Handshake | `hello` first and once, correct protocol id, non-empty adapter identity, capabilities from the closed set |
-| Snapshot validity | Every snapshot passes `validateSnapshot`, carries this session's id, has resolvable parents and monotonic revisions |
+| Snapshot validity | Every publication is a complete v2 snapshot that passes `validateSnapshot`, carries this session's id, has resolvable parents and monotonic revisions |
 | Revision ordering | For each revision: snapshot → `revision-commit` → a marker that verifies against the session token, markers strictly increasing |
 | Channel loss | Cutting the socket leaves the application rendering and alive, and the adapter does not reconnect |
 | Logs | An adapter that did not announce `logs` sends none. One that declares them in the registration must deliver a record whose `seq` is unique and increasing and whose message never appears on the terminal |
-| Deltas (when announced) | With `subscribe: 'diffs'`, the deltas an adapter emits compose — through the protocol's own `applyTreeDelta` — to the same tree it reports when asked with `get-tree` |
 | Conventions | The machine-checkable half of the protocol README's "Adapter semantics conventions": containers are not named from their content (rule 2), an annotated test id reaches the wire (rule 3), an empty textbox publishes `value: ''` and no value is derived outside `{textbox, progressbar}` or from a boolean (rule 5) |
 
 `await` it at the top level: `vitest` is imported dynamically so the package can
@@ -151,27 +149,32 @@ keep running, and only a pid probed afterwards tells the two apart.
 
 ```sh
 pnpm --filter @termwright/conformance conformance     # every suite, one matrix
+pnpm --filter @termwright/conformance conformance --require-declared-skips
+pnpm --filter @termwright/conformance conformance --require-no-skipped-areas
 pnpm --filter @termwright/conformance test            # plain vitest
 pnpm --filter @termwright/conformance test:hostile    # adversarial suite, 128 MB heap cap
 ```
 
-```
-area                        spec     result         tests    time
-generic fallback            §20.1    pass           10/10    2.0s
-hostile peer                §20.3    pass           25/25    14.5s
-interaction                 §20.4    pass           12/12    2.6s
-readiness + env             §5.3     pass           10/10    2.2s
-adapter contract (py/go)    §7       pass, 8 skip   6/14     0.6s
-hostile peer @ 128 MB heap  §10      pass           25/25    14.4s
-```
+The table reports each area as pass, fail, or pass with an explicit skip count;
+the exact test counts intentionally are not documentation because suites grow.
+Test identities use `file::fullName`, so declarations cannot accidentally
+match a same-named test elsewhere.
 
 Certifying the py/go rows needs their toolchains on the runner
 (`pip install -e clients/python[dev]` and a Go toolchain); without them those
 rows skip honestly, with the probe's failure on stderr.
 
-A partly-skipped area is reported as such rather than as a clean pass: the
-language adapters skip their whole registration when the toolchain is absent,
-and a matrix that hid it would claim coverage the machine never produced.
+A partly-skipped area is reported as such rather than as a clean pass. Platform
+deviations live in the reviewed registry and must match the exact test identity.
+`--require-declared-skips` requires the observed skip identities to equal the
+reviewed applicability and platform-deviation registries exactly.
+`--require-no-skipped-areas` is stricter: it permits only the fixed
+applicability skips and rejects every registered platform deviation. Vitest
+implements applicability with `skipIf`/`runIf`, so those cases do appear in the
+matrix as expected skips even though they are not missing platform coverage.
+Local runs may honestly skip a missing optional toolchain, while certification
+installs its prerequisites and requires exact declared skips so missing
+coverage cannot look green.
 
 Sessions launch with the driver's secret-safe `envMode: 'replace'` default, so
 a fixture only sees the documented allowlist plus what a suite declares.

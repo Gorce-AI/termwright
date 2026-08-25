@@ -1,6 +1,7 @@
 /**
- * `@termwright/test` — the Vitest preset: fixtures, retry-able matchers,
- * semantic YAML snapshots and cell snapshots.
+ * `@termwright/test` — the authoring surface for the Termwright Native Host:
+ * Vitest-powered DSL, fixtures, retry-able matchers, semantic YAML snapshots
+ * and cell snapshots. It is not a direct-Vitest compatibility preset.
  *
  * Importing this module registers the matchers with `expect`, so a test file
  * only ever imports `test` and `expect` from here.
@@ -39,7 +40,7 @@ export { afterAll, afterEach, beforeAll, beforeEach, describe, expect, vi } from
 // Public harness types belong beside the fixture that returns them. Consumers
 // of the umbrella `termwright` package should not need a second direct package
 // dependency only to type a custom fixture.
-export type { Locator, TerminalHarness } from '@termwright/driver';
+export type { AnyLocator, SemanticLocator, ScreenLocator, TerminalHarness } from '@termwright/driver';
 
 export {
   configureTermwright,
@@ -74,6 +75,8 @@ export {
   type TermwrightTestAPI,
 } from './fixtures.js';
 
+export type { ResourceAwareTestApi, TermwrightTestResources } from './provider.js';
+
 export {
   registerTermwrightMatchers,
   type CellSnapshotMatcherOptions,
@@ -91,7 +94,7 @@ export {
 
 export { serializeScreen, type CellSnapshotOptions } from './cells.js';
 
-export { ptyAvailable } from './pty-available.js';
+export { ptyAvailable, ptyUnavailableReason, type PtyUnavailableReason } from './pty-available.js';
 
 export {
   type LaunchOverrides,
@@ -113,8 +116,3 @@ export {
   type LogQuery,
   type LogSource,
 } from './logs.js';
-
-// The reporter is deliberately NOT re-exported here: `vitest.config.ts` runs
-// before the test runner exists, and this module registers matchers on import.
-// Umbrella-package users import it from `termwright/reporter`; direct package
-// consumers can use `@termwright/test/reporter`.

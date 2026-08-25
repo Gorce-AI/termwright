@@ -18,7 +18,7 @@ import type { LogWindowQuery, TraceLogs } from './trace-logs.js';
 import type { TraceCommands, TraceFrames } from './trace-playback.js';
 import type { TraceOverview, TraceStatePayload } from './trace-source.js';
 import type { ProjectInfo } from './project.js';
-import type { RunManifest, RunSummaryEntry } from './runs.js';
+import type { RunDetail, RunSummaryEntry } from './runs.js';
 import type { SpecFacts } from './spec-tree.js';
 
 /**
@@ -75,7 +75,7 @@ export interface DataSource {
   /** What the project's spec files look like on disk and in the history. */
   specs(files: readonly string[]): Promise<{ readonly specs: readonly SpecFacts[] }>;
   runs(): Promise<{ readonly runs: readonly RunSummaryEntry[] }>;
-  run(id: string): Promise<RunManifest>;
+  run(id: string): Promise<RunDetail>;
   openTrace(path: string): Promise<{ readonly trace: TraceOverview | null }>;
 }
 
@@ -196,7 +196,7 @@ export class InlineDataSource implements DataSource {
   }
 
   /** @throws Error always; see {@link InlineDataSource.runs}. */
-  async run(): Promise<RunManifest> {
+  async run(): Promise<RunDetail> {
     throw new Error('a self-contained report holds one recording and no run history');
   }
 

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: PointerOptions
 
-Defined in: [api.ts:477](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L477)
+Defined in: [driver/src/api.ts:767](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L767)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -32,7 +32,7 @@ await terminal.close();
 
 ## Extends
 
-- [`WaitOptions`](../waitoptions/)
+- [`WaitOptions`](../waitoptions/).[`MouseModifierOptions`](../mousemodifieroptions/)
 
 ## Properties
 
@@ -40,7 +40,19 @@ await terminal.close();
 
 > `readonly` `optional` **button?**: `"left"` \| `"middle"` \| `"right"`
 
-Defined in: [api.ts:478](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L478)
+Defined in: [driver/src/api.ts:768](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L768)
+
+***
+
+### modifiers?
+
+> `readonly` `optional` **modifiers?**: readonly [`MouseModifier`](../../type-aliases/mousemodifier/)[]
+
+Defined in: [driver/src/api.ts:278](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L278)
+
+#### Inherited from
+
+[`MouseModifierOptions`](../mousemodifieroptions/).[`modifiers`](../mousemodifieroptions/#modifiers)
 
 ***
 
@@ -48,7 +60,7 @@ Defined in: [api.ts:478](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` `optional` **position?**: `object`
 
-Defined in: [api.ts:479](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L479)
+Defined in: [driver/src/api.ts:769](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L769)
 
 #### columnOffset
 
@@ -64,7 +76,7 @@ Defined in: [api.ts:479](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [api.ts:399](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L399)
+Defined in: [driver/src/api.ts:537](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L537)
 
 #### Inherited from
 

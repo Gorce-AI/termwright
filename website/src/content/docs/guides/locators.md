@@ -3,9 +3,10 @@ title: Locators
 description: Find semantic elements by role, label, text, test ID, or selector.
 ---
 
-Locators find elements in the semantic tree published by your application or
-framework integration. Prefer a role and accessible name when they describe what a
-user interacts with.
+Termwright has two disjoint locator domains. `SemanticLocator` finds elements in
+the semantic tree published by your application or framework integration;
+`ScreenLocator` finds exact regions in the physical terminal grid. TypeScript
+rejects composition across those domains.
 
 ```ts
 const save = app.getByRole('button', {name: 'Save'});
@@ -25,8 +26,8 @@ element appears and pass it to a retrying assertion.
 | `getByTestId(id)` | The application has no stable user-facing identity for the element. |
 | `locator(selector)` | You need a structural or framework-specific selector. |
 
-Programs without a semantic tree do not support these locators. Use screen
-text, cell assertions, and terminal-level input instead.
+Programs without a semantic tree do not support these locators. Use
+`getByScreenText()`, cell assertions, and terminal-level input instead.
 
 ## Locate by role and name
 
@@ -53,7 +54,7 @@ refactors more often.
 
 ```ts
 const name = app.getByLabel('Profile name');
-await name.focusNode();
+await name.focus();
 await name.type('release');
 ```
 
@@ -70,6 +71,27 @@ await expect(app.getByText(/items: \d+/)).toHaveText(/items: 3/);
 Use `app.waitForText()` when you only need to wait for characters on the
 terminal grid. Use `getByText()` when you need a semantic element carrying that
 text.
+
+## Locate physical screen text
+
+`getByScreenText()` always searches the terminal grid, including when the
+session also has semantics. It never changes domains based on runtime state or
+options.
+
+```ts
+const secondError = app.getByScreenText('ERROR', {
+  occurrence: 2,
+  fg: 'red',
+});
+
+await expect(secondError).toBeVisible();
+```
+
+Use it for styled output, repeated rendered text, custom canvases, and programs
+without a framework integration. It returns a physical grid region, not a
+semantic role or component identity. It supports truthful pointer actions when
+that exact region is actionable, but deliberately has no `fill()`, `focus()`,
+semantic state, role descendants, or semantic filters.
 
 ## Scope a locator
 
@@ -108,7 +130,8 @@ expect(await app.getByRole('button').count()).toBe(3);
 that receive a semantic reference from a snapshot. Normal tests should prefer a
 declarative locator.
 
-Stable semantic identities may be resolved again after a new revision. A
+Refs carry their domain explicitly: `semantic:n8@42` or
+`screen:4,10,6,1@17`. Stable semantic identities may be resolved again after a new revision. A
 frame-local reference cannot. Grid references remain tied to the revision that
 created them.
 

@@ -25,4 +25,22 @@ describe.skipIf(!runnable)('the Bubble Tea login form', () => {
     await expect(app).not.toHaveText('secret');
     expect(JSON.stringify(app.semanticTree())).not.toContain('secret');
   });
+
+  test('clicks through Bubble Tea input using its production pointer router evidence', async ({terminal}) => {
+    const app = await terminal.launch();
+    await app.waitForText('Sign in');
+
+    const receipt = await app.getByRole('button', {name: 'Submit'}).click();
+
+    await expect(app).toHaveText('status: submitted through terminal mouse');
+    expect(receipt.plan.strategy).toBe('authoritative-pointer-region');
+    expect(receipt.executed.map((step) => `${step.device}:${step.kind}`)).toEqual([
+      'mouse:down',
+      'mouse:up',
+    ]);
+    expect(app.contract()?.capabilities['pointer-hit-testing']).toMatchObject({
+      status: 'supported',
+      evidence: {providerId: 'bubbletea-login-production-router'},
+    });
+  });
 });

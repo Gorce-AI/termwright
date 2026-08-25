@@ -50,8 +50,10 @@ function nodeChanged(before: SemanticNode, after: SemanticNode): boolean {
     before.testId !== after.testId ||
     before.description !== after.description ||
     before.parentId !== after.parentId ||
-    JSON.stringify(before.bounds ?? null) !== JSON.stringify(after.bounds ?? null) ||
-    JSON.stringify(before.state ?? null) !== JSON.stringify(after.state ?? null)
+    JSON.stringify(before.geometry) !== JSON.stringify(after.geometry) ||
+    JSON.stringify(before.state ?? null) !== JSON.stringify(after.state ?? null) ||
+    JSON.stringify(before.scroll ?? null) !== JSON.stringify(after.scroll ?? null) ||
+    JSON.stringify(before.paintedRegion ?? null) !== JSON.stringify(after.paintedRegion ?? null)
   );
 }
 

@@ -13,7 +13,7 @@
  * @packageDocumentation
  */
 
-import type { SemanticSnapshot } from '@termwright/protocol';
+import type { EffectiveSessionContract, SemanticSnapshot } from '@termwright/protocol';
 import type { StepSummary, TraceReader } from '@termwright/trace';
 import { parseCrash, type CrashView } from './crash.js';
 import type { ServerMessage, UiTestStatus } from './events.js';
@@ -44,6 +44,7 @@ export interface TraceOverview {
   /** Length of the recording on the cast timeline. */
   readonly durationMs: number;
   readonly semanticTree: boolean;
+  readonly contract: EffectiveSessionContract | null;
   /**
    * Terminal profile the session was recorded with, from `meta.terminalProfile`.
    * The panel needs it to measure characters the way the driver did; `null`
@@ -117,6 +118,7 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
     startedAt: Number.isFinite(Date.parse(meta.startedAt)) ? Date.parse(meta.startedAt) : 0,
     durationMs: Math.max(last, steps.at(-1)?.castEndOffset ?? 0),
     semanticTree: meta.semanticTree,
+    contract: meta.contract ?? null,
     terminalProfile,
     exit: meta.exit ?? null,
     lostLogRecords: meta.logs?.dropped ?? 0,
@@ -133,7 +135,16 @@ export async function readTraceOverview(reader: TraceReader): Promise<TraceOverv
 export function publishTraceTimeline(hub: UiHub, overview: TraceOverview): void {
   const testId = overview.sessionId;
   const messages: ServerMessage[] = [
-    { v: 1, type: 'run-start', mode: 'post-mortem', startedAt: overview.startedAt },
+    { v: 1, type: 'run-start', runId: `trace:${overview.sessionId}`, mode: 'post-mortem', startedAt: overview.startedAt },
+    {
+      v: 1,
+      type: 'session',
+      sessionId: overview.sessionId,
+      terminalProfile: overview.terminalProfile ?? 'default',
+      columns: overview.columns,
+      rows: overview.rows,
+      ...(overview.contract === null ? {} : { contract: overview.contract }),
+    },
     {
       v: 1,
       type: 'test-start',

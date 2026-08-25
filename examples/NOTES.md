@@ -53,17 +53,16 @@ workaround in this directory.
 ## Traps
 
 - **`waitForText` is satisfied by the screen; the tree arrives a beat later.**
-  Matchers poll through that gap. Plain reads do not: `expect(app.capabilities()
-  .semanticTree).toBe(true)` straight after a text wait fails under load. Put a
-  polling matcher first — it is what waits for the handshake — and read the
-  capability after it.
+  Matchers wait through that gap. To branch on semantics, use
+  `await app.settled()` and inspect its frozen contract; do not read transient
+  adapter attachment state.
 - **A spy is not a frame.** Every wait in the harness is driven by rendered
   frames, and a callback that only notifies its parent renders nothing. After
   physical input, `expect(spy).toHaveBeenCalledOnce()` is a race; `vi.waitFor`
   is not.
 - **A click needs the frame to hold still.** Matchers read the tree, but a
   click aims at cell coordinates. Textual fades a modal in, so its buttons
-  exist at coordinates that are still moving — `waitForStable()` before the
+  exist at coordinates that are still moving — `waitForQuiet()` before the
   click. This is the one wait in these suites that is *not* about the tree, and
   the reason it survives the rest of them being deleted.
 - **Two chords in one `press()` are one write, not two keystrokes.** The driver
@@ -126,6 +125,6 @@ is gone, not that the selector is wrong.
 
 - Windows. Nothing in this directory has run on ConPTY.
 - `launchInkFixture`. The component tests use `mountInk`; the process-mode half
-  of that API is covered by `@termwright/ink-testing`'s own suite.
+  of that API is covered by `@termwright/ink`'s own suite.
 - The Rust client, which is protocol-only and has no framework adapter to
   demonstrate.

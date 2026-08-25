@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: SessionClosedError
 
-Defined in: [errors.ts:110](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L110)
+Defined in: [driver/src/errors.ts:195](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L195)
 
 The harness was closed; no further observation or input is possible.
 
@@ -25,7 +25,7 @@ The harness was closed; no further observation or input is possible.
 
 > **new SessionClosedError**(`message`, `diagnostics`): `SessionClosedError`
 
-Defined in: [errors.ts:111](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L111)
+Defined in: [driver/src/errors.ts:196](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L196)
 
 #### Parameters
 
@@ -47,11 +47,23 @@ Defined in: [errors.ts:111](https://github.com/Gorce-AI/termwright/blob/main/pac
 
 ## Properties
 
+### actionability?
+
+> `optional` **actionability?**: [`ActionabilityExplanation`](../../interfaces/actionabilityexplanation/)
+
+Defined in: [driver/src/errors.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L22)
+
+#### Inherited from
+
+[`TermwrightError`](../termwrighterror/).[`actionability`](../termwrighterror/#actionability)
+
+***
+
 ### code
 
 > `readonly` **code**: [`TermwrightErrorCode`](../../type-aliases/termwrighterrorcode/)
 
-Defined in: [errors.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L19)
+Defined in: [driver/src/errors.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L20)
 
 #### Inherited from
 
@@ -63,7 +75,7 @@ Defined in: [errors.ts:19](https://github.com/Gorce-AI/termwright/blob/main/pack
 
 > `readonly` **diagnostics**: [`ErrorDiagnostics`](../../interfaces/errordiagnostics/)
 
-Defined in: [errors.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L20)
+Defined in: [driver/src/errors.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L21)
 
 #### Inherited from
 
@@ -75,7 +87,7 @@ Defined in: [errors.ts:20](https://github.com/Gorce-AI/termwright/blob/main/pack
 
 > **toString**(): `string`
 
-Defined in: [errors.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L30)
+Defined in: [driver/src/errors.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L38)
 
 Renders message + diagnostics the way test runners print failures.
 
@@ -86,3 +98,27 @@ Renders message + diagnostics the way test runners print failures.
 #### Inherited from
 
 [`TermwrightError`](../termwrighterror/).[`toString`](../termwrighterror/#tostring)
+
+***
+
+### withActionability()
+
+> **withActionability**(`explanation`): `this`
+
+Defined in: [driver/src/errors.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L32)
+
+Attach the exact failed planner evaluation; never recomputed after state changes.
+
+#### Parameters
+
+##### explanation
+
+[`ActionabilityExplanation`](../../interfaces/actionabilityexplanation/)
+
+#### Returns
+
+`this`
+
+#### Inherited from
+
+[`TermwrightError`](../termwrighterror/).[`withActionability`](../termwrighterror/#withactionability)

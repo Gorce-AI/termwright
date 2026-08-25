@@ -1,7 +1,7 @@
 {
   "framework": "charm.land/bubbletea/v2",
   "frameworkVersion": "v2.0.8",
-  "patchSetVersion": 10,
+  "patchSetVersion": 15,
   "note": "One anchor: Program.render, which v2 consolidated from v1's three call sites. See docs/architecture/audit/charm.md §1.",
   "patched": [
     {
@@ -21,12 +21,12 @@
     {
       "path": "termwright_probe.go",
       "source": "add/termwright_probe.go",
-      "sha256": "sha256:0ce80d4f043f9fd5f6c8ecb1da77614685caec98dc8080a4fefdead4e52abc32"
+      "sha256": "sha256:4d42218bc8e4abdf838c6c47263e712fd467bcd7746e8172ea4d4109274009cb"
     },
     {
       "path": "termwright_probe_test.go",
       "source": "add/termwright_probe_test.go",
-      "sha256": "sha256:ee779fff3ba0eef7a60f30f31c179763d7072753f5acb49dd9f7998201f8319e"
+      "sha256": "sha256:58cff1243dc108ed238cf5ba5fe539c88ae28edf5161d1d03d9d1ffb4d1c23fc"
     }
   ]
 }

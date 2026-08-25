@@ -1,15 +1,10 @@
 /**
- * The channel the fixtures use to hand trace archives to the reporter.
+ * The channel fixtures use to attach terminal diagnostics to the native task.
  *
  * Vitest serializes `task.meta` from the worker to the main process, which is
- * how a `.twtrace` directory written during teardown reaches the reporter that
- * renders the HTML report.
- *
- * It lives in its own module because both sides need the augmentation, and a
- * consumer that only imports `@termwright/test/reporter` must still get it:
- * without `TaskMeta` carrying `termwright`, Vitest's `File` is not assignable
- * to the reporter's structural view of a task, and
- * `reporters: [new TermwrightReporter()]` fails to typecheck.
+ * how a `.twtrace` directory and cleanup diagnostics written during teardown
+ * reach the exact-certified runner and Native Host. Human reporters are only
+ * projections of that host-owned state; they do not own this channel.
  */
 
 /**
@@ -57,13 +52,18 @@ export interface TermwrightTaskMeta {
    * A green test with records missing is not the same result as a green test
    * with all of them, and the difference is invisible in a pass count — which
    * is why it travels to reporters rather than living only in a failure
-   * message nobody sees on a passing run.
+   * message nobody sees on a passing run. The host persists this fact and
+   * human reporters may project it.
    */
   readonly lostLogRecords?: number;
 }
 
 export interface TermwrightAttemptFailure {
-  /** One-based attempt number. */
+  readonly executionId: import('./attempt-context.js').ExecutionId;
+  readonly attemptId: import('./attempt-context.js').AttemptId;
+  readonly repeat: number;
+  readonly retry: number;
+  /** One-based retry number within the execution. */
   readonly attempt: number;
   readonly errors: readonly { readonly message: string; readonly stack?: string }[];
   readonly traceRefs?: readonly string[];

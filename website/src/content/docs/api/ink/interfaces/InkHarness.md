@@ -3,15 +3,15 @@ title: "Interface: InkHarness"
 editUrl: false
 ---
 
-[**@termwright/ink-testing**](../../)
+[**@termwright/ink**](../../)
 
 ***
 
-[@termwright/ink-testing](../../) / InkHarness
+[@termwright/ink](../../) / InkHarness
 
 # Interface: InkHarness
 
-Defined in: [ink-testing/src/mount.tsx:93](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L93)
+Defined in: [ink/src/mount.tsx:93](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L93)
 
 A [TerminalHarness](https://gorce-ai.github.io/termwright/api/driver/interfaces/terminalharness/) over an in-process Ink application, plus the two
 things only an in-process mount can offer.
@@ -26,7 +26,7 @@ things only an in-process mount can offer.
 
 > `readonly` **events**: `SessionEvents`
 
-Defined in: driver/dist/index.d.ts:161
+Defined in: driver/dist/index.d.ts:178
 
 #### Inherited from
 
@@ -38,7 +38,7 @@ Defined in: driver/dist/index.d.ts:161
 
 > `readonly` **exit**: `Promise`\<`ExitStatus`\>
 
-Defined in: driver/dist/index.d.ts:176
+Defined in: driver/dist/index.d.ts:199
 
 #### Inherited from
 
@@ -46,11 +46,39 @@ Defined in: driver/dist/index.d.ts:176
 
 ***
 
+### keyboard
+
+> `readonly` **keyboard**: `Keyboard`
+
+Defined in: driver/dist/index.d.ts:101
+
+One physical keyboard implementation. Convenience methods delegate here.
+
+#### Inherited from
+
+`TerminalHarness.keyboard`
+
+***
+
+### mouse
+
+> `readonly` **mouse**: `Mouse`
+
+Defined in: driver/dist/index.d.ts:103
+
+One physical mouse implementation. Locator actions delegate here after planning.
+
+#### Inherited from
+
+`TerminalHarness.mouse`
+
+***
+
 ### scrollback
 
 > `readonly` **scrollback**: `ScrollbackApi`
 
-Defined in: driver/dist/index.d.ts:159
+Defined in: driver/dist/index.d.ts:176
 
 #### Inherited from
 
@@ -62,7 +90,7 @@ Defined in: driver/dist/index.d.ts:159
 
 > `readonly` **selection**: `SelectionApi`
 
-Defined in: driver/dist/index.d.ts:160
+Defined in: driver/dist/index.d.ts:177
 
 #### Inherited from
 
@@ -74,7 +102,7 @@ Defined in: driver/dist/index.d.ts:160
 
 > `readonly` **sessionId**: `string`
 
-Defined in: driver/dist/index.d.ts:96
+Defined in: driver/dist/index.d.ts:95
 
 #### Inherited from
 
@@ -86,7 +114,7 @@ Defined in: driver/dist/index.d.ts:96
 
 > `readonly` **shell**: `ShellApi`
 
-Defined in: driver/dist/index.d.ts:98
+Defined in: driver/dist/index.d.ts:99
 
 Shell command boundaries and prompt state when the child emits OSC 133.
 
@@ -94,37 +122,91 @@ Shell command boundaries and prompt state when the child emits OSC 133.
 
 `TerminalHarness.shell`
 
-## Methods
+***
 
-### blur()
+### terminalProfile
 
-> **blur**(): `Promise`\<`void`\>
+> `readonly` **terminalProfile**: `string`
 
-Defined in: driver/dist/index.d.ts:140
+Defined in: driver/dist/index.d.ts:97
 
-#### Returns
-
-`Promise`\<`void`\>
+Immutable terminal profile used to decode the very first PTY byte.
 
 #### Inherited from
 
-`TerminalHarness.blur`
+`TerminalHarness.terminalProfile`
 
 ***
 
-### capabilities()
+### terminalState
 
-> **capabilities**(): `SessionCapabilities`
+> `readonly` **terminalState**: `TerminalState`
 
-Defined in: driver/dist/index.d.ts:99
+Defined in: driver/dist/index.d.ts:107
 
-#### Returns
-
-`SessionCapabilities`
+Emulator facts captured together at the current screen revision.
 
 #### Inherited from
 
-`TerminalHarness.capabilities`
+`TerminalHarness.terminalState`
+
+***
+
+### window
+
+> `readonly` **window**: `TerminalWindow`
+
+Defined in: driver/dist/index.d.ts:105
+
+Terminal-window focus reports, distinct from semantic element focus.
+
+#### Inherited from
+
+`TerminalHarness.window`
+
+## Methods
+
+### appLogs()
+
+> **appLogs**(): readonly `AppLogEvent`[]
+
+Defined in: driver/dist/index.d.ts:190
+
+Bounded, oldest-first application-log history, including entries emitted
+while `launchTerminal()` was still starting. Consumers should subscribe to
+`app-log` first and then seed from this snapshot to avoid a startup gap.
+
+#### Returns
+
+readonly `AppLogEvent`[]
+
+#### Inherited from
+
+`TerminalHarness.appLogs`
+
+***
+
+### bindOperationBudget()?
+
+> `optional` **bindOperationBudget**(`budget`): `void`
+
+Defined in: driver/dist/index.d.ts:109
+
+Binds one attempt-wide budget before any user operation starts.
+
+#### Parameters
+
+##### budget
+
+`OperationBudget`
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+`TerminalHarness.bindOperationBudget`
 
 ***
 
@@ -132,7 +214,7 @@ Defined in: driver/dist/index.d.ts:99
 
 > **cell**(`pos`): `CellSnapshot`
 
-Defined in: driver/dist/index.d.ts:112
+Defined in: driver/dist/index.d.ts:130
 
 #### Parameters
 
@@ -156,11 +238,29 @@ Defined in: driver/dist/index.d.ts:112
 
 ***
 
+### checkpoint()
+
+> **checkpoint**(): `ObservationStamp`
+
+Defined in: driver/dist/index.d.ts:113
+
+Atomic identity of the currently committed terminal/semantic observation.
+
+#### Returns
+
+`ObservationStamp`
+
+#### Inherited from
+
+`TerminalHarness.checkpoint`
+
+***
+
 ### close()
 
 > **close**(): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:175
+Defined in: driver/dist/index.d.ts:198
 
 Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
@@ -174,11 +274,29 @@ Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
 ***
 
+### contract()
+
+> **contract**(): `EffectiveSessionContract` \| `null`
+
+Defined in: driver/dist/index.d.ts:111
+
+Frozen negotiated contract, or null until negotiation has completed.
+
+#### Returns
+
+`EffectiveSessionContract` \| `null`
+
+#### Inherited from
+
+`TerminalHarness.contract`
+
+***
+
 ### crashReport()
 
 > **crashReport**(): `CrashReport` \| `null`
 
-Defined in: driver/dist/index.d.ts:173
+Defined in: driver/dist/index.d.ts:196
 
 What the session knew when the program died unexpectedly, or `null` — for a
 live session, a clean exit, or one the harness asked for via `close()` or
@@ -198,7 +316,7 @@ live session, a clean exit, or one the harness asked for via `close()` or
 
 > **diagnostics**(): readonly `SessionDiagnostic`[]
 
-Defined in: driver/dist/index.d.ts:167
+Defined in: driver/dist/index.d.ts:184
 
 Bounded, oldest-first log of what the session decided behind the scenes:
 dropped or superseded revisions, unverified markers, adapter negotiation,
@@ -214,27 +332,11 @@ readonly `SessionDiagnostic`[]
 
 ***
 
-### focus()
-
-> **focus**(): `Promise`\<`void`\>
-
-Defined in: driver/dist/index.d.ts:139
-
-#### Returns
-
-`Promise`\<`void`\>
-
-#### Inherited from
-
-`TerminalHarness.focus`
-
-***
-
 ### getByLabel()
 
-> **getByLabel**(`text`, `opts?`): `Locator`
+> **getByLabel**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:117
+Defined in: driver/dist/index.d.ts:135
 
 #### Parameters
 
@@ -250,7 +352,7 @@ Defined in: driver/dist/index.d.ts:117
 
 #### Returns
 
-`Locator`
+`SemanticLocator`
 
 #### Inherited from
 
@@ -260,9 +362,9 @@ Defined in: driver/dist/index.d.ts:117
 
 ### getByRole()
 
-> **getByRole**(`role`, `opts?`): `Locator`
+> **getByRole**(`role`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:116
+Defined in: driver/dist/index.d.ts:134
 
 #### Parameters
 
@@ -276,7 +378,7 @@ Defined in: driver/dist/index.d.ts:116
 
 #### Returns
 
-`Locator`
+`SemanticLocator`
 
 #### Inherited from
 
@@ -284,11 +386,39 @@ Defined in: driver/dist/index.d.ts:116
 
 ***
 
+### getByScreenText()
+
+> **getByScreenText**(`text`, `opts?`): `ScreenLocator`
+
+Defined in: driver/dist/index.d.ts:141
+
+Physical terminal-grid text, optionally narrowed by occurrence or style.
+
+#### Parameters
+
+##### text
+
+`string` \| `RegExp`
+
+##### opts?
+
+`ScreenTextLocatorOptions`
+
+#### Returns
+
+`ScreenLocator`
+
+#### Inherited from
+
+`TerminalHarness.getByScreenText`
+
+***
+
 ### getByTestId()
 
-> **getByTestId**(`testId`): `Locator`
+> **getByTestId**(`testId`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:121
+Defined in: driver/dist/index.d.ts:142
 
 #### Parameters
 
@@ -298,7 +428,7 @@ Defined in: driver/dist/index.d.ts:121
 
 #### Returns
 
-`Locator`
+`SemanticLocator`
 
 #### Inherited from
 
@@ -308,9 +438,11 @@ Defined in: driver/dist/index.d.ts:121
 
 ### getByText()
 
-> **getByText**(`text`, `opts?`): `Locator`
+> **getByText**(`text`, `opts?`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:120
+Defined in: driver/dist/index.d.ts:139
+
+Semantic text only. Never falls back to the terminal grid.
 
 #### Parameters
 
@@ -324,7 +456,7 @@ Defined in: driver/dist/index.d.ts:120
 
 #### Returns
 
-`Locator`
+`SemanticLocator`
 
 #### Inherited from
 
@@ -334,11 +466,11 @@ Defined in: driver/dist/index.d.ts:120
 
 ### locator()
 
-> **locator**(`selector`): `Locator`
+> **locator**(`selector`): `SemanticLocator`
 
-Defined in: driver/dist/index.d.ts:123
+Defined in: driver/dist/index.d.ts:144
 
-Textual-style CSS dialect: 'dialog button.primary:focused', '#id'.
+Advanced Termwright semantic selector: 'dialog button.primary:focused', '#id'.
 
 #### Parameters
 
@@ -348,7 +480,7 @@ Textual-style CSS dialect: 'dialog button.primary:focused', '#id'.
 
 #### Returns
 
-`Locator`
+`SemanticLocator`
 
 #### Inherited from
 
@@ -358,26 +490,68 @@ Textual-style CSS dialect: 'dialog button.primary:focused', '#id'.
 
 ### locatorForRef()
 
-> **locatorForRef**(`ref`): `Locator`
+#### Call Signature
 
-Defined in: driver/dist/index.d.ts:130
+> **locatorForRef**(`ref`): `SemanticLocator`
+
+Defined in: driver/dist/index.d.ts:151
 
 Rebuilds a locator from a ref returned by a resolved target.
-(`'n8@42'` for a semantic node, `'grid:r,c,w,h@7'` for a grid match).
+(`'semantic:n8@42'` for a semantic node, `'screen:r,c,w,h@7'` for a grid match).
 The ref stays bound to its revision: resolving it after that revision was
 superseded raises `stale-snapshot`.
 
-#### Parameters
+##### Parameters
 
-##### ref
+###### ref
 
-`string`
+`` `semantic:${string}@${number}` ``
 
-#### Returns
+##### Returns
 
-`Locator`
+`SemanticLocator`
 
-#### Inherited from
+##### Inherited from
+
+`TerminalHarness.locatorForRef`
+
+#### Call Signature
+
+> **locatorForRef**(`ref`): `ScreenLocator`
+
+Defined in: driver/dist/index.d.ts:152
+
+##### Parameters
+
+###### ref
+
+`` `screen:${number},${number},${number},${number}@${number}` ``
+
+##### Returns
+
+`ScreenLocator`
+
+##### Inherited from
+
+`TerminalHarness.locatorForRef`
+
+#### Call Signature
+
+> **locatorForRef**(`ref`): `SemanticLocator` \| `ScreenLocator`
+
+Defined in: driver/dist/index.d.ts:153
+
+##### Parameters
+
+###### ref
+
+`LocatorRef`
+
+##### Returns
+
+`SemanticLocator` \| `ScreenLocator`
+
+##### Inherited from
 
 `TerminalHarness.locatorForRef`
 
@@ -387,13 +561,13 @@ superseded raises `stale-snapshot`.
 
 > **paste**(`text`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:133
+Defined in: driver/dist/index.d.ts:156
 
 #### Parameters
 
 ##### text
 
-`string`
+`ExecutableValue`
 
 #### Returns
 
@@ -409,7 +583,7 @@ Defined in: driver/dist/index.d.ts:133
 
 > **press**(`keys`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:131
+Defined in: driver/dist/index.d.ts:154
 
 #### Parameters
 
@@ -431,7 +605,7 @@ Defined in: driver/dist/index.d.ts:131
 
 > **renderError**(): `Error` \| `null`
 
-Defined in: [ink-testing/src/mount.tsx:109](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L109)
+Defined in: [ink/src/mount.tsx:109](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L109)
 
 The error a component threw during render, or `null`.
 
@@ -448,7 +622,7 @@ until the next [InkHarness.rerender](#rerender).
 
 > **rerender**(`element`, `opts?`): `Promise`\<`void`\>
 
-Defined in: [ink-testing/src/mount.tsx:101](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L101)
+Defined in: [ink/src/mount.tsx:101](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L101)
 
 Replaces the mounted element and resolves once the resulting frame has been
 committed and published — the component-test equivalent of a prop update.
@@ -476,7 +650,7 @@ reset, so a rerender can recover from a crash.
 
 > **resize**(`size`): `Promise`\<`ResizeReceipt`\>
 
-Defined in: driver/dist/index.d.ts:135
+Defined in: driver/dist/index.d.ts:158
 
 #### Parameters
 
@@ -504,7 +678,7 @@ Defined in: driver/dist/index.d.ts:135
 
 > **screen**(): `ScreenSnapshot`
 
-Defined in: driver/dist/index.d.ts:110
+Defined in: driver/dist/index.d.ts:128
 
 #### Returns
 
@@ -520,7 +694,7 @@ Defined in: driver/dist/index.d.ts:110
 
 > **semanticTree**(): `SemanticSnapshot` \| `null`
 
-Defined in: driver/dist/index.d.ts:111
+Defined in: driver/dist/index.d.ts:129
 
 #### Returns
 
@@ -534,17 +708,12 @@ Defined in: driver/dist/index.d.ts:111
 
 ### settled()
 
-> **settled**(`opts?`): `Promise`\<`SessionCapabilities`\>
+> **settled**(`opts?`): `Promise`\<`EffectiveSessionContract`\>
 
-Defined in: driver/dist/index.d.ts:109
+Defined in: driver/dist/index.d.ts:127
 
-The capabilities, once they are final.
-
-`capabilities()` answers immediately with what is known so far, which is
-what a synchronous caller needs. This waits for the negotiation to reach
-its verdict — including the grace an adapter gets to attach late — and, for
-a semantic session, for the first tree to be published. After it resolves,
-`semanticTree` will not change again.
+Waits for the one frozen Effective Session Contract and, for a semantic
+session, for the first paired tree. There is no provisional capability API.
 
 #### Parameters
 
@@ -554,7 +723,7 @@ a semantic session, for the first tree to be published. After it resolves,
 
 #### Returns
 
-`Promise`\<`SessionCapabilities`\>
+`Promise`\<`EffectiveSessionContract`\>
 
 #### Inherited from
 
@@ -566,7 +735,7 @@ a semantic session, for the first tree to be published. After it resolves,
 
 > **signal**(`sig`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:141
+Defined in: driver/dist/index.d.ts:162
 
 #### Parameters
 
@@ -588,7 +757,7 @@ Defined in: driver/dist/index.d.ts:141
 
 > **title**(): `string`
 
-Defined in: driver/dist/index.d.ts:157
+Defined in: driver/dist/index.d.ts:174
 
 #### Returns
 
@@ -604,13 +773,13 @@ Defined in: driver/dist/index.d.ts:157
 
 > **type**(`text`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:132
+Defined in: driver/dist/index.d.ts:155
 
 #### Parameters
 
 ##### text
 
-`string`
+`ExecutableValue`
 
 #### Returns
 
@@ -622,11 +791,60 @@ Defined in: driver/dist/index.d.ts:132
 
 ***
 
+### waitForCheckpointChange()
+
+> **waitForCheckpointChange**(`options`): `Promise`\<`ObservationStamp`\>
+
+Defined in: driver/dist/index.d.ts:115
+
+Wait until a committed observation newer than `after` is available.
+
+#### Parameters
+
+##### options
+
+`object` & `WaitOptions`
+
+#### Returns
+
+`Promise`\<`ObservationStamp`\>
+
+#### Inherited from
+
+`TerminalHarness.waitForCheckpointChange`
+
+***
+
+### waitForCommittedObservation()
+
+> **waitForCommittedObservation**(`opts?`): `Promise`\<`ObservationStamp`\>
+
+Defined in: driver/dist/index.d.ts:122
+
+Waits until parser work and semantic frame pairing caused by prior input
+have committed. This is not a quiet/global-idle heuristic.
+
+#### Parameters
+
+##### opts?
+
+`WaitOptions`
+
+#### Returns
+
+`Promise`\<`ObservationStamp`\>
+
+#### Inherited from
+
+`TerminalHarness.waitForCommittedObservation`
+
+***
+
 ### waitForExit()
 
 > **waitForExit**(`opts?`): `Promise`\<`ExitStatus`\>
 
-Defined in: driver/dist/index.d.ts:156
+Defined in: driver/dist/index.d.ts:173
 
 #### Parameters
 
@@ -644,17 +862,19 @@ Defined in: driver/dist/index.d.ts:156
 
 ***
 
-### waitForIdle()
+### waitForQuiet()
 
-> **waitForIdle**(`opts?`): `Promise`\<`void`\>
+> **waitForQuiet**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:149
+Defined in: driver/dist/index.d.ts:168
+
+Heuristic only: waits for a stated interval with no screen or semantic change.
 
 #### Parameters
 
 ##### opts?
 
-`WaitOptions`
+`object` & `WaitOptions`
 
 #### Returns
 
@@ -662,33 +882,7 @@ Defined in: driver/dist/index.d.ts:149
 
 #### Inherited from
 
-`TerminalHarness.waitForIdle`
-
-***
-
-### waitForReady()
-
-> **waitForReady**(`opts?`): `Promise`\<`void`\>
-
-Defined in: driver/dist/index.d.ts:155
-
-Waits until the program is ready for input: shell-integration prompt
-marks (OSC 133) when the program emits them, otherwise a settled-screen
-heuristic. Which one was used is reported as a `diagnostic` event.
-
-#### Parameters
-
-##### opts?
-
-`WaitOptions`
-
-#### Returns
-
-`Promise`\<`void`\>
-
-#### Inherited from
-
-`TerminalHarness.waitForReady`
+`TerminalHarness.waitForQuiet`
 
 ***
 
@@ -696,7 +890,7 @@ heuristic. Which one was used is reported as a `diagnostic` event.
 
 > **waitForRender**(`opts`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:143
+Defined in: driver/dist/index.d.ts:164
 
 #### Parameters
 
@@ -714,17 +908,19 @@ Defined in: driver/dist/index.d.ts:143
 
 ***
 
-### waitForStable()
+### waitForShellPrompt()
 
-> **waitForStable**(`opts?`): `Promise`\<`void`\>
+> **waitForShellPrompt**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:146
+Defined in: driver/dist/index.d.ts:172
+
+Authoritative: waits for an OSC 133 prompt marker from shell integration.
 
 #### Parameters
 
 ##### opts?
 
-`object` & `WaitOptions`
+`WaitOptions`
 
 #### Returns
 
@@ -732,7 +928,7 @@ Defined in: driver/dist/index.d.ts:146
 
 #### Inherited from
 
-`TerminalHarness.waitForStable`
+`TerminalHarness.waitForShellPrompt`
 
 ***
 
@@ -740,7 +936,7 @@ Defined in: driver/dist/index.d.ts:146
 
 > **waitForText**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:142
+Defined in: driver/dist/index.d.ts:163
 
 #### Parameters
 
@@ -766,7 +962,7 @@ Defined in: driver/dist/index.d.ts:142
 
 > **waitForTitle**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:158
+Defined in: driver/dist/index.d.ts:175
 
 #### Parameters
 
@@ -792,7 +988,7 @@ Defined in: driver/dist/index.d.ts:158
 
 > **write**(`bytes`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:134
+Defined in: driver/dist/index.d.ts:157
 
 #### Parameters
 

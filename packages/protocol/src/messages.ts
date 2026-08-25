@@ -1,16 +1,20 @@
-import { z } from 'zod';
-import type { SemanticSnapshot } from './tree.js';
-import type { LogRecord } from './logs.js';
-import type { TreeDelta } from './delta.js';
-import type { ProbeInfo } from './probe/ir.js';
-import type { ProtocolLimits } from './limits.js';
-import { PROTOCOL_ID, PROTOCOL_V2_ID, type ProtocolId } from './env.js';
-import { ProtocolViolation } from './errors.js';
-import { projectDto } from './framing.js';
-import { validateSnapshot } from './validate.js';
-import { validateLogRecord } from './logs.js';
-import { validateTreeDelta } from './delta.js';
-import { probeInfoSchema, validateProbeInfo } from './probe/validate.js';
+import { z } from "zod";
+import type { SemanticSnapshot } from "./tree.js";
+import type { LogRecord } from "./logs.js";
+import type { ProbeInfo } from "./probe/ir.js";
+import type { ProtocolLimits } from "./limits.js";
+import { PROTOCOL_ID, type ProtocolId } from "./env.js";
+import { ProtocolViolation } from "./errors.js";
+import { projectDto } from "./framing.js";
+import { validateSnapshot } from "./validate.js";
+import { validateLogRecord } from "./logs.js";
+import { probeInfoSchema, validateProbeInfo } from "./probe/validate.js";
+import {
+  ADAPTER_CAPABILITIES,
+  EVIDENCE_PROVIDER_CAPABILITIES,
+  type AdapterCapability,
+  type EvidenceProviderRegistration,
+} from "./contract.js";
 
 /**
  * Wire messages. Transport: length-prefixed JSON frames (see framing.ts).
@@ -18,24 +22,12 @@ import { probeInfoSchema, validateProbeInfo } from './probe/validate.js';
  * send errors. All messages are validated against limits BEFORE retention.
  */
 
-export const ADAPTER_CAPABILITIES = [
-  'tree',
-  'bounds',
-  'absolute-bounds',
-  'states',
-  'actions',
-  'text-ranges',
-  'render-revisions',
-  'tree-diffs',
-  'logs',
-  'qualified-observations',
-  'pointer-hit-grid',
-] as const;
-export type AdapterCapability = (typeof ADAPTER_CAPABILITIES)[number];
+export { ADAPTER_CAPABILITIES } from "./contract.js";
+export type { AdapterCapability } from "./contract.js";
 
 /** adapter → driver, exactly once, before any other message. */
 export interface HelloMessage {
-  readonly type: 'hello';
+  readonly type: "hello";
   readonly protocol: ProtocolId;
   readonly token: string;
   readonly adapter: { readonly name: string; readonly version: string };
@@ -48,23 +40,18 @@ export interface HelloMessage {
    * negotiates against measured capability rather than assuming a floor.
    */
   readonly probe?: ProbeInfo;
+  /** Application evidence providers frozen into this session contract. */
+  readonly providers?: readonly EvidenceProviderRegistration[];
 }
 
 /** driver → adapter, reply to hello. */
 export interface HelloAckMessage {
-  readonly type: 'hello-ack';
+  readonly type: "hello-ack";
   readonly protocol: ProtocolId;
   readonly sessionId: string;
   readonly limits: ProtocolLimits;
-  /**
-   * Which traffic the driver wants pushed.
-   *
-   * `diffs` is only ever selected for an adapter that announced the
-   * `tree-diffs` capability, so an adapter that does not know the value never
-   * receives it — the closed set grew without breaking anyone, because the
-   * adapter opts in first.
-   */
-  readonly subscribe: 'snapshots' | 'revisions' | 'diffs';
+  /** Which semantic traffic the driver wants pushed. */
+  readonly subscribe: "snapshots" | "revisions";
   /** Marker configuration: producer must emit the signed OSC 8487 commit marker. */
   readonly marker: { readonly enabled: boolean };
   /**
@@ -88,29 +75,14 @@ export interface HelloAckMessage {
 
 /** adapter → driver after each committed render (always, regardless of mode). */
 export interface RevisionCommitMessage {
-  readonly type: 'revision-commit';
+  readonly type: "revision-commit";
   readonly revision: number;
 }
 
 /** adapter → driver, full snapshot for a revision (subscribe: 'snapshots'). */
 export interface SnapshotMessage {
-  readonly type: 'snapshot';
+  readonly type: "snapshot";
   readonly snapshot: SemanticSnapshot;
-}
-
-/** driver → adapter, request full snapshot (latest, or a held revision). */
-export interface GetTreeRequest {
-  readonly type: 'get-tree';
-  readonly requestId: number;
-  readonly revision?: number;
-}
-
-/** adapter → driver, response to get-tree. */
-export interface GetTreeResponse {
-  readonly type: 'get-tree-result';
-  readonly requestId: number;
-  readonly snapshot?: SemanticSnapshot;
-  readonly error?: string;
 }
 
 /**
@@ -131,20 +103,8 @@ export interface GetTreeResponse {
  * which is the timeout it replaced, only now wearing a false air of precision.
  */
 export interface FrameBeginMessage {
-  readonly type: 'frame-begin';
+  readonly type: "frame-begin";
   readonly revision: number;
-}
-
-/**
- * adapter → driver, an incremental tree update (capability `tree-diffs`,
- * `subscribe: 'diffs'`).
- *
- * Bound to an exact base revision: see `delta.ts` for composition semantics.
- * A receiver that does not hold `baseRevision` must request a full snapshot
- * with `get-tree` rather than patch speculatively.
- */
-export interface TreeDeltaMessage extends TreeDelta {
-  readonly type: 'tree-delta';
 }
 
 /**
@@ -155,19 +115,22 @@ export interface TreeDeltaMessage extends TreeDelta {
  * snapshot publication.
  */
 export interface LogMessage {
-  readonly type: 'log';
+  readonly type: "log";
   readonly record: LogRecord;
 }
 
 /** either direction: terminal protocol error; sender closes after emitting. */
 export interface ProtocolErrorMessage {
-  readonly type: 'error';
+  readonly type: "error";
   readonly code:
-    | 'bad-token'
-    | 'bad-version'
-    | 'malformed'
-    | 'limit-exceeded'
-    | 'internal';
+    | "bad-token"
+    | "bad-version"
+    | "malformed"
+    | "limit-exceeded"
+    | "duplicate-semantic-key"
+    | "adapter-guarantee-violation"
+    | "capability-provider-violation"
+    | "internal";
   readonly message: string;
 }
 
@@ -175,16 +138,11 @@ export type AdapterToDriverMessage =
   | HelloMessage
   | RevisionCommitMessage
   | SnapshotMessage
-  | GetTreeResponse
-  | TreeDeltaMessage
   | FrameBeginMessage
   | LogMessage
   | ProtocolErrorMessage;
 
-export type DriverToAdapterMessage =
-  | HelloAckMessage
-  | GetTreeRequest
-  | ProtocolErrorMessage;
+export type DriverToAdapterMessage = HelloAckMessage | ProtocolErrorMessage;
 
 // --------------------------------------------------------------------------
 // Runtime validation
@@ -199,7 +157,11 @@ export type MessageParseResult<T> =
   | { readonly ok: true; readonly message: T }
   | {
       readonly ok: false;
-      readonly code: 'bad-version' | 'malformed' | 'limit-exceeded';
+      readonly code:
+        | "bad-version"
+        | "malformed"
+        | "limit-exceeded"
+        | "capability-provider-violation";
       readonly detail: string;
     };
 
@@ -210,10 +172,16 @@ const identifier = z.string().max(MAX_IDENTIFIER_LENGTH);
 const nonEmptyIdentifier = identifier.min(1);
 const safeIndex = z
   .number()
-  .refine((n) => Number.isSafeInteger(n) && n >= 0, 'expected a non-negative safe integer');
+  .refine(
+    (n) => Number.isSafeInteger(n) && n >= 0,
+    "expected a non-negative safe integer",
+  );
 const revisionNumber = z
   .number()
-  .refine((n) => Number.isSafeInteger(n) && n > 0, 'expected a positive safe integer');
+  .refine(
+    (n) => Number.isSafeInteger(n) && n > 0,
+    "expected a positive safe integer",
+  );
 
 /**
  * Limits are an ADDITIVE part of the contract: unknown keys are IGNORED, not
@@ -237,8 +205,17 @@ const limitsSchema = z.object({
 });
 
 const errorFields = {
-  type: z.literal('error'),
-  code: z.enum(['bad-token', 'bad-version', 'malformed', 'limit-exceeded', 'internal']),
+  type: z.literal("error"),
+  code: z.enum([
+    "bad-token",
+    "bad-version",
+    "malformed",
+    "limit-exceeded",
+    "duplicate-semantic-key",
+    "adapter-guarantee-violation",
+    "capability-provider-violation",
+    "internal",
+  ]),
   message: z.string().max(MAX_IDENTIFIER_LENGTH),
 };
 
@@ -250,55 +227,80 @@ const errorFromDriverSchema = z.object(errorFields);
 
 /** adapter → driver schemas. Snapshot bodies are validated separately. */
 const helloSchema = z.strictObject({
-  type: z.literal('hello'),
-  protocol: z.union([z.literal(PROTOCOL_ID), z.literal(PROTOCOL_V2_ID)]),
+  type: z.literal("hello"),
+  protocol: z.literal(PROTOCOL_ID),
   token: nonEmptyIdentifier,
-  adapter: z.strictObject({ name: nonEmptyIdentifier, version: nonEmptyIdentifier }),
-  capabilities: z.array(z.enum(ADAPTER_CAPABILITIES)).max(ADAPTER_CAPABILITIES.length),
+  adapter: z.strictObject({
+    name: nonEmptyIdentifier,
+    version: nonEmptyIdentifier,
+  }),
+  capabilities: z
+    .array(z.enum(ADAPTER_CAPABILITIES))
+    .max(ADAPTER_CAPABILITIES.length),
   probe: probeInfoSchema.optional(),
+  providers: z
+    .array(
+      z.strictObject({
+        id: nonEmptyIdentifier,
+        version: nonEmptyIdentifier,
+        method: z.enum(["native", "declared"]),
+        capabilities: z
+          .array(z.enum(EVIDENCE_PROVIDER_CAPABILITIES))
+          .min(1)
+          .max(EVIDENCE_PROVIDER_CAPABILITIES.length)
+          .refine(
+            (values) => new Set(values).size === values.length,
+            "provider capabilities must be unique",
+          ),
+      }),
+    )
+    .max(64)
+    .superRefine((providers, ctx) => {
+      const ids = new Set<string>();
+      for (let index = 0; index < providers.length; index += 1) {
+        const provider = providers[index]!;
+        const id = provider.id;
+        if (ids.has(id)) {
+          ctx.addIssue({
+            code: "custom",
+            path: [index, "id"],
+            message: `duplicate provider id ${id}`,
+          });
+          return;
+        }
+        ids.add(id);
+      }
+    })
+    .optional(),
 });
 
 const frameBeginSchema = z.strictObject({
-  type: z.literal('frame-begin'),
+  type: z.literal("frame-begin"),
   revision: revisionNumber,
 });
 
 const revisionCommitSchema = z.strictObject({
-  type: z.literal('revision-commit'),
+  type: z.literal("revision-commit"),
   revision: revisionNumber,
 });
 
 const snapshotEnvelopeSchema = z.strictObject({
-  type: z.literal('snapshot'),
+  type: z.literal("snapshot"),
   snapshot: z.unknown(),
 });
 
-const treeDeltaTypeSchema = z.object({ type: z.literal('tree-delta') });
-
 const logEnvelopeSchema = z.strictObject({
-  type: z.literal('log'),
+  type: z.literal("log"),
   record: z.unknown(),
 });
 
-const getTreeResultSchema = z
-  .strictObject({
-    type: z.literal('get-tree-result'),
-    requestId: safeIndex,
-    snapshot: z.unknown().optional(),
-    error: z.string().max(MAX_IDENTIFIER_LENGTH).optional(),
-  })
-  .refine(
-    (m) => (m.snapshot === undefined) !== (m.error === undefined),
-    'exactly one of snapshot or error must be present',
-  );
-
 /** driver → adapter schemas. */
 const helloAckSchema = z.object({
-  type: z.literal('hello-ack'),
-  protocol: z.union([z.literal(PROTOCOL_ID), z.literal(PROTOCOL_V2_ID)]),
+  type: z.literal("hello-ack"),
+  protocol: z.literal(PROTOCOL_ID),
   sessionId: nonEmptyIdentifier,
   limits: limitsSchema,
-  subscribe: z.enum(['snapshots', 'revisions', 'diffs']),
+  subscribe: z.enum(["snapshots", "revisions"]),
   marker: z.object({ enabled: z.boolean() }),
   logs: z
     .object({
@@ -309,59 +311,67 @@ const helloAckSchema = z.object({
     .optional(),
 });
 
-const getTreeRequestSchema = z.object({
-  type: z.literal('get-tree'),
-  requestId: safeIndex,
-  revision: revisionNumber.optional(),
-});
-
 function malformed(detail: string): MessageParseResult<never> {
-  return { ok: false, code: 'malformed', detail };
+  return { ok: false, code: "malformed", detail };
 }
 
 /** Projection guard shared by both parsers. */
-function project(value: unknown, limits: ProtocolLimits): MessageParseResult<unknown> {
+function project(
+  value: unknown,
+  limits: ProtocolLimits,
+): MessageParseResult<unknown> {
   try {
     return { ok: true, message: projectDto<unknown>(value, limits.maxDepth) };
   } catch (error) {
     const detail =
-      error instanceof ProtocolViolation ? error.message : 'value is not a plain JSON DTO';
-    return error instanceof ProtocolViolation && error.code === 'dto-depth'
-      ? { ok: false, code: 'limit-exceeded', detail }
+      error instanceof ProtocolViolation
+        ? error.message
+        : "value is not a plain JSON DTO";
+    return error instanceof ProtocolViolation && error.code === "dto-depth"
+      ? { ok: false, code: "limit-exceeded", detail }
       : malformed(detail);
   }
 }
 
 function messageType(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null) return null;
+  if (typeof value !== "object" || value === null) return null;
   const type: unknown = (value as { type?: unknown }).type;
-  return typeof type === 'string' ? type : null;
+  return typeof type === "string" ? type : null;
 }
 
 function check(schema: z.ZodType, value: unknown): string | null {
   const result = schema.safeParse(value);
   if (result.success) return null;
   const issue = result.error.issues[0]!;
-  const where = issue.path.length > 0 ? issue.path.map(String).join('.') : '<root>';
+  const where =
+    issue.path.length > 0 ? issue.path.map(String).join(".") : "<root>";
   return `${where}: ${issue.message}`;
 }
 
 /**
  * Validate a snapshot carried inside an envelope and map its failure onto the
- * wire error taxonomy: capacity failures are `limit-exceeded`, the rest are
+ * wire error taxonomy: capacity failures are `limit-exceeded`; evidence-frame
+ * contract failures retain their typed provider classification; the rest are
  * `malformed`.
  */
-function checkSnapshot(value: unknown, limits: ProtocolLimits): MessageParseResult<never> | null {
+function checkSnapshot(
+  value: unknown,
+  limits: ProtocolLimits,
+): MessageParseResult<never> | null {
   const result = validateSnapshot(value, limits);
   if (result.ok) return null;
   const overCapacity =
-    result.code === 'bytes' ||
-    result.code === 'count' ||
-    result.code === 'depth' ||
-    result.code === 'string-bytes';
+    result.code === "bytes" ||
+    result.code === "count" ||
+    result.code === "depth" ||
+    result.code === "string-bytes";
   return {
     ok: false,
-    code: overCapacity ? 'limit-exceeded' : 'malformed',
+    code: overCapacity
+      ? "limit-exceeded"
+      : result.code === "provider"
+        ? "capability-provider-violation"
+        : "malformed",
     detail: `snapshot ${result.code}: ${result.detail}`,
   };
 }
@@ -370,37 +380,21 @@ function checkSnapshot(value: unknown, limits: ProtocolLimits): MessageParseResu
  * Validate a log record carried inside an envelope, mapping capacity failures
  * onto `limit-exceeded` exactly as snapshots do.
  */
-function checkLogRecord(value: unknown, limits: ProtocolLimits): MessageParseResult<never> | null {
+function checkLogRecord(
+  value: unknown,
+  limits: ProtocolLimits,
+): MessageParseResult<never> | null {
   const result = validateLogRecord(value, limits);
   if (result.ok) return null;
   const overCapacity =
-    result.code === 'bytes' ||
-    result.code === 'count' ||
-    result.code === 'depth' ||
-    result.code === 'string-bytes';
+    result.code === "bytes" ||
+    result.code === "count" ||
+    result.code === "depth" ||
+    result.code === "string-bytes";
   return {
     ok: false,
-    code: overCapacity ? 'limit-exceeded' : 'malformed',
+    code: overCapacity ? "limit-exceeded" : "malformed",
     detail: `log record ${result.code}: ${result.detail}`,
-  };
-}
-
-/**
- * Validate a tree delta carried inside an envelope, mapping capacity failures
- * onto `limit-exceeded` exactly as snapshots do.
- */
-function checkTreeDelta(value: unknown, limits: ProtocolLimits): MessageParseResult<never> | null {
-  const result = validateTreeDelta(value, limits);
-  if (result.ok) return null;
-  const overCapacity =
-    result.code === 'bytes' ||
-    result.code === 'count' ||
-    result.code === 'depth' ||
-    result.code === 'string-bytes';
-  return {
-    ok: false,
-    code: overCapacity ? 'limit-exceeded' : 'malformed',
-    detail: `tree delta ${result.code}: ${result.detail}`,
   };
 }
 
@@ -424,25 +418,17 @@ export function parseAdapterMessage(
   const dto = projected.message;
 
   switch (messageType(dto)) {
-    case 'hello': {
+    case "hello": {
       const protocol: unknown = (dto as { protocol?: unknown }).protocol;
-      if (typeof protocol === 'string' && protocol !== PROTOCOL_ID && protocol !== PROTOCOL_V2_ID) {
-        return { ok: false, code: 'bad-version', detail: `unsupported protocol ${protocol}` };
+      if (typeof protocol === "string" && protocol !== PROTOCOL_ID) {
+        return {
+          ok: false,
+          code: "bad-version",
+          detail: `unsupported protocol ${protocol}`,
+        };
       }
       const issue = check(helloSchema, dto);
       if (issue !== null) return malformed(issue);
-      const candidate = dto as HelloMessage;
-      const qualified = candidate.capabilities.includes('qualified-observations');
-      if ((candidate.protocol === PROTOCOL_V2_ID) !== qualified) {
-        return malformed(
-          candidate.protocol === PROTOCOL_V2_ID
-            ? "termwright/2 requires the 'qualified-observations' capability"
-            : "'qualified-observations' requires termwright/2",
-        );
-      }
-      if (candidate.capabilities.includes('pointer-hit-grid') && !qualified) {
-        return malformed("'pointer-hit-grid' requires qualified observations");
-      }
       // The shape check cannot see the one incoherent pair: a probe declaring
       // frame-local identity while claiming it can be correlated across
       // frames. That rule has to hold on the wire, not only when a caller
@@ -454,56 +440,41 @@ export function parseAdapterMessage(
       }
       return { ok: true, message: dto as HelloMessage };
     }
-    case 'revision-commit': {
+    case "revision-commit": {
       const issue = check(revisionCommitSchema, dto);
       return issue === null
         ? { ok: true, message: dto as RevisionCommitMessage }
         : malformed(issue);
     }
-    case 'snapshot': {
+    case "snapshot": {
       const issue = check(snapshotEnvelopeSchema, dto);
       if (issue !== null) return malformed(issue);
-      const bad = checkSnapshot((dto as { snapshot: unknown }).snapshot, limits);
+      const bad = checkSnapshot(
+        (dto as { snapshot: unknown }).snapshot,
+        limits,
+      );
       return bad ?? { ok: true, message: dto as SnapshotMessage };
     }
-    case 'get-tree-result': {
-      const issue = check(getTreeResultSchema, dto);
-      if (issue !== null) return malformed(issue);
-      const envelope = dto as { snapshot?: unknown };
-      if (envelope.snapshot !== undefined) {
-        const bad = checkSnapshot(envelope.snapshot, limits);
-        if (bad !== null) return bad;
-      }
-      return { ok: true, message: dto as GetTreeResponse };
-    }
-    case 'frame-begin': {
+    case "frame-begin": {
       const issue = check(frameBeginSchema, dto);
       return issue === null
         ? { ok: true, message: dto as FrameBeginMessage }
         : malformed(issue);
     }
-    case 'tree-delta': {
-      const issue = check(treeDeltaTypeSchema, dto);
-      if (issue !== null) return malformed(issue);
-      // The delta body is everything but the discriminator.
-      const { type: _type, ...body } = dto as Record<string, unknown>;
-      const bad = checkTreeDelta(body, limits);
-      return bad ?? { ok: true, message: dto as TreeDeltaMessage };
-    }
-    case 'log': {
+    case "log": {
       const issue = check(logEnvelopeSchema, dto);
       if (issue !== null) return malformed(issue);
       const bad = checkLogRecord((dto as { record: unknown }).record, limits);
       return bad ?? { ok: true, message: dto as LogMessage };
     }
-    case 'error': {
+    case "error": {
       const issue = check(errorSchema, dto);
       return issue === null
         ? { ok: true, message: dto as ProtocolErrorMessage }
         : malformed(issue);
     }
     default:
-      return malformed('unknown or missing message type');
+      return malformed("unknown or missing message type");
   }
 }
 
@@ -535,25 +506,27 @@ export function parseDriverMessage(
   const dto = projected.message;
 
   switch (messageType(dto)) {
-    case 'hello-ack': {
+    case "hello-ack": {
       const protocol: unknown = (dto as { protocol?: unknown }).protocol;
-      if (typeof protocol === 'string' && protocol !== PROTOCOL_ID && protocol !== PROTOCOL_V2_ID) {
-        return { ok: false, code: 'bad-version', detail: `unsupported protocol ${protocol}` };
+      if (typeof protocol === "string" && protocol !== PROTOCOL_ID) {
+        return {
+          ok: false,
+          code: "bad-version",
+          detail: `unsupported protocol ${protocol}`,
+        };
       }
       const issue = check(helloAckSchema, dto);
-      return issue === null ? { ok: true, message: dto as HelloAckMessage } : malformed(issue);
+      return issue === null
+        ? { ok: true, message: dto as HelloAckMessage }
+        : malformed(issue);
     }
-    case 'get-tree': {
-      const issue = check(getTreeRequestSchema, dto);
-      return issue === null ? { ok: true, message: dto as GetTreeRequest } : malformed(issue);
-    }
-    case 'error': {
+    case "error": {
       const issue = check(errorFromDriverSchema, dto);
       return issue === null
         ? { ok: true, message: dto as ProtocolErrorMessage }
         : malformed(issue);
     }
     default:
-      return malformed('unknown or missing message type');
+      return malformed("unknown or missing message type");
   }
 }

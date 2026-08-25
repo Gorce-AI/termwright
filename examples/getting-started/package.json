@@ -4,14 +4,14 @@
   "private": true,
   "description": "Executable source for the Getting Started documentation",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "^22.0.0 || ^24.0.0" },
   "scripts": {
     "build": "node --check app.js",
     "typecheck": "node --check app.js",
-    "test": "vitest run"
+    "test": "termwright test"
   },
   "devDependencies": {
     "termwright": "workspace:*",
-    "vitest": "^3.2.0"
+    "vitest": "4.1.11"
   }
 }

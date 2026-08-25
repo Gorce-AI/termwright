@@ -8,8 +8,6 @@
  * cursor keys), so the same description produces different bytes depending on
  * what the child program asked for.
  */
-import { UnsupportedActionError } from './errors.js';
-
 const ESC = '\x1b';
 const CSI = `${ESC}[`;
 const SS3 = `${ESC}O`;
@@ -89,13 +87,11 @@ function modifierParameter(mods: Modifiers): number {
 }
 
 function unsupported(key: string, detail: string): never {
-  throw new UnsupportedActionError(`cannot encode key ${JSON.stringify(key)}: ${detail}`, {
-    semanticTree: false,
-    suggestion:
-      'use a single character, or one of Enter, Escape, Tab, Backspace, Delete, Insert, Space, ' +
-      'Arrow{Up,Down,Left,Right}, Home, End, PageUp, PageDown, F1–F12, optionally prefixed with ' +
-      'Control+/Shift+/Alt+',
-  });
+  throw new TypeError(
+    `cannot encode key ${JSON.stringify(key)}: ${detail}; use a single character, or one of Enter, ` +
+    'Escape, Tab, Backspace, Delete, Insert, Space, Arrow{Up,Down,Left,Right}, Home, End, PageUp, ' +
+    'PageDown, F1–F12, optionally prefixed with Control+/Shift+/Alt+',
+  );
 }
 
 function parseChord(chord: string): { key: string; mods: Modifiers } {

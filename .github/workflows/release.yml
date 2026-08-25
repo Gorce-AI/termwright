@@ -1,58 +1,88 @@
 name: Release
-
-# Maintainer workflow:
-#   1. Run this workflow manually to create or update the Version PR.
-#   2. Review and merge that PR after its normal CI checks pass.
-#   3. The merge runs this same workflow and publishes every registry.
-#
-# The manual run never publishes. Registry credentials are short-lived OIDC
-# identities and are available only to the registry-specific jobs below.
+run-name: Release ${{ inputs.mode }} ${{ inputs.target }} @ ${{ inputs.expected_sha }}${{ inputs.mode == 'publish' && format(' (Version PR {0})', inputs.version_pr) || '' }}
 
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Branch to prepare a release for'
+        description: 'Trusted default branch'
         required: true
         default: main
         type: choice
         options:
           - main
-          - release/0.x
-          - release/1.x
-  push:
-    branches:
-      - main
-      - 'release/**'
+      mode:
+        description: 'Trusted coordinator phase'
+        required: true
+        type: choice
+        options: [prepare, publish]
+      expected_sha:
+        description: 'Exact current target-branch SHA'
+        required: true
+        type: string
+      version_pr:
+        description: 'Exact merged Version PR number (publish only)'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.target || github.ref }}
+  group: release-${{ inputs.target }}
   # A cancelled registry upload can leave a partial release. Queue instead.
   cancel-in-progress: false
 
 permissions:
   contents: read
 
+env:
+  TERMWRIGHT_RETRIES: '0'
+  TERMWRIGHT_REQUIRE_FIRST_WORKFLOW_ATTEMPT: '1'
+  TERMWRIGHT_UPDATE_SNAPSHOTS: 'none'
+  TERMWRIGHT_REQUIRE_GO: '1'
+
 jobs:
   prepare:
     name: prepare Version PR
-    if: github.event_name == 'workflow_dispatch'
+    if: inputs.mode == 'prepare'
     runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # The SHA is verified after checkout; never let an input choose an
+          # arbitrary commit to execute with this job's write token.
           ref: ${{ inputs.target }}
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v6
+      - name: Require the exact current trusted target SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          TARGET: ${{ inputs.target }}
+          VERSION_PR: ${{ inputs.version_pr }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -z "$VERSION_PR"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          default_branch=$(gh api "/repos/$GITHUB_REPOSITORY" --jq '.default_branch')
+          test "$TARGET" = "$default_branch"
+          current=$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/$TARGET" --jq '.object.sha')
+          test "$current" = "$EXPECTED_SHA"
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
           version: '9.4.0'
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: pnpm
@@ -82,8 +112,6 @@ jobs:
           node scripts/sync-protocol-version.mjs --check
           pnpm install --lockfile-only
           echo "changed=true" >> "$GITHUB_OUTPUT"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summarize proposed versions
         if: steps.version.outputs.changed == 'true'
@@ -109,8 +137,9 @@ jobs:
       - name: Open or update the Version PR
         if: steps.version.outputs.changed == 'true'
         id: pr
-        uses: peter-evans/create-pull-request@v8
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
+          token: ${{ github.token }}
           base: ${{ inputs.target }}
           branch: release-pr/${{ inputs.target }}
           delete-branch: true
@@ -120,10 +149,9 @@ jobs:
           body: |
             This PR applies the pending changesets to `${{ inputs.target }}`.
 
-            Review the package versions and changelogs. After the required CI
-            checks pass, approving and merging this PR publishes npm, PyPI and
-            crates.io, creates the coordinated tags, and publishes one GitHub
-            Release. No additional workflow dispatch is required.
+            The trusted coordinator will reproduce this transformation from the
+            base commit. Only an exact tree match plus the complete required CI
+            suite may be merged and explicitly dispatched for publication.
 
       # Pull requests created with GITHUB_TOKEN do not emit pull_request events.
       # workflow_dispatch is the documented exception, so explicitly attach the
@@ -133,11 +161,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: release-pr/${{ inputs.target }}
-        run: gh workflow run ci.yml --ref "$BRANCH"
+        shell: bash
+        run: |
+          set -euo pipefail
+          head_sha=$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq '.object.sha')
+          existing=$(gh api "/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=workflow_dispatch&head_sha=$head_sha" --jq '.total_count')
+          if [ "$existing" = 0 ]; then gh workflow run ci.yml --ref "$BRANCH"; fi
 
   detect:
-    name: detect merged Version PR
-    if: github.event_name == 'push'
+    name: authorize exact merged Version PR
+    if: inputs.mode == 'publish'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -145,43 +178,45 @@ jobs:
     outputs:
       release: ${{ steps.release.outputs.release }}
       commit: ${{ steps.release.outputs.commit }}
+      base: ${{ steps.release.outputs.base }}
       version: ${{ steps.release.outputs.version }}
       dist_tag: ${{ steps.release.outputs.dist_tag }}
       latest: ${{ steps.release.outputs.latest }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ inputs.target }}
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Require the push to come from the generated Version PR
+      - name: Require exact current HEAD and exact merged Version PR
         id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
-          COMMIT: ${{ github.sha }}
-          TARGET: ${{ github.ref_name }}
+          COMMIT: ${{ inputs.expected_sha }}
+          TARGET: ${{ inputs.target }}
+          VERSION_PR: ${{ inputs.version_pr }}
         shell: bash
         run: |
           set -euo pipefail
-          prs=$(gh api \
-            -H 'Accept: application/vnd.github+json' \
-            "/repos/$REPOSITORY/commits/$COMMIT/pulls")
-          expected_head="release-pr/$TARGET"
-          if ! PRS="$prs" EXPECTED_HEAD="$expected_head" TARGET="$TARGET" node - <<'NODE'
-          const prs = JSON.parse(process.env.PRS);
-          const match = prs.some((pr) =>
-            pr.merged_at &&
-            pr.base?.ref === process.env.TARGET &&
-            pr.head?.ref === process.env.EXPECTED_HEAD &&
-            pr.title?.startsWith('chore(release): version packages')
-          );
-          process.exit(match ? 0 : 1);
-          NODE
-          then
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            echo "Push $COMMIT is not a merged Version PR; nothing to publish."
-            exit 0
-          fi
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$VERSION_PR" =~ ^[1-9][0-9]*$ ]]
+          test "$(git rev-parse HEAD)" = "$COMMIT"
+          default_branch=$(gh api "/repos/$REPOSITORY" --jq '.default_branch')
+          test "$TARGET" = "$default_branch"
+          current=$(gh api "/repos/$REPOSITORY/git/ref/heads/$TARGET" --jq '.object.sha')
+          test "$current" = "$COMMIT"
+          gh api "/repos/$REPOSITORY/pulls/$VERSION_PR" > /tmp/version-pr.json
+          gh api --paginate "/repos/$REPOSITORY/pulls/$VERSION_PR/files?per_page=100" --slurp \
+            | jq 'add' > /tmp/version-files.json
+          node scripts/autonomous-release-coordinator.mjs validate-version-pr \
+            "$GITHUB_EVENT_PATH" /tmp/version-pr.json /tmp/version-files.json
+          test "$(git rev-list --parents -n 1 "$COMMIT" | wc -w | tr -d ' ')" = 2
+          base=$(git rev-parse "$COMMIT^")
 
           pending=$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md | wc -l | tr -d ' ')
           if [ "$pending" != "0" ]; then
@@ -195,13 +230,8 @@ jobs:
               dist_tag=latest
               latest=true
               ;;
-            release/[0-9]*.x)
-              major=${TARGET#release/}
-              dist_tag="$major-lts"
-              latest=false
-              ;;
             *)
-              echo "::error::unsupported release target $TARGET"
+              echo "::error::publishing is restricted to the default branch"
               exit 1
               ;;
           esac
@@ -209,38 +239,118 @@ jobs:
           {
             echo "release=true"
             echo "commit=$COMMIT"
+            echo "base=$base"
             echo "version=$version"
             echo "dist_tag=$dist_tag"
             echo "latest=$latest"
           } >> "$GITHUB_OUTPUT"
 
+  prebuilds:
+    name: compile the ConPTY prebuild (${{ matrix.arch }})
+    needs: detect
+    if: needs.detect.outputs.release == 'true'
+    # The same 2022 image CI compiles on, for the same reason: node-gyp 11
+    # cannot identify the Visual Studio that windows-latest now ships.
+    runs-on: windows-2022
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.detect.outputs.commit }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: '9.4.0'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Compile
+        working-directory: packages/conpty
+        run: pnpm exec node-gyp rebuild --arch=${{ matrix.arch }}
+      - name: Place the binary in its prebuild package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp packages/conpty/build/Release/termwright_conpty.node \
+             "packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node"
+          node scripts/check-prebuild.mjs "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-conpty-${{ matrix.arch }}
+          path: packages/conpty-win32-${{ matrix.arch }}/termwright_conpty.node
+          if-no-files-found: error
+          retention-days: 1
+
   verify:
     name: verify and pack release
-    needs: detect
+    needs: [detect, prebuilds]
     if: needs.detect.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
           version: '9.4.0'
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.25'
+          cache: false
 
-      - uses: actions/setup-python@v7
+      - name: Independently reproduce the merged Version PR tree
+        env:
+          BASE_COMMIT: ${{ needs.detect.outputs.base }}
+          RELEASE_COMMIT: ${{ needs.detect.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          reproduction="$RUNNER_TEMP/version-reproduction"
+          git worktree add --detach "$reproduction" "$BASE_COMMIT"
+          (
+            cd "$reproduction"
+            corepack enable
+            pnpm install --frozen-lockfile
+            pnpm changeset version
+            node scripts/sync-protocol-version.mjs
+            node scripts/sync-protocol-version.mjs --check
+            pnpm install --lockfile-only
+            git add -A
+            expected_tree=$(git write-tree)
+            actual_tree=$(git rev-parse "$RELEASE_COMMIT^{tree}")
+            test "$expected_tree" = "$actual_tree" || {
+              echo '::error::Merged Version PR differs from the trusted deterministic transformation'
+              exit 1
+            }
+          )
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
 
       - name: Verify release metadata
         env:
@@ -253,11 +363,30 @@ jobs:
           test "$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md | wc -l | tr -d ' ')" = 0
           node scripts/sync-protocol-version.mjs --check
           node scripts/check-package-metadata.mjs
+          node scripts/check-platform-deviations.mjs
+          node scripts/audit-determinism-constructs.mjs
+          node scripts/generate-semantic-completeness.mjs
+          node scripts/generate-mission-completion.mjs
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm check:node-pty
       - run: pnpm -r --filter './packages/*' run typecheck
-      - run: pnpm -r --filter './packages/*' run test
+      - name: Run the certified Termwright host
+        run: pnpm test -- --resource-profile ci --json
+
+      # The prebuilds are compiled on Windows and published from here, so they
+      # have to arrive before anything is packed. A missing one would otherwise
+      # publish an empty package that installs cleanly and supplies no addon.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-conpty-x64
+          path: packages/conpty-win32-x64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-conpty-arm64
+          path: packages/conpty-win32-arm64
+      - run: node scripts/check-prebuild.mjs --all
 
       - name: Pack npm packages
         shell: bash
@@ -279,7 +408,30 @@ jobs:
               echo "::error::$archive does not identify the repository required for npm provenance"
               exit 1
             fi
+            # A prebuild package is nothing but its binary. Packed without it,
+            # it installs without complaint and supplies no addon, and every
+            # Windows session silently runs on the fallback instead.
+            case "$directory" in
+              packages/conpty-win32-*)
+                if ! tar -tf "$archive" | grep -qx 'package/termwright_conpty.node'; then
+                  echo "::error::$archive carries no addon; a prebuild package without its binary is an empty promise"
+                  exit 1
+                fi
+                ;;
+            esac
           done
+
+      - name: Verify packed driver without workspace patch state
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_dir="$RUNNER_TEMP/termwright-packed-driver"
+          mkdir -p "$install_dir"
+          npm install --prefix "$install_dir" \
+            release/npm/termwright-protocol-*.tgz \
+            release/npm/termwright-vt-*.tgz \
+            release/npm/termwright-driver-*.tgz
+          node scripts/check-installed-driver.mjs "$install_dir"
 
       - name: Build and test the Python distribution
         working-directory: clients/python
@@ -300,23 +452,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p release/crates
+          cargo_target="$RUNNER_TEMP/release-cargo-target"
           cargo test --locked --manifest-path clients/rust/Cargo.toml
           TERMWRIGHT_REQUIRE_RATATUI=1 cargo test --locked --manifest-path clients/rust-probe/Cargo.toml
           cargo test --locked --manifest-path clients/rust-ratatui/Cargo.toml
-          cargo package --locked --manifest-path clients/rust/Cargo.toml
+          cargo package --locked --target-dir "$cargo_target" --manifest-path clients/rust/Cargo.toml
           cargo package --locked --manifest-path clients/rust-probe/Cargo.toml \
+            --target-dir "$cargo_target" \
             --config "patch.crates-io.termwright-protocol.path='$GITHUB_WORKSPACE/clients/rust'"
           cargo package --locked --manifest-path clients/rust-ratatui/Cargo.toml \
+            --target-dir "$cargo_target" \
             --config "patch.crates-io.termwright-protocol.path='$GITHUB_WORKSPACE/clients/rust'" \
             --config "patch.crates-io.termwright-probe-ratatui.path='$GITHUB_WORKSPACE/clients/rust-probe'"
+          cp "$cargo_target"/package/*.crate release/crates/
+          test "$(find release/crates -maxdepth 1 -name '*.crate' | wc -l | tr -d ' ')" = 3
 
       - name: Seal release artifacts
         shell: bash
         run: |
           set -euo pipefail
-          (cd release && find npm pypi -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd release && find npm pypi crates -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-artifacts-${{ needs.detect.outputs.commit }}
           path: release
@@ -331,10 +489,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Create tags and a draft GitHub Release
         env:
@@ -371,7 +533,9 @@ jobs:
             fi
             refs+=("refs/tags/$tag:refs/tags/$tag")
           done
-          git push --atomic origin "${refs[@]}"
+          git push --atomic \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "${refs[@]}"
 
           anchor="protocol/v$VERSION"
           if ! gh release view "$anchor" >/dev/null 2>&1; then
@@ -388,13 +552,26 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: release-artifacts-${{ needs.detect.outputs.commit }}
+          path: release
 
-      - uses: rust-lang/crates-io-auth-action@v1
+      - name: Verify release artifacts
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+
+      - uses: rust-lang/crates-io-auth-action@f14f407dad32919804d8e0550a5e471a82249cee # main 2026-08-21
         id: auth
 
       - name: Publish in dependency order
@@ -412,13 +589,25 @@ jobs:
           for entry in "${crates[@]}"; do
             name=${entry%%:*}
             manifest=${entry#*:}
-            code=$(curl -s -o /dev/null -w '%{http_code}' \
-              -H 'User-Agent: termwright-release (github.com/Gorce-AI/termwright)' \
-              "https://crates.io/api/v1/crates/$name/$VERSION")
-            if [ "$code" = 200 ]; then
+            archive="release/crates/$name-$VERSION.crate"
+            state=$(node scripts/verify-published-artifact.mjs crate "$archive" "$name" "$VERSION")
+            if [ "$state" = exact ]; then
               echo "::notice::$name $VERSION already exists; skipping"
-            else
+            elif [ "$state" = missing ]; then
               cargo publish --locked --manifest-path "$manifest" --no-verify
+              deadline=$((SECONDS + 300))
+              while true; do
+                state=$(node scripts/verify-published-artifact.mjs crate "$archive" "$name" "$VERSION")
+                [ "$state" = exact ] && break
+                if (( SECONDS >= deadline )); then
+                  echo "::error::$name@$VERSION was uploaded but its exact checksum did not become visible"
+                  exit 1
+                fi
+                sleep 15
+              done
+            else
+              echo "::error::unexpected crates.io verification state: $state"
+              exit 1
             fi
           done
 
@@ -431,7 +620,15 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.detect.outputs.commit }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: release-artifacts-${{ needs.detect.outputs.commit }}
           path: release
@@ -446,19 +643,42 @@ jobs:
           VERSION: ${{ needs.detect.outputs.version }}
         shell: bash
         run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/termwright/$VERSION/json")
-          if [ "$code" = 200 ]; then
+          set -euo pipefail
+          state=$(node scripts/verify-published-artifact.mjs pypi release/pypi "$VERSION")
+          if [ "$state" = exact ]; then
             echo "value=true" >> "$GITHUB_OUTPUT"
             echo "::notice::termwright $VERSION already exists; skipping"
-          else
+          elif [ "$state" = missing ] || [ "$state" = partial ]; then
             echo "value=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::unexpected PyPI verification state: $state"
+            exit 1
           fi
 
       - name: Publish
         if: steps.exists.outputs.value == 'false'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1 2026-08-21
         with:
           packages-dir: release/pypi
+          skip-existing: true
+
+      - name: Confirm the exact complete PyPI file set
+        if: steps.exists.outputs.value == 'false'
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 300))
+          while true; do
+            state=$(node scripts/verify-published-artifact.mjs pypi release/pypi "$VERSION")
+            [ "$state" = exact ] && break
+            if (( SECONDS >= deadline )); then
+              echo "::error::the complete exact PyPI file set did not become visible"
+              exit 1
+            fi
+            sleep 15
+          done
 
   npm:
     name: publish npm
@@ -469,14 +689,22 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/setup-node@v7
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.detect.outputs.commit }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22.14'
           registry-url: 'https://registry.npmjs.org'
 
       - run: npm install --global npm@11.5.1
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: release-artifacts-${{ needs.detect.outputs.commit }}
           path: release
@@ -499,11 +727,15 @@ jobs:
             manifest=$(tar -xOf "$archive" package/package.json)
             name=$(node -p "JSON.parse(process.argv[1]).name" "$manifest")
             version=$(node -p "JSON.parse(process.argv[1]).version" "$manifest")
-            if npm view "$name@$version" version >/dev/null 2>&1; then
+            state=$(node scripts/verify-published-artifact.mjs npm "$archive")
+            if [ "$state" = exact ]; then
               echo "::notice::$name@$version already exists; skipping"
-            else
+            elif [ "$state" = missing ]; then
               npm publish --access public --tag "$DIST_TAG" --workspaces=false \
                 --ignore-scripts "$archive"
+            else
+              echo "::error::unexpected npm verification state: $state"
+              exit 1
             fi
           done
 
@@ -514,9 +746,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - name: Reject workflow reruns
+        shell: bash
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.detect.outputs.commit }}
+          persist-credentials: false
 
       - name: Confirm every registry and publish the release notes
         env:

@@ -78,8 +78,9 @@ Tagging retains nothing; the entry is released with the widget.
 
 `LabelledBy` and `DescribedBy` use framework-neutral `SemanticKey` strings, so
 one annotation does not retain its targets. The probe resolves them after the
-whole tree has been walked. Missing or duplicate keys are omitted instead of
-becoming dangling or arbitrary node references. Pointer identity remains the
+whole tree has been walked. Missing targets are omitted; duplicate non-empty
+keys are a typed fatal producer error instead of silently weakening identity.
+Pointer identity remains the
 stable node id; a key is only the relation target for tview. Primary framework
 provenance is reported in `p`, with recognizer and annotation exceptions in
 `px`.
@@ -87,6 +88,13 @@ provenance is reported in `p`, with recognizer and annotation exceptions in
 This is the one import that makes an application no longer zero-config, which
 is why it is optional and why the two example fixtures in this package are kept
 apart.
+
+Application-owned physical evidence is registered separately through
+`clients/go/evidence`. The injected probe freezes that registry on the first
+render, after application initialization has run, so a normal registration in
+`main()` participates in the immutable session contract. Region-only and
+hit-test-only providers may be composed; they publish evidence only and never
+dispatch tview input handlers.
 
 ## Dormant without instrumentation
 

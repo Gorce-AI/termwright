@@ -3,27 +3,20 @@
 What this does differently from the hand-written adapter it replaces, each
 point traceable to a measurement in `docs/architecture/audit/textual.md`:
 
-**`bounds` is the visible rectangle.** `Widget.region` is where the widget
-sits in screen coordinates whether or not a container clips it; the audit
-found the adapter publishing that, which reports cells the user cannot see for
-anything scrolled halfway out of a viewport. The truth is
-`MapGeometry.visible_region`, defined by Textual as `clip ∩ region`.
+**Geometry is evidence-qualified.** `Widget.region` reports intended layout;
+`MapGeometry.visible_region` reports Textual's `clip ∩ region`. Both facts are
+published independently, so missing geometry never becomes a guessed rectangle.
 
 **Paint order is real here.** Textual's compositor sorts widgets by
 `MapGeometry.order` (`_compositor.py:763`), a per-ancestor tuple that compares
 lexicographically. Ranking the frame's widgets by that same key gives a
-`paintOrder` that is Textual's own answer rather than our guess, which is what
-lets every node claim `occlusion: 'known'` and unlocks pointer actions the
-driver otherwise refuses.
+`paintOrder` that is Textual's own answer rather than our guess. Pointer
+ownership comes separately from Textual's exact `get_widget_at` result.
 
 **Not displayed and scrolled out of view are different facts, and the tree now
-says which.** A widget Textual is not displaying is `hidden` with no bounds; one
-that is displayed and entirely clipped is `hidden` **and** `offscreen`, with a
-zero-area rectangle at its own origin. The earlier encoding leaned on absent
-`bounds` to mean "not displayed", which collided with what absent bounds
-already means — "this producer cannot report geometry" — so a consumer reading
-the tree generically could not tell them apart. `state.offscreen` removes the
-ambiguity at the source.
+says which.** A widget Textual is not displaying has absent geometry. One that
+is displayed and entirely clipped has a known intended rectangle and a known
+zero-area visible rectangle. `state.offscreen` records the latter case.
 
 The Textual knowledge below — which class means which role, where a widget
 keeps its text — is deliberately copied from the adapter rather than imported
@@ -46,6 +39,8 @@ from termwright.tree import (
     SemanticNode,
     SemanticSnapshot,
     SemanticState,
+    SemanticValueObservation,
+    framework_evidence,
 )
 
 #: Widget class name → semantic role, walked along the MRO so a subclass of a
@@ -139,6 +134,10 @@ class Identities:
         return assigned
 
 
+class DuplicateSemanticKeyError(ValueError):
+    """An explicit application identity was not unique in one frame."""
+
+
 def role_for(widget: Any, annotation: Optional[ResolvedAnnotation] = None) -> str:
     """Semantic role: the SDK annotation, then the class ancestry."""
     resolved = annotation if annotation is not None else resolve_annotation(widget)
@@ -229,7 +228,7 @@ def actions_for(role: str) -> Optional[Sequence[str]]:
     return None
 
 
-def value_for(widget: Any, role: str) -> Optional[str]:
+def value_for(widget: Any, role: str) -> Optional[SemanticValueObservation]:
     """Current value of a value-bearing widget, as text.
 
     `''` is a value: it says the field is empty, where absence says the widget
@@ -242,7 +241,16 @@ def value_for(widget: Any, role: str) -> Optional[str]:
         value = getattr(widget, "value", None)
     if isinstance(value, bool) or value is None:
         return None
-    return value if isinstance(value, str) else str(value)
+    if role == "textbox" and bool(getattr(widget, "password", False)):
+        return SemanticValueObservation(
+            status="withheld", reason="sensitive", sensitivity="sensitive"
+        )
+    return SemanticValueObservation(
+        status="known",
+        value=value if isinstance(value, str) else str(value),
+        sensitivity="public",
+        evidence=framework_evidence("textual-probe"),
+    )
 
 
 def _rect(region: Any) -> Optional[Rect]:
@@ -325,7 +333,7 @@ def _rank_paint_order(observations: List[WidgetObservation]) -> None:
         ordered.sort(key=lambda item: item.geometry.order)
     except TypeError:
         # Mixed key shapes across Textual versions: no honest ranking, so no
-        # claim of one. Every node then reports occlusion 'unknown'.
+        # claim of one. Pointer ownership still comes from `get_widget_at`.
         return
     for rank, item in enumerate(ordered):
         item.paint_order = rank
@@ -337,7 +345,6 @@ def build_snapshot(
     *,
     session_id: str,
     revision: int,
-    qualified: bool = False,
 ) -> SemanticSnapshot:
     """The semantic tree for the frame that just landed."""
     observations = observe(app)
@@ -346,14 +353,13 @@ def build_snapshot(
     key_counts = Counter(
         annotation.key for annotation in annotations.values() if annotation.key is not None
     )
-    # Duplicate author keys are not identities. Degrade every colliding node to
-    # Textual's retained object identity for this frame; keeping one by
-    # traversal order would be unstable, while duplicate ids reject the whole
-    # snapshot.
+    duplicates = sorted(str(key) for key, count in key_counts.items() if count > 1)
+    if duplicates:
+        raise DuplicateSemanticKeyError(
+            "duplicate SemanticKey values: " + ", ".join(repr(key) for key in duplicates[:16])
+        )
     semantic_keys = {
         widget_id: annotation.key
-        if annotation.key is not None and key_counts[annotation.key] == 1
-        else None
         for widget_id, annotation in annotations.items()
     }
     screen = app.screen
@@ -377,31 +383,29 @@ def build_snapshot(
         if parent_id is None:
             root_ids.append(node_id)
 
-        bounds, hidden, offscreen = _geometry_of(item)
+        hidden, offscreen = _visibility_flags(item)
         intended = _rect(getattr(item.geometry, "region", None)) if item.geometry is not None else None
         visible = _rect(getattr(item.geometry, "visible_region", None)) if item.geometry is not None else None
-        geometry = None
-        if qualified:
-            if not item.displayed:
-                absent = WireObservation(status="absent", reason="not-displayed")
-                geometry = NodeGeometryObservations(
-                    displayed=WireObservation(status="known", value=False, evidence="probe"),
-                    intendedRect=absent,
-                    visibleRect=absent,
-                )
-            elif item.geometry is None:
-                unknown = WireObservation(status="unknown", reason="temporary")
-                geometry = NodeGeometryObservations(
-                    displayed=WireObservation(status="known", value=True, evidence="probe"),
-                    intendedRect=unknown,
-                    visibleRect=unknown,
-                )
-            else:
-                geometry = NodeGeometryObservations(
-                    displayed=WireObservation(status="known", value=True, evidence="probe"),
-                    intendedRect=(WireObservation(status="known", value=intended, evidence="probe") if intended is not None else WireObservation(status="unknown", reason="not-reported")),
-                    visibleRect=(WireObservation(status="known", value=visible, evidence="viewport-clip") if visible is not None else WireObservation(status="unsupported", capability="visible-rect", reason="framework-unobservable")),
-                )
+        if not item.displayed:
+            absent = WireObservation(status="absent", reason="not-displayed", evidence=framework_evidence("textual-compositor"))
+            geometry = NodeGeometryObservations(
+                displayed=WireObservation(status="known", value=False, evidence=framework_evidence("textual-probe")),
+                intendedRect=absent,
+                visibleRect=absent,
+            )
+        elif item.geometry is None:
+            absent = WireObservation(status="absent", reason="not-laid-out", evidence=framework_evidence("textual-compositor"))
+            geometry = NodeGeometryObservations(
+                displayed=WireObservation(status="known", value=True, evidence=framework_evidence("textual-probe")),
+                intendedRect=absent,
+                visibleRect=absent,
+            )
+        else:
+            geometry = NodeGeometryObservations(
+                displayed=WireObservation(status="known", value=True, evidence=framework_evidence("textual-probe")),
+                intendedRect=(WireObservation(status="known", value=intended, evidence=framework_evidence("textual-probe")) if intended is not None else WireObservation(status="absent", reason="not-laid-out", evidence=framework_evidence("textual-compositor"))),
+                visibleRect=(WireObservation(status="known", value=visible, evidence=framework_evidence("textual-compositor")) if visible is not None else WireObservation(status="unsupported", capability="clipped-geometry", reason="framework-unobservable")),
+            )
         annotated = _annotated_fields(annotation, semantic_key is not None)
         nodes.append(
             SemanticNode(
@@ -418,7 +422,6 @@ def build_snapshot(
                 description=annotation.description,
                 testId=test_id_for(widget, annotation),
                 value=value_for(widget, role),
-                bounds=None if qualified else bounds,
                 state=_state_of(item, widget, role, focused, hidden, offscreen),
                 extended=annotation.extended,
                 actions=(
@@ -433,14 +436,13 @@ def build_snapshot(
                     annotation.described_by, included, identities, semantic_keys
                 ),
                 frameworkType=type(widget).__name__ if role == "generic" else None,
-                occlusion=None if qualified else "unknown",
                 p="framework",
                 px=annotated or None,
                 geometry=geometry,
             )
         )
 
-    hit_regions = _hit_regions(screen, observations, identities, semantic_keys) if qualified else None
+    hit_regions = _hit_regions(screen, observations, identities, semantic_keys)
 
     return SemanticSnapshot(
         sessionId=session_id,
@@ -449,14 +451,12 @@ def build_snapshot(
         rows=int(getattr(app, "size", _Size()).height),
         rootIds=root_ids,
         nodes=nodes,
-        v=2 if qualified else 1,
-        coordinateSpace=(WireObservation(status="known", value="viewport-cells", evidence="probe") if qualified else None),
+        v=2,
+        coordinateSpace=WireObservation(status="known", value="viewport-cells", evidence=framework_evidence("textual-probe")),
         hitGrid=(
-            WireObservation(status="known", value={"regions": hit_regions}, evidence="hit-grid")
-            if qualified and hit_regions is not None
+            WireObservation(status="known", value={"regions": hit_regions}, evidence=framework_evidence("textual-compositor-hit-grid"))
+            if hit_regions is not None
             else WireObservation(status="unsupported", capability="pointer-hit-grid", reason="framework-unobservable")
-            if qualified
-            else None
         ),
     )
 
@@ -515,30 +515,19 @@ def _app_name(app: Any) -> str:
     return type(app).__name__
 
 
-def _geometry_of(item: WidgetObservation) -> Tuple[Optional[Rect], bool, bool]:
-    """Bounds to publish, whether the node is hidden, and whether it is offscreen.
-
-    Three cases, and the tree distinguishes all of them:
-
-    - not displayed: `hidden`, no bounds at all;
-    - displayed but entirely clipped: `hidden` and `offscreen`, with a
-      zero-area rect at its own origin — "it is somewhere, and none of it is
-      on screen";
-    - visible: the intersection of its region with the clip.
-    """
-    if not item.displayed or item.geometry is None:
-        return None, True, False
+def _visibility_flags(item: WidgetObservation) -> Tuple[bool, bool]:
+    """Return only visibility facts Textual actually exposes."""
+    if not item.displayed:
+        return True, False
+    if item.geometry is None:
+        return False, False
 
     visible = _rect(getattr(item.geometry, "visible_region", None))
     if visible is None:
-        # An older Textual without the property: fall back to the region and
-        # say so by refusing the occlusion claim elsewhere.
-        return _rect(getattr(item.geometry, "region", None)), False, False
+        return False, False
     if visible.width == 0 or visible.height == 0:
-        region = _rect(getattr(item.geometry, "region", None))
-        origin = region if region is not None else visible
-        return Rect(row=origin.row, column=origin.column, width=0, height=0), True, True
-    return visible, False, False
+        return True, True
+    return False, False
 
 
 def _state_of(

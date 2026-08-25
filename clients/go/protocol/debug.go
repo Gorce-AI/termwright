@@ -218,11 +218,3 @@ func joinCapabilities(capabilities []Capability) string {
 	}
 	return strings.Join(parts, ",")
 }
-
-// countIn is the length of a list-valued field of a delta message, for the log
-// line only. The delta is carried as a map because the wire shape is what the
-// composition rules are written against, so this reaches in by name.
-func countIn(delta map[string]any, field string) int {
-	list, _ := delta[field].([]any)
-	return len(list)
-}

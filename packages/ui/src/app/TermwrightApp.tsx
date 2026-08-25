@@ -2,7 +2,6 @@ import { AlertTriangle, X } from 'lucide-react';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { DataSource, ViewerState } from '../data-source.js';
 import type { RunnerClient } from '../browser-client.js';
-import type { RunManifest, RunTest } from '../runs.js';
 import { parseCommandLine } from '../command-line.js';
 import { editorLink } from '../editor-link.js';
 import { AppShell } from './components/AppShell.js';
@@ -52,7 +51,10 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
       (message) => dispatch({ type: 'message', message }),
       (connected) => dispatch({ type: 'connected', connected }),
     );
-    return () => { active = false; };
+    return () => {
+      active = false;
+      client?.disconnect();
+    };
   }, [client, source]);
 
   const openReplay = useCallback(async (execution: ExecutionCase) => {
@@ -190,7 +192,9 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
   const stop = () => {
     if (client === undefined || state.run.status !== 'running') return;
     dispatch({ type: 'stop-requested' });
-    client.send({ v: 1, type: 'stop' });
+    void client.stopRun().catch((cause: unknown) => {
+      dispatch({ type: 'toast', tone: 'failure', text: runFailureText(cause) });
+    });
   };
   const startRecording = async () => {
     if (client === undefined || recordDraft.busy) return;
@@ -250,36 +254,6 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
     void operation().then(() => dispatch({ type: 'toast', tone: 'success', text: success }))
       .catch((cause: unknown) => dispatch({ type: 'toast', tone: 'failure', text: describe(cause) }));
   };
-  const openHistorical = (runManifest: RunManifest, test: RunTest, index: number) => {
-    if (test.traceRef === undefined || test.traceAvailable === false) return;
-    const execution: ExecutionCase = {
-      caseKey: test.id,
-      runId: runManifest.id,
-      executionId: `${runManifest.id}:${test.id}:${index + 1}`,
-      runtimeId: test.id,
-      provider: null,
-      kind: 'test',
-      title: test.title,
-      ancestors: [],
-      tags: [],
-      source: { file: test.file },
-      status: test.status,
-      // The list index is not an attempt number. Manifests written before
-      // retry history represent one final attempt, regardless of row order.
-      attempt: test.attempts?.at(-1)?.attempt ?? 1,
-      priorFailures: (test.attempts ?? []).slice(0, -1).map((attempt) => ({ attempt: attempt.attempt, errors: attempt.errors })),
-      durationMs: test.durationMs,
-      flaky: test.flaky,
-      lostLogRecords: test.lostLogRecords,
-      sessionIds: [],
-      traceRef: test.traceRef,
-      nodes: [],
-      ...(test.error === undefined ? {} : { error: test.error }),
-    };
-    dispatch({ type: 'select-history', execution });
-    void openReplay(execution);
-  };
-
   if (state.boot === 'loading') {
     return <div className="tw-boot"><span className="tw-boot-mark" /><strong>Preparing the execution workspace</strong></div>;
   }
@@ -310,7 +284,13 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
           dispatch={dispatch}
           onRun={run}
           onStop={stop}
-          onInput={(sessionId, data) => client?.sendInput(sessionId, data)}
+          onInput={(sessionId, data) => {
+            if (client === undefined) return;
+            void client.sendInput(sessionId, data).catch((cause: unknown) => {
+              dispatch({ type: 'toast', tone: 'failure', text: `Terminal input failed: ${describe(cause)}` });
+            });
+          }}
+          {...(client === undefined ? {} : { onInspectActionability: (sessionId: string, nodeId: string) => client.inspectActionability(sessionId, nodeId) })}
           onTraceStateAt={(timeMs) => source.traceState(timeMs)}
           onOpenReplay={(executionId) => {
             const execution = state.executions.find((test) => test.executionId === executionId)
@@ -359,7 +339,7 @@ export function TermwrightApp({ source, client }: { readonly source: DataSource;
           } })}
         />
       ) : state.route === 'runs' ? (
-        <RunsPage source={source} onOpen={openHistorical} />
+        <RunsPage source={source} />
       ) : (
         <SettingsPage state={state} features={source.features} />
       )}

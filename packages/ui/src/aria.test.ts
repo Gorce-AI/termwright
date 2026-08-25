@@ -92,7 +92,11 @@ describe('ariaElementFor', () => {
   it('turns a scrollbar’s offsets into value bounds', () => {
     expect(
       ariaElementFor(
-        node({ id: 'n1', role: 'scrollbar', state: { scrollOffset: 3, scrollExtent: 20, orientation: 'vertical' } }),
+        node({ id: 'n1', role: 'scrollbar', state: { orientation: 'vertical' }, scroll: {
+          status: 'known',
+          value: { axis: 'vertical', offset: 3, viewport: 4, extent: 20 },
+          evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll' },
+        } }),
       ).attrs,
     ).toEqual({
       'aria-orientation': 'vertical',

@@ -42,32 +42,12 @@ and exact pointer ownership where the framework can observe them.
 | Import | Contents |
 |---|---|
 | `termwright` | `launchTerminal`, locators, actions, waits, the error taxonomy |
-| `termwright/test` | the Vitest preset: `test`, `expect`, matchers, YAML snapshots |
+| `termwright/test` | the Native Host authoring surface: `test`, `expect`, fixtures, matchers, snapshots |
 | `termwright/ink` | `mountInk`, `launchInkFixture` for Ink component tests |
 | `termwright/gherkin` | physical `.feature` support, step definitions and the explicit Vitest plugin |
-| `termwright/reporter` | the trace reporter, for `vitest.config.ts` |
-| `termwright/ui-reporter` | the runner's lifecycle reporter, for a manually started UI server/test process |
-
-Everything a project needs is reachable from this one package, config included —
-so `termwright` in `devDependencies` is the whole install:
-
-```ts
-// vitest.config.ts
-import { defineConfig } from 'vitest/config';
-import TermwrightReporter from 'termwright/reporter';
-import TermwrightUiReporter from 'termwright/ui-reporter';
-
-export default defineConfig({
-  test: { reporters: ['default', new TermwrightReporter(), new TermwrightUiReporter()] },
-});
-```
-
-The two reporters are independent and compose: one writes `.twtrace` archives,
-the other streams a live run to `termwright ui`. The UI one does nothing when
-`TERMWRIGHT_UI_URL` is unset, so it is safe to leave configured in a repository
-whose runs are mostly headless. `termwright ui` injects that reporter
-automatically; configure it yourself only when your own script starts the UI
-server and Vitest separately.
+Everything a project needs is reachable from this one package. Termwright's
+runner, journal, traces and live UI are installed and owned by the Native Host;
+there is no reporter users must inject into `vitest.config.ts`.
 
 `termwright` on its own has no test-runner dependency, so a script or a
 `node:test` file can use it:
@@ -85,6 +65,9 @@ await app.close();
 
 ```sh
 termwright ui                            # runner + Vitest in watch mode, opens Termwright desktop
+termwright test                          # certified one-shot native host
+termwright test --runs 50                # 50 complete RunIds in that one host
+termwright watch                         # same persistent host, source-triggered runs
 termwright ui --browser                  # use the same runner in the system browser
 termwright ui --no-open                  # …or just print the URL
 termwright ui --trace out/login.twtrace  # open a recording from CI and scrub it
@@ -99,28 +82,23 @@ termwright skill --out .claude/skills/tw # an agent-skill package
 `termwright ui` opens a local runner with Specs, Runner, Runs and Settings
 views. Runner keeps a single execution rail — cases with the selected case's
 Test body, steps and commands expanded inline — beside the live terminal,
-semantic inspector, logs and timeline. It starts your project's own Vitest in
-watch mode, injects the UI reporter, and points both reporter and worker-side
-terminal bridge at the runner through `TERMWRIGHT_UI_URL`.
-Vitest options remain native and are forwarded to watcher and targeted browser
-runs; for example, `termwright ui -- --retry=2` allows two additional attempts.
-This is per-test retry, not a second whole-run rerun.
+semantic inspector, logs and timeline. `test`, `watch`, and `ui` share one
+persistent Termwright-owned Vitest engine. UI discovery, targeted reruns and
+cancellation use native collected IDs in that engine; they never spawn sibling
+Vitest processes or reconstruct selection from file and title.
 
-The watch process keeps its native terminal and hotkeys. A browser rerun starts
-a separate, precisely targeted Vitest child; Stop terminates that child
-without taking down the watcher or the UI server. The row becomes cancelled
-only after the child exits, and a failed cancellation is shown as such.
+Vitest options remain native and are forwarded after `--`; for example,
+`termwright test -- --retry=2` allows two diagnostic attempts. A failed first
+attempt followed by a pass is still a non-certifying `flaky` run.
 
-The UI catalogues and executes only cases declared by `test`/`it` from
-`@termwright/test` (or `termwright/test`). The preset attaches a versioned
-provider marker at declaration time; discovery reads that metadata and the
-UI-owned Vitest runner skips every unmarked case, including a plain Vitest
-sibling in the same file. This applies to Run all, directory, file and case
-buttons; a foreign `test.only` cannot suppress the marked Termwright cases.
-A normal `vitest run` does not use that UI runner and retains Vitest's usual
-`.only` behavior.
-The marker is also the extension point for future test providers; no additional
-provider is implied to exist today.
+The native host owns the complete graph collected by its embedded, exact-pinned
+Vitest engine. Tests may use Vitest's DSL, assertions, transforms and mocks,
+while Termwright assigns every case a Run/Execution/Attempt identity and applies
+the same lifecycle, journal and resource policy. Terminal-aware metadata enriches
+a case; it never filters an otherwise valid unit test out of certification.
+Direct `vitest` execution is not a Termwright product mode. The exact runner
+fails closed without its native-host context; repository tests use the same
+host rather than maintaining a compatibility path.
 
 Physical Gherkin features join that same catalogue automatically. Put paired
 step definitions beside the feature and import the authoring API from the
@@ -150,10 +128,9 @@ boundaries with their physical source. A terminal launched by a step, its live
 output, actions, assertions and retained replay all remain attached to that
 step. Actionless scenarios keep their prose and outcome without a fabricated
 terminal panel.
-Ordinary `vitest run` and IDE runs remain unchanged; opt them in by adding
-`gherkinPlugin()` and a `.feature` include to their Vitest config as documented
-by `@termwright/gherkin`. Hooks, tag filters and editor configuration are not
-included in the current Gherkin slice.
+The native host installs the Gherkin transform itself. It remains the only
+Termwright scheduler: there is no direct-Vitest compatibility path or separate
+Cucumber process.
 
 Interactive use opens the packaged Termwright desktop application. Use
 `--browser` for the system browser or `--no-open` for a server-only process. In
@@ -174,11 +151,11 @@ arguments after `--`:
 termwright ui -- src/login.test.ts --reporter=dot
 ```
 
-The command supplies `default` and `termwright/ui-reporter` automatically. An
-additional `--reporter` after `--` composes with them. An initial `-t` or
-`--testNamePattern` scopes the watcher; selecting a different test in the
-browser replaces that name filter for the targeted one-shot run so two filters
-cannot combine into an empty selection.
+The native host composes its structured journal projection with every reporter
+configured by the project. Human reporter output is never parsed as control
+data. An initial `-t` or `--testNamePattern` scopes collection; browser
+selection is then carried by the collected native RunnerTaskId, never rebuilt
+from file/title text.
 
 `termwright report` writes the same viewer as `ui --trace`, but as one HTML file
 with the bundle, recording and imported assets (including the SVG Termwright
@@ -202,7 +179,8 @@ output machine-readable, and failures carry a `kind`.
 
 ## Requirements
 
-Node >= 22, ESM only. Vitest >= 3.2 is an optional peer: needed for
-`termwright/test` and for `termwright ui`'s watch mode, and for nothing else.
+Node >= 22, ESM only. The native host embeds and certifies exactly Vitest 4.1.11
+as its collection/transform/assertion engine. It is an implementation surface,
+not a user-selectable runner range.
 
 Implementation decisions: [`NOTES.md`](./NOTES.md).

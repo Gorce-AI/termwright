@@ -19,28 +19,66 @@ Windows environment names are case-insensitive and the OS chooses the casing, so
 the allowlist is matched against the real keys rather than read by an assumed
 spelling.
 
-## Windows: the AttachConsole noise is teardown, not spawn
+## Windows: ConPTY teardown must not stall on AttachConsole
 
-`Error: AttachConsole failed` is thrown at `conpty_console_list_agent.js:11`,
-inside a process `@lydell/node-pty` **forks** from `kill()` to enumerate the
-console process list. A GitHub Actions runner's session has no console to
-attach to, so it throws there every time a session closes.
+> Historical investigation. This section describes the former node-pty
+> Windows backend and the evidence that caused it to be replaced. Current
+> releases use the Termwright-owned `@termwright/conpty` addon on Windows with
+> no fallback. POSIX continues to use node-pty.
+
+`@lydell/node-pty` forks a helper from `kill()` to enumerate the console process
+list. On a loaded GitHub Actions runner, several helpers can race and Win32's
+`AttachConsole` may temporarily fail. Version 1.1.0 let that helper die without
+an IPC reply; every parent then retained its ConPTY handles for a five-second
+fallback timer. Parallel sessions amplified this into missing frames and
+timeouts elsewhere in the suite.
 
 Worth recording because the obvious diagnosis is wrong twice over:
 
-- **There is no winpty fallback to escape.** `WindowsPtyAgent` in
-  `@lydell/node-pty` 1.1.0 unconditionally `require`s `conpty.node` and calls
-  `conptyNative.startProcess`. The package is ConPTY-only; nothing chooses
-  between backends.
+- **There is no backend fallback to escape.** The supported Windows path is
+  ConPTY; Termwright does not switch terminal implementations after a failure.
 - **There is no `useConpty` to force.** Neither the typings nor the JavaScript
   mention it — the only Windows option is `conptyInheritCursor`. Passing
   `useConpty: true` would be a no-op that looks like a fix.
 
-The parent tolerates the throw: it waits for the agent's message and falls back
-to the shell pid after a 5 s timeout. That makes it a slowness risk on Windows
-rather than a correctness one — if teardown turns out to cost seconds per
-session there, the fix is to stop routing Windows teardown through
-`pty.kill()`, and that needs a Windows run to justify rather than a guess.
+Termwright pins `@lydell/node-pty` 1.2.0-beta.15. Its helper catches this exact
+race, sends an empty process list immediately and lets the parent close ConPTY
+without the five-second stall. A Windows-only stress regression closes several
+live PTYs concurrently and requires every exit promptly. The version also
+connects ConPTY asynchronously, so `PtyProcess.pid` is a live getter rather
+than a snapshot of the transient pre-connect value `0`.
+
+The pin is an exact private-boundary certification, not a package-manager
+patch. Termwright owns its input queue: on Unix it writes through the exact
+`fd` boundary; on ConPTY it owns a deferred, backpressured queue over the exact
+agent input socket. Async failures become `writeError`, wake pending
+operations, and make cleanup fail after resources are released. Nothing
+mutates `node_modules` or suppresses global stderr, so packed installations and
+the repository execute the same code. `check:node-pty` validates the exact
+upstream shape and exercises the Termwright-owned boundary on the active OS;
+the lockfile binds all six OS/architecture packages.
+
+On ConPTY the same exact boundary includes the agent's console-process-list
+operation. Before a hard close Termwright captures the owned console PIDs,
+terminates them, closes HPCON, observes the real PTY exit, and verifies every
+captured PID is gone. An empty enumeration while the root remains alive is a
+cleanup failure, not permission to claim that `close()` proved the tree dead.
+The Windows Node 22/24 native lane exercises a parent and grandchild through
+this path.
+
+The public node-pty API does not expose EOF, so the exact adapter owns that
+boundary where the backend makes it possible. It observes Unix stream end/EIO
+before node-pty's exit callback; only then does TerminalSession publish exit
+after an exact VT drain. The beta.15 forced Unix socket-destroy path retains the
+explicit `degraded-output-drain` fallback. ConPTY is always degraded for this
+version: its agent destroys the output socket after a private 100-ms flush
+timer, so `close` is not an OS EOF and Termwright does not relabel it as one.
+Certification checks this exact upstream source shape and a real output/exit
+smoke, while the 1 MiB Unix final-output test proves the normal path does not
+degrade. `write()` has a different, deliberately weaker
+meaning: bytes were admitted to the backend's ordered queue, not consumed by
+the child. High-level actions prove their effect through committed semantic
+postconditions.
 
 ## Windows: the mouse mode is hidden, not absent
 
@@ -199,7 +237,7 @@ identity that re-resolution is **not** "did this node change?" but "does the
 number 8 mean anything in this frame?", and the honest answer is no.
 
 Proposed: `ResolvedTarget` gains `identity: 'stable' | 'frame-local'`, and
-`locatorForRef` refuses with `unsupported-action` for a frame-local ref,
+`locatorForRef` refuses with `capability-unavailable` for a frame-local ref,
 suggesting role/name/testId instead. The failure this prevents is the worst
 kind: a ref that silently resolves to a *different widget* between frames, so
 a passing test asserts about something it never targeted.
@@ -248,9 +286,8 @@ heuristic". That is a small change with a large effect on how debuggable the
 zero-config model is, and it is the argument for keeping provenance in the tree
 rather than behind a lazy inspector channel.
 
-### 5. Still open, deliberately not assumed
+### 5. Capability truth moved to the frozen contract
 
-Progressive levels (spec c: "no more binary `semanticTree`") are **not** in the
-D1-D6 series. `capabilities().semanticTree` is a boolean today and the audit
-lists it as delete-on-replacement, but no decision has replaced it yet. Not
-touching it until one does.
+The former provisional `capabilities()` snapshot was deleted. Capability
+support, evidence and remediation now come only from the immutable Effective
+Session Contract; runtime state remains a separate observation domain.

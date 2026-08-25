@@ -9,12 +9,12 @@
     "directory": "packages/probe-go"
   },
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "^22.0.0 || ^24.0.0" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "files": ["dist"],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm --dir ../.. test -- -- --run packages/probe-go"
   }
 }

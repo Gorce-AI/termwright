@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: CellAttributes
 
-Defined in: [api.ts:296](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L296)
+Defined in: [driver/src/api.ts:421](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L421)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **bold**: `boolean`
 
-Defined in: [api.ts:297](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L297)
+Defined in: [driver/src/api.ts:422](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L422)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [api.ts:297](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **dim**: `boolean`
 
-Defined in: [api.ts:298](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L298)
+Defined in: [driver/src/api.ts:423](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L423)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [api.ts:298](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **inverse**: `boolean`
 
-Defined in: [api.ts:301](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L301)
+Defined in: [driver/src/api.ts:426](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L426)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [api.ts:301](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **italic**: `boolean`
 
-Defined in: [api.ts:299](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L299)
+Defined in: [driver/src/api.ts:424](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L424)
 
 ***
 
@@ -68,7 +68,7 @@ Defined in: [api.ts:299](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **strikethrough**: `boolean`
 
-Defined in: [api.ts:302](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L302)
+Defined in: [driver/src/api.ts:427](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L427)
 
 ***
 
@@ -76,4 +76,4 @@ Defined in: [api.ts:302](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **underline**: `boolean`
 
-Defined in: [api.ts:300](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L300)
+Defined in: [driver/src/api.ts:425](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L425)

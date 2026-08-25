@@ -15,7 +15,7 @@
 
 import {
   DEFAULT_LIMITS,
-  resolveNodeBounds,
+  evidence,
   SEMANTIC_ROLES,
   type ProbeFrame,
   type ProbeObject,
@@ -43,8 +43,6 @@ export interface RecognizeContext {
   readonly paintOrderKnown?: boolean;
   /** Bound for a name correlated from descendant text. */
   readonly maxStringBytes?: number;
-  /** Emit the explicit qualified geometry contract instead of legacy v1. */
-  readonly qualified?: boolean;
 }
 
 const ROLES: ReadonlySet<string> = new Set(SEMANTIC_ROLES);
@@ -193,14 +191,13 @@ function resolveState(
   if (observed?.selected !== undefined) state['selected'] = observed.selected;
   if (observed?.busy !== undefined) state['busy'] = observed.busy;
   if (observed?.multiline !== undefined) state['multiline'] = observed.multiline;
+  if (observed?.required !== undefined) state['required'] = observed.required;
+  if (observed?.multiselectable !== undefined) state['multiselectable'] = observed.multiselectable;
   if (observed?.displayed !== undefined) state['hidden'] = !observed.displayed;
   // Probe IR keeps item selection distinct from a text range. The semantic
   // tree represents the highlighted item's zero-based index as the matching
   // one-based collection position.
   if (observed?.selectedIndex !== undefined) state['positionInSet'] = observed.selectedIndex + 1;
-  if (observed?.scroll !== undefined) state['scrollOffset'] = observed.scroll.row;
-  if (observed?.scrollExtent !== undefined) state['scrollExtent'] = observed.scrollExtent.rows;
-
   // Clipped entirely away is a different fact from the framework's own display
   // flag, and both end up as `hidden` because the wire has one field for it.
   if (hiddenByGeometry) state['hidden'] = true;
@@ -242,23 +239,11 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
     const { role, source: roleSource } = resolveRole(object, context.framework);
     const { name, source: nameSource } = resolveName(object, role, subtreeText);
 
-    const bounds =
-      object.geometry === undefined
-        ? undefined
-        : resolveNodeBounds(object.geometry, {
-            // The terminal viewport is always a real, known clip even when the
-            // framework cannot expose clips imposed by intermediate widgets.
-            clip: { row: 0, column: 0, width: context.columns, height: context.rows },
-            // Paint order is not a hit test. Until the normalized contract
-            // carries the topmost recipient at a concrete point, v1 must not
-            // promote either a frame-level flag or an object's order number to
-            // `occlusion: known`.
-            paintOrderKnown: false,
-          });
-
-    const hiddenByGeometry =
-      bounds !== undefined && (bounds.rect.width === 0 || bounds.rect.height === 0);
-    const state = resolveState(object, hiddenByGeometry, bounds?.clippedAway ?? false);
+    const intended = object.geometry?.intendedRect;
+    const visible = object.geometry?.visibleRect;
+    const hiddenByGeometry = visible !== undefined && (visible.width === 0 || visible.height === 0);
+    const offscreen = hiddenByGeometry && intended !== undefined && intended.width > 0 && intended.height > 0;
+    const state = resolveState(object, hiddenByGeometry, offscreen);
     const parentId = object.parent === undefined ? undefined : idByIdentity.get(object.parent);
     if (parentId === undefined) rootIds.push(id);
 
@@ -266,7 +251,7 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
     // from the framework: an annotation may not move a widget on screen.
     const px: Record<string, ProvenanceSource> = {};
     if (nameSource !== roleSource) px['name'] = nameSource;
-    if (bounds !== undefined) px[context.qualified ? 'geometry' : 'bounds'] = 'framework';
+    if (object.geometry !== undefined) px['geometry'] = 'framework';
     if (state !== undefined) px['state'] = 'framework';
     if (object.annotations?.description !== undefined && roleSource !== 'annotation') {
       px['description'] = 'annotation';
@@ -281,6 +266,9 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
     }
     if (object.annotations?.actions !== undefined && roleSource !== 'annotation') {
       px['actions'] = 'annotation';
+    }
+    if (object.annotations?.inputRecipes !== undefined && roleSource !== 'annotation') {
+      px['inputRecipes'] = 'annotation';
     }
     if (object.annotations?.labelledBy !== undefined && roleSource !== 'annotation') {
       px['labelledBy'] = 'annotation';
@@ -297,22 +285,26 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
       .filter((target): target is string => target !== undefined);
 
     const displayed: Observation<boolean> = object.state?.displayed !== undefined
-      ? { status: 'known', value: object.state.displayed, evidence: 'probe' }
+      ? { status: 'known', value: object.state.displayed, evidence: evidence('framework', 'instrumented', 'authoritative', context.framework) }
       : object.unobservable?.includes('displayed') === true
         ? { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' }
-        : { status: 'unknown', reason: 'not-reported' };
-    const intendedRect: Observation<Rect> = object.geometry?.intendedRect !== undefined
-      ? { status: 'known', value: object.geometry.intendedRect, evidence: 'probe' }
+        : { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' };
+    const intendedRect: Observation<Rect> = displayed.status === 'known' && displayed.value === false && displayed.evidence.strength === 'authoritative'
+      ? { status: 'absent', reason: 'not-displayed', evidence: { ...displayed.evidence, strength: 'authoritative' } }
+      : object.geometry?.intendedRect !== undefined
+      ? { status: 'known', value: object.geometry.intendedRect, evidence: evidence('framework', 'instrumented', 'authoritative', context.framework) }
       : object.unobservable?.includes('intendedRect') === true
         ? { status: 'unsupported', capability: 'intended-rect', reason: 'framework-unobservable' }
-        : { status: 'unknown', reason: 'not-reported' };
-    const visibleRect: Observation<Rect> = displayed.status === 'known' && displayed.value === false
-      ? { status: 'absent', reason: 'not-displayed' }
+        : { status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' };
+    const visibleRect: Observation<Rect> = displayed.status === 'known' && displayed.value === false && displayed.evidence.strength === 'authoritative'
+      ? { status: 'absent', reason: 'not-displayed', evidence: { ...displayed.evidence, strength: 'authoritative' } }
+      : displayed.status === 'known' && displayed.value === false
+        ? { status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' }
       : object.geometry?.visibleRect !== undefined
-        ? { status: 'known', value: object.geometry.visibleRect, evidence: 'viewport-clip' }
+        ? { status: 'known', value: object.geometry.visibleRect, evidence: evidence('framework', 'instrumented', 'authoritative', context.framework) }
         : object.unobservable?.includes('visibleRect') === true
           ? { status: 'unsupported', capability: 'visible-rect', reason: 'framework-unobservable' }
-          : { status: 'unknown', reason: 'not-reported' };
+          : { status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' };
 
     nodes.push({
       id,
@@ -325,12 +317,7 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
           : { description: object.accessibility.description }
         : { description: object.annotations.description }),
       frameworkType: object.frameworkType,
-      ...(context.qualified
-        ? { geometry: { displayed, intendedRect, visibleRect } }
-        : {
-            ...(bounds === undefined ? {} : { bounds: bounds.rect }),
-            ...(bounds === undefined ? {} : { occlusion: bounds.occlusion }),
-          }),
+      geometry: { displayed, intendedRect, visibleRect },
       ...(state === undefined ? {} : { state }),
       ...(object.annotations?.testId === undefined
         ? {}
@@ -341,15 +328,23 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
       ...(object.annotations?.actions === undefined
         ? {}
         : { actions: object.annotations.actions }),
+      ...(object.annotations?.inputRecipes === undefined
+        ? {}
+        : { inputRecipes: object.annotations.inputRecipes }),
       ...(labelledBy === undefined || labelledBy.length === 0 ? {} : { labelledBy }),
       ...(describedBy === undefined || describedBy.length === 0 ? {} : { describedBy }),
-      ...(object.state?.value === undefined ? {} : { value: object.state.value }),
+      ...(object.state?.value === undefined ? {} : { value: {
+        status: 'known' as const,
+        value: object.state.value,
+        sensitivity: object.state?.valueSensitivity ?? 'sensitive',
+        evidence: evidence('framework', 'instrumented', 'authoritative', context.framework),
+      } }),
       p: roleSource,
       ...(Object.keys(px).length === 0 ? {} : { px }),
     });
   }
 
-  return context.qualified ? {
+  return {
     v: 2,
     sessionId: context.sessionId,
     revision: context.revision,
@@ -357,15 +352,7 @@ export function recognize(frame: ProbeFrame, context: RecognizeContext): Semanti
     rows: context.rows,
     rootIds,
     nodes,
-    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence('framework', 'instrumented', 'authoritative', context.framework) },
     hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
-  } : {
-    v: 1,
-    sessionId: context.sessionId,
-    revision: context.revision,
-    columns: context.columns,
-    rows: context.rows,
-    rootIds,
-    nodes,
   };
 }

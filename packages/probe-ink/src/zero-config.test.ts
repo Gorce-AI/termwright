@@ -7,11 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   ENV_ENDPOINT,
-  ENV_PROTOCOL,
   ENV_TOKEN,
   MARKER_OSC_CODE,
   MARKER_OSC_PREFIX,
-  PROTOCOL_V2_ID,
+  PROTOCOL_ID,
   verifyMarkerPayload,
 } from '@termwright/protocol';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
@@ -20,7 +19,6 @@ import { PACKAGE_VERSION } from './version.js';
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(packageRoot, 'src', 'testing', 'vanilla-app.mjs');
 const annotatedApp = join(packageRoot, 'src', 'testing', 'annotated-app.mjs');
-const annotationSdkRoot = join(packageRoot, '..', 'ink');
 
 type Runtime = 'bun' | 'node';
 
@@ -47,7 +45,6 @@ function launch(options: {
   readonly driver?: FakeDriver;
   readonly steps?: number;
   readonly appPath?: string;
-  readonly protocol?: typeof PROTOCOL_V2_ID;
 }): Promise<Run> {
   const interpreter = options.runtime === 'bun' ? 'bun' : process.execPath;
   const base = [interpreter, options.appPath ?? app];
@@ -63,7 +60,6 @@ function launch(options: {
       env: {
         ...process.env,
         TW_APP_STEPS: String(options.steps ?? 2),
-        [ENV_PROTOCOL]: options.protocol ?? '',
         ...(options.mode === 'instrumented'
           ? {
               [ENV_ENDPOINT]: options.driver?.endpoint as string,
@@ -113,22 +109,11 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
   const runtimes: readonly Runtime[] = bunAvailable() ? ['node', 'bun'] : ['node'];
 
   beforeAll(async () => {
-    // Process tests execute published JavaScript, not Vitest's source transform.
-    const { execFile } = await import('node:child_process');
-    const build = (cwd: string) => {
-      const executable = process.platform === 'win32' ? (process.env['ComSpec'] ?? 'cmd.exe') : 'npm';
-      const argv = process.platform === 'win32'
-        ? ['/d', '/s', '/c', 'npm run build']
-        : ['run', 'build'];
-      return new Promise<void>((resolve, reject) => {
-        execFile(executable, argv, { cwd }, (error) => {
-          if (error === null) resolve();
-          else reject(error);
-        });
-      });
-    };
-    await build(annotationSdkRoot);
-    await build(packageRoot);
+    // The native host consumes the already-built workspace just like a packed
+    // installation. Building here used `tsup --clean` against shared `dist/`
+    // directories and could delete the Ink preload while another project was
+    // spawning it. Build is a host prerequisite, never a concurrent test-side
+    // mutation of another attempt's executable inputs.
     const built = await import(join(packageRoot, 'dist', 'index.js')) as {
       readonly withProbe: BuiltWithProbe;
     };
@@ -144,16 +129,17 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
     async (runtime) => {
       const driver = await startFakeDriver();
       open.push(driver);
-      await launch({ runtime, mode: 'instrumented', driver, protocol: PROTOCOL_V2_ID });
+      await launch({ runtime, mode: 'instrumented', driver });
       const hello = await driver.waitForHandshake();
       const [snapshot] = await driver.waitForSnapshots(1);
-      expect(hello.protocol).toBe(PROTOCOL_V2_ID);
-      expect(hello.capabilities).toContain('qualified-observations');
+      expect(hello.protocol).toBe(PROTOCOL_ID);
       expect(snapshot?.v).toBe(2);
       expect(snapshot?.coordinateSpace).toMatchObject({ status: 'known', value: 'viewport-cells' });
       expect(snapshot?.hitGrid).toMatchObject({ status: 'unsupported' });
       expect(snapshot?.nodes.every((node) => node.geometry !== undefined)).toBe(true);
-      expect(snapshot?.nodes.some((node) => node.geometry?.visibleRect.status === 'unsupported')).toBe(true);
+      expect(snapshot?.nodes.every((node) =>
+        node.geometry.visibleRect.status === 'known'
+        || node.geometry.visibleRect.status === 'unsupported')).toBe(true);
     },
     60_000,
   );
@@ -201,9 +187,9 @@ describe('a vanilla Ink app instrumented by the launcher', () => {
         probeVersion: PACKAGE_VERSION,
         identityKind: 'stable',
       });
-      // No guessed frameworkVersion and no source-component claim: Ink's host
-      // tree contains neither after reconciliation.
-      expect(hello.probe?.frameworkVersion).toBeUndefined();
+      // The framework version is certified from both checksummed artifacts,
+      // not guessed from the retained host tree.
+      expect(hello.probe?.frameworkVersion).toBe('7.1.1');
 
       const [snapshot] = await driver.waitForSnapshots(1);
       expect(snapshot?.nodes.map((node) => node.role)).toEqual(expect.arrayContaining([

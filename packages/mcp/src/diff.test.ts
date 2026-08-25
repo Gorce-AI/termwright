@@ -2,27 +2,40 @@ import { describe, expect, it } from 'vitest';
 import { diffRows, diffSemantic } from './diff.js';
 import type { SemanticNode, SemanticSnapshot } from './model.js';
 
+const geometry = (rect?: { row: number; column: number; width: number; height: number }): SemanticNode['geometry'] => rect === undefined ? {
+  displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+  intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+  visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+} : {
+  displayed: { status: 'known', value: true, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'mcp-test' } },
+  intendedRect: { status: 'known', value: { ...rect }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'mcp-test' } },
+  visibleRect: { status: 'known', value: { ...rect }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'mcp-test' } },
+};
+
 function snapshot(revision: number, nodes: readonly SemanticNode[]): SemanticSnapshot {
   return {
-    v: 1,
+    v: 2,
     sessionId: 's1',
     revision,
     columns: 80,
     rows: 24,
     rootIds: nodes.filter((node) => node.parentId === undefined).map((node) => node.id),
     nodes,
+    coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 
-const dialog: SemanticNode = { id: 'n1', role: 'dialog', name: 'Permission' };
+const dialog: SemanticNode = { id: 'n1', role: 'dialog', name: 'Permission', geometry: geometry() };
 const approve: SemanticNode = {
   id: 'n2',
   parentId: 'n1',
   role: 'button',
   name: 'Approve',
   state: { focused: true },
+  geometry: geometry(),
 };
-const reject: SemanticNode = { id: 'n3', parentId: 'n1', role: 'button', name: 'Reject' };
+const reject: SemanticNode = { id: 'n3', parentId: 'n1', role: 'button', name: 'Reject', geometry: geometry() };
 
 describe('row diffs', () => {
   it('reports only the rows that differ', () => {
@@ -48,8 +61,8 @@ describe('semantic diffs', () => {
     const changes = diffSemantic(before, after);
     expect(changes).toHaveLength(1);
     expect(changes[0]?.change).toBe('updated');
-    expect(changes[0]?.ref).toBe('n2@2');
-    expect(changes[0]?.compact).toBe('button "Approve" ref=n2@2');
+    expect(changes[0]?.ref).toBe('semantic:n2@2');
+    expect(changes[0]?.compact).toBe('button "Approve" ref=semantic:n2@2');
   });
 
   it('folds a changed child into its changed parent instead of reporting both', () => {
@@ -60,10 +73,10 @@ describe('semantic diffs', () => {
     ]);
     const changes = diffSemantic(before, after);
     expect(changes).toHaveLength(1);
-    expect(changes[0]?.ref).toBe('n1@2');
+    expect(changes[0]?.ref).toBe('semantic:n1@2');
     expect(changes[0]?.compact.split('\n')).toEqual([
-      'dialog "Permission required" ref=n1@2',
-      '  button "Allow" ref=n2@2 focused',
+      'dialog "Permission required" ref=semantic:n1@2',
+      '  button "Allow" ref=semantic:n2@2 focused',
     ]);
   });
 
@@ -72,8 +85,8 @@ describe('semantic diffs', () => {
     const after = snapshot(2, [dialog, reject]);
     const changes = diffSemantic(before, after);
     expect(changes.map((change) => [change.change, change.ref])).toEqual([
-      ['added', 'n3@2'],
-      ['removed', 'n2@1'],
+      ['added', 'semantic:n3@2'],
+      ['removed', 'semantic:n2@1'],
     ]);
   });
 

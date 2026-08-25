@@ -10,7 +10,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "exports": {
     ".": {
@@ -22,9 +22,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/main.ts --format esm --dts --sourcemap && node scripts/copy-brand.mjs",
+    "build": "tsup src/index.ts src/main.ts --format esm --dts --sourcemap --clean && node scripts/copy-brand.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm --dir ../.. test -- -- --run packages/desktop-host"
   },
   "dependencies": {
     "@electron/packager": "20.3.0",
@@ -34,6 +34,6 @@
   "devDependencies": {
     "png2icons": "2.0.1",
     "sharp": "^0.34.3",
-    "vitest": "^3.2.0"
+    "vitest": "4.1.11"
   }
 }

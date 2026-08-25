@@ -1,4 +1,4 @@
-//! Blocking unix-socket client for the semantic side-channel.
+//! Bounded local-socket client for the semantic side-channel.
 //!
 //! **Dormant rule.** Without `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN` in
 //! the environment [`Client::from_env`] returns `None`: the application opens
@@ -11,37 +11,44 @@
 //! to write. Driver requests are picked up by [`Client::poll`], which never
 //! blocks.
 
-use std::collections::VecDeque;
 use std::io::{ErrorKind, Read, Write};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde_json::value::RawValue;
 use serde_json::Value;
 
 use crate::debug::{describe_endpoint, error_label, join_capabilities, on_off, Category, DebugLog};
-use crate::diffing::build_delta;
 use crate::error::Error;
+use crate::evidence::{Lease as EvidenceProviderLease, Registry as EvidenceProviderRegistry};
 use crate::framing::{encode_frame, FrameDecoder};
 use crate::limits::{Limits, DEFAULT_LIMITS};
 use crate::logs::{AttrValue, LogLevel, LogRecord, MAX_LOG_ATTRS};
 use crate::marker::encode_marker;
 use crate::messages::{
-    default_capabilities, parse_driver_message, GetTree, GetTreeResult, Hello, HelloAck,
-    LogMessage, ProbeInfo, ProtocolErrorMessage, RevisionCommit, SnapshotMessage,
+    default_capabilities, parse_driver_message, Hello, HelloAck, LogMessage, ProbeInfo,
+    ProtocolErrorMessage, RevisionCommit, SnapshotMessage,
 };
 use crate::roles::Capability;
 use crate::tree::Snapshot;
 use crate::validate::validate_snapshot;
 
+#[cfg(unix)]
+type TransportStream = UnixStream;
+
+#[cfg(windows)]
+use interprocess::{
+    os::windows::named_pipe::{pipe_mode, DuplexPipeStream},
+    ConnectWaitMode,
+};
+#[cfg(windows)]
+type TransportStream = DuplexPipeStream<pipe_mode::Bytes>;
+
 /// Environment variable naming the driver's socket.
 pub const ENV_ENDPOINT: &str = "TERMWRIGHT_ENDPOINT";
 /// Environment variable carrying the per-launch session token.
 pub const ENV_TOKEN: &str = "TERMWRIGHT_TOKEN";
-/// Environment variable pinning the protocol version.
-pub const ENV_PROTOCOL: &str = "TERMWRIGHT_PROTOCOL";
-
 /// Default handshake budget.
 pub const DIAL_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -53,9 +60,6 @@ pub const DIAL_TIMEOUT: Duration = Duration::from_secs(5);
 /// drawing. A driver that cannot take a frame in a quarter of a second is not
 /// keeping up, and the next frame carries newer state anyway.
 pub const WRITE_TIMEOUT: Duration = Duration::from_millis(250);
-
-/// How many recent revisions stay answerable by `get-tree`.
-const SNAPSHOT_HISTORY: usize = 8;
 
 /// How a client identifies itself and what it can provide.
 #[derive(Debug, Clone)]
@@ -79,6 +83,8 @@ pub struct Options {
     /// file. Shared rather than owned so an adapter can log alongside the
     /// client on the same file.
     pub debug: Option<Arc<DebugLog>>,
+    /// Application evidence registry frozen before hello.
+    pub evidence_registry: Option<EvidenceProviderRegistry>,
 }
 
 impl Options {
@@ -105,6 +111,7 @@ impl Options {
             // constructor is the wrong place for one. `Client::from_env` is
             // where the environment is read, here and in the other clients.
             debug: None,
+            evidence_registry: None,
         }
     }
 }
@@ -167,24 +174,19 @@ pub struct Client {
     endpoint: String,
     token: String,
     options: Options,
-    protocol: String,
-
-    stream: Option<UnixStream>,
+    stream: Option<TransportStream>,
     decoder: FrameDecoder,
     limits: Limits,
     session_id: Option<String>,
     revision: i64,
     marker_enabled: bool,
     log_budget: Option<crate::messages::LogBudget>,
-    published: Option<Value>,
-    deltas_sent: u64,
     snapshots_sent: u64,
     log_seq: i64,
     log_bucket: Option<TokenBucket>,
     logs_dropped: u64,
     subscribe: String,
-    history: VecDeque<(i64, Box<RawValue>)>,
-    force_full: bool,
+    evidence_lease: Option<EvidenceProviderLease>,
 }
 
 impl Client {
@@ -195,7 +197,6 @@ impl Client {
             endpoint: endpoint.into(),
             token: token.into(),
             options,
-            protocol: crate::messages::PROTOCOL_ID.into(),
             stream: None,
             decoder: FrameDecoder::new(limits.max_frame_bytes, limits.max_depth),
             limits,
@@ -203,25 +204,13 @@ impl Client {
             revision: 0,
             marker_enabled: false,
             log_budget: None,
-            published: None,
-            deltas_sent: 0,
             snapshots_sent: 0,
             log_seq: 0,
             log_bucket: None,
             logs_dropped: 0,
             subscribe: "snapshots".to_owned(),
-            history: VecDeque::new(),
-            force_full: false,
+            evidence_lease: None,
         }
-    }
-
-    /// Whether this client negotiated evidence-qualified protocol v2.
-    ///
-    /// Snapshot producers must know this before observing a frame because v1
-    /// forbids qualified geometry while v2 requires it on every node.
-    #[must_use]
-    pub fn qualified_observations(&self) -> bool {
-        self.protocol == crate::messages::PROTOCOL_V2_ID
     }
 
     /// Build a client from `TERMWRIGHT_*`, or `None` when not instrumented.
@@ -235,21 +224,18 @@ impl Client {
         Self::from_values(
             std::env::var(ENV_ENDPOINT).ok().as_deref(),
             std::env::var(ENV_TOKEN).ok().as_deref(),
-            std::env::var(ENV_PROTOCOL).ok().as_deref(),
             options,
         )
     }
 
-    /// Build a client from explicit endpoint, token and protocol values,
+    /// Build a client from explicit endpoint and token values,
     /// applying the same dormant rule as [`Client::from_env`].
     ///
     /// Use this when the process manages its own environment, or in tests.
-    /// A missing or empty endpoint or token, a protocol other than
-    /// `termwright/1`, or a Windows named pipe all yield `None`.
+    /// A missing or empty endpoint or token yields `None`.
     pub fn from_values(
         endpoint: Option<&str>,
         token: Option<&str>,
-        protocol: Option<&str>,
         options: Options,
     ) -> Option<Self> {
         let endpoint = endpoint.filter(|value| !value.is_empty());
@@ -270,54 +256,19 @@ impl Client {
             }
             return None;
         };
-        if let Some(protocol) = protocol.filter(|value| !value.is_empty()) {
-            if protocol != crate::messages::PROTOCOL_ID
-                && protocol != crate::messages::PROTOCOL_V2_ID
-                && protocol != "1"
-                && protocol != "2"
-            {
-                if let Some(log) = options.debug.as_ref() {
-                    log.line(
-                        Category::Diag,
-                        &format!(
-                            "dormant: {ENV_PROTOCOL}={protocol:?} is not {:?}",
-                            crate::messages::PROTOCOL_ID
-                        ),
-                    );
-                }
-                return None;
-            }
-        }
-        if endpoint.starts_with(r"\\.\pipe\") || endpoint.starts_with(r"\\?\pipe\") {
-            // Named pipes need a Windows-only transport; stay dormant rather
-            // than half-working.
+        if !endpoint_supported(endpoint) {
             if let Some(log) = options.debug.as_ref() {
                 log.line(
                     Category::Diag,
                     &format!(
-                        "dormant: {} needs a Windows transport this client does not have",
+                        "dormant: {} is not a local endpoint for this platform",
                         describe_endpoint(endpoint)
                     ),
                 );
             }
             return None;
         }
-        let v2 = matches!(protocol, Some(crate::messages::PROTOCOL_V2_ID) | Some("2"));
-        let mut client = Self::new(endpoint, token, options);
-        if v2 {
-            client.protocol = crate::messages::PROTOCOL_V2_ID.into();
-            if !client
-                .options
-                .capabilities
-                .contains(&Capability::QualifiedObservations)
-            {
-                client
-                    .options
-                    .capabilities
-                    .push(Capability::QualifiedObservations);
-            }
-        }
-        Some(client)
+        Some(Self::new(endpoint, token, options))
     }
 
     /// Connect, send `hello`, and wait for `hello-ack`.
@@ -336,7 +287,7 @@ impl Client {
                 timeout.as_millis()
             ),
         );
-        let stream = match UnixStream::connect(&self.endpoint) {
+        let stream = match connect_transport(&self.endpoint, timeout, self.options.write_timeout) {
             Ok(stream) => stream,
             Err(error) => {
                 self.debug_line(
@@ -346,8 +297,6 @@ impl Client {
                 return Err(error.into());
             }
         };
-        stream.set_read_timeout(Some(Duration::from_millis(50)))?;
-        stream.set_write_timeout(self.options.write_timeout)?;
         self.stream = Some(stream);
 
         let mut hello = Hello::new(
@@ -356,9 +305,13 @@ impl Client {
             &self.options.adapter_version,
             self.options.capabilities.clone(),
         );
-        hello.protocol = self.protocol.clone();
         if let Some(probe) = self.options.probe.clone() {
             hello = hello.with_probe(probe);
+        }
+        if let Some(registry) = self.options.evidence_registry.as_ref() {
+            let lease = registry.freeze();
+            hello = hello.with_providers(lease.registrations());
+            self.evidence_lease = Some(lease);
         }
         self.send(&hello)?;
         self.debug_line(
@@ -385,6 +338,7 @@ impl Client {
                 return Err(Error::HandshakeTimeout);
             }
             self.poll()?;
+            std::thread::yield_now();
         }
         Ok(())
     }
@@ -427,36 +381,29 @@ impl Client {
         &self.limits
     }
 
-    /// Make the next publish send a whole tree.
-    ///
-    /// The producer's obligation from D5: a probe that lost anything from its
-    /// own stream of facts — a dropped frame, a coalesced burst, a write that
-    /// failed — must not follow it with a patch. The driver would apply that
-    /// patch to a tree that never accounted for what was lost, and the
-    /// divergence would be silent.
-    pub fn require_full_snapshot(&mut self) {
-        self.force_full = true;
-    }
-
-    /// Whether the obligation is outstanding.
-    #[must_use]
-    pub fn full_snapshot_required(&self) -> bool {
-        self.force_full
-    }
-
     /// Drop the session. The application keeps running.
     pub fn close(&mut self) {
         if let Some(stream) = self.stream.take() {
             self.debug_line(
                 Category::Sem,
                 &format!(
-                    "close r{} snapshots={} deltas={} logs_dropped={}",
-                    self.revision, self.snapshots_sent, self.deltas_sent, self.logs_dropped
+                    "close r{} snapshots={} logs_dropped={}",
+                    self.revision, self.snapshots_sent, self.logs_dropped
                 ),
             );
-            let _ = stream.shutdown(std::net::Shutdown::Both);
+            close_transport(stream);
         }
         self.session_id = None;
+        if let Some(mut lease) = self.evidence_lease.take() {
+            lease.close();
+        }
+    }
+
+    /// Send a typed fatal producer-contract error and close the channel.
+    pub fn fail(&mut self, code: &str, message: impl Into<String>) -> Result<(), Error> {
+        let result = self.send(&ProtocolErrorMessage::new(code, message));
+        self.close();
+        result
     }
 
     /// Publish a snapshot for the next revision and return its marker.
@@ -473,14 +420,7 @@ impl Client {
     /// adapter bug, so it is loud rather than silent — or [`Error::Io`] if the
     /// channel broke.
     pub fn publish(&mut self, snapshot: &mut Snapshot) -> Result<Option<String>, Error> {
-        let result = self.publish_inner(snapshot);
-        if matches!(result, Err(Error::Protocol(_) | Error::Validation(_))) {
-            // Nothing reached the wire for a local encode/validation refusal.
-            // Keep the link usable, but make recovery explicit and independent
-            // of whether a framework wrapper remembers to report the gap.
-            self.require_full_snapshot();
-        }
-        result
+        self.publish_inner(snapshot)
     }
 
     fn publish_inner(&mut self, snapshot: &mut Snapshot) -> Result<Option<String>, Error> {
@@ -492,13 +432,13 @@ impl Client {
         }
 
         let revision = self.revision + 1;
-        snapshot.v = if self.protocol == crate::messages::PROTOCOL_V2_ID {
-            2
-        } else {
-            1
-        };
+        snapshot.v = 2;
         snapshot.session_id = session_id.clone();
         snapshot.revision = revision;
+        if let Some(lease) = self.evidence_lease.as_ref() {
+            snapshot.provider_evidence =
+                lease.collect(&session_id, revision, snapshot.columns, snapshot.rows);
+        }
 
         let body = serde_json::to_string(&snapshot).map_err(|_| {
             Error::Protocol(crate::error::Violation::new(
@@ -518,39 +458,11 @@ impl Client {
         // Encode every frame before writing the first byte. A local ceiling
         // failure is recoverable; sending the tree and only then discovering
         // that its commit cannot be encoded would leave the wire half-applied.
-        let mut sent_delta = false;
         let tree_frame = if self.subscribe != "revisions" {
-            // A delta when the driver asked for one and it is worth sending;
-            // a whole tree on the first publish, under a snapshots
-            // subscription, or past roughly half the tree. The base advances
-            // only once a message has been built from it, so a skipped
-            // publish cannot leave the driver patching a tree it never got.
-            // An outstanding obligation overrides the choice: a gap in the
-            // producer's own facts means the next tree must be whole.
-            let forced = self.force_full;
-            if forced {
-                self.debug_line(
-                    Category::Io,
-                    &format!("r{revision} full snapshot: the producer reported a gap"),
-                );
-            }
-            let delta = if self.subscribe == "diffs" && !forced {
-                self.published
-                    .as_ref()
-                    .and_then(|base| build_delta(base, &parsed))
-            } else {
-                None
-            };
-            match delta {
-                Some(delta) => {
-                    sent_delta = true;
-                    Some(encode_frame(&delta, self.limits.max_frame_bytes)?)
-                }
-                None => Some(encode_frame(
-                    &SnapshotMessage::new(snapshot),
-                    self.limits.max_frame_bytes,
-                )?),
-            }
+            Some(encode_frame(
+                &SnapshotMessage::new(snapshot),
+                self.limits.max_frame_bytes,
+            )?)
         } else {
             None
         };
@@ -562,27 +474,13 @@ impl Client {
         }
         self.write_frame(&commit_frame)?;
 
-        // Only bytes that are fully on the wire become a revision/base. This
-        // keeps a locally rejected frame from making the next delta refer to a
-        // tree the driver never received.
+        // Only bytes that are fully on the wire become the published revision.
         self.revision = revision;
-        self.remember(revision, RawValue::from_string(body).expect("valid JSON"));
         if tree_frame.is_some() {
-            self.published = Some(parsed);
-            self.force_full = false;
-            if sent_delta {
-                self.deltas_sent += 1;
-            } else {
-                self.snapshots_sent += 1;
-            }
+            self.snapshots_sent += 1;
         }
 
         Ok(marker)
-    }
-
-    /// Patches this client has published.
-    pub fn deltas_sent(&self) -> u64 {
-        self.deltas_sent
     }
 
     /// Whole trees this client has published.
@@ -662,8 +560,8 @@ impl Client {
 
     /// Read and answer whatever the driver has sent, without blocking.
     ///
-    /// Call it on every render tick, or whenever convenient: `get-tree`
-    /// requests are answered from the retained snapshots.
+    /// Call it on every render tick, or whenever convenient, to process
+    /// driver control messages without blocking.
     ///
     /// # Errors
     /// Returns [`Error::Io`] if the channel broke, or [`Error::Parse`] if the
@@ -673,24 +571,20 @@ impl Client {
         loop {
             let read = match self.stream.as_mut() {
                 None => return Ok(()),
-                Some(stream) => stream.read(&mut buffer),
+                Some(stream) => read_transport(stream, &mut buffer),
             };
             match read {
-                Ok(0) => {
+                Ok(Incoming::Closed) => {
                     self.close();
                     return Ok(());
                 }
-                Ok(count) => {
+                Ok(Incoming::Data(count)) => {
                     let frames = self.decoder.push(&buffer[..count])?;
                     for frame in frames {
                         self.handle(&frame.value)?;
                     }
                 }
-                Err(error)
-                    if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
-                {
-                    return Ok(())
-                }
+                Ok(Incoming::Idle) => return Ok(()),
                 Err(error) if error.kind() == ErrorKind::Interrupted => continue,
                 Err(error) => {
                     self.close();
@@ -741,24 +635,6 @@ impl Client {
                     );
                 }
             }
-            Some("get-tree") => {
-                let request: GetTree =
-                    serde_json::from_value(value.clone()).expect("validated above");
-                let wanted = request.revision.unwrap_or(self.revision);
-                let held = self
-                    .history
-                    .iter()
-                    .find(|(revision, _)| *revision == wanted)
-                    .map(|(_, body)| body.clone());
-                let answer = match held {
-                    Some(body) => GetTreeResult::found(request.request_id, body),
-                    None => GetTreeResult::missing(
-                        request.request_id,
-                        format!("revision {wanted} is not retained"),
-                    ),
-                };
-                self.send(&answer)?;
-            }
             Some("error") => {
                 self.debug_line(
                     Category::Diag,
@@ -774,13 +650,6 @@ impl Client {
         Ok(())
     }
 
-    fn remember(&mut self, revision: i64, body: Box<RawValue>) {
-        self.history.push_back((revision, body));
-        while self.history.len() > SNAPSHOT_HISTORY {
-            self.history.pop_front();
-        }
-    }
-
     fn send<T: serde::Serialize>(&mut self, message: &T) -> Result<(), Error> {
         let frame = encode_frame(message, self.limits.max_frame_bytes)?;
         self.write_frame(&frame)
@@ -790,7 +659,7 @@ impl Client {
         let Some(stream) = self.stream.as_mut() else {
             return Ok(());
         };
-        match stream.write_all(frame).and_then(|()| stream.flush()) {
+        match write_transport_frame(stream, frame, self.options.write_timeout) {
             Ok(()) => Ok(()),
             Err(error) => {
                 let timed_out = matches!(
@@ -810,6 +679,154 @@ impl Client {
                 }
                 Err(Error::Io(error))
             }
+        }
+    }
+}
+
+#[cfg(unix)]
+fn endpoint_supported(endpoint: &str) -> bool {
+    !endpoint.starts_with(r"\\.\pipe\") && !endpoint.starts_with(r"\\?\pipe\")
+}
+
+#[cfg(windows)]
+fn endpoint_supported(endpoint: &str) -> bool {
+    endpoint.starts_with(r"\\.\pipe\") || endpoint.starts_with(r"\\?\pipe\")
+}
+
+#[cfg(unix)]
+fn connect_transport(
+    endpoint: &str,
+    _dial_timeout: Duration,
+    write_timeout: Option<Duration>,
+) -> std::io::Result<TransportStream> {
+    let stream = UnixStream::connect(endpoint)?;
+    stream.set_read_timeout(Some(Duration::from_millis(50)))?;
+    stream.set_write_timeout(write_timeout)?;
+    Ok(stream)
+}
+
+#[cfg(windows)]
+fn connect_transport(
+    endpoint: &str,
+    dial_timeout: Duration,
+    _write_timeout: Option<Duration>,
+) -> std::io::Result<TransportStream> {
+    let stream = TransportStream::connect_by_path_with_wait_mode(
+        endpoint,
+        ConnectWaitMode::Timeout(dial_timeout),
+    )?;
+    // Windows named pipes have no reliable socket-style timeout option in the
+    // exact transport. Nonblocking mode lets poll return immediately and lets
+    // write_transport_frame enforce one monotonic whole-frame deadline.
+    stream.set_nonblocking(true)?;
+    Ok(stream)
+}
+
+/// What one non-blocking read of the side channel found.
+enum Incoming {
+    Data(usize),
+    /// Nothing buffered right now; the channel is still open.
+    Idle,
+    /// The driver closed its end.
+    Closed,
+}
+
+#[cfg(unix)]
+fn read_transport(stream: &mut TransportStream, buffer: &mut [u8]) -> std::io::Result<Incoming> {
+    match stream.read(buffer) {
+        Ok(0) => Ok(Incoming::Closed),
+        Ok(count) => Ok(Incoming::Data(count)),
+        Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+            Ok(Incoming::Idle)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// Windows: `ERROR_NO_DATA`, returned by a `PIPE_NOWAIT` read of an empty pipe.
+#[cfg(windows)]
+const ERROR_NO_DATA: i32 = 232;
+/// Windows: `ERROR_BROKEN_PIPE`, the peer actually closed its end.
+#[cfg(windows)]
+const ERROR_BROKEN_PIPE: i32 = 109;
+
+/// Reads the named pipe, where an empty read does not mean end of stream.
+///
+/// `set_nonblocking(true)` puts the handle in `PIPE_NOWAIT`, and a read of an
+/// empty pipe in that mode succeeds with zero bytes — or fails with
+/// `ERROR_NO_DATA` — rather than reporting `WouldBlock`. Both mean "nothing
+/// yet". Treating either as end of stream closed the channel in the gap
+/// between sending `hello` and the driver's `hello-ack`, which the driver then
+/// saw as a vanished peer. Only `ERROR_BROKEN_PIPE` reports a real close; note
+/// that Rust maps both 109 and 232 to `ErrorKind::BrokenPipe`, so the raw code
+/// is the only thing that separates them.
+#[cfg(windows)]
+fn read_transport(stream: &mut TransportStream, buffer: &mut [u8]) -> std::io::Result<Incoming> {
+    match stream.read(buffer) {
+        Ok(0) => Ok(Incoming::Idle),
+        Ok(count) => Ok(Incoming::Data(count)),
+        Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+            Ok(Incoming::Idle)
+        }
+        Err(error) if error.raw_os_error() == Some(ERROR_NO_DATA) => Ok(Incoming::Idle),
+        Err(error) if error.raw_os_error() == Some(ERROR_BROKEN_PIPE) => Ok(Incoming::Closed),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(unix)]
+fn close_transport(stream: TransportStream) {
+    let _ = stream.shutdown(std::net::Shutdown::Both);
+}
+
+#[cfg(windows)]
+fn close_transport(_stream: TransportStream) {
+    // Named pipes do not support half-shutdown. Dropping the unique handle is
+    // the authoritative close operation.
+}
+
+#[cfg(unix)]
+fn write_transport_frame(
+    stream: &mut TransportStream,
+    frame: &[u8],
+    _timeout: Option<Duration>,
+) -> std::io::Result<()> {
+    stream.write_all(frame).and_then(|()| stream.flush())
+}
+
+#[cfg(windows)]
+fn write_transport_frame(
+    stream: &mut TransportStream,
+    frame: &[u8],
+    timeout: Option<Duration>,
+) -> std::io::Result<()> {
+    let deadline = timeout.map(|duration| Instant::now() + duration);
+    let mut offset = 0;
+    while offset < frame.len() {
+        match stream.write(&frame[offset..]) {
+            Ok(0) => return Err(std::io::Error::from(ErrorKind::WriteZero)),
+            Ok(written) => offset += written,
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    return Err(std::io::Error::from(ErrorKind::TimedOut));
+                }
+                std::thread::yield_now();
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    loop {
+        match stream.flush() {
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    return Err(std::io::Error::from(ErrorKind::TimedOut));
+                }
+                std::thread::yield_now();
+            }
+            Err(error) => return Err(error),
         }
     }
 }

@@ -26,25 +26,24 @@ Windows; Alpine/musl is not supported (use `node:22-slim`).
 ## Usage
 
 ```ts
-import { launchTerminal, TermwrightError } from '@termwright/driver';
+import { launchTerminal, TermwrightError } from "@termwright/driver";
 
 const terminal = await launchTerminal({
-  command: ['node', 'app.js'],
+  command: ["node", "app.js"],
   columns: 100,
   rows: 30,
 });
 
 // Generic observation works for any program.
-await terminal.waitForText('Ready');
+await terminal.waitForText("Ready");
 console.log(terminal.screen().text());
 console.log(terminal.screen().cell(0, 0).fg);
 
-// Semantic locators work when the program publishes a semantic tree.
-if (terminal.capabilities().semanticTree) {
-  // Present only for an instrumented framework probe. Adapter capabilities
-  // describe wire traffic; probe.capabilities describe observable framework facts.
-  console.log(terminal.capabilities().probe);
-  const approve = terminal.getByRole('button', { name: 'Approve' });
+// Semantic locators work only when the frozen contract proves a semantic tree.
+const contract = await terminal.settled();
+if (contract.capabilities["semantic-tree"].status === "supported") {
+  console.log(contract.framework);
+  const approve = terminal.getByRole("button", { name: "Approve" });
 
   // Evidence-qualified observations preserve unknown and unsupported instead
   // of inventing a boolean or rectangle.
@@ -54,56 +53,66 @@ if (terminal.capabilities().semanticTree) {
   console.log(await approve.hitTest());
   console.log(await approve.extendedState()); // application-domain JSON, if published
   const receipt = await approve.activate(); // 'click' | 'focus-enter' | 'focus-space'
-  console.log(receipt.strategy);
+  console.log(receipt.plan.strategy);
 
-  await terminal.locator('dialog button#reject').click();
+  await terminal.locator("dialog button#reject").click();
 }
 
 // Stable refs can be turned back into locators across later frames.
-const target = await terminal.getByRole('button').first().resolve();
-if (target.identity === 'stable') await terminal.locatorForRef(target.ref).click();
+const target = await terminal.getByRole("button").first().resolve();
+if (target.identity === "stable")
+  await terminal.locatorForRef(target.ref).click();
 
 // Keyboard, paste and resize honor the modes the child actually enabled.
-await terminal.press('Control+K Control+U');
-await terminal.paste('multi\nline');
+await terminal.press("Control+K Control+U");
+await terminal.paste("multi\nline");
 await terminal.resize({ columns: 80, rows: 24 });
 
 try {
-  await terminal.waitForText('never', { timeout: 500 });
+  await terminal.waitForText("never", { timeout: 500 });
 } catch (error) {
-  if (error instanceof TermwrightError) console.log(error.code, error.toString());
+  if (error instanceof TermwrightError)
+    console.log(error.code, error.toString());
 }
 
-await terminal.signal('INT');
+await terminal.signal("INT");
 console.log(await terminal.waitForExit());
 await terminal.close();
 ```
 
 ## What the driver guarantees
 
-- **Revisions, never sleeps.** Every wait is driven by a screen revision, a
-  semantic revision or a process event. `waitForStable` also knows whether a
-  render is still unpaired.
+- **Causal waits, explicit heuristics.** Content and action waits are driven by
+  screen/semantic revisions or process events. `waitForQuiet` is the named,
+  bounded exception: it proves silence for a caller-selected interval and also
+  refuses to finish while a render is still unpaired.
 - **Frame↔tree pairing.** A semantic revision becomes observable only when both
   its tree (semantic socket) and its render-commit marker (private OSC 8487 in
   stdout, BEL-terminated and MAC-signed with the session token) have arrived.
   Superseded or half-delivered revisions are dropped with a diagnostic.
 - **Strict locators.** Zero matches wait until the deadline; more than one fails
-  with bounded candidates. A semantic ref such as `n8@42` re-resolves across
+  with bounded candidates. A semantic ref such as `semantic:n8@42` re-resolves across
   revisions only when the probe provides stable identity. Frame-local semantic
   refs are refused, grid refs remain revision-bound, and a removed stable node
   raises `stale-snapshot`.
-- **Typed failures.** `timeout`, `stale-snapshot`, `ambiguous-locator`,
-  `unsupported-action`, `history-truncated`, `protocol-violation`, `capacity`,
-  `process-exited`, `session-closed` — each with a screen excerpt, candidates
-  and a suggestion.
+- **Typed failures.** Capability absence, semantic/probe attachment, current
+  actionability, terminal input mode, provider loss/violation, adapter guarantee
+  violation, stale observations, strict locator failures, process exit, and
+  protocol failures have distinct machine-readable codes and actionable
+  diagnostics.
 - **Honest degradation.** No mouse tracking means `click()` fails with
-  `unsupported-action` instead of sending bytes nobody reads. Semantic pointer
-  actions also require negotiated `absolute-bounds` and proof of the exact
-  pointer recipient. Legacy paint-order knowledge is not that proof. No
-  semantic tree means no invented roles.
+  `input-mode-disabled` instead of sending bytes nobody reads. Semantic pointer
+  actions require known terminal-cell geometry and proof of the exact pointer
+  recipient. Paint order is not that proof. No semantic tree means no invented
+  roles.
+- **Authoritative hidden modes.** When a backend such as ConPTY hides DEC mode
+  changes, an application input-mode provider may publish the production
+  parser's revision-bound mouse/focus configuration. It never enables or
+  dispatches input; Termwright still writes real PTY bytes, rejects disagreement
+  with observable VT state, and stops using the evidence if its provider is
+  lost.
 - **Dormant by default.** The endpoint and token are injected as
-  `TERMWRIGHT_ENDPOINT` / `TERMWRIGHT_TOKEN` / `TERMWRIGHT_PROTOCOL`; without
+  `TERMWRIGHT_ENDPOINT` / `TERMWRIGHT_TOKEN`; without
   them a conforming probe or adapter opens nothing and the run is byte-identical.
 
 ## Terminal profiles
@@ -113,10 +122,10 @@ one it used:
 
 ```ts
 const terminal = await launchTerminal({
-  command: ['node', 'app.js'],
-  terminalProfile: 'iterm2-ambiguous-wide', // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
+  command: ["node", "app.js"],
+  terminalProfile: "iterm2-ambiguous-wide", // 'default' | 'kitty' | 'iterm2-ambiguous-wide'
 });
-console.log(terminal.capabilities().terminalProfile);
+console.log(terminal.terminalProfile);
 ```
 
 The profile decides whether an ambiguous character takes one column or two, and
@@ -135,13 +144,12 @@ Pass `envMode: 'inherit'` when the program really needs the full environment.
 
 ## Waiting for a prompt
 
-`waitForReady()` prefers OSC 133 shell-integration marks (`A` prompt start,
-`B` input start, `C` command start, `D` finished) — the same marks VS Code,
-iTerm2, WezTerm and fish already emit. When a program emits none, it falls back
-to "the screen settled", which is a heuristic and is reported as one — by code,
-not by prose: a diagnostic entry of `ready-shell-integration` means the program
-said it was at a prompt, `ready-settled-screen` means the driver guessed from
-silence.
+`waitForShellPrompt()` requires OSC 133 shell-integration marks (`A` prompt
+start, `B` input start, `C` command start, `D` finished) — the same marks VS
+Code, iTerm2, WezTerm and fish already emit. A program without them gets a
+capability error; Termwright never upgrades silence into prompt readiness.
+When silence itself is the intended heuristic, request it explicitly with
+`waitForQuiet({quietMs})`.
 
 ## Seeing what the driver is doing
 
@@ -162,43 +170,29 @@ Categories are `api` (calls), `wait` (what was awaited, how long, how it ended),
 `paste`/`write` payloads are logged by size only. Switched off, nothing is
 wrapped and no listener is registered.
 
-## Incremental trees
+## Semantic snapshots
 
-An adapter that offers deltas gets them by default: a semantic tree changes on
-nearly every keystroke, and sending the whole thing each time is what makes the
-semantic channel expensive. The driver composes each delta onto the tree it
-holds and pairs the result with its render marker exactly as it would a full
-snapshot.
+The semantic channel uses `termwright/2` and complete evidence-qualified
+snapshots. Each semantic revision is validated independently, retained, and
+paired with its authenticated render marker.
 
-When a delta cannot be composed — a base revision the driver never held, a node
-it does not know — the driver asks for a full tree (`get-tree`) and ignores
-further deltas until it arrives. That is reported as `delta-resync`, not as a
-dropped revision: nothing was lost, and a repair should not read like damage.
-The last good tree stays observable throughout.
-
-`treeUpdates: 'snapshots'` declines deltas from an adapter that offers them —
-the switch to reach for when a replay and a live session disagree and the delta
-path is a suspect.
-
-Evidence-qualified geometry, visibility and exact pointer ownership use
-`termwright/2`, which is the default. `semanticProtocol: 'termwright/1'` is an
-explicit compatibility mode for an older producer. V1 never enables pointer
-actions from unqualified bounds. V2 always uses full snapshots; the driver
-never applies v1 delta semantics to qualified observations.
+`displayed`, `intendedRect`, `visibleRect`, coordinate space, and pointer
+ownership remain separate observations. Missing framework evidence is
+`unsupported`. `unknown` is reserved for a temporary unsettled revision or
+provider refresh; a settled guaranteed fact must be `known` or `absent`,
+otherwise the provider or adapter fails closed.
 
 ## Knowing when the verdict is final
 
-`capabilities()` answers immediately with what is known so far. Three things can
-still be pending right after launch: the negotiation window, the grace a slow
-adapter gets to attach after it, and the first tree of an adapter that did
-attach. When a caller needs to branch on `semanticTree`, it should wait for all
-three instead of polling:
+There is no provisional capability read. Three things can still be pending
+right after launch: negotiation, a slow adapter attach, and the first paired
+tree. `settled()` resolves only after the frozen verdict is usable:
 
 ```ts
-const capabilities = await terminal.settled();
-if (capabilities.semanticTree) {
+const contract = await terminal.settled();
+if (contract.capabilities["semantic-tree"].status === "supported") {
   // the tree is published, not merely promised
-  await terminal.getByRole('button', { name: 'Approve' }).click();
+  await terminal.getByRole("button", { name: "Approve" }).click();
 }
 ```
 
@@ -213,10 +207,12 @@ as everything else:
 
 ```ts
 const terminal = await launchTerminal({
-  command: ['node', 'app.js'],
-  logs: [{ path: '/tmp/app.log', label: 'app' }],
+  command: ["node", "app.js"],
+  logs: [{ path: "/tmp/app.log", label: "app" }],
 });
-terminal.events.on('app-log', (entry) => console.log(entry.label, entry.path, entry.line));
+terminal.events.on("app-log", (entry) =>
+  console.log(entry.label, entry.path, entry.line),
+);
 ```
 
 A file that does not exist yet is waited for (programs create their log on first
@@ -235,7 +231,7 @@ adapter dropped records at the source, and a repeated or rewound number means it
 lost track of its counter — the first is reported, the second is refused, both
 as `log-dropped`. Neither closes the channel.
 
-`timeMs` is when the driver *read* the line, not when the program wrote it —
+`timeMs` is when the driver _read_ the line, not when the program wrote it —
 they differ by up to one poll interval, so treat it as an upper bound. Bounded
 throughout: lines longer than 4 KiB are truncated with an ellipsis, and a source
 that outruns 250 lines per 250 ms has the rest dropped and counted in a
@@ -249,9 +245,9 @@ asking for it leaves a `CrashReport`:
 ```ts
 const status = await terminal.waitForExit();
 const report = terminal.crashReport(); // null for a clean exit, close() or signal()
-console.log(report?.screenTail.join('\n')); // the stack trace or panic
-console.log(report?.recentInputs);          // what was sent just before
-console.log(report?.lastSemanticTree);      // the last paired revision, if any
+console.log(report?.screenTail.join("\n")); // the stack trace or panic
+console.log(report?.recentInputs); // what was sent just before
+console.log(report?.lastSemanticTree); // the last paired revision, if any
 ```
 
 It is also delivered as a `crash` event (emitted just before `exit`), and any

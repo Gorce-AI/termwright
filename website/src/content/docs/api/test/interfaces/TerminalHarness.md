@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalHarness
 
-Defined in: driver/dist/index.d.ts:95
+Defined in: driver/dist/index.d.ts:94
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: driver/dist/index.d.ts:95
 
 > `readonly` **events**: `SessionEvents`
 
-Defined in: driver/dist/index.d.ts:161
+Defined in: driver/dist/index.d.ts:178
 
 ***
 
@@ -27,7 +27,27 @@ Defined in: driver/dist/index.d.ts:161
 
 > `readonly` **exit**: `Promise`\<`ExitStatus`\>
 
-Defined in: driver/dist/index.d.ts:176
+Defined in: driver/dist/index.d.ts:199
+
+***
+
+### keyboard
+
+> `readonly` **keyboard**: `Keyboard`
+
+Defined in: driver/dist/index.d.ts:101
+
+One physical keyboard implementation. Convenience methods delegate here.
+
+***
+
+### mouse
+
+> `readonly` **mouse**: `Mouse`
+
+Defined in: driver/dist/index.d.ts:103
+
+One physical mouse implementation. Locator actions delegate here after planning.
 
 ***
 
@@ -35,7 +55,7 @@ Defined in: driver/dist/index.d.ts:176
 
 > `readonly` **scrollback**: `ScrollbackApi`
 
-Defined in: driver/dist/index.d.ts:159
+Defined in: driver/dist/index.d.ts:176
 
 ***
 
@@ -43,7 +63,7 @@ Defined in: driver/dist/index.d.ts:159
 
 > `readonly` **selection**: `SelectionApi`
 
-Defined in: driver/dist/index.d.ts:160
+Defined in: driver/dist/index.d.ts:177
 
 ***
 
@@ -51,7 +71,7 @@ Defined in: driver/dist/index.d.ts:160
 
 > `readonly` **sessionId**: `string`
 
-Defined in: driver/dist/index.d.ts:96
+Defined in: driver/dist/index.d.ts:95
 
 ***
 
@@ -59,33 +79,75 @@ Defined in: driver/dist/index.d.ts:96
 
 > `readonly` **shell**: `ShellApi`
 
-Defined in: driver/dist/index.d.ts:98
+Defined in: driver/dist/index.d.ts:99
 
 Shell command boundaries and prompt state when the child emits OSC 133.
 
-## Methods
+***
 
-### blur()
+### terminalProfile
 
-> **blur**(): `Promise`\<`void`\>
+> `readonly` **terminalProfile**: `string`
 
-Defined in: driver/dist/index.d.ts:140
+Defined in: driver/dist/index.d.ts:97
 
-#### Returns
-
-`Promise`\<`void`\>
+Immutable terminal profile used to decode the very first PTY byte.
 
 ***
 
-### capabilities()
+### terminalState
 
-> **capabilities**(): `SessionCapabilities`
+> `readonly` **terminalState**: `TerminalState`
 
-Defined in: driver/dist/index.d.ts:99
+Defined in: driver/dist/index.d.ts:107
+
+Emulator facts captured together at the current screen revision.
+
+***
+
+### window
+
+> `readonly` **window**: `TerminalWindow`
+
+Defined in: driver/dist/index.d.ts:105
+
+Terminal-window focus reports, distinct from semantic element focus.
+
+## Methods
+
+### appLogs()
+
+> **appLogs**(): readonly `AppLogEvent`[]
+
+Defined in: driver/dist/index.d.ts:190
+
+Bounded, oldest-first application-log history, including entries emitted
+while `launchTerminal()` was still starting. Consumers should subscribe to
+`app-log` first and then seed from this snapshot to avoid a startup gap.
 
 #### Returns
 
-`SessionCapabilities`
+readonly `AppLogEvent`[]
+
+***
+
+### bindOperationBudget()?
+
+> `optional` **bindOperationBudget**(`budget`): `void`
+
+Defined in: driver/dist/index.d.ts:109
+
+Binds one attempt-wide budget before any user operation starts.
+
+#### Parameters
+
+##### budget
+
+`OperationBudget`
+
+#### Returns
+
+`void`
 
 ***
 
@@ -93,7 +155,7 @@ Defined in: driver/dist/index.d.ts:99
 
 > **cell**(`pos`): `CellSnapshot`
 
-Defined in: driver/dist/index.d.ts:112
+Defined in: driver/dist/index.d.ts:130
 
 #### Parameters
 
@@ -113,11 +175,25 @@ Defined in: driver/dist/index.d.ts:112
 
 ***
 
+### checkpoint()
+
+> **checkpoint**(): `ObservationStamp`
+
+Defined in: driver/dist/index.d.ts:113
+
+Atomic identity of the currently committed terminal/semantic observation.
+
+#### Returns
+
+`ObservationStamp`
+
+***
+
 ### close()
 
 > **close**(): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:175
+Defined in: driver/dist/index.d.ts:198
 
 Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
@@ -127,11 +203,25 @@ Idempotent; bounded physical cleanup. Never sends signals implicitly.
 
 ***
 
+### contract()
+
+> **contract**(): `EffectiveSessionContract` \| `null`
+
+Defined in: driver/dist/index.d.ts:111
+
+Frozen negotiated contract, or null until negotiation has completed.
+
+#### Returns
+
+`EffectiveSessionContract` \| `null`
+
+***
+
 ### crashReport()
 
 > **crashReport**(): `CrashReport` \| `null`
 
-Defined in: driver/dist/index.d.ts:173
+Defined in: driver/dist/index.d.ts:196
 
 What the session knew when the program died unexpectedly, or `null` — for a
 live session, a clean exit, or one the harness asked for via `close()` or
@@ -147,7 +237,7 @@ live session, a clean exit, or one the harness asked for via `close()` or
 
 > **diagnostics**(): readonly `SessionDiagnostic`[]
 
-Defined in: driver/dist/index.d.ts:167
+Defined in: driver/dist/index.d.ts:184
 
 Bounded, oldest-first log of what the session decided behind the scenes:
 dropped or superseded revisions, unverified markers, adapter negotiation,
@@ -159,23 +249,11 @@ readonly `SessionDiagnostic`[]
 
 ***
 
-### focus()
-
-> **focus**(): `Promise`\<`void`\>
-
-Defined in: driver/dist/index.d.ts:139
-
-#### Returns
-
-`Promise`\<`void`\>
-
-***
-
 ### getByLabel()
 
-> **getByLabel**(`text`, `opts?`): [`Locator`](../locator/)
+> **getByLabel**(`text`, `opts?`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/index.d.ts:117
+Defined in: driver/dist/index.d.ts:135
 
 #### Parameters
 
@@ -191,15 +269,15 @@ Defined in: driver/dist/index.d.ts:117
 
 #### Returns
 
-[`Locator`](../locator/)
+[`SemanticLocator`](../semanticlocator/)
 
 ***
 
 ### getByRole()
 
-> **getByRole**(`role`, `opts?`): [`Locator`](../locator/)
+> **getByRole**(`role`, `opts?`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/index.d.ts:116
+Defined in: driver/dist/index.d.ts:134
 
 #### Parameters
 
@@ -213,15 +291,39 @@ Defined in: driver/dist/index.d.ts:116
 
 #### Returns
 
-[`Locator`](../locator/)
+[`SemanticLocator`](../semanticlocator/)
+
+***
+
+### getByScreenText()
+
+> **getByScreenText**(`text`, `opts?`): [`ScreenLocator`](../screenlocator/)
+
+Defined in: driver/dist/index.d.ts:141
+
+Physical terminal-grid text, optionally narrowed by occurrence or style.
+
+#### Parameters
+
+##### text
+
+`string` \| `RegExp`
+
+##### opts?
+
+`ScreenTextLocatorOptions`
+
+#### Returns
+
+[`ScreenLocator`](../screenlocator/)
 
 ***
 
 ### getByTestId()
 
-> **getByTestId**(`testId`): [`Locator`](../locator/)
+> **getByTestId**(`testId`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/index.d.ts:121
+Defined in: driver/dist/index.d.ts:142
 
 #### Parameters
 
@@ -231,15 +333,17 @@ Defined in: driver/dist/index.d.ts:121
 
 #### Returns
 
-[`Locator`](../locator/)
+[`SemanticLocator`](../semanticlocator/)
 
 ***
 
 ### getByText()
 
-> **getByText**(`text`, `opts?`): [`Locator`](../locator/)
+> **getByText**(`text`, `opts?`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/index.d.ts:120
+Defined in: driver/dist/index.d.ts:139
+
+Semantic text only. Never falls back to the terminal grid.
 
 #### Parameters
 
@@ -253,17 +357,17 @@ Defined in: driver/dist/index.d.ts:120
 
 #### Returns
 
-[`Locator`](../locator/)
+[`SemanticLocator`](../semanticlocator/)
 
 ***
 
 ### locator()
 
-> **locator**(`selector`): [`Locator`](../locator/)
+> **locator**(`selector`): [`SemanticLocator`](../semanticlocator/)
 
-Defined in: driver/dist/index.d.ts:123
+Defined in: driver/dist/index.d.ts:144
 
-Textual-style CSS dialect: 'dialog button.primary:focused', '#id'.
+Advanced Termwright semantic selector: 'dialog button.primary:focused', '#id'.
 
 #### Parameters
 
@@ -273,30 +377,64 @@ Textual-style CSS dialect: 'dialog button.primary:focused', '#id'.
 
 #### Returns
 
-[`Locator`](../locator/)
+[`SemanticLocator`](../semanticlocator/)
 
 ***
 
 ### locatorForRef()
 
-> **locatorForRef**(`ref`): [`Locator`](../locator/)
+#### Call Signature
 
-Defined in: driver/dist/index.d.ts:130
+> **locatorForRef**(`ref`): [`SemanticLocator`](../semanticlocator/)
+
+Defined in: driver/dist/index.d.ts:151
 
 Rebuilds a locator from a ref returned by a resolved target.
-(`'n8@42'` for a semantic node, `'grid:r,c,w,h@7'` for a grid match).
+(`'semantic:n8@42'` for a semantic node, `'screen:r,c,w,h@7'` for a grid match).
 The ref stays bound to its revision: resolving it after that revision was
 superseded raises `stale-snapshot`.
 
-#### Parameters
+##### Parameters
 
-##### ref
+###### ref
 
-`string`
+`` `semantic:${string}@${number}` ``
 
-#### Returns
+##### Returns
 
-[`Locator`](../locator/)
+[`SemanticLocator`](../semanticlocator/)
+
+#### Call Signature
+
+> **locatorForRef**(`ref`): [`ScreenLocator`](../screenlocator/)
+
+Defined in: driver/dist/index.d.ts:152
+
+##### Parameters
+
+###### ref
+
+`` `screen:${number},${number},${number},${number}@${number}` ``
+
+##### Returns
+
+[`ScreenLocator`](../screenlocator/)
+
+#### Call Signature
+
+> **locatorForRef**(`ref`): [`SemanticLocator`](../semanticlocator/) \| [`ScreenLocator`](../screenlocator/)
+
+Defined in: driver/dist/index.d.ts:153
+
+##### Parameters
+
+###### ref
+
+`LocatorRef`
+
+##### Returns
+
+[`SemanticLocator`](../semanticlocator/) \| [`ScreenLocator`](../screenlocator/)
 
 ***
 
@@ -304,13 +442,13 @@ superseded raises `stale-snapshot`.
 
 > **paste**(`text`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:133
+Defined in: driver/dist/index.d.ts:156
 
 #### Parameters
 
 ##### text
 
-`string`
+`ExecutableValue`
 
 #### Returns
 
@@ -322,7 +460,7 @@ Defined in: driver/dist/index.d.ts:133
 
 > **press**(`keys`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:131
+Defined in: driver/dist/index.d.ts:154
 
 #### Parameters
 
@@ -340,7 +478,7 @@ Defined in: driver/dist/index.d.ts:131
 
 > **resize**(`size`): `Promise`\<`ResizeReceipt`\>
 
-Defined in: driver/dist/index.d.ts:135
+Defined in: driver/dist/index.d.ts:158
 
 #### Parameters
 
@@ -364,7 +502,7 @@ Defined in: driver/dist/index.d.ts:135
 
 > **screen**(): `ScreenSnapshot`
 
-Defined in: driver/dist/index.d.ts:110
+Defined in: driver/dist/index.d.ts:128
 
 #### Returns
 
@@ -376,7 +514,7 @@ Defined in: driver/dist/index.d.ts:110
 
 > **semanticTree**(): `SemanticSnapshot` \| `null`
 
-Defined in: driver/dist/index.d.ts:111
+Defined in: driver/dist/index.d.ts:129
 
 #### Returns
 
@@ -386,17 +524,12 @@ Defined in: driver/dist/index.d.ts:111
 
 ### settled()
 
-> **settled**(`opts?`): `Promise`\<`SessionCapabilities`\>
+> **settled**(`opts?`): `Promise`\<`EffectiveSessionContract`\>
 
-Defined in: driver/dist/index.d.ts:109
+Defined in: driver/dist/index.d.ts:127
 
-The capabilities, once they are final.
-
-`capabilities()` answers immediately with what is known so far, which is
-what a synchronous caller needs. This waits for the negotiation to reach
-its verdict — including the grace an adapter gets to attach late — and, for
-a semantic session, for the first tree to be published. After it resolves,
-`semanticTree` will not change again.
+Waits for the one frozen Effective Session Contract and, for a semantic
+session, for the first paired tree. There is no provisional capability API.
 
 #### Parameters
 
@@ -406,7 +539,7 @@ a semantic session, for the first tree to be published. After it resolves,
 
 #### Returns
 
-`Promise`\<`SessionCapabilities`\>
+`Promise`\<`EffectiveSessionContract`\>
 
 ***
 
@@ -414,7 +547,7 @@ a semantic session, for the first tree to be published. After it resolves,
 
 > **signal**(`sig`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:141
+Defined in: driver/dist/index.d.ts:162
 
 #### Parameters
 
@@ -432,7 +565,7 @@ Defined in: driver/dist/index.d.ts:141
 
 > **title**(): `string`
 
-Defined in: driver/dist/index.d.ts:157
+Defined in: driver/dist/index.d.ts:174
 
 #### Returns
 
@@ -444,13 +577,13 @@ Defined in: driver/dist/index.d.ts:157
 
 > **type**(`text`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:132
+Defined in: driver/dist/index.d.ts:155
 
 #### Parameters
 
 ##### text
 
-`string`
+`ExecutableValue`
 
 #### Returns
 
@@ -458,11 +591,52 @@ Defined in: driver/dist/index.d.ts:132
 
 ***
 
+### waitForCheckpointChange()
+
+> **waitForCheckpointChange**(`options`): `Promise`\<`ObservationStamp`\>
+
+Defined in: driver/dist/index.d.ts:115
+
+Wait until a committed observation newer than `after` is available.
+
+#### Parameters
+
+##### options
+
+`object` & `WaitOptions`
+
+#### Returns
+
+`Promise`\<`ObservationStamp`\>
+
+***
+
+### waitForCommittedObservation()
+
+> **waitForCommittedObservation**(`opts?`): `Promise`\<`ObservationStamp`\>
+
+Defined in: driver/dist/index.d.ts:122
+
+Waits until parser work and semantic frame pairing caused by prior input
+have committed. This is not a quiet/global-idle heuristic.
+
+#### Parameters
+
+##### opts?
+
+`WaitOptions`
+
+#### Returns
+
+`Promise`\<`ObservationStamp`\>
+
+***
+
 ### waitForExit()
 
 > **waitForExit**(`opts?`): `Promise`\<`ExitStatus`\>
 
-Defined in: driver/dist/index.d.ts:156
+Defined in: driver/dist/index.d.ts:173
 
 #### Parameters
 
@@ -476,39 +650,19 @@ Defined in: driver/dist/index.d.ts:156
 
 ***
 
-### waitForIdle()
+### waitForQuiet()
 
-> **waitForIdle**(`opts?`): `Promise`\<`void`\>
+> **waitForQuiet**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:149
+Defined in: driver/dist/index.d.ts:168
 
-#### Parameters
-
-##### opts?
-
-`WaitOptions`
-
-#### Returns
-
-`Promise`\<`void`\>
-
-***
-
-### waitForReady()
-
-> **waitForReady**(`opts?`): `Promise`\<`void`\>
-
-Defined in: driver/dist/index.d.ts:155
-
-Waits until the program is ready for input: shell-integration prompt
-marks (OSC 133) when the program emits them, otherwise a settled-screen
-heuristic. Which one was used is reported as a `diagnostic` event.
+Heuristic only: waits for a stated interval with no screen or semantic change.
 
 #### Parameters
 
 ##### opts?
 
-`WaitOptions`
+`object` & `WaitOptions`
 
 #### Returns
 
@@ -520,7 +674,7 @@ heuristic. Which one was used is reported as a `diagnostic` event.
 
 > **waitForRender**(`opts`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:143
+Defined in: driver/dist/index.d.ts:164
 
 #### Parameters
 
@@ -534,17 +688,19 @@ Defined in: driver/dist/index.d.ts:143
 
 ***
 
-### waitForStable()
+### waitForShellPrompt()
 
-> **waitForStable**(`opts?`): `Promise`\<`void`\>
+> **waitForShellPrompt**(`opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:146
+Defined in: driver/dist/index.d.ts:172
+
+Authoritative: waits for an OSC 133 prompt marker from shell integration.
 
 #### Parameters
 
 ##### opts?
 
-`object` & `WaitOptions`
+`WaitOptions`
 
 #### Returns
 
@@ -556,7 +712,7 @@ Defined in: driver/dist/index.d.ts:146
 
 > **waitForText**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:142
+Defined in: driver/dist/index.d.ts:163
 
 #### Parameters
 
@@ -578,7 +734,7 @@ Defined in: driver/dist/index.d.ts:142
 
 > **waitForTitle**(`text`, `opts?`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:158
+Defined in: driver/dist/index.d.ts:175
 
 #### Parameters
 
@@ -600,7 +756,7 @@ Defined in: driver/dist/index.d.ts:158
 
 > **write**(`bytes`): `Promise`\<`void`\>
 
-Defined in: driver/dist/index.d.ts:134
+Defined in: driver/dist/index.d.ts:157
 
 #### Parameters
 

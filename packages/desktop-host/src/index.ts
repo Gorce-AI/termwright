@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { access, chmod, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { createServer, type Socket } from 'node:net';
+import { createServer, type Server, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -16,6 +16,7 @@ import {
   validateRunnerUrl,
   type DesktopHostMessage,
 } from './protocol.js';
+import { withinDeadline } from './deadline.js';
 
 export { DESKTOP_HOST_PROTOCOL, validateRunnerUrl } from './protocol.js';
 export { SECURE_WEB_PREFERENCES, contentSecurityPolicy, isAllowedNavigation, isAllowedRequest } from './security.js';
@@ -30,6 +31,8 @@ export interface DesktopHostHandle {
 export interface DesktopHostLaunchOptions {
   readonly url: string;
   readonly readyTimeoutMs?: number;
+  /** Total budget for shutdown acknowledgement plus forced termination. */
+  readonly closeTimeoutMs?: number;
   /** Tests and packaged launchers can provide an Electron executable explicitly. */
   readonly executable?: string;
   readonly main?: string;
@@ -195,12 +198,15 @@ function processClosed(child: ChildProcess): Promise<void> {
 /** Start the companion without placing the authenticated URL in argv or the environment. */
 export async function launchDesktopHost(options: DesktopHostLaunchOptions): Promise<DesktopHostHandle> {
   validateRunnerUrl(options.url);
+  const readyTimeoutMs = positiveTimeout(options.readyTimeoutMs ?? 10_000, 'readyTimeoutMs');
+  const closeTimeoutMs = positiveTimeout(options.closeTimeoutMs ?? 2_000, 'closeTimeoutMs');
+  const readyDeadline = performance.now() + readyTimeoutMs;
   const main = options.main ?? fileURLToPath(new URL('./main.js', import.meta.url));
   // Resolve the npm Electron runtime early so a missing/corrupt install fails
   // before packaging rather than producing a partial cache entry.
   if (options.executable === undefined) electronExecutable();
   const executable = options.executable ?? await ensurePackagedHost(main);
-  const controlDirectory = process.platform === 'win32'
+  let controlDirectory: string | undefined = process.platform === 'win32'
     ? undefined
     : await mkdtemp(join(tmpdir(), 'termwright-desktop-'));
   const controlAddress = process.platform === 'win32'
@@ -208,26 +214,61 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
     : join(controlDirectory as string, 'control.sock');
   let acceptControl: ((socket: Socket) => void) | undefined;
   const connected = new Promise<Socket>((resolve) => { acceptControl = resolve; });
-  const server = createServer((socket) => acceptControl?.(socket));
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(controlAddress, resolve);
+  let acceptedSocket: Socket | undefined;
+  const server = createServer((candidate) => {
+    if (acceptedSocket !== undefined) {
+      candidate.destroy();
+      return;
+    }
+    acceptedSocket = candidate;
+    acceptControl?.(candidate);
   });
-  if (process.platform !== 'win32') await chmod(controlAddress, 0o600);
-  const child = spawn(executable, options.executable === undefined ? [] : [...desktopHostArguments(main)], {
-    stdio: 'ignore',
-    windowsHide: true,
-    env: { ...desktopHostEnvironment(), [DESKTOP_CONTROL_ENV]: controlAddress },
-  });
-  const exited = processClosed(child);
-  const connectionTimeout = setTimeout(() => child.kill(), options.readyTimeoutMs ?? 10_000);
-  const socket = await Promise.race([
-    connected,
-    exited.then(() => { throw new Error('desktop host exited before connecting'); }),
-  ]).finally(() => clearTimeout(connectionTimeout));
-  server.close();
-  const input = socket;
-  const output = socket;
+  let child: ChildProcess | undefined;
+  let socket: Socket | undefined;
+  try {
+    await withinDeadline(new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(controlAddress, () => {
+        server.removeListener('error', reject);
+        resolve();
+      });
+    }), readyDeadline, 'desktop control endpoint did not bind');
+    if (process.platform !== 'win32') await chmod(controlAddress, 0o600);
+    child = spawn(executable, options.executable === undefined ? [] : [...desktopHostArguments(main)], {
+      stdio: 'ignore',
+      windowsHide: true,
+      env: { ...desktopHostEnvironment(), [DESKTOP_CONTROL_ENV]: controlAddress },
+    });
+    const spawned = child;
+    const exitedBeforeConnect = processClosed(spawned).then(() => {
+      throw new Error('desktop host exited before connecting');
+    });
+    socket = await withinDeadline(
+      Promise.race([connected, exitedBeforeConnect]),
+      readyDeadline,
+      'desktop host did not connect to its control endpoint',
+    );
+    socket.on('error', () => undefined);
+    // stop accepting synchronously; its final `close` event follows when the
+    // one owned control socket is destroyed during host teardown.
+    server.close();
+    if (controlDirectory !== undefined) {
+      await rm(controlDirectory, { recursive: true, force: true });
+      controlDirectory = undefined;
+    }
+  } catch (error) {
+    await rollbackDesktopLaunch({ server, child, socket: socket ?? acceptedSocket, controlDirectory, error });
+    throw error;
+  }
+
+  const runningChild = child;
+  const runningSocket = socket;
+  if (runningChild === undefined || runningSocket === undefined) {
+    throw new Error('desktop host startup completed without owned process and control socket');
+  }
+  const exited = processClosed(runningChild);
+  const input = runningSocket;
+  const output = runningSocket;
   let buffer = '';
   let readyResolve: (() => void) | undefined;
   let readyReject: ((error: Error) => void) | undefined;
@@ -244,9 +285,8 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
       didClose = true;
       resolve();
     };
-    child.once('exit', finish);
-    child.once('error', finish);
-    socket.once('close', finish);
+    runningChild.once('exit', finish);
+    runningChild.once('error', finish);
   });
 
   const accept = (message: DesktopHostMessage): void => {
@@ -264,7 +304,7 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
     buffer += chunk;
     if (Buffer.byteLength(buffer, 'utf8') > MAX_CONTROL_MESSAGE_BYTES * 2) {
       readyReject?.(new Error('desktop host sent too much control data'));
-      child.kill();
+      runningChild.kill('SIGKILL');
       return;
     }
     for (;;) {
@@ -280,40 +320,105 @@ export async function launchDesktopHost(options: DesktopHostLaunchOptions): Prom
       }
     }
   });
-  child.once('error', (error) => readyReject?.(new Error(`could not start desktop host: ${error.message}`)));
-  child.once('exit', () => {
+  runningChild.once('error', (error) => readyReject?.(new Error(`could not start desktop host: ${error.message}`)));
+  runningChild.once('exit', () => {
     if (!didReady) readyReject?.(new Error('desktop host exited before the runner loaded'));
   });
 
   input.write(encodeControlMessage({ protocol: DESKTOP_HOST_PROTOCOL, type: 'bootstrap', url: options.url }));
-  const timeout = setTimeout(() => readyReject?.(new Error(`desktop host did not become ready (last stage: ${lastStage})`)), options.readyTimeoutMs ?? 10_000);
   try {
-    await ready;
+    await withinDeadline(ready, readyDeadline, () => `desktop host did not become ready (last stage: ${lastStage})`);
   } catch (error) {
-    input.end();
-    socket.destroy();
-    child.kill();
-    await exited;
-    if (controlDirectory !== undefined) await rm(controlDirectory, { recursive: true, force: true });
+    await rollbackDesktopLaunch({ server, child: runningChild, socket: runningSocket, controlDirectory, error });
     throw error;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  // Losing the authenticated control path means this process can no longer be
+  // supervised. Fail closed by terminating it; `closed` resolves only from
+  // actual process evidence, never from the socket event itself.
+  let shutdownRequested = false;
+  runningSocket.once('close', () => {
+    if (!shutdownRequested && runningChild.exitCode === null && runningChild.signalCode === null) {
+      runningChild.kill('SIGKILL');
+    }
+  });
+
+  let closePromise: Promise<void> | undefined;
 
   return {
     closed,
-    async close(): Promise<void> {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      input.write(encodeControlMessage({ protocol: DESKTOP_HOST_PROTOCOL, type: 'shutdown' }));
-      input.end();
-      const force = setTimeout(() => child.kill(), 2_000);
-      try {
-        await exited;
-      } finally {
-        clearTimeout(force);
-        socket.destroy();
-        if (controlDirectory !== undefined) await rm(controlDirectory, { recursive: true, force: true });
+    close(): Promise<void> {
+      if (closePromise === undefined) {
+        shutdownRequested = true;
+        closePromise = closeDesktopHost(runningChild, runningSocket, exited, closeTimeoutMs);
       }
+      return closePromise;
     },
   };
+}
+
+function positiveTimeout(value: number, name: string): number {
+  if (!Number.isFinite(value) || value <= 0) throw new TypeError(`${name} must be a positive finite number`);
+  return value;
+}
+
+
+async function closeServer(server: Server): Promise<void> {
+  if (!server.listening) return;
+  await new Promise<void>((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error)));
+}
+
+async function rollbackDesktopLaunch(options: {
+  readonly server: Server;
+  readonly child: ChildProcess | undefined;
+  readonly socket: Socket | undefined;
+  readonly controlDirectory: string | undefined;
+  readonly error: unknown;
+}): Promise<void> {
+  const failures: unknown[] = [];
+  options.socket?.destroy();
+  try { await closeServer(options.server); } catch (error) { failures.push(error); }
+  if (options.child !== undefined && options.child.exitCode === null && options.child.signalCode === null) {
+    options.child.kill('SIGKILL');
+    try {
+      await withinDeadline(processClosed(options.child), performance.now() + 2_000, 'desktop host did not exit during startup rollback');
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (options.controlDirectory !== undefined) {
+    try { await rm(options.controlDirectory, { recursive: true, force: true }); } catch (error) { failures.push(error); }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError([options.error, ...failures], 'desktop host startup and rollback failed', { cause: options.error });
+  }
+}
+
+async function closeDesktopHost(
+  child: ChildProcess,
+  socket: Socket,
+  exited: Promise<void>,
+  timeoutMs: number,
+): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    socket.destroy();
+    return;
+  }
+  const deadline = performance.now() + timeoutMs;
+  try {
+    if (!socket.destroyed) {
+      socket.write(encodeControlMessage({ protocol: DESKTOP_HOST_PROTOCOL, type: 'shutdown' }));
+      socket.end();
+    }
+    await withinDeadline(exited, deadline, 'desktop host did not acknowledge shutdown');
+  } catch (error) {
+    child.kill('SIGKILL');
+    try {
+      await withinDeadline(exited, performance.now() + 2_000, 'desktop host remained alive after hard termination');
+    } catch (killError) {
+      throw new AggregateError([error, killError], 'desktop host cleanup failed', { cause: error });
+    }
+  } finally {
+    socket.destroy();
+  }
 }

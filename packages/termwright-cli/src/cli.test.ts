@@ -3,15 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { EXIT_CODES } from '@termwright/mcp';
 import type { UiServer, UiServerOptions } from '@termwright/ui';
 import { runCli, type CliDeps } from './cli.js';
-import type { VitestHandle, VitestRun } from './ui-command.js';
+import type { NativeHostHandle, NativeHostRun } from './ui-command.js';
 import { CLI_VERSION } from './version.js';
+import { TERMWRIGHT_RESOURCE_PROFILES } from './resource-profiles.js';
+import type { DoctorReport } from './doctor.js';
+import type { RunCompletion } from './test-host.js';
 
 interface Harness {
   readonly deps: CliDeps;
   readonly out: string[];
   readonly err: string[];
   readonly uiOptions: UiServerOptions[];
-  readonly runs: VitestRun[];
+  readonly runs: NativeHostRun[];
   readonly mcpArgs: string[][];
   readonly closed: () => number;
 }
@@ -19,7 +22,6 @@ interface Harness {
 function harness(
   overrides: {
     readonly mode?: UiServer['mode'];
-    readonly runnerExit?: number;
     readonly mcpExit?: number;
     /** Thrown by `startUi`, to stand in for an archive that will not open. */
     readonly startUiError?: unknown;
@@ -29,16 +31,14 @@ function harness(
   const out: string[] = [];
   const err: string[] = [];
   const uiOptions: UiServerOptions[] = [];
-  const runs: VitestRun[] = [];
+  const runs: NativeHostRun[] = [];
   const mcpArgs: string[][] = [];
   let closes = 0;
 
   const deps: CliDeps = {
     io: { out: (text) => out.push(text), err: (text) => err.push(text) },
     cwd: '/workspace',
-    doctor: async () => overrides.doctorOk === false
-      ? ({ ok: false, checks: [{ name: 'PTY backend', status: 'fail' as const, detail: 'unavailable' }] })
-      : ({ ok: true, checks: [] }),
+    doctor: async () => doctorReport(overrides.doctorOk !== false),
     runMcp: async (argv) => {
       mcpArgs.push([...argv]);
       return overrides.mcpExit ?? EXIT_CODES.ok;
@@ -64,13 +64,14 @@ function harness(
           },
         } satisfies UiServer;
       },
-      startVitest: (run): VitestHandle => {
+      startHost: async (run): Promise<NativeHostHandle> => {
         runs.push(run);
         return {
-          exited: Promise.resolve(overrides.runnerExit ?? 0),
-          run: async () => undefined,
+          discover: async () => [],
+          run: () => ({ runId: 'run:00000000-0000-4000-8000-000000000001' as never, completed: Promise.resolve() }),
           stop: async () => undefined,
-          shutdown: async () => undefined,
+subscribe: () => () => undefined,
+shutdown: async () => undefined,
         };
       },
       waitForInterrupt: async () => undefined,
@@ -78,6 +79,23 @@ function harness(
   };
 
   return { deps, out, err, uiOptions, runs, mcpArgs, closed: () => closes };
+}
+
+function doctorReport(ok: boolean): DoctorReport {
+  return {
+    ok,
+    checks: ok ? [] : [{ name: 'PTY backend', status: 'fail', detail: 'unavailable' }],
+    effectiveConfig: {
+      mode: 'termwright-native-only',
+      engine: { name: 'vitest', version: '4.1.11' },
+      defaultProfile: TERMWRIGHT_RESOURCE_PROFILES.local,
+      profiles: TERMWRIGHT_RESOURCE_PROFILES,
+      semantics: 'explicit-session-contract',
+      flakyPolicy: 'fail',
+      artifactValuePolicy: 'redacted',
+      hostTimeouts: { startupMs: 30_000, runMs: 600_000, finalizationReserveMs: 30_000 },
+    },
+  };
 }
 
 describe('informational commands', () => {
@@ -144,6 +162,8 @@ describe('informational commands', () => {
     };
 
     expect(document.commands.map((command) => command.name)).toEqual([
+      'test',
+      'watch',
       'ui',
       'report',
       'screenshot',
@@ -210,14 +230,89 @@ describe('mcp delegation', () => {
   });
 });
 
+describe('the native test command', () => {
+  it('repeats complete cycles in one host and fails on the worst run', async () => {
+    const h = harness();
+    const close = vi.fn(async () => undefined);
+    const requestRun = vi.fn();
+    const completions = [completion('passed', 1), completion('failed', 2), completion('passed', 3)];
+    for (const value of completions) {
+      requestRun.mockReturnValueOnce({
+        invocationId: value.invocationId,
+        runId: value.runId,
+        completed: Promise.resolve(value),
+      });
+    }
+    Object.assign(h.deps, {
+      openTestHost: async () => ({ requestRun, watch: vi.fn(), close }),
+    });
+
+    expect(await runCli(['test', '--runs', '3', '--json'], h.deps)).toBe(EXIT_CODES.assertion);
+    expect(requestRun).toHaveBeenCalledTimes(3);
+    expect(close).toHaveBeenCalledOnce();
+    const report = JSON.parse(h.out[0] ?? '{}') as Record<string, unknown>;
+    expect(report).toMatchObject({ state: 'failed', requestedRuns: 3, completedRuns: 3 });
+    expect(report['runs']).toHaveLength(3);
+  });
+
+  it('stops repeating when the persistent host loses certification', async () => {
+    const h = harness();
+    const close = vi.fn(async () => undefined);
+    const requestRun = vi.fn();
+    for (const value of [completion('passed', 1), completion('infrastructure-failed', 2)]) {
+      requestRun.mockReturnValueOnce({
+        invocationId: value.invocationId,
+        runId: value.runId,
+        completed: Promise.resolve(value),
+      });
+    }
+    Object.assign(h.deps, {
+      openTestHost: async () => ({ requestRun, watch: vi.fn(), close }),
+    });
+
+    expect(await runCli(['test', '--runs', '50', '--json'], h.deps)).toBe(EXIT_CODES.internal);
+    expect(requestRun).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledOnce();
+    expect(JSON.parse(h.out[0] ?? '{}')).toMatchObject({
+      state: 'infrastructure-failed', requestedRuns: 50, completedRuns: 2,
+    });
+  });
+
+  it('does not certify an empty or entirely skipped run', async () => {
+    const h = harness();
+    const value = completion('skipped', 1);
+    Object.assign(h.deps, {
+      openTestHost: async () => ({
+        requestRun: () => ({ invocationId: value.invocationId, runId: value.runId, completed: Promise.resolve(value) }),
+        watch: vi.fn(),
+        close: async () => undefined,
+      }),
+    });
+
+    expect(await runCli(['test', '--json'], h.deps)).toBe(EXIT_CODES.assertion);
+    expect(JSON.parse(h.out[0] ?? '{}')).toMatchObject({ state: 'skipped', completedRuns: 1 });
+  });
+});
+
+function completion(state: RunCompletion['state'], ordinal: number): RunCompletion {
+  return {
+    invocationId: 'invocation:00000000-0000-4000-8000-000000000001' as never,
+    runId: `run:00000000-0000-4000-8000-${String(ordinal).padStart(12, '0')}` as never,
+    state,
+    catalog: undefined,
+    events: [],
+    failures: [],
+  };
+}
+
 describe('the ui command', () => {
-  it('starts the runner and the suite, and prints the URL', async () => {
+  it('starts the native host and UI server, and prints the URL', async () => {
     const h = harness();
     expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.ok);
 
     expect(h.out.join('\n')).toContain('http://127.0.0.1:5000/?token=abc');
     expect(h.runs).toHaveLength(1);
-    expect(h.runs[0]).toMatchObject({ uiUrl: 'http://127.0.0.1:5000/?token=abc', cwd: '/workspace' });
+    expect(h.runs[0]).toMatchObject({ args: [], cwd: '/workspace', resourceProfile: 'local' });
     expect(h.closed()).toBe(1);
   });
 
@@ -293,11 +388,12 @@ describe('the ui command', () => {
     const closed = new Promise<void>((resolve) => { closeWindow = resolve; });
     const shutdown = vi.fn(async () => undefined);
     const closeHost = vi.fn(async () => undefined);
-    const ui = h.deps.ui as { startVitest: CliDeps['ui']['startVitest'] };
-    ui.startVitest = () => ({
-      exited: new Promise<number>(() => undefined),
-      run: async () => undefined,
+    const ui = h.deps.ui as { startHost: CliDeps['ui']['startHost'] };
+    ui.startHost = async () => ({
+      discover: async () => [],
+      run: () => ({ runId: 'run:00000000-0000-4000-8000-000000000001' as never, completed: new Promise(() => undefined) }),
       stop: async () => undefined,
+      subscribe: () => () => undefined,
       shutdown,
     });
     Object.assign(h.deps, {
@@ -311,12 +407,6 @@ describe('the ui command', () => {
     expect(await running).toBe(EXIT_CODES.ok);
     expect(shutdown).toHaveBeenCalledOnce();
     expect(closeHost).toHaveBeenCalledOnce();
-    expect(h.closed()).toBe(1);
-  });
-
-  it('reports a failing run as an assertion failure', async () => {
-    const h = harness({ runnerExit: 1 });
-    expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.assertion);
     expect(h.closed()).toBe(1);
   });
 
@@ -344,8 +434,9 @@ describe('the ui command', () => {
     expect(h.uiOptions[0]?.discovery).toMatchObject({
       cwd: '/workspace',
       watch: true,
-      args: ['src/login.test.ts'],
     });
+    expect(h.runs[0]?.args).toEqual(['src/login.test.ts']);
+    expect(h.uiOptions[0]?.discovery?.load).toBeTypeOf('function');
   });
 
   it('does not list a project’s tests for a replay or a recording', async () => {
@@ -429,37 +520,40 @@ describe('the ui command', () => {
     expect(h.runs).toHaveLength(0);
   });
 
-  it('leaves the suite alone with --no-watch', async () => {
+  it('keeps native discovery and exact run controls with --no-watch', async () => {
     const h = harness();
     await runCli(['ui', '--no-watch'], h.deps);
-    expect(h.runs).toHaveLength(0);
-    expect(h.uiOptions[0]?.onRerun).toBeUndefined();
-    expect(h.uiOptions[0]?.onStop).toBeUndefined();
+    expect(h.runs).toHaveLength(1);
+    expect(h.uiOptions[0]?.discovery).toMatchObject({ watch: false });
+    expect(h.uiOptions[0]?.onRun).toBeTypeOf('function');
+    expect(h.uiOptions[0]?.onStop).toBeTypeOf('function');
     expect(h.closed()).toBe(1);
   });
 
   it('wires the browser controls to the runner', async () => {
     const h = harness();
-    const run = vi.fn(async () => undefined);
+    const run = vi.fn(async (_ids: readonly string[]) => undefined);
     const stop = vi.fn(async () => undefined);
-    const ui = h.deps.ui as { startVitest: CliDeps['ui']['startVitest'] };
+    const ui = h.deps.ui as { startHost: CliDeps['ui']['startHost'] };
     let released: (() => void) | undefined;
-    ui.startVitest = () => ({
-      exited: new Promise<number>((resolve) => {
-        released = () => resolve(0);
-      }),
-      run,
-      stop,
-      shutdown: async () => undefined,
+    ui.startHost = async () => ({
+      discover: async () => [],
+      run: (ids) => {
+        void run(ids);
+        return { runId: 'run:00000000-0000-4000-8000-000000000001' as never, completed: new Promise<void>((resolve) => { released = resolve; }) };
+      },
+      stop: async () => { await stop(); },
+subscribe: () => () => undefined,
+shutdown: async () => undefined,
     });
 
     const running = runCli(['ui'], h.deps);
     await vi.waitFor(() => expect(h.uiOptions).toHaveLength(1));
-    await vi.waitFor(() => expect(released).toBeTypeOf('function'));
 
-    await h.uiOptions[0]?.onRerun?.(['tests/a.test.ts']);
-    await h.uiOptions[0]?.onStop?.();
-    // The panel names the files it wants run; the watcher's `r` never could.
+    const started = await h.uiOptions[0]?.onRun?.(['tests/a.test.ts']);
+    expect(released).toBeTypeOf('function');
+    if (started !== undefined) await h.uiOptions[0]?.onStop?.(started.runId);
+    // The panel sends native RunnerTaskIds to the one persistent host.
     expect(run).toHaveBeenCalledWith(['tests/a.test.ts']);
     expect(stop).toHaveBeenCalledOnce();
 
@@ -467,16 +561,17 @@ describe('the ui command', () => {
     expect(await running).toBe(EXIT_CODES.ok);
   });
 
-  it('closes the runner even when starting the suite throws', async () => {
+  it('does not allocate the UI server when native host startup fails', async () => {
     const h = harness();
-    const ui = h.deps.ui as { startVitest: CliDeps['ui']['startVitest'] };
-    ui.startVitest = () => {
+    const ui = h.deps.ui as { startHost: CliDeps['ui']['startHost'] };
+    ui.startHost = async () => {
       throw new Error('vitest is not installed in this project');
     };
 
     expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.internal);
     expect(h.err.join('\n')).toContain('vitest is not installed');
-    expect(h.closed()).toBe(1);
+    expect(h.uiOptions).toHaveLength(0);
+    expect(h.closed()).toBe(0);
   });
 });
 

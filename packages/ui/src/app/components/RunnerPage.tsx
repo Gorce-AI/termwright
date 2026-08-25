@@ -6,6 +6,7 @@ import { currentRunCases, nodesForSelected, selectedCase, selectedSession } from
 import type { AppState, CompactWorkspace, ExecutionNode, SessionRecord } from '../domain/model.js';
 import { highlightExecutionTarget, highlightSemanticNode, type TerminalHighlight } from '../domain/terminal-highlight.js';
 import type { TraceStatePayload } from '../../trace-source.js';
+import type { UiActionability } from '../../events.js';
 import { usePreferences } from '../preferences.js';
 import { ExecutionRail } from './ExecutionRail.js';
 import { InspectorPanel } from './InspectorPanel.js';
@@ -23,6 +24,7 @@ interface RunnerPageProps {
   readonly onOpenReplay: (executionId: string) => void;
   readonly onSelectExecution: (executionId: string) => void;
   readonly onTraceStateAt: (timeMs: number) => Promise<TraceStatePayload>;
+  readonly onInspectActionability?: (sessionId: string, nodeId: string) => Promise<readonly UiActionability[]>;
   readonly interactive: boolean;
   readonly recorder?: {
     readonly active: boolean;
@@ -35,7 +37,7 @@ interface RunnerPageProps {
   };
 }
 
-export function RunnerPage({ state, dispatch, onRun, onStop, onInput, onOpenReplay, onSelectExecution, onTraceStateAt, recorder, interactive }: RunnerPageProps) {
+export function RunnerPage({ state, dispatch, onRun, onStop, onInput, onOpenReplay, onSelectExecution, onTraceStateAt, onInspectActionability, recorder, interactive }: RunnerPageProps) {
   const { preferences, updatePreferences } = usePreferences();
   const runBusy = state.pendingRunTargets !== null || state.run.status === 'running' || state.run.status === 'stopping';
   const cases = currentRunCases(state);
@@ -210,6 +212,11 @@ export function RunnerPage({ state, dispatch, onRun, onStop, onInput, onOpenRepl
 
   return (
     <div className="tw-runner-page">
+      {state.run.diagnosticGaps === 0 ? null : (
+        <div className="tw-diagnostic-gap" role="alert">
+          Runner diagnostics incomplete: {state.run.diagnosticGaps} projected messages were dropped. The canonical run history remains authoritative.
+        </div>
+      )}
       <CompactTabs current={state.compactWorkspace} onSelect={(workspace) => {
         if (workspace === 'inspect') updatePreferences({ inspectorCollapsed: false });
         if (workspace === 'steps') updatePreferences({ timelineCollapsed: false });
@@ -390,6 +397,7 @@ export function RunnerPage({ state, dispatch, onRun, onStop, onInput, onOpenRepl
           onCollapsed={(collapsed) => updatePreferences({ inspectorCollapsed: collapsed })}
           onPreviewNode={previewSemanticNode}
           onPinNode={pinSemanticNode}
+          {...(replay === null && onInspectActionability !== undefined ? { onInspectActionability } : {})}
           {...(recorder?.active === true ? {
             recorder: { onClickNode: recorder.onClickNode, onAssertNode: recorder.onAssertNode },
           } : {})}
@@ -490,7 +498,7 @@ function evidenceLabel(state: AppState): string {
 
 export function sessionLabel(session: SessionRecord | undefined, index: number): string {
   if (session === undefined) return `Terminal ${index + 1}`;
-  const framework = session.adapter?.name ?? session.probe?.framework;
+  const framework = session.contract?.framework?.name;
   const identity = framework === undefined ? 'Terminal' : framework;
   return `${identity} · ${session.terminalProfile} · ${session.columns}×${session.rows} · #${index + 1}`;
 }

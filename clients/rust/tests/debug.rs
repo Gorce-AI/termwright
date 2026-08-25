@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 //! The adapter-side diagnostic log: off by default, a file when asked, never
 //! stderr.
 
@@ -138,7 +140,7 @@ fn dormancy_reason_is_recorded() {
     let directory = support::temp_dir();
     let path = directory.join("adapter.log");
     let (options, log) = options_logging_to(&path);
-    assert!(Client::from_values(None, None, None, options).is_none());
+    assert!(Client::from_values(None, None, options).is_none());
     log.close();
 
     let text = fs::read_to_string(&path).expect("readable");
@@ -153,53 +155,31 @@ fn dormancy_reason_names_only_the_missing_variable() {
     let directory = support::temp_dir();
     let path = directory.join("adapter.log");
     let (options, log) = options_logging_to(&path);
-    assert!(Client::from_values(Some("/tmp/x.sock"), None, None, options).is_none());
+    assert!(Client::from_values(Some("/tmp/x.sock"), None, options).is_none());
     log.close();
 
     let text = fs::read_to_string(&path).expect("readable");
     assert!(text.contains("dormant: TERMWRIGHT_TOKEN not set"), "{text}");
 }
 
+/// A Windows pipe is not a Unix local endpoint. Cross-platform configuration
+/// mistakes stay dormant and say why without exposing the pipe token.
 #[test]
-fn a_protocol_mismatch_says_so() {
+fn a_pipe_endpoint_is_rejected_on_unix() {
     let directory = support::temp_dir();
     let path = directory.join("adapter.log");
     let (options, log) = options_logging_to(&path);
-    assert!(Client::from_values(
-        Some("/tmp/x.sock"),
-        Some("token"),
-        Some("termwright/99"),
-        options
-    )
-    .is_none());
-    log.close();
-
-    let text = fs::read_to_string(&path).expect("readable");
     assert!(
-        text.contains(r#"dormant: TERMWRIGHT_PROTOCOL="termwright/99""#),
-        "{text}"
+        Client::from_values(Some(r"\\.\pipe\termwright-ab12"), Some("token"), options).is_none()
     );
-}
-
-/// This client has no Windows transport, and a pipe path is the shape that
-/// exposes it. The log is the only place that says so.
-#[test]
-fn a_pipe_endpoint_says_which_transport_is_missing() {
-    let directory = support::temp_dir();
-    let path = directory.join("adapter.log");
-    let (options, log) = options_logging_to(&path);
-    assert!(Client::from_values(
-        Some(r"\\.\pipe\termwright-ab12"),
-        Some("token"),
-        None,
-        options
-    )
-    .is_none());
     log.close();
 
     let text = fs::read_to_string(&path).expect("readable");
     assert!(text.contains("dormant: pipe:"), "{text}");
-    assert!(text.contains("needs a Windows transport"), "{text}");
+    assert!(
+        text.contains("is not a local endpoint for this platform"),
+        "{text}"
+    );
 }
 
 /// The line that would have settled the Windows question by itself.

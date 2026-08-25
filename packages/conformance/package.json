@@ -10,7 +10,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "exports": {
     ".": {
@@ -23,10 +23,10 @@
     "src/fixtures"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:hostile": "vitest run --config vitest.hostile.config.ts src/suites/adversarial.test.ts src/suites/mcp-sessions.test.ts",
+    "test": "pnpm --dir ../.. test -- -- --run packages/conformance",
+    "test:hostile": "pnpm --dir ../.. test -- -- --run packages/conformance/src/suites/adversarial.test.ts packages/conformance/src/suites/mcp-sessions.test.ts",
     "conformance": "node scripts/conformance.mjs"
   },
   "dependencies": {
@@ -41,12 +41,13 @@
     "@termwright/mcp": "workspace:*",
     "@termwright/probe-ink": "workspace:*",
     "@termwright/probe-tview": "workspace:*",
+    "@termwright/test": "workspace:*",
     "@types/react": "^19.2.18",
     "ink": "^7.1.1",
     "react": "^19.2.8"
   },
   "peerDependencies": {
-    "vitest": ">=3.2.0"
+    "vitest": "4.1.11"
   },
   "peerDependenciesMeta": {
     "vitest": {

@@ -15,7 +15,7 @@ import { useSemantic } from './use-semantic.js';
 import type { InkSemanticAnnotation } from './types.js';
 
 /** A child that can receive the ref `<Semantic>` needs. In Ink that is `<Box>`. */
-type RefCapableElement = ReactElement<{ readonly ref?: Ref<DOMElement> }>;
+export type SemanticChild = ReactElement<{ readonly ref?: Ref<DOMElement> }>;
 
 /** {@link Semantic} props: the annotation, plus the element it describes. */
 export interface SemanticProps extends InkSemanticAnnotation {
@@ -26,7 +26,7 @@ export interface SemanticProps extends InkSemanticAnnotation {
    * text in a `<Box>` instead, which is what giving it a shape would require
    * anyway.
    */
-  readonly children: RefCapableElement;
+  readonly children: SemanticChild;
 }
 
 function assignRef(ref: Ref<DOMElement> | undefined, node: DOMElement | null): void {

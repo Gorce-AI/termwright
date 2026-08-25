@@ -49,12 +49,11 @@ export function statesOf(node: SemanticNode): string[] {
 }
 
 /**
- * The innermost node whose bounds contain a cell — the pick-mode hit test.
+ * The innermost node whose known visible region contains a cell.
  *
  * Innermost wins by area, so pointing at a button inside a dialog selects the
- * button. Nodes without bounds are not pickable: a framework that publishes no
- * measurements cannot be pointed at, and guessing would put the overlay
- * somewhere the node is not.
+ * button. Nodes without authoritative visible geometry are not pickable:
+ * guessing would put the overlay somewhere the node is not.
  */
 export function nodeAt(
   nodes: readonly SemanticNode[],
@@ -63,8 +62,9 @@ export function nodeAt(
   let best: SemanticNode | undefined;
   let bestArea = Number.POSITIVE_INFINITY;
   for (const node of nodes) {
-    const rect = node.bounds;
-    if (rect === undefined) continue;
+    const visible = node.geometry.visibleRect;
+    if (visible.status !== 'known') continue;
+    const rect = visible.value;
     if (
       position.row < rect.row ||
       position.row >= rect.row + rect.height ||

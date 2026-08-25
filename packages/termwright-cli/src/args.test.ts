@@ -82,6 +82,22 @@ describe('parseArgs', () => {
     ]);
   });
 
+  it('selects only a declared native-host resource profile', () => {
+    expect(parseArgs(['test', '--resource-profile', 'windows-ci']).resourceProfile).toBe('windows-ci');
+    expect(parseArgs(['watch', '--resource-profile', 'stress']).resourceProfile).toBe('stress');
+    expect(() => parseArgs(['test', '--resource-profile', 'auto'])).toThrow(/must be one of/u);
+    expect(() => parseArgs(['doctor', '--resource-profile', 'ci'])).toThrow(/only available/u);
+  });
+
+  it('accepts a bounded number of complete native-host run cycles only for test', () => {
+    expect(parseArgs(['test', '--runs', '50'])).toMatchObject({ command: 'test', runs: 50 });
+    expect(parseArgs(['test']).runs).toBe(1);
+    for (const value of ['0', '-1', '1.5', '10001', 'many']) {
+      expect(() => parseArgs(['test', '--runs', value]), value).toThrow(/between 1 and 10000/u);
+    }
+    expect(() => parseArgs(['watch', '--runs', '2'])).toThrow(/only available/u);
+  });
+
   it('treats codegen as ui --record', () => {
     const args = parseArgs(['codegen', '--out-file', 'src/rec.test.ts', '--', 'node', 'agent.js']);
     expect(args).toMatchObject({
@@ -103,8 +119,16 @@ describe('parseArgs', () => {
   });
 
   it('does not apply Gherkin tag filtering to unrelated commands', () => {
+    // Filtering belongs to the commands that run scenarios. Reading a trace or
+    // writing a report has nothing to select.
     expect(() => parseArgs(['report', '--trace', 'a.twtrace', '--tags', '@smoke']))
-      .toThrow(/only available with `termwright ui`/u);
+      .toThrow(/only available with `termwright test`/u);
+  });
+
+  it('accepts a tag filter on every command that runs scenarios', () => {
+    expect(parseArgs(['test', '--tags', '@smoke']).tags).toBe('@smoke');
+    expect(parseArgs(['watch', '--tags', 'not @slow']).tags).toBe('not @slow');
+    expect(parseArgs(['ui', '--tags', '@a or @b']).tags).toBe('@a or @b');
   });
 
   it('rejects a flag whose value is missing', () => {

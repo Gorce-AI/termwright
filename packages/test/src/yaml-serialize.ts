@@ -62,8 +62,6 @@ export const ALL_STATE_KEYS: readonly (keyof SemanticState)[] = Object.freeze([
   ...STABLE_STATE_KEYS,
   'positionInSet',
   'setSize',
-  'scrollOffset',
-  'scrollExtent',
 ]);
 
 /**

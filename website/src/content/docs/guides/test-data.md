@@ -10,5 +10,3 @@ This topic is now split by task:
 - [Extend test fixtures](../fixtures/) covers `test.extend()`, `test.scoped()`,
   and configuration precedence.
 - [Migration](../migrating/) covers existing terminal-test harnesses.
-- [Version migration](../version-migration/) covers older Termwright framework
-  integrations.

@@ -23,7 +23,7 @@
       "name": "hello",
       "value": {
         "type": "hello",
-        "protocol": "termwright/1",
+        "protocol": "termwright/2",
         "token": "test-token",
         "adapter": {
           "name": "vectors",
@@ -31,13 +31,13 @@
         },
         "capabilities": [
           "tree",
-          "bounds",
+          "intended-geometry",
           "states"
         ]
       },
-      "bodyJson": "{\"type\":\"hello\",\"protocol\":\"termwright/1\",\"token\":\"test-token\",\"adapter\":{\"name\":\"vectors\",\"version\":\"0.1.0\"},\"capabilities\":[\"tree\",\"bounds\",\"states\"]}",
-      "bodyBytes": 152,
-      "frameHex": "000000987b2274797065223a2268656c6c6f222c2270726f746f636f6c223a227465726d7772696768742f31222c22746f6b656e223a22746573742d746f6b656e222c2261646170746572223a7b226e616d65223a22766563746f7273222c2276657273696f6e223a22302e312e30227d2c226361706162696c6974696573223a5b2274726565222c22626f756e6473222c22737461746573225d7d"
+      "bodyJson": "{\"type\":\"hello\",\"protocol\":\"termwright/2\",\"token\":\"test-token\",\"adapter\":{\"name\":\"vectors\",\"version\":\"0.1.0\"},\"capabilities\":[\"tree\",\"intended-geometry\",\"states\"]}",
+      "bodyBytes": 163,
+      "frameHex": "000000a37b2274797065223a2268656c6c6f222c2270726f746f636f6c223a227465726d7772696768742f32222c22746f6b656e223a22746573742d746f6b656e222c2261646170746572223a7b226e616d65223a22766563746f7273222c2276657273696f6e223a22302e312e30227d2c226361706162696c6974696573223a5b2274726565222c22696e74656e6465642d67656f6d65747279222c22737461746573225d7d"
     },
     {
       "name": "unicode-name",

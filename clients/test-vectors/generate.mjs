@@ -27,6 +27,14 @@ import { Buffer } from 'node:buffer';
 import {
   ABSOLUTE_LIMITS,
   ADAPTER_CAPABILITIES,
+  CAPABILITY_GRAPH,
+  CAPABILITY_GRAPH_VERSION,
+  CAPABILITY_CONFORMANCE_CLAIMS,
+  CAPABILITY_NODE_CATEGORIES,
+  CAPABILITY_NODE_LAYERS,
+  CONDITION_KINDS,
+  EVIDENCE_PROVIDER_CAPABILITIES,
+  EVIDENCE_PROVIDER_TYPES,
   LOG_LEVELS,
   LOG_LEVEL_SEVERITY,
   MAX_LOG_ATTRS,
@@ -39,8 +47,16 @@ import {
   PROBE_UNOBSERVABLE_FIELDS,
   PROVENANCE_SOURCES,
   PROTOCOL_ID,
-  PROTOCOL_V2_ID,
   PROTOCOL_VERSION,
+  RUN_EVENT_CLASSES,
+  RUN_EVENT_VERSION,
+  RUN_ID_KINDS,
+  DEFAULT_RUN_EVENT_LIMITS,
+  RUN_STATES,
+  TERMINAL_RUN_STATES,
+  RUN_STATE_TRANSITIONS,
+  RUNTIME_PREREQUISITES,
+  SESSION_CAPABILITIES,
   SEMANTIC_ACTIONS,
   SEMANTIC_NODE_KEYS,
   SEMANTIC_ROLES,
@@ -50,13 +66,16 @@ import {
   encodeMarker,
   parseAdapterMessage,
   parseDriverMessage,
-  applyTreeDelta,
   validateSnapshot,
-  validateTreeDelta,
   verifyMarkerPayload,
-  FRAMEWORK_OBSERVATION_CAPABILITIES,
   intersectRects,
   viewportIntersection,
+  createRunEvent,
+  createRunId,
+  validateRunEvent,
+  RunEventStreamValidator,
+  RunEventProducer,
+  RunEventJournal,
 } from '../../packages/protocol/dist/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -154,7 +173,6 @@ write('constants.json', {
   env: {
     endpoint: 'TERMWRIGHT_ENDPOINT',
     token: 'TERMWRIGHT_TOKEN',
-    protocol: 'TERMWRIGHT_PROTOCOL',
   },
   logLevels: [...LOG_LEVELS],
   logLevelSeverity: { ...LOG_LEVEL_SEVERITY },
@@ -162,11 +180,26 @@ write('constants.json', {
   roles: [...SEMANTIC_ROLES],
   actions: [...SEMANTIC_ACTIONS],
   capabilities: [...ADAPTER_CAPABILITIES],
+  capabilityGraphVersion: CAPABILITY_GRAPH_VERSION,
+  capabilityNodeCategories: [...CAPABILITY_NODE_CATEGORIES],
+  capabilityNodeLayers: [...CAPABILITY_NODE_LAYERS],
+  sessionCapabilities: [...SESSION_CAPABILITIES],
+  evidenceProviderCapabilities: [...EVIDENCE_PROVIDER_CAPABILITIES],
+  evidenceProviderTypes: [...EVIDENCE_PROVIDER_TYPES],
+  runtimePrerequisites: [...RUNTIME_PREREQUISITES],
+  conditionKinds: [...CONDITION_KINDS],
+  capabilityConformanceClaims: [...CAPABILITY_CONFORMANCE_CLAIMS],
   provenanceSources: [...PROVENANCE_SOURCES],
   probeCapabilities: [...PROBE_CAPABILITIES],
   probeUnobservableFields: [...PROBE_UNOBSERVABLE_FIELDS],
   probeIdentityKinds: ['stable', 'frame-local'],
-  occlusionValues: ['known', 'unknown'],
+  runIdKinds: [...RUN_ID_KINDS],
+  runEventClasses: [...RUN_EVENT_CLASSES],
+  runEventVersion: RUN_EVENT_VERSION,
+  runEventLimits: { ...DEFAULT_RUN_EVENT_LIMITS },
+  runStates: [...RUN_STATES],
+  terminalRunStates: [...TERMINAL_RUN_STATES],
+  runStateTransitions: Object.fromEntries(Object.entries(RUN_STATE_TRANSITIONS).map(([state, next]) => [state, [...next]])),
   // Every field a node and a state may carry. A client asserts its own
   // structures against these, so a field added to the protocol fails three
   // client suites at once instead of waiting to be noticed in production —
@@ -177,6 +210,10 @@ write('constants.json', {
   absoluteLimits: { ...ABSOLUTE_LIMITS },
 });
 
+// The graph itself is a cross-language executable vector. Clients may project
+// it into native enums, but may not maintain a second dependency matrix.
+write('capability-graph.json', CAPABILITY_GRAPH);
+
 // --------------------------------------------------------------------------
 // observations.json — epistemic tags and half-open geometry across clients.
 // --------------------------------------------------------------------------
@@ -186,6 +223,25 @@ const geometryCases = [
   { name: 'partially-clipped', rect: { row: 4, column: 8, width: 4, height: 2 }, columns: 10, rows: 5 },
   { name: 'touching-outside-edge', rect: { row: 5, column: 10, width: 4, height: 2 }, columns: 10, rows: 5 },
 ].map((entry) => ({ ...entry, expect: viewportIntersection(entry.rect, entry.columns, entry.rows) }));
+
+const evidence = (providerId = 'vector-provider') => ({
+  source: 'framework',
+  method: 'native',
+  strength: 'authoritative',
+  providerId,
+});
+
+const geometry = (rect) => ({
+  displayed: { status: 'known', value: true, evidence: evidence() },
+  intendedRect: { status: 'known', value: { ...rect }, evidence: evidence() },
+  visibleRect: { status: 'known', value: { ...rect }, evidence: evidence() },
+});
+
+const unknownGeometry = () => ({
+  displayed: { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' },
+  intendedRect: { status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' },
+  visibleRect: { status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' },
+});
 
 const qualifiedSnapshot = {
   v: 2,
@@ -198,23 +254,23 @@ const qualifiedSnapshot = {
     {
       id: 'approve', role: 'button', name: 'Approve',
       geometry: {
-        displayed: { status: 'known', value: true, evidence: 'probe' },
-        intendedRect: { status: 'known', value: { row: 2, column: 2, width: 6, height: 2 }, evidence: 'probe' },
-        visibleRect: { status: 'known', value: { row: 2, column: 2, width: 6, height: 2 }, evidence: 'viewport-clip' },
+        displayed: { status: 'known', value: true, evidence: evidence() },
+        intendedRect: { status: 'known', value: { row: 2, column: 2, width: 6, height: 2 }, evidence: evidence() },
+        visibleRect: { status: 'known', value: { row: 2, column: 2, width: 6, height: 2 }, evidence: evidence() },
       },
     },
     {
       id: 'cover', role: 'dialog', name: 'Blocking dialog',
       geometry: {
-        displayed: { status: 'known', value: true, evidence: 'probe' },
-        intendedRect: { status: 'known', value: { row: 2, column: 5, width: 4, height: 2 }, evidence: 'probe' },
-        visibleRect: { status: 'known', value: { row: 2, column: 5, width: 4, height: 2 }, evidence: 'viewport-clip' },
+        displayed: { status: 'known', value: true, evidence: evidence() },
+        intendedRect: { status: 'known', value: { row: 2, column: 5, width: 4, height: 2 }, evidence: evidence() },
+        visibleRect: { status: 'known', value: { row: 2, column: 5, width: 4, height: 2 }, evidence: evidence() },
       },
     },
   ],
-  coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: 'probe' },
+  coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() },
   hitGrid: {
-    status: 'known', evidence: 'hit-grid', value: { regions: [
+    status: 'known', evidence: evidence('hit-grid'), value: { regions: [
       { rect: { row: 2, column: 2, width: 3, height: 1 }, recipientId: 'approve' },
       { rect: { row: 2, column: 5, width: 4, height: 1 }, recipientId: 'cover' },
       { rect: { row: 3, column: 2, width: 3, height: 1 }, recipientId: 'approve' },
@@ -227,9 +283,9 @@ if (!validateSnapshot(qualifiedSnapshot, DEFAULT_LIMITS).ok) throw new Error('qu
 write('observations.json', {
   statuses: ['known', 'absent', 'unknown', 'unsupported'],
   examples: [
-    { status: 'known', value: true, evidence: 'probe' },
-    { status: 'absent', reason: 'detached' },
-    { status: 'unknown', reason: 'legacy-unqualified' },
+    { status: 'known', value: true, evidence: evidence() },
+    { status: 'absent', reason: 'detached', evidence: evidence() },
+    { status: 'unknown', reason: 'awaiting-revision-pair' },
     { status: 'unsupported', capability: 'hit-test', reason: 'framework-unobservable' },
   ],
   halfOpenTouch: intersectRects(
@@ -237,8 +293,110 @@ write('observations.json', {
     { row: 1, column: 4, width: 2, height: 2 },
   ),
   geometryCases,
-  frameworks: FRAMEWORK_OBSERVATION_CAPABILITIES,
   qualifiedSnapshot,
+});
+
+// --------------------------------------------------------------------------
+// run-events.json — orchestration identity, envelope and stream invariants.
+// --------------------------------------------------------------------------
+
+const runUuid = (suffix) => `00000000-0000-4000-8000-${suffix.toString(16).padStart(12, '0')}`;
+const runIdentity = {
+  invocationId: createRunId('invocation', () => runUuid(1)),
+  runId: createRunId('run', () => runUuid(2)),
+  projectId: createRunId('project', () => runUuid(3)),
+  specId: createRunId('spec', () => runUuid(4)),
+  runnerTaskId: createRunId('runner-task', () => runUuid(5)),
+  executionId: createRunId('execution', () => runUuid(6)),
+  attemptId: createRunId('attempt', () => runUuid(7)),
+};
+const runProducer = createRunId('producer', () => runUuid(8));
+const runEvent = (seq, overrides = {}) => createRunEvent({
+  producerId: runProducer,
+  epoch: 0,
+  seq,
+  eventClass: 'authoritative',
+  type: 'attempt.started',
+  monotonicTime: seq * 10,
+  wallTime: 1_800_000_000_000 + seq,
+  identity: runIdentity,
+  payload: { retry: 0 },
+  randomUUID: () => runUuid(20 + seq),
+  ...overrides,
+});
+const runAcceptInputs = [
+  { name: 'attempt-started', value: runEvent(0) },
+  { name: 'diagnostic-with-cause', value: runEvent(1, { eventClass: 'diagnostic', type: 'adapter.warning', causedBy: [runEvent(0).eventId], payload: { code: 'slow-frame' } }) },
+  { name: 'state-without-wall-clock', value: runEvent(2, { eventClass: 'state', type: 'session.snapshot', wallTime: undefined, payload: { status: 'running' } }) },
+];
+const self = runEvent(3);
+const runRejectInputs = [
+  { name: 'obsolete-envelope-version', value: { ...runEvent(0), v: 1 } },
+  { name: 'cross-domain-id', value: { ...runEvent(0), identity: { ...runIdentity, attemptId: runIdentity.executionId } } },
+  { name: 'detached-attempt-identity', value: { ...runEvent(0), identity: { invocationId: runIdentity.invocationId, runId: runIdentity.runId, attemptId: runIdentity.attemptId } } },
+  { name: 'self-cause', value: { ...self, causedBy: [self.eventId] } },
+  { name: 'non-finite-time', value: { ...runEvent(0), monotonicTime: null } },
+  { name: 'unknown-envelope-field', value: { ...runEvent(0), surprise: true } },
+];
+const annotateRunEvents = (entries, expected) => entries.map(({ name, value }) => {
+  const result = validateRunEvent(value);
+  if (result.ok !== expected) throw new Error(`run event vector ${name}: expected ok=${expected}, got ${JSON.stringify(result)}`);
+  return expected ? { name, value } : { name, value, code: result.code, detail: result.detail };
+});
+const streamVerdict = (name, values) => {
+  const validator = new RunEventStreamValidator();
+  const results = values.map((value) => validator.accept(value));
+  return { name, values, verdicts: results.map((result) => result.ok ? 'accept' : result.code) };
+};
+let gapId = 500;
+let gapTime = 1;
+const vectorJournal = new RunEventJournal({
+  invocationId: runIdentity.invocationId,
+  runId: runIdentity.runId,
+  gapProducer: new RunEventProducer({
+    producerId: createRunId('producer', () => runUuid(499)),
+    epoch: 0,
+    randomUUID: () => runUuid(gapId++),
+    monotonicNow: () => gapTime++,
+  }),
+  limits: { maxAuthoritativeEvents: 4, maxStateKeys: 4, maxDiagnosticEvents: 1 },
+});
+vectorJournal.append(runEvent(0, { eventClass: 'diagnostic', type: 'adapter.warning' }));
+vectorJournal.append(runEvent(1, { eventClass: 'diagnostic', type: 'adapter.warning' }));
+const diagnosticGapBatch = await vectorJournal.flushThrough(vectorJournal.barrier(), () => {});
+
+const stateJournal = new RunEventJournal({
+  invocationId: runIdentity.invocationId,
+  runId: runIdentity.runId,
+  gapProducer: new RunEventProducer({
+    producerId: createRunId('producer', () => runUuid(498)),
+    epoch: 0,
+    randomUUID: () => runUuid(gapId++),
+    monotonicNow: () => gapTime++,
+  }),
+});
+stateJournal.append(runEvent(0, { eventClass: 'state', type: 'run.state', payload: { status: 'scheduled' } }), { stateKey: 'run:state' });
+stateJournal.append(runEvent(1, { eventClass: 'state', type: 'run.state', payload: { status: 'running' } }), { stateKey: 'run:state' });
+const coalescedStateBatch = await stateJournal.flushThrough(stateJournal.barrier(), () => {});
+
+write('run-events.json', {
+  version: 2,
+  idKinds: [...RUN_ID_KINDS],
+  eventClasses: [...RUN_EVENT_CLASSES],
+  limits: { ...DEFAULT_RUN_EVENT_LIMITS },
+  identity: runIdentity,
+  accept: annotateRunEvents(runAcceptInputs, true),
+  reject: annotateRunEvents(runRejectInputs, false),
+  streams: [
+    streamVerdict('monotonic', [runEvent(0), runEvent(1)]),
+    streamVerdict('duplicate-sequence-coordinate', [runEvent(0), { ...runEvent(1), seq: 0 }]),
+    streamVerdict('monotonic-clock-regression', [runEvent(0, { monotonicTime: 10 }), runEvent(1, { monotonicTime: 9 })]),
+    streamVerdict('epoch-regression', [runEvent(0, { epoch: 2 }), runEvent(1, { epoch: 1 })]),
+  ],
+  journal: {
+    diagnosticGap: diagnosticGapBatch,
+    coalescedState: coalescedStateBatch,
+  },
 });
 
 // --------------------------------------------------------------------------
@@ -257,7 +415,7 @@ const encodeCases = [
       protocol: PROTOCOL_ID,
       token: 'test-token',
       adapter: { name: 'vectors', version: '0.1.0' },
-      capabilities: ['tree', 'bounds', 'states'],
+      capabilities: ['tree', 'intended-geometry', 'states'],
     },
   },
   { name: 'unicode-name', value: { type: 'error', code: 'internal', message: 'zażółć gęślą jaźń — ✓ 🎛' } },
@@ -463,7 +621,7 @@ write('marker.json', {
 // --------------------------------------------------------------------------
 
 const baseSnapshot = {
-  v: 1,
+  v: 2,
   sessionId: 's-0001',
   revision: 1,
   columns: 80,
@@ -475,7 +633,7 @@ const baseSnapshot = {
       id: 'n1',
       role: 'dialog',
       name: 'Permission',
-      bounds: { row: 0, column: 0, width: 40, height: 2 },
+      geometry: geometry({ row: 0, column: 0, width: 40, height: 2 }),
       state: { modal: true },
     },
     {
@@ -484,7 +642,7 @@ const baseSnapshot = {
       role: 'button',
       name: 'Approve',
       testId: 'approve',
-      bounds: { row: 1, column: 2, width: 9, height: 1 },
+      geometry: geometry({ row: 1, column: 2, width: 9, height: 1 }),
       state: { focused: true },
       actions: ['focus', 'activate'],
     },
@@ -493,11 +651,13 @@ const baseSnapshot = {
       parentId: 'n1',
       role: 'button',
       name: 'Reject',
-      bounds: { row: 1, column: 14, width: 8, height: 1 },
+      geometry: geometry({ row: 1, column: 14, width: 8, height: 1 }),
       state: { focused: false },
       actions: ['focus', 'activate'],
     },
   ],
+  coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence() },
+  hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
 };
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -516,29 +676,39 @@ const snapshotAccept = [
     name: 'offscreen-implies-hidden',
     snapshot: mutate((s) => {
       s.nodes[2].state = { hidden: true, offscreen: true };
-      s.nodes[2].bounds = { row: 1, column: 14, width: 0, height: 0 };
+      s.nodes[2].geometry.displayed = { status: 'known', value: true, evidence: evidence() };
+      s.nodes[2].geometry.visibleRect = { status: 'absent', reason: 'not-laid-out', evidence: evidence() };
     }),
   },
   {
     // What a probe publishes: paint order observed, so the cells are
     // answerable and the driver's pointer gate opens; provenance says the
     // facts came from the framework rather than from an author or a guess.
-    name: 'probe-node-with-occlusion-and-provenance',
+    name: 'node-with-provenance',
     snapshot: mutate((s) => {
-      s.nodes[1].occlusion = 'known';
       s.nodes[1].p = 'framework';
       s.nodes[1].px = { name: 'annotation', testId: 'annotation' };
-      s.nodes[2].occlusion = 'unknown';
     }),
   },
   {
     name: 'minimal-empty-tree',
-    snapshot: { v: 1, sessionId: 's', revision: 1, columns: 1, rows: 1, rootIds: [], nodes: [] },
+    snapshot: {
+      v: 2,
+      sessionId: 's',
+      revision: 1,
+      columns: 1,
+      rows: 1,
+      rootIds: [],
+      nodes: [],
+      coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+      hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+    },
   },
   {
     name: 'hidden-node-outside-viewport',
     snapshot: mutate((s) => {
-      s.nodes[2].bounds = { row: 900, column: 900, width: 5, height: 1 };
+      s.nodes[2].geometry.intendedRect = { status: 'known', value: { row: 900, column: 900, width: 5, height: 1 }, evidence: evidence() };
+      s.nodes[2].geometry.visibleRect = { status: 'absent', reason: 'not-laid-out', evidence: evidence() };
       s.nodes[2].state = { hidden: true };
     }),
   },
@@ -564,15 +734,163 @@ const snapshotAccept = [
     }),
   },
   {
+    name: 'public-semantic-value',
+    snapshot: mutate((s) => {
+      s.nodes[1].value = { status: 'known', value: '', sensitivity: 'public', evidence: evidence() };
+    }),
+  },
+  {
+    name: 'withheld-sensitive-semantic-value',
+    snapshot: mutate((s) => {
+      s.nodes[1].value = { status: 'withheld', reason: 'sensitive', sensitivity: 'sensitive' };
+    }),
+  },
+  {
+    name: 'authoritative-physical-input-recipes',
+    snapshot: mutate((s) => {
+      s.nodes[1].inputRecipes = [
+        { action: 'focus', requiresFocus: false, steps: [{ kind: 'press', key: 'Tab' }] },
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+      ];
+    }),
+  },
+  {
+    name: 'application-action-strategy-provider',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.keys',
+        sessionId: s.sessionId,
+        revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.keys',
+        },
+        pointerRegions: [],
+        actionRecipes: [{
+          recipientId: 'n2',
+          recipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] }],
+        }],
+      }];
+    }),
+  },
+  {
+    name: 'application-focus-provider',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.focus', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.focus',
+        },
+        pointerRegions: [],
+        focusState: { status: 'focused', recipientId: 'n2' },
+      }, {
+        providerId: 'app.focus.none', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.focus.none',
+        },
+        pointerRegions: [],
+        focusState: { status: 'none' },
+      }];
+    }),
+  },
+  {
+    name: 'application-scroll-provider',
+    snapshot: mutate((s) => {
+      s.nodes[1].scroll = {
+        status: 'known',
+        value: { axis: 'vertical', offset: 3, viewport: 4, extent: 20 },
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll',
+        },
+      };
+      s.providerEvidence = [{
+        providerId: 'app.scroll', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll',
+        },
+        pointerRegions: [],
+        scrollStates: [{ recipientId: 'n2', axis: 'vertical', offset: 3, viewport: 4, extent: 20 }],
+      }];
+    }),
+  },
+  {
+    name: 'application-painted-region-provider',
+    snapshot: mutate((s) => {
+      const region = {
+        regionBounds: { row: 1, column: 2, width: 9, height: 1 },
+        spans: [{ row: 1, from: 2, to: 11 }],
+      };
+      s.nodes[1].paintedRegion = {
+        status: 'known', value: region,
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+      };
+      s.providerEvidence = [{
+        providerId: 'app.paint', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+        pointerRegions: [],
+        paintedRegions: [{
+          recipientId: 'n2',
+          regionBounds: { ...region.regionBounds },
+          spans: region.spans.map((span) => ({ ...span })),
+        }],
+      }];
+    }),
+  },
+  {
+    name: 'application-terminal-input-mode-provider',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.input', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.input',
+        },
+        pointerRegions: [],
+        inputModes: {
+          mouseTracking: 'drag', mouseEncoding: 'sgr', focusReporting: 'on',
+        },
+      }];
+    }),
+  },
+  {
     name: 'two-roots',
     snapshot: mutate((s) => {
       s.rootIds = ['n1', 'n4'];
-      s.nodes.push({ id: 'n4', role: 'status', name: 'ready', bounds: { row: 3, column: 0, width: 5, height: 1 } });
+      s.nodes.push({ id: 'n4', role: 'status', name: 'ready', geometry: geometry({ row: 3, column: 0, width: 5, height: 1 }) });
     }),
   },
 ];
 
 const snapshotReject = [
+  {
+    name: 'absent-requires-provenance',
+    snapshot: mutate((s) => {
+      s.nodes[1].geometry.visibleRect = { status: 'absent', reason: 'not-displayed' };
+    }),
+  },
+  {
+    name: 'absent-requires-authoritative-provenance',
+    snapshot: mutate((s) => {
+      s.nodes[1].geometry.visibleRect = {
+        status: 'absent', reason: 'not-displayed',
+        evidence: { ...evidence(), strength: 'diagnostic' },
+      };
+    }),
+  },
+  {
+    name: 'permanent-unknown-reason-rejected',
+    snapshot: mutate((s) => {
+      s.nodes[1].geometry.visibleRect = { status: 'unknown', reason: 'not-reported' };
+    }),
+  },
   {
     name: 'extended-must-be-an-object',
     snapshot: mutate((s) => { s.nodes[1].extended = ['not', 'a', 'namespace']; }),
@@ -594,8 +912,8 @@ const snapshotReject = [
     snapshot: mutate((s) => {
       s.rootIds = [];
       s.nodes = [
-        { id: 'a', parentId: 'b', role: 'generic', frameworkType: 'Fixture', name: '' },
-        { id: 'b', parentId: 'a', role: 'generic', frameworkType: 'Fixture', name: '' },
+        { id: 'a', parentId: 'b', role: 'generic', frameworkType: 'Fixture', name: '', geometry: unknownGeometry() },
+        { id: 'b', parentId: 'a', role: 'generic', frameworkType: 'Fixture', name: '', geometry: unknownGeometry() },
       ];
     }),
   },
@@ -618,16 +936,16 @@ const snapshotReject = [
     snapshot: mutate((s) => { s.nodes[1].state = { offscreen: true }; }),
   },
   {
-    name: 'unknown-occlusion',
-    snapshot: mutate((s) => { s.nodes[1].occlusion = 'maybe'; }),
-  },
-  {
     name: 'unknown-provenance',
     snapshot: mutate((s) => { s.nodes[1].p = 'vibes'; }),
   },
   {
     name: 'unknown-provenance-per-field',
     snapshot: mutate((s) => { s.nodes[1].px = { name: 'vibes' }; }),
+  },
+  {
+    name: 'legacy-raw-semantic-value',
+    snapshot: mutate((s) => { s.nodes[1].value = 'plaintext'; }),
   },
   { name: 'root-with-parent', snapshot: mutate((s) => { s.nodes[0].parentId = 'n2'; }) },
   {
@@ -638,17 +956,213 @@ const snapshotReject = [
   { name: 'duplicate-rootid', snapshot: mutate((s) => { s.rootIds = ['n1', 'n1']; }) },
   { name: 'revision-zero', snapshot: mutate((s) => { s.revision = 0; }) },
   { name: 'revision-not-integer', snapshot: mutate((s) => { s.revision = 1.5; }) },
-  { name: 'v2-with-legacy-node-shape', snapshot: mutate((s) => { s.v = 2; }) },
+  { name: 'v1-protocol-rejected', snapshot: mutate((s) => { s.v = 1; }) },
   { name: 'empty-session-id', snapshot: mutate((s) => { s.sessionId = ''; }) },
   { name: 'zero-columns', snapshot: mutate((s) => { s.columns = 0; }) },
   {
-    name: 'bounds-outside-viewport',
+    name: 'obsolete-bounds-rejected',
     snapshot: mutate((s) => { s.nodes[2].bounds = { row: 900, column: 900, width: 5, height: 1 }; }),
   },
   { name: 'cursor-outside-viewport', snapshot: mutate((s) => { s.cursor = { row: 99, column: 0, visible: true }; }) },
   { name: 'unknown-node-field', snapshot: mutate((s) => { s.nodes[1].colour = 'red'; }) },
   { name: 'unknown-state-field', snapshot: mutate((s) => { s.nodes[1].state = { sparkling: true }; }) },
   { name: 'unknown-action', snapshot: mutate((s) => { s.nodes[1].actions = ['detonate']; }) },
+  {
+    name: 'recipe-without-matching-intent',
+    snapshot: mutate((s) => {
+      s.nodes[1].actions = ['focus'];
+      s.nodes[1].inputRecipes = [
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+      ];
+    }),
+  },
+  {
+    name: 'focus-recipe-cannot-require-focus',
+    snapshot: mutate((s) => {
+      s.nodes[1].inputRecipes = [
+        { action: 'focus', requiresFocus: true, steps: [{ kind: 'press', key: 'Tab' }] },
+      ];
+    }),
+  },
+  {
+    name: 'setvalue-recipe-requires-exactly-one-action-value',
+    snapshot: mutate((s) => {
+      s.nodes[1].actions = ['setValue'];
+      s.nodes[1].inputRecipes = [
+        { action: 'setValue', requiresFocus: true, steps: [{ kind: 'press', key: 'Control+U' }] },
+      ];
+    }),
+  },
+  {
+    name: 'duplicate-recipe-action',
+    snapshot: mutate((s) => {
+      s.nodes[1].inputRecipes = [
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Space' }] },
+      ];
+    }),
+  },
+  {
+    name: 'recipe-step-is-strict',
+    snapshot: mutate((s) => {
+      s.nodes[1].inputRecipes = [
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter', callback: 'forbidden' }] },
+      ];
+    }),
+  },
+  {
+    name: 'provider-action-recipe-unknown-recipient',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.keys', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.keys',
+        },
+        pointerRegions: [],
+        actionRecipes: [{
+          recipientId: 'ghost',
+          recipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] }],
+        }],
+      }];
+    }),
+  },
+  {
+    name: 'provider-focus-unknown-recipient',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.focus', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.focus',
+        },
+        pointerRegions: [],
+        focusState: { status: 'focused', recipientId: 'ghost' },
+      }];
+    }),
+  },
+  {
+    name: 'provider-focus-none-is-strict',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.focus', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.focus',
+        },
+        pointerRegions: [],
+        focusState: { status: 'none', recipientId: 'n2' },
+      }];
+    }),
+  },
+  {
+    name: 'provider-scroll-unknown-recipient',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.scroll', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll',
+        },
+        pointerRegions: [],
+        scrollStates: [{ recipientId: 'ghost', axis: 'vertical', offset: 0, viewport: 4, extent: 20 }],
+      }];
+    }),
+  },
+  {
+    name: 'provider-scroll-outside-extent',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.scroll', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.scroll',
+        },
+        pointerRegions: [],
+        scrollStates: [{ recipientId: 'n2', axis: 'vertical', offset: 18, viewport: 4, extent: 20 }],
+      }];
+    }),
+  },
+  {
+    name: 'provider-painted-region-unknown-recipient',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.paint', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+        pointerRegions: [],
+        paintedRegions: [{
+          recipientId: 'ghost',
+          regionBounds: { row: 1, column: 2, width: 9, height: 1 },
+          spans: [{ row: 1, from: 2, to: 11 }],
+        }],
+      }];
+    }),
+  },
+  {
+    name: 'provider-input-mode-invalid-tracking',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.input', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.input',
+        },
+        pointerRegions: [],
+        inputModes: {
+          mouseTracking: 'guess-sgr', mouseEncoding: 'sgr', focusReporting: 'on',
+        },
+      }];
+    }),
+  },
+  {
+    name: 'provider-input-mode-is-strict',
+    snapshot: mutate((s) => {
+      s.providerEvidence = [{
+        providerId: 'app.input', sessionId: s.sessionId, revision: s.revision,
+        status: 'available',
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.input',
+        },
+        pointerRegions: [],
+        inputModes: {
+          mouseTracking: 'drag', mouseEncoding: 'sgr', focusReporting: 'on', guessed: true,
+        },
+      }];
+    }),
+  },
+  {
+    name: 'painted-region-span-outside-bounds',
+    snapshot: mutate((s) => {
+      s.nodes[1].paintedRegion = {
+        status: 'known',
+        value: {
+          regionBounds: { row: 1, column: 2, width: 4, height: 1 },
+          spans: [{ row: 1, from: 2, to: 11 }],
+        },
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+      };
+    }),
+  },
+  {
+    name: 'painted-region-span-outside-viewport',
+    snapshot: mutate((s) => {
+      s.nodes[1].paintedRegion = {
+        status: 'known',
+        value: {
+          regionBounds: { row: 30, column: 2, width: 4, height: 1 },
+          spans: [{ row: 30, from: 2, to: 6 }],
+        },
+        evidence: {
+          source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.paint',
+        },
+      };
+    }),
+  },
   { name: 'empty-node-id', snapshot: mutate((s) => { s.nodes[2].id = ''; }) },
   { name: 'labelledby-unknown-target', snapshot: mutate((s) => { s.nodes[1].labelledBy = ['ghost']; }) },
   { name: 'text-range-reversed', snapshot: mutate((s) => {
@@ -690,7 +1204,7 @@ const helloMessage = {
   protocol: PROTOCOL_ID,
   token: 'test-token',
   adapter: { name: 'vectors', version: '0.1.0' },
-  capabilities: ['tree', 'bounds', 'absolute-bounds', 'states', 'actions', 'render-revisions'],
+  capabilities: ['tree', 'states', 'actions', 'render-revisions'],
 };
 
 const helloAckMessage = {
@@ -701,44 +1215,10 @@ const helloAckMessage = {
   subscribe: 'snapshots',
   marker: { enabled: true },
 };
-const helloV2Message = {
-  ...helloMessage,
-  protocol: PROTOCOL_V2_ID,
-  capabilities: ['tree', 'states', 'render-revisions', 'qualified-observations', 'pointer-hit-grid'],
-};
-const helloAckV2Message = { ...helloAckMessage, protocol: PROTOCOL_V2_ID };
-
-/** A node as it appears inside a delta's `changed` list. */
-const deltaNode = (id, parentId, extra = {}) => ({
-  id,
-  ...(parentId === undefined ? {} : { parentId }),
-  role: 'button',
-  name: 'Approve',
-  ...extra,
-});
-
-/**
- * A delta on the minimal shape. Only the shape is checkable here: a receiver
- * cannot judge parents, depth or whether bounds fall inside the viewport
- * without the base it applies to, because the delta carries no columns/rows.
- * Those are caught when the assembled tree goes through snapshot validation.
- */
-const treeDelta = (over = {}) => ({
-  type: 'tree-delta',
-  baseRevision: 4,
-  revision: 5,
-  changed: [deltaNode('ok', 'dialog')],
-  removed: ['stale'],
-  ...over,
-});
-
 const adapterAccept = [
   { name: 'hello', message: helloMessage },
-  { name: 'hello-v2-qualified', message: helloV2Message },
   { name: 'revision-commit', message: { type: 'revision-commit', revision: 3 } },
   { name: 'snapshot', message: { type: 'snapshot', snapshot: baseSnapshot } },
-  { name: 'get-tree-result-ok', message: { type: 'get-tree-result', requestId: 0, snapshot: baseSnapshot } },
-  { name: 'get-tree-result-error', message: { type: 'get-tree-result', requestId: 1, error: 'no such revision' } },
   { name: 'error', message: { type: 'error', code: 'internal', message: 'boom' } },
   ...LOG_LEVELS.map((level) => ({
     name: `log-${level}`,
@@ -760,13 +1240,6 @@ const adapterAccept = [
       },
     },
   },
-  { name: 'tree-delta', message: treeDelta() },
-  { name: 'tree-delta-empty', message: treeDelta({ changed: [], removed: [] }) },
-  { name: 'tree-delta-with-root-ids', message: treeDelta({ rootIds: ['root', 'aside'] }) },
-  { name: 'tree-delta-with-cursor', message: treeDelta({ cursor: { row: 3, column: 9, visible: true } }) },
-  { name: 'tree-delta-cursor-hidden', message: treeDelta({ cursor: { row: 0, column: 0, visible: false } }) },
-  { name: 'tree-delta-cursor-shape', message: treeDelta({ cursor: { row: 1, column: 1, visible: true, shape: 'bar' } }) },
-  { name: 'tree-delta-node-without-bounds', message: treeDelta({ changed: [deltaNode('ok', 'dialog')] }) },
   {
     name: 'log-attrs-at-the-ceiling',
     message: {
@@ -797,15 +1270,11 @@ const adapterReject = [
   { name: 'hello-wrong-protocol', message: { ...helloMessage, protocol: 'termwright/99' } },
   { name: 'hello-empty-token', message: { ...helloMessage, token: '' } },
   { name: 'hello-unknown-capability', message: { ...helloMessage, capabilities: ['telepathy'] } },
-  { name: 'hello-v2-without-qualified-capability', message: { ...helloV2Message, capabilities: ['tree'] } },
-  { name: 'hello-v1-with-qualified-capability', message: { ...helloMessage, capabilities: ['tree', 'qualified-observations'] } },
-  { name: 'hello-pointer-grid-without-qualified-capability', message: { ...helloMessage, capabilities: ['tree', 'pointer-hit-grid'] } },
+  { name: 'hello-v1-rejected', message: { ...helloMessage, protocol: 'termwright/1' } },
   { name: 'hello-extra-field', message: { ...helloMessage, extra: 1 } },
   { name: 'revision-commit-zero', message: { type: 'revision-commit', revision: 0 } },
   { name: 'revision-commit-float', message: { type: 'revision-commit', revision: 2.5 } },
   { name: 'snapshot-invalid-body', message: { type: 'snapshot', snapshot: { ...baseSnapshot, revision: 0 } } },
-  { name: 'get-tree-result-both', message: { type: 'get-tree-result', requestId: 0, snapshot: baseSnapshot, error: 'x' } },
-  { name: 'get-tree-result-neither', message: { type: 'get-tree-result', requestId: 0 } },
   { name: 'error-unknown-code', message: { type: 'error', code: 'meltdown', message: 'x' } },
   { name: 'log-unknown-level', message: { type: 'log', record: logRecord({ level: 'verbose' }) } },
   { name: 'log-missing-seq', message: { type: 'log', record: logRecord({ seq: undefined }) } },
@@ -848,48 +1317,11 @@ const adapterReject = [
     message: { type: 'log', record: logRecord({}), priority: 'high' },
   },
   { name: 'log-record-not-an-object', message: { type: 'log', record: 'oops' } },
-  // A revision must move forward, and never onto or behind its own base.
-  { name: 'tree-delta-revision-not-forward', message: treeDelta({ baseRevision: 5, revision: 5 }) },
-  { name: 'tree-delta-revision-backwards', message: treeDelta({ baseRevision: 6, revision: 5 }) },
-  { name: 'tree-delta-base-revision-zero', message: treeDelta({ baseRevision: 0, revision: 1 }) },
-  { name: 'tree-delta-unknown-envelope-field', message: treeDelta({ speculative: true }) },
-  { name: 'tree-delta-duplicate-changed-id', message: treeDelta({ changed: [deltaNode('a', 'r'), deltaNode('a', 'r')] }) },
-  { name: 'tree-delta-duplicate-removed-id', message: treeDelta({ removed: ['a', 'a'] }) },
-  // One id cannot be upserted and cascaded away by the same delta.
-  { name: 'tree-delta-changed-and-removed', message: treeDelta({ changed: [deltaNode('a', 'r')], removed: ['a'] }) },
-  { name: 'tree-delta-self-parent', message: treeDelta({ changed: [deltaNode('a', 'a')] }) },
-  { name: 'tree-delta-unknown-role', message: treeDelta({ changed: [{ id: 'a', role: 'supervillain', name: 'A' }] }) },
-  { name: 'tree-delta-unknown-node-field', message: treeDelta({ changed: [{ id: 'a', role: 'button', name: 'A', onClick: 'x' }] }) },
-  {
-    name: 'tree-delta-bad-rect',
-    message: treeDelta({
-      changed: [{ id: 'a', role: 'button', name: 'A', bounds: { row: 0.5, column: 0, width: 1, height: 1 } }],
-    }),
-  },
-  { name: 'tree-delta-bad-cursor', message: treeDelta({ cursor: { row: -1, column: 0, visible: true } }) },
-  { name: 'tree-delta-cursor-unknown-field', message: treeDelta({ cursor: { row: 0, column: 0, visible: true, blink: true } }) },
-  { name: 'tree-delta-duplicate-root-id', message: treeDelta({ rootIds: ['r', 'r'] }) },
-  {
-    // Projection depth bites before any shape check, which buys
-    // `limit-exceeded` coverage for the price of a nested value rather than
-    // the 5 001 nodes it would take to cross maxNodes.
-    name: 'tree-delta-depth-over-ceiling',
-    message: treeDelta({
-      nested: Array.from({ length: 70 }).reduce((deep) => ({ deep }), 'leaf'),
-    }),
-  },
-  {
-    name: 'tree-delta-missing-removed',
-    message: (() => {
-      const { removed: _removed, ...rest } = treeDelta();
-      return rest;
-    })(),
-  },
+  { name: 'obsolete-tree-delta', message: { type: 'tree-delta', baseRevision: 1, revision: 2, changed: [], removed: [] } },
 ];
 
 const driverAccept = [
   { name: 'hello-ack', message: helloAckMessage },
-  { name: 'hello-ack-v2', message: helloAckV2Message },
   {
     // Driver traffic is read tolerantly throughout: `limits` is the object
     // that grows most often, but the rule is the same everywhere — a receiver
@@ -912,14 +1344,7 @@ const driverAccept = [
     name: 'hello-ack-unknown-nested-field',
     message: { ...helloAckMessage, marker: { enabled: true, style: 'dcs' } },
   },
-  {
-    name: 'get-tree-unknown-envelope-field',
-    message: { type: 'get-tree', requestId: 3, priority: 'high' },
-  },
-  { name: 'hello-ack-subscribe-diffs', message: { ...helloAckMessage, subscribe: 'diffs' } },
   { name: 'hello-ack-subscribe-revisions', message: { ...helloAckMessage, subscribe: 'revisions' } },
-  { name: 'get-tree-latest', message: { type: 'get-tree', requestId: 0 } },
-  { name: 'get-tree-revision', message: { type: 'get-tree', requestId: 4, revision: 12 } },
   { name: 'error', message: { type: 'error', code: 'bad-token', message: 'nope' } },
 ];
 
@@ -937,8 +1362,7 @@ const driverReject = [
   { name: 'hello-ack-empty-session', message: { ...helloAckMessage, sessionId: '' } },
   { name: 'hello-ack-bad-subscribe', message: { ...helloAckMessage, subscribe: 'everything' } },
   { name: 'hello-ack-missing-limits', message: { ...helloAckMessage, limits: undefined } },
-  { name: 'get-tree-negative-request-id', message: { type: 'get-tree', requestId: -1 } },
-  { name: 'get-tree-revision-zero', message: { type: 'get-tree', requestId: 0, revision: 0 } },
+  { name: 'obsolete-get-tree', message: { type: 'get-tree', requestId: 0 } },
   { name: 'unknown-type', message: { type: 'snapshot', snapshot: baseSnapshot } },
 ];
 
@@ -967,163 +1391,4 @@ write('messages.json', {
     reject: annotate(driverReject, parseDriverMessage, false),
   },
 });
-
-// --------------------------------------------------------------------------
-// deltas.json — composition: `delta + base → snapshot | error`
-//
-// Message-shape vectors cannot reach these: the four composition rules, both
-// resynchronisation paths and the cursor only show up once a delta meets the
-// tree it applies to. Five implementations agreeing on the shape and
-// disagreeing here is the failure this file exists to prevent.
-//
-// NOTE ON ORDER: the order of `nodes` in a composed snapshot is NOT normative.
-// The reference composes through a Map and so reports base order with new
-// nodes appended; a client backed by a hash map will report another order and
-// is equally correct. Compare `nodes` as a set keyed by id.
-// --------------------------------------------------------------------------
-
-/** root → dialog → { prompt, approve, cancel }. */
-const composeBase = (over = {}) => ({
-  v: 1,
-  sessionId: 's-0001',
-  revision: 4,
-  columns: 80,
-  rows: 24,
-  cursor: { row: 1, column: 2, visible: true },
-  rootIds: ['root'],
-  nodes: [
-    { id: 'root', role: 'region', name: 'main' },
-    { id: 'dialog', parentId: 'root', role: 'dialog', name: 'Permission', state: { modal: true } },
-    { id: 'prompt', parentId: 'dialog', role: 'text', name: 'Allow bash to run?' },
-    { id: 'approve', parentId: 'dialog', role: 'button', name: 'Approve', state: { focused: true } },
-    { id: 'cancel', parentId: 'dialog', role: 'button', name: 'Reject' },
-  ],
-  ...over,
-});
-
-const withAside = (over = {}) =>
-  composeBase({
-    rootIds: ['root', 'aside'],
-    nodes: [...composeBase().nodes, { id: 'aside', role: 'region', name: 'Aside' }],
-    ...over,
-  });
-
-const composeDelta = (over = {}) => ({ baseRevision: 4, revision: 5, changed: [], removed: [], ...over });
-
-/** [name, rule, base, delta, limitsOverride?] */
-const composeCases = [
-  // Rule (a): `changed` upserts, replacing a node WHOLESALE rather than merging.
-  ['upsert-inserts-a-new-node', 'changed-upsert', composeBase(),
-    composeDelta({ changed: [{ id: 'note', parentId: 'dialog', role: 'text', name: 'Note' }] })],
-  // `approve` carries state.focused in the base and the replacement omits
-  // state, so state must be GONE afterwards. An implementation that merges
-  // fields passes every other case and fails only this one.
-  ['upsert-replaces-node-wholesale', 'changed-upsert', composeBase(),
-    composeDelta({ changed: [{ id: 'approve', parentId: 'dialog', role: 'button', name: 'Approve' }] })],
-  ['upsert-can-reparent-a-node', 'changed-upsert', composeBase(),
-    composeDelta({ changed: [{ id: 'cancel', parentId: 'root', role: 'button', name: 'Reject' }] })],
-
-  // Rule (b): `removed` takes the whole subtree, which is what keeps a delta small.
-  ['remove-cascades-to-the-subtree', 'removed-cascade', composeBase(), composeDelta({ removed: ['dialog'] })],
-  ['remove-a-leaf', 'removed-cascade', composeBase(), composeDelta({ removed: ['cancel'] })],
-  ['remove-unknown-node-resyncs', 'resync-unknown-removal', composeBase(), composeDelta({ removed: ['ghost'] })],
-
-  // Rule (c): rootIds absent inherits the base's minus removals; present replaces.
-  ['roots-carry-over-minus-removals', 'rootids', withAside(), composeDelta({ removed: ['aside'] })],
-  ['explicit-rootids-replace-the-list', 'rootids', withAside(),
-    composeDelta({ rootIds: ['root'], removed: ['aside'] })],
-  // A new root without `rootIds` is a parentless node outside the root list,
-  // which is exactly what snapshot validation refuses — loudly, by design.
-  ['new-root-without-rootids-fails-loudly', 'rootids', composeBase(),
-    composeDelta({ changed: [{ id: 'aside', role: 'region', name: 'Aside' }] })],
-  ['new-root-with-rootids', 'rootids', composeBase(),
-    composeDelta({ changed: [{ id: 'aside', role: 'region', name: 'Aside' }], rootIds: ['root', 'aside'] })],
-
-  // Rule (d): removals apply BEFORE upserts, so one delta can move a node out
-  // of a subtree it is deleting.
-  ['rescue-a-node-out-of-a-removed-subtree', 'remove-before-insert', composeBase(),
-    composeDelta({
-      removed: ['dialog'],
-      changed: [{ id: 'approve', parentId: 'root', role: 'button', name: 'Approve' }],
-    })],
-
-  // Resynchronisation: a disagreeing base is reported, never patched around.
-  ['base-revision-mismatch-resyncs', 'resync-bad-base', composeBase(),
-    { baseRevision: 3, revision: 5, changed: [], removed: [] }],
-  ['base-revision-ahead-resyncs', 'resync-bad-base', composeBase(),
-    { baseRevision: 9, revision: 10, changed: [], removed: [] }],
-
-  // Cursor: absent inherits, present replaces, and there is no way to remove
-  // one — hiding it is `visible: false`.
-  ['cursor-absent-is-inherited', 'cursor', composeBase(), composeDelta()],
-  ['cursor-present-replaces', 'cursor', composeBase(),
-    composeDelta({ cursor: { row: 9, column: 12, visible: true } })],
-  ['cursor-hidden-via-visible-false', 'cursor', composeBase(),
-    composeDelta({ cursor: { row: 1, column: 2, visible: false } })],
-  ['cursor-outside-viewport-rejected-on-composition', 'cursor', composeBase(),
-    composeDelta({ cursor: { row: 900, column: 0, visible: true } })],
-
-  // Invariants only the composed tree can show: the delta carries no viewport
-  // and no parents, so these pass shape validation and fail here.
-  ['cycle-after-composition', 'composed-invariants', composeBase(),
-    composeDelta({
-      changed: [
-        { id: 'dialog', parentId: 'approve', role: 'dialog', name: 'Permission' },
-        { id: 'approve', parentId: 'dialog', role: 'button', name: 'Approve' },
-      ],
-    })],
-  ['unknown-parent-after-composition', 'composed-invariants', composeBase(),
-    composeDelta({ changed: [{ id: 'orphan', parentId: 'nowhere', role: 'text', name: 'Orphan' }] })],
-  ['bounds-outside-viewport-after-composition', 'composed-invariants', composeBase(),
-    composeDelta({
-      changed: [{
-        id: 'approve', parentId: 'dialog', role: 'button', name: 'Approve',
-        bounds: { row: 900, column: 900, width: 4, height: 1 },
-      }],
-    })],
-  ['node-ceiling-crossed-by-composition', 'composed-invariants', composeBase(),
-    composeDelta({
-      changed: Array.from({ length: 3 }, (_, index) => ({
-        id: `n${index}`, parentId: 'root', role: 'text', name: 'x',
-      })),
-    }),
-    { maxNodes: 7 }],
-];
-
-const composed = composeCases.map(([name, rule, baseValue, deltaValue, limitsOverride]) => {
-  const limits = { ...DEFAULT_LIMITS, ...(limitsOverride ?? {}) };
-
-  const checkedBase = validateSnapshot(baseValue, limits);
-  if (!checkedBase.ok) {
-    throw new Error(`compose fixture ${name}: base invalid (${checkedBase.code} ${checkedBase.detail})`);
-  }
-  const checkedDelta = validateTreeDelta(deltaValue, limits);
-  if (!checkedDelta.ok) {
-    throw new Error(`compose fixture ${name}: delta shape invalid (${checkedDelta.code} ${checkedDelta.detail})`);
-  }
-
-  const result = applyTreeDelta(checkedBase.snapshot, checkedDelta.delta, limits);
-  return {
-    name,
-    rule,
-    base: baseValue,
-    delta: deltaValue,
-    ...(limitsOverride === undefined ? {} : { limitsOverride }),
-    expect: result.ok
-      ? { ok: true, snapshot: result.snapshot }
-      : { ok: false, code: result.code, detail: result.detail },
-  };
-});
-
-write('deltas.json', {
-  note:
-    'Apply `delta` to `base` and compare. `limits` is DEFAULT_LIMITS merged ' +
-    'with the per-case `limitsOverride` when present. `code` is the VALIDATION ' +
-    'taxonomy (revision | missing-parent | cycle | depth | count | bad-rect | ' +
-    'schema), not the wire taxonomy: composition is an operation on session ' +
-    'state, and the transport maps it onto malformed/limit-exceeded later. ' +
-    'The order of `nodes` is NOT normative — compare them as a set keyed by id.',
-  cases: composed,
-});
-
 masking();

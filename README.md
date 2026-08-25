@@ -1,5 +1,9 @@
 # Termwright
 
+Termwright's certified native host supports the Node.js 22 and 24 LTS lines.
+Package manifests deliberately reject intervening and future majors until the
+same native-host, PTY, framework, and Windows matrix certifies them.
+
 <p align="center">
   <img src="website/src/assets/termwright-logo.svg" alt="Termwright" width="640">
 </p>
@@ -17,7 +21,7 @@ pointer targeting where the framework can provide them.
 ## Install
 
 ```sh
-npm install --save-dev termwright vitest
+npm install --save-dev termwright
 ```
 
 ## Write a test
@@ -47,9 +51,16 @@ test needs semantic locators such as `getByRole()`.
 ## Run tests
 
 ```sh
-npx vitest run
+npx termwright test
+npx termwright watch
 npx termwright ui
 ```
+
+All three commands use one certified Termwright host backed by exactly certified
+Vitest 4.1.11. It is embedded as the generic engine, not selected or launched by
+the user. Termwright owns run and attempt identity, terminal resource
+budgets, cleanup, event integrity and flaky-run classification; Vitest supplies
+collection, transforms, mocks, assertions and the authoring DSL.
 
 `termwright ui` opens the desktop Runner with the test catalog, concurrent live
 executions, terminal evidence, semantic inspection, run history, replay, and
@@ -77,9 +88,8 @@ Cross-package contracts are maintained in [`CONTRACTS.md`](CONTRACTS.md).
 
 ```sh
 pnpm install
-pnpm -r --filter './packages/*' run build
-pnpm -r --filter './packages/*' run typecheck
-pnpm -r --filter './packages/*' run test
+pnpm check:fast
+pnpm check:full
 ```
 
 Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before changing the repository. Docs

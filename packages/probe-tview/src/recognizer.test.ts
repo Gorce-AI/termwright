@@ -65,10 +65,10 @@ describe('roles', () => {
 });
 
 describe('facts are carried, not invented', () => {
-  it('leaves bounds absent when the probe reported no geometry', () => {
+  it('keeps intended geometry unknown when the probe reported no geometry', () => {
     const snapshot = recognize(frameOf(object({ frameworkType: 'Button' })), OPTIONS);
 
-    expect(snapshot.nodes[0]?.bounds).toBeUndefined();
+    expect(snapshot.nodes[0]?.geometry.intendedRect).toEqual({ status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' });
   });
 
   it('uses intendedRect and never fabricates a visibleRect', () => {
@@ -82,7 +82,8 @@ describe('facts are carried, not invented', () => {
       OPTIONS,
     );
 
-    expect(snapshot.nodes[0]?.bounds).toEqual({ row: 2, column: 1, width: 30, height: 7 });
+    expect(snapshot.nodes[0]?.geometry.intendedRect).toMatchObject({ status: 'known', value: { row: 2, column: 1, width: 30, height: 7 } });
+    expect(snapshot.nodes[0]?.geometry.visibleRect).toMatchObject({ status: 'unsupported' });
   });
 
   it('does not turn an unreported state into a false one', () => {
@@ -120,8 +121,8 @@ describe('facts are carried, not invented', () => {
       OPTIONS,
     );
 
-    expect(early.nodes[0]?.state?.scrollOffset).toBeUndefined();
-    expect(settled.nodes[0]?.state?.scrollOffset).toBe(3);
+    expect(early.nodes[0]?.scroll).toBeUndefined();
+    expect(settled.nodes[0]?.scroll).toBeUndefined();
   });
 
   it('prefers an annotation over the widget text for the name', () => {
@@ -151,7 +152,7 @@ describe('the shape of the tree', () => {
   it('carries the session, revision and viewport through unchanged', () => {
     const snapshot = recognize(frameOf(object({ frameworkType: 'Box' })), OPTIONS);
 
-    expect(snapshot).toMatchObject({ v: 1, sessionId: 's-1', revision: 7, columns: 80, rows: 24 });
+    expect(snapshot).toMatchObject({ v: 2, sessionId: 's-1', revision: 7, columns: 80, rows: 24 });
   });
 
   it('accepts an empty frame rather than treating it as an error', () => {

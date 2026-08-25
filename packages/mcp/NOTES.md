@@ -28,7 +28,7 @@ exact name — which made two same-named buttons ambiguous and could not express
 grid ref at all. Grid refs (`grid:1,2,9,1@7`) now work for free.
 
 The malformed-ref and superseded-ref failures are the driver's, verbatim: kinds
-`unsupported-action` and `stale-snapshot` with the driver's own suggestion. The
+`capability-unavailable`, `not-actionable` and `stale-snapshot` with the driver's own suggestion. The
 suggestion is phrased for a library caller ("re-resolve the locator"); the
 MCP-flavoured advice ("call terminal.snapshot again") lives in the server
 instructions and in `SKILL.md`, per error kind, rather than by rewriting what the
@@ -45,7 +45,7 @@ no changed *subtrees*, because it caught the pair mid-flight — this one was
 intermittent in the end-to-end suite, and an agent polling `capture_since` after
 an action would have hit exactly the same race.
 
-`tools.ts: settleSemantics()` therefore calls the public `waitForStable()` before
+`tools.ts: settleSemantics()` therefore calls the public `waitForQuiet()` before
 every read: 2 s for a session still waiting for its first tree, 250 ms to let an
 in-flight render pair. Timeouts are swallowed — a session with no observable tree
 is reported honestly rather than made to look broken.

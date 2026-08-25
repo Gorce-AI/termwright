@@ -15,10 +15,9 @@
 //!   nothing records that it happened, so the rectangle a widget was drawn
 //!   into is not the cells it ended up with. It is reported as the intended
 //!   rectangle and never as a visible one.
-//! - **Paint order is unavailable**, so every node this probe produces says
-//!   `occlusion: "unknown"` and the driver refuses pointer actions against it.
-//!   That is the correct outcome for this framework, not a gap to be filled in
-//!   later.
+//! - **Paint order is unavailable**, so the snapshot reports pointer hit-grid
+//!   support as unavailable. Intended geometry is never promoted to pointer
+//!   ownership.
 //!
 //! The crate is deliberately small. It is a hook, a buffer of what one frame
 //! contained, and the protocol client — everything that needs `std`, kept out
@@ -29,6 +28,7 @@ pub mod patchset;
 pub mod session;
 pub mod tree;
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -197,6 +197,8 @@ pub const MAX_ITEMS: usize = 200;
 pub struct RenderCall {
     /// Position in this frame's call stream. Meaningful only within the frame.
     pub ordinal: u32,
+    /// Enclosing annotated render call when actual call nesting proves it.
+    pub parent_ordinal: Option<u32>,
     pub type_name: &'static str,
     pub x: u16,
     pub y: u16,
@@ -249,6 +251,28 @@ fn buffer() -> &'static Mutex<FrameBuffer> {
     BUFFER.get_or_init(|| Mutex::new(FrameBuffer::default()))
 }
 
+thread_local! {
+    // Ordinary Frame calls have no end hook. Only Annotated's own RAII
+    // boundaries may therefore establish a truthful nesting relation.
+    static ANNOTATED_STACK: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+}
+
+/// RAII boundary for one authoritative `Annotated<W>` render call.
+pub struct AnnotatedRenderGuard {
+    ordinal: Option<u32>,
+}
+
+impl Drop for AnnotatedRenderGuard {
+    fn drop(&mut self) {
+        let Some(expected) = self.ordinal else { return };
+        ANNOTATED_STACK.with(|stack| {
+            if stack.borrow_mut().pop() != Some(expected) {
+                DISABLED.store(true, Ordering::Relaxed);
+            }
+        });
+    }
+}
+
 /// Called by the patched `ratatui-core` for every `Frame::render_widget`.
 ///
 /// This runs inside the application's render path, so it does the least it
@@ -274,6 +298,7 @@ pub fn on_render(type_name: &'static str, x: u16, y: u16, width: u16, height: u1
     }
     frame.calls.push(RenderCall {
         ordinal,
+        parent_ordinal: None,
         type_name,
         x,
         y,
@@ -284,45 +309,89 @@ pub fn on_render(type_name: &'static str, x: u16, y: u16, width: u16, height: u1
     });
 }
 
-/// Attach author intent to the render call announced immediately before it.
+/// Begin an annotated render, including direct `Widget::render` calls.
 ///
-/// `wrapper_type_name` is compared with the framework-observed type before
-/// anything is changed. This matters for immediate-mode composition: a nested
-/// annotated widget may call `Widget::render` directly and never pass through
-/// `Frame`; without the match it would steal the outer widget's last call.
-/// An already annotated call is never overwritten, which also handles a
-/// recursive wrapper with the same concrete type.
-pub fn on_annotation(
+/// An exact Frame hook for the same wrapper/area is claimed rather than
+/// duplicated. Otherwise the wrapper contributes the render fact itself.
+#[must_use]
+pub fn begin_annotated_render(
     wrapper_type_name: &'static str,
     widget_type_name: &'static str,
     annotation: Annotation,
-) {
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
+) -> AnnotatedRenderGuard {
     if !instrumented() || DISABLED.load(Ordering::Relaxed) {
-        return;
+        return AnnotatedRenderGuard { ordinal: None };
     }
+    let parent_ordinal = ANNOTATED_STACK.with(|stack| stack.borrow().last().copied());
     let Ok(mut frame) = buffer().lock() else {
         DISABLED.store(true, Ordering::Relaxed);
-        return;
+        return AnnotatedRenderGuard { ordinal: None };
     };
-    attach_annotation(&mut frame, wrapper_type_name, widget_type_name, annotation);
+    let ordinal = record_annotated_call(
+        &mut frame,
+        parent_ordinal,
+        wrapper_type_name,
+        widget_type_name,
+        annotation,
+        x,
+        y,
+        width,
+        height,
+    );
+    drop(frame);
+    ANNOTATED_STACK.with(|stack| stack.borrow_mut().push(ordinal));
+    AnnotatedRenderGuard {
+        ordinal: Some(ordinal),
+    }
 }
 
-fn attach_annotation(
+#[allow(clippy::too_many_arguments)]
+fn record_annotated_call(
     frame: &mut FrameBuffer,
+    parent_ordinal: Option<u32>,
     wrapper_type_name: &'static str,
     widget_type_name: &'static str,
     annotation: Annotation,
-) {
-    let Some(call) = frame.calls.last_mut() else {
-        return;
-    };
-    if call.type_name != wrapper_type_name || call.annotation.is_some() {
-        return;
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
+) -> u32 {
+    let existing = frame.calls.last_mut().filter(|call| {
+        call.type_name == wrapper_type_name
+            && call.annotation.is_none()
+            && call.x == x
+            && call.y == y
+            && call.width == width
+            && call.height == height
+    });
+    if let Some(call) = existing {
+        call.type_name = widget_type_name;
+        call.annotation = Some(annotation);
+        call.parent_ordinal = parent_ordinal;
+        call.ordinal
+    } else {
+        let ordinal = frame.calls.len() as u32;
+        if ordinal == 0 {
+            first_call_seen(widget_type_name);
+        }
+        frame.calls.push(RenderCall {
+            ordinal,
+            parent_ordinal,
+            type_name: widget_type_name,
+            x,
+            y,
+            width,
+            height,
+            collection: None,
+            annotation: Some(annotation),
+        });
+        ordinal
     }
-    // The wrapper is transport machinery. The inner W is the application or
-    // framework widget Ratatui actually rendered, so keep that truthful type.
-    call.type_name = widget_type_name;
-    call.annotation = Some(annotation);
 }
 
 /// Called by a patched `ratatui-widgets` once a collection has rendered.
@@ -422,6 +491,7 @@ mod tests {
     fn a_render_call_carries_what_the_framework_reported() {
         let call = RenderCall {
             ordinal: 0,
+            parent_ordinal: None,
             type_name: "ratatui_widgets::paragraph::Paragraph<'_>",
             x: 1,
             y: 2,
@@ -436,10 +506,11 @@ mod tests {
     }
 
     #[test]
-    fn an_annotation_attaches_only_to_its_exact_unclaimed_frame_call() {
+    fn direct_and_frame_announced_annotations_have_one_truthful_call() {
         let mut frame = FrameBuffer {
             calls: vec![RenderCall {
                 ordinal: 0,
+                parent_ordinal: None,
                 type_name: "my_app::Outer",
                 x: 1,
                 y: 2,
@@ -450,47 +521,54 @@ mod tests {
             }],
         };
 
-        // An Annotated<Inner> rendered directly inside Outer was never
-        // announced by Frame and must not steal Outer's physical record.
-        attach_annotation(
+        let direct = record_annotated_call(
             &mut frame,
+            Some(0),
             "termwright_ratatui::Annotated<my_app::Inner>",
             "my_app::Inner",
             Annotation::new().name("nested"),
+            5,
+            6,
+            7,
+            8,
         );
         assert_eq!(frame.calls[0].type_name, "my_app::Outer");
         assert!(frame.calls[0].annotation.is_none());
+        assert_eq!(direct, 1);
+        assert_eq!(frame.calls[1].parent_ordinal, Some(0));
 
-        attach_annotation(
+        frame.calls.push(RenderCall {
+            ordinal: 2,
+            parent_ordinal: None,
+            type_name: "termwright_ratatui::Annotated<my_app::Button>",
+            x: 9,
+            y: 10,
+            width: 11,
+            height: 12,
+            collection: None,
+            annotation: None,
+        });
+        let claimed = record_annotated_call(
             &mut frame,
-            "my_app::Outer",
-            "my_app::Inner",
-            Annotation::new().name("first"),
+            Some(1),
+            "termwright_ratatui::Annotated<my_app::Button>",
+            "my_app::Button",
+            Annotation::new().name("claimed"),
+            9,
+            10,
+            11,
+            12,
         );
-        assert_eq!(frame.calls[0].type_name, "my_app::Inner");
+        assert_eq!(claimed, 2);
+        assert_eq!(frame.calls.len(), 3);
+        assert_eq!(frame.calls[2].type_name, "my_app::Button");
+        assert_eq!(frame.calls[2].parent_ordinal, Some(1));
         assert_eq!(
-            frame.calls[0]
+            frame.calls[2]
                 .annotation
                 .as_ref()
                 .and_then(|annotation| annotation.name.as_deref()),
-            Some("first")
-        );
-
-        // A recursively rendered wrapper of the same type cannot overwrite
-        // intent after the outer call has been claimed.
-        attach_annotation(
-            &mut frame,
-            "my_app::Inner",
-            "my_app::Other",
-            Annotation::new().name("second"),
-        );
-        assert_eq!(frame.calls[0].type_name, "my_app::Inner");
-        assert_eq!(
-            frame.calls[0]
-                .annotation
-                .as_ref()
-                .and_then(|annotation| annotation.name.as_deref()),
-            Some("first")
+            Some("claimed")
         );
     }
 }
@@ -514,7 +592,11 @@ pub fn probe_info(framework_version: Option<&str>) -> ProbeInfo {
         framework_version: framework_version.map(str::to_owned),
         probe_version: env!("CARGO_PKG_VERSION").to_owned(),
         identity_kind: ProbeIdentityKind::FrameLocal,
-        capabilities: vec!["operations".to_owned(), "annotations".to_owned()],
+        capabilities: vec![
+            "intended-rect".to_owned(),
+            "operations".to_owned(),
+            "annotations".to_owned(),
+        ],
     }
 }
 

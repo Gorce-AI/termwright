@@ -107,6 +107,12 @@ export class LogBuffer {
     if (this.#entries.length > this.#capacity) this.#entries.splice(0, this.#entries.length - this.#capacity);
   }
 
+  /** Advances the cursor for source events that were explicitly reported lost. */
+  omit(count: number): void {
+    if (!Number.isSafeInteger(count) || count <= 0) throw new TypeError('omitted log count must be a positive safe integer');
+    this.#counter += count;
+  }
+
   /**
    * Everything after `cursor`, newest-biased and bounded.
    *

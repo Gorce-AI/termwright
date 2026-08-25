@@ -4,9 +4,9 @@ import { gherkinPlugin } from '../../src/index.js';
 import ProviderReporter from './provider-reporter.js';
 
 export default defineConfig({
-  root: import.meta.dirname,
+  root: resolve(import.meta.dirname, '../../../..'),
   plugins: [gherkinPlugin({
-    featureRoot: 'features',
+    featureRoot: 'packages/gherkin/test-fixtures/direct/features',
     stepDefinitions: ['[filepath].steps.{ts,tsx,mts}'],
   })],
   resolve: {
@@ -27,7 +27,10 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['ordinary.test.ts', 'features/**/*.feature'],
+    include: [
+      'packages/gherkin/test-fixtures/direct/ordinary.test.ts',
+      'packages/gherkin/test-fixtures/direct/features/**/*.feature',
+    ],
     reporters: ['default', new ProviderReporter()],
   },
 });

@@ -11,14 +11,18 @@
  * Parameters (ready text, interaction, quit) come from `clients/README.md`,
  * which is where each adapter's example app documents itself.
  */
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runAdapterConformance } from '../adapter-conformance.js';
 import { pythonWith, repositoryPath } from '../support/pty.js';
 
 const PYTHON_APP = repositoryPath('clients', 'python', 'examples', 'permission_app.py');
+const PYTHON_SOURCE = repositoryPath('clients', 'python', 'src');
+const PYTHON_ENV = Object.freeze({
+  PYTHONPATH: [PYTHON_SOURCE, process.env['PYTHONPATH']].filter(Boolean).join(delimiter),
+});
 /** `null` when no interpreter here can import the client; the row then skips. */
-const PYTHON = pythonWith(['termwright', 'textual']);
+const PYTHON = pythonWith(['termwright', 'textual'], PYTHON_ENV);
 /** Built once by the toolchain probe, so no `go run` wrapper outlives a test. */
 const GO_BINARY = join(tmpdir(), 'termwright-conformance-tview');
 const GO_BASELINE = join(tmpdir(), 'termwright-conformance-tview-plain');
@@ -32,11 +36,13 @@ await runAdapterConformance({
   requires: {
     probe: [PYTHON ?? 'python3', '-c', 'import termwright, textual'],
     label: 'a python with termwright and textual installed',
+    env: PYTHON_ENV,
   },
   spawn: () => {
     const interpreter = PYTHON ?? 'python3';
     return {
       command: [interpreter, '-m', 'termwright_probe', '--', interpreter, PYTHON_APP],
+      env: PYTHON_ENV,
     };
   },
   ready: 'Permission required',
@@ -54,7 +60,7 @@ await runAdapterConformance({
   quit: { input: '\u0011', exitCode: 0 },
   columns: 80,
   rows: 24,
-  expectAbsoluteBounds: true,
+  expectIntendedGeometry: true,
 });
 
 await runAdapterConformance({
@@ -88,5 +94,5 @@ await runAdapterConformance({
   quit: { input: '\u0003', exitCode: 0 },
   columns: 80,
   rows: 24,
-  expectAbsoluteBounds: true,
+  expectIntendedGeometry: true,
 });

@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
+import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { canaryCheck, writeWorkspace } from './workspace.js';
 import {
   applyPatchSet,
@@ -40,17 +41,14 @@ const PATCH_SET = join(
 
 /** The pristine module in the Go cache, or null when it is not downloaded. */
 async function upstreamDir(): Promise<string | null> {
-  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return null;
-  try {
+  return goTestCapability(async () => {
     // Fetches when the cache is cold, which is every fresh CI runner.
     return await ensureUpstreamModule({
       module: 'github.com/rivo/tview',
       version: 'v0.42.0',
       cachePath: ['github.com', 'rivo', 'tview@v0.42.0'],
     });
-  } catch {
-    return null;
-  }
+  }, null, 'required upstream Go module');
 }
 
 /**
@@ -62,13 +60,10 @@ async function upstreamDir(): Promise<string | null> {
  * assuming it — the same question `workspace.test.ts` already asks.
  */
 async function goAvailable(): Promise<boolean> {
-  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;
-  try {
+  return goTestCapability(async () => {
     await run('go', ['version']);
     return true;
-  } catch {
-    return false;
-  }
+  }, false, 'Go certification toolchain');
 }
 
 const hasGo = await goAvailable();

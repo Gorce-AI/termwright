@@ -6,6 +6,12 @@ description: Retain terminal recordings, replay a run, create a self-contained r
 Traces retain the terminal recording, semantic revisions, test steps, actions,
 assertions, application logs, and crash metadata for one or more sessions.
 
+Trace publication is transactional. Termwright writes and fsyncs a staging
+directory, records checksums in `COMMITTED`, and only then atomically publishes
+the `.twtrace` directory. The Runner distinguishes complete, incomplete,
+corrupt, and unsupported-version artifacts instead of attempting a best-effort
+replay. Packaging likewise refuses an uncommitted trace.
+
 ## Choose a trace policy
 
 ```ts
@@ -38,21 +44,11 @@ same playhead.
 
 ## Generate an HTML report
 
-Add the reporter to Vitest:
-
-```ts
-import {defineConfig} from 'vitest/config';
-import TermwrightReporter from 'termwright/reporter';
-
-export default defineConfig({
-  test: {
-    reporters: ['default', new TermwrightReporter()],
-  },
-});
-```
-
-The report is a self-contained HTML file. It uses the same React viewer as the
-Runner but does not expose live-run, history, or file-system actions.
+Run tests with `termwright test`; the Native Host owns trace retention and the
+transactional run record. Direct `vitest run` is not a Termwright execution
+mode. A generated report is a self-contained HTML file. It uses the same React
+viewer as the Runner but does not expose live-run, history, or file-system
+actions.
 
 [![A self-contained HTML report showing retained terminal replay and failure evidence.](/termwright/images/runner/html-report.png)](/termwright/images/runner/html-report.png)
 

@@ -1,4 +1,4 @@
-import type { SemanticNode, SemanticSnapshot } from '@termwright/protocol';
+import type { Rect, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import { parseRef } from '../../commands.js';
 import type { ExecutionNode } from './model.js';
 
@@ -8,18 +8,16 @@ export interface TerminalHighlight {
   readonly revision: number | null;
   readonly role: string | null;
   readonly name: string | null;
-  readonly bounds?: SemanticNode['bounds'];
+  readonly bounds?: Rect;
   readonly reason: string | null;
   readonly pinned: boolean;
 }
 
 export function highlightSemanticNode(node: SemanticNode, snapshot: SemanticSnapshot, pinned: boolean): TerminalHighlight {
-  const bounds = snapshot.v === 2
-    ? qualifiedHighlightRect(node)
-    : node.bounds;
+  const bounds = qualifiedHighlightRect(node);
   return {
     sourceId: `semantic:${snapshot.revision}:${node.id}`,
-    targetRef: `${node.id}@${snapshot.revision}`,
+    targetRef: `semantic:${node.id}@${snapshot.revision}`,
     revision: snapshot.revision,
     role: node.role,
     name: node.name,
@@ -29,12 +27,10 @@ export function highlightSemanticNode(node: SemanticNode, snapshot: SemanticSnap
   };
 }
 
-function qualifiedHighlightRect(node: SemanticNode): SemanticNode['bounds'] | undefined {
+function qualifiedHighlightRect(node: SemanticNode): Rect | undefined {
   const geometry = node.geometry;
-  if (geometry === undefined) return undefined;
   if (geometry.visibleRect.status === 'known') return geometry.visibleRect.value;
-  if (geometry.visibleRect.status !== 'unsupported') return undefined;
-  return geometry.intendedRect.status === 'known' ? geometry.intendedRect.value : undefined;
+  return undefined;
 }
 
 export function highlightExecutionTarget(node: ExecutionNode, snapshot: SemanticSnapshot | null, pinned: boolean): TerminalHighlight | null {

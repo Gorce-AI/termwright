@@ -139,8 +139,10 @@ describe('developer intent merge', () => {
       role: 'textbox',
       name: 'Domain input',
       description: 'Provided by the application',
-      value: 'physical',
-      bounds: { row: 3, column: 4, width: 12, height: 1 },
+      value: expect.objectContaining({ status: 'known', value: 'physical', sensitivity: 'sensitive' }),
+      geometry: expect.objectContaining({
+        intendedRect: expect.objectContaining({ value: { row: 3, column: 4, width: 12, height: 1 } }),
+      }),
       state: { focused: true },
       extended: { environment: 'production' },
       actions: ['setValue'],
@@ -149,7 +151,7 @@ describe('developer intent merge', () => {
       p: 'recognizer',
       px: expect.objectContaining({
         name: 'annotation',
-        bounds: 'framework',
+        geometry: 'framework',
         state: 'framework',
         extended: 'annotation',
       }),
@@ -294,6 +296,19 @@ describe('naming', () => {
 });
 
 describe('physical facts stay the framework\'s', () => {
+  it('publishes authoritative absence for both geometry observations when display is false', () => {
+    const snapshot = recognize(
+      frameOf(object({ num: 1, state: { displayed: false } })),
+      context,
+    );
+
+    expect(snapshot.nodes[0]?.geometry).toMatchObject({
+      displayed: { status: 'known', value: false },
+      intendedRect: { status: 'absent', reason: 'not-displayed' },
+      visibleRect: { status: 'absent', reason: 'not-displayed' },
+    });
+  });
+
   it('takes bounds from geometry and records where they came from', () => {
     const snapshot = recognize(
       frameOf(
@@ -306,8 +321,8 @@ describe('physical facts stay the framework\'s', () => {
       context,
     );
 
-    expect(snapshot.nodes[0]?.bounds).toEqual({ row: 2, column: 3, width: 10, height: 4 });
-    expect(snapshot.nodes[0]?.px?.['bounds']).toBe('framework');
+    expect(snapshot.nodes[0]?.geometry?.intendedRect).toMatchObject({ status: 'known', value: { row: 2, column: 3, width: 10, height: 4 } });
+    expect(snapshot.nodes[0]?.px?.['geometry']).toBe('framework');
   });
 
   it('marks a node the clip removed as hidden rather than publishing an empty box', () => {
@@ -328,7 +343,7 @@ describe('physical facts stay the framework\'s', () => {
     expect(snapshot.nodes[0]?.state?.offscreen).toBe(true);
   });
 
-  it('clips intended bounds to the known terminal viewport', () => {
+  it('does not turn the terminal viewport into framework clipping evidence', () => {
     const snapshot = recognize(
       frameOf(
         object({
@@ -339,12 +354,13 @@ describe('physical facts stay the framework\'s', () => {
       context,
     );
 
-    expect(snapshot.nodes[0]?.bounds).toEqual({ row: 30, column: 3, width: 10, height: 0 });
-    expect(snapshot.nodes[0]?.state).toMatchObject({ hidden: true, offscreen: true });
+    expect(snapshot.nodes[0]?.geometry?.intendedRect).toMatchObject({ status: 'known', value: { row: 30, column: 3, width: 10, height: 4 } });
+    expect(snapshot.nodes[0]?.geometry?.visibleRect).toEqual({ status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' });
+    expect(snapshot.nodes[0]?.state).toBeUndefined();
     expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
   });
 
-  it('marks an intrinsically empty out-of-viewport node hidden, but not offscreen', () => {
+  it('does not infer display state from an empty intended rectangle', () => {
     const snapshot = recognize(
       frameOf(
         object({
@@ -355,7 +371,7 @@ describe('physical facts stay the framework\'s', () => {
       context,
     );
 
-    expect(snapshot.nodes[0]?.state).toEqual({ hidden: true });
+    expect(snapshot.nodes[0]?.state).toBeUndefined();
     expect(validateSnapshot(snapshot, DEFAULT_LIMITS).ok).toBe(true);
   });
 
@@ -365,7 +381,10 @@ describe('physical facts stay the framework\'s', () => {
       context,
     );
 
-    expect(snapshot.nodes[0]?.value).toBe('');
+    expect(snapshot.nodes[0]?.value).toEqual({
+      status: 'known', value: '', sensitivity: 'sensitive',
+      evidence: { source: 'framework', method: 'instrumented', strength: 'authoritative', providerId: 'opentui' },
+    });
   });
 
   it('maps focus and display straight through', () => {
@@ -446,7 +465,7 @@ describe('the protocol accepts what this produces', () => {
         state: { displayed: true },
         unobservable: ['visibleRect', 'paintOrder'],
       })),
-      { ...context, framework: 'ink', qualified: true },
+      { ...context, framework: 'ink' },
     );
 
     expect(snapshot).toMatchObject({

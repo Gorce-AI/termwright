@@ -1,7 +1,7 @@
 {
   "name": "@termwright/ink",
   "version": "0.2.0",
-  "description": "Optional in-app Ink annotations; most tests import component helpers from termwright/ink",
+  "description": "Ink annotations and component testing through mountInk or a real PTY fixture",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "exports": {
     ".": {
@@ -19,23 +19,27 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "runner"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm --dir ../.. test -- -- --run packages/ink"
   },
   "dependencies": {
+    "@termwright/driver": "workspace:*",
+    "@termwright/probe-ink": "workspace:*",
     "@termwright/protocol": "workspace:*"
   },
   "peerDependencies": {
-    "ink": ">=7.1.0",
+    "ink": "7.1.1",
     "react": ">=19.2.0"
   },
   "devDependencies": {
+    "@termwright/test": "workspace:*",
     "@types/react": "^19.2.18",
-    "ink": "^7.1.1",
+    "ink": "7.1.1",
     "react": "^19.2.8"
   }
 }

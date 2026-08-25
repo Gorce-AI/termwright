@@ -17,8 +17,9 @@ import { probeInfo, startSession, type ObservableRenderer, type ProbeSession } f
 import { connectProbe, type ProbeChannel } from '@termwright/probe-runtime';
 import { isInstrumented, type EnvSource } from './runtime.js';
 import type { AdapterCapability } from '@termwright/protocol';
-import { DEFAULT_LIMITS, ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN, PROTOCOL_V2_ID } from '@termwright/protocol';
+import { DEFAULT_LIMITS, ENV_ENDPOINT, ENV_TOKEN } from '@termwright/protocol';
 import { PACKAGE_VERSION } from './version.js';
+import { instrumentationSentinel } from './instrumentation.js';
 
 const ADAPTER_NAME = '@termwright/probe-opentui';
 const ADAPTER_VERSION = PACKAGE_VERSION;
@@ -32,9 +33,9 @@ const ADAPTER_VERSION = PACKAGE_VERSION;
  */
 const BASE_CAPABILITIES: readonly AdapterCapability[] = [
   'tree',
-  'bounds',
-  'absolute-bounds',
+  'intended-geometry',
   'states',
+  'focus-state',
   'actions',
   'render-revisions',
 ];
@@ -56,10 +57,11 @@ export interface BootstrapOptions {
 /**
  * Arm the probe.
  *
- * Returns immediately: the hooks are installed synchronously so no renderer can
- * be missed, while the connection is established in the background. A renderer
- * created before the handshake finishes still gets a session — its first
- * publication simply waits for the channel.
+ * Returns immediately. The hooks are installed synchronously, but the driver
+ * connection is deliberately deferred until the imported OpenTUI artifact has
+ * passed the exact-version checksum and installed its instrumentation sentinel.
+ * An unsupported or modified build keeps running without an adapter attachment;
+ * no weaker capability set is negotiated as a fallback.
  */
 export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
   const env = options.env ?? process.env;
@@ -71,47 +73,60 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
 
   const target = options.stdout ?? process.stdout;
   let sink: MarkerSink | undefined;
+  let connecting: Promise<void> | undefined;
+  let stopped = false;
+
+  const connectCertified = (): void => {
+    if (connecting !== undefined || stopped) return;
+    const sentinel = instrumentationSentinel();
+    if (sentinel === undefined) return;
+    connecting = connectProbe({
+      endpoint: env[ENV_ENDPOINT] as string,
+      token: env[ENV_TOKEN] as string,
+      probe: probeInfo(sentinel.frameworkVersion),
+      capabilities: [...BASE_CAPABILITIES, 'clipped-geometry', 'pointer-hit-grid'],
+      adapterName: ADAPTER_NAME,
+      adapterVersion: ADAPTER_VERSION,
+      ...(options.handshakeTimeoutMs === undefined
+        ? {}
+        : { handshakeTimeoutMs: options.handshakeTimeoutMs }),
+    })
+      .then((channel) => {
+        if (channel === null) return;
+        if (stopped) channel.close();
+        else state.channel = channel;
+      })
+      .catch(() => undefined);
+  };
 
   // The one chance to install a custom stdout. Without it OpenTUI writes frames
   // from a Zig thread and no byte reaches JS, so a marker has nothing to follow.
   const releaseConfig = onRendererConfig((config) => {
+    connectCertified();
     if (config['stdout'] !== undefined) return undefined;
     sink = createMarkerSink(target);
     return { ...config, stdout: sink };
   });
 
   const releaseRenderer = onRendererCreated((renderer) => {
+    if (instrumentationSentinel() === undefined) return;
+    connectCertified();
     state.session = startSession({
       renderer: renderer as ObservableRenderer,
       publisher: {
-        protocol: env[ENV_PROTOCOL] === PROTOCOL_V2_ID ? PROTOCOL_V2_ID : 'termwright/1',
         publish: (snapshot, metrics) => state.channel?.publish(snapshot, metrics),
       },
       ...(sink === undefined ? {} : { sink }),
       // Resolved per frame: the renderer can exist before the handshake does.
       sessionId: () => state.channel?.session.sessionId ?? 'pending',
       limits: () => state.channel?.session.limits ?? DEFAULT_LIMITS,
+      onGuaranteeViolation: (error) => {
+        state.channel?.fail('adapter-guarantee-violation', error.message);
+        state.session?.stop();
+        state.channel = null;
+      },
     });
   });
-
-  void connectProbe({
-    endpoint: env[ENV_ENDPOINT] as string,
-    token: env[ENV_TOKEN] as string,
-    probe: probeInfo(),
-    capabilities: env[ENV_PROTOCOL] === PROTOCOL_V2_ID
-      ? [...BASE_CAPABILITIES, 'qualified-observations', 'pointer-hit-grid']
-      : BASE_CAPABILITIES,
-    ...(env[ENV_PROTOCOL] === PROTOCOL_V2_ID ? { protocol: PROTOCOL_V2_ID } : {}),
-    adapterName: ADAPTER_NAME,
-    adapterVersion: ADAPTER_VERSION,
-    ...(options.handshakeTimeoutMs === undefined
-      ? {}
-      : { handshakeTimeoutMs: options.handshakeTimeoutMs }),
-  })
-    .then((channel) => {
-      state.channel = channel;
-    })
-    .catch(() => undefined);
 
   return {
     get channel() {
@@ -121,6 +136,7 @@ export function bootstrap(options: BootstrapOptions = {}): Bootstrap {
       return state.session;
     },
     stop() {
+      stopped = true;
       releaseConfig();
       releaseRenderer();
       state.session?.stop();

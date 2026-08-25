@@ -10,7 +10,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "exports": {
     ".": {
@@ -22,9 +22,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm --dir ../.. test -- -- --run packages/screenshot"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
@@ -34,6 +34,6 @@
   },
   "devDependencies": {
     "@types/fontkit": "^2.0.9",
-    "vitest": "^3.2.0"
+    "vitest": "4.1.11"
   }
 }

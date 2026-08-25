@@ -40,18 +40,29 @@ SEMANTIC_ACTIONS = (
 
 ADAPTER_CAPABILITIES = (
     "tree",
-    "bounds",
-    "absolute-bounds",
+    "intended-geometry",
+    "clipped-geometry",
     "states",
+    "focus-state",
     "actions",
+    "action-recipes",
     "text-ranges",
     "render-revisions",
-    "tree-diffs",
     "logs",
-    "qualified-observations",
     "pointer-hit-grid",
+)
+
+EVIDENCE_PROVIDER_CAPABILITIES = (
+    "pointer-regions",
+    "hit-test",
+    "focus-state",
+    "action-recipes",
+    "scroll-state",
+    "painted-regions",
+    "terminal-input-modes",
 )
 
 ROLE_SET = frozenset(SEMANTIC_ROLES)
 ACTION_SET = frozenset(SEMANTIC_ACTIONS)
 CAPABILITY_SET = frozenset(ADAPTER_CAPABILITIES)
+EVIDENCE_PROVIDER_CAPABILITY_SET = frozenset(EVIDENCE_PROVIDER_CAPABILITIES)

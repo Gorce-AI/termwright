@@ -108,6 +108,8 @@ export interface ProbeObservedState {
   readonly selected?: boolean;
   readonly busy?: boolean;
   readonly multiline?: boolean;
+  readonly required?: boolean;
+  readonly multiselectable?: boolean;
   /**
    * Whether the framework's own display flag is on. Distinct from being
    * scrolled out of view, which shows up as an empty `visibleRect`.
@@ -115,6 +117,8 @@ export interface ProbeObservedState {
   readonly displayed?: boolean;
   /** Contents of a value-bearing widget. `''` means empty, not absent. */
   readonly value?: string;
+  /** Explicit confidentiality classification. Omitted values default sensitive. */
+  readonly valueSensitivity?: 'public' | 'sensitive';
   /** Highlighted item in a collection, by index. Not a text selection. */
   readonly selectedIndex?: number;
   /** Selected text range within this object. Not an item selection. */
@@ -133,6 +137,8 @@ export const PROBE_UNOBSERVABLE_FIELDS = [
   'selected',
   'busy',
   'multiline',
+  'required',
+  'multiselectable',
   'displayed',
   'value',
   'selectedIndex',
@@ -173,6 +179,8 @@ export interface ProbeAnnotations {
   readonly extended?: import('../tree.js').SemanticExtendedState;
   /** Descriptive action intent; never callbacks or a second input channel. */
   readonly actions?: readonly import('../roles.js').SemanticAction[];
+  /** Production key bindings represented as data, never framework callbacks. */
+  readonly inputRecipes?: readonly import('../roles.js').PhysicalInputRecipe[];
   /** Probe identity values of author-declared labelling relationships. */
   readonly labelledBy?: readonly string[];
   /** Probe identity values of author-declared description relationships. */
@@ -250,22 +258,9 @@ export interface ProbeFrame {
 }
 
 /** Optional abilities a probe declares at handshake time. */
-export const PROBE_CAPABILITIES = [
-  /** Identities survive across frames and may be correlated. */
-  'stable-identity',
-  /** `visibleRect` is computed, not guessed. */
-  'visible-rect',
-  /** A render/layout call stream is reported. */
-  'operations',
-  /** Author annotations are readable. */
-  'annotations',
-  /** A frame-start signal is emitted. Absent for most frameworks — see below. */
-  'frame-begin',
-  /** `paintOrder` is reported, so occlusion can be reasoned about. */
-  'paint-order',
-] as const;
-
-export type ProbeCapability = (typeof PROBE_CAPABILITIES)[number];
+export { PROBE_CAPABILITIES } from '../capability-graph.js';
+export type { ProbeCapability } from '../capability-graph.js';
+import type { ProbeCapability } from '../capability-graph.js';
 
 /**
  * What a probe says about itself when it attaches.
@@ -305,6 +300,7 @@ export const PROVENANCE_SOURCES = [
   'annotation',
   'recognizer',
   'framework',
+  'application',
   'correlation',
   'heuristic',
 ] as const;

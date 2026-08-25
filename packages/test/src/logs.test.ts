@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LogLevel, LogRecord } from '@termwright/protocol';
-import type { SessionEvents } from '@termwright/driver';
+import type { SessionEventMap, SessionEventRecord, SessionEvents } from '@termwright/driver';
 import {
   MAX_CAPTURED_LOGS,
   logThresholdFailure,
@@ -187,6 +187,9 @@ describe('collectLogs', () => {
     emit: (event: 'app-log' | 'diagnostic', payload: unknown) => void;
   } {
     const listeners = new Map<string, ((payload: never) => void)[]>();
+    const journalListeners = new Set<(record: SessionEventRecord) => void>();
+    const journal: SessionEventRecord[] = [];
+    let sequence = 0;
     const harness = {
       sessionId: 'session-9',
       events: {
@@ -199,13 +202,33 @@ describe('collectLogs', () => {
             if (index !== -1) bucket.splice(index, 1);
           };
         },
-      } as unknown as SessionEvents,
+        checkpoint: () => sequence,
+        subscribe: (options: { fromSequence: number }, callback: (record: SessionEventRecord) => void) => {
+          for (const record of journal) {
+            if (record.sequence >= options.fromSequence) callback(record);
+          }
+          journalListeners.add(callback);
+          return () => journalListeners.delete(callback);
+        },
+      } satisfies SessionEvents,
     };
     return {
       harness,
-      emit: (event, payload) => (listeners.get(event) ?? []).forEach((listener) => listener(payload as never)),
+      emit: (event, payload) => {
+        const record = { sequence: ++sequence, type: event, payload } as SessionEventRecord;
+        journal.push(record);
+        for (const listener of journalListeners) listener(record);
+        for (const listener of listeners.get(event) ?? []) listener(payload as never);
+      },
     };
   }
+
+  it('replays application logs emitted before collection attaches', () => {
+    const { harness, emit } = fakeHarness();
+    emit('app-log', { source: 'file', timeMs: 1, line: 'startup' } satisfies SessionEventMap['app-log']);
+    const { collection } = collectLogs(harness);
+    expect(collection.all()).toEqual([expect.objectContaining({ sessionId: 'session-9', line: 'startup' })]);
+  });
 
   it('tags entries with the session and finds them by harness', () => {
     const { harness, emit } = fakeHarness();
@@ -299,6 +322,12 @@ describe('the failure threshold', () => {
     expect(message).toContain('may be incomplete');
     // Nothing lost, nothing to caveat.
     expect(describeLogThresholdFailure([record('error', 'x')], 'error', 0)).not.toContain('never reached');
+  });
+
+  it('refuses a clean certification when the only evidence is a log gap', () => {
+    const message = describeLogThresholdFailure([], 'error', 3);
+    expect(message).toContain('could prove the run clean');
+    expect(message).toContain('complete correctness log stream');
   });
 
   it('lists the offenders and how to turn the check off', () => {

@@ -1,17 +1,17 @@
 /**
  * The `termwright` binary.
  *
- * It is a dispatcher and nothing more. The runner belongs to
- * `@termwright/ui`, and the agent-facing surface — `agent-context`, `usage`,
- * `skill`, the MCP server itself — belongs to `@termwright/mcp`, which this
- * file *imports* rather than spawns. That is what keeps the two binaries from
- * drifting: there is one implementation of `agent-context`, one exit-code
- * taxonomy, and one JSON error shape, and this package owns none of them.
+ * It is the entry point to the Termwright-native host. Vitest remains the
+ * embedded collection/assertion engine; process identity, terminal resource
+ * budgets, attempt lifecycle and run persistence are owned here. The
+ * agent-facing surface — `agent-context`, `usage`, `skill`, and MCP — is
+ * imported from `@termwright/mcp` rather than reimplemented.
  *
  * Exit codes follow CONTRACTS.md §MCP: 0 ok / 1 assertion / 2 usage /
  * 3 no-session / 4 ipc / 5 internal.
  */
 
+import { GHERKIN_TAGS_ENV } from '@termwright/gherkin';
 import {
   buildAgentContext,
   buildAgentSkill,
@@ -25,18 +25,20 @@ import {
 } from '@termwright/mcp';
 import { launchDesktopHost, type DesktopHostHandle } from '@termwright/desktop-host';
 import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { openInBrowser, shouldOpenBrowser, startUiServer, writeInlineReport } from '@termwright/ui';
 import { captureScreenshot } from './screenshot-command.js';
 import { documentedCommands, parseArgs, type ParsedArgs } from './args.js';
 import {
   runUi,
-  startVitest,
+  startNativeHost,
   waitForInterrupt,
   type UiRuntime,
   type UiResult,
 } from './ui-command.js';
 import { CLI_NAME, CLI_VERSION } from './version.js';
 import { formatDoctor, runDoctor, type DoctorReport } from './doctor.js';
+import { TERMWRIGHT_RESOURCE_PROFILES, TermwrightTestHost, describeFailure, type RunCompletion, type TermwrightTestHostOptions } from './test-host.js';
 
 export type { CliIo };
 
@@ -61,19 +63,22 @@ export interface CliDeps {
     readonly env: Readonly<Record<string, string | undefined>>;
   };
   readonly doctor: (cwd: string) => Promise<DoctorReport>;
+  /** Certified native host factory; injectable so CLI unit tests spawn no workers. */
+  readonly openTestHost?: (options: TermwrightTestHostOptions) => Promise<Pick<TermwrightTestHost, 'requestRun' | 'watch' | 'close'>>;
 }
 
 /** The real collaborators. */
 export function defaultDeps(io: CliIo = defaultIo): CliDeps {
   return {
     io,
-    ui: { startUi: startUiServer, startVitest, waitForInterrupt },
+    ui: { startUi: startUiServer, startHost: startNativeHost, waitForInterrupt },
     runMcp: runMcpCli,
     cwd: process.cwd(),
     launchDesktop: (url) => launchDesktopHost({ url }),
     openBrowser: openInBrowser,
     processContext: { isTty: process.stdout.isTTY === true, env: process.env },
     doctor: runDoctor,
+    openTestHost: (options) => TermwrightTestHost.open(options),
   };
 }
 
@@ -126,6 +131,12 @@ export async function runCli(
         return report.ok ? EXIT_CODES.ok : EXIT_CODES.assertion;
       }
 
+      case 'test':
+        return await runNativeTests(args, deps, json);
+
+      case 'watch':
+        return await runNativeWatch(args, deps, json);
+
       case 'mcp':
         // Forwarded verbatim, `--json` included, so the delegate owns its own
         // flags and its own error rendering.
@@ -147,6 +158,124 @@ export async function runCli(
     if (!json && payload.suggestion !== undefined) io.err(`suggestion: ${payload.suggestion}`);
     return exitCodeFor(payload.kind);
   }
+}
+
+/**
+ * Publishes a run's tag filter to the workers that do the filtering.
+ *
+ * The Gherkin transform runs inside the runner's workers, not in the process
+ * that parsed the arguments, and the environment is what those workers
+ * inherit. The plugin composes this with whatever the project configured
+ * rather than replacing it.
+ */
+function applyTagFilter(tags: string | undefined): void {
+  if (tags === undefined) return;
+  process.env[GHERKIN_TAGS_ENV] = tags;
+}
+
+async function runNativeTests(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
+  applyTagFilter(args.tags);
+  const host = await (deps.openTestHost ?? TermwrightTestHost.open)({
+    cwd: deps.cwd,
+    runsDir: join(deps.cwd, '.termwright', 'runs'),
+    vitestArgs: args.rest,
+    resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[args.resourceProfile],
+  });
+  const completions: RunCompletion[] = [];
+  try {
+    for (let cycle = 0; cycle < args.runs; cycle += 1) {
+      const completion = await host.requestRun().completed;
+      completions.push(completion);
+      // An infrastructure failure means the persistent engine or one of its
+      // authoritative services is no longer certified. Repeating on that
+      // damaged host would create noise, not determinism evidence.
+      if (isInfrastructureState(completion.state)) break;
+    }
+  } finally {
+    await host.close();
+  }
+  const state = completions.reduce<RunCompletion['state']>(
+    (worst, completion) => worseRunState(worst, completion.state),
+    'passed',
+  );
+  if (json) {
+    deps.io.out(JSON.stringify({
+      invocationId: completions[0]?.invocationId,
+      state,
+      requestedRuns: args.runs,
+      completedRuns: completions.length,
+      resourceProfile: args.resourceProfile,
+      runs: completions.map((completion) => ({
+        runId: completion.runId,
+        state: completion.state,
+        tests: completion.catalog?.tests.length ?? 0,
+        failures: completion.failures,
+        ...(completion.error === undefined ? {} : { infrastructureError: describeFailure(completion.error) }),
+      })),
+    }));
+  } else {
+    for (const [index, completion] of completions.entries()) {
+      for (const failure of completion.failures) {
+        deps.io.err(`FAIL ${failure.file} > ${failure.fullName}`);
+        for (const error of failure.errors) deps.io.err(error);
+      }
+      if (completion.error !== undefined) deps.io.err(`INFRASTRUCTURE ${describeFailure(completion.error)}`);
+      deps.io.out(
+        `termwright ${completion.state} — run ${completion.runId} ` +
+        `(${completion.catalog?.tests.length ?? 0} tests, resources: ${args.resourceProfile}, cycle: ${index + 1}/${args.runs})`,
+      );
+    }
+  }
+  // A skipped/empty run is useful structured state for discovery and UI, but
+  // it is not certification evidence. Returning zero here lets a stale path,
+  // missing toolchain, or platform-wide skip turn a CI lane falsely green.
+  if (state === 'passed') return EXIT_CODES.ok;
+  if (state === 'failed' || state === 'flaky' || state === 'skipped') return EXIT_CODES.assertion;
+  return EXIT_CODES.internal;
+}
+
+function isInfrastructureState(state: RunCompletion['state']): boolean {
+  return state === 'infrastructure-failed' || state === 'incomplete' || state === 'crashed' || state === 'cancelled';
+}
+
+async function runNativeWatch(args: ParsedArgs, deps: CliDeps, json: boolean): Promise<number> {
+  applyTagFilter(args.tags);
+  const host = await (deps.openTestHost ?? TermwrightTestHost.open)({
+    cwd: deps.cwd,
+    runsDir: join(deps.cwd, '.termwright', 'runs'),
+    vitestArgs: args.rest,
+    resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[args.resourceProfile],
+  });
+  let worst: RunCompletion['state'] = 'passed';
+  const watching = host.watch({}, (completion) => {
+    worst = worseRunState(worst, completion.state);
+    if (completion.runId === watching.initial.runId) return;
+    deps.io.out(json
+      ? JSON.stringify({ invocationId: completion.invocationId, runId: completion.runId, state: completion.state, watching: true })
+      : `termwright watch — ${completion.runId}: ${completion.state}`);
+  });
+  try {
+    const initial = await watching.initial.completed;
+    deps.io.out(json
+      ? JSON.stringify({ invocationId: initial.invocationId, runId: initial.runId, state: initial.state, watching: true })
+      : `termwright watch ${initial.invocationId} — initial ${initial.runId}: ${initial.state}`);
+    worst = worseRunState(worst, initial.state);
+    if (initial.state === 'infrastructure-failed' || initial.state === 'incomplete') return EXIT_CODES.internal;
+    await deps.ui.waitForInterrupt();
+    if (worst === 'infrastructure-failed' || worst === 'incomplete' || worst === 'crashed') return EXIT_CODES.internal;
+    return worst === 'failed' || worst === 'flaky' ? EXIT_CODES.assertion : EXIT_CODES.ok;
+  } finally {
+    await watching.close();
+    await host.close();
+  }
+}
+
+function worseRunState(left: RunCompletion['state'], right: RunCompletion['state']): RunCompletion['state'] {
+  const severity: Record<RunCompletion['state'], number> = {
+    passed: 0, skipped: 1, cancelled: 2, flaky: 3, failed: 4,
+    crashed: 5, incomplete: 6, 'infrastructure-failed': 7,
+  };
+  return severity[right] > severity[left] ? right : left;
 }
 
 async function emitSkill(args: ParsedArgs, io: CliIo): Promise<number> {
@@ -375,6 +504,7 @@ async function launch(
     watch: args.watch,
     // In record mode `rest` is the recorded command, not runner arguments.
     rest: args.record ? [] : args.rest,
+    resourceProfile: args.resourceProfile,
     cwd: deps.cwd,
   };
   if (args.trace === undefined) return runUi(request, deps.ui, announce);

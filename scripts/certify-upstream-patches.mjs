@@ -28,9 +28,10 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { safeExtractTarGz } from './safe-tar.mjs';
 
 const exec = promisify(execFile);
 const scriptPath = fileURLToPath(import.meta.url);
@@ -205,8 +206,8 @@ function candidateKey(candidate) {
 export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(['go', 'rust'])) {
   const registryPath = join(root, 'compatibility/registry.json');
   const registry = JSON.parse(await readFile(registryPath, 'utf8'));
-  if (registry?.schemaVersion !== 1 || !Array.isArray(registry.frameworks)) {
-    throw new CertificationError('compatibility/registry.json is not schemaVersion 1');
+  if (registry?.schemaVersion !== 5 || !Array.isArray(registry.frameworks)) {
+    throw new CertificationError('compatibility/registry.json is not schemaVersion 5');
   }
   const declarations = new Map();
   for (const framework of registry.frameworks) {
@@ -214,44 +215,40 @@ export async function loadDeclarations(root = defaultRoot, ecosystems = new Set(
     if (
       !['stable', 'frame-local', 'correlated'].includes(framework.probe?.identityKind)
       || !Array.isArray(framework.probe?.capabilities)
-      || !Array.isArray(framework.probe?.adapterCapabilityVariants)
+      || !Array.isArray(framework.probe?.adapterCapabilities)
       || framework.probe.capabilities.some((capability) => typeof capability !== 'string')
-      || framework.probe.adapterCapabilityVariants.some(
-        (variant) => typeof variant?.when !== 'string'
-          || !Array.isArray(variant?.capabilities)
-          || variant.capabilities.some((capability) => typeof capability !== 'string'),
-      )
+      || framework.probe.adapterCapabilities.some((capability) => typeof capability !== 'string')
     ) {
       throw new CertificationError(`${framework.id} has an invalid capability declaration`);
     }
     const ecosystem = framework.id === 'ratatui' ? 'rust' : 'go';
     if (!ecosystems.has(ecosystem)) continue;
-    for (const variant of framework.instrumentation?.variants ?? []) {
-      for (const module of variant.modules ?? []) {
-        if (
-          typeof module.name !== 'string'
-          || typeof module.version !== 'string'
-          || !Number.isSafeInteger(module.patchSetVersion)
-          || module.patchSetVersion <= 0
-        ) {
-          throw new CertificationError(`${framework.id}/${variant.id} has an invalid module declaration`);
-        }
-        const key = `${module.name}@${module.version}`;
-        if (declarations.has(key)) throw new CertificationError(`duplicate compatibility declaration ${key}`);
-        declarations.set(key, {
-          ecosystem,
-          frameworkId: framework.id,
-          variantId: variant.id,
-          frameworkVersion: variant.frameworkVersion,
-          module: module.name,
-          version: module.version,
-          patchSetVersion: module.patchSetVersion,
-          optional: module.optional === true,
-          identityKind: framework.probe.identityKind,
-          probeCapabilities: framework.probe.capabilities,
-          adapterCapabilityVariants: framework.probe.adapterCapabilityVariants,
-        });
+    for (const module of framework.instrumentation?.patchSets ?? []) {
+      if (
+        typeof module.name !== 'string'
+        || typeof module.version !== 'string'
+        || !Number.isSafeInteger(module.patchSetVersion)
+        || module.patchSetVersion <= 0
+      ) {
+        throw new CertificationError(`${framework.id} has an invalid patch-set declaration`);
       }
+      const key = `${module.name}@${module.version}`;
+      if (declarations.has(key)) throw new CertificationError(`duplicate compatibility declaration ${key}`);
+      const executableVariants = (framework.instrumentation?.variants ?? [])
+        .filter((variant) => variant.modules?.some((entry) => entry.name === module.name && entry.version === module.version))
+        .map((variant) => variant.id)
+        .sort();
+      declarations.set(key, {
+        ecosystem,
+        frameworkId: framework.id,
+        executableVariants,
+        module: module.name,
+        version: module.version,
+        patchSetVersion: module.patchSetVersion,
+        identityKind: framework.probe.identityKind,
+        probeCapabilities: framework.probe.capabilities,
+        adapterCapabilities: framework.probe.adapterCapabilities,
+      });
     }
   }
   return { declarations, registryDigest: await sha256File(registryPath) };
@@ -448,63 +445,30 @@ async function goModule(root, candidate) {
   }
 }
 
-function cargoLockChecksum(lock, name, version) {
-  const sections = lock.split(/^\[\[package\]\]\s*$/mu).slice(1);
-  const matches = sections.filter((section) => {
-    const packageName = /^name = "([^"]+)"$/mu.exec(section)?.[1];
-    const packageVersion = /^version = "([^"]+)"$/mu.exec(section)?.[1];
-    return packageName === name && packageVersion === version;
-  });
-  if (matches.length !== 1) {
-    throw new CertificationError(`Cargo.lock contains ${matches.length} entries for ${name}@${version}`);
-  }
-  const checksum = /^checksum = "([0-9a-f]{64})"$/mu.exec(matches[0])?.[1];
-  if (checksum === undefined) throw new CertificationError(`${name}@${version} has no crates.io checksum in Cargo.lock`);
-  return `sha256:${checksum}`;
-}
-
-async function rustPackages(root) {
-  const manifestPath = join(root, 'clients/rust-ratatui/Cargo.toml');
-  const metadataResult = await run('cargo', ['metadata', '--format-version', '1', '--manifest-path', manifestPath], { cwd: root });
-  const metadata = JSON.parse(metadataResult.stdout);
-  const lock = await readFile(join(root, 'clients/rust-ratatui/Cargo.lock'), 'utf8');
-  return new Map(metadata.packages
-    .filter((entry) => entry.name === 'ratatui-core' || entry.name === 'ratatui-widgets')
-    .map((entry) => {
-      if (entry.source !== 'registry+https://github.com/rust-lang/crates.io-index') {
-        throw new CertificationError(`${entry.name}@${entry.version} is not the crates.io source`);
-      }
-      const sourceDir = dirname(entry.manifest_path);
-      const registryId = basename(dirname(sourceDir));
-      const registryRoot = dirname(dirname(dirname(sourceDir)));
-      return [`${entry.name}@${entry.version}`, {
-        ...entry,
-        checksum: cargoLockChecksum(lock, entry.name, entry.version),
-        archivePath: join(registryRoot, 'cache', registryId, `${entry.name}-${entry.version}.crate`),
-      }];
-    }));
-}
-
-async function rustCrate(root, candidate, packages) {
+async function rustCrate(root, candidate) {
   const { manifest, patchSetDir } = candidate;
-  const crate = packages.get(`${manifest.framework}@${manifest.frameworkVersion}`);
-  if (crate === undefined) throw new CertificationError(`${candidateKey(manifest)} is absent from Cargo metadata`);
   const scratch = await mkdtemp(join(tmpdir(), 'tw-upstream-rust-'));
   try {
-    // Cargo's registry source directory is a mutable cache. Bind the input to
-    // the lockfile by hashing the original `.crate`, then extract that verified
-    // archive into this run's private scratch directory.
-    const archiveDigest = await sha256File(crate.archivePath).catch(() => null);
-    if (archiveDigest !== crate.checksum) {
+    const metadataResponse = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(manifest.framework)}/${encodeURIComponent(manifest.frameworkVersion)}`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });
+    if (!metadataResponse.ok) throw new CertificationError(`${candidateKey(manifest)}: crates.io metadata failed with ${metadataResponse.status}`);
+    const metadata = await metadataResponse.json();
+    const published = metadata.version?.num === manifest.frameworkVersion ? metadata.version : undefined;
+    if (!/^[0-9a-f]{64}$/u.test(published?.checksum ?? '')) throw new CertificationError(`${candidateKey(manifest)}: crates.io returned no exact checksum`);
+    const archiveResponse = await fetch(`https://crates.io/api/v1/crates/${encodeURIComponent(manifest.framework)}/${encodeURIComponent(manifest.frameworkVersion)}/download`, { headers: { 'user-agent': 'termwright-compatibility-workflow/1' } });
+    if (!archiveResponse.ok) throw new CertificationError(`${candidateKey(manifest)}: crates.io archive failed with ${archiveResponse.status}`);
+    const archive = Buffer.from(await archiveResponse.arrayBuffer());
+    const archiveDigest = sha256(archive);
+    const checksum = `sha256:${published.checksum}`;
+    if (archiveDigest !== checksum) {
       throw new CertificationError(
-        `${candidateKey(manifest)}: crates.io archive hashes ${archiveDigest ?? 'missing'}, expected ${crate.checksum}`,
+        `${candidateKey(manifest)}: crates.io archive hashes ${archiveDigest}, expected ${checksum}`,
       );
     }
     const registrySource = join(scratch, 'registry-source');
     await mkdir(registrySource);
-    await run('tar', ['-xzf', crate.archivePath, '-C', registrySource], { cwd: root });
+    await safeExtractTarGz(archive, registrySource);
     const extracted = await readdir(registrySource, { withFileTypes: true });
-    const expectedDirectory = `${crate.name}-${crate.version}`;
+    const expectedDirectory = `${manifest.framework}-${manifest.frameworkVersion}`;
     if (
       extracted.length !== 1
       || extracted[0].name !== expectedDirectory
@@ -536,9 +500,9 @@ async function rustCrate(root, candidate, packages) {
     return {
       material: {
         source: 'crates.io',
-        crate: crate.name,
-        version: crate.version,
-        checksum: crate.checksum,
+        crate: manifest.framework,
+        version: manifest.frameworkVersion,
+        checksum,
         archiveDigest,
         upstreamTreeDigest,
         sourceBinding: 'lockfile-checksum-matched-crate-archive',
@@ -578,16 +542,14 @@ function candidateRecord(root, candidate, local, execution) {
     id: candidateKey(manifest),
     ecosystem,
     frameworkId: declaration.frameworkId,
-    variantId: declaration.variantId,
-    frameworkVersion: declaration.frameworkVersion,
+    executableVariants: declaration.executableVariants,
     module: manifest.framework,
     upstreamVersion: manifest.frameworkVersion,
     patchSetVersion: manifest.patchSetVersion,
-    optional: declaration.optional,
     identityKind: declaration.identityKind,
     capabilities: {
       probe: declaration.probeCapabilities,
-      adapterVariants: declaration.adapterCapabilityVariants,
+      adapter: declaration.adapterCapabilities,
     },
     patchSetPath: relative(root, patchSetDir).split(sep).join('/'),
     patchSetDigest: local.patchSetDigest,
@@ -662,9 +624,13 @@ export function sanitizeFailureMessage(error, root = defaultRoot, outputDir) {
   // Keep the diagnostic useful while making failure evidence portable and
   // safe to upload from a developer machine.
   message = message
-    .replace(/file:\/\/\/[^\s"'<>]*/gmu, 'file://<absolute-path>')
+    // A Windows file URL is `file://C:\path`, with two slashes — requiring
+    // three left the drive-qualified path in the message, and the bare
+    // drive-letter rule below could not catch it either because the character
+    // before `C:` is a slash rather than whitespace.
+    .replace(/file:\/\/\/?[^\s"'<>]*/gmu, 'file://<absolute-path>')
     .replace(/(^|[\s"'=(])\/(?!\/)[^\s"'<>]*/gmu, '$1<absolute-path>')
-    .replace(/(^|[\s"'=(])[A-Za-z]:\\[^\s"'<>]*/gmu, '$1<absolute-path>');
+    .replace(/(^|[\s"'=(])[A-Za-z]:[\\/][^\s"'<>]*/gmu, '$1<absolute-path>');
   return message.slice(-12_000);
 }
 
@@ -722,13 +688,12 @@ export async function certify(options = {}) {
     const { declarations, registryDigest } = await loadDeclarations(root, ecosystems);
     const candidates = crossCheckDeclarations(patchSets, declarations);
     const toolchains = await collectToolchains(root, ecosystems);
-    const rust = ecosystems.has('rust') ? await rustPackages(root) : new Map();
     const records = [];
     for (const candidate of candidates) {
       const local = await validatePatchSetFiles(candidate);
       const execution = candidate.ecosystem === 'go'
         ? await goModule(root, candidate)
-        : await rustCrate(root, candidate, rust);
+        : await rustCrate(root, candidate);
       records.push(candidateRecord(root, candidate, local, execution));
     }
 

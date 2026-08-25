@@ -13,6 +13,6 @@ editUrl: false
 
 > **TextMatcher** = \{ `kind`: `"exact"`; `text`: `string`; \} \| \{ `kind`: `"substring"`; `text`: `string`; \} \| \{ `kind`: `"regex"`; `source`: `RegExp`; \}
 
-Defined in: [selectors.ts:17](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L17)
+Defined in: [driver/src/selectors.ts:15](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/selectors.ts#L15)
 
 How a piece of text is compared.

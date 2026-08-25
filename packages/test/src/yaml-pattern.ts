@@ -48,7 +48,7 @@ export interface NodePattern {
 const STATE_KEYS: ReadonlySet<string> = new Set<keyof SemanticState>([
   'disabled', 'focused', 'selected', 'checked', 'expanded', 'modal', 'busy',
   'hidden', 'readonly', 'multiline', 'orientation', 'level', 'positionInSet',
-  'setSize', 'scrollOffset', 'scrollExtent',
+  'setSize',
 ]);
 
 const HEAD =

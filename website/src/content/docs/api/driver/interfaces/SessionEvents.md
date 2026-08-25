@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SessionEvents
 
-Defined in: [api.ts:538](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L538)
+Defined in: [driver/src/api.ts:826](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L826)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -32,11 +32,25 @@ await terminal.close();
 
 ## Methods
 
+### checkpoint()
+
+> **checkpoint**(): `number`
+
+Defined in: [driver/src/api.ts:833](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L833)
+
+Last sequence assigned by the source journal. Zero means no event yet.
+
+#### Returns
+
+`number`
+
+***
+
 ### on()
 
 > **on**\<`E`\>(`event`, `cb`): () => `void`
 
-Defined in: [api.ts:539](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L539)
+Defined in: [driver/src/api.ts:827](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L827)
 
 #### Type Parameters
 
@@ -53,6 +67,33 @@ Defined in: [api.ts:539](https://github.com/Gorce-AI/termwright/blob/main/packag
 ##### cb
 
 (`payload`) => `void`
+
+#### Returns
+
+() => `void`
+
+***
+
+### subscribe()
+
+> **subscribe**(`options`, `cb`): () => `void`
+
+Defined in: [driver/src/api.ts:841](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L841)
+
+Subscribes to the single ordered session stream and replays retained
+events starting at `fromSequence` before switching to live delivery.
+A requested prefix that exceeded the bounded journal is never hidden:
+`onGap` runs first, or subscription throws when no gap handler is given.
+
+#### Parameters
+
+##### options
+
+[`SessionEventSubscriptionOptions`](../sessioneventsubscriptionoptions/)
+
+##### cb
+
+(`event`) => `void`
 
 #### Returns
 

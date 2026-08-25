@@ -11,7 +11,7 @@ editUrl: false
 
 # Class: AmbiguousLocatorError
 
-Defined in: [errors.ts:64](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L64)
+Defined in: [driver/src/errors.ts:80](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L80)
 
 Strict-mode violation: a locator matched more than one node.
 
@@ -25,7 +25,7 @@ Strict-mode violation: a locator matched more than one node.
 
 > **new AmbiguousLocatorError**(`message`, `candidates`, `diagnostics`): `AmbiguousLocatorError`
 
-Defined in: [errors.ts:65](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L65)
+Defined in: [driver/src/errors.ts:81](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L81)
 
 #### Parameters
 
@@ -35,7 +35,7 @@ Defined in: [errors.ts:65](https://github.com/Gorce-AI/termwright/blob/main/pack
 
 ##### candidates
 
-readonly [`ResolvedTarget`](../../interfaces/resolvedtarget/)[]
+readonly [`ResolvedTarget`](../../interfaces/resolvedtarget/)\<[`LocatorDomain`](../../type-aliases/locatordomain/)\>[]
 
 ##### diagnostics
 
@@ -51,11 +51,23 @@ readonly [`ResolvedTarget`](../../interfaces/resolvedtarget/)[]
 
 ## Properties
 
+### actionability?
+
+> `optional` **actionability?**: [`ActionabilityExplanation`](../../interfaces/actionabilityexplanation/)
+
+Defined in: [driver/src/errors.ts:22](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L22)
+
+#### Inherited from
+
+[`TermwrightError`](../termwrighterror/).[`actionability`](../termwrighterror/#actionability)
+
+***
+
 ### code
 
 > `readonly` **code**: [`TermwrightErrorCode`](../../type-aliases/termwrighterrorcode/)
 
-Defined in: [errors.ts:19](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L19)
+Defined in: [driver/src/errors.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L20)
 
 #### Inherited from
 
@@ -67,7 +79,7 @@ Defined in: [errors.ts:19](https://github.com/Gorce-AI/termwright/blob/main/pack
 
 > `readonly` **diagnostics**: [`ErrorDiagnostics`](../../interfaces/errordiagnostics/)
 
-Defined in: [errors.ts:20](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L20)
+Defined in: [driver/src/errors.ts:21](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L21)
 
 #### Inherited from
 
@@ -79,7 +91,7 @@ Defined in: [errors.ts:20](https://github.com/Gorce-AI/termwright/blob/main/pack
 
 > **toString**(): `string`
 
-Defined in: [errors.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L30)
+Defined in: [driver/src/errors.ts:38](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L38)
 
 Renders message + diagnostics the way test runners print failures.
 
@@ -90,3 +102,27 @@ Renders message + diagnostics the way test runners print failures.
 #### Inherited from
 
 [`TermwrightError`](../termwrighterror/).[`toString`](../termwrighterror/#tostring)
+
+***
+
+### withActionability()
+
+> **withActionability**(`explanation`): `this`
+
+Defined in: [driver/src/errors.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/errors.ts#L32)
+
+Attach the exact failed planner evaluation; never recomputed after state changes.
+
+#### Parameters
+
+##### explanation
+
+[`ActionabilityExplanation`](../../interfaces/actionabilityexplanation/)
+
+#### Returns
+
+`this`
+
+#### Inherited from
+
+[`TermwrightError`](../termwrighterror/).[`withActionability`](../termwrighterror/#withactionability)

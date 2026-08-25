@@ -1,271 +1,177 @@
 ---
-title: Protocol v1 and v2
-description: The semantic wire protocol — transport, handshake, framing, the render marker, the data model and its ceilings.
+title: Semantic protocol
+description: Transport, handshake, full snapshots, render markers, validation, and protocol ceilings.
 ---
 
-The protocol is language-neutral, and `@termwright/protocol` is its normative
-implementation: where a client differs from it, the client is wrong. Everything
-here **fails closed** — untrusted input is rejected with a typed violation, never
-partially accepted.
+The semantic protocol connects an in-process framework probe to the Termwright
+driver. `@termwright/protocol` is the normative implementation. Other language
+clients must produce the same wire shapes and validation outcomes.
 
-## Protocol majors
-
-`termwright/2` is the default protocol. `termwright/1` is available only through
-an explicit compatibility option for existing adapters. Its optional
-`bounds` field is a legacy, unqualified projection; paint-order knowledge is
-not pointer ownership.
-
-`termwright/2` requires `qualified-observations` and snapshot `v: 2`. Nodes
-carry separate evidence-qualified `displayed`, `intendedRect` and `visibleRect`
-facts. The snapshot carries its coordinate space and an explicit `hitGrid`
-observation. A known grid additionally requires `pointer-hit-grid`. The driver
-echoes the selected major and rejects mixed-major traffic. See
-[Geometry, visibility and pointer ownership](../geometry-visibility/).
+Termwright has one current protocol id: `termwright/2`. A snapshot always has
+`v: 2`, evidence-qualified geometry, a coordinate-space observation, and a
+pointer hit-grid observation. Missing evidence is represented explicitly; it
+is never projected into a guessed boolean or rectangle.
 
 ## Transport and lifecycle
 
-The driver creates a private endpoint **before** it spawns the child: a unix
-socket in a `0700` temporary directory on macOS and Linux, or a named pipe with
-an unguessable name on Windows. Never TCP.
+The driver creates a private endpoint before spawning the child: a Unix socket
+inside a mode-`0700` temporary directory on macOS and Linux, or an unguessable
+named pipe on Windows. The semantic channel never listens on TCP.
 
-Three variables are injected into the child:
+The child receives two variables:
 
 | Variable | Meaning |
-|---|---|
-| `TERMWRIGHT_ENDPOINT` | the socket or pipe path |
-| `TERMWRIGHT_TOKEN` | 256 bits of randomness, opaque |
-| `TERMWRIGHT_PROTOCOL` | `termwright/2` by default; `termwright/1` only for an explicit compatibility session |
+| --- | --- |
+| `TERMWRIGHT_ENDPOINT` | Unix socket or named-pipe path |
+| `TERMWRIGHT_TOKEN` | Opaque 256-bit session secret |
 
-Without them an adapter is [dormant](../../adapters/writing-an-adapter/): it
-opens nothing and the run is byte-identical to an uninstrumented one.
+Without both values, a probe stays dormant: it opens no connection, writes no
+marker, and does not change the application's terminal output.
 
-The handshake is a bounded `hello` carrying the token, the protocol version, the
-producer identity and an adapter capability list. A framework probe additionally
-sends `probe {framework, frameworkVersion?, probeVersion, identityKind,
-capabilities}`. Adapter capabilities describe wire traffic such as trees,
-bounds, diffs and logs; probe capabilities describe observable framework facts
-such as stable identity, visible rectangles, annotations and paint order. The
-driver replies with the selected version, session limits and marker
-configuration. No valid hello inside the negotiation window (250 ms by default)
-means `semanticTree: false` and a generic session; a late or malformed hello
-never flips an already-selected mode.
+The probe sends one bounded `hello` containing:
+
+- protocol id `termwright/2`;
+- the token;
+- a non-empty adapter name and version;
+- capabilities for optional traffic and authoritative observations such as
+  `intended-geometry`, `clipped-geometry`, or `pointer-hit-grid`;
+- probe metadata when the sender is a framework probe.
+
+The driver replies with `hello-ack`, the same protocol id, a session id, active
+limits, the snapshot subscription, marker configuration, and an optional log
+budget. A malformed, rejected, or late handshake does not turn a generic
+terminal session into a semantic session.
 
 ## Framing
 
-A 4-byte big-endian length prefix followed by UTF-8 JSON. The declared length is
-checked against the ceiling **before** any body is read, so a four-byte header
-claiming 4 GB costs four bytes. Partial frames are buffered and never emitted; a
-violation poisons the decoder permanently rather than resynchronising on an
-attacker-chosen offset.
+Every socket message is UTF-8 JSON preceded by a four-byte big-endian length.
+The receiver checks the declared length before reading the body. Partial frames
+are buffered and never emitted. A framing violation poisons the decoder instead
+of attempting to resynchronise at an attacker-controlled byte offset.
 
-Every decoded value is projected into an immutable plain DTO. The projection
-walks the graph with property descriptors and rejects accessors, proxies, symbol
-keys, exotic prototypes, reserved keys such as `__proto__`, sparse arrays,
-aliases and cycles, non-finite numbers, and unpaired surrogates. **A getter on
-hostile input is detected without being invoked.** The result is a deep-frozen
-copy sharing no references with the input.
+Decoded values are projected into immutable plain data. Projection rejects
+accessors, proxies, symbol keys, exotic prototypes, reserved keys, sparse
+arrays, aliases, cycles, non-finite numbers, and unpaired surrogates. The
+validated result shares no mutable references with the input.
 
-## Message model
+## Full snapshot stream
 
-Three kinds of traffic on one channel, CDP-style:
+Each committed semantic revision uses a complete snapshot. The producer sends:
 
-1. **adapter push** — `revision-commit {revision}` after each committed render,
-   and optionally changed subtrees once the diff capability is negotiated;
-2. **driver request/response** — `getTree {revision?}`, `getNode {id}`;
-3. **subscriptions** — the driver declares whether it wants full snapshots,
-   diffs, or bare revision numbers.
+1. `snapshot { snapshot }`;
+2. `revision-commit { revision }`;
+3. the authenticated terminal marker after the rendered terminal bytes have
+   been flushed.
 
-Full snapshots after each commit are the baseline. Deltas are negotiated, and
-every delta binds an exact base revision — any gap forces a full rehydrate.
+The driver may subscribe to `revisions` when it does not need trees. Otherwise
+the producer sends a full snapshot for every semantic revision.
 
-## Tree deltas
+The full snapshot is the recovery boundary by construction. A receiver can
+validate and retain each revision independently without composing it with
+earlier application state.
 
-An adapter that announces the `tree-diffs` capability can subscribe the driver
-to `tree-delta` messages instead of a full snapshot after each commit. A
-semantic tree changes on nearly every keystroke, and resending all of it each
-time is what makes the semantic channel expensive — so **an adapter that offers
-deltas gets them by default**.
+## Render marker
 
-```ts
-import {applyTreeDelta, validateTreeDelta} from '@termwright/protocol';
+The stdout marker commits a rendered frame; it is not a data channel.
 
-const checked = validateTreeDelta(body, limits);        // shape only
-if (!checked.ok) return closeWith('malformed', checked.detail);
-
-const composed = applyTreeDelta(held, checked.delta, limits);
-if (!composed.ok) {
-  // Never patch around a mismatch — ask for the whole tree instead.
-  if (composed.code === 'revision') return requestFullTree();
-  return closeWith('malformed', composed.detail);
-}
-```
-
-### Composition rules
-
-Normative — every adapter and every client must agree on all four, or two
-implementations will hold different trees while both believe they are correct:
-
-1. **`changed` upserts by id, replacing a node wholesale.** Never field-merged:
-   merging would need a third state meaning "unset this optional field", which
-   the wire cannot express.
-2. **`removed` removes each id together with its subtree.** The cascade is what
-   keeps deltas small — dropping a dialog is one id, not one per descendant —
-   and it is the only rule that cannot leave orphans behind.
-3. **`rootIds`, when present, replaces the root list.** When absent, the base
-   roots carry over minus anything removed. So *introducing a new root requires
-   sending `rootIds`*; otherwise the parentless node is missing from the root
-   list and validation rejects it.
-4. **Removals apply before upserts**, so a single delta can rescue a node out of
-   a subtree it also removes.
-
-`cursor`, when present, replaces the cursor; absent means **unchanged**. Without
-that rule a diffs-only session could never move the cursor — which in a TUI
-moves on nearly every keystroke — making the mode useless for exactly the
-interactive applications it exists to make cheap.
-
-:::caution[A delta can set the cursor but cannot clear it]
-`{visible: false}` means there is a cursor and it is hidden. An absent `cursor`
-on a snapshot means there is no cursor information at all. Those differ, so a
-producer whose tree loses its cursor entirely **must send a full snapshot**.
-:::
-
-### When a delta cannot be composed
-
-The driver asks for a full tree (`get-tree`) and ignores further deltas until it
-arrives. That is reported as **`delta-resync`**, not as a dropped revision:
-nothing was lost, and a repair should not read like damage. The last good tree
-stays observable throughout.
-
-If you suspect deltas are involved in a bug, take them out of the picture:
-
-```ts
-await terminal.launch({command, treeUpdates: 'snapshots'});
-```
-
-That declines deltas from an adapter that offers them, so the session behaves
-exactly as it did before deltas existed. It is the switch to reach for when a
-replay and a live session disagree and the delta path is a suspect.
-
-## The render marker
-
-The stdout marker is a **frame commit, not a data channel**. The adapter emits
-it after the last byte of the render for revision N, and its payload is N plus a
-MAC, so ordinary program output cannot forge one.
-
-```
+```text
 ESC ] 8487 ; twm;{revision};{mac} BEL
 ```
 
-The MAC is `base64url(HMAC-SHA256(token, "{sessionId}:{revision}"))` truncated to
-16 bytes. Comparison is constant-time; revisions must be canonical decimal (`01`
-is not `1`); and the MAC binds both session and revision, so it cannot be
-replayed across either.
+`mac` is the base64url encoding of
+`HMAC-SHA256(token, "{sessionId}:{revision}")`, truncated to 16 bytes.
+Comparison is constant-time. Revision text must be canonical decimal, and the
+MAC binds both the session and revision.
 
-A private OSC number is used because a cross-platform PTY probe found ConPTY
-drops DCS, APC and OSC 8 while forwarding private OSC and OSC 133. One encoding
-is used on every platform. BEL is the emitted terminator because it was the most
-reliable form in that probe; parsers may still pass a trailing BEL or ST to the
-verifier.
-
-:::caution[The trap when integrating with a VT parser]
-Register an OSC handler for code `8487`. The parser consumes the OSC number and
-separator; pass the remaining `twm;{revision};{mac}` payload directly to the
-verifier. Registering the removed DCS handler or prepending a DCS final byte
-makes every current marker disappear.
-:::
+Register an OSC handler for code `8487` and pass the remaining payload to
+`verifyMarkerPayload`:
 
 ```ts
 import {MARKER_OSC_CODE, verifyMarkerPayload} from '@termwright/protocol';
 
-term.parser.registerOscHandler(MARKER_OSC_CODE, (data) => {
+terminal.parser.registerOscHandler(MARKER_OSC_CODE, (data) => {
   const marker = verifyMarkerPayload(data, token, sessionId);
   if (marker !== null) commit(marker.revision);
-  return true; // consumed: keeps the sequence out of the visible grid
+  return true;
 });
 ```
 
-The driver publishes revision N only when it holds **both** the tree for N and
-the grid state at marker N. Waits are bounded in both directions; superseded
-incomplete revisions are dropped with a diagnostic; on process exit the last
-fully paired revision is published.
+The driver exposes revision N only after it has both the complete semantic
+snapshot for N and the terminal grid at marker N. Superseded incomplete pairs
+are discarded with a diagnostic.
 
-## The data model
+## Snapshot model
 
-A v2 snapshot carries a session id, revision, viewport, coordinate space,
-`rootIds`, nodes, an evidence-qualified `hitGrid`, and optionally a cursor. A
-node carries identity and hierarchy, role and name, optional description and
-value, portable state, application-owned `extended` JSON, action hints,
-relationships, text ranges, `testId`, and evidence-qualified display and
-geometry observations. Intended and visible rectangles are separate facts.
+A `SemanticSnapshot` contains:
 
-An unrecognised widget survives as `role: 'generic'` and carries its native
-`frameworkType` rather than disappearing from the tree.
+- `v: 2`, `sessionId`, and a positive `revision`;
+- terminal `columns` and `rows`;
+- `rootIds` and a complete `nodes` array;
+- an optional cursor;
+- `coordinateSpace: Observation<CoordinateSpace>`;
+- `hitGrid: Observation<PointerHitGrid>`.
 
-`p` records the node's primary provenance and `px` records per-field
-exceptions. Both use the closed set `annotation | recognizer | framework |
-correlation | heuristic`. Legacy v1 `occlusion: known` means only that paint
-order was observable. It does **not** identify the topmost input recipient and
-cannot vouch for pointer targeting. The driver never treats v1 bounds as
-qualified terminal-cell evidence. Current consumers use the observations described in
-[Geometry, visibility and pointer ownership](../geometry-visibility/).
+Each `SemanticNode` contains identity, hierarchy, role, name, optional value and
+description, portable state, application-owned `extended` JSON, action hints,
+relationships, text ranges, a test id, provenance, and required geometry:
 
-Validation enforces: unique ids, parents that exist, acyclic parent chains,
-depth / count / byte ceilings, UTF-8 byte bounds on strings, safe-integer rects
-that intersect the viewport unless the node is hidden, a positive revision, and
-a closed role, action, state and provenance vocabulary. It also bounds extended
-JSON and relationship targets. Unknown properties are rejected, not ignored,
-and checks run cheapest-first so an oversized snapshot is rejected before any
-per-node work.
+```ts
+interface NodeGeometryObservations {
+  displayed: Observation<boolean>;
+  intendedRect: Observation<Rect>;
+  visibleRect: Observation<Rect>;
+}
+```
 
-Two invariants are stricter than the prose spec and every adapter must satisfy
-them: **every node without a `parentId` must appear in `rootIds`**, and
-**`labelledBy` / `describedBy` must reference nodes present in the same
-snapshot**.
+An unrecognised framework widget uses `role: 'generic'` and must include its
+native `frameworkType`.
 
-### Legacy v1 bounds
+`p` records a node's primary provenance and `px` records per-field exceptions.
+The provenance vocabulary is closed: `annotation`, `recognizer`, `framework`,
+`correlation`, or `heuristic`.
 
-V1 may carry an unqualified `bounds` field. The v2 driver does not project that
-field into `geometry()`, `visibility()`, or pointer ownership. A v1 compatibility
-session therefore keeps non-geometric locators and keyboard input, while
-qualified geometry matchers and semantic pointer actions remain unavailable.
+See [Geometry, visibility and pointer ownership](../geometry-visibility/) for
+observation states and the exact pointer-ownership contract.
 
-V2 producers publish `intendedRect`, `visibleRect`, and `hitGrid` observations
-directly. Missing evidence is represented as `unknown` or `unsupported`, not by
-reusing a legacy rectangle.
+## Snapshot validation
 
-### Roles
+`validateSnapshot` checks untrusted data before it is retained. It enforces:
 
-The role set is closed and ARIA-aligned, which keeps a future AccessKit / AT-SPI
-bridge possible. Resolution is a three-level fallback, normative for all
-adapters: an explicit author annotation, then the framework's widget-type map,
-then `generic`.
+- the literal snapshot version `2`;
+- unique node ids and root ids;
+- existing parents and acyclic parent chains;
+- every parentless node appearing in `rootIds`;
+- relationships targeting nodes in the same snapshot;
+- bounded depth, counts, strings, JSON data, and encoded bytes;
+- safe-integer rectangles and canonical hit-grid runs;
+- a positive revision and valid cursor coordinates;
+- closed role, action, state, observation, and provenance vocabularies;
+- rejection of unknown properties.
 
-## Ceilings
+Validation checks size ceilings before per-node work. Failures return a stable
+code and detail rather than a partially accepted tree.
 
-Absolute limits on tree depth, node count, byte size, frame size, in-flight
-frames, waiters and sessions; flood eviction with an explicit retained floor;
-typed outcomes for disconnect, crash, partial, duplicate and mismatch; and
-exactly-once settlement for every waiter. Token values are redacted from every
-diagnostic and never echoed.
+## Protocol limits
 
-Hostile-input suites run under `node --max-old-space-size=128`, so a
-resource-exhaustion case fails closed instead of passing by virtue of a large
-default heap.
+The handshake supplies the active `ProtocolLimits`. A driver may tighten the
+published defaults but cannot widen the absolute ceilings. Limits cover frame
+and snapshot bytes, tree depth, node count, string bytes, relation targets,
+in-flight work, waits, and structured logs.
+
+Driver messages are tolerant of unknown additive fields so a published client
+can continue talking to a newer driver. Adapter messages remain strict because
+they cross an untrusted boundary. Known fields and closed vocabularies keep
+their exact types in both directions.
 
 ## Cross-language vectors
 
-`clients/test-vectors/` holds fixtures generated from the reference
-implementation — exact frame bytes per message, byte-at-a-time decoding, hostile
-frames with their violation codes, marker sequences byte for byte including a
-non-ASCII token, forgeries that must not verify, and valid and invalid trees
-with their validation codes.
-
-The generator re-runs every expectation through the reference implementation
-before writing, so a stale or hand-edited vector fails at generation time.
+`clients/test-vectors/` contains fixtures generated from the TypeScript
+reference implementation: frame bytes, hostile frames and error codes, marker
+sequences, observation cases, and valid and invalid v2 snapshots. The generator
+re-validates each expectation before writing it.
 
 ## Versioning
 
-The protocol version is negotiated in the handshake and every language client
-is bound to it. Additive changes stay within the selected major. A change that
-invalidates an existing producer frame requires a new protocol major rather
-than a patch-level reinterpretation.
+`PROTOCOL_ID` is `termwright/2` and `PROTOCOL_VERSION` is `2`. Additive changes
+must remain readable by existing v2 clients. A change that invalidates a valid
+v2 producer frame requires a future protocol major.

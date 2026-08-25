@@ -47,7 +47,6 @@ export default defineConfig({
 					collapsed: true,
 					items: [
 						{label: 'Migrate to Termwright', slug: 'guides/migrating'},
-						{label: 'Version migration', slug: 'guides/version-migration'},
 					],
 				},
 				{

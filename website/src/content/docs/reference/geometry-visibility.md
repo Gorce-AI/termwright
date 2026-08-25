@@ -6,10 +6,10 @@ description: Evidence-qualified terminal layout assertions without false greens.
 Termwright does not reduce “the framework did not tell us” to `false`. Every
 layout fact is an `Observation<T>` with one of four states:
 
-- `known(value, evidence)` — safe to assert;
-- `absent(reason)` — the node is detached, not displayed or not laid out;
-- `unknown(reason)` — retryable missing evidence;
-- `unsupported(capability, reason)` — the framework cannot provide the fact.
+- `known(value, evidence)` — the value and its provenance are available;
+- `absent(reason, evidence)` — authoritative evidence proves the node is detached, not displayed or not laid out;
+- `unknown(reason)` — only a revision pair, provider refresh or stale revision is temporarily unsettled;
+- `unsupported(capability, reason)` — outside the frozen session contract.
 
 Use `locator.geometry()`, `locator.visibility()` and `locator.hitTest()`. Their
 results carry one atomic stamp: session id, screen revision and semantic
@@ -21,7 +21,7 @@ Rectangles use zero-based terminal cells and half-open edges. A rectangle at
 adjacent, not overlapping. `visibleRect` and `intendedRect` are separate facts;
 relative and viewport coordinate spaces cannot be compared.
 
-Matchers poll `unknown`, fail immediately on `unsupported`, and require known
+Matchers may poll a transient `unknown`, fail immediately on `unsupported`, and require known
 evidence for both positive and negated assertions. Therefore neither
 `toBeVisible()` nor `.not.toBeVisible()` can pass merely because clipping was
 unobservable. Available assertions include `toBeAttached`, `toBeDetached`,
@@ -32,53 +32,107 @@ An omitted viewport ratio means “any non-zero intersection”; an explicit
 Spatial assertions additionally require both locators to come from the same
 session, observation revision and known coordinate space.
 
-## Framework capability matrix
+<!-- geometry-matrices:start -->
+## Framework capability graph
 
-This table mirrors `FRAMEWORK_OBSERVATION_CAPABILITIES` from
-`@termwright/protocol`, the normative machine-readable registry.
+Every value below is generated from the executable capability graph and the exact certification row. `automatic`, `application-integrated`, and `unsupported` describe authoritative evidence sources; runtime prerequisites are separate.
 
-| Framework | Identity | Displayed | Intended rect | Visible rect | Exact hit test | Why |
-| --- | --- | --- | --- | --- | --- | --- |
-| Generic grid | none | supported | supported | supported | conditional | Grid matches are physical cells; pointer delivery still requires terminal mouse mode. |
-| Textual | stable | supported | supported | supported | supported | The compositor exposes intended/clipped regions and Screen.get_widget_at(), the same fresh-pointer routing lookup. |
-| OpenTUI | stable | supported | supported | unsupported | supported | The committed native hit grid proves fresh-pointer ownership; the renderer exposes no per-node visual clip rectangle. |
-| Ink | stable | supported | conditional | unsupported | unsupported | Intended bounds are conditional on a viewport-stable live region; Ink exposes neither clipping nor pointer ownership. |
-| tview | stable | supported | supported | conditional | unsupported | Primitive rectangles do not identify the recipient after overlap. |
-| Ratatui | frame-local | conditional | supported | conditional | unsupported | Render areas are frame-local and buffer writes do not preserve widget ownership. |
-| Charm | frame-local | conditional | unsupported | unsupported | unsupported | Bubble Tea hands over a rendered string without attributable widget geometry. |
+| Framework | Semantic tree | Stable identity | Intended geometry | Clipped geometry | Painted region | Pointer region | Hit testing | Focus | Scroll | Render order |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Ink | automatic | automatic | automatic | automatic | application-integrated | application-integrated | application-integrated | application-integrated | application-integrated | unsupported |
+| OpenTUI | automatic | automatic | automatic | automatic | application-integrated | automatic | automatic | automatic | application-integrated | unsupported |
+| Textual | automatic | automatic | automatic | automatic | application-integrated | automatic | automatic | automatic | application-integrated | automatic |
+| tview | automatic | automatic | unsupported | unsupported | application-integrated | application-integrated | application-integrated | automatic | application-integrated | unsupported |
+| Ratatui | automatic | unsupported | automatic | unsupported | application-integrated | application-integrated | application-integrated | application-integrated | application-integrated | unsupported |
+| Bubble Tea / Bubbles | automatic | unsupported | unsupported | unsupported | application-integrated | application-integrated | application-integrated | automatic | application-integrated | unsupported |
 
-Textual and OpenTUI v2 probes build an exact, compressed fresh-pointer map from
-the same routing lookup the framework uses. Active drag/capture is deliberately
-outside that claim. If any framework recipient cannot be mapped to a semantic
-node, the whole map becomes unknown; it is never encoded as an empty cell.
-Known maps are canonical, non-overlapping row-major runs (`height: 1`, positive
-width). Ownership is therefore unambiguous and hostile input is validated in
-linear time.
-Semantic pointer actions are unavailable in `termwright/1`, including for
-hand-written adapters. Exact pointer ownership requires a v2 hit grid.
+## Derived public surface
 
-## Action and assertion matrix
+Public availability is computed by traversing the same graph used by certification. Diagnostic evidence never unlocks an action.
 
-This operation matrix is derived from the same registry. `conditional` means
-the operation succeeds only when the runtime publishes the required known
-observation (and, for pointer actions, terminal mouse mode is enabled).
+| Framework | Semantic query | Visible | Click | Hover | Drag | Focus | Activate | Type | Fill | Checkpoint |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Ink | automatic | automatic | application-integrated | application-integrated | application-integrated | automatic | automatic | application-integrated | automatic | automatic |
+| OpenTUI | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic |
+| Textual | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic | automatic |
+| tview | automatic | unsupported | application-integrated | application-integrated | application-integrated | automatic | automatic | automatic | automatic | automatic |
+| Ratatui | automatic | unsupported | application-integrated | application-integrated | application-integrated | automatic | automatic | application-integrated | automatic | automatic |
+| Bubble Tea / Bubbles | automatic | unsupported | application-integrated | application-integrated | application-integrated | automatic | automatic | automatic | automatic | automatic |
 
-| Framework | Keyboard | Pointer | Attached | Detached | Displayed | Hidden | Visible | Offscreen | In viewport | Receives pointer | Bounds | Spatial | Cell snapshot |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Generic grid | supported | conditional | supported | supported | supported | supported | supported | supported | supported | conditional | supported | supported | supported |
-| Textual | supported | conditional | supported | supported | supported | supported | supported | supported | supported | supported | supported | supported | supported |
-| OpenTUI | supported | conditional | supported | supported | supported | supported | unsupported | unsupported | unsupported | supported | supported | supported | unsupported |
-| Ink | supported | unsupported | supported | supported | supported | supported | unsupported | unsupported | unsupported | unsupported | conditional | conditional | unsupported |
-| tview | supported | unsupported | supported | supported | supported | supported | conditional | conditional | conditional | unsupported | supported | supported | conditional |
-| Ratatui | supported | unsupported | supported | supported | conditional | conditional | conditional | conditional | conditional | unsupported | supported | supported | conditional |
-| Charm | supported | unsupported | supported | supported | conditional | conditional | unsupported | unsupported | unsupported | unsupported | unsupported | unsupported | unsupported |
+## Exact certifications
 
-`termwright/2` is the default and requires `qualified-observations`; a complete
-pointer map also requires `pointer-hit-grid`. `termwright/1` is available only
-through explicit `semanticProtocol: 'termwright/1'` compatibility configuration.
-The driver echoes the selected major and rejects a snapshot whose `v` does not match. V2 is
-full-snapshot-only until qualified delta semantics are negotiated; v1 delta
-semantics are unchanged.
+| Framework | Certification ID | Instrumentation policy | Checksum source of truth |
+| --- | --- | --- | --- |
+| Ink | ink@7.1.1/0.2.0 | checksummed-instrumentation | `packages/probe-ink/src/certified-instrumentation.json` |
+| OpenTUI | opentui@0.5.3/0.2.0 | checksummed-instrumentation | `packages/probe-opentui/src/certified-instrumentation.json` |
+| Textual | textual@8.2.8/0.2.0 | native-hook | native hook |
+| tview | tview@v0.42.0/0.2.0 | checksummed-replacement | `packages/probe-tview/upstream-patches/tview/v0.42.0/manifest.json` |
+| Ratatui | ratatui@0.30.2/0.2.0 | checksummed-replacement | `clients/rust-probe/upstream-patches/ratatui-core/0.1.2/manifest.json`<br>`clients/rust-probe/upstream-patches/ratatui-widgets/0.3.2/manifest.json` |
+| Bubble Tea / Bubbles | charm@v1.3.10/0.2.0<br>charm@v2.0.8/0.2.0 | checksummed-replacement | `packages/probe-charm/upstream-patches/bubbletea/v1.3.10/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbletea/v2.0.8/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v1.0.0/manifest.json`<br>`packages/probe-charm/upstream-patches/bubbles/v2.1.1/manifest.json` |
+
+## Application-integrated providers
+
+| Framework | Accepted provider types | Extended session capabilities | SDKs |
+| --- | --- | --- | --- |
+| Ink | pointer-evidence, action-strategy, focus-evidence, scroll-evidence, paint-evidence, input-mode-evidence | pointer-geometry, pointer-hit-testing, action-strategies, focus, scroll, painted-region, pointer-input, focus-input | `@termwright/evidence-provider`, `/evidence-provider` |
+| OpenTUI | action-strategy, scroll-evidence, paint-evidence, input-mode-evidence | action-strategies, scroll, painted-region, pointer-input, focus-input | `@termwright/evidence-provider`, `/evidence-provider` |
+| Textual | action-strategy, scroll-evidence, paint-evidence, input-mode-evidence | action-strategies, scroll, painted-region, pointer-input, focus-input | `termwright`, `/evidence-provider` |
+| tview | pointer-evidence, scroll-evidence, paint-evidence, input-mode-evidence | pointer-geometry, pointer-hit-testing, scroll, painted-region, pointer-input, focus-input | `github.com/gorce-ai/termwright/clients/go/evidence`, `/evidence-provider` |
+| Ratatui | pointer-evidence, action-strategy, focus-evidence, scroll-evidence, paint-evidence, input-mode-evidence | pointer-geometry, pointer-hit-testing, action-strategies, focus, scroll, painted-region, pointer-input, focus-input | `termwright-protocol`, `termwright-ratatui`, `/evidence-provider` |
+| Bubble Tea / Bubbles | pointer-evidence, action-strategy, scroll-evidence, paint-evidence, input-mode-evidence | pointer-geometry, pointer-hit-testing, action-strategies, scroll, painted-region, pointer-input, focus-input | `github.com/gorce-ai/termwright/clients/go/evidence`, `/evidence-provider` |
+
+## Executable conformance claims
+
+| Framework | Mandatory claim IDs | Executable files |
+| --- | --- | --- |
+| Ink | `claim.semantic-tree-authoritative`<br>`claim.stable-identity-authoritative`<br>`claim.intended-geometry-authoritative`<br>`claim.clipped-geometry-authoritative`<br>`claim.paired-revisions`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `packages/probe-ink/src/geometry.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`examples/ink-todo/tests/app.e2e.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/driver/src/provider-evidence.test.ts`<br>`packages/evidence-provider/src/index.test.ts` |
+| OpenTUI | `claim.semantic-tree-authoritative`<br>`claim.stable-identity-authoritative`<br>`claim.intended-geometry-authoritative`<br>`claim.clipped-geometry-authoritative`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.paired-revisions`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `packages/probe-opentui/src/zero-config.test.ts`<br>`packages/probe-opentui/src/instrumentation.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/conformance/src/suites/interaction.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`packages/driver/src/provider-evidence.test.ts`<br>`packages/evidence-provider/src/index.test.ts` |
+| Textual | `claim.semantic-tree-authoritative`<br>`claim.stable-identity-authoritative`<br>`claim.intended-geometry-authoritative`<br>`claim.clipped-geometry-authoritative`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.render-order-authoritative`<br>`claim.paired-revisions`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `clients/python/tests/test_textual_probe_hook.py`<br>`clients/python/tests/test_probe_tree.py`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/conformance/src/suites/interaction.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`clients/python/tests/test_textual_annotations.py`<br>`packages/driver/src/provider-evidence.test.ts`<br>`clients/python/tests/test_evidence.py` |
+| tview | `claim.semantic-tree-authoritative`<br>`claim.stable-identity-authoritative`<br>`claim.paired-revisions`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `packages/probe-tview/src/zero-config.pty.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`clients/go/evidence/registry_test.go`<br>`packages/driver/src/provider-evidence.test.ts` |
+| Ratatui | `claim.semantic-tree-authoritative`<br>`claim.intended-geometry-authoritative`<br>`claim.paired-revisions`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `clients/rust-probe/tests/patchset.rs`<br>`examples/ratatui-list/tests/app.e2e.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`packages/driver/src/provider-evidence.test.ts`<br>`clients/rust/tests/evidence.rs` |
+| Bubble Tea / Bubbles | `claim.semantic-tree-authoritative`<br>`claim.paired-revisions`<br>`claim.pointer-region-authoritative`<br>`claim.pointer-hit-test-authoritative`<br>`claim.keyboard-real-pty`<br>`claim.pointer-real-pty`<br>`claim.focus-report-real-pty`<br>`claim.focus-authoritative`<br>`claim.action-strategy-authoritative`<br>`claim.scroll-authoritative`<br>`claim.painted-region-authoritative` | `packages/probe-charm/src/zero-config.pty.test.ts`<br>`examples/bubbletea-login/tests/app.e2e.test.ts`<br>`packages/conformance/src/suites/driver-generic.test.ts`<br>`packages/driver/src/session.pty.test.ts`<br>`packages/probe-ink/src/provider.pty.test.ts`<br>`packages/driver/src/provider-evidence.test.ts`<br>`clients/go/evidence/registry_test.go` |
+
+### Runtime prerequisites and generated remediation
+
+- **Ink — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **Ink — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Ink — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **Ink — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Ink — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **OpenTUI — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **OpenTUI — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **OpenTUI — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **OpenTUI — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **OpenTUI — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **Textual — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **Textual — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Textual — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **Textual — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Textual — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **tview — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **tview — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **tview — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **tview — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **tview — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **Ratatui — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **Ratatui — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Ratatui — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **Ratatui — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Ratatui — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+- **Bubble Tea / Bubbles — keyboard-input / writable-pty:** Launch or retain a writable PTY.
+- **Bubble Tea / Bubbles — pointer-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Bubble Tea / Bubbles — pointer-input / mouse-reporting-enabled:** Enable terminal mouse reporting in the application.
+- **Bubble Tea / Bubbles — focus-input / terminal-input-modes-authoritative:** Use a backend with authoritative terminal mouse mode tracking or register input-mode evidence.
+- **Bubble Tea / Bubbles — focus-input / focus-reporting-enabled:** Enable terminal focus reporting in the application.
+<!-- geometry-matrices:end -->
+
+Every semantic snapshot uses the evidence-qualified v2 schema. A producer
+announces `intended-geometry` or `clipped-geometry` only for the corresponding
+authoritative framework fact. A producer that can publish a complete pointer
+map announces `pointer-hit-grid`; other producers publish an `unsupported`
+hit-grid observation rather than guessed ownership. Settled snapshots never
+use `unknown` as a permanent substitute for missing framework evidence. Geometry and visibility observations are
+required regardless of capability claims.
 
 `resize()` returns a receipt containing the requested dimensions, before/after
 observation stamps and the paired render revision. A missing repaint is a

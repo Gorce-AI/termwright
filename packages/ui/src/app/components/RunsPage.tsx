@@ -1,12 +1,9 @@
-import { AlertTriangle, ArrowRight, Clock3, GitCommitHorizontal, History, Play, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Clock3, GitCommitHorizontal, History, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { DataSource } from '../../data-source.js';
 import type { RunManifest, RunSummaryEntry, RunTest } from '../../runs.js';
 
-export function RunsPage({ source, onOpen }: {
-  readonly source: DataSource;
-  readonly onOpen: (run: RunManifest, test: RunTest, index: number) => void;
-}) {
+export function RunsPage({ source }: { readonly source: DataSource }) {
   const [runs, setRuns] = useState<readonly RunSummaryEntry[]>([]);
   const [opened, setOpened] = useState<RunManifest | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,29 +16,40 @@ export function RunsPage({ source, onOpen }: {
   }, [source]);
 
   const openRun = async (id: string) => {
-    try { setOpened(await source.run(id)); }
-    catch (cause) { setError(describe(cause)); }
+    try {
+      const detail = await source.run(id);
+      if (detail.state === 'complete') setOpened(detail);
+      else setError(healthDescription(detail));
+    } catch (cause) { setError(describe(cause)); }
   };
 
   return (
     <section className="tw-runs-page">
       <div className="tw-page-intro">
-        <div><h2>Runs</h2><p>Open a retained execution without interrupting a live run.</p></div>
+        <div><h2>Runs</h2><p>Native-host results and the health of every retained transaction.</p></div>
       </div>
       {error === null ? null : <p className="tw-inline-error">{error}</p>}
       {opened === null ? (
         <div className="tw-run-cards">
           {runs.length === 0 ? <div className="tw-page-empty"><History aria-hidden="true" /><strong>No run history yet</strong></div> : runs.map((run) => (
-            <button type="button" className="tw-run-card" key={run.id} onClick={() => void openRun(run.id)}>
-              <span className="tw-run-card-icon" data-failed={run.summary.failed > 0}><Clock3 aria-hidden="true" /></span>
-              <span>
-                <strong>{run.git?.message ?? 'Local test run'}</strong>
-                <small><time dateTime={new Date(run.startedAt).toISOString()}>{formatStartedAt(run.startedAt)}</time><span>{run.testCount} cases · {format(run.summary.durationMs)}</span></small>
-              </span>
-              {run.git === undefined ? null : <span className="tw-commit"><GitCommitHorizontal aria-hidden="true" size={13} /> {run.git.commit.slice(0, 7)}</span>}
-              <span className="tw-history-counts"><b>{run.summary.passed} passed</b><b>{run.summary.failed} failed</b></span>
-              <ArrowRight aria-hidden="true" />
-            </button>
+            run.state === 'complete' ? (
+              <button type="button" className="tw-run-card" key={run.id} onClick={() => void openRun(run.id)}>
+                <span className="tw-run-card-icon" data-failed={run.summary.status !== 'passed'}><Clock3 aria-hidden="true" /></span>
+                <span>
+                  <strong>{run.git?.message ?? run.id}</strong>
+                  <small><time dateTime={new Date(run.startedAt).toISOString()}>{formatStartedAt(run.startedAt)}</time><span>{run.testCount} cases · {format(run.summary.durationMs)}</span></small>
+                </span>
+                {run.git === null ? null : <span className="tw-commit"><GitCommitHorizontal aria-hidden="true" size={13} /> {run.git.commit.slice(0, 7)}</span>}
+                <span className="tw-history-counts"><b>{run.summary.passed} passed</b><b>{run.summary.failed} failed</b></span>
+                <ArrowRight aria-hidden="true" />
+              </button>
+            ) : (
+              <article className="tw-run-card" data-health={run.state} key={`${run.state}:${run.id}`}>
+                <span className="tw-run-card-icon" data-failed><AlertTriangle aria-hidden="true" /></span>
+                <span><strong>{healthTitle(run)}</strong><small>{healthDescription(run)}</small></span>
+                <code>{run.id}</code>
+              </article>
+            )
           ))}
         </div>
       ) : (
@@ -50,24 +58,20 @@ export function RunsPage({ source, onOpen }: {
           <h3>{opened.git?.message ?? opened.id}</h3>
           <time className="tw-run-detail-time" dateTime={new Date(opened.startedAt).toISOString()}>{formatStartedAt(opened.startedAt)}</time>
           <div className="tw-history-tests">
-            {opened.tests.map((test, index) => (
-              <article key={`${test.id}:${index}`} data-status={test.status}>
+            {opened.tests.map((test) => (
+              <article key={test.id} data-status={test.status}>
                 <span>{test.status}</span>
                 <div>
                   <strong>{test.title}</strong>
-                  <small>{test.file} · {format(test.durationMs)} · attempt {finalAttempt(test)}</small>
+                  <small>{test.file} · {formatNullable(test.durationMs)} · {attemptLabel(test)}</small>
                   {test.flaky ? <span className="tw-history-warning"><RefreshCw aria-hidden="true" size={12} /> Passed after a retry</span> : null}
-                  {test.lostLogRecords > 0 ? <span className="tw-history-warning"><AlertTriangle aria-hidden="true" size={12} /> {test.lostLogRecords} application log {test.lostLogRecords === 1 ? 'record was' : 'records were'} dropped</span> : null}
-                  {test.attempts === undefined || test.attempts.length < 2 ? null : (
-                    <details className="tw-history-attempts"><summary>{test.attempts.length - 1} earlier {test.attempts.length === 2 ? 'attempt' : 'attempts'} failed</summary>
-                      <ol>{test.attempts.slice(0, -1).map((attempt) => <li key={attempt.attempt}><b>Attempt {attempt.attempt}</b><span>{attempt.errors[0] ?? 'Failure reason was not retained.'}</span></li>)}</ol>
+                  {test.attempts.length < 2 ? null : (
+                    <details className="tw-history-attempts"><summary>{test.attempts.length} exact attempts</summary>
+                      <ol>{test.attempts.map((attempt) => <li key={attempt.attemptId}><b>repeat {attempt.repeat}, retry {attempt.retry}</b><span>{attempt.status} · {formatNullable(attempt.durationMs)} · {attempt.attemptId}</span></li>)}</ol>
                     </details>
                   )}
-                  {test.error === undefined ? null : <pre className="tw-history-error">{test.error}</pre>}
                 </div>
-                {test.traceRef === undefined ? <em>No recording retained</em> : test.traceAvailable === false ? <em title="The recording path stored by this run no longer exists.">Recording unavailable</em> : (
-                  <button type="button" onClick={() => onOpen(opened, test, index)}><Play aria-hidden="true" size={13} /> Replay</button>
-                )}
+                <em>Recording not retained in native manifest</em>
               </article>
             ))}
           </div>
@@ -77,8 +81,18 @@ export function RunsPage({ source, onOpen }: {
   );
 }
 
+function healthTitle(run: Exclude<RunSummaryEntry, { readonly state: 'complete' }>): string {
+  if (run.state === 'incomplete') return 'Incomplete run transaction';
+  if (run.state === 'corrupt') return 'Corrupt run history';
+  return 'Unsupported run-history version';
+}
+function healthDescription(run: Exclude<RunSummaryEntry, { readonly state: 'complete' }>): string {
+  if (run.state === 'incomplete' || run.state === 'corrupt') return run.reason;
+  return `Manifest version ${run.version ?? 'unknown'} is not supported by this Runner.`;
+}
 function format(timeMs: number): string { return timeMs >= 1_000 ? `${(timeMs / 1_000).toFixed(1)}s` : `${timeMs}ms`; }
-function finalAttempt(test: RunTest): number { return test.attempts?.at(-1)?.attempt ?? 1; }
+function formatNullable(timeMs: number | null): string { return timeMs === null ? 'duration unavailable' : format(timeMs); }
+function attemptLabel(test: RunTest): string { return `${test.attempts.length} ${test.attempts.length === 1 ? 'attempt' : 'attempts'}`; }
 function formatStartedAt(startedAt: number): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(startedAt));
 }

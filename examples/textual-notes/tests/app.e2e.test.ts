@@ -32,12 +32,10 @@ describe.skipIf(!runnable)('the notes app', () => {
     const geometry = await add.geometry();
     expect(geometry.intendedRect.status).toBe('known');
     expect(geometry.visibleRect.status).toBe('known');
-    const hit = await add.hitTest();
-    expect(hit.receivesEvents).toMatchObject({ status: 'known', value: true });
-    expect(hit.recipient).toMatchObject({ status: 'known' });
+    await expect(add).toReceivePointerEvents();
 
     const draft = app.getByRole('textbox');
-    await app.waitForStable();
+    await app.waitForQuiet();
     await draft.click();
     await app.type('v2 pointer');
     await expect(draft).toHaveText('v2 pointer');
@@ -48,7 +46,7 @@ describe.skipIf(!runnable)('the notes app', () => {
     await app.waitForText('write the release notes');
     await app.getByRole('button', { name: 'Delete' }).activate();
     await expect(app.getByRole('dialog')).toBeVisible();
-    await app.waitForStable();
+    await app.waitForQuiet();
 
     const covered = app.getByTestId('add');
     const hit = await covered.hitTest();
@@ -67,7 +65,7 @@ describe.skipIf(!runnable)('the notes app', () => {
     // The matcher polls, so it is what waits for the probe's handshake — a
     // plain read of the capability is only meaningful once a tree arrived.
     await expect(app).toMatchSemanticSnapshot();
-    expect(app.capabilities().semanticTree).toBe(true);
+    expect(app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
   });
 
   test('adds a note from the input field', async ({ terminal, step }) => {
@@ -105,7 +103,7 @@ describe.skipIf(!runnable)('the notes app', () => {
 
     await step('dismiss it with Escape', async () => {
       await app.press('Escape');
-      await expect(app.getByRole('dialog')).not.toBeVisible();
+      await expect(app.getByRole('dialog')).toBeDetached();
     });
 
     await expect(app).toHaveText('status: cancelled');
@@ -116,14 +114,16 @@ describe.skipIf(!runnable)('the notes app', () => {
       // unscoped locator would fail as ambiguous rather than pick one.
       const confirm = app.locator('dialog button#confirm');
       await expect(confirm).toBeVisible();
-      // Textual fades a modal in, so the button exists at coordinates that are
-      // still moving. A click needs the frame to hold still; a matcher, which
-      // only reads the tree, does not.
-      await app.waitForStable();
-      await confirm.activate();
+      // Textual fades a modal in. The production click runner waits for the
+      // target itself to become stable and re-plans before the first PTY byte;
+      // a global quiet-screen wait would unnecessarily include unrelated UI.
+      await confirm.click();
     });
 
-    await expect(app.getByRole('listitem', { name: 'buy milk' })).not.toBeVisible();
+    // The modal temporarily omits the covered list from Textual's exposed
+    // tree, so detachment alone is not proof that deletion happened. Wait for
+    // the application-domain outcome first, then assert the resulting tree.
     await expect(app).toHaveText('status: deleted buy milk');
+    await expect(app.getByRole('listitem', { name: 'buy milk' })).toBeDetached();
   });
 });

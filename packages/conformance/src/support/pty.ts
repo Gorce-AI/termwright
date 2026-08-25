@@ -114,11 +114,17 @@ export function environment(extra?: Readonly<Record<string, string>>): Record<st
  *
  * @returns the interpreter path, or `null` when no candidate can import them.
  */
-export function pythonWith(modules: readonly string[]): string | null {
+export function pythonWith(
+  modules: readonly string[],
+  extraEnv?: Readonly<Record<string, string>>,
+): string | null {
   const script = `import ${modules.join(', ')}, sys; print(sys.executable)`;
   for (const candidate of ['python3', 'python']) {
-    if (!commandAvailable([candidate, '-c', `import ${modules.join(', ')}`], { quiet: true })) continue;
-    const resolved = spawnSync(candidate, ['-c', script], { encoding: 'utf8', env: environment() });
+    if (!commandAvailable([candidate, '-c', `import ${modules.join(', ')}`], {
+      quiet: true,
+      ...(extraEnv === undefined ? {} : { env: extraEnv }),
+    })) continue;
+    const resolved = spawnSync(candidate, ['-c', script], { encoding: 'utf8', env: environment(extraEnv) });
     const path = (resolved.stdout ?? '').trim();
     if (resolved.status === 0 && path.length > 0) return path;
   }
@@ -243,7 +249,12 @@ async function waitForStart(
  */
 export function commandAvailable(
   command: readonly string[],
-  options: { readonly cwd?: string; readonly timeoutMs?: number; readonly quiet?: boolean } = {},
+  options: {
+    readonly cwd?: string;
+    readonly timeoutMs?: number;
+    readonly quiet?: boolean;
+    readonly env?: Readonly<Record<string, string>>;
+  } = {},
 ): boolean {
   const [binary, ...args] = command;
   if (binary === undefined) return false;
@@ -253,7 +264,7 @@ export function commandAvailable(
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
       timeout: options.timeoutMs ?? 120_000,
       encoding: 'utf8',
-      env: environment(),
+      env: environment(options.env),
     });
     if (result.status === 0) return true;
     // A skipped suite has to say *why* it skipped, or a probe that broke looks
@@ -281,11 +292,9 @@ export function commandAvailable(
  * Turns on the child's mouse reporting and reports whether the emulator can
  * see that it happened.
  *
- * ConPTY consumes the child's DECSET, so on Windows the mode reads `'unknown'`
- * — the child did enable tracking, the terminal just cannot say so. Branching
- * on the *observed* mode rather than on `process.platform` keeps one code path:
- * a platform that starts reporting the mode tightens the assertions by itself,
- * and one that stops loosens them, without anyone editing a list of platforms.
+ * ConPTY consumes the child's DECSET, so on Windows the mode reads `'unknown'`.
+ * Unknown never authorizes pointer input: callers use the return value either
+ * to run a positive protocol-delivery proof or to assert the typed refusal.
  *
  * @returns `true` when the mode is observable, so mode-specific claims (an
  * exact tracking level, a refusal for the wrong level) can be asserted.
@@ -296,7 +305,7 @@ export async function enableMouseReporting(
 ): Promise<boolean> {
   const expected = mode === 'click' ? 'vt200' : 'drag';
   await terminal.press(mode === 'click' ? 'm' : 'M');
-  await pollUntil(() => {
+  await waitForTerminal(terminal, () => {
     const tracking = terminal.screen().modes.mouseTracking;
     return tracking === expected || tracking === 'unknown';
   });
@@ -307,18 +316,16 @@ export async function enableMouseReporting(
  * Asks the child to enable focus reporting and reports what the emulator made
  * of it.
  *
- * Same shape as the mouse, and the same three answers: `'on'` where the DECSET
- * was seen, `'unknown'` where the platform reports the host's state rather than
- * the child's — ConPTY does that — and `'off'` only while the request is still
- * in flight. Waiting for a settled answer is what keeps the caller off the
- * third: branching on `'off'` would mean branching on how loaded the machine
- * is, which is how this last flaked.
+ * Same shape as the mouse: `'on'` where the DECSET was seen, `'unknown'` where
+ * the platform cannot prove the child's state — ConPTY does that — and `'off'`
+ * only while the request is still in flight. Unknown requires a typed refusal;
+ * it is never treated as permission to send a focus report.
  */
 export async function enableFocusReporting(
   terminal: TerminalHarness,
 ): Promise<'on' | 'off' | 'unknown'> {
   await terminal.press('f');
-  await pollUntil(() => terminal.screen().modes.focusReporting !== 'off', 3_000).catch(
+  await waitForTerminal(terminal, () => terminal.screen().modes.focusReporting !== 'off', 3_000).catch(
     () => undefined,
   );
   return terminal.screen().modes.focusReporting;
@@ -340,19 +347,22 @@ export async function settledRevision(
   stallMs = 15_000,
 ): Promise<number> {
   let seen = terminal.semanticTree()?.revision ?? 0;
-  let progressed = Date.now();
+  let progressed = performance.now();
+  let checkpoint = terminal.checkpoint();
   for (;;) {
     const current = terminal.semanticTree()?.revision ?? 0;
     if (current >= target) return current;
     if (current > seen) {
       seen = current;
-      progressed = Date.now();
+      progressed = performance.now();
     }
-    if (Date.now() - progressed > stallMs) return seen;
-    await new Promise((resolve) => {
-      const timer = setTimeout(resolve, 25);
-      timer.unref?.();
-    });
+    if (performance.now() - progressed > stallMs) return seen;
+    const remaining = Math.max(0, stallMs - (performance.now() - progressed));
+    try {
+      checkpoint = await terminal.waitForCheckpointChange({ after: checkpoint, timeout: remaining });
+    } catch {
+      return seen;
+    }
   }
 }
 
@@ -375,15 +385,20 @@ export function mouseModeHidden(terminal: TerminalHarness): boolean {
   return terminal.screen().modes.mouseTracking === 'unknown';
 }
 
-/** Polls a predicate until it holds, or throws once the budget is spent. */
-export async function pollUntil(predicate: () => boolean, timeoutMs = 15_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
+/** Waits on the driver's owned observation generation until a predicate holds. */
+async function waitForTerminal(
+  terminal: TerminalHarness,
+  predicate: () => boolean,
+  timeoutMs = 15_000,
+): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  let checkpoint = terminal.checkpoint();
   for (;;) {
     if (predicate()) return;
-    if (Date.now() >= deadline) throw new Error('conformance: condition never became true');
-    await new Promise((resolve) => {
-      const timer = setTimeout(resolve, 25);
-      timer.unref?.();
+    if (performance.now() >= deadline) throw new Error('conformance: condition never became true');
+    checkpoint = await terminal.waitForCheckpointChange({
+      after: checkpoint,
+      timeout: Math.max(0, deadline - performance.now()),
     });
   }
 }

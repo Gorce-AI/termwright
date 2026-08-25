@@ -65,6 +65,10 @@ export interface LogCollection {
   push(entry: CapturedLog): void;
   /** Adds to {@link lostRecords}. Used by {@link collectLogs}. */
   noteLostRecords(count: number): void;
+  /** Monotonic collection revision for race-free matcher waits. */
+  revision(): number;
+  /** Arms first, then checks whether `after` was already superseded. */
+  waitForChange(after: number, timeout: number): Promise<void>;
 }
 
 /**
@@ -90,6 +94,12 @@ export function createLogCollection(): LogCollection {
   const seen = new Set<string>();
   let dropped = 0;
   let lost = 0;
+  let revision = 0;
+  const waiters = new Set<() => void>();
+  const changed = (): void => {
+    revision += 1;
+    for (const wake of [...waiters]) wake();
+  };
   const collection: LogCollection = {
     all: () => entries,
     filter: (query) => (query === undefined ? entries : entries.filter((entry) => matchesLog(entry, query))),
@@ -102,6 +112,7 @@ export function createLogCollection(): LogCollection {
       seen.clear();
       dropped = 0;
       lost = 0;
+      changed();
     },
     dropped: () => dropped,
     lostRecords: () => lost,
@@ -113,6 +124,7 @@ export function createLogCollection(): LogCollection {
         seen.add(identity);
       }
       entries.push(entry);
+      changed();
       if (entries.length > MAX_CAPTURED_LOGS) {
         // Forget the identities of the entries being evicted with them, or the
         // set would outgrow the entries it guards.
@@ -125,7 +137,23 @@ export function createLogCollection(): LogCollection {
     },
     noteLostRecords: (count) => {
       lost += count;
+      changed();
     },
+    revision: () => revision,
+    waitForChange: (after, timeout) => new Promise<void>((resolve) => {
+      let done = false;
+      const finish = (): void => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        waiters.delete(finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, Math.max(0, timeout));
+      timer.unref?.();
+      waiters.add(finish);
+      if (revision > after) finish();
+    }),
   };
   return collection;
 }
@@ -152,21 +180,29 @@ export function collectLogs(
   harness: LogSource,
   into: LogCollection = createLogCollection(),
 ): { readonly collection: LogCollection; dispose(): void } {
-  const unsubscribeLogs = harness.events.on('app-log', (event) => {
-    into.push({ ...event, sessionId: harness.sessionId });
-  });
-  // Counted live rather than read from `diagnostics()` at the end: that log
-  // keeps only the most recent entries, so a chatty session would have
-  // evicted the early drops and the count would quietly be too low.
-  const unsubscribeDiagnostics = harness.events.on('diagnostic', (event) => {
-    if (event.code === 'log-dropped' && event.count !== undefined) into.noteLostRecords(event.count);
+  const unsubscribe = harness.events.subscribe({
+    fromSequence: 1,
+    // The bounded source journal accounts for all event kinds, so this is a
+    // conservative lower bound rather than pretending the missing prefix had
+    // no logs. Any positive loss makes failOnLogLevel inconclusive and fails
+    // certification below.
+    onGap: (gap) => into.noteLostRecords(Math.max(1, gap.lostEvents)),
+  }, (recorded) => {
+    if (recorded.type === 'app-log') {
+      into.push({ ...recorded.payload, sessionId: harness.sessionId });
+    } else if (
+      recorded.type === 'diagnostic' &&
+      recorded.payload.code === 'log-dropped' &&
+      recorded.payload.count !== undefined
+    ) {
+      into.noteLostRecords(recorded.payload.count);
+    }
   });
   collections.set(harness, into);
   return {
     collection: into,
     dispose: () => {
-      unsubscribeLogs();
-      unsubscribeDiagnostics();
+      unsubscribe();
       if (collections.get(harness) === into) collections.delete(harness);
     },
   };
@@ -254,7 +290,13 @@ export function describeLogThresholdFailure(
   lostRecords = 0,
 ): string | undefined {
   const offenders = logsFailingThreshold(entries, threshold);
-  return offenders.length === 0 ? undefined : formatLogFailure(offenders, threshold, lostRecords);
+  if (offenders.length > 0) return formatLogFailure(offenders, threshold, lostRecords);
+  if (lostRecords > 0) {
+    return `The test passed, but ${lostRecords} application-log event${lostRecords === 1 ? '' : 's'} ` +
+      `were lost before failOnLogLevel(${JSON.stringify(threshold)}) could prove the run clean. ` +
+      'A certified pass requires a complete correctness log stream.';
+  }
+  return undefined;
 }
 
 /**

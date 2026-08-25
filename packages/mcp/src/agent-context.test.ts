@@ -2,8 +2,8 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildAgentContext, buildUsage } from './agent-context.js';
-import { buildAgentSkill } from './agent-skill.js';
+import { buildAgentContext, buildUsage, TARGETING_GUIDANCE } from './agent-context.js';
+import { buildAgentSkill, renderMcpToolSurfaceMarkdown } from './agent-skill.js';
 import { EXIT_CODES, exitCodeFor } from './errors.js';
 import { runCli } from './cli.js';
 import { TOOLS } from './registry.js';
@@ -17,10 +17,16 @@ const CONTRACT_TOOLS = [
   'terminal.snapshot',
   'terminal.capture_since',
   'terminal.query',
+  'terminal.checkpoint',
+  'terminal.actionability',
   'terminal.click',
   'terminal.double_click',
+  'terminal.hover',
   'terminal.press',
   'terminal.type',
+  'terminal.fill',
+  'terminal.check',
+  'terminal.uncheck',
   'terminal.paste',
   'terminal.write_raw',
   'terminal.drag',
@@ -159,10 +165,27 @@ describe('the agent-skill package', () => {
     expect(skill).toContain('terminal.capture_since');
   });
 
+  it('uses the product targeting model when no semantic tree is available', () => {
+    const skill = files[0]?.contents ?? '';
+    const context = buildAgentContext();
+
+    expect(context.conventions).toContain(TARGETING_GUIDANCE.precedence);
+    expect(context.conventions).toContain(TARGETING_GUIDANCE.semanticUnavailable);
+    expect(skill).toContain(TARGETING_GUIDANCE.precedence);
+    expect(skill).toContain(TARGETING_GUIDANCE.semanticUnavailable);
+    expect(skill).not.toContain('Target those by `text`');
+  });
+
   it('documents every tool and its parameters in the reference', () => {
     const reference = files[1]?.contents ?? '';
     for (const name of ALL_TOOLS) expect(reference).toContain(`## ${name}`);
     expect(reference).toContain('`cursor`: integer — revision returned by an earlier snapshot');
+  });
+
+  it('renders every registered tool into the committed documentation surface', () => {
+    const surface = renderMcpToolSurfaceMarkdown();
+    for (const name of ALL_TOOLS) expect(surface).toContain(`| \`${name}\` |`);
+    expect(surface).toContain(TARGETING_GUIDANCE.semanticUnavailable);
   });
 
   it('ships the same agent-context the CLI prints', () => {

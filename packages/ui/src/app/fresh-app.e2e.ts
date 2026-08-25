@@ -6,9 +6,11 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright';
 import { buildCrashedFixtureTrace, buildFixtureTrace, FIXTURE_TREES } from '../__fixtures__/build-trace.js';
+import { writeNativeRunFixture } from '../__fixtures__/native-run.js';
 import { writeInlineReport } from '../inline-report.js';
-import { RUN_MANIFEST_VERSION, writeRunManifest } from '../runs.js';
 import { startUiServer, type UiServer } from '../server.js';
+import { FakeSession, frameworkContract, node, snapshot } from '../__fixtures__/fake-session.js';
+import { createRunId } from '@termwright/protocol';
 
 const APP_DIR = fileURLToPath(new URL('../../dist/app', import.meta.url));
 let browser: Browser;
@@ -88,7 +90,7 @@ describe('fresh React runner', () => {
       second.goto(server.url, { waitUntil: 'domcontentloaded' }),
     ]);
     const startedAt = Date.now();
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
     for (const [id, title, traceRef, status] of [
       ['normal-case', 'normal historical flow', normal, 'passed'],
       ['crash-case', 'crashed historical flow', crashed, 'failed'],
@@ -112,7 +114,7 @@ describe('fresh React runner', () => {
     expect(await first.locator('.tw-terminal-viewport').innerText()).toContain('Permission required');
 
     const liveStartedAt = startedAt + 100;
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: liveStartedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: liveStartedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'live-case', title: 'new live flow', file: '/repo/live.test.ts', startedAt: liveStartedAt, sessionId: 'live-session' });
     server.hub.publish({ v: 1, type: 'session', sessionId: 'live-session', testId: 'live-case', terminalProfile: 'default', columns: 80, rows: 24 });
     server.hub.publish({ v: 1, type: 'output', sessionId: 'live-session', dataB64: Buffer.from('LIVE ONLY\r\n').toString('base64'), t: 1 });
@@ -132,14 +134,33 @@ describe('fresh React runner', () => {
     await page.goto(server.url, { waitUntil: 'domcontentloaded' });
     await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');
     const startedAt = Date.now();
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'multi', title: 'launches two terminals', file: '/repo/multi.test.ts', startedAt });
     const publishSession = (sessionId: string, framework: string, profile: string, columns: number, rows: number, text: string, nodeName: string) => {
-      server.hub.publish({ v: 1, type: 'session', sessionId, testId: 'multi', terminalProfile: profile, adapter: { name: framework, version: '1.0.0' }, columns, rows });
+      server.hub.publish({ v: 1, type: 'session', sessionId, testId: 'multi', terminalProfile: profile, contract: frameworkContract(sessionId, framework, '1.0.0', profile), adapterStatus: 'attached', columns, rows });
       server.hub.publish({ v: 1, type: 'output', sessionId, dataB64: Buffer.from(`${text}\r\n`).toString('base64'), t: 1 });
       server.hub.publish({
         v: 1, type: 'semantic', sessionId, revision: 1,
-        snapshot: { v: 1, sessionId, revision: 1, columns, rows, rootIds: ['root'], nodes: [{ id: 'root', role: 'status', name: nodeName, bounds: { row: 0, column: 0, width: 10, height: 1 } }] },
+        snapshot: {
+          v: 2,
+          sessionId,
+          revision: 1,
+          columns,
+          rows,
+          rootIds: ['root'],
+          nodes: [{
+            id: 'root',
+            role: 'status',
+            name: nodeName,
+            geometry: {
+              displayed: { status: 'known', value: true, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-e2e' } },
+              intendedRect: { status: 'known', value: { row: 0, column: 0, width: 10, height: 1 }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-e2e' } },
+              visibleRect: { status: 'known', value: { row: 0, column: 0, width: 10, height: 1 }, evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-e2e' } },
+            },
+          }],
+          coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-e2e' } },
+          hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+        },
       });
     };
     publishSession('opaque-a', 'Ink', 'unicode', 80, 24, 'FIRST SCREEN', 'First inspector');
@@ -151,7 +172,7 @@ describe('fresh React runner', () => {
     await page.getByRole('button', { name: 'Expand inspector' }).click();
     await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('SECOND SCREEN');
     await expect.poll(() => page.getByRole('treeitem', { name: /Second inspector/u }).count()).toBe(1);
-    await selector.selectOption(`run:${startedAt}:opaque-a`);
+    await selector.selectOption(await selector.locator('option').first().getAttribute('value') ?? '');
     await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('FIRST SCREEN');
     expect(await page.locator('.tw-terminal-viewport').innerText()).not.toContain('SECOND SCREEN');
     await expect.poll(() => page.getByRole('treeitem', { name: /First inspector/u }).count()).toBe(1);
@@ -159,28 +180,57 @@ describe('fresh React runner', () => {
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
-  it('lists retained runs, explains unavailable evidence and opens an available replay', async () => {
+  it('shows live Can click/hover/focus/type answers from the production planner', async () => {
+    const server = await startUiServer();
+    servers.push(server);
+    const page = await checkedPage();
+    await page.goto(server.url, { waitUntil: 'domcontentloaded' });
+    const startedAt = Date.now();
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'test-start', id: 'planner-case', title: 'planner inspector', file: '/repo/planner.test.ts', startedAt, sessionId: 'planner-session' });
+    const session = new FakeSession('planner-session');
+    session.actionabilityPlanner = async (action, ref) => ({
+      actionable: action !== 'hover',
+      intent: { kind: action, targetRef: ref },
+      checkpoint: { sessionId: session.sessionId, contractId: 'planner-session:0', epoch: 0, sequence: 12, screenRevision: 11, semanticRevision: 7, pairedScreenRevision: 11 },
+      requirements: [],
+      ...(action === 'hover'
+        ? { reason: { code: 'input-mode-disabled', message: 'motion reporting is disabled', targetRef: ref } }
+        : { strategy: action === 'type' ? 'focused-keyboard-type' : 'production-plan' }),
+    });
+    server.attach({ source: session });
+    session.semantic(snapshot(7, [node({ id: 'save', role: 'button', name: 'Save' })], session.sessionId));
+    await page.getByRole('button', { name: 'Expand inspector' }).click();
+    await page.getByRole('tab', { name: 'Semantic' }).click();
+    const actionability = page.getByRole('region', { name: 'Live actionability' });
+    // The live semantic stream can replace the selected-node projection while
+    // the four planner RPCs complete. Poll one coherent DOM projection instead
+    // of mixing one awaited sentinel with three immediate reads from a later
+    // render.
+    await expect.poll(() => actionability.locator('li[data-actionable] header strong').allTextContents()).toEqual([
+      'Can click?',
+      'Can hover?',
+      'Can focus?',
+      'Can type?',
+    ]);
+    await expect.poll(() => actionability.getByText(/input-mode-disabled: motion reporting is disabled/u).count()).toBe(1);
+    await expect.poll(() => actionability.getByText('revision 12', { exact: true }).count()).toBe(4);
+    expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
+  });
+
+  it('lists canonical native runs with exact attempts and honest recording availability', async () => {
     const runsDir = await mkdtemp(join(tmpdir(), 'tw-fresh-runs-'));
-    const trace = await buildFixtureTrace();
     const startedAt = Date.now() - 5_000;
-    await writeRunManifest(runsDir, {
-      v: RUN_MANIFEST_VERSION,
-      id: 'history-e2e',
+    const nativeRunId = await writeNativeRunFixture(runsDir, {
       startedAt,
-      finishedAt: startedAt + 900,
-      summary: { total: 2, passed: 1, failed: 1, skipped: 0, flaky: 1, durationMs: 900 },
+      status: 'flaky',
       tests: [
         {
-          id: 'retried', title: 'passes after retry', file: '/repo/retried.test.ts', status: 'passed', durationMs: 600,
-          flaky: true, lostLogRecords: 2, traceRef: trace,
-          attempts: [
-            { attempt: 1, status: 'failed', durationMs: 200, errors: ['first attempt timed out'] },
-            { attempt: 2, status: 'passed', durationMs: 400, errors: [] },
-          ],
+          title: 'passes after retry', file: '/repo/retried.test.ts', status: 'passed', durationMs: 600,
+          retries: ['failed', 'passed'],
         },
         {
-          id: 'missing', title: 'missing recording', file: '/repo/missing.test.ts', status: 'failed', durationMs: 300,
-          flaky: false, lostLogRecords: 0, traceRef: join(runsDir, 'gone.twtrace'), error: 'final assertion failed',
+          title: 'missing recording', file: '/repo/missing.test.ts', status: 'failed', durationMs: 300,
         },
       ],
     });
@@ -189,23 +239,14 @@ describe('fresh React runner', () => {
     const page = await checkedPage();
     await page.goto(server.url, { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Runs', exact: true }).click();
-    await page.getByRole('button', { name: /Local test run/u }).click();
+    await page.getByRole('button', { name: new RegExp(escapeRegExp(nativeRunId), 'u') }).click();
     await expect.poll(() => page.getByText('Passed after a retry', { exact: true }).count()).toBe(1);
-    expect(await page.getByText('2 application log records were dropped', { exact: true }).count()).toBe(1);
-    expect(await page.locator('.tw-history-tests article').filter({ hasText: 'missing recording' }).getByText(/attempt 1$/u).count()).toBe(1);
-    await page.getByText('1 earlier attempt failed', { exact: true }).click();
-    expect(await page.getByText('first attempt timed out', { exact: true }).count()).toBe(1);
-    expect(await page.getByText('Recording unavailable', { exact: true }).count()).toBe(1);
-    expect(await page.getByRole('button', { name: 'Replay', exact: true }).count()).toBe(1);
-    await page.getByRole('button', { name: 'Replay', exact: true }).click();
-    await page.locator('.tw-replay-controls').waitFor({ timeout: 15_000 });
-    expect(await page.getByText('passes after retry', { exact: true }).count()).toBeGreaterThan(0);
-    await page.getByRole('button', { name: 'Expand inspector' }).click();
-    await page.getByRole('tab', { name: 'Logs' }).click();
-    const initialLogCount = await page.locator('.tw-log-list li').count();
-    const replayPosition = page.getByLabel('Replay position');
-    await replayPosition.fill(await replayPosition.getAttribute('max') ?? '0');
-    await expect.poll(() => page.locator('.tw-log-list li').count()).toBeGreaterThan(initialLogCount);
+    expect(await page.locator('.tw-history-tests article').filter({ hasText: 'missing recording' }).locator('small').filter({ hasText: /1 attempt$/u }).count()).toBe(1);
+    await page.getByText('2 exact attempts', { exact: true }).click();
+    expect(await page.getByText(/retry 0/u).count()).toBe(1);
+    expect(await page.getByText(/retry 1/u).count()).toBe(1);
+    expect(await page.getByText('Recording not retained in native manifest', { exact: true }).count()).toBe(2);
+    expect(await page.getByRole('button', { name: 'Replay', exact: true }).count()).toBe(0);
     expect((page as unknown as { __errors: string[] }).__errors).toEqual([]);
   });
 
@@ -281,7 +322,8 @@ describe('fresh React runner', () => {
     await expect.poll(() => existsSync(saved)).toBe(true);
     const generated = await readFile(saved, 'utf8');
     expect(generated).toContain('submit permission');
-    expect(generated).toContain("await app.type('hello');");
+    expect(generated).toContain('type input withheld by recorder policy');
+    expect(generated).not.toContain('hello');
     expect(generated).toContain('await expect(app).toMatchSemanticSnapshot();');
 
     await record(discarded);
@@ -319,7 +361,7 @@ describe('fresh React runner', () => {
     await page.locator('.tw-replay-controls').waitFor({ timeout: 15_000 });
     const command = page.locator('.tw-command-row[data-kind="action"]').filter({ hasText: 'click' });
     await command.hover();
-    const overlay = page.locator('.tw-terminal-highlight[data-target-ref="b1@1"]');
+    const overlay = page.locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"]');
     await overlay.waitFor();
     const geometry = await page.evaluate(() => {
       const screen = document.querySelector<HTMLElement>('.xterm-screen')?.getBoundingClientRect();
@@ -339,14 +381,14 @@ describe('fresh React runner', () => {
 
     await command.click();
     await page.locator('.tw-machine-bar').hover();
-    expect(await page.locator('.tw-terminal-highlight[data-pinned="true"][data-target-ref="b1@1"]').count()).toBe(1);
+    expect(await page.locator('.tw-terminal-highlight[data-pinned="true"][data-target-ref="semantic:b1@1"]').count()).toBe(1);
     await page.keyboard.press('Escape');
     expect(await page.locator('.tw-terminal-highlight-layer').count()).toBe(0);
 
     await page.getByRole('button', { name: 'Expand inspector' }).click();
     const semanticButton = page.getByRole('treeitem', { name: /Approve/u });
     await semanticButton.hover();
-    expect(await page.locator('.tw-terminal-highlight[data-target-ref="b1@1"]').count()).toBe(1);
+    expect(await page.locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"]').count()).toBe(1);
     await semanticButton.click();
     await page.locator('.tw-machine-bar').hover();
     expect(await page.locator('.tw-terminal-highlight[data-pinned="true"]').count()).toBe(1);
@@ -363,7 +405,7 @@ describe('fresh React runner', () => {
     await page.locator('.tw-replay-controls').waitFor({ timeout: 15_000 });
     const server = servers.at(-1) as UiServer;
     const startedAt = Date.now();
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'finished-b', title: 'suite > finished B', file: '/tmp/finished-b.test.ts', startedAt });
     server.hub.publish({ v: 1, type: 'test-end', id: 'finished-b', status: 'passed', durationMs: 20, flaky: false, lostLogRecords: 0, traceRef: secondTrace });
     server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 20 } });
@@ -403,7 +445,7 @@ describe('fresh React runner', () => {
     await page.goto(server.url, { waitUntil: 'domcontentloaded' });
     await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');
     const startedAt = Date.now();
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'no-actions', title: 'suite > no actions', file: '/tmp/no-actions.test.ts', startedAt });
     await expect.poll(() => page.getByRole('button', { name: 'Stop', exact: true }).count()).toBe(1);
     expect(await page.getByRole('button', { name: /Rerun no actions/ }).count()).toBe(0);
@@ -415,7 +457,7 @@ describe('fresh React runner', () => {
     expect(await page.getByRole('button', { name: 'Stop', exact: true }).count()).toBe(0);
 
     const missingStartedAt = startedAt + 10;
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: missingStartedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: missingStartedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'missing', title: 'suite > missing trace', file: '/tmp/missing.test.ts', startedAt: missingStartedAt });
     server.hub.publish({ v: 1, type: 'test-end', id: 'missing', status: 'failed', durationMs: 4, flaky: false, lostLogRecords: 0, traceRef: '/tmp/does-not-exist.twtrace', error: 'test failed' });
     server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0, durationMs: 4 } });
@@ -479,7 +521,11 @@ describe('fresh React runner', () => {
     await page.getByRole('button', { name: 'Expand inspector' }).click();
     await expect.poll(() => page.locator('.tw-inspector').isVisible()).toBe(true);
     expect(await scrollEndIsReachable(page, '.tw-inspector-body', '.tw-inspector-body > :last-child')).toBe(true);
-    await page.waitForTimeout(250); // navigation grid transition has finished before pointer geometry is sampled
+    await page.evaluate(async () => {
+      await Promise.all(document.getAnimations().map(async (animation) => {
+        await animation.finished.catch(() => undefined);
+      }));
+    });
     const railDivider = page.locator('.tw-workspace-splitter');
     const beforeRailDrag = await railDivider.boundingBox();
     if (beforeRailDrag === null) throw new Error('rail divider missing');
@@ -582,10 +628,10 @@ describe('fresh React runner', () => {
     let selectedTitle = '';
     const server = await startUiServer({
       trace,
-      onRerun: (ids) => {
+      onRun: (ids) => {
         requested = ids;
         const startedAt = Date.now();
-        server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
+        server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
         server.hub.publish({ v: 1, type: 'test-start', id: 'rerun-runtime', title: selectedTitle, file: trace, startedAt });
         setTimeout(() => {
           server.hub.publish({ v: 1, type: 'session', sessionId: 'rerun-session', testId: 'rerun-runtime', terminalProfile: 'default', columns: 80, rows: 24 });
@@ -594,12 +640,13 @@ describe('fresh React runner', () => {
           server.hub.publish({ v: 1, type: 'action-start', actionId: 'a-live', api: 'press', t: 12, testId: 'rerun-runtime', sessionId: 'rerun-session' });
         }, 40);
         setTimeout(() => {
-          server.hub.publish({ v: 1, type: 'action', actionId: 'a-live', kind: 'action', api: 'press', t: 80, ok: true, testId: 'rerun-runtime', sessionId: 'rerun-session', ref: 'b1@1' });
+          server.hub.publish({ v: 1, type: 'action', actionId: 'a-live', kind: 'action', api: 'press', t: 80, ok: true, testId: 'rerun-runtime', sessionId: 'rerun-session', ref: 'semantic:b1@1' });
         }, 500);
         setTimeout(() => {
           server.hub.publish({ v: 1, type: 'test-end', id: 'rerun-runtime', status: 'passed', durationMs: 100, flaky: false, lostLogRecords: 0, traceRef: trace });
           server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 100 } });
         }, 1_200);
+        return { runId: createRunId('run'), completed: Promise.resolve() };
       },
     });
     servers.push(server);
@@ -610,7 +657,7 @@ describe('fresh React runner', () => {
     await page.getByRole('button', { name: new RegExp(`^Rerun ${escapeRegExp(selectedTitle)}$`, 'u') }).click();
 
     await expect.poll(() => page.locator('.tw-evidence-pill').innerText()).toContain('LIVE');
-    expect(requested).toEqual([`${trace}::${selectedTitle}`]);
+    expect(requested).toEqual(['trace:trace-session']);
     await expect.poll(() => page.locator('.tw-terminal-viewport').innerText()).toContain('LIVE rerun evidence');
     await expect.poll(() => page.locator('[data-node-id="action:rerun-session:a-live"]').count()).toBe(1);
     await page.getByRole('button', { name: 'Expand inspector' }).click();
@@ -618,7 +665,7 @@ describe('fresh React runner', () => {
     const liveCommand = page.locator('[data-node-id="action:rerun-session:a-live"]');
     await expect.poll(() => liveCommand.getAttribute('data-status')).toBe('passed');
     await liveCommand.hover();
-    await expect.poll(() => page.locator('.tw-terminal-highlight[data-target-ref="b1@1"]').count()).toBe(1);
+    await expect.poll(() => page.locator('.tw-terminal-highlight[data-target-ref="semantic:b1@1"]').count()).toBe(1);
     await liveCommand.click();
     await page.locator('.tw-machine-bar').hover();
     expect(await page.locator('.tw-terminal-highlight[data-pinned="true"]').count()).toBe(1);
@@ -635,7 +682,7 @@ describe('fresh React runner', () => {
     await page.goto(server.url, { waitUntil: 'domcontentloaded' });
     await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');
     const startedAt = Date.now();
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'alpha', title: 'suite > alpha case', file: '/tmp/alpha.test.ts', startedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'beta', title: 'suite > beta case', file: '/tmp/beta.test.ts', startedAt: startedAt + 1 });
     const alpha = page.locator('.tw-case-button').filter({ hasText: 'alpha case' });
@@ -646,11 +693,15 @@ describe('fresh React runner', () => {
     await alpha.click();
     expect(await alpha.getAttribute('aria-expanded')).toBe('false');
     server.hub.publish({ v: 1, type: 'action-start', actionId: 'live-a1', api: 'press', t: 20, testId: 'alpha' });
-    await page.waitForTimeout(80);
-    expect(await alpha.getAttribute('aria-expanded')).toBe('false');
 
+    // A collapsed case renders no command rows, so alpha's own update is not
+    // observable while it stays collapsed — waiting on one would wait forever.
+    // Beta is expanded and the stream is ordered, so beta's row is proof that
+    // alpha's update was applied before it, and alpha is still collapsed.
     await beta.click();
     expect(await beta.getAttribute('aria-expanded')).toBe('true');
+    server.hub.publish({ v: 1, type: 'action-start', actionId: 'live-b1', api: 'press', t: 21, testId: 'beta' });
+    await expect.poll(() => page.locator('.tw-command-row').count()).toBe(1);
     expect(await alpha.getAttribute('aria-expanded')).toBe('false');
     await alpha.click();
     expect(await alpha.getAttribute('aria-expanded')).toBe('true');
@@ -665,7 +716,7 @@ describe('fresh React runner', () => {
     await page.goto(server.url, { waitUntil: 'domcontentloaded' });
     await expect.poll(() => page.locator('.tw-connection-dot').getAttribute('data-connected')).toBe('true');
     const startedAt = Date.now();
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
     server.hub.publish({ v: 1, type: 'test-start', id: 'status-live', title: 'status suite > stays running', file: '/tmp/status.test.ts', startedAt });
     server.hub.publish({ v: 1, type: 'action-start', actionId: 'a1', api: 'press', t: 10, testId: 'status-live' });
     const runningCase = page.locator('.tw-case[data-status="running"]');
@@ -695,12 +746,13 @@ describe('fresh React runner', () => {
     const actionlessTitle = 'Permission workflow > records an actionless business rule';
     server.hub.publish({ v: 1, type: 'tests-discovered', tests: [ownedDescriptor(feature, actionlessTitle)] });
     const startedAt = Date.now();
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
-    server.hub.publish({ v: 1, type: 'test-start', id: 'actionless-runtime', title: actionlessTitle, file: feature, startedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
+    const actionlessId = `${feature}::${actionlessTitle}`;
+    server.hub.publish({ v: 1, type: 'test-start', id: actionlessId, runnerTaskId: actionlessId, title: actionlessTitle, file: feature, startedAt });
     const authored = { keyword: 'Given', text: 'the policy already permits the request', source: { file: feature, line: 8, column: 5 } } as const;
-    server.hub.publish({ v: 1, type: 'step', testId: 'actionless-runtime', title: 'provider wrapper', phase: 'start', stepId: 'tw-step-1', t: 1, gherkin: authored });
-    server.hub.publish({ v: 1, type: 'step', testId: 'actionless-runtime', title: 'provider wrapper', phase: 'end', stepId: 'tw-step-1', t: 2, status: 'passed', gherkin: authored });
-    server.hub.publish({ v: 1, type: 'test-end', id: 'actionless-runtime', status: 'passed', durationMs: 3, flaky: false, lostLogRecords: 0 });
+    server.hub.publish({ v: 1, type: 'step', testId: actionlessId, title: 'provider wrapper', phase: 'start', stepId: 'tw-step-1', t: 1, gherkin: authored });
+    server.hub.publish({ v: 1, type: 'step', testId: actionlessId, title: 'provider wrapper', phase: 'end', stepId: 'tw-step-1', t: 2, status: 'passed', gherkin: authored });
+    server.hub.publish({ v: 1, type: 'test-end', id: actionlessId, status: 'passed', durationMs: 3, flaky: false, lostLogRecords: 0 });
     server.hub.publish({ v: 1, type: 'run-end', summary: { total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, durationMs: 3 } });
 
     const actionless = page.locator('.tw-case-button').filter({ hasText: 'records an actionless business rule' });
@@ -714,7 +766,7 @@ describe('fresh React runner', () => {
     await page.locator('.tw-inspector').waitFor();
     const absentGeometry = await paneWidths(page);
     expect(await page.getByText('No semantic tree at this moment', { exact: true }).count()).toBe(1);
-    server.hub.publish({ v: 1, type: 'session', sessionId: 'late-semantic', testId: 'actionless-runtime', terminalProfile: 'default', columns: 60, rows: 10 });
+    server.hub.publish({ v: 1, type: 'session', sessionId: 'late-semantic', testId: actionlessId, terminalProfile: 'default', columns: 60, rows: 10 });
     server.hub.publish({ v: 1, type: 'semantic', sessionId: 'late-semantic', revision: 1, snapshot: { ...(FIXTURE_TREES[0] as NonNullable<(typeof FIXTURE_TREES)[number]>), sessionId: 'late-semantic', columns: 60, rows: 10 } });
     await page.locator('.tw-semantic-node-row').first().waitFor();
     const presentGeometry = await paneWidths(page);
@@ -734,20 +786,20 @@ describe('fresh React runner', () => {
     const caseId = `${file}::${title}`;
     server.hub.publish({ v: 1, type: 'tests-discovered', tests: [{ id: caseId, title, file, provider: { id: '@termwright/test', version: 1 }, kind: 'gherkin-scenario', ancestors: [{ kind: 'feature', title: 'Checkout' }, { kind: 'rule', title: 'Approval' }], tags: ['@smoke', '@checkout'], source: { file, line: 12, column: 3 } }] });
     const startedAt = Date.now();
-    server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
-    server.hub.publish({ v: 1, type: 'test-start', id: 'gherkin-live', title, file, startedAt });
+    server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
+    server.hub.publish({ v: 1, type: 'test-start', id: caseId, runnerTaskId: caseId, title, file, startedAt });
     const backgroundStep = { keyword: 'Given', text: 'the application is open', source: { file, line: 13, column: 5 }, background: true } as const;
     const approvalStep = { keyword: 'When', text: 'I approve the purchase', source: { file, line: 16, column: 5 } } as const;
-    server.hub.publish({ v: 1, type: 'step', testId: 'gherkin-live', title: 'generic wrapper title', phase: 'start', stepId: 'before', t: 5, gherkin: backgroundStep });
-    server.hub.publish({ v: 1, type: 'action', actionId: 'setup', kind: 'action', api: 'open application', t: 18, ok: true, testId: 'gherkin-live', stepId: 'before' });
-    server.hub.publish({ v: 1, type: 'step', testId: 'gherkin-live', title: 'generic wrapper title', phase: 'end', stepId: 'before', t: 25, status: 'passed', gherkin: backgroundStep });
-    server.hub.publish({ v: 1, type: 'step', testId: 'gherkin-live', title: 'duplicate retained annotation', phase: 'start', stepId: 'before', t: 5, gherkin: backgroundStep });
-    server.hub.publish({ v: 1, type: 'step', testId: 'gherkin-live', title: 'generic wrapper title', phase: 'start', stepId: 'approve', t: 30, gherkin: approvalStep });
+    server.hub.publish({ v: 1, type: 'step', testId: caseId, title: 'generic wrapper title', phase: 'start', stepId: 'before', t: 5, gherkin: backgroundStep });
+    server.hub.publish({ v: 1, type: 'action', actionId: 'setup', kind: 'action', api: 'open application', t: 18, ok: true, testId: caseId, stepId: 'before' });
+    server.hub.publish({ v: 1, type: 'step', testId: caseId, title: 'generic wrapper title', phase: 'end', stepId: 'before', t: 25, status: 'passed', gherkin: backgroundStep });
+    server.hub.publish({ v: 1, type: 'step', testId: caseId, title: 'duplicate retained annotation', phase: 'start', stepId: 'before', t: 5, gherkin: backgroundStep });
+    server.hub.publish({ v: 1, type: 'step', testId: caseId, title: 'generic wrapper title', phase: 'start', stepId: 'approve', t: 30, gherkin: approvalStep });
     for (let index = 0; index < 20; index += 1) {
-      server.hub.publish({ v: 1, type: 'action', actionId: `a${index}`, kind: 'action', api: index === 0 ? 'locator.click' : 'locator.press', t: 40 + index * 12, ok: true, testId: 'gherkin-live', sessionId: 'scenario-session', stepId: 'approve', selector: index === 0 ? "getByRole('button', { name: 'Approve purchase with an intentionally descriptive label' })" : `[data-key="${index}"]` });
+      server.hub.publish({ v: 1, type: 'action', actionId: `a${index}`, kind: 'action', api: index === 0 ? 'locator.click' : 'locator.press', t: 40 + index * 12, ok: true, testId: caseId, sessionId: 'scenario-session', stepId: 'approve', selector: index === 0 ? "getByRole('button', { name: 'Approve purchase with an intentionally descriptive label' })" : `[data-key="${index}"]` });
     }
-    server.hub.publish({ v: 1, type: 'action', actionId: 'failed-assert', kind: 'assert', api: 'toHaveText', t: 155, ok: false, error: 'expected status to be approved\nReceived: pending', testId: 'gherkin-live', sessionId: 'scenario-session', stepId: 'approve', selector: '[role="status"]', ref: 'status@7' });
-    server.hub.publish({ v: 1, type: 'action-start', actionId: 'still-running', api: 'waitForStableScreen', t: 170, testId: 'gherkin-live', sessionId: 'scenario-session', stepId: 'approve', selector: 'screen' });
+    server.hub.publish({ v: 1, type: 'action', actionId: 'failed-assert', kind: 'assert', api: 'toHaveText', t: 155, ok: false, error: 'expected status to be approved\nReceived: pending', testId: caseId, sessionId: 'scenario-session', stepId: 'approve', selector: '[role="status"]', ref: 'semantic:status@7' });
+    server.hub.publish({ v: 1, type: 'action-start', actionId: 'still-running', api: 'waitForQuietScreen', t: 170, testId: caseId, sessionId: 'scenario-session', stepId: 'approve', selector: 'screen' });
 
     await expect.poll(() => page.locator('.tw-command-row').count()).toBe(23);
     expect(await page.locator('.tw-section-row').count()).toBeGreaterThanOrEqual(3);
@@ -795,7 +847,7 @@ describe('fresh React runner', () => {
     expect(bottom.reachable).toBe(true);
     await page.screenshot({ path: '/tmp/termwright-fresh-dense-timeline.png', fullPage: false });
     server.hub.publish({
-      v: 1, type: 'test-end', id: 'gherkin-live', status: 'failed', durationMs: 220, flaky: false,
+      v: 1, type: 'test-end', id: caseId, status: 'failed', durationMs: 220, flaky: false,
       lostLogRecords: 0, attempt: 3, error: 'final provider failure',
       priorFailures: [{ attempt: 1, errors: ['first provider failure'] }, { attempt: 2, errors: ['second provider failure'] }],
     });
@@ -819,24 +871,25 @@ describe('fresh React runner', () => {
       ownedDescriptor(join(projectRoot, 'specs/nested/b.test.ts'), 'case C'),
       ownedDescriptor(join(projectRoot, 'other/outside.test.ts'), 'outside case'),
     ];
-    const server = await startUiServer({ onRerun: (targets) => {
+    const server = await startUiServer({ onRun: (targets) => {
       const selectedTargets = targets ?? [];
       mutableRequests.push([...selectedTargets]);
       const selected = descriptors.find((test) => selectedTargets.includes(test.id)) ?? descriptors[0];
-      if (selected === undefined) return;
+      if (selected === undefined) return { runId: createRunId('run'), completed: Promise.resolve() };
       const startedAt = Date.now();
-      server.hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt });
-      server.hub.publish({ v: 1, type: 'test-start', id: `runtime-${mutableRequests.length}`, title: selected.title, file: selected.file, startedAt });
-      server.hub.publish({ v: 1, type: 'test-end', id: `runtime-${mutableRequests.length}`, status: 'passed', durationMs: 1, flaky: false, lostLogRecords: 0 });
+      server.hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt });
+      server.hub.publish({ v: 1, type: 'test-start', id: selected.id, runnerTaskId: selected.id, title: selected.title, file: selected.file, startedAt });
+      server.hub.publish({ v: 1, type: 'test-end', id: selected.id, status: 'passed', durationMs: 1, flaky: false, lostLogRecords: 0 });
       if (mutableRequests.length === 2) {
         const outside = descriptors[3];
         if (outside !== undefined) {
-          server.hub.publish({ v: 1, type: 'test-start', id: 'runtime-unexpected', title: outside.title, file: outside.file, startedAt });
-          server.hub.publish({ v: 1, type: 'test-end', id: 'runtime-unexpected', status: 'passed', durationMs: 1, flaky: false, lostLogRecords: 0 });
+          server.hub.publish({ v: 1, type: 'test-start', id: outside.id, runnerTaskId: outside.id, title: outside.title, file: outside.file, startedAt });
+          server.hub.publish({ v: 1, type: 'test-end', id: outside.id, status: 'passed', durationMs: 1, flaky: false, lostLogRecords: 0 });
         }
       }
       const total = mutableRequests.length === 2 ? 2 : 1;
       server.hub.publish({ v: 1, type: 'run-end', summary: { total, passed: total, failed: 0, skipped: 0, flaky: 0, durationMs: 1 } });
+      return { runId: createRunId('run'), completed: Promise.resolve() };
     } });
     servers.push(server);
     const page = await checkedPage();

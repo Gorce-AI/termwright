@@ -1,6 +1,6 @@
 {
   "kind": "termwright-performance-report",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "generatedAt": "2026-08-20T10:34:46.858Z",
   "environment": {
     "runtime": "node v24.1.0",
@@ -38,12 +38,6 @@
           "unit": "count",
           "value": 1000,
           "note": "The current TypeScript probe transport sends one full snapshot per benchmark frame."
-        },
-        "deltas": {
-          "status": "measured",
-          "unit": "count",
-          "value": 0,
-          "note": "The current TypeScript probe transport does not advertise or emit tree-diffs."
         },
         "droppedEvents": {
           "status": "unavailable",

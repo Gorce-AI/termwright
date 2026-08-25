@@ -3,7 +3,6 @@ import {mkdirSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {prepareInstrumentedBuild} from '@termwright/probe-charm';
 
-const root = fileURLToPath(new URL('..', import.meta.url));
 const app = fileURLToPath(new URL('../app', import.meta.url));
 const available = spawnSync('go', ['version'], {stdio: 'ignore'});
 

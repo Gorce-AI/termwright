@@ -10,7 +10,7 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { buildAgentContext, buildUsage } from './agent-context.js';
+import { buildAgentContext, buildUsage, TARGETING_GUIDANCE } from './agent-context.js';
 import type { JsonSchema } from './agent-context.js';
 import { TOOLS } from './registry.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
@@ -46,6 +46,40 @@ function renderParameters(schema: JsonSchema): string {
     .join('\n');
 }
 
+function markdownTableCell(value: string): string {
+  return value.replaceAll('|', '\\|').replace(/\s+/gu, ' ').trim();
+}
+
+/** Renders the committed tool inventories from the same registry the server exposes. */
+export function renderMcpToolSurfaceMarkdown(): string {
+  const context = buildAgentContext();
+  const sections = [
+    ['Live terminal tools', context.tools.filter((tool) => tool.name.startsWith('terminal.'))],
+    ['Trace tools', context.tools.filter((tool) => tool.name.startsWith('trace.'))],
+  ] as const;
+
+  return [
+    '<!-- Generated from packages/mcp/src/registry.ts; do not edit this block by hand. -->',
+    ...sections.flatMap(([heading, tools]) => [
+      `### ${heading}`,
+      '',
+      '| Tool | Purpose |',
+      '| --- | --- |',
+      ...tools.map((tool) => `| \`${tool.name}\` | ${markdownTableCell(tool.description)} |`),
+      '',
+    ]),
+    '### Targeting',
+    '',
+    TARGETING_GUIDANCE.precedence,
+    '',
+    TARGETING_GUIDANCE.semanticUnavailable,
+    '',
+    'Names and text accept `/pattern/flags`. Locators are strict: more than one match returns',
+    '`ambiguous-locator` unless `nth` is explicit.',
+    '',
+  ].join('\n');
+}
+
 /** The skill body an agent reads before its first tool call. */
 function renderSkillMarkdown(): string {
   return [
@@ -74,8 +108,8 @@ function renderSkillMarkdown(): string {
     '```',
     'Terminal t1 100x30 revision 42',
     'semanticTree: available',
-    'dialog "Permission" ref=n7@42 bounds=(8,20,40,9) modal',
-    '  button "Approve" ref=n8@42 bounds=(14,23,11,1) focused',
+    'dialog "Permission" ref=semantic:n7@42 bounds=(8,20,40,9) modal',
+    '  button "Approve" ref=semantic:n8@42 bounds=(14,23,11,1) focused',
     'visible text:',
     '…',
     '```',
@@ -85,12 +119,12 @@ function renderSkillMarkdown(): string {
     'Stable semantic identities can be resolved again after the screen moves on. Frame-local',
     'identities and grid refs cannot; take a fresh snapshot when they become stale.',
     '',
-    '`semanticTree: unavailable` means the program ships no adapter. Target those by `text`; there',
-    'are no invented roles.',
+    TARGETING_GUIDANCE.semanticUnavailable,
     '',
     '## Targeting',
     '',
-    'Precedence: `ref`, `selector`, `testId`, `role` (+`name`), `label`, `text`. Any name or text may',
+    TARGETING_GUIDANCE.precedence,
+    'Any name or text may',
     'be written `/pattern/flags` to match as a regular expression. Locators are strict — more than one',
     'match fails with `ambiguous-locator` and lists the candidates; pass `nth` to disambiguate, or use',
     '`terminal.query` first to see what matches.',
@@ -164,8 +198,9 @@ function renderSkillMarkdown(): string {
     '`suggestion`. Branch on the kind: `stale-snapshot` (re-snapshot), `ambiguous-locator` (narrow the',
     'target), `timeout` (the condition never held — read the screen excerpt), `not-found` (the path you',
     'named holds nothing — a typo, not a broken artifact; a corrupt archive reports',
-    '`protocol-violation` instead), `unsupported-action` (the',
-    'program never enabled mouse tracking, or has no semantic tree), `no-session` (bad handle),',
+    '`protocol-violation` instead), `probe-attach-failed` (a required semantic probe never attached),',
+    '`capability-unavailable` (the frozen contract lacks the requested fact), `input-mode-disabled`',
+    '(the app did not enable the required terminal input mode), `no-session` (bad handle),',
     '`history-truncated` (cursor too old). The same payload is in `_meta["io.termwright/error"]`.',
     '',
     'See `reference.md` for every tool and parameter, and `agent-context.json` for the machine-readable',

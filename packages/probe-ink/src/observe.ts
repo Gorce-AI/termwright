@@ -10,6 +10,7 @@ import type {
   ProtocolLimits,
 } from '@termwright/protocol';
 import { annotationForInkNode } from './annotations.js';
+import type { RelativeGeometry } from './frame-capture.js';
 
 /** Structural subset of Ink's DOM node. No runtime import from `ink`. */
 export interface InkDomElement {
@@ -29,6 +30,8 @@ export interface InkDomElement {
       readonly selected?: boolean;
       readonly busy?: boolean;
       readonly multiline?: boolean;
+      readonly required?: boolean;
+      readonly multiselectable?: boolean;
     };
   };
 }
@@ -51,14 +54,18 @@ export interface ObserveInkOptions {
   readonly limits: ProtocolLimits;
   /** The probe's own hidden Box. It is the sole injected node and is omitted. */
   readonly excluded?: InkDomElement | null;
+  /** Renderer-retained roots (notably committed <Static>) detached by Ink later. */
+  readonly retainedRoots?: readonly InkDomElement[];
+  readonly retainedChildren?: ReadonlyMap<InkDomElement, readonly InkDomNode[]>;
   readonly measureElement?: MeasureElement;
-  /** Only true when live-region coordinates are proven viewport-absolute. */
-  readonly includeGeometry?: boolean;
+  /** Geometry frozen by the certified 7.1.1 renderer instrumentation. */
+  readonly geometry?: ReadonlyMap<InkDomElement, RelativeGeometry>;
 }
 
 export interface InkObservation {
   readonly frame: ProbeFrame;
   readonly truncated: boolean;
+  readonly geometryRegions: ReadonlyMap<string, 'live' | 'static'>;
 }
 
 const isElement = (node: InkDomNode): node is InkDomElement => node.nodeName !== '#text';
@@ -74,6 +81,8 @@ export function observeInkTree(root: InkDomElement, options: ObserveInkOptions):
   const objects: ProbeObject[] = [];
   const ids = identityStore(root);
   let truncated = false;
+  const geometryRegions = new Map<string, 'live' | 'static'>();
+  const visited = new Set<InkDomElement>();
 
   const visit = (
     node: InkDomElement,
@@ -81,7 +90,8 @@ export function observeInkTree(root: InkDomElement, options: ObserveInkOptions):
     depth: number,
     ancestorHidden: boolean,
   ): void => {
-    if (node === options.excluded) return;
+    if (node === options.excluded || visited.has(node)) return;
+    visited.add(node);
     if (depth > options.limits.maxDepth || objects.length >= options.limits.maxNodes) {
       truncated = true;
       return;
@@ -96,16 +106,20 @@ export function observeInkTree(root: InkDomElement, options: ObserveInkOptions):
     );
     const accessibility = observedAccessibility(node);
     const geometry = geometryOf(node, options);
+    const identity = ids.idFor(node);
+    const region = options.geometry?.get(node)?.region;
+    if (region !== undefined) geometryRegions.set(identity, region);
     // Probe IR's `text` is the object's own text, never a descendant-derived
     // accessible name. The recognizer applies name-from-content over the tree.
-    const text = isTextHost(node) ? textOf(node, options.limits.maxStringBytes) : undefined;
-    const unobservable = unobservableFor(node, geometry !== undefined, text !== undefined);
+    const children = options.retainedChildren?.get(node) ?? node.childNodes;
+    const text = isTextHost(node) ? textOf(children, options.limits.maxStringBytes) : undefined;
+    const unobservable = unobservableFor(node, geometry?.intendedRect !== undefined, text !== undefined);
 
     objects.push({
-      identity: { kind: 'stable', value: ids.idFor(node) },
+      identity: { kind: 'stable', value: identity },
       frameworkType: node.nodeName,
       ...(parent === undefined ? {} : { parent: ids.idFor(parent) }),
-      ...(geometry === undefined ? {} : { geometry: { intendedRect: geometry } }),
+      ...(geometry === undefined ? {} : { geometry }),
       ...(state === undefined ? {} : { state }),
       ...(text === undefined ? {} : { text }),
       ...(accessibility === undefined ? {} : { accessibility }),
@@ -113,7 +127,7 @@ export function observeInkTree(root: InkDomElement, options: ObserveInkOptions):
       unobservable,
     });
 
-    for (const child of node.childNodes) {
+    for (const child of children) {
       // Raw `#text` values are payload owned by their `ink-text` host, not a
       // fifth host kind. The text is retained on that host above.
       if (isElement(child)) visit(child, node, depth + 1, hidden);
@@ -121,7 +135,13 @@ export function observeInkTree(root: InkDomElement, options: ObserveInkOptions):
   };
 
   visit(root, undefined, 0, false);
-  return { frame: { frame: options.frame, objects }, truncated };
+  // Ink removes committed <Static> children from the live root but retains the
+  // exact host subtree in root.staticNode for the separately rendered static
+  // output. Observe that retained subtree as a root child when it is no longer
+  // reachable through childNodes; the identity and captured layout stay exact.
+  if (root.staticNode !== undefined) visit(root.staticNode, root, 1, false);
+  for (const retained of options.retainedRoots ?? []) visit(retained, root, 1, false);
+  return { frame: { frame: options.frame, objects }, truncated, geometryRegions };
 }
 
 /** Weak identity is stable for exactly the lifetime of Ink's host object. */
@@ -170,6 +190,10 @@ function observedState(node: InkDomElement, displayed: boolean): ProbeObservedSt
     ...(accessibility?.selected === undefined ? {} : { selected: accessibility.selected }),
     ...(accessibility?.busy === undefined ? {} : { busy: accessibility.busy }),
     ...(accessibility?.multiline === undefined ? {} : { multiline: accessibility.multiline }),
+    ...(accessibility?.required === undefined ? {} : { required: accessibility.required }),
+    ...(accessibility?.multiselectable === undefined
+      ? {}
+      : { multiselectable: accessibility.multiselectable }),
   };
   return state;
 }
@@ -177,31 +201,14 @@ function observedState(node: InkDomElement, displayed: boolean): ProbeObservedSt
 function geometryOf(
   node: InkDomElement,
   options: ObserveInkOptions,
-): ProbeRect | undefined {
-  if (options.includeGeometry !== true || options.measureElement === undefined) return undefined;
-  if (node.nodeName === 'ink-virtual-text') return undefined;
-  try {
-    const measured = options.measureElement(node);
-    if (
-      !Number.isFinite(measured.x)
-      || !Number.isFinite(measured.y)
-      || !Number.isFinite(measured.width)
-      || !Number.isFinite(measured.height)
-      || measured.width <= 0
-      || measured.height <= 0
-    ) return undefined;
-    return {
-      row: Math.trunc(measured.y),
-      column: Math.trunc(measured.x),
-      width: Math.trunc(measured.width),
-      height: Math.trunc(measured.height),
-    };
-  } catch {
-    return undefined;
-  }
+): { readonly intendedRect: ProbeRect; readonly visibleRect: ProbeRect } | undefined {
+  const geometry = options.geometry?.get(node);
+  return geometry === undefined
+    ? undefined
+    : { intendedRect: geometry.intended, visibleRect: geometry.visible };
 }
 
-function textOf(node: InkDomElement, maxBytes: number): string | undefined {
+function textOf(children: readonly InkDomNode[], maxBytes: number): string | undefined {
   const parts: string[] = [];
   let bytes = 0;
 
@@ -217,7 +224,7 @@ function textOf(node: InkDomElement, maxBytes: number): string | undefined {
   // Raw #text children are this host's payload. Nested host elements retain
   // their own ProbeObjects, so folding them in here would violate the IR's
   // own-text contract and duplicate them during name-from-content inference.
-  for (const child of node.childNodes) {
+  for (const child of children) {
     if (bytes >= maxBytes) break;
     if (!isElement(child)) append(child.nodeValue);
   }
@@ -237,7 +244,6 @@ function unobservableFor(
     'textSelection',
     'scroll',
     'scrollExtent',
-    'visibleRect',
     'paintOrder',
   ];
   const state = node.internal_accessibility?.state;
@@ -248,18 +254,7 @@ function unobservableFor(
   if (state?.selected === undefined) result.push('selected');
   if (state?.busy === undefined) result.push('busy');
   if (state?.multiline === undefined) result.push('multiline');
-  if (!hasGeometry) result.push('intendedRect');
+  if (!hasGeometry) result.push('intendedRect', 'visibleRect');
   if (!hasText && isTextHost(node)) result.push('text');
   return result;
-}
-
-/** `<Static>` moves the live region down by an offset Ink does not expose. */
-export function hasStaticContent(root: InkDomElement): boolean {
-  const stack: InkDomElement[] = [root];
-  while (stack.length > 0) {
-    const node = stack.pop() as InkDomElement;
-    if (node.internal_static === true || node.staticNode !== undefined) return true;
-    for (const child of node.childNodes) if (isElement(child)) stack.push(child);
-  }
-  return false;
 }

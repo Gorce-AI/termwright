@@ -7,12 +7,12 @@ copies from.
 
 | Example | Application | What the tests show |
 |---|---|---|
-| [`ink-todo/`](ink-todo) | Ink 7 + TypeScript | end-to-end over a real PTY, plus component tests with `mountInk` |
+| [`ink-todo/`](ink-todo) | Ink 7 + TypeScript | end-to-end over a real PTY, component tests, and production-router pointer evidence |
 | [`opentui-form/`](opentui-form) | OpenTUI + TypeScript | focused input, semantic values, geometry, and exact pointer ownership |
 | [`textual-notes/`](textual-notes) | Textual + Python | a TypeScript test driving a Python program |
 | [`tview-menu/`](tview-menu) | tview + Go | a TypeScript test driving a Go binary |
-| [`bubbletea-login/`](bubbletea-login) | Bubble Tea + Go | frame-local component state, focus, values, and secret withholding |
-| [`ratatui-list/`](ratatui-list) | Ratatui + Rust | instrumented Cargo build, keyboard navigation, and selected list state |
+| [`bubbletea-login/`](bubbletea-login) | Bubble Tea + Go | component state, secret withholding, and provider-backed real mouse input |
+| [`ratatui-list/`](ratatui-list) | Ratatui + Rust | instrumented Cargo build and provider-backed real mouse input |
 
 The suites read almost identically, which is the point: the driver
 addresses an application by role and name over a language-neutral protocol, so
@@ -55,8 +55,8 @@ pnpm test
 
 - `src/todo-app.tsx` — the application. `useSemantic` carries optional author
   intent; the launcher-injected Ink probe owns observation and transport.
-- `src/mouse.ts` — the application side of clicking: enabling mouse reporting
-  and hit-testing its own measured layout.
+- `src/mouse.ts` — the production mouse router: it both handles normal input
+  and exposes read-only measured evidence to Termwright.
 - `tests/app.e2e.test.ts` — `launchTerminal` through the Vitest preset: role
   locators, the CSS dialect, mouse, keyboard, YAML snapshots on file and both
   snapshot oracles.
@@ -103,16 +103,17 @@ OpenTUI's exact geometry and pointer ownership evidence.
 
 ## bubbletea-login
 
-The application imports only Bubble Tea and Bubbles. Its build script prepares
-an external Go workspace, then the test verifies focused component state and
-that a password never enters semantics or a trace.
+The application uses Bubble Tea/Bubbles plus Termwright's annotation and
+evidence SDKs. Its build script prepares an external Go workspace; the tests
+verify focused component state, secret withholding, and that a semantic Submit
+click reaches the ordinary `tea.MouseClickMsg` branch through the PTY.
 
 ## ratatui-list
 
 The application is a normal Crossterm/Ratatui binary. A small Rust build tool
-uses the published `termwright-probe-ratatui` preparation API, restores the
-lockfile after the instrumented build, and leaves the application source
-unchanged.
+uses the published `termwright-probe-ratatui` preparation API and restores the
+lockfile after the instrumented build. Its production router is also registered
+as evidence, while all actions still arrive as normal `crossterm` mouse events.
 
 ## What to copy
 
@@ -120,9 +121,9 @@ unchanged.
   application publishes the tree for the frame your input caused, so `press()`
   followed straight by `expect(...)` is correct and sleep-free. Actions wait for
   a slow child to attach too, so a test can act right after a screen wait. The
-  one thing that never waits is a plain read — `capabilities()` in a bare
-  `expect`, or a **spy**, which renders nothing and so produces no frame to wait
-  for. Put a polling matcher first, and poll a spy with `vi.waitFor`.
+  a plain **spy** still renders nothing and produces no frame to wait for. Put a
+  locator matcher first, and poll a spy with `vi.waitFor`. Capability branching
+  uses the frozen result of `await app.settled()`.
 - **Scope destructive locators.** `dialog button#confirm` keeps working the day
   someone adds a second Delete button to the toolbar; `getByRole('button',
   {name: 'Delete'})` starts failing as ambiguous.
@@ -138,7 +139,7 @@ unchanged.
   no suite depends on a shared fixtures directory or on what ran before it.
 - **A click needs the frame to hold still.** Matchers only read the tree, but a
   click aims at coordinates. After anything animated — a modal fading in —
-  `waitForStable()` before clicking.
+  `waitForQuiet()` before clicking.
 
 [`NOTES.md`](NOTES.md) has the rest: why each example is shaped the way it is,
 and the traps that cost time while writing them.

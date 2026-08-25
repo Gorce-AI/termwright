@@ -4,8 +4,6 @@
  * exits cleanly on demand, so "clean exit is not a crash" can be asserted
  * against the same program.
  */
-process.stdout.write('CRASH APP READY\r\n');
-
 process.stdin.setRawMode?.(true);
 process.stdin.resume();
 // A pty coalesces writes: two press() calls routinely arrive as one chunk, so
@@ -30,3 +28,8 @@ process.stdin.on('data', (chunk) => {
     }
   }
 });
+
+// READY is also a synchronization boundary: once it is visible, terminal
+// input is raw and the fatal-signal command cannot be echoed over the screen
+// before the process dies.
+process.stdout.write('CRASH APP READY\r\n');

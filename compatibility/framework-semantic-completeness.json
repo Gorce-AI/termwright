@@ -1,0 +1,1868 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": {
+    "registry": "compatibility/registry.json",
+    "registrySchemaVersion": 5
+  },
+  "frameworks": [
+    {
+      "frameworkId": "ink",
+      "frameworkPackage": "ink",
+      "exactConfigurations": [
+        {
+          "id": "ink-7.1.1",
+          "frameworkVersion": "7.1.1",
+          "modules": [
+            {
+              "name": "ink",
+              "version": "7.1.1"
+            }
+          ]
+        }
+      ],
+      "upstreamTruth": {
+        "identityKind": "stable",
+        "probeFacts": [
+          "stable-identity",
+          "intended-rect",
+          "visible-rect",
+          "annotations"
+        ],
+        "adapterFacts": [
+          "tree",
+          "intended-geometry",
+          "clipped-geometry",
+          "states",
+          "actions",
+          "render-revisions"
+        ]
+      },
+      "capturedAutomatically": [
+        "semantic-tree",
+        "stable-identity",
+        "intended-geometry",
+        "clipped-geometry",
+        "paired-revisions"
+      ],
+      "portableContract": {
+        "automatic": [
+          "semantic-tree",
+          "stable-identity",
+          "intended-geometry",
+          "clipped-geometry",
+          "paired-revisions"
+        ],
+        "applicationIntegrated": [
+          {
+            "providerType": "pointer-evidence",
+            "providerFacts": [
+              "pointer-regions",
+              "hit-test"
+            ],
+            "sessionCapabilities": [
+              "pointer-geometry",
+              "pointer-hit-testing"
+            ],
+            "sdks": [
+              "@termwright/evidence-provider"
+            ]
+          },
+          {
+            "providerType": "action-strategy",
+            "providerFacts": [
+              "action-recipes"
+            ],
+            "sessionCapabilities": [
+              "action-strategies"
+            ],
+            "sdks": [
+              "@termwright/evidence-provider"
+            ]
+          },
+          {
+            "providerType": "focus-evidence",
+            "providerFacts": [
+              "focus-state"
+            ],
+            "sessionCapabilities": [
+              "focus"
+            ],
+            "sdks": [
+              "@termwright/evidence-provider"
+            ]
+          },
+          {
+            "providerType": "scroll-evidence",
+            "providerFacts": [
+              "scroll-state"
+            ],
+            "sessionCapabilities": [
+              "scroll"
+            ],
+            "sdks": [
+              "@termwright/evidence-provider"
+            ]
+          },
+          {
+            "providerType": "paint-evidence",
+            "providerFacts": [
+              "painted-regions"
+            ],
+            "sessionCapabilities": [
+              "painted-region"
+            ],
+            "sdks": [
+              "@termwright/evidence-provider"
+            ]
+          }
+        ],
+        "input": [
+          {
+            "capability": "keyboard-input",
+            "producerFacts": [
+              "terminal.writable-pty"
+            ],
+            "providerAlternatives": [],
+            "runtimePrerequisites": [
+              "writable-pty"
+            ]
+          },
+          {
+            "capability": "pointer-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "mouse-reporting-enabled"
+            ]
+          },
+          {
+            "capability": "focus-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "focus-reporting-enabled"
+            ]
+          }
+        ],
+        "unsupported": [
+          "render-order"
+        ]
+      },
+      "extendedOrDiagnostic": {
+        "annotations": {
+          "package": "@termwright/ink",
+          "apis": [
+            "useSemantic",
+            "Semantic"
+          ]
+        },
+        "producerFactsNotPromotedToAutomaticSessionCapabilities": [
+          "annotations",
+          "intended-geometry",
+          "clipped-geometry",
+          "states",
+          "actions"
+        ]
+      },
+      "applicationProvidersCanAdd": [
+        {
+          "providerType": "pointer-evidence",
+          "facts": [
+            "pointer-regions",
+            "hit-test"
+          ],
+          "sessionCapabilities": [
+            "pointer-geometry",
+            "pointer-hit-testing"
+          ]
+        },
+        {
+          "providerType": "action-strategy",
+          "facts": [
+            "action-recipes"
+          ],
+          "sessionCapabilities": [
+            "action-strategies"
+          ]
+        },
+        {
+          "providerType": "focus-evidence",
+          "facts": [
+            "focus-state"
+          ],
+          "sessionCapabilities": [
+            "focus"
+          ]
+        },
+        {
+          "providerType": "scroll-evidence",
+          "facts": [
+            "scroll-state"
+          ],
+          "sessionCapabilities": [
+            "scroll"
+          ]
+        },
+        {
+          "providerType": "paint-evidence",
+          "facts": [
+            "painted-regions"
+          ],
+          "sessionCapabilities": [
+            "painted-region"
+          ]
+        }
+      ],
+      "remainsUnknowableAutomatically": [
+        "Application component names disappear before the retained Ink host tree is created.",
+        "Ink cannot attribute focus to a host node automatically; an application production focus manager can provide it through the focus-evidence contract. Text selection and third-party input values remain unobservable automatically.",
+        "Only the checksummed Ink 7.1.1 renderer is certified; modified or other versions fail closed without negotiating semantics.",
+        "Occlusion is unknown, so semantic click is refused even when qualified bounds are present.",
+        "Ink does not retain aria-label; name-from-content roles use rendered text and containers remain unnamed."
+      ],
+      "executableClaims": [
+        {
+          "id": "claim.semantic-tree-authoritative",
+          "files": [
+            "packages/probe-ink/src/geometry.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.stable-identity-authoritative",
+          "files": [
+            "packages/probe-ink/src/geometry.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.intended-geometry-authoritative",
+          "files": [
+            "packages/probe-ink/src/geometry.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.clipped-geometry-authoritative",
+          "files": [
+            "packages/probe-ink/src/geometry.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.paired-revisions",
+          "files": [
+            "packages/probe-ink/src/geometry.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-region-authoritative",
+          "files": [
+            "packages/probe-ink/src/provider.pty.test.ts",
+            "examples/ink-todo/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-hit-test-authoritative",
+          "files": [
+            "packages/probe-ink/src/provider.pty.test.ts",
+            "examples/ink-todo/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.keyboard-real-pty",
+          "files": [
+            "packages/conformance/src/suites/driver-generic.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-real-pty",
+          "files": [
+            "packages/probe-ink/src/provider.pty.test.ts",
+            "examples/ink-todo/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-report-real-pty",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-authoritative",
+          "files": [
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.action-strategy-authoritative",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.scroll-authoritative",
+          "files": [
+            "packages/evidence-provider/src/index.test.ts",
+            "packages/driver/src/provider-evidence.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.painted-region-authoritative",
+          "files": [
+            "packages/evidence-provider/src/index.test.ts",
+            "packages/driver/src/provider-evidence.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "frameworkId": "opentui",
+      "frameworkPackage": "@opentui/core",
+      "exactConfigurations": [
+        {
+          "id": "opentui-0.5.3",
+          "frameworkVersion": "0.5.3",
+          "modules": [
+            {
+              "name": "@opentui/core",
+              "version": "0.5.3"
+            }
+          ]
+        }
+      ],
+      "upstreamTruth": {
+        "identityKind": "stable",
+        "probeFacts": [
+          "stable-identity",
+          "intended-rect",
+          "visible-rect",
+          "paint-order",
+          "annotations"
+        ],
+        "adapterFacts": [
+          "tree",
+          "intended-geometry",
+          "states",
+          "focus-state",
+          "actions",
+          "render-revisions",
+          "clipped-geometry",
+          "pointer-hit-grid"
+        ]
+      },
+      "capturedAutomatically": [
+        "semantic-tree",
+        "stable-identity",
+        "intended-geometry",
+        "clipped-geometry",
+        "pointer-geometry",
+        "pointer-hit-testing",
+        "paired-revisions",
+        "focus"
+      ],
+      "portableContract": {
+        "automatic": [
+          "semantic-tree",
+          "stable-identity",
+          "intended-geometry",
+          "clipped-geometry",
+          "pointer-geometry",
+          "pointer-hit-testing",
+          "paired-revisions",
+          "focus"
+        ],
+        "applicationIntegrated": [
+          {
+            "providerType": "action-strategy",
+            "providerFacts": [
+              "action-recipes"
+            ],
+            "sessionCapabilities": [
+              "action-strategies"
+            ],
+            "sdks": [
+              "@termwright/evidence-provider"
+            ]
+          },
+          {
+            "providerType": "scroll-evidence",
+            "providerFacts": [
+              "scroll-state"
+            ],
+            "sessionCapabilities": [
+              "scroll"
+            ],
+            "sdks": [
+              "@termwright/evidence-provider"
+            ]
+          },
+          {
+            "providerType": "paint-evidence",
+            "providerFacts": [
+              "painted-regions"
+            ],
+            "sessionCapabilities": [
+              "painted-region"
+            ],
+            "sdks": [
+              "@termwright/evidence-provider"
+            ]
+          }
+        ],
+        "input": [
+          {
+            "capability": "keyboard-input",
+            "producerFacts": [
+              "terminal.writable-pty"
+            ],
+            "providerAlternatives": [],
+            "runtimePrerequisites": [
+              "writable-pty"
+            ]
+          },
+          {
+            "capability": "pointer-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "mouse-reporting-enabled"
+            ]
+          },
+          {
+            "capability": "focus-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "focus-reporting-enabled"
+            ]
+          }
+        ],
+        "unsupported": [
+          "render-order"
+        ]
+      },
+      "extendedOrDiagnostic": {
+        "annotations": {
+          "package": "@termwright/opentui",
+          "apis": [
+            "describeRenderable"
+          ]
+        },
+        "producerFactsNotPromotedToAutomaticSessionCapabilities": [
+          "paint-order",
+          "annotations",
+          "intended-geometry",
+          "states",
+          "focus-state",
+          "actions",
+          "clipped-geometry",
+          "pointer-hit-grid"
+        ]
+      },
+      "applicationProvidersCanAdd": [
+        {
+          "providerType": "action-strategy",
+          "facts": [
+            "action-recipes"
+          ],
+          "sessionCapabilities": [
+            "action-strategies"
+          ]
+        },
+        {
+          "providerType": "scroll-evidence",
+          "facts": [
+            "scroll-state"
+          ],
+          "sessionCapabilities": [
+            "scroll"
+          ]
+        },
+        {
+          "providerType": "paint-evidence",
+          "facts": [
+            "painted-regions"
+          ],
+          "sessionCapabilities": [
+            "painted-region"
+          ]
+        }
+      ],
+      "remainsUnknowableAutomatically": [
+        "frameworkType comes from constructor.name and may be mangled by bundling or minification.",
+        "Only the exact checksummed OpenTUI 0.5.3 Node and Bun builds are attached; any changed artifact fails closed before capability negotiation.",
+        "OpenTUI has no native role or state annotation channel; framework semantics come from types and observable state, with optional developer intent from @termwright/opentui.",
+        "The renderer's native output thread must be redirected through the probe sink for marker ordering."
+      ],
+      "executableClaims": [
+        {
+          "id": "claim.semantic-tree-authoritative",
+          "files": [
+            "packages/probe-opentui/src/zero-config.test.ts",
+            "packages/probe-opentui/src/instrumentation.test.ts"
+          ]
+        },
+        {
+          "id": "claim.stable-identity-authoritative",
+          "files": [
+            "packages/probe-opentui/src/zero-config.test.ts",
+            "packages/probe-opentui/src/instrumentation.test.ts"
+          ]
+        },
+        {
+          "id": "claim.intended-geometry-authoritative",
+          "files": [
+            "packages/probe-opentui/src/zero-config.test.ts",
+            "packages/probe-opentui/src/instrumentation.test.ts"
+          ]
+        },
+        {
+          "id": "claim.clipped-geometry-authoritative",
+          "files": [
+            "packages/probe-opentui/src/zero-config.test.ts",
+            "packages/probe-opentui/src/instrumentation.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-region-authoritative",
+          "files": [
+            "packages/probe-opentui/src/zero-config.test.ts",
+            "packages/probe-opentui/src/instrumentation.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-hit-test-authoritative",
+          "files": [
+            "packages/probe-opentui/src/zero-config.test.ts",
+            "packages/probe-opentui/src/instrumentation.test.ts"
+          ]
+        },
+        {
+          "id": "claim.paired-revisions",
+          "files": [
+            "packages/probe-opentui/src/zero-config.test.ts",
+            "packages/probe-opentui/src/instrumentation.test.ts"
+          ]
+        },
+        {
+          "id": "claim.keyboard-real-pty",
+          "files": [
+            "packages/conformance/src/suites/driver-generic.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-real-pty",
+          "files": [
+            "packages/conformance/src/suites/interaction.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-report-real-pty",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-authoritative",
+          "files": [
+            "packages/probe-opentui/src/zero-config.test.ts"
+          ]
+        },
+        {
+          "id": "claim.action-strategy-authoritative",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.scroll-authoritative",
+          "files": [
+            "packages/evidence-provider/src/index.test.ts",
+            "packages/driver/src/provider-evidence.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.painted-region-authoritative",
+          "files": [
+            "packages/evidence-provider/src/index.test.ts",
+            "packages/driver/src/provider-evidence.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "frameworkId": "textual",
+      "frameworkPackage": "textual",
+      "exactConfigurations": [],
+      "upstreamTruth": {
+        "identityKind": "stable",
+        "probeFacts": [
+          "stable-identity",
+          "intended-rect",
+          "visible-rect",
+          "annotations",
+          "paint-order"
+        ],
+        "adapterFacts": [
+          "tree",
+          "intended-geometry",
+          "clipped-geometry",
+          "states",
+          "focus-state",
+          "actions",
+          "render-revisions",
+          "pointer-hit-grid"
+        ]
+      },
+      "capturedAutomatically": [
+        "semantic-tree",
+        "stable-identity",
+        "intended-geometry",
+        "clipped-geometry",
+        "pointer-geometry",
+        "pointer-hit-testing",
+        "render-order",
+        "paired-revisions",
+        "focus"
+      ],
+      "portableContract": {
+        "automatic": [
+          "semantic-tree",
+          "stable-identity",
+          "intended-geometry",
+          "clipped-geometry",
+          "pointer-geometry",
+          "pointer-hit-testing",
+          "render-order",
+          "paired-revisions",
+          "focus"
+        ],
+        "applicationIntegrated": [
+          {
+            "providerType": "action-strategy",
+            "providerFacts": [
+              "action-recipes"
+            ],
+            "sessionCapabilities": [
+              "action-strategies"
+            ],
+            "sdks": [
+              "termwright"
+            ]
+          },
+          {
+            "providerType": "scroll-evidence",
+            "providerFacts": [
+              "scroll-state"
+            ],
+            "sessionCapabilities": [
+              "scroll"
+            ],
+            "sdks": [
+              "termwright"
+            ]
+          },
+          {
+            "providerType": "paint-evidence",
+            "providerFacts": [
+              "painted-regions"
+            ],
+            "sessionCapabilities": [
+              "painted-region"
+            ],
+            "sdks": [
+              "termwright"
+            ]
+          }
+        ],
+        "input": [
+          {
+            "capability": "keyboard-input",
+            "producerFacts": [
+              "terminal.writable-pty"
+            ],
+            "providerAlternatives": [],
+            "runtimePrerequisites": [
+              "writable-pty"
+            ]
+          },
+          {
+            "capability": "pointer-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "mouse-reporting-enabled"
+            ]
+          },
+          {
+            "capability": "focus-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "focus-reporting-enabled"
+            ]
+          }
+        ],
+        "unsupported": []
+      },
+      "extendedOrDiagnostic": {
+        "annotations": {
+          "package": "termwright",
+          "apis": [
+            "termwright.textual.semantic",
+            "termwright.textual.annotate"
+          ]
+        },
+        "producerFactsNotPromotedToAutomaticSessionCapabilities": [
+          "annotations",
+          "intended-geometry",
+          "clipped-geometry",
+          "states",
+          "focus-state",
+          "actions",
+          "pointer-hit-grid"
+        ]
+      },
+      "applicationProvidersCanAdd": [
+        {
+          "providerType": "action-strategy",
+          "facts": [
+            "action-recipes"
+          ],
+          "sessionCapabilities": [
+            "action-strategies"
+          ]
+        },
+        {
+          "providerType": "scroll-evidence",
+          "facts": [
+            "scroll-state"
+          ],
+          "sessionCapabilities": [
+            "scroll"
+          ]
+        },
+        {
+          "providerType": "paint-evidence",
+          "facts": [
+            "painted-regions"
+          ],
+          "sessionCapabilities": [
+            "painted-region"
+          ]
+        }
+      ],
+      "remainsUnknowableAutomatically": [
+        "python -S and python -E bypass the sitecustomize/PYTHONPATH injection mechanism.",
+        "Poetry launch is unverified; plain scripts, -m, -c, console scripts and uv run were measured.",
+        "PYTHONPATH is inherited, so child processes are instrumented unless the application scrubs it.",
+        "Inactive screens are absent rather than represented as hidden nodes.",
+        "No frame-begin capability exists because post_display_hook runs after the frame flush.",
+        "A Static subclass with custom render() is named from stored content, not the final rendered segments."
+      ],
+      "executableClaims": [
+        {
+          "id": "claim.semantic-tree-authoritative",
+          "files": [
+            "clients/python/tests/test_textual_probe_hook.py",
+            "clients/python/tests/test_probe_tree.py"
+          ]
+        },
+        {
+          "id": "claim.stable-identity-authoritative",
+          "files": [
+            "clients/python/tests/test_textual_probe_hook.py",
+            "clients/python/tests/test_probe_tree.py"
+          ]
+        },
+        {
+          "id": "claim.intended-geometry-authoritative",
+          "files": [
+            "clients/python/tests/test_textual_probe_hook.py",
+            "clients/python/tests/test_probe_tree.py"
+          ]
+        },
+        {
+          "id": "claim.clipped-geometry-authoritative",
+          "files": [
+            "clients/python/tests/test_textual_probe_hook.py",
+            "clients/python/tests/test_probe_tree.py"
+          ]
+        },
+        {
+          "id": "claim.pointer-region-authoritative",
+          "files": [
+            "clients/python/tests/test_textual_probe_hook.py",
+            "clients/python/tests/test_probe_tree.py"
+          ]
+        },
+        {
+          "id": "claim.pointer-hit-test-authoritative",
+          "files": [
+            "clients/python/tests/test_textual_probe_hook.py",
+            "clients/python/tests/test_probe_tree.py"
+          ]
+        },
+        {
+          "id": "claim.render-order-authoritative",
+          "files": [
+            "clients/python/tests/test_textual_probe_hook.py",
+            "clients/python/tests/test_probe_tree.py"
+          ]
+        },
+        {
+          "id": "claim.paired-revisions",
+          "files": [
+            "clients/python/tests/test_textual_probe_hook.py",
+            "clients/python/tests/test_probe_tree.py"
+          ]
+        },
+        {
+          "id": "claim.keyboard-real-pty",
+          "files": [
+            "packages/conformance/src/suites/driver-generic.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-real-pty",
+          "files": [
+            "packages/conformance/src/suites/interaction.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-report-real-pty",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-authoritative",
+          "files": [
+            "clients/python/tests/test_textual_annotations.py"
+          ]
+        },
+        {
+          "id": "claim.action-strategy-authoritative",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.scroll-authoritative",
+          "files": [
+            "clients/python/tests/test_evidence.py",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.painted-region-authoritative",
+          "files": [
+            "clients/python/tests/test_evidence.py",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "frameworkId": "tview",
+      "frameworkPackage": "github.com/rivo/tview",
+      "exactConfigurations": [
+        {
+          "id": "tview-v0.42.0",
+          "frameworkVersion": "v0.42.0",
+          "modules": [
+            {
+              "name": "github.com/rivo/tview",
+              "version": "v0.42.0"
+            }
+          ]
+        }
+      ],
+      "upstreamTruth": {
+        "identityKind": "stable",
+        "probeFacts": [
+          "stable-identity",
+          "annotations"
+        ],
+        "adapterFacts": [
+          "tree",
+          "states",
+          "focus-state",
+          "actions",
+          "action-recipes",
+          "render-revisions"
+        ]
+      },
+      "capturedAutomatically": [
+        "semantic-tree",
+        "stable-identity",
+        "paired-revisions",
+        "focus",
+        "action-strategies"
+      ],
+      "portableContract": {
+        "automatic": [
+          "semantic-tree",
+          "stable-identity",
+          "paired-revisions",
+          "focus",
+          "action-strategies"
+        ],
+        "applicationIntegrated": [
+          {
+            "providerType": "pointer-evidence",
+            "providerFacts": [
+              "pointer-regions",
+              "hit-test"
+            ],
+            "sessionCapabilities": [
+              "pointer-geometry",
+              "pointer-hit-testing"
+            ],
+            "sdks": [
+              "github.com/gorce-ai/termwright/clients/go/evidence"
+            ]
+          },
+          {
+            "providerType": "scroll-evidence",
+            "providerFacts": [
+              "scroll-state"
+            ],
+            "sessionCapabilities": [
+              "scroll"
+            ],
+            "sdks": [
+              "github.com/gorce-ai/termwright/clients/go/evidence"
+            ]
+          },
+          {
+            "providerType": "paint-evidence",
+            "providerFacts": [
+              "painted-regions"
+            ],
+            "sessionCapabilities": [
+              "painted-region"
+            ],
+            "sdks": [
+              "github.com/gorce-ai/termwright/clients/go/evidence"
+            ]
+          }
+        ],
+        "input": [
+          {
+            "capability": "keyboard-input",
+            "producerFacts": [
+              "terminal.writable-pty"
+            ],
+            "providerAlternatives": [],
+            "runtimePrerequisites": [
+              "writable-pty"
+            ]
+          },
+          {
+            "capability": "pointer-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "mouse-reporting-enabled"
+            ]
+          },
+          {
+            "capability": "focus-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "focus-reporting-enabled"
+            ]
+          }
+        ],
+        "unsupported": [
+          "intended-geometry",
+          "clipped-geometry",
+          "render-order"
+        ]
+      },
+      "extendedOrDiagnostic": {
+        "annotations": {
+          "package": "github.com/gorce-ai/termwright/clients/go/annotate",
+          "apis": [
+            "annotate.Tag",
+            "annotate.Untag",
+            "annotate.Semantics",
+            "annotate.SemanticKey"
+          ]
+        },
+        "producerFactsNotPromotedToAutomaticSessionCapabilities": [
+          "annotations",
+          "states",
+          "focus-state",
+          "actions",
+          "action-recipes"
+        ]
+      },
+      "applicationProvidersCanAdd": [
+        {
+          "providerType": "pointer-evidence",
+          "facts": [
+            "pointer-regions",
+            "hit-test"
+          ],
+          "sessionCapabilities": [
+            "pointer-geometry",
+            "pointer-hit-testing"
+          ]
+        },
+        {
+          "providerType": "scroll-evidence",
+          "facts": [
+            "scroll-state"
+          ],
+          "sessionCapabilities": [
+            "scroll"
+          ]
+        },
+        {
+          "providerType": "paint-evidence",
+          "facts": [
+            "painted-regions"
+          ],
+          "sessionCapabilities": [
+            "painted-region"
+          ]
+        }
+      ],
+      "remainsUnknowableAutomatically": [
+        "Only exact versions with shipped patch manifests are instrumented.",
+        "GOFLAGS=-mod=vendor is refused because an ephemeral workspace and vendor mode are incompatible.",
+        "Grid hierarchy is available only because the exact-version patch reads tview's private item list; unsupported versions are refused.",
+        "Publication occurs under tview's application write lock, so the probe drops instead of blocking when the driver is slow.",
+        "tview GetRect values do not prove pointer ownership; high-level pointer actions require an application provider exposing the production router."
+      ],
+      "executableClaims": [
+        {
+          "id": "claim.semantic-tree-authoritative",
+          "files": [
+            "packages/probe-tview/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.stable-identity-authoritative",
+          "files": [
+            "packages/probe-tview/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.paired-revisions",
+          "files": [
+            "packages/probe-tview/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-region-authoritative",
+          "files": [
+            "packages/probe-tview/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-hit-test-authoritative",
+          "files": [
+            "packages/probe-tview/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.keyboard-real-pty",
+          "files": [
+            "packages/conformance/src/suites/driver-generic.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-real-pty",
+          "files": [
+            "packages/probe-tview/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-report-real-pty",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-authoritative",
+          "files": [
+            "packages/probe-tview/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.action-strategy-authoritative",
+          "files": [
+            "packages/probe-tview/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.scroll-authoritative",
+          "files": [
+            "clients/go/evidence/registry_test.go",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.painted-region-authoritative",
+          "files": [
+            "clients/go/evidence/registry_test.go",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "frameworkId": "ratatui",
+      "frameworkPackage": "ratatui",
+      "exactConfigurations": [
+        {
+          "id": "ratatui-0.30.2",
+          "frameworkVersion": "0.30.2",
+          "modules": [
+            {
+              "name": "ratatui-core",
+              "version": "0.1.2"
+            },
+            {
+              "name": "ratatui-widgets",
+              "version": "0.3.2"
+            }
+          ]
+        }
+      ],
+      "upstreamTruth": {
+        "identityKind": "frame-local",
+        "probeFacts": [
+          "intended-rect",
+          "operations",
+          "annotations"
+        ],
+        "adapterFacts": [
+          "tree",
+          "intended-geometry",
+          "states",
+          "actions",
+          "render-revisions"
+        ]
+      },
+      "capturedAutomatically": [
+        "semantic-tree",
+        "intended-geometry",
+        "paired-revisions"
+      ],
+      "portableContract": {
+        "automatic": [
+          "semantic-tree",
+          "intended-geometry",
+          "paired-revisions"
+        ],
+        "applicationIntegrated": [
+          {
+            "providerType": "pointer-evidence",
+            "providerFacts": [
+              "pointer-regions",
+              "hit-test"
+            ],
+            "sessionCapabilities": [
+              "pointer-geometry",
+              "pointer-hit-testing"
+            ],
+            "sdks": [
+              "termwright-protocol",
+              "termwright-ratatui"
+            ]
+          },
+          {
+            "providerType": "action-strategy",
+            "providerFacts": [
+              "action-recipes"
+            ],
+            "sessionCapabilities": [
+              "action-strategies"
+            ],
+            "sdks": [
+              "termwright-protocol"
+            ]
+          },
+          {
+            "providerType": "focus-evidence",
+            "providerFacts": [
+              "focus-state"
+            ],
+            "sessionCapabilities": [
+              "focus"
+            ],
+            "sdks": [
+              "termwright-protocol"
+            ]
+          },
+          {
+            "providerType": "scroll-evidence",
+            "providerFacts": [
+              "scroll-state"
+            ],
+            "sessionCapabilities": [
+              "scroll"
+            ],
+            "sdks": [
+              "termwright-protocol"
+            ]
+          },
+          {
+            "providerType": "paint-evidence",
+            "providerFacts": [
+              "painted-regions"
+            ],
+            "sessionCapabilities": [
+              "painted-region"
+            ],
+            "sdks": [
+              "termwright-protocol"
+            ]
+          }
+        ],
+        "input": [
+          {
+            "capability": "keyboard-input",
+            "producerFacts": [
+              "terminal.writable-pty"
+            ],
+            "providerAlternatives": [],
+            "runtimePrerequisites": [
+              "writable-pty"
+            ]
+          },
+          {
+            "capability": "pointer-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "mouse-reporting-enabled"
+            ]
+          },
+          {
+            "capability": "focus-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "focus-reporting-enabled"
+            ]
+          }
+        ],
+        "unsupported": [
+          "stable-identity",
+          "clipped-geometry",
+          "render-order"
+        ]
+      },
+      "extendedOrDiagnostic": {
+        "annotations": {
+          "package": "termwright-ratatui",
+          "apis": [
+            "Annotated",
+            "Annotate",
+            "Semantics",
+            "Action"
+          ]
+        },
+        "producerFactsNotPromotedToAutomaticSessionCapabilities": [
+          "operations",
+          "annotations",
+          "intended-geometry",
+          "states",
+          "actions"
+        ]
+      },
+      "applicationProvidersCanAdd": [
+        {
+          "providerType": "pointer-evidence",
+          "facts": [
+            "pointer-regions",
+            "hit-test"
+          ],
+          "sessionCapabilities": [
+            "pointer-geometry",
+            "pointer-hit-testing"
+          ]
+        },
+        {
+          "providerType": "action-strategy",
+          "facts": [
+            "action-recipes"
+          ],
+          "sessionCapabilities": [
+            "action-strategies"
+          ]
+        },
+        {
+          "providerType": "focus-evidence",
+          "facts": [
+            "focus-state"
+          ],
+          "sessionCapabilities": [
+            "focus"
+          ]
+        },
+        {
+          "providerType": "scroll-evidence",
+          "facts": [
+            "scroll-state"
+          ],
+          "sessionCapabilities": [
+            "scroll"
+          ]
+        },
+        {
+          "providerType": "paint-evidence",
+          "facts": [
+            "painted-regions"
+          ],
+          "sessionCapabilities": [
+            "painted-region"
+          ]
+        }
+      ],
+      "remainsUnknowableAutomatically": [
+        "Identity is frame-local by default and ordinary immediate-mode calls are flat; a unique author semantic_key stabilizes its annotated render call, and actual nested Annotated render boundaries preserve only the hierarchy proven by call nesting.",
+        "Paint order is unavailable and every node has unknown occlusion without an application provider; a registered production pointer router makes pointer geometry and hit testing application-integrated.",
+        "The launcher supports the exact crates.io versions above; Git, path, alternate-registry and multiple-version graphs are refused.",
+        "Instrumented builds cannot use --locked and must not race another Cargo command in the same workspace while Cargo.lock is temporarily rewritten.",
+        "testId is a locator and explicit correlation hint; semantic_key is the separate opt-in identity and duplicate keys are a fatal duplicate-semantic-key provider violation."
+      ],
+      "executableClaims": [
+        {
+          "id": "claim.semantic-tree-authoritative",
+          "files": [
+            "clients/rust-probe/tests/patchset.rs",
+            "examples/ratatui-list/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.intended-geometry-authoritative",
+          "files": [
+            "clients/rust-probe/tests/patchset.rs",
+            "examples/ratatui-list/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.paired-revisions",
+          "files": [
+            "clients/rust-probe/tests/patchset.rs",
+            "examples/ratatui-list/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-region-authoritative",
+          "files": [
+            "examples/ratatui-list/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-hit-test-authoritative",
+          "files": [
+            "examples/ratatui-list/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.keyboard-real-pty",
+          "files": [
+            "packages/conformance/src/suites/driver-generic.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-real-pty",
+          "files": [
+            "examples/ratatui-list/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-report-real-pty",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-authoritative",
+          "files": [
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.action-strategy-authoritative",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.scroll-authoritative",
+          "files": [
+            "clients/rust/tests/evidence.rs",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.painted-region-authoritative",
+          "files": [
+            "clients/rust/tests/evidence.rs",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "frameworkId": "charm",
+      "frameworkPackage": "Bubble Tea",
+      "exactConfigurations": [
+        {
+          "id": "bubbletea-v1",
+          "frameworkVersion": "v1.3.10",
+          "modules": [
+            {
+              "name": "github.com/charmbracelet/bubbletea",
+              "version": "v1.3.10"
+            },
+            {
+              "name": "github.com/charmbracelet/bubbles",
+              "version": "v1.0.0",
+              "optional": true
+            }
+          ]
+        },
+        {
+          "id": "bubbletea-v2",
+          "frameworkVersion": "v2.0.8",
+          "modules": [
+            {
+              "name": "charm.land/bubbletea/v2",
+              "version": "v2.0.8"
+            },
+            {
+              "name": "charm.land/bubbles/v2",
+              "version": "v2.1.1",
+              "optional": true
+            }
+          ]
+        }
+      ],
+      "upstreamTruth": {
+        "identityKind": "frame-local",
+        "probeFacts": [
+          "annotations"
+        ],
+        "adapterFacts": [
+          "tree",
+          "states",
+          "focus-state",
+          "actions",
+          "render-revisions"
+        ]
+      },
+      "capturedAutomatically": [
+        "semantic-tree",
+        "paired-revisions",
+        "focus"
+      ],
+      "portableContract": {
+        "automatic": [
+          "semantic-tree",
+          "paired-revisions",
+          "focus"
+        ],
+        "applicationIntegrated": [
+          {
+            "providerType": "pointer-evidence",
+            "providerFacts": [
+              "pointer-regions",
+              "hit-test"
+            ],
+            "sessionCapabilities": [
+              "pointer-geometry",
+              "pointer-hit-testing"
+            ],
+            "sdks": [
+              "github.com/gorce-ai/termwright/clients/go/evidence"
+            ]
+          },
+          {
+            "providerType": "action-strategy",
+            "providerFacts": [
+              "action-recipes"
+            ],
+            "sessionCapabilities": [
+              "action-strategies"
+            ],
+            "sdks": [
+              "github.com/gorce-ai/termwright/clients/go/evidence"
+            ]
+          },
+          {
+            "providerType": "scroll-evidence",
+            "providerFacts": [
+              "scroll-state"
+            ],
+            "sessionCapabilities": [
+              "scroll"
+            ],
+            "sdks": [
+              "github.com/gorce-ai/termwright/clients/go/evidence"
+            ]
+          },
+          {
+            "providerType": "paint-evidence",
+            "providerFacts": [
+              "painted-regions"
+            ],
+            "sessionCapabilities": [
+              "painted-region"
+            ],
+            "sdks": [
+              "github.com/gorce-ai/termwright/clients/go/evidence"
+            ]
+          }
+        ],
+        "input": [
+          {
+            "capability": "keyboard-input",
+            "producerFacts": [
+              "terminal.writable-pty"
+            ],
+            "providerAlternatives": [],
+            "runtimePrerequisites": [
+              "writable-pty"
+            ]
+          },
+          {
+            "capability": "pointer-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "mouse-reporting-enabled"
+            ]
+          },
+          {
+            "capability": "focus-input",
+            "producerFacts": [
+              "terminal.input-modes-observable"
+            ],
+            "providerAlternatives": [
+              {
+                "providerType": "input-mode-evidence",
+                "providerFacts": [
+                  "terminal-input-modes"
+                ],
+                "sdks": [
+                  "/evidence-provider"
+                ]
+              }
+            ],
+            "runtimePrerequisites": [
+              "terminal-input-modes-authoritative",
+              "focus-reporting-enabled"
+            ]
+          }
+        ],
+        "unsupported": [
+          "stable-identity",
+          "intended-geometry",
+          "clipped-geometry",
+          "render-order"
+        ]
+      },
+      "extendedOrDiagnostic": {
+        "annotations": {
+          "package": "github.com/gorce-ai/termwright/clients/go/annotate",
+          "apis": [
+            "annotate.Provider.TermwrightSemantics",
+            "annotate.Semantics",
+            "annotate.SemanticKey"
+          ]
+        },
+        "producerFactsNotPromotedToAutomaticSessionCapabilities": [
+          "annotations",
+          "states",
+          "focus-state",
+          "actions"
+        ]
+      },
+      "applicationProvidersCanAdd": [
+        {
+          "providerType": "pointer-evidence",
+          "facts": [
+            "pointer-regions",
+            "hit-test"
+          ],
+          "sessionCapabilities": [
+            "pointer-geometry",
+            "pointer-hit-testing"
+          ]
+        },
+        {
+          "providerType": "action-strategy",
+          "facts": [
+            "action-recipes"
+          ],
+          "sessionCapabilities": [
+            "action-strategies"
+          ]
+        },
+        {
+          "providerType": "scroll-evidence",
+          "facts": [
+            "scroll-state"
+          ],
+          "sessionCapabilities": [
+            "scroll"
+          ]
+        },
+        {
+          "providerType": "paint-evidence",
+          "facts": [
+            "painted-regions"
+          ],
+          "sessionCapabilities": [
+            "painted-region"
+          ]
+        }
+      ],
+      "remainsUnknowableAutomatically": [
+        "Bubble Tea produces a styled string, so automatic component geometry is unavailable; a registered production pointer router provides application-integrated pointer geometry and hit testing.",
+        "Identity is frame-local by default because Update copies model values; a unique author SemanticKey stabilizes only its annotated node.",
+        "Only the exact Bubble Tea versions above have frame-hook patch sets.",
+        "A detected Bubbles companion must match its exact certified version; unknown companions are refused instead of changing semantic breadth.",
+        "Masked text input values are intentionally withheld from trees, traces and reports.",
+        "A project requiring both Bubble Tea majors is refused because frames cannot be attributed safely."
+      ],
+      "executableClaims": [
+        {
+          "id": "claim.semantic-tree-authoritative",
+          "files": [
+            "packages/probe-charm/src/zero-config.pty.test.ts",
+            "examples/bubbletea-login/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.paired-revisions",
+          "files": [
+            "packages/probe-charm/src/zero-config.pty.test.ts",
+            "examples/bubbletea-login/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-region-authoritative",
+          "files": [
+            "examples/bubbletea-login/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-hit-test-authoritative",
+          "files": [
+            "examples/bubbletea-login/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.keyboard-real-pty",
+          "files": [
+            "packages/conformance/src/suites/driver-generic.test.ts"
+          ]
+        },
+        {
+          "id": "claim.pointer-real-pty",
+          "files": [
+            "examples/bubbletea-login/tests/app.e2e.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-report-real-pty",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/probe-ink/src/provider.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.focus-authoritative",
+          "files": [
+            "packages/probe-charm/src/zero-config.pty.test.ts"
+          ]
+        },
+        {
+          "id": "claim.action-strategy-authoritative",
+          "files": [
+            "packages/driver/src/session.pty.test.ts",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.scroll-authoritative",
+          "files": [
+            "clients/go/evidence/registry_test.go",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        },
+        {
+          "id": "claim.painted-region-authoritative",
+          "files": [
+            "clients/go/evidence/registry_test.go",
+            "packages/driver/src/provider-evidence.test.ts"
+          ]
+        }
+      ]
+    }
+  ]
+}

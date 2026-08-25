@@ -104,17 +104,17 @@ export function ariaElementFor(node: SemanticNode): AriaElement {
   }
   if (state.positionInSet !== undefined) attrs['aria-posinset'] = String(state.positionInSet);
   if (state.setSize !== undefined) attrs['aria-setsize'] = String(state.setSize);
-  if (state.scrollExtent !== undefined && effectiveRole === 'scrollbar') {
+  if (node.scroll?.status === 'known' && effectiveRole === 'scrollbar') {
     attrs['aria-valuemin'] = '0';
-    attrs['aria-valuemax'] = String(state.scrollExtent);
-    if (state.scrollOffset !== undefined) attrs['aria-valuenow'] = String(state.scrollOffset);
+    attrs['aria-valuemax'] = String(node.scroll.value.extent);
+    attrs['aria-valuenow'] = String(node.scroll.value.offset);
   }
 
   // A textbox's content is its value; a progressbar's is its text.
-  if (node.value !== undefined && effectiveRole === 'progressbar') {
-    const numeric = Number.parseFloat(node.value);
+  if (node.value?.status === 'known' && node.value.sensitivity === 'public' && effectiveRole === 'progressbar') {
+    const numeric = Number.parseFloat(node.value.value);
     if (Number.isFinite(numeric)) attrs['aria-valuenow'] = String(numeric);
-    else attrs['aria-valuetext'] = node.value;
+    else attrs['aria-valuetext'] = node.value.value;
   }
   if (node.description !== undefined) attrs['aria-description'] = node.description;
 
@@ -134,8 +134,8 @@ export function ariaElementFor(node: SemanticNode): AriaElement {
  * `textbox` — render their value instead.
  */
 export function ariaTextFor(node: SemanticNode): string {
-  if (node.role === 'text') return node.value ?? node.name;
-  if (node.role === 'textbox') return node.value ?? '';
+  if (node.role === 'text') return node.value?.status === 'known' && node.value.sensitivity === 'public' ? node.value.value : node.name;
+  if (node.role === 'textbox') return node.value?.status === 'known' && node.value.sensitivity === 'public' ? node.value.value : '';
   return '';
 }
 

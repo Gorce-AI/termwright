@@ -5,7 +5,7 @@
  * arguments describe and hands everything else — strictness, waiting, staleness,
  * candidate diagnostics — to `@termwright/driver`.
  */
-import type { Locator, TerminalHarness } from '@termwright/driver';
+import { parseRef, type AnyLocator, type LocatorRef, type TerminalHarness } from '@termwright/driver';
 import { usageError } from './errors.js';
 import { definedOnly } from './objects.js';
 import type { Loose } from './objects.js';
@@ -18,16 +18,18 @@ import type { SemanticRole, SemanticState } from './model.js';
  * from zod-parsed arguments, where an absent key is present-and-undefined.
  */
 export interface TargetInput {
-  /** A ref from a previous snapshot: `n8@42`, or `grid:1,2,9,1@7`. */
+  /** A domain-tagged ref: `semantic:n8@42`, or `screen:1,2,9,1@7`. */
   readonly ref?: string | undefined;
-  /** The Textual-style CSS dialect, e.g. `dialog button#approve:focused`. */
+  /** Termwright Semantic Selector Language, e.g. `dialog button#approve:focused`. */
   readonly selector?: string | undefined;
   readonly role?: SemanticRole | undefined;
   /** Accessible name; `/…/flags` is read as a regular expression. */
   readonly name?: string | undefined;
   readonly testId?: string | undefined;
-  /** Visible text (grid matching when there is no semantic tree). */
+  /** Text carried by a semantic node. Requires a semantic tree. */
   readonly text?: string | undefined;
+  /** Text rendered in the physical terminal grid. */
+  readonly screenText?: string | undefined;
   /** Label text (`labelledBy`, else name). */
   readonly label?: string | undefined;
   readonly exact?: boolean | undefined;
@@ -63,24 +65,28 @@ export function hasTarget(input: TargetInput): boolean {
     input.role !== undefined ||
     input.testId !== undefined ||
     input.text !== undefined ||
+    input.screenText !== undefined ||
     input.label !== undefined
   );
 }
 
 /**
  * Builds the locator described by `input`. Precedence is `ref`, `selector`,
- * `testId`, `role`, `label`, `text` — the order from most to least specific.
+ * `testId`, `role`, `label`, `text`, `screenText` — the order from most to least specific.
  *
  * Every branch hands straight to a driver factory; nothing here matches, waits
  * or decides staleness.
  */
-export function buildLocator(harness: TerminalHarness, input: TargetInput): Locator {
-  let locator: Locator;
+export function buildLocator(harness: TerminalHarness, input: TargetInput): AnyLocator {
+  let locator: AnyLocator;
   if (input.ref !== undefined) {
     // The driver resolves a ref by node identity and owns its staleness rule,
     // so two nodes with the same name stay distinct. The driver alone decides
     // whether that producer promised stable identity or requires a fresh ref.
-    locator = harness.locatorForRef(input.ref);
+    if (parseRef(input.ref) === null) {
+      throw usageError('ref must include an explicit locator domain', 'use semantic:<node>@<revision> or screen:<row>,<column>,<width>,<height>@<revision>');
+    }
+    locator = harness.locatorForRef(input.ref as LocatorRef);
   } else if (input.selector !== undefined) {
     locator = harness.locator(input.selector);
   } else if (input.testId !== undefined) {
@@ -98,10 +104,12 @@ export function buildLocator(harness: TerminalHarness, input: TargetInput): Loca
     locator = harness.getByLabel(textOrRegExp(input.label), definedOnly({ exact: input.exact }));
   } else if (input.text !== undefined) {
     locator = harness.getByText(textOrRegExp(input.text), definedOnly({ exact: input.exact }));
+  } else if (input.screenText !== undefined) {
+    locator = harness.getByScreenText(textOrRegExp(input.screenText), definedOnly({ exact: input.exact }));
   } else {
     throw usageError(
       'no target given',
-      'pass one of ref, selector, testId, role (+name), label or text',
+      'pass one of ref, selector, testId, role (+name), label, text or screenText',
     );
   }
   return input.nth === undefined ? locator : locator.nth(input.nth);

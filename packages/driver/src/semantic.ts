@@ -5,7 +5,7 @@
  * Lifecycle (design §4.1): the driver creates the endpoint *before* spawning
  * the child — a unix socket inside a 0700 temporary directory on POSIX, a named
  * pipe with an unguessable name on Windows — and injects
- * `TERMWRIGHT_ENDPOINT`/`TERMWRIGHT_TOKEN`/`TERMWRIGHT_PROTOCOL`. Without those
+ * `TERMWRIGHT_ENDPOINT` and `TERMWRIGHT_TOKEN`. Without those
  * variables a conforming adapter stays dormant, so an uninstrumented run is
  * byte-for-byte identical.
  *
@@ -22,8 +22,6 @@ import { randomBytes } from 'node:crypto';
 import {
   ADAPTER_CAPABILITIES,
   ProtocolViolation,
-  applyTreeDelta,
-  type GetTreeRequest,
   type ProtocolViolationCode,
   createFrameDecoder,
   encodeFrame,
@@ -39,11 +37,13 @@ import {
   type ProbeInfo,
   type ProtocolLimits,
   type ProtocolId,
+  type EvidenceProviderRegistration,
   type SemanticNode,
   type SemanticSnapshot,
 } from '@termwright/protocol';
 import type { DiagnosticCode } from './api.js';
 import { ProtocolViolationError } from './errors.js';
+import { ResourceScope } from './internal/resource-scope.js';
 import { endAfterFlush } from './internal/socket.js';
 import { tokenMatches } from './internal/token.js';
 
@@ -56,8 +56,6 @@ export interface SemanticAttachment {
   readonly markerEnabled: boolean;
   /** True when the log channel was negotiated in the handshake. */
   readonly logsEnabled: boolean;
-  /** True when the adapter pushes deltas instead of full trees. */
-  readonly deltasEnabled: boolean;
   /**
    * What the sender said about itself as a probe, when it is one.
    *
@@ -67,6 +65,8 @@ export interface SemanticAttachment {
    * capability rather than a floor it assumed.
    */
   readonly probe: ProbeInfo | null;
+  /** Application evidence providers frozen by the same hello. */
+  readonly providers: readonly EvidenceProviderRegistration[];
 }
 
 /** Budget the driver grants an adapter that announced the `logs` capability. */
@@ -100,6 +100,8 @@ export interface SemanticChannelHooks {
   onFrameBegin(revision: number): void;
   /** The handshake completed; the session is semantic from here on. */
   onAttach(attachment: SemanticAttachment): void;
+  /** An attached provider disappeared; new semantic observations must fail closed. */
+  onDisconnect(): void;
   /** One validated application log record arrived on the channel. */
   onLogRecord(record: LogRecord): void;
   /** Non-fatal channel diagnostics (negotiation, disconnects, advisory commits). */
@@ -135,9 +137,16 @@ export interface SemanticChannelOptions {
   acceptHello(): boolean;
   /** Budget offered to an adapter that announced the `logs` capability. */
   readonly logBudget: LogBudget;
-  /** False forces full snapshots even from an adapter that offers deltas. */
-  readonly acceptDeltas: boolean;
+  /** Absolute budget for an accepted socket to authenticate with hello. */
+  readonly handshakeTimeoutMs?: number;
   readonly hooks: SemanticChannelHooks;
+}
+
+/** Fault-injection seam used by transport lifecycle tests. */
+export interface SemanticChannelListenDependencies {
+  readonly createServer?: () => Server;
+  readonly makeDirectory?: (prefix: string) => Promise<string>;
+  readonly listen?: (server: Server, endpoint: string) => Promise<void>;
 }
 
 /** Capability that makes render markers — and therefore pairing — meaningful. */
@@ -146,16 +155,13 @@ const MARKER_CAPABILITY: AdapterCapability = 'render-revisions';
 /** Capability that opens the application log channel. */
 const LOGS_CAPABILITY: AdapterCapability = 'logs';
 
-/** Capability that lets an adapter send deltas instead of whole trees. */
-const DIFFS_CAPABILITY: AdapterCapability = 'tree-diffs';
-
 /** Probe ability that makes a `frame-begin` message believable. */
 const FRAME_BEGIN_CAPABILITY: ProbeCapability = 'frame-begin';
 
-/** How long a `get-tree` may take before the resync is abandoned. */
-const GET_TREE_TIMEOUT_MS = 2_000;
-
 const CAPABILITY_SET: ReadonlySet<string> = new Set(ADAPTER_CAPABILITIES);
+
+/** A connected but unauthenticated peer may not occupy a session indefinitely. */
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
 
 type ErrorCode = ProtocolErrorMessage['code'];
 
@@ -188,33 +194,25 @@ function wireCodeFor(error: unknown): ErrorCode {
 export class SemanticChannel {
   readonly endpoint: string;
 
-  readonly #server: Server;
   readonly #options: SemanticChannelOptions;
-  readonly #directory: string | null;
+  readonly #resources: ResourceScope;
+  readonly #sockets = new Set<Socket>();
+  readonly #handshakeTimers = new Map<Socket, NodeJS.Timeout>();
   #attached: Socket | null = null;
   #attachment: SemanticAttachment | null = null;
   #closed = false;
-  /**
-   * Head of the delta chain: the newest tree the driver holds, published or
-   * not. Pairing decides what becomes observable; composition needs the latest
-   * accepted tree regardless, because the next delta is based on it.
-   */
-  #composed: SemanticSnapshot | null = null;
-  /** While true, deltas are dropped: a full tree is on its way. */
-  #resyncing = false;
-  #requestId = 0;
-  #getTreeTimer: NodeJS.Timeout | null = null;
+  #closePromise: Promise<void> | null = null;
 
   private constructor(
     server: Server,
     endpoint: string,
-    directory: string | null,
     options: SemanticChannelOptions,
+    resources: ResourceScope,
   ) {
-    this.#server = server;
     this.endpoint = endpoint;
-    this.#directory = directory;
     this.#options = options;
+    this.#resources = resources;
+    resources.defer('accepted semantic sockets', () => this.#destroySockets());
     server.on('connection', (socket) => this.#handleConnection(socket));
     server.on('error', (error) => {
       options.hooks.onDiagnostic('endpoint-error', `semantic endpoint error: ${String(error)}`);
@@ -222,24 +220,37 @@ export class SemanticChannel {
   }
 
   /** Creates the private endpoint and starts listening. */
-  static async listen(options: SemanticChannelOptions): Promise<SemanticChannel> {
-    const server = createServer();
+  static async listen(
+    options: SemanticChannelOptions,
+    dependencies: SemanticChannelListenDependencies = {},
+  ): Promise<SemanticChannel> {
+    const resources = new ResourceScope('semantic channel');
+    const server = (dependencies.createServer ?? createServer)();
     let endpoint: string;
     let directory: string | null = null;
-    if (process.platform === 'win32') {
-      endpoint = `\\\\.\\pipe\\termwright-${randomBytes(16).toString('hex')}`;
-    } else {
-      directory = await mkdtemp(join(tmpdir(), 'termwright-'));
-      endpoint = join(directory, 'semantic.sock');
+    try {
+      if (process.platform === 'win32') {
+        endpoint = `\\\\.\\pipe\\termwright-${randomBytes(16).toString('hex')}`;
+      } else {
+        directory = await (dependencies.makeDirectory ?? mkdtemp)(join(tmpdir(), 'termwright-'));
+        endpoint = join(directory, 'semantic.sock');
+        resources.defer('semantic socket directory', () => rm(directory!, { recursive: true, force: true }));
+      }
+      resources.defer('semantic listener', () => closeServer(server));
+      await (dependencies.listen ?? listenServer)(server, endpoint);
+      return new SemanticChannel(server, endpoint, options, resources);
+    } catch (error) {
+      try {
+        await resources.close();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'semantic channel startup and rollback failed',
+          { cause: error },
+        );
+      }
+      throw error;
     }
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(endpoint, () => {
-        server.removeListener('error', reject);
-        resolve();
-      });
-    });
-    return new SemanticChannel(server, endpoint, directory, options);
   }
 
   /** The negotiated adapter, or `null` while no adapter has attached. */
@@ -248,16 +259,15 @@ export class SemanticChannel {
   }
 
   /** Closes the endpoint and removes the socket directory. Idempotent. */
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    this.#closePromise ??= this.#close();
+    return this.#closePromise;
+  }
+
+  async #close(): Promise<void> {
     this.#closed = true;
-    this.#finishResync();
-    this.#attached?.destroy();
     this.#attached = null;
-    await new Promise<void>((resolve) => this.#server.close(() => resolve()));
-    if (this.#directory !== null) {
-      await rm(this.#directory, { recursive: true, force: true }).catch(() => {});
-    }
+    await this.#resources.close();
   }
 
   #handleConnection(socket: Socket): void {
@@ -265,6 +275,18 @@ export class SemanticChannel {
       socket.destroy();
       return;
     }
+    this.#sockets.add(socket);
+    const handshakeTimer = setTimeout(() => {
+      if (!this.#sockets.has(socket) || this.#attached === socket) return;
+      this.#options.hooks.onDiagnostic(
+        'endpoint-error',
+        `semantic peer did not authenticate within ${this.#options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS} ms`,
+      );
+      this.#refuse(socket, 'internal', 'semantic hello deadline exceeded');
+    }, this.#options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
+    handshakeTimer.unref?.();
+    this.#handshakeTimers.set(socket, handshakeTimer);
+
     if (this.#attached !== null) {
       // One adapter per session; a second connection is refused, not raced.
       this.#refuse(socket, 'internal', 'a semantic adapter is already attached');
@@ -311,14 +333,30 @@ export class SemanticChannel {
     });
     socket.on('error', () => socket.destroy());
     socket.on('close', () => {
+      this.#sockets.delete(socket);
+      this.#clearHandshakeTimer(socket);
       if (this.#attached === socket) {
         this.#attached = null;
-        this.#options.hooks.onDiagnostic('adapter-disconnected', 'the semantic adapter disconnected');
+        if (!this.#closed) {
+          this.#options.hooks.onDiagnostic('adapter-disconnected', 'the semantic adapter disconnected');
+          this.#options.hooks.onDisconnect();
+        }
       }
     });
   }
 
   #handleHello(socket: Socket, hello: HelloMessage): boolean {
+    // Connections are admitted before they authenticate. Re-check at the
+    // claim itself so two sockets accepted in the same turn cannot both win.
+    if (this.#attached !== null && this.#attached !== socket) {
+      this.#refuse(socket, 'internal', 'a semantic adapter is already attached');
+      this.#options.hooks.onDiagnostic(
+        'adapter-capability',
+        'refused a concurrent adapter hello: this session already has one attached',
+        { wireCode: 'internal' },
+      );
+      return false;
+    }
     if (!this.#options.acceptHello()) {
       this.#refuse(
         socket,
@@ -341,18 +379,15 @@ export class SemanticChannel {
     );
 
     this.#attached = socket;
+    this.#clearHandshakeTimer(socket);
     const markerEnabled = capabilities.includes(MARKER_CAPABILITY);
     const logsEnabled = capabilities.includes(LOGS_CAPABILITY);
-    // V2 deltas need their own qualified-field patch semantics. Until those
-    // are negotiated, v2 is full-snapshot only rather than silently applying
-    // the v1 delta projection to qualified observations.
-    const deltasEnabled = hello.protocol === PROTOCOL_ID && this.#options.acceptDeltas && capabilities.includes(DIFFS_CAPABILITY);
     const ack: HelloAckMessage = {
       type: 'hello-ack',
       protocol: hello.protocol,
       sessionId: this.#options.sessionId,
       limits: this.#options.limits,
-      subscribe: deltasEnabled ? 'diffs' : 'snapshots',
+      subscribe: 'snapshots',
       marker: { enabled: markerEnabled },
       // Absent means disabled: an adapter without this field must stay quiet.
       ...(logsEnabled ? { logs: { enabled: true, ...this.#options.logBudget } } : {}),
@@ -364,7 +399,6 @@ export class SemanticChannel {
       capabilities: Object.freeze(capabilities),
       markerEnabled,
       logsEnabled,
-      deltasEnabled,
       probe:
         hello.probe === undefined
           ? null
@@ -372,6 +406,12 @@ export class SemanticChannel {
               ...hello.probe,
               capabilities: Object.freeze([...hello.probe.capabilities]),
             }),
+      providers: Object.freeze((hello.providers ?? []).map((provider) => Object.freeze({
+        id: provider.id,
+        version: provider.version,
+        method: provider.method,
+        capabilities: Object.freeze([...provider.capabilities]),
+      }))),
     });
     this.#options.hooks.onAttach(this.#attachment);
     if (!markerEnabled) {
@@ -410,45 +450,16 @@ export class SemanticChannel {
           this.#fail(socket, 'malformed', 'snapshot carries a foreign sessionId');
           return false;
         }
-        const expectedVersion = this.#attachment?.protocol === 'termwright/2' ? 2 : 1;
-        if (message.snapshot.v !== expectedVersion) {
-          this.#fail(socket, 'bad-version', `snapshot v${message.snapshot.v} does not match negotiated termwright/${expectedVersion}`);
+        if (message.snapshot.v !== 2) {
+          this.#fail(socket, 'bad-version', `snapshot v${message.snapshot.v} does not match negotiated ${PROTOCOL_ID}`);
           return false;
         }
         if (!this.#acceptsTreeFields(socket, message.snapshot.nodes, 'snapshot')) return false;
-        if (message.snapshot.v === 2 && message.snapshot.hitGrid?.status === 'known' && this.#attachment?.capabilities.includes('pointer-hit-grid') !== true) {
+        if (message.snapshot.hitGrid.status === 'known' && this.#attachment?.capabilities.includes('pointer-hit-grid') !== true) {
           this.#fail(socket, 'malformed', "snapshot contains a known hit grid without the 'pointer-hit-grid' capability");
           return false;
         }
         this.#acceptTree(message.snapshot);
-        return true;
-      }
-      case 'tree-delta': {
-        if (this.#attachment?.deltasEnabled !== true) {
-          this.#fail(socket, 'malformed', 'tree-delta sent without negotiated tree-diffs');
-          return false;
-        }
-        if (!this.#acceptsTreeFields(socket, message.changed, 'tree-delta')) return false;
-        if (this.#resyncing) {
-          // A full tree is already on its way; patching onto a base we know is
-          // wrong would only produce a second wrong tree.
-          return true;
-        }
-        const base = this.#composed;
-        if (base === null) {
-          this.#resync(socket, `a delta for revision ${message.revision} arrived before any full tree`);
-          return true;
-        }
-        const composed = applyTreeDelta(base, message, this.#options.limits);
-        if (!composed.ok) {
-          this.#resync(
-            socket,
-            `delta ${message.baseRevision}→${message.revision} did not compose (${composed.code}): ${composed.detail}`,
-            message.revision,
-          );
-          return true;
-        }
-        this.#acceptTree(composed.snapshot);
         return true;
       }
       case 'log': {
@@ -474,49 +485,6 @@ export class SemanticChannel {
         socket.destroy();
         this.#attached = null;
         return false;
-      case 'get-tree-result': {
-        if (!this.#resyncing) {
-          this.#options.hooks.onDiagnostic(
-            'adapter-capability',
-            'ignoring a get-tree-result that answers no outstanding request',
-          );
-          return true;
-        }
-        if (message.snapshot === undefined) {
-          this.#finishResync();
-          this.#options.hooks.onDiagnostic(
-            'delta-resync',
-            `the adapter could not supply a full tree: ${message.error ?? 'no reason given'}`,
-          );
-          return true;
-        }
-        if (message.snapshot.sessionId !== this.#options.sessionId) {
-          this.#fail(socket, 'malformed', 'get-tree-result carries a foreign sessionId');
-          return false;
-        }
-        if (!this.#acceptsTreeFields(socket, message.snapshot.nodes, 'get-tree-result')) return false;
-        if (message.snapshot.v === 2 && message.snapshot.hitGrid?.status === 'known' && this.#attachment?.capabilities.includes('pointer-hit-grid') !== true) {
-          this.#fail(socket, 'malformed', "get-tree-result contains a known hit grid without the 'pointer-hit-grid' capability");
-          return false;
-        }
-        this.#finishResync();
-        const held = this.#composed;
-        const current = held !== null && message.snapshot.revision <= held.revision;
-        this.#options.hooks.onDiagnostic(
-          'delta-resync',
-          current
-            ? `resynchronised: the full tree is revision ${message.snapshot.revision}, which is already held`
-            : `resynchronised on revision ${message.snapshot.revision} from a full tree`,
-          { revision: message.snapshot.revision },
-        );
-        // A tree the session already published must not be offered again: the
-        // pairing would report it as a dropped revision, and a repair that
-        // reads like data loss is worse than no report at all. It still
-        // replaces the composition base, because it is the authoritative one.
-        if (current) this.#composed = message.snapshot;
-        else this.#acceptTree(message.snapshot);
-        return true;
-      }
       default:
         this.#fail(socket, 'malformed', 'unknown message type');
         return false;
@@ -525,7 +493,6 @@ export class SemanticChannel {
 
   /** Records a tree as the newest one held, and hands it to the session. */
   #acceptTree(snapshot: SemanticSnapshot): void {
-    this.#composed = snapshot;
     this.#options.hooks.onSnapshot(snapshot);
   }
 
@@ -534,9 +501,9 @@ export class SemanticChannel {
    * influence locators. Shape validation proves that a field is well-formed;
    * this gate proves that the sender was entitled to send it.
    *
-   * Geometry is accepted under `bounds`; physical pointer actions separately
-   * require `absolute-bounds`. Keeping those checks separate lets consumers
-   * inspect relative geometry without ever treating it as a terminal address.
+   * Geometry observations are required by the v2 snapshot schema. The
+   * handshake separately declares whether intended and clipped geometry are
+   * guaranteed by this session contract.
    */
   #acceptsTreeFields(socket: Socket, nodes: readonly SemanticNode[], message: string): boolean {
     const capabilities = this.#attachment?.capabilities ?? [];
@@ -547,18 +514,12 @@ export class SemanticChannel {
     };
 
     if (!has('tree')) return reject("sent without the 'tree' capability");
-    if (this.#attachment?.protocol === 'termwright/2' && !has('qualified-observations')) {
-      return reject("uses termwright/2 without the 'qualified-observations' capability");
-    }
     for (const node of nodes) {
-      if (node.bounds !== undefined) {
-        if (!has('bounds')) return reject("contains bounds without the 'bounds' capability");
-      }
-      if (node.geometry !== undefined && !has('qualified-observations')) {
-        return reject("contains qualified geometry without the 'qualified-observations' capability");
-      }
       if (node.state !== undefined && !has('states')) {
         return reject("contains state without the 'states' capability");
+      }
+      if (node.state?.focused !== undefined && !has('focus-state')) {
+        return reject("contains focused state without the 'focus-state' capability");
       }
       if (node.extended !== undefined && !has('states')) {
         return reject("contains extended state without the 'states' capability");
@@ -566,52 +527,14 @@ export class SemanticChannel {
       if (node.actions !== undefined && !has('actions')) {
         return reject("contains actions without the 'actions' capability");
       }
+      if (node.inputRecipes !== undefined && !has('action-recipes')) {
+        return reject("contains input recipes without the 'action-recipes' capability");
+      }
       if (node.textRanges !== undefined && !has('text-ranges')) {
         return reject("contains text ranges without the 'text-ranges' capability");
       }
     }
     return true;
-  }
-
-  /**
-   * Asks for a full tree and stops trusting deltas until it arrives.
-   *
-   * Per design §8.3 a receiver that cannot compose must rehydrate rather than
-   * patch around the gap. Nothing is lost here — the last good tree stays
-   * observable while the new one is fetched — so this is reported as a resync,
-   * not as dropped data.
-   */
-  #resync(socket: Socket, reason: string, revision?: number): void {
-    this.#options.hooks.onDiagnostic(
-      'delta-resync',
-      `requesting a full tree: ${reason}`,
-      revision === undefined ? undefined : { revision },
-    );
-    if (this.#resyncing) return;
-    this.#resyncing = true;
-    this.#requestId += 1;
-    const request: GetTreeRequest = { type: 'get-tree', requestId: this.#requestId };
-    this.#send(socket, request);
-    this.#getTreeTimer = setTimeout(() => {
-      this.#getTreeTimer = null;
-      if (!this.#resyncing) return;
-      this.#resyncing = false;
-      // Giving up on the request rather than the session: a later pushed
-      // snapshot still repairs the chain, and deltas resume from it.
-      this.#options.hooks.onDiagnostic(
-        'delta-resync',
-        `no full tree arrived within ${GET_TREE_TIMEOUT_MS} ms; waiting for the adapter to push one`,
-      );
-    }, GET_TREE_TIMEOUT_MS);
-    this.#getTreeTimer.unref?.();
-  }
-
-  #finishResync(): void {
-    this.#resyncing = false;
-    if (this.#getTreeTimer !== null) {
-      clearTimeout(this.#getTreeTimer);
-      this.#getTreeTimer = null;
-    }
   }
 
   #send(socket: Socket, message: unknown): void {
@@ -656,6 +579,45 @@ export class SemanticChannel {
       wireCode,
     );
   }
+
+  #clearHandshakeTimer(socket: Socket): void {
+    const timer = this.#handshakeTimers.get(socket);
+    if (timer !== undefined) clearTimeout(timer);
+    this.#handshakeTimers.delete(socket);
+  }
+
+  #destroySockets(): void {
+    for (const timer of this.#handshakeTimers.values()) clearTimeout(timer);
+    this.#handshakeTimers.clear();
+    for (const socket of this.#sockets) socket.destroy();
+    this.#sockets.clear();
+  }
+}
+
+function listenServer(server: Server, endpoint: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => {
+      server.removeListener('listening', onListening);
+      reject(error);
+    };
+    const onListening = (): void => {
+      server.removeListener('error', onError);
+      resolve();
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(endpoint);
+  });
+}
+
+async function closeServer(server: Server): Promise<void> {
+  if (!server.listening) return;
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error === undefined) resolve();
+      else reject(error);
+    });
+  });
 }
 
 function errorDetail(error: unknown): string {

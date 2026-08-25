@@ -1,30 +1,44 @@
 # @termwright/test
 
-The Vitest preset for [termwright](https://github.com/gorce-ai/termwright): a
-`terminal` fixture that launches and tears down real PTY sessions, matchers that
-retry until the screen catches up, and **semantic YAML snapshots** — the
-accessibility tree of a terminal app, in a form a reviewer can read.
+The authoring API used by Termwright's native test host: a `terminal` fixture
+that owns real PTY sessions, event-driven matchers, and **semantic YAML
+snapshots** — the accessibility tree of a terminal app in a reviewable form.
+Vitest supplies the DSL, transforms, mocks and assertions inside that host;
+direct Vitest/Jest/node:test execution is not a Termwright product mode.
 
-The driver works fine from `node:test` or Jest. This package is the thin layer
-that makes Vitest feel like Playwright.
+`termwright test`, `termwright watch` and `termwright ui` all use the same exact
+runner and persistent host. Native collected IDs, not file/title strings,
+identify `.each`, duplicate-title, repeat and retry attempts. Each real try has
+an AttemptContext, total budget, journal producer and host resource leases.
 
-Cases declared through this package's `test` or `it` carry a small, versioned
-provider marker in Vitest task metadata. `termwright ui` uses it for exact
-per-case discovery and for a fail-closed UI-only runner: unrelated Vitest cases
-are not shown or executed by UI controls, even in a mixed file. Chained APIs,
-`each`, `for`, conditional modifiers and a project's own `test.extend()` retain
-the marker. The declaration also preserves `skip`, `todo` and provider-owned
-`only`, so a foreign `test.only` cannot globally suppress Termwright cases in
-the UI process. Normal Vitest runs do not install the UI runner and behave
-exactly as Vitest configured them.
+Tests which need more than one terminal declare the complete group on the test
+itself. The Native Host atomically admits that group before fixtures run and
+before the Attempt budget starts, so two-terminal tests cannot deadlock after
+holding only their first lease:
+
+```ts
+test.resources({ terminals: 2 })('client and server interoperate', async ({ terminal }) => {
+  const [client, server] = await Promise.all([
+    terminal.launch({ command: ['node', 'client.js'] }),
+    terminal.launch({ command: ['node', 'server.js'] }),
+  ]);
+  // ...
+});
+```
+
+Each declared terminal reserves one PTY, external process, semantic endpoint,
+and—unless `traceWriters` is explicitly set—one trace writer. Exceeding the
+declared group fails instead of silently falling back to another queue.
 
 ## Install
 
 ```sh
-pnpm add -D @termwright/test vitest
+pnpm add -D termwright @termwright/test vitest@4.1.11
 ```
 
-Requires Node >= 22 and Vitest >= 3.2. ESM only.
+Requires a certified Node LTS line and exact Vitest 4.1.11. ESM only. Run with
+`termwright test`; the exact pin is an engine certification surface, not a broad
+peer-compatibility promise.
 
 ## Usage
 
@@ -175,7 +189,7 @@ Retrying is what makes them safe right after a *screen* wait. `waitForText()`
 returns when the grid shows the text, but the semantic tree for that frame only
 becomes observable once its render-commit marker has been paired — including the
 first tree after the handshake, where `semanticTree()` is still `null` while
-`capabilities().semanticTree` is already true. Every tree-reading matcher polls
+the contract negotiation is pending. Every tree-reading matcher waits
 through that gap, and a snapshot being written for the first time waits for a
 tree rather than storing the absence of one.
 
@@ -331,8 +345,8 @@ of each file the preset compares the file's keys against the tests that file
 *declares*, and:
 
 - in `changed` / `all` it removes the orphans;
-- in any other mode it leaves them alone and the reporter names them in the
-  summary. It never fails the run — an orphaned snapshot is housekeeping, and a
+- in any other mode it leaves them alone and the host records them in the run
+  diagnostics. It never fails the run — an orphaned snapshot is housekeeping, and a
   red run would only teach people to stop renaming tests.
 
 "Declares" is the important word: a test skipped by `describe.skipIf(!pty)` is
@@ -547,49 +561,37 @@ three in `composition.test.ts`.
 | custom commands (`Cypress.Commands.add`) | a fixture composed with `test.extend`, as above |
 | `beforeEach` that logs in | the same, but as a fixture: it also tears down, and only the tests that ask for it pay for it |
 
-## Reporter
+## Diagnostic retries and reports
 
 ```ts
 // vitest.config.ts
 import { defineConfig } from 'vitest/config';
 import { termwrightRetry } from '@termwright/test/config';
-import TermwrightReporter from '@termwright/test/reporter';
 
 export default defineConfig({
   test: {
     setupFiles: ['./vitest.setup.ts'],
-    retry: termwrightRetry({ ci: 2, local: 0 }),
-    reporters: ['default', new TermwrightReporter()],
+    retry: termwrightRetry({ ci: 0, local: 0 }),
   },
 });
 ```
 
-`termwrightRetry` returns Vitest's native `retry` value; it does not rerun the
-whole suite. `TERMWRIGHT_RETRIES` overrides it for CI jobs and means additional
-attempts (`2` means at most three total attempts). Direct CLI use stays native:
-`vitest run --retry=2`.
+`termwrightRetry` returns the retry value consumed by Termwright's embedded
+Vitest engine; it does not rerun the whole suite. `TERMWRIGHT_RETRIES` means
+additional diagnostic attempts (`2` means at most three total attempts).
+Keep the checked-in certifying configuration at zero; enable a non-zero value
+only for an explicit diagnostic run.
+Product execution always goes through `termwright test`. If `-- --retry=2` is
+used as a diagnostic experiment, attempts retain their distinct identities,
+journals and resources; fail-then-pass is classified `flaky` and remains a
+non-zero certification result.
 
-After the run it writes `<outputDir>/index.html` — the self-contained report
-from `@termwright/trace`, with the visual diff, the semantic diff and the
-embedded recording of every failure. Tests that only passed after a retry are
-listed separately as **flaky**: a flaky test is a different problem from a
-broken one, and hiding it in the pass count is how it stays broken.
-The report also lists the ordered attempt numbers and the failure reason (and
-retained trace, when available) from every failed attempt.
-
-A test appears in the report when it failed, when it was flaky, or when it kept
-a trace — so under `trace: 'on'` every test is there, with its recording, its
-logs and its steps, collapsed until you open it. Under `retain-on-failure`
-(the default) only the failures kept a trace, so only they appear.
-
-The reporter runs in Vitest's main process, while `configureTermwright` usually
-runs in a `setupFiles` module, which is a worker. It therefore does not see
-your `outputDir`: pass `outFile` to the reporter, or call `configureTermwright`
-from `vitest.config.ts` as well.
-
-Import the reporter from `@termwright/test/reporter`, never from the package
-root: `vitest.config.ts` is loaded before the test runner exists, and the root
-module registers matchers on `expect` as a side effect.
+`termwright test`, `termwright watch` and `termwright ui` load the project’s
+Vitest/Vite configuration inside the certified native host. Optional human or
+HTML reporters configured there are composed with Termwright’s structured
+projection; they never own RunId, attempt identity or canonical persistence.
+The host transaction persists attempts and retained traces. Use `termwright
+report --trace …` for an explicit standalone HTML projection.
 
 ## Development
 

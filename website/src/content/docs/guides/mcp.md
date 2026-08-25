@@ -37,8 +37,8 @@ The snapshot contains the terminal screen and, when an integration is active,
 a compact semantic tree with stable node references:
 
 ```text
-dialog "Permission" ref=n7@42
-  button "Approve" ref=n8@42 focused
+dialog "Permission" ref=semantic:n7@42
+  button "Approve" ref=semantic:n8@42 focused
 ```
 
 Programs without semantics remain operable through text, keyboard input, and
@@ -50,7 +50,7 @@ Prefer references or semantic locators when available:
 
 ```jsonc
 // terminal.click
-{"terminal": "t1", "ref": "n8@42"}
+{"terminal": "t1", "ref": "semantic:n8@42"}
 
 // terminal.wait_for
 {"terminal": "t1", "wait": "text", "text": "Approved"}

@@ -21,6 +21,7 @@ export type ValidationErrorCode =
   | 'count'
   | 'string-bytes'
   | 'bad-rect'
+  | 'provider'
   | 'revision'
   | 'bytes';
 
@@ -36,7 +37,7 @@ function codeForIssue(issue: z.core.$ZodIssue): ValidationErrorCode {
   const path = issue.path.map(String);
   if (path.includes('role')) return 'unknown-role';
   if (path.includes('revision')) return 'revision';
-  if (path.includes('bounds') || path.includes('rect')) return 'bad-rect';
+  if (path.includes('bounds') || ['row', 'column', 'width', 'height'].includes(path.at(-1) ?? '')) return 'bad-rect';
   if (issue.code === 'custom' && issue.message?.includes('hit regions')) return 'bad-rect';
   if (issue.code === 'too_big' && (path.includes('nodes') || path.includes('rootIds'))) {
     return 'count';
@@ -64,6 +65,40 @@ function rectIntersectsViewport(
     rect.column + rect.width > 0 &&
     rect.row + rect.height > 0
   );
+}
+
+function rectContains(
+  outer: { row: number; column: number; width: number; height: number },
+  inner: { row: number; column: number; width: number; height: number },
+): boolean {
+  return (
+    inner.row >= outer.row &&
+    inner.column >= outer.column &&
+    inner.row + inner.height <= outer.row + outer.height &&
+    inner.column + inner.width <= outer.column + outer.width
+  );
+}
+
+function regionProblem(
+  owner: string,
+  region: { readonly regionBounds: { row: number; column: number; width: number; height: number }; readonly spans: readonly { row: number; from: number; to: number }[] },
+  columns: number,
+  rows: number,
+): ValidationResult | null {
+  for (const span of region.spans) {
+    if (span.row >= rows || span.from >= columns || span.to > columns) {
+      return fail('bad-rect', `${owner} span lies outside the viewport`);
+    }
+    if (
+      span.row < region.regionBounds.row ||
+      span.row >= region.regionBounds.row + region.regionBounds.height ||
+      span.from < region.regionBounds.column ||
+      span.to > region.regionBounds.column + region.regionBounds.width
+    ) {
+      return fail('bad-rect', `${owner} span lies outside regionBounds`);
+    }
+  }
+  return null;
 }
 
 function checkNodeShape(
@@ -94,19 +129,40 @@ function checkNodeShape(
     );
   }
 
-  if (node.bounds !== undefined) {
-    const { width, height, row, column } = node.bounds;
-    if (
-      !Number.isSafeInteger(row + height) ||
-      !Number.isSafeInteger(column + width)
-    ) {
-      return fail('bad-rect', `node ${node.id}: bounds overflow the safe-integer range`);
+  for (const [name, observation] of [
+    ['intendedRect', node.geometry.intendedRect],
+    ['visibleRect', node.geometry.visibleRect],
+  ] as const) {
+    if (observation.status !== 'known') continue;
+    const { row, column, width, height } = observation.value;
+    if (!Number.isSafeInteger(row + height) || !Number.isSafeInteger(column + width)) {
+      return fail('bad-rect', `node ${node.id}: ${name} overflows the safe-integer range`);
     }
-    if (node.state?.hidden !== true && !rectIntersectsViewport(node.bounds, snapshot.columns, snapshot.rows)) {
-      return fail(
-        'bad-rect',
-        `node ${node.id}: bounds do not intersect the ${snapshot.columns}x${snapshot.rows} viewport and the node is not hidden`,
-      );
+  }
+
+  if (node.paintedRegion?.status === 'known') {
+    const problem = regionProblem(
+      `node ${node.id} painted region`,
+      node.paintedRegion.value,
+      snapshot.columns,
+      snapshot.rows,
+    );
+    if (problem !== null) return problem;
+  }
+
+
+  const intended = node.geometry.intendedRect;
+  const visible = node.geometry.visibleRect;
+  if (visible.status === 'known' && visible.value.width > 0 && visible.value.height > 0) {
+    if (
+      snapshot.coordinateSpace.status === 'known' &&
+      snapshot.coordinateSpace.value === 'viewport-cells' &&
+      !rectIntersectsViewport(visible.value, snapshot.columns, snapshot.rows)
+    ) {
+      return fail('bad-rect', `node ${node.id}: visibleRect does not intersect the viewport`);
+    }
+    if (intended.status === 'known' && !rectContains(intended.value, visible.value)) {
+      return fail('bad-rect', `node ${node.id}: visibleRect extends outside intendedRect`);
     }
   }
 
@@ -244,20 +300,122 @@ export function validateSnapshot(value: unknown, limits: ProtocolLimits): Valida
 
   const ids: ReadonlySet<string> = new Set(byId.keys());
 
-  if (snapshot.v === 2) {
-    if (snapshot.coordinateSpace?.status === 'known' && snapshot.coordinateSpace.value !== 'viewport-cells') {
-      // Framework-local geometry is inspectable, but it cannot be addressed by
-      // terminal input. Keeping it valid is intentional; pointer ownership is
-      // independently qualified by the hit grid.
+  if (snapshot.coordinateSpace.status === 'known' && snapshot.coordinateSpace.value !== 'viewport-cells') {
+    // Framework-local geometry is inspectable, but it cannot be addressed by
+    // terminal input. Pointer ownership is independently qualified by the hit grid.
+  }
+  if (snapshot.hitGrid.status === 'known') {
+    for (const region of snapshot.hitGrid.value.regions) {
+      if (!ids.has(region.recipientId)) {
+        return fail('missing-parent', `hitGrid references unknown recipient ${region.recipientId}`);
+      }
+      if (!rectIntersectsViewport(region.rect, snapshot.columns, snapshot.rows)) {
+        return fail('bad-rect', `hitGrid region for ${region.recipientId} does not intersect the viewport`);
+      }
     }
-    if (snapshot.hitGrid?.status === 'known') {
-      for (const region of snapshot.hitGrid.value.regions) {
-        if (!ids.has(region.recipientId)) {
-          return fail('missing-parent', `hitGrid references unknown recipient ${region.recipientId}`);
-        }
-        if (!rectIntersectsViewport(region.rect, snapshot.columns, snapshot.rows)) {
-          return fail('bad-rect', `hitGrid region for ${region.recipientId} does not intersect the viewport`);
-        }
+  }
+
+  const providerIds = new Set<string>();
+  for (const provider of snapshot.providerEvidence ?? []) {
+    if (providerIds.has(provider.providerId)) {
+      return fail('provider', `provider evidence id ${provider.providerId} appears more than once`);
+    }
+    providerIds.add(provider.providerId);
+    if (provider.sessionId !== snapshot.sessionId) {
+      return fail(
+        'provider',
+        `provider ${provider.providerId} evidence session ${provider.sessionId} does not match snapshot session ${snapshot.sessionId}`,
+      );
+    }
+    if (provider.revision !== snapshot.revision) {
+      return fail(
+        'provider',
+        `provider ${provider.providerId} evidence revision ${provider.revision} does not match snapshot revision ${snapshot.revision}`,
+      );
+    }
+    if (provider.status !== 'available') continue;
+    if (provider.evidence.providerId !== provider.providerId) {
+      return fail(
+        'schema',
+        `provider ${provider.providerId} evidence provenance names ${provider.evidence.providerId}`,
+      );
+    }
+    if (
+      provider.focusState?.status === 'focused' &&
+      !ids.has(provider.focusState.recipientId)
+    ) {
+      return fail(
+        'missing-parent',
+        `provider ${provider.providerId} focus references unknown recipient ${provider.focusState.recipientId}`,
+      );
+    }
+    for (const region of provider.pointerRegions) {
+      if (!ids.has(region.recipientId)) {
+        return fail(
+          'missing-parent',
+          `provider ${provider.providerId} references unknown recipient ${region.recipientId}`,
+        );
+      }
+      const problem = regionProblem(
+        `provider ${provider.providerId} span for ${region.recipientId}`,
+        region,
+        snapshot.columns,
+        snapshot.rows,
+      );
+      if (problem !== null) return problem;
+    }
+    for (const region of provider.paintedRegions ?? []) {
+      if (!ids.has(region.recipientId)) {
+        return fail(
+          'missing-parent',
+          `provider ${provider.providerId} painted region references unknown recipient ${region.recipientId}`,
+        );
+      }
+      const problem = regionProblem(
+        `provider ${provider.providerId} painted region for ${region.recipientId}`,
+        region,
+        snapshot.columns,
+        snapshot.rows,
+      );
+      if (problem !== null) return problem;
+    }
+    for (const hit of provider.hitGrid?.regions ?? []) {
+      if (!ids.has(hit.recipientId)) {
+        return fail(
+          'missing-parent',
+          `provider ${provider.providerId} hitGrid references unknown recipient ${hit.recipientId}`,
+        );
+      }
+      if (!rectIntersectsViewport(hit.rect, snapshot.columns, snapshot.rows)) {
+        return fail(
+          'bad-rect',
+          `provider ${provider.providerId} hitGrid region for ${hit.recipientId} does not intersect the viewport`,
+        );
+      }
+    }
+    for (const entry of provider.actionRecipes ?? []) {
+      if (!ids.has(entry.recipientId)) {
+        return fail(
+          'missing-parent',
+          `provider ${provider.providerId} action recipes reference unknown recipient ${entry.recipientId}`,
+        );
+      }
+      const node = snapshot.nodes.find(({ id }) => id === entry.recipientId)!;
+      const intents = new Set(node.actions ?? []);
+      const missingIntent = entry.recipes.find(({ action }) => !intents.has(action));
+      if (missingIntent !== undefined) {
+        return fail(
+          'provider',
+          `provider ${provider.providerId} ${missingIntent.action} recipe has no matching semantic action intent on ${entry.recipientId}`,
+        );
+      }
+    }
+    for (const state of provider.scrollStates ?? []) {
+      if (!ids.has(state.recipientId)) {
+        return fail(
+          'missing-parent',
+          `provider ${provider.providerId} scroll state references unknown recipient ${state.recipientId}`,
+        );
       }
     }
   }

@@ -1,10 +1,10 @@
 package protocol
 
-// Role is a v1 semantic role. The set is closed and ARIA-aligned: an unknown
+// Role is a semantic role. The set is closed and ARIA-aligned: an unknown
 // role is rejected during validation rather than silently acquiring behaviour.
 type Role string
 
-// The v1 roles.
+// Semantic roles.
 const (
 	RoleApplication Role = "application"
 	RoleRegion      Role = "region"
@@ -34,7 +34,7 @@ const (
 // Action is a descriptive capability hint: a diagnostic, never a callback.
 type Action string
 
-// The v1 actions.
+// Semantic actions.
 const (
 	ActionFocus    Action = "focus"
 	ActionActivate Action = "activate"
@@ -48,19 +48,19 @@ const (
 // Capability is something an adapter tells the driver it can provide.
 type Capability string
 
-// The v1 capabilities.
+// Protocol capabilities.
 const (
-	CapTree                  Capability = "tree"
-	CapBounds                Capability = "bounds"
-	CapAbsoluteBounds        Capability = "absolute-bounds"
-	CapStates                Capability = "states"
-	CapActions               Capability = "actions"
-	CapTextRanges            Capability = "text-ranges"
-	CapRenderRevisions       Capability = "render-revisions"
-	CapTreeDiffs             Capability = "tree-diffs"
-	CapLogs                  Capability = "logs"
-	CapQualifiedObservations Capability = "qualified-observations"
-	CapPointerHitGrid        Capability = "pointer-hit-grid"
+	CapTree             Capability = "tree"
+	CapIntendedGeometry Capability = "intended-geometry"
+	CapClippedGeometry  Capability = "clipped-geometry"
+	CapStates           Capability = "states"
+	CapFocusState       Capability = "focus-state"
+	CapActions          Capability = "actions"
+	CapActionRecipes    Capability = "action-recipes"
+	CapTextRanges       Capability = "text-ranges"
+	CapRenderRevisions  Capability = "render-revisions"
+	CapLogs             Capability = "logs"
+	CapPointerHitGrid   Capability = "pointer-hit-grid"
 )
 
 var roleSet = map[Role]struct{}{
@@ -78,23 +78,22 @@ var actionSet = map[Action]struct{}{
 }
 
 var capabilitySet = map[Capability]struct{}{
-	CapTree: {}, CapBounds: {}, CapAbsoluteBounds: {}, CapStates: {},
-	CapActions: {}, CapTextRanges: {}, CapRenderRevisions: {}, CapTreeDiffs: {},
-	CapLogs:                  {},
-	CapQualifiedObservations: {}, CapPointerHitGrid: {},
+	CapTree: {}, CapIntendedGeometry: {}, CapClippedGeometry: {}, CapStates: {}, CapFocusState: {},
+	CapActions: {}, CapActionRecipes: {}, CapTextRanges: {}, CapRenderRevisions: {},
+	CapLogs: {}, CapPointerHitGrid: {},
 }
 
-// ValidRole reports whether r is one of the v1 roles.
+// ValidRole reports whether r is a known role.
 func ValidRole(r Role) bool { _, ok := roleSet[r]; return ok }
 
-// ValidAction reports whether a is one of the v1 actions.
+// ValidAction reports whether a is a known action.
 func ValidAction(a Action) bool { _, ok := actionSet[a]; return ok }
 
-// ValidCapability reports whether c is one of the v1 capabilities.
+// ValidCapability reports whether c is a known capability.
 func ValidCapability(c Capability) bool { _, ok := capabilitySet[c]; return ok }
 
 // ActionCount is the size of the closed action set, used as an array bound.
 const ActionCount = 7
 
 // CapabilityCount is the size of the closed capability set.
-const CapabilityCount = 11
+const CapabilityCount = 9

@@ -24,10 +24,10 @@ semantic locators make the test clearer or when you need framework state.
 | Framework | Integration | Semantic identity | Viewport visibility | Exact pointer recipient |
 | --- | --- | --- | --- | --- |
 | [Ink](ink/) | `@termwright/probe-ink` | stable | unsupported | unsupported |
-| [OpenTUI](opentui/) | `@termwright/probe-opentui` | stable | unsupported | supported |
+| [OpenTUI](opentui/) | `@termwright/probe-opentui` | stable | unsupported | unsupported |
 | [Textual](textual/) | Python `termwright` probe | stable | supported | supported |
-| [tview](tview/) | `@termwright/probe-tview` instrumented build | stable | conditional | unsupported |
-| [Ratatui](ratatui/) | `termwright-probe-ratatui` instrumented build | frame-local by default | conditional | unsupported |
+| [tview](tview/) | `@termwright/probe-tview` instrumented build | stable | unsupported | unsupported |
+| [Ratatui](ratatui/) | `termwright-probe-ratatui` instrumented build | frame-local by default | unsupported | unsupported |
 | [Bubble Tea / Bubbles](bubbletea/) | `@termwright/probe-charm` instrumented build | frame-local by default | unsupported | unsupported |
 
 The generated [compatibility reference](../reference/compatibility/) is the
@@ -67,7 +67,7 @@ await app.waitForText('Permission required');
 await expect(app.getByRole('button', {name: 'Approve'})).toBeAttached();
 ```
 
-Then inspect `app.capabilities()` or the Runner inspector. Do not infer a
+Then inspect `await app.settled()` or the Runner inspector. Do not infer a
 working integration from the package being installed; the launch command must
 actually enable it.
 

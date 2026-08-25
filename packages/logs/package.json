@@ -10,7 +10,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "exports": {
     ".": {
@@ -38,10 +38,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/pino.ts src/winston.ts src/consola.ts src/otel.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/pino.ts src/winston.ts src/consola.ts src/otel.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:hostile": "vitest run --config vitest.hostile.config.ts"
+    "test": "pnpm --dir ../.. test -- -- --run packages/logs",
+    "test:hostile": "pnpm --dir ../.. test -- -- --run packages/logs"
   },
   "dependencies": {
     "@termwright/protocol": "workspace:*"
@@ -71,7 +71,7 @@
     "@opentelemetry/sdk-logs": "^0.208.0",
     "consola": "^3.4.2",
     "pino": "^10.3.1",
-    "vitest": "^3.2.0",
+    "vitest": "4.1.11",
     "winston": "^3.19.0"
   }
 }

@@ -18,7 +18,7 @@ import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { ENV_ENDPOINT, ENV_PROTOCOL, ENV_TOKEN, PROTOCOL_V2_ID, verifyMarkerPayload, MARKER_OSC_CODE, MARKER_OSC_PREFIX } from '@termwright/protocol';
+import { ENV_ENDPOINT, ENV_TOKEN, PROTOCOL_ID, verifyMarkerPayload, MARKER_OSC_CODE, MARKER_OSC_PREFIX } from '@termwright/protocol';
 import { startFakeDriver, type FakeDriver } from './testing/fake-driver.js';
 import { bunAvailable } from './testing/bun-available.js';
 
@@ -26,6 +26,7 @@ const run = promisify(execFile);
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(packageRoot, 'src', 'testing', 'vanilla-app.ts');
 const annotatedApp = join(packageRoot, 'src', 'testing', 'annotated-app.ts');
+const geometryApp = join(packageRoot, 'src', 'testing', 'geometry-app.ts');
 const annotationSdkRoot = join(packageRoot, '..', 'opentui');
 
 async function ensureBuilt(): Promise<void> {
@@ -47,7 +48,6 @@ function launch(options: {
   readonly driver?: FakeDriver;
   readonly steps?: number;
   readonly appPath?: string;
-  readonly protocol?: 'termwright/1' | 'termwright/2';
 }): Promise<Run> {
   const entry = pathToFileURL(join(packageRoot, 'dist', 'bun-preload.js')).href;
   const targetApp = options.appPath ?? app;
@@ -61,7 +61,7 @@ function launch(options: {
         TW_APP_STEPS: String(options.steps ?? 2),
         ...(options.driver === undefined
           ? { [ENV_ENDPOINT]: '', [ENV_TOKEN]: '' }
-          : { [ENV_ENDPOINT]: options.driver.endpoint, [ENV_TOKEN]: options.driver.token, ...(options.protocol === undefined ? {} : { [ENV_PROTOCOL]: options.protocol }) }),
+          : { [ENV_ENDPOINT]: options.driver.endpoint, [ENV_TOKEN]: options.driver.token }),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -116,6 +116,7 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
 
     const hello = await driver.waitForHandshake();
     expect(hello.probe?.framework).toBe('opentui');
+    expect(hello.probe?.frameworkVersion).toBe('0.5.3');
     expect(hello.probe?.identityKind).toBe('stable');
 
     const [snapshot] = await driver.waitForSnapshots(1);
@@ -169,9 +170,14 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
       actions: ['activate'],
       labelledBy: [label?.id],
       describedBy: [label?.id],
-      bounds: expect.objectContaining({ width: 24, height: 3 }),
+      geometry: expect.objectContaining({
+        intendedRect: expect.objectContaining({
+          status: 'known',
+          value: expect.objectContaining({ width: 24, height: 3 }),
+        }),
+      }),
       p: 'annotation',
-      px: expect.objectContaining({ bounds: 'framework' }),
+      px: expect.objectContaining({ geometry: 'framework' }),
     });
     expect(hello.capabilities).toContain('actions');
     expect(deployment?.state?.focused).not.toBe(true);
@@ -187,7 +193,8 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
 
     const values = snapshots
       .map((snapshot) => snapshot.nodes.find((node) => node.role === 'textbox')?.value)
-      .filter((value): value is string => value !== undefined);
+      .filter((value) => value?.status === 'known')
+      .map((value) => value!.status === 'known' ? value!.value : '');
 
     // The app types into the field on every step; at least one snapshot has to
     // show a value it set, or the probe is reporting a stale tree.
@@ -204,18 +211,13 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
     const selectedPositions = snapshots
       .map((snapshot) => snapshot.nodes.find((node) => node.role === 'list')?.state?.positionInSet)
       .filter((position): position is number => position !== undefined);
-    const scrollStates = snapshots
-      .map((snapshot) => snapshot.nodes.find(
-        (node) => node.frameworkType === 'ScrollBoxRenderable',
-      )?.state)
-      .filter((state) => state !== undefined);
-
-    // Select exposes a highlighted index, while ScrollBox exposes position and
-    // extent. These assertions require values changed by the application, so a
-    // probe that publishes only its initial tree cannot pass.
+    // Select exposes a highlighted index. ScrollBox's private offset/extent are
+    // retained in probe IR diagnostics, but do not become portable scroll
+    // truth without an explicit scroll-state producer including its viewport.
     expect(new Set(selectedPositions).size).toBeGreaterThan(1);
-    expect(scrollStates.some((state) => (state.scrollOffset ?? 0) > 0)).toBe(true);
-    expect(scrollStates.some((state) => (state.scrollExtent ?? 0) > 4)).toBe(true);
+    expect(snapshots.some((snapshot) => snapshot.nodes.some(
+      (node) => node.frameworkType === 'ScrollBoxRenderable' && node.scroll !== undefined,
+    ))).toBe(false);
   }, 60_000);
 
   it('marks each revision it published, and the markers verify', async () => {
@@ -250,18 +252,55 @@ describe.skipIf(!bunAvailable())('a vanilla OpenTUI app, instrumented by the lau
   }, 90_000);
 
   it('publishes qualified v2 geometry and the native exact hit grid', async () => {
-    const driver = await startFakeDriver(PROTOCOL_V2_ID);
+    const driver = await startFakeDriver();
     open.push(driver);
-    await launch({ driver, steps: 2, protocol: PROTOCOL_V2_ID });
+    await launch({ driver, steps: 2 });
     const hello = await driver.waitForHandshake();
-    expect(hello.protocol).toBe(PROTOCOL_V2_ID);
+    expect(hello.protocol).toBe(PROTOCOL_ID);
     expect(hello.capabilities).toContain('pointer-hit-grid');
+    expect(hello.capabilities).toContain('clipped-geometry');
+    expect(hello.probe?.capabilities).toContain('visible-rect');
     const [snapshot] = await driver.waitForSnapshots(1);
     expect(snapshot?.v).toBe(2);
     expect(snapshot?.coordinateSpace).toMatchObject({ status: 'known', value: 'viewport-cells' });
     expect(snapshot?.hitGrid).toMatchObject({ status: 'known' });
     expect(snapshot?.nodes.some((node) => node.geometry?.intendedRect.status === 'known')).toBe(true);
-    expect(snapshot?.nodes.every((node) => node.bounds === undefined && node.occlusion === undefined)).toBe(true);
+    expect(snapshot?.nodes.every((node) =>
+      node.geometry?.visibleRect.status === 'known' || node.geometry?.visibleRect.status === 'absent')).toBe(true);
+    expect(snapshot?.nodes.every((node) => node.geometry !== undefined)).toBe(true);
+  }, 60_000);
+
+  it('records nested clips, overlap ownership, hidden nodes, render hooks and resize from real OpenTUI', async () => {
+    const driver = await startFakeDriver();
+    open.push(driver);
+    await launch({ driver, appPath: geometryApp });
+    const snapshots = await driver.waitForSnapshots(2);
+    const snapshot = snapshots.find((candidate) => candidate.nodes.some((node) => node.name === 'nested clipped target'))!;
+    const clipped = snapshot.nodes.find((node) => node.name === 'nested clipped target')!;
+    const hidden = snapshot.nodes.find((node) => node.name === 'hidden node')!;
+    const moved = snapshot.nodes.find((node) => node.name === 'hook moved')!;
+    const upper = snapshot.nodes.find((node) => node.name === 'upper overlap')!;
+
+    expect(clipped.geometry.intendedRect).toMatchObject({ status: 'known' });
+    expect(clipped.geometry.visibleRect).toMatchObject({ status: 'known' });
+    if (clipped.geometry.intendedRect.status === 'known' && clipped.geometry.visibleRect.status === 'known') {
+      expect(clipped.geometry.visibleRect.value.width).toBeLessThan(clipped.geometry.intendedRect.value.width);
+    }
+    expect(hidden.geometry).toMatchObject({
+      displayed: { status: 'known', value: false },
+      visibleRect: { status: 'absent', reason: 'not-displayed' },
+    });
+    expect(moved.geometry.intendedRect).toMatchObject({ status: 'known' });
+    expect(snapshot.hitGrid).toMatchObject({ status: 'known' });
+    if (snapshot.hitGrid.status === 'known' && upper.geometry.visibleRect.status === 'known') {
+      const { row, column } = upper.geometry.visibleRect.value;
+      expect(snapshot.hitGrid.value.regions.some((region) =>
+        region.recipientId === upper.id
+        && region.rect.row === row
+        && column >= region.rect.column
+        && column < region.rect.column + region.rect.width)).toBe(true);
+    }
+    expect(new Set(snapshots.map((candidate) => `${candidate.columns}x${candidate.rows}`)).size).toBeGreaterThan(1);
   }, 60_000);
 });
 

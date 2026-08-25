@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createNodePtyBackend } from '@termwright/driver';
 import { Client, connectClient } from './sdk-facade.js';
 import { ERROR_META_KEY, serveInMemory } from './server.js';
@@ -101,7 +101,7 @@ afterEach(async () => {
 });
 
 describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout: 30_000 }, () => {
-  it('walks launch -> snapshot -> click -> wait_for -> capture_since -> close', async () => {
+  it.skipIf(process.platform === 'win32')('walks launch -> snapshot -> click -> wait_for -> capture_since -> close', async () => {
     const { call } = await connectSession();
     const terminal = await launchSemantic(call);
 
@@ -112,9 +112,8 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(snapshot.data['semanticTree']).toBe('available');
     expect(snapshot.text).toMatch(/^Terminal t1 60x10 revision \d+$/mu);
     expect(snapshot.text).toContain('semanticTree: available');
-    expect(snapshot.text).toMatch(/dialog "Permission" ref=n1@\d+ modal/u);
-    expect(snapshot.text).toMatch(/ {2}button "Approve" ref=n2@\d+ focused/u);
-    expect(snapshot.text).not.toContain('bounds=');
+    expect(snapshot.text).toMatch(/dialog "Permission" ref=semantic:n1@\d+ bounds=\(0,0,40,2\) modal/u);
+    expect(snapshot.text).toMatch(/ {2}button "Approve" ref=semantic:n2@\d+ bounds=\(1,2,9,1\) focused/u);
     expect(snapshot.text).toContain('visible text:');
 
     const refs = snapshot.data['refs'] as { ref: string; name: string }[];
@@ -122,9 +121,56 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     expect(reject).toBeDefined();
     const cursor = snapshot.data['revision'] as number;
 
-    const clicked = await call('terminal.click', { terminal, ref: reject?.ref });
+    const invalidSemanticAction = await call('terminal.fill', {
+      terminal,
+      ref: `screen:0,0,1,1@${cursor}`,
+      text: 'must-not-be-sent',
+    });
+    expect(invalidSemanticAction.isError).toBe(true);
+    expect(invalidSemanticAction.text).toMatch(/requires a semantic target/u);
+
+    const checkpoint = await call('terminal.checkpoint', { terminal });
+    expect(checkpoint.isError, checkpoint.text).toBe(false);
+    expect(checkpoint.data).toMatchObject({ terminal, contractId: expect.any(String), sequence: expect.any(Number) });
+
+    const explanation = await call('terminal.actionability', {
+      terminal,
+      ref: reject?.ref,
+      action: 'click',
+    });
+    expect(explanation.isError, explanation.text).toBe(false);
+    expect(explanation.data).toMatchObject({
+      actionable: true,
+      strategy: 'authoritative-pointer-region',
+      contractId: expect.any(String),
+      requirements: expect.arrayContaining([
+        expect.objectContaining({ kind: 'pointer-input', verdict: 'satisfied', observation: 'known' }),
+        expect.objectContaining({ kind: 'mouse-input-enabled', verdict: 'satisfied', observation: 'known' }),
+        expect.objectContaining({
+          kind: 'receives-pointer', verdict: 'satisfied', observation: 'known',
+          evidence: expect.objectContaining({ strength: 'authoritative', providerId: expect.any(String) }),
+        }),
+      ]),
+    });
+
+    const clicked = await call('terminal.click', {
+      terminal,
+      ref: reject?.ref,
+      modifiers: ['control', 'shift', 'alt'],
+    });
     expect(clicked.isError, clicked.text).toBe(false);
     expect(clicked.data['ok']).toBe(true);
+    expect(clicked.data['action']).toMatchObject({
+      kind: 'click',
+      strategy: 'authoritative-pointer-region',
+      contractId: expect.any(String),
+      operations: [
+        { device: 'mouse', kind: 'down', modifiers: ['shift', 'alt', 'control'] },
+        { device: 'mouse', kind: 'up', modifiers: ['shift', 'alt', 'control'] },
+      ],
+      requirements: expect.any(Array),
+      physicalEvidence: expect.objectContaining({ strength: 'authoritative', providerId: expect.any(String) }),
+    });
 
     const waited = await call('terminal.wait_for', {
       terminal,
@@ -133,18 +179,10 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     });
     expect(waited.isError, waited.text).toBe(false);
 
-    // Same hazard as the stale-ref test: the click's semantic revision lands
-    // after the screen shows its effect, and settleSemantics only budgets
-    // 250 ms for the pairing. Re-asking with the SAME cursor is lossless, so
-    // poll until the subtrees arrive rather than assume one call catches them.
-    let since = await call('terminal.capture_since', { terminal, cursor });
-    await vi.waitFor(
-      async () => {
-        since = await call('terminal.capture_since', { terminal, cursor });
-        expect((since.data['changedSubtrees'] as unknown[]).length).toBeGreaterThan(0);
-      },
-      { timeout: 15_000, interval: 50 },
-    );
+    // capture_since crosses the driver's committed-observation barrier. The
+    // same lossless cursor therefore returns screen rows and paired semantic
+    // subtrees together without polling scheduler timing.
+    const since = await call('terminal.capture_since', { terminal, cursor });
 
     expect(since.isError, since.text).toBe(false);
     const changedRows = since.data['changedRows'] as { row: number; text: string }[];
@@ -156,6 +194,39 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
     const closed = await call('terminal.close', { terminal });
     expect(closed.isError, closed.text).toBe(false);
     expect(closed.data['ok']).toBe(true);
+  });
+
+  it.runIf(process.platform === 'win32')('reports unavailable pointer actionability through MCP without emitting input', async () => {
+    const { call } = await connectSession();
+    const terminal = await launchSemantic(call);
+    await call('terminal.wait_for', { terminal, wait: 'text', text: 'Permission required' });
+
+    const before = await call('terminal.snapshot', { terminal });
+    const reject = (before.data['refs'] as { ref: string; name: string }[])
+      .find((entry) => entry.name === 'Reject');
+    expect(reject).toBeDefined();
+
+    const explanation = await call('terminal.actionability', {
+      terminal,
+      ref: reject?.ref,
+      action: 'click',
+    });
+    expect(explanation.isError, explanation.text).toBe(false);
+    expect(explanation.data).toMatchObject({
+      actionable: false,
+      reason: { code: 'capability-unavailable' },
+      requirements: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'pointer-input', verdict: 'inconclusive', observation: 'unsupported',
+        }),
+      ]),
+    });
+
+    const clicked = await call('terminal.click', { terminal, ref: reject?.ref });
+    expect(clicked.isError).toBe(true);
+    expect(clicked.error?.kind).toBe('capability-unavailable');
+    const after = await call('terminal.snapshot', { terminal });
+    expect(after.data['revision']).toBe(before.data['revision']);
   });
 
   it('targets by role and by testId, and reports candidates when a locator is ambiguous', async () => {
@@ -184,29 +255,35 @@ describe.skipIf(!ptyAvailable())('the MCP server over a real driver', { timeout:
 
     const snapshot = await call('terminal.snapshot', { terminal });
     const refs = snapshot.data['refs'] as { ref: string; name: string }[];
-    const approve = refs.find((entry) => entry.name === 'Approve');
-    expect(approve).toBeDefined();
+    const reject = refs.find((entry) => entry.name === 'Reject');
+    expect(reject).toBeDefined();
     const mintedAt = snapshot.data['semanticRevision'] as number;
     expect(mintedAt).toBeGreaterThan(0);
 
     // Tab re-renders the fixture, which publishes a new semantic revision.
     await call('terminal.press', { terminal, keys: 'Tab' });
 
-    // Wait for the revision itself, not for the screen to settle: "stable" can
-    // return before the new tree is observable, and on a slow ConPTY it did —
-    // the old ref was then still current, so the tool correctly did NOT fail
-    // and the assertion below tested timing rather than the staleness rule.
-    await vi.waitFor(
-      async () => {
-        const now = await call('terminal.snapshot', { terminal });
-        expect(now.data['semanticRevision']).toBeGreaterThan(mintedAt);
-      },
-      { timeout: 15_000, interval: 50 },
-    );
+    // Wait on the target's canonical focused Condition. This is the causal
+    // child consequence of Tab and is driven by semantic revisions; polling a
+    // snapshot made this test depend on scheduler speed on slow ConPTY hosts.
+    const focused = await call('terminal.wait_for', {
+      terminal,
+      wait: 'focused',
+      ref: reject?.ref,
+      timeout: 15_000,
+    });
+    expect(focused.isError, focused.text).toBe(false);
+    const now = await call('terminal.snapshot', { terminal });
+    expect(now.data['semanticRevision']).toBeGreaterThan(mintedAt);
 
-    const clicked = await call('terminal.click', { terminal, ref: approve?.ref });
-    expect(clicked.isError, clicked.text).toBe(false);
-    expect(clicked.data['ok']).toBe(true);
+    // Reject was unfocused when this ref was minted and becomes focused in the
+    // next revision. A targeted keyboard action proves stable re-resolution
+    // without depending on platform-specific pointer-mode visibility.
+    const pressed = await call('terminal.press', { terminal, ref: reject?.ref, keys: 'Enter' });
+    expect(pressed.isError, pressed.text).toBe(false);
+    expect(pressed.data['ref']).toMatch(/^semantic:n3@\d+$/u);
+    expect(pressed.data['ref']).not.toBe(reject?.ref);
+    await call('terminal.wait_for', { terminal, wait: 'text', text: 'ACTIVATED reject' });
   });
 
   it('writes the full dump to disk and returns only refs plus the path', async () => {

@@ -17,7 +17,7 @@
 
 import { writeFile } from 'node:fs/promises';
 import { launchTerminal, type LaunchOptions, type TerminalHarness } from '@termwright/driver';
-import type { SemanticSnapshot } from '@termwright/protocol';
+import { DEFAULT_ARTIFACT_VALUE_POLICY, type ArtifactValuePolicy, type EffectiveSessionContract, type PointerHitGrid, type SemanticSnapshot } from '@termwright/protocol';
 import { generateTestSource, type CodegenOptions, type RecordedEvent } from './codegen.js';
 import { coalesceInput, InputDecoder } from './input-decode.js';
 import { generateSelector, type GeneratedSelector } from './selector.js';
@@ -35,6 +35,8 @@ export interface RecorderOptions {
   readonly testName?: string;
   /** Where {@link RecorderSession.save} writes by default. */
   readonly outFile?: string;
+  /** Input captured into generated source. Defaults to secure `redacted`. */
+  readonly artifactValuePolicy?: ArtifactValuePolicy;
   /** Injectable launcher, so tests can record against a fake harness. */
   readonly launch?: (options: LaunchOptions) => Promise<TerminalHarness>;
 }
@@ -53,7 +55,10 @@ export interface RecorderSession {
   /** Enters or leaves pick mode. */
   setPickMode(enabled: boolean): void;
 
-  /** Records a click on a node, addressed by the narrowest selector. */
+  /**
+   * Records a semantic click only when the frozen contract and the committed
+   * frame both prove that real pointer input can be routed to this node.
+   */
   recordClick(nodeId: string): GeneratedSelector | undefined;
   /** Records a visibility assertion on a node. */
   recordAssertVisible(nodeId: string): GeneratedSelector | undefined;
@@ -102,7 +107,7 @@ class Recorder implements RecorderSession {
   readonly #options: RecorderOptions;
   readonly #events: RecordedEvent[] = [];
   readonly #decoder = new InputDecoder();
-  readonly #startedAt = Date.now();
+  readonly #startedAt = performance.now();
   #picking = false;
 
   constructor(harness: TerminalHarness, options: RecorderOptions) {
@@ -145,19 +150,24 @@ class Recorder implements RecorderSession {
           this.#push({ kind: 'press', keys: input.keys, t });
           break;
         case 'type':
-          this.#pushTyped(input.text, t);
+          this.#recordPayload('type', input.text, t);
           break;
         case 'paste':
-          this.#push({ kind: 'paste', text: input.text, t });
+          this.#recordPayload('paste', input.text, t);
           break;
         case 'raw':
-          this.#push({ kind: 'raw', dataB64: Buffer.from(input.bytes).toString('base64'), t });
+          this.#recordRaw(input.bytes, t);
           break;
       }
     }
   }
 
   recordClick(nodeId: string): GeneratedSelector | undefined {
+    const snapshot = this.harness.semanticTree();
+    const contract = this.harness.contract();
+    if (snapshot === null || contract === null || !ownsPointerCell(contract, snapshot, nodeId)) {
+      return undefined;
+    }
     const selector = this.#selectorFor(nodeId);
     if (selector === undefined) return undefined;
     this.#push({ kind: 'click', selector, t: this.#now() });
@@ -207,7 +217,7 @@ class Recorder implements RecorderSession {
   async close(): Promise<void> {
     for (const input of this.#decoder.flush()) {
       if (input.kind === 'raw') {
-        this.#push({ kind: 'raw', dataB64: Buffer.from(input.bytes).toString('base64'), t: this.#now() });
+        this.#recordRaw(input.bytes, this.#now());
       }
     }
     await this.harness.close();
@@ -220,11 +230,32 @@ class Recorder implements RecorderSession {
   }
 
   #now(): number {
-    return Date.now() - this.#startedAt;
+    return performance.now() - this.#startedAt;
   }
 
   #push(event: RecordedEvent): void {
     this.#events.push(event);
+  }
+
+  #recordPayload(kind: 'type' | 'paste', text: string, t: number): void {
+    const policy = this.#options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+    if (policy === 'none') return;
+    if (policy === 'redacted') {
+      this.#push({ kind: 'withheld-input', inputKind: kind, bytes: Buffer.byteLength(text, 'utf8'), t });
+      return;
+    }
+    if (kind === 'type') this.#pushTyped(text, t);
+    else this.#push({ kind: 'paste', text, t });
+  }
+
+  #recordRaw(bytes: Uint8Array, t: number): void {
+    const policy = this.#options.artifactValuePolicy ?? DEFAULT_ARTIFACT_VALUE_POLICY;
+    if (policy === 'none') return;
+    if (policy === 'redacted') {
+      this.#push({ kind: 'withheld-input', inputKind: 'raw', bytes: bytes.length, t });
+      return;
+    }
+    this.#push({ kind: 'raw', dataB64: Buffer.from(bytes).toString('base64'), t });
   }
 
   /** Consecutive typing collapses into one `type()` call. */
@@ -236,4 +267,45 @@ class Recorder implements RecorderSession {
     }
     this.#push({ kind: 'type', text, t });
   }
+}
+
+/**
+ * Semantic code generation is an executable promise: a later `.click()` must
+ * be able to use the same authoritative ownership model that justified the
+ * recording. Bounds, paint provenance and a node picked in the inspector are
+ * deliberately insufficient.
+ */
+function ownsPointerCell(
+  contract: EffectiveSessionContract,
+  snapshot: SemanticSnapshot,
+  nodeId: string,
+): boolean {
+  if (contract.sessionId !== snapshot.sessionId) return false;
+  const capability = contract.capabilities['pointer-hit-testing'];
+  if (capability.status !== 'supported' || capability.evidence.strength !== 'authoritative') return false;
+  if (!snapshot.nodes.some((node) => node.id === nodeId)) return false;
+
+  if (
+    snapshot.hitGrid.status === 'known' &&
+    snapshot.hitGrid.evidence.strength === 'authoritative' &&
+    snapshot.hitGrid.evidence.providerId === capability.evidence.providerId
+  ) {
+    return gridOwns(snapshot.hitGrid.value, nodeId);
+  }
+
+  return (snapshot.providerEvidence ?? []).some((provider) =>
+    provider.status === 'available' &&
+    provider.sessionId === snapshot.sessionId &&
+    provider.revision === snapshot.revision &&
+    provider.providerId === capability.evidence.providerId &&
+    provider.evidence.strength === 'authoritative' &&
+    provider.hitGrid !== undefined &&
+    gridOwns(provider.hitGrid, nodeId),
+  );
+}
+
+function gridOwns(grid: PointerHitGrid, nodeId: string): boolean {
+  return grid.regions.some(({ recipientId, rect }) =>
+    recipientId === nodeId && rect.width > 0 && rect.height > 0,
+  );
 }

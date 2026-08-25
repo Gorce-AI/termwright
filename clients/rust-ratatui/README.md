@@ -33,24 +33,27 @@ The SDK can express only author intent:
 - descriptive protocol actions, relationships to other semantic keys and an
   optional stable semantic key for a recreated widget value.
 
-It has no API for bounds, focus, visibility, cells or collection selection.
+It has no API for geometry, focus, visibility, cells or collection selection.
 Domain keys named `bounds`, `state` or `actions` remain nested JSON; the probe
 never promotes them into portable facts or callback capabilities. A declared
 `Action` is only a capability hint and still resolves through real terminal
 input.
-Geometry, collection state, frame commit ordering and `occlusion: unknown`
-continue to come from the instrumented framework.
+Geometry, clipping and pointer observations, collection state, and frame commit
+ordering continue to come from the instrumented framework.
 
 `test_id` remains a locator and correlation hint. `semantic_key` is deliberately
 separate: a unique key produces a `k:<key>` node id that survives recreation and
-can be used by `labelled_by` / `described_by`. Duplicate or empty keys degrade
-to distinct frame-local ids. The handshake remains conservatively
+can be used by `labelled_by` / `described_by`. Empty keys remain frame-local;
+duplicate non-empty keys terminate the semantic session with
+`duplicate-semantic-key`. The handshake remains conservatively
 `identityKind: frame-local` because ordinary unannotated Ratatui nodes still do.
 
-The wrapper must be passed through `Frame::render_widget` or
-`Frame::render_stateful_widget`. Ratatui composition that calls `Widget::render`
-directly is not intercepted. The SDK detects that case and drops the nested
-annotation instead of attaching it to the wrong outer render call.
+The wrapper itself is an authoritative render boundary. It is observed both
+through `Frame::render_widget` / `Frame::render_stateful_widget` and when a
+custom parent calls its `Widget::render` implementation directly. An exact
+Frame announcement is claimed instead of duplicated. Nested `Annotated`
+calls retain hierarchy only where their real Rust call nesting proves it;
+ordinary unannotated immediate-mode calls remain flat.
 
 ## Versions
 

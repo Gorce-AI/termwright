@@ -61,8 +61,8 @@ checks and semantic validation are measured separately as
 This harness does not invent data it cannot observe. Backpressure drops,
 coalescing and render-marker correlation require a live framework process and
 PTY, so those values are `null` with `status: "unavailable"` and a reason. The
-current TypeScript probe transport sends full snapshots and no deltas; those
-two counters are measured as such. `probeHotPathTime` covers recognizer plus
+current transport sends full snapshots; that counter is measured directly.
+`probeHotPathTime` covers recognizer plus
 serialization, but excludes framework observation and socket I/O, so it is not
 presented as whole-application slowdown.
 

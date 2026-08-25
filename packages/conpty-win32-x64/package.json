@@ -1,0 +1,30 @@
+{
+  "name": "@termwright/conpty-win32-x64",
+  "version": "0.2.0",
+  "description": "Prebuilt termwright ConPTY addon for Windows x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gorce-AI/termwright.git",
+    "directory": "packages/conpty-win32-x64"
+  },
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
+  "exports": {
+    "./termwright_conpty.node": "./termwright_conpty.node"
+  },
+  "files": [
+    "termwright_conpty.node"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/check-prebuild.mjs x64 --allow-missing",
+    "typecheck": "node --version"
+  }
+}

@@ -20,7 +20,7 @@ if (endpoint === undefined || token === undefined) {
       encodeFrame(
         {
           type: 'hello',
-          protocol: 'termwright/1',
+          protocol: 'termwright/2',
           token,
           adapter: { name: 'hostile', version: '0.1.0' },
           capabilities: ['tree', 'render-revisions'],

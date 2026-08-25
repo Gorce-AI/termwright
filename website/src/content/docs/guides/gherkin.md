@@ -14,7 +14,7 @@ step, retry, trace, report, and Runner behavior as a `.test.ts` case.
 The umbrella package includes the Gherkin authoring API and Runner integration:
 
 ```sh
-npm install --save-dev termwright vitest
+npm install --save-dev termwright
 ```
 
 ## Write a terminal scenario
@@ -77,7 +77,7 @@ export default defineSteps(
     world.app = undefined;
   }),
   Given('the application is ready', async ({world}) => {
-    await (world.app as TerminalHarness).waitForReady();
+    await (world.app as TerminalHarness).waitForQuiet();
   }),
 );
 ```
@@ -122,10 +122,10 @@ timeline, with driver actions and assertions nested below the matching step.
 
 No generated TypeScript files or separate Cucumber process are required.
 
-## Run with Vitest and an IDE
+## Configure the embedded engine and editor
 
-Direct Vitest and IDE runs require the plugin and an explicit `.feature`
-include:
+The Termwright host loads the project's Vite/Vitest configuration. Add the
+plugin and an explicit `.feature` include there; execute through Termwright:
 
 ```ts
 // vitest.config.ts
@@ -143,10 +143,10 @@ export default defineConfig({
 });
 ```
 
-Then use normal Vitest selection:
+Select the feature through the Termwright host:
 
 ```sh
-npx vitest run tests/features/command-approval.feature
+npx termwright test -- tests/features/command-approval.feature
 ```
 
 ## Filter scenarios by tag
@@ -155,15 +155,6 @@ Runner-owned execution accepts standard Cucumber tag expressions:
 
 ```sh
 npx termwright ui --tags '@e2e and not @slow'
-```
-
-For direct Vitest or IDE runs, configure the same expression on the plugin:
-
-```ts
-gherkinPlugin({
-  featureRoot: 'tests/features',
-  tags: process.env.GHERKIN_TAGS,
-})
 ```
 
 Filtering happens during feature collection, so excluded Scenario and Outline
@@ -181,11 +172,27 @@ Termwright fixtures for reusable application setup across feature files.
 ## Editor support and step diagnostics
 
 The source of every case and step remains the physical `.feature` line, so
-Vitest output and Runner's Open source action return to authored prose. Use an
-editor Cucumber extension for `.feature` syntax and navigation to the paired
-`Given`/`When`/`Then` calls. Termwright reports undefined steps and same-tier
-ambiguities with the step text and candidate glue files during the normal test
-run; it does not currently ship a separate language server.
+Vitest output and Runner's Open source action return to authored prose. Install
+the official [Cucumber for VS Code](https://github.com/cucumber/vscode)
+extension (`CucumberOpen.cucumber-official`) and align its source globs with
+Termwright:
+
+```json title=".vscode/settings.json"
+{
+  "cucumber.features": ["**/*.feature"],
+  "cucumber.glue": [
+    "**/*.steps.{ts,tsx,mts}",
+    "**/*.feature.{ts,tsx,mts}",
+    "**/step_definitions/**/*.{ts,tsx,mts}"
+  ]
+}
+```
+
+The Cucumber language server then provides completion, undefined-step
+diagnostics, and navigation from a physical feature step to the matching
+`Given`/`When`/`Then` call. Termwright independently validates undefined and
+same-tier ambiguous definitions during collection, before a scenario body can
+run, so editor feedback is not the test suite's correctness boundary.
 
 For expressions, step pairing, ambiguity, Scenario Outline identity, and the
 transform contract, see [Gherkin reference](../../reference/gherkin/).

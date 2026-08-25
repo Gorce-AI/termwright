@@ -1,6 +1,6 @@
 ---
 title: OpenTUI
-description: Observe OpenTUI Renderables and use exact semantic pointer targeting.
+description: Observe OpenTUI Renderables with stable semantic identity and intended geometry.
 ---
 
 The OpenTUI integration observes the existing Renderable tree. It does not replace the
@@ -44,15 +44,14 @@ const dispose = describeRenderable(deployment, {
 });
 ```
 
-Annotations add intent. Text, focus, value, geometry, display, and hit testing
-remain observed framework facts.
+Annotations add intent. Text, focus, value, geometry, and display remain observed
+framework facts.
 
 ## Supported behavior
 
 OpenTUI 0.5 is verified. The integration observes stable identity, effective display,
-focus, values, intended geometry, and the committed native hit grid. Exact
-pointer actions are supported. OpenTUI does not expose ancestor clipping, so
-visible rectangles are unsupported. The hit result describes a fresh pointer,
-not active drag capture.
+focus, values, and intended geometry. The current adapter handshake does not
+guarantee clipped geometry or a complete pointer-recipient map, so viewport
+visibility and exact pointer actions are unsupported.
 
 See [Framework compatibility](../../reference/compatibility/) for current versions.

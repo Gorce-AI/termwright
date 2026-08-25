@@ -16,21 +16,19 @@
 //! - **Frame-local ids by default.** `Widget::render` takes `self` by value, so
 //!   the widget is gone by the time the call returns and nothing survives to
 //!   be named again next frame. Ids carry the frame number unless the author
-//!   explicitly supplies a unique semantic key. Duplicate keys degrade to the
-//!   frame-local form instead of picking an unstable winner.
-//! - **`occlusion: "unknown"` everywhere.** Ratatui exposes no paint order,
-//!   so nothing here can answer "is my target actually the thing at this
-//!   cell". The driver refuses pointer actions against such nodes, which is
-//!   the correct outcome for this framework rather than a gap to fill in.
+//!   explicitly supplies a unique semantic key. Duplicate explicit keys are a
+//!   fatal producer-contract violation; they never degrade to frame-local ids.
+//! - **No pointer ownership claim.** Ratatui exposes no paint order, so the
+//!   snapshot-level hit grid is explicitly unsupported.
 //!
-//! `bounds` carries the rectangle the widget was drawn *into*. That is intent,
-//! not ownership — a later write silently wins — and `occlusion` is exactly
-//! the field that says so.
+//! Geometry distinguishes the widget's intended rectangle from its viewport
+//! clipping. Neither fact is treated as pointer ownership.
 
 use std::collections::BTreeMap;
 
 use termwright_protocol::tree::{
-    Node, NodeGeometryObservations, Observation, Occlusion, Provenance, Rect, Snapshot, State,
+    EvidenceMethod, EvidenceProvenance, EvidenceSource, EvidenceStrength, Node,
+    NodeGeometryObservations, Observation, Provenance, Rect, Snapshot, State,
 };
 use termwright_protocol::{Role, DEFAULT_LIMITS};
 
@@ -96,7 +94,6 @@ pub fn snapshot_from(calls: &[RenderCall], frame: u64, columns: u16, rows: u16) 
         columns,
         rows,
         DEFAULT_LIMITS.max_relation_targets,
-        false,
     )
 }
 
@@ -110,21 +107,31 @@ pub(crate) fn snapshot_from_with_relation_limit(
     columns: u16,
     rows: u16,
     max_relation_targets: usize,
-    qualified: bool,
 ) -> Snapshot {
-    let mut snapshot = if qualified {
-        Snapshot::new_v2(i64::from(columns), i64::from(rows))
-    } else {
-        Snapshot::new(i64::from(columns), i64::from(rows))
-    };
+    let mut snapshot = Snapshot::new(i64::from(columns), i64::from(rows));
     let mut key_counts = BTreeMap::<&str, usize>::new();
     for key in calls.iter().filter_map(annotation_key) {
         *key_counts.entry(key).or_default() += 1;
     }
-    let stable_ids: BTreeMap<&str, String> = key_counts
+    if let Some(key) = key_counts
         .iter()
-        .filter(|(_, count)| **count == 1)
-        .map(|(key, _)| (*key, format!("k:{key}")))
+        .find_map(|(key, count)| (*count > 1).then_some(*key))
+    {
+        panic!("duplicate SemanticKey {key:?}");
+    }
+    let stable_ids: BTreeMap<&str, String> = key_counts
+        .keys()
+        .map(|key| (*key, format!("k:{key}")))
+        .collect();
+    let ids_by_ordinal: BTreeMap<u32, String> = calls
+        .iter()
+        .map(|call| {
+            let id = annotation_key(call)
+                .and_then(|key| stable_ids.get(key))
+                .cloned()
+                .unwrap_or_else(|| format!("f{frame}:{}", call.ordinal));
+            (call.ordinal, id)
+        })
         .collect();
 
     for call in calls {
@@ -138,22 +145,16 @@ pub(crate) fn snapshot_from_with_relation_limit(
             role.unwrap_or(Role::Generic),
             "",
         );
+        node.parent_id = call
+            .parent_ordinal
+            .and_then(|ordinal| ids_by_ordinal.get(&ordinal).cloned());
         let intended = Rect {
             row: i64::from(call.y),
             column: i64::from(call.x),
             width: i64::from(call.width),
             height: i64::from(call.height),
         };
-        if qualified {
-            node.geometry = Some(render_call_geometry(intended, columns, rows));
-        } else {
-            node.bounds = Some(intended);
-        }
-        // No paint order is observable, so no node may claim its cells are
-        // uncovered. The driver refuses pointer actions on these.
-        if !qualified {
-            node.occlusion = Some(Occlusion::Unknown);
-        }
+        node.geometry = render_call_geometry(intended, columns, rows);
         // The rectangle and the type came from the framework; the role is our
         // conclusion about the type, and a consumer resolving a disagreement
         // needs to know which is which.
@@ -186,17 +187,22 @@ pub(crate) fn snapshot_from_with_relation_limit(
         // `List::items` is `pub(crate)`, so the item text and the item count
         // are unreachable from outside and reachable from within.
         if let Some(collection) = &call.collection {
-            push_items(
-                &mut snapshot,
-                &node_id,
-                collection,
-                frame,
-                call.ordinal,
-                qualified,
-            );
+            push_items(&mut snapshot, &node_id, collection, frame, call.ordinal);
         }
     }
     snapshot
+}
+
+pub(crate) fn duplicate_semantic_key(calls: &[RenderCall]) -> Option<&str> {
+    let mut counts = BTreeMap::<&str, usize>::new();
+    for key in calls.iter().filter_map(annotation_key) {
+        let count = counts.entry(key).or_default();
+        *count += 1;
+        if *count > 1 {
+            return Some(key);
+        }
+    }
+    None
 }
 
 fn render_call_geometry(intended: Rect, columns: u16, rows: u16) -> NodeGeometryObservations {
@@ -204,19 +210,29 @@ fn render_call_geometry(intended: Rect, columns: u16, rows: u16) -> NodeGeometry
         // Reaching the patched render call proves participation, but Ratatui
         // does not preserve which buffer writes came from this widget. A
         // no-op render and a painted widget are indistinguishable here.
-        displayed: Observation::Unknown {
-            reason: "not-reported".into(),
+        displayed: Observation::Unsupported {
+            capability: "displayed".into(),
+            reason: "framework-unobservable".into(),
         },
         intended_rect: Observation::Known {
             value: intended,
-            evidence: "probe".into(),
+            evidence: geometry_evidence(EvidenceMethod::Instrumented),
         },
         // Ratatui gives the widget an area but does not preserve per-cell
         // ownership. The one exact clip we do know is the terminal viewport.
         visible_rect: Observation::Known {
             value: viewport_intersection(intended, columns, rows),
-            evidence: "viewport-clip".into(),
+            evidence: geometry_evidence(EvidenceMethod::Derived),
         },
+    }
+}
+
+fn geometry_evidence(method: EvidenceMethod) -> EvidenceProvenance {
+    EvidenceProvenance {
+        source: EvidenceSource::Framework,
+        method,
+        strength: EvidenceStrength::Authoritative,
+        provider_id: "termwright-ratatui-probe".into(),
     }
 }
 
@@ -318,7 +334,6 @@ fn push_items(
     collection: &crate::Collection,
     frame: u64,
     ordinal: u32,
-    qualified: bool,
 ) {
     for (index, text) in collection.items.iter().enumerate() {
         let mut item = Node::new(
@@ -327,23 +342,27 @@ fn push_items(
             text.clone(),
         );
         item.parent_id = Some(parent.to_owned());
-        if qualified {
-            item.geometry = Some(NodeGeometryObservations {
-                // Ratatui exposes collection membership, not which rows the
-                // widget chose to paint in this viewport.
-                displayed: Observation::Unknown {
-                    reason: "not-reported".into(),
-                },
-                intended_rect: Observation::Unknown {
-                    reason: "not-reported".into(),
-                },
-                visible_rect: Observation::Unknown {
-                    reason: "clip-unobservable".into(),
-                },
-            });
-        } else {
-            item.occlusion = Some(Occlusion::Unknown);
-        }
+        // This is a logical child reported by the instrumented collection,
+        // not an independently rendered widget. Ratatui authoritatively tells
+        // us that no separate render rectangle exists for this node. Keep the
+        // list widget's own geometry known and represent the child's geometry
+        // as absent rather than violating the session-wide guarantee with a
+        // permanent `unsupported` observation.
+        let logical_item_evidence = geometry_evidence(EvidenceMethod::Instrumented);
+        item.geometry = NodeGeometryObservations {
+            displayed: Observation::Unsupported {
+                capability: "displayed".into(),
+                reason: "framework-unobservable".into(),
+            },
+            intended_rect: Observation::Absent {
+                reason: "not-laid-out".into(),
+                evidence: logical_item_evidence.clone(),
+            },
+            visible_rect: Observation::Absent {
+                reason: "not-laid-out".into(),
+                evidence: logical_item_evidence,
+            },
+        };
         item.p = Some(Provenance::Framework);
         item.state = Some(State {
             selected: Some(collection.selected == Some(index)),
@@ -364,6 +383,7 @@ mod tests {
     fn call(ordinal: u32, type_name: &'static str) -> RenderCall {
         RenderCall {
             ordinal,
+            parent_ordinal: None,
             type_name,
             x: 0,
             y: ordinal as u16,
@@ -398,6 +418,18 @@ mod tests {
     }
 
     #[test]
+    fn actual_annotated_call_nesting_becomes_semantic_hierarchy() {
+        let outer = call(0, "my_app::Outer");
+        let mut inner = call(1, "my_app::Inner");
+        inner.parent_ordinal = Some(0);
+        let mut snapshot = snapshot_from(&[outer, inner], 3, 80, 24);
+        validated(&mut snapshot);
+
+        assert_eq!(snapshot.root_ids, ["f3:0"]);
+        assert_eq!(snapshot.nodes[1].parent_id.as_deref(), Some("f3:0"));
+    }
+
+    #[test]
     fn roles_come_from_the_type_name() {
         let calls = [
             call(0, "ratatui_widgets::paragraph::Paragraph<'_>"),
@@ -426,16 +458,16 @@ mod tests {
 
     /// The claim this framework cannot make, asserted so nobody quietly makes it.
     #[test]
-    fn nothing_claims_to_know_about_occlusion() {
+    fn nothing_claims_pointer_ownership() {
         let calls = [
             call(0, "ratatui_widgets::block::Block<'_>"),
             call(1, "ratatui_widgets::clear::Clear"),
         ];
         let snapshot = snapshot_from(&calls, 1, 80, 24);
-        assert!(snapshot
-            .nodes
-            .iter()
-            .all(|node| node.occlusion == Some(Occlusion::Unknown)));
+        assert!(matches!(
+            snapshot.hit_grid,
+            Observation::Unsupported { ref capability, .. } if capability == "pointer-hit-grid"
+        ));
     }
 
     /// Ids are frame-local, and they say so.
@@ -484,8 +516,10 @@ mod tests {
             Some("Deploy the current release")
         );
         assert_eq!(node.test_id.as_deref(), Some("deploy-release"));
-        assert_eq!(node.bounds, Some(Rect::new(4, 3, 20, 1)));
-        assert_eq!(node.occlusion, Some(Occlusion::Unknown));
+        assert!(matches!(
+            node.geometry.intended_rect,
+            Observation::Known { value, .. } if value == Rect::new(4, 3, 20, 1)
+        ));
         assert_eq!(node.actions, Some(vec![crate::Action::Activate]));
         assert!(node.state.is_none());
         assert_eq!(node.p, Some(Provenance::Framework));
@@ -582,7 +616,7 @@ mod tests {
         let mut calls = labels;
         calls.push(control);
 
-        let snapshot = snapshot_from_with_relation_limit(&calls, 1, 80, 24, 1, false);
+        let snapshot = snapshot_from_with_relation_limit(&calls, 1, 80, 24, 1);
         let node = snapshot
             .nodes
             .iter()
@@ -599,27 +633,22 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_semantic_keys_degrade_without_invalidating_the_snapshot() {
+    fn duplicate_semantic_keys_fail_closed() {
         let mut first = call(0, "my_app::First");
         first.annotation = Some(Annotation::new().semantic_key("duplicate"));
         let mut second = call(1, "my_app::Second");
         second.annotation = Some(Annotation::new().semantic_key("duplicate"));
 
-        let mut snapshot = snapshot_from(&[first, second], 9, 80, 24);
-        validated(&mut snapshot);
-
-        assert_eq!(snapshot.nodes[0].id, "f9:0");
-        assert_eq!(snapshot.nodes[1].id, "f9:1");
-        assert!(snapshot
-            .nodes
-            .iter()
-            .all(|node| node.px.as_ref().map_or(true, |px| !px.contains_key("id"))));
+        let calls = [first, second];
+        assert_eq!(duplicate_semantic_key(&calls), Some("duplicate"));
+        assert!(std::panic::catch_unwind(|| snapshot_from(&calls, 9, 80, 24)).is_err());
     }
 
     #[test]
-    fn bounds_are_the_rectangle_the_widget_was_drawn_into() {
+    fn intended_geometry_is_the_rectangle_the_widget_was_drawn_into() {
         let calls = [RenderCall {
             ordinal: 0,
+            parent_ordinal: None,
             type_name: "ratatui_widgets::paragraph::Paragraph<'_>",
             x: 3,
             y: 4,
@@ -629,7 +658,10 @@ mod tests {
             annotation: None,
         }];
         let snapshot = snapshot_from(&calls, 1, 80, 24);
-        let bounds = snapshot.nodes[0].bounds.expect("bounds");
+        let Observation::Known { value: bounds, .. } = snapshot.nodes[0].geometry.intended_rect
+        else {
+            panic!("intended geometry is not known")
+        };
         assert_eq!((bounds.column, bounds.row), (3, 4));
         assert_eq!((bounds.width, bounds.height), (10, 2));
     }
@@ -653,9 +685,10 @@ mod tests {
     }
 
     #[test]
-    fn qualified_frame_preserves_what_ratatui_knows_and_refuses_hit_testing() {
+    fn frame_preserves_what_ratatui_knows_and_refuses_hit_testing() {
         let calls = [RenderCall {
             ordinal: 0,
+            parent_ordinal: None,
             type_name: "ratatui_widgets::paragraph::Paragraph<'_>",
             x: 75,
             y: 23,
@@ -664,21 +697,19 @@ mod tests {
             collection: None,
             annotation: None,
         }];
-        let mut snapshot = snapshot_from_with_relation_limit(&calls, 1, 80, 24, 16, true);
+        let mut snapshot = snapshot_from_with_relation_limit(&calls, 1, 80, 24, 16);
         validated(&mut snapshot);
 
         assert_eq!(snapshot.v, 2);
         assert!(matches!(
             snapshot.hit_grid,
-            Some(Observation::Unsupported { ref capability, .. }) if capability == "pointer-hit-grid"
+            Observation::Unsupported { ref capability, .. } if capability == "pointer-hit-grid"
         ));
-        let geometry = snapshot.nodes[0]
-            .geometry
-            .as_ref()
-            .expect("qualified geometry");
+        let geometry = &snapshot.nodes[0].geometry;
         assert!(matches!(
             geometry.displayed,
-            Observation::Unknown { ref reason } if reason == "not-reported"
+            Observation::Unsupported { ref capability, ref reason }
+                if capability == "displayed" && reason == "framework-unobservable"
         ));
         assert!(matches!(
             geometry.intended_rect,
@@ -704,7 +735,5 @@ mod tests {
                 ..
             }
         ));
-        assert!(snapshot.nodes[0].bounds.is_none());
-        assert!(snapshot.nodes[0].occlusion.is_none());
     }
 }

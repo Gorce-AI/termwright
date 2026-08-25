@@ -7,11 +7,14 @@
  * flow through.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, ptyAvailable, test as base, type TerminalHarness } from 'termwright/test';
+import { cli } from '../termwright.config.js';
 
-const pty = await ptyAvailable();
+// The built CLI gates this suite for the same reason it gates the end-to-end
+// one: an unbuilt example launches nothing and fails as a missing capability.
+const runnable = (await ptyAvailable()) && existsSync(cli);
 
 const SEEDED = [
   { id: 1, text: 'restore the backup', done: false },
@@ -25,7 +28,7 @@ const test = base.extend<{ app: TerminalHarness }>({
     // its first frame. No shared fixtures directory, so no test can be
     // affected by what another one left behind.
     const app = await terminal.launch({ files: { 'todos.json': JSON.stringify(SEEDED) } });
-    await app.waitForReady();
+    await app.waitForQuiet();
 
     await use(app);
 
@@ -37,7 +40,7 @@ const test = base.extend<{ app: TerminalHarness }>({
   },
 });
 
-describe.skipIf(!pty)('a suite with its own fixture', () => {
+describe.skipIf(!runnable)('a suite with its own fixture', () => {
   test('starts from the state the fixture declared', async ({ app }) => {
     await expect(app.getByRole('listitem', { name: 'restore the backup' })).toBeAttached();
     await expect(app).toHaveText('[x] rotate the keys');
@@ -52,9 +55,11 @@ describe.skipIf(!pty)('a suite with its own fixture', () => {
       // Tab moves the focus onto the list without moving the selection, which
       // an arrow key would.
       await app.press('Tab');
-      // Ink does not retain a host-level focus fact. Waiting for the painted
-      // focus transition keeps the next byte in a separate render commit.
-      await app.waitForStable();
+      // Ink does not expose authoritative host-level focus evidence. The
+      // application's own status is therefore the causal production fact:
+      // unlike a quiet-window heuristic, it proves the Tab reached the child
+      // and its focus manager committed the transition before Space is sent.
+      await expect(app).toHaveText('status: focused list');
 
       await app.press('Space');
       await expect(app).toHaveText('[x] restore the backup');

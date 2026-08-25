@@ -7,6 +7,11 @@ Most projects need no Termwright configuration. Import a config explicitly from
 `vitest.config.ts` when you want to change defaults; Termwright does not search
 for `termwright.config.ts` automatically.
 
+The certified host runs on the Node.js 22 and 24 LTS lines. This is an exact
+support policy, not shorthand for `>=22`: another major is unsupported until
+the native host, PTY lifecycle, framework adapters, and Windows lanes certify
+it.
+
 ```ts
 // termwright.config.ts
 import {defineTermwrightConfig} from 'termwright/test';
@@ -121,6 +126,42 @@ export default defineTermwrightConfig({
 });
 ```
 
+Every public operation creates one monotonic deadline and passes its remaining
+time through resolution, capability negotiation, input, postcondition, trace,
+and cleanup phases. A phase never receives a fresh copy of the original
+timeout. The Native Host also owns a total run deadline and reserves its final
+portion for diagnostic capture, journal flush, trace finalization, and verified
+resource teardown. Run manifests record both resolved values.
+
+Use `termwright doctor` to inspect the exact host timeout and resource profile
+that will be certified. These host values are Termwright-owned infrastructure
+configuration; arbitrary Vitest defaults cannot silently weaken them.
+
+The profile's PTY count is independent of Vitest's worker count. Every live
+terminal consumes one PTY, external-process, and semantic-endpoint unit at the
+driver allocation boundary; trace writers hold their own units until durable
+finalization. Several terminals launched by one test count separately. Select
+the `stress` profile for a deliberately large fan-out. For a test which needs
+several terminals simultaneously, declare the group before collection:
+
+```ts
+test.resources({ terminals: 2 })('two peers', async ({ terminal }) => {
+  const [left, right] = await Promise.all([terminal.launch(leftOptions), terminal.launch(rightOptions)]);
+});
+```
+
+The exact runner requests that vector atomically in `onBeforeTryTask`, before
+fixtures and before starting Termwright's Attempt budget. By default every
+declared terminal also reserves a trace writer; a trace-off test can set
+`traceWriters: 0`. Launching beyond the declared vector fails closed instead of
+falling into a second scheduler queue. The certified `local`, `ci`, and
+`windows-ci` worker envelopes remain deliberately conservative until the
+current Windows pressure matrix is certified, but scheduling and terminal
+capacity are now separate controls rather than package serialization. The
+broker never discounts resources merely because the leases share an AttemptId. A request
+that cannot fit remains in the visible FIFO queue and consumes the same attempt
+deadline instead of overcommitting the machine.
+
 ## Traces
 
 | Value | Behavior |
@@ -141,13 +182,15 @@ Vitest owns scheduling. Configure retries with the public helper:
 import {termwrightRetry} from 'termwright/test';
 
 export default defineConfig({
-  test: {retry: termwrightRetry({ci: 2, local: 0})},
+  test: {retry: termwrightRetry({ci: 0, local: 0})},
 });
 ```
 
 `TERMWRIGHT_RETRIES` overrides the number of additional attempts and accepts an
 integer from 0 through 100. Reports retain each earlier failure reason and the
-attempt on which the test passed or finally failed.
+identity of the attempt on which the test passed or finally failed. Use a
+non-zero value only as a diagnostic experiment: a fail-then-pass run is flaky,
+exits non-zero, and is not certifying evidence.
 
 ## Snapshot updates
 
@@ -163,7 +206,7 @@ project needs a fixed policy.
 | `TERMWRIGHT_DEBUG` | `1` for debug logs; `all` also includes raw PTY traffic. |
 | `TERMWRIGHT_PROFILE` | Name of a configured profile to apply. |
 | `TERMWRIGHT_UPDATE_SNAPSHOTS` | Snapshot update policy when set by tooling. |
-| `TERMWRIGHT_UI_URL` | Internal live Runner reporter destination. |
+| `TERMWRIGHT_UI_URL` | Internal live terminal-session projection endpoint. |
 | `TERMWRIGHT_ENDPOINT` | Internal semantic probe transport endpoint. |
 | `TERMWRIGHT_TOKEN` | Internal session authentication token. |
 

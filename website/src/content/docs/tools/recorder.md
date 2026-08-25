@@ -56,7 +56,7 @@ destination untouched.
 Run the saved file immediately:
 
 ```sh
-vitest run tests/permission.test.ts
+termwright test tests/permission.test.ts
 ```
 
 Then simplify it. Remove incidental interactions, add assertions for the

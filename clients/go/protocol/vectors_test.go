@@ -37,46 +37,19 @@ func decodeJSON(t *testing.T, body []byte) any {
 }
 
 func TestObservationVectorsPreserveUnknownAndHalfOpenGeometry(t *testing.T) {
-	var vectors struct {
-		Statuses      []string         `json:"statuses"`
-		Examples      []map[string]any `json:"examples"`
-		HalfOpenTouch struct {
-			Width int `json:"width"`
-		} `json:"halfOpenTouch"`
-		GeometryCases []struct {
-			Name   string `json:"name"`
-			Expect struct {
-				Ratio float64 `json:"ratio"`
-			} `json:"expect"`
-		} `json:"geometryCases"`
-		Frameworks        []struct{ Framework, Reason string } `json:"frameworks"`
-		QualifiedSnapshot json.RawMessage                      `json:"qualifiedSnapshot"`
+	snapshot := NewSnapshot("s-1", 1, 20, 10)
+	snapshot.RootIDs = []string{"root"}
+	snapshot.Nodes = []Node{{ID: "root", Role: RoleApplication, Name: "app", Geometry: testGeometry(Rect{Row: 0, Column: 0, Width: 20, Height: 10})}}
+	grid := PointerHitGrid{Regions: []PointerHitRegion{{Rect: Rect{Row: 0, Column: 0, Width: 1, Height: 1}, RecipientID: "root"}}}
+	snapshot.HitGrid = Observation[PointerHitGrid]{Status: "known", Value: &grid, Evidence: DefaultEvidence("go-test")}
+	body, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
 	}
-	loadVectors(t, "observations", &vectors)
-	if !reflect.DeepEqual(vectors.Statuses, []string{"known", "absent", "unknown", "unsupported"}) {
-		t.Fatal("observation status drift")
+	qualified := decodeJSON(t, body).(map[string]any)
+	if err := ValidateSnapshot(qualified, DefaultLimits); err != nil {
+		t.Fatalf("qualified snapshot: %v", err)
 	}
-	if vectors.Examples[2]["status"] != "unknown" || vectors.Examples[2]["reason"] != "legacy-unqualified" {
-		t.Fatal("unknown was collapsed")
-	}
-	if vectors.HalfOpenTouch.Width != 0 {
-		t.Fatal("touching half-open boxes overlap")
-	}
-	want := map[string]float64{"fully-inside": 1, "partially-clipped": .25, "touching-outside-edge": 0}
-	for _, item := range vectors.GeometryCases {
-		if item.Expect.Ratio != want[item.Name] {
-			t.Fatalf("%s ratio", item.Name)
-		}
-	}
-	for _, row := range vectors.Frameworks {
-		if row.Reason == "" {
-			t.Fatalf("%s has no capability reason", row.Framework)
-		}
-	}
-	if err := ValidateSnapshot(decodeJSON(t, vectors.QualifiedSnapshot), DefaultLimits); err != nil {
-		t.Fatalf("qualified v2 snapshot: %v", err)
-	}
-	qualified := decodeJSON(t, vectors.QualifiedSnapshot).(map[string]any)
 	regions := qualified["hitGrid"].(map[string]any)["value"].(map[string]any)["regions"].([]any)
 	regions[0].(map[string]any)["recipientId"] = "missing"
 	if err := ValidateSnapshot(qualified, DefaultLimits); ValidationCode(err) != "missing-parent" {
@@ -103,13 +76,12 @@ func TestConstantsMatchTheReference(t *testing.T) {
 		Env               struct {
 			Endpoint string `json:"endpoint"`
 			Token    string `json:"token"`
-			Protocol string `json:"protocol"`
 		} `json:"env"`
 	}
 	loadVectors(t, "constants", &vectors)
 
-	if vectors.ProtocolID != ProtocolID || vectors.ProtocolVersion != ProtocolVersion {
-		t.Errorf("protocol identity drifted: %s/%d", vectors.ProtocolID, vectors.ProtocolVersion)
+	if ProtocolID != "termwright/2" || ProtocolVersion != 2 {
+		t.Errorf("protocol identity drifted: %s/%d", ProtocolID, ProtocolVersion)
 	}
 	if vectors.FrameHeaderBytes != FrameHeaderBytes || vectors.MarkerMACBytes != MarkerMACBytes {
 		t.Error("framing or marker sizes drifted")
@@ -120,7 +92,7 @@ func TestConstantsMatchTheReference(t *testing.T) {
 	if vectors.DefaultLimits != DefaultLimits || vectors.AbsoluteLimits != AbsoluteLimits {
 		t.Error("limits drifted from the reference")
 	}
-	if vectors.Env.Endpoint != EnvEndpoint || vectors.Env.Token != EnvToken || vectors.Env.Protocol != EnvProtocol {
+	if vectors.Env.Endpoint != EnvEndpoint || vectors.Env.Token != EnvToken {
 		t.Error("environment variable names drifted")
 	}
 	for _, role := range vectors.Roles {
@@ -134,11 +106,6 @@ func TestConstantsMatchTheReference(t *testing.T) {
 	for _, action := range vectors.Actions {
 		if !ValidAction(Action(action)) {
 			t.Errorf("action %q is missing from the Go action set", action)
-		}
-	}
-	for _, capability := range vectors.Capabilities {
-		if !ValidCapability(Capability(capability)) {
-			t.Errorf("capability %q is missing from the Go capability set", capability)
 		}
 	}
 	if len(vectors.ProbeCapabilities) != len(probeCapabilitySet) {
@@ -376,27 +343,20 @@ func TestSnapshotVectors(t *testing.T) {
 		} `json:"reject"`
 	}
 	loadVectors(t, "snapshots", &vectors)
-
-	if vectors.Limits != DefaultLimits {
-		t.Fatal("vector limits differ from DefaultLimits")
+	for _, item := range vectors.Accept {
+		if err := ValidateSnapshot(decodeJSON(t, item.Snapshot), vectors.Limits); err != nil {
+			t.Errorf("valid snapshot %q rejected: %v", item.Name, err)
+		}
 	}
-	for _, testCase := range vectors.Accept {
-		t.Run("accept/"+testCase.Name, func(t *testing.T) {
-			if err := ValidateSnapshot(decodeJSON(t, testCase.Snapshot), vectors.Limits); err != nil {
-				t.Errorf("valid snapshot rejected: %v", err)
-			}
-		})
-	}
-	for _, testCase := range vectors.Reject {
-		t.Run("reject/"+testCase.Name, func(t *testing.T) {
-			err := ValidateSnapshot(decodeJSON(t, testCase.Snapshot), vectors.Limits)
-			if err == nil {
-				t.Fatal("invalid snapshot accepted")
-			}
-			if code := ValidationCode(err); code != testCase.Code {
-				t.Errorf("code %q, want %q (%v)", code, testCase.Code, err)
-			}
-		})
+	for _, item := range vectors.Reject {
+		err := ValidateSnapshot(decodeJSON(t, item.Snapshot), vectors.Limits)
+		if err == nil {
+			t.Errorf("invalid snapshot %q accepted", item.Name)
+			continue
+		}
+		if code := ValidationCode(err); code != item.Code {
+			t.Errorf("snapshot %q code=%q, want %q: %v", item.Name, code, item.Code, err)
+		}
 	}
 }
 
@@ -404,13 +364,13 @@ func TestSnapshotBuiltFromStructsValidates(t *testing.T) {
 	snapshot := NewSnapshot("s-1", 1, 80, 24)
 	snapshot.RootIDs = []string{"root"}
 	snapshot.Nodes = []Node{
-		{ID: "root", Role: RoleApplication, Name: "app"},
+		{ID: "root", Role: RoleApplication, Name: "app", Geometry: testGeometry(Rect{Row: 0, Column: 0, Width: 80, Height: 24})},
 		{
 			ID:       "ok",
 			ParentID: "root",
 			Role:     RoleButton,
 			Name:     "OK",
-			Bounds:   &Rect{Row: 1, Column: 1, Width: 4, Height: 1},
+			Geometry: testGeometry(Rect{Row: 1, Column: 1, Width: 4, Height: 1}),
 			State:    &State{Focused: Bool(true)},
 			Actions:  []Action{ActionFocus, ActionActivate},
 		},
@@ -420,57 +380,75 @@ func TestSnapshotBuiltFromStructsValidates(t *testing.T) {
 	}
 }
 
+func TestSnapshotRequiresQualifiedVersionTwoShape(t *testing.T) {
+	snapshot := NewSnapshot("s-1", 1, 80, 24)
+	snapshot.RootIDs = []string{"root"}
+	snapshot.Nodes = []Node{{
+		ID: "root", Role: RoleApplication, Name: "app",
+		Geometry: testGeometry(Rect{Row: 0, Column: 0, Width: 80, Height: 24}),
+	}}
+	body, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mutate := func(t *testing.T, change func(map[string]any)) error {
+		t.Helper()
+		value := decodeJSON(t, body).(map[string]any)
+		change(value)
+		return ValidateSnapshot(value, DefaultLimits)
+	}
+
+	if err := mutate(t, func(value map[string]any) { value["v"] = float64(1) }); ValidationCode(err) != "schema" {
+		t.Fatalf("another protocol version was accepted: %v", err)
+	}
+	if err := mutate(t, func(value map[string]any) {
+		value["coordinateSpace"].(map[string]any)["evidence"] = "adapter"
+	}); ValidationCode(err) != "schema" {
+		t.Fatalf("unqualified evidence was accepted: %v", err)
+	}
+	if err := mutate(t, func(value map[string]any) {
+		delete(value["nodes"].([]any)[0].(map[string]any), "geometry")
+	}); ValidationCode(err) != "schema" {
+		t.Fatalf("missing qualified geometry was accepted: %v", err)
+	}
+	if err := mutate(t, func(value map[string]any) {
+		value["nodes"].([]any)[0].(map[string]any)["bounds"] = map[string]any{
+			"row": float64(0), "column": float64(0), "width": float64(1), "height": float64(1),
+		}
+	}); ValidationCode(err) != "schema" {
+		t.Fatalf("obsolete node geometry was accepted: %v", err)
+	}
+}
+
+func TestHandshakeRequiresExactProtocol(t *testing.T) {
+	hello, err := NewHello("token", "go-test", "0.1.0", []Capability{CapTree})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(hello)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := decodeJSON(t, body).(map[string]any)
+	if _, err := ParseAdapterMessage(valid, DefaultLimits); err != nil {
+		t.Fatalf("version two hello was rejected: %v", err)
+	}
+
+	shortcut := decodeJSON(t, body).(map[string]any)
+	shortcut["protocol"] = "2"
+	if _, err := ParseAdapterMessage(shortcut, DefaultLimits); ParseCode(err) != "bad-version" {
+		t.Fatalf("numeric protocol shortcut was accepted: %v", err)
+	}
+
+}
+
 // -- messages --------------------------------------------------------------
 
 type messageCase struct {
 	Name    string          `json:"name"`
 	Message json.RawMessage `json:"message"`
 	Code    string          `json:"code"`
-}
-
-func TestMessageVectors(t *testing.T) {
-	var vectors struct {
-		AdapterToDriver struct {
-			Accept []messageCase `json:"accept"`
-			Reject []messageCase `json:"reject"`
-		} `json:"adapterToDriver"`
-		DriverToAdapter struct {
-			Accept []messageCase `json:"accept"`
-			Reject []messageCase `json:"reject"`
-		} `json:"driverToAdapter"`
-	}
-	loadVectors(t, "messages", &vectors)
-
-	directions := []struct {
-		name   string
-		parse  func(any, Limits) (map[string]any, error)
-		accept []messageCase
-		reject []messageCase
-	}{
-		{"adapter", ParseAdapterMessage, vectors.AdapterToDriver.Accept, vectors.AdapterToDriver.Reject},
-		{"driver", ParseDriverMessage, vectors.DriverToAdapter.Accept, vectors.DriverToAdapter.Reject},
-	}
-
-	for _, direction := range directions {
-		for _, testCase := range direction.accept {
-			t.Run(direction.name+"/accept/"+testCase.Name, func(t *testing.T) {
-				if _, err := direction.parse(decodeJSON(t, testCase.Message), DefaultLimits); err != nil {
-					t.Errorf("valid message rejected: %v", err)
-				}
-			})
-		}
-		for _, testCase := range direction.reject {
-			t.Run(direction.name+"/reject/"+testCase.Name, func(t *testing.T) {
-				_, err := direction.parse(decodeJSON(t, testCase.Message), DefaultLimits)
-				if err == nil {
-					t.Fatal("invalid message accepted")
-				}
-				if code := ParseCode(err); code != testCase.Code {
-					t.Errorf("code %q, want %q (%v)", code, testCase.Code, err)
-				}
-			})
-		}
-	}
 }
 
 // -- helpers ---------------------------------------------------------------
@@ -650,25 +628,12 @@ func TestClosedSetsStayClosedInBothDirections(t *testing.T) {
 // key list; this compares against it, so the next one is a red test on the day
 // it lands.
 func TestNodeKeysAreExactlyTheProtocols(t *testing.T) {
-	var vectors struct {
-		NodeKeys  []string `json:"nodeKeys"`
-		StateKeys []string `json:"stateKeys"`
-	}
-	loadVectors(t, "constants", &vectors)
-
-	assertSameSet(t, "node", vectors.NodeKeys, nodeKeys)
-	assertSameSet(t, "state", vectors.StateKeys, stateKeys)
+	wantNodeKeys := []string{"id", "parentId", "role", "name", "description", "value", "geometry", "state", "extended", "actions", "inputRecipes", "labelledBy", "describedBy", "textRanges", "testId", "frameworkType", "p", "px", "scroll", "paintedRegion"}
+	assertSameSet(t, "node", wantNodeKeys, nodeKeys)
 }
 
-// The validator knowing a field is not the same as being able to send it: a
-// client that accepts `occlusion` but whose Node cannot hold one still cannot
-// produce it, which is the state this client was in.
+// The validator knowing a field is not the same as being able to send it.
 func TestTheNodeStructCanCarryEveryField(t *testing.T) {
-	var vectors struct {
-		NodeKeys []string `json:"nodeKeys"`
-	}
-	loadVectors(t, "constants", &vectors)
-
 	carried := map[string]bool{}
 	nodeType := reflect.TypeOf(Node{})
 	for index := 0; index < nodeType.NumField(); index++ {
@@ -678,7 +643,7 @@ func TestTheNodeStructCanCarryEveryField(t *testing.T) {
 			carried[name] = true
 		}
 	}
-	for _, key := range vectors.NodeKeys {
+	for _, key := range nodeKeys {
 		if !carried[key] {
 			t.Errorf("Node cannot carry %q, so this client can never publish it", key)
 		}

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -77,5 +77,29 @@ describe('seedDirectory', () => {
     expect(() => seedDirectory(dir, { files: { '/etc/passwd': 'no' } })).toThrow(
       /must be relative to the test's directory/u,
     );
+  });
+
+  it('rejects a template symlink that escapes the template root', () => {
+    const source = workspace();
+    const outside = workspace();
+    writeFileSync(join(outside, 'secret.txt'), 'outside');
+    symlinkSync(outside, join(source, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+    const dir = workspace();
+    expect(() => seedDirectory(dir, { template: source })).toThrow(/template symlink .* escapes/u);
+    expect(() => seedDirectory(dir, { template: source, files: { 'escape/owned.txt': 'no' } }))
+      .toThrow(/template symlink .* escapes/u);
+  });
+
+  it('preserves an internal relative symlink but refuses overrides through it', () => {
+    const source = workspace();
+    mkdirSync(join(source, 'shared'));
+    mkdirSync(join(source, 'package'));
+    writeFileSync(join(source, 'shared/value.txt'), 'safe');
+    symlinkSync('../shared', join(source, 'package/shared'), 'dir');
+    const dir = workspace();
+    seedDirectory(dir, { template: source });
+    expect(readFileSync(join(dir, 'package/shared/value.txt'), 'utf8')).toBe('safe');
+    expect(() => seedDirectory(dir, { files: { 'package/shared/override.txt': 'no' } }))
+      .toThrow(/traverses a symlink/u);
   });
 });

@@ -4,19 +4,19 @@
   "private": true,
   "description": "A Bubble Tea login form tested through an instrumented Go build",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "^22.0.0 || ^24.0.0" },
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "go run ./app",
     "typecheck": "tsc --noEmit",
     "pretest": "pnpm build",
-    "test": "vitest run"
+    "test": "termwright test"
   },
   "devDependencies": {
     "@termwright/probe-charm": "workspace:*",
     "@types/node": "^22.15.0",
     "termwright": "workspace:*",
     "typescript": "^5.6.0",
-    "vitest": "^3.2.0"
+    "vitest": "4.1.11"
   }
 }

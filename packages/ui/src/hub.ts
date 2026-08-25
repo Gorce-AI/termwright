@@ -1,5 +1,5 @@
 /**
- * The fan-out point: every producer (a Vitest reporter, a live session bridge,
+ * The fan-out point: every producer (the host projection, a live session bridge,
  * a replayed trace) writes {@link ServerMessage}s here, and every connected
  * browser tab reads them.
  *
@@ -43,7 +43,7 @@ const DEFAULT_MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
  * @example
  * ```ts
  * const hub = new UiHub();
- * hub.publish({ v: 1, type: 'run-start', mode: 'live', startedAt: Date.now() });
+ * hub.publish({ v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: Date.now() });
  * const detach = hub.addClient(socket); // socket receives the backlog first
  * ```
  */
@@ -56,7 +56,9 @@ export class UiHub {
   #outputBytes = 0;
 
   constructor(options: UiHubOptions = {}) {
-    this.#maxMessages = options.maxMessages ?? DEFAULT_MAX_MESSAGES;
+    // run-start + session + an explicit gap must always fit. A smaller limit
+    // cannot truthfully retain identity and disclose projection loss.
+    this.#maxMessages = Math.max(3, options.maxMessages ?? DEFAULT_MAX_MESSAGES);
     this.#maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
     this.#maxSessions = options.maxSessions ?? Math.min(256, Math.max(1, this.#maxMessages - 1));
   }
@@ -159,13 +161,18 @@ export class UiHub {
     if (message.type === 'output') this.#outputBytes += message.dataB64.length;
     if (message.type === 'session') this.#trimSessions();
 
+    let droppedMessages = 0;
+    let droppedBytes = 0;
     while (
       this.#backlog.length > this.#maxMessages ||
       this.#outputBytes > this.#maxOutputBytes
     ) {
       const dropped = this.#dropOldest();
       if (dropped === undefined) break;
+      droppedMessages += 1;
+      droppedBytes += encodeMessage(dropped).length;
     }
+    if (droppedMessages > 0) this.#recordGap(droppedMessages, droppedBytes);
   }
 
   /** Evicts the oldest complete session record, including its dependent wire events. */
@@ -198,11 +205,43 @@ export class UiHub {
       firstIndexOf(this.#backlog, 'output') ??
       firstIndexOf(this.#backlog, 'app-log') ??
       this.#backlog.findIndex(
-        (message) => message.type !== 'run-start' && message.type !== 'session',
+        (message) => message.type !== 'run-start' && message.type !== 'session' && message.type !== 'diagnostic-gap',
       );
     if (index < 0) return undefined;
     const [dropped] = this.#backlog.splice(index, 1);
     if (dropped?.type === 'output') this.#outputBytes -= dropped.dataB64.length;
     return dropped;
+  }
+
+  #recordGap(messages: number, bytes: number): void {
+    const existing = this.#backlog.findIndex(
+      (message) => message.type === 'diagnostic-gap' && message.source === 'ui-hub',
+    );
+    if (existing >= 0) {
+      const gap = this.#backlog[existing];
+      if (gap?.type === 'diagnostic-gap') {
+        this.#backlog[existing] = {
+          ...gap,
+          droppedMessages: gap.droppedMessages + messages,
+          droppedBytes: gap.droppedBytes + bytes,
+        };
+      }
+      return;
+    }
+    let droppedMessages = messages;
+    let droppedBytes = bytes;
+    while (this.#backlog.length >= this.#maxMessages) {
+      const dropped = this.#dropOldest();
+      if (dropped === undefined) break;
+      droppedMessages += 1;
+      droppedBytes += encodeMessage(dropped).length;
+    }
+    this.#backlog.push({
+      v: 1,
+      type: 'diagnostic-gap',
+      source: 'ui-hub',
+      droppedMessages,
+      droppedBytes,
+    });
   }
 }

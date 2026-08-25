@@ -1,5 +1,7 @@
 //! Client behaviour: the dormant rule, the handshake, and publishing.
 
+#![cfg(unix)]
+
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -9,7 +11,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use termwright_protocol::{
-    encode_frame, verify_marker_payload, Client, Error, FrameDecoder, Node, Options, Rect, Role,
+    encode_frame, verify_marker_payload, Client, Error, FrameDecoder, Node, Options, Role,
     Snapshot, DEFAULT_LIMITS,
 };
 
@@ -39,6 +41,13 @@ fn socket_path() -> String {
 /// The driver end: completes the handshake, reports what the adapter sent, and
 /// forwards anything pushed into the returned sender back down the socket.
 fn start_fake_driver(path: &str) -> (Receiver<Value>, Sender<Value>) {
+    start_fake_driver_with_limits(path, DEFAULT_LIMITS)
+}
+
+fn start_fake_driver_with_limits(
+    path: &str,
+    limits: termwright_protocol::Limits,
+) -> (Receiver<Value>, Sender<Value>) {
     let listener = UnixListener::bind(path).expect("binding the driver socket");
     let (sender, receiver) = channel();
     let (outbound, to_send) = channel::<Value>();
@@ -80,76 +89,10 @@ fn start_fake_driver(path: &str) -> (Receiver<Value>, Sender<Value>) {
                                 &mut stream,
                                 &json!({
                                     "type": "hello-ack",
-                                    "protocol": "termwright/1",
-                                    "sessionId": SESSION,
-                                    "limits": DEFAULT_LIMITS,
-                                    "subscribe": "snapshots",
-                                    "marker": { "enabled": true },
-                                }),
-                            );
-                        }
-                        if sender.send(frame.value).is_err() {
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    (receiver, outbound)
-}
-
-/// A fake driver that asks the adapter for diffs rather than whole trees.
-fn start_fake_driver_with_subscribe(
-    path: &str,
-    subscribe: &str,
-    limits: termwright_protocol::Limits,
-) -> (Receiver<Value>, Sender<Value>) {
-    let listener = UnixListener::bind(path).expect("binding the driver socket");
-    let (sender, receiver) = channel();
-    let (outbound, to_send) = channel::<Value>();
-    let subscribe = subscribe.to_owned();
-
-    thread::spawn(move || {
-        let Ok((mut stream, _)) = listener.accept() else {
-            return;
-        };
-        let mut decoder =
-            FrameDecoder::new(DEFAULT_LIMITS.max_frame_bytes, DEFAULT_LIMITS.max_depth);
-        stream
-            .set_read_timeout(Some(Duration::from_millis(20)))
-            .expect("read timeout");
-        let mut buffer = [0u8; 8192];
-        loop {
-            for message in to_send.try_iter() {
-                send(&mut stream, &message);
-            }
-            match stream.read(&mut buffer) {
-                Ok(0) => return,
-                Err(error)
-                    if matches!(
-                        error.kind(),
-                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                    ) =>
-                {
-                    continue
-                }
-                Err(_) => return,
-                Ok(count) => {
-                    let Ok(frames) = decoder.push(&buffer[..count]) else {
-                        return;
-                    };
-                    for frame in frames {
-                        if frame.value.get("type").and_then(Value::as_str) == Some("hello") {
-                            send(
-                                &mut stream,
-                                &json!({
-                                    "type": "hello-ack",
-                                    "protocol": "termwright/1",
+                                    "protocol": "termwright/2",
                                     "sessionId": SESSION,
                                     "limits": limits,
-                                    "subscribe": subscribe,
+                                    "subscribe": "snapshots",
                                     "marker": { "enabled": true },
                                 }),
                             );
@@ -179,13 +122,8 @@ fn next_frame(receiver: &Receiver<Value>) -> Value {
 
 fn sample_snapshot() -> Snapshot {
     let mut snapshot = Snapshot::new(80, 24);
-    snapshot
-        .push(Node::new("root", Role::Dialog, "Permission").with_bounds(Rect::new(0, 0, 40, 2)));
-    snapshot.push(
-        Node::new("ok", Role::Button, "Approve")
-            .with_parent("root")
-            .with_bounds(Rect::new(1, 2, 9, 1)),
-    );
+    snapshot.push(Node::new("root", Role::Dialog, "Permission"));
+    snapshot.push(Node::new("ok", Role::Button, "Approve").with_parent("root"));
     snapshot
 }
 
@@ -193,46 +131,26 @@ fn sample_snapshot() -> Snapshot {
 
 #[test]
 fn no_client_without_a_complete_environment() {
-    let cases: [(Option<&str>, Option<&str>, Option<&str>); 5] = [
-        (None, None, None),
-        (Some("/tmp/nope.sock"), None, None),
-        (None, Some(TOKEN), None),
-        (Some("/tmp/nope.sock"), Some(TOKEN), Some("termwright/9")),
-        (Some(r"\\.\pipe\termwright"), Some(TOKEN), None),
+    let cases: [(Option<&str>, Option<&str>); 4] = [
+        (None, None),
+        (Some("/tmp/nope.sock"), None),
+        (None, Some(TOKEN)),
+        (Some(r"\\.\pipe\termwright"), Some(TOKEN)),
     ];
-    for (endpoint, token, protocol) in cases {
-        let client = Client::from_values(
-            endpoint,
-            token,
-            protocol,
-            Options::new("rust-test", "0.1.0"),
-        );
+    for (endpoint, token) in cases {
+        let client = Client::from_values(endpoint, token, Options::new("rust-test", "0.1.0"));
         assert!(
             client.is_none(),
             "endpoint={endpoint:?} token={token:?} produced a client"
         );
     }
 
-    let client = Client::from_values(
+    Client::from_values(
         Some("/tmp/tw.sock"),
         Some(TOKEN),
-        Some("termwright/1"),
-        Options::new("rust-test", "0.1.0"),
-    );
-    assert!(!client.as_ref().expect("v1 client").qualified_observations());
-
-    let qualified = Client::from_values(
-        Some("/tmp/tw.sock"),
-        Some(TOKEN),
-        Some("termwright/2"),
         Options::new("rust-test", "0.1.0"),
     )
-    .expect("v2 client");
-    assert!(qualified.qualified_observations());
-    assert!(
-        client.is_some(),
-        "a fully instrumented environment produced no client"
-    );
+    .expect("current client");
 }
 
 #[test]
@@ -321,10 +239,8 @@ fn publish_refuses_an_invalid_snapshot() {
     client.connect(Duration::from_secs(2)).expect("handshake");
     next_frame(&frames); // hello
 
-    // Bounds far outside the viewport on a node that is not hidden.
     let mut broken = Snapshot::new(80, 24);
-    broken
-        .push(Node::new("root", Role::Dialog, "Permission").with_bounds(Rect::new(900, 900, 5, 1)));
+    broken.push(Node::new("root", Role::Generic, "unnamed framework type"));
 
     let error = client
         .publish(&mut broken)
@@ -340,62 +256,6 @@ fn publish_refuses_an_invalid_snapshot() {
     );
 
     let _ = std::fs::remove_file(&path);
-}
-
-#[test]
-fn get_tree_is_answered_from_the_retained_snapshots() {
-    let path = socket_path();
-    let (frames, driver) = start_fake_driver(&path);
-    let mut client = Client::new(&path, TOKEN, Options::new("rust-test", "0.1.0"));
-    client.connect(Duration::from_secs(2)).expect("handshake");
-    next_frame(&frames); // hello
-
-    client.publish(&mut sample_snapshot()).expect("publish");
-    next_frame(&frames); // snapshot
-    next_frame(&frames); // revision-commit
-
-    driver
-        .send(json!({ "type": "get-tree", "requestId": 7, "revision": 1 }))
-        .expect("queueing the request");
-    wait_for(&mut client, &frames, |frame| {
-        frame["type"] == "get-tree-result"
-    })
-    .map(|answer| {
-        assert_eq!(answer["requestId"], 7);
-        assert_eq!(answer["snapshot"]["revision"], 1);
-    })
-    .expect("a retained revision was not answered");
-
-    driver
-        .send(json!({ "type": "get-tree", "requestId": 8, "revision": 99 }))
-        .expect("queueing the request");
-    let answer = wait_for(&mut client, &frames, |frame| {
-        frame["type"] == "get-tree-result"
-    })
-    .expect("an unretained revision was not answered");
-    assert!(
-        answer["error"].is_string(),
-        "expected an error answer, got {answer}"
-    );
-
-    let _ = std::fs::remove_file(&path);
-}
-
-/// Pump the client until a frame matching `wanted` arrives at the driver.
-fn wait_for(
-    client: &mut Client,
-    frames: &Receiver<Value>,
-    wanted: impl Fn(&Value) -> bool,
-) -> Option<Value> {
-    for _ in 0..200 {
-        client.poll().expect("polling");
-        if let Ok(frame) = frames.recv_timeout(Duration::from_millis(20)) {
-            if wanted(&frame) {
-                return Some(frame);
-            }
-        }
-    }
-    None
 }
 
 // -- a driver that stops reading -------------------------------------------
@@ -416,7 +276,7 @@ fn start_stalled_driver(path: &str) -> std::sync::mpsc::Sender<()> {
         }
         let ack = serde_json::json!({
             "type": "hello-ack",
-            "protocol": "termwright/1",
+            "protocol": "termwright/2",
             "sessionId": SESSION,
             "limits": DEFAULT_LIMITS,
             "subscribe": "snapshots",
@@ -515,9 +375,11 @@ fn an_invalid_snapshot_is_not_a_write_timeout() {
 fn a_locally_oversized_frame_keeps_the_revision_and_recovers_with_a_full_tree() {
     let path = socket_path();
     let mut limits = DEFAULT_LIMITS;
-    limits.max_frame_bytes = 600;
-    let (frames, _driver) = start_fake_driver_with_subscribe(&path, "diffs", limits);
-    let mut client = Client::new(&path, TOKEN, Options::new("test", "0.1.0"));
+    limits.max_frame_bytes = 1_200;
+    let (frames, _driver) = start_fake_driver_with_limits(&path, limits);
+    let mut options = Options::new("test", "0.1.0");
+    options.limits = limits;
+    let mut client = Client::new(&path, TOKEN, options);
     client.connect(Duration::from_secs(2)).expect("handshake");
     assert_eq!(next_frame(&frames)["type"], "hello");
 
@@ -543,7 +405,6 @@ fn a_locally_oversized_frame_keeps_the_revision_and_recovers_with_a_full_tree() 
         "a local refusal closed a healthy socket"
     );
     assert_eq!(client.revision(), 1, "a rejected frame consumed a revision");
-    assert!(client.full_snapshot_required());
     assert!(frames.recv_timeout(Duration::from_millis(100)).is_err());
 
     let recovery_marker = client
@@ -551,50 +412,9 @@ fn a_locally_oversized_frame_keeps_the_revision_and_recovers_with_a_full_tree() 
         .expect("recovery snapshot")
         .expect("recovery marker");
     let recovery = next_frame(&frames);
-    assert_eq!(recovery["type"], "snapshot", "recovery was an unsafe delta");
+    assert_eq!(recovery["type"], "snapshot");
     assert_eq!(recovery["snapshot"]["revision"], 2);
     assert_eq!(next_frame(&frames)["revision"], 2);
     assert_eq!(client.revision(), 2);
-    assert!(!client.full_snapshot_required());
     assert_ne!(first_marker, recovery_marker);
-}
-
-// -- the producer's obligation after a gap ---------------------------------
-
-#[test]
-fn require_full_snapshot_forces_a_whole_tree() {
-    let path = socket_path();
-    let driver = start_fake_driver_with_subscribe(&path, "diffs", DEFAULT_LIMITS);
-    let mut client = Client::new(&path, TOKEN, Options::new("test", "0.1.0"));
-    client.connect(Duration::from_secs(2)).expect("handshake");
-
-    client.publish(&mut padded_snapshot(1)).expect("first");
-    client.publish(&mut padded_snapshot(2)).expect("second");
-    assert!(
-        client.deltas_sent() > 0,
-        "the second publish was not a delta, so this test proves nothing"
-    );
-
-    client.require_full_snapshot();
-    assert!(client.full_snapshot_required());
-    let before = client.snapshots_sent();
-    client.publish(&mut padded_snapshot(3)).expect("third");
-    assert_eq!(
-        client.snapshots_sent(),
-        before + 1,
-        "the obligation produced no full snapshot"
-    );
-    assert!(
-        !client.full_snapshot_required(),
-        "the obligation was not cleared"
-    );
-
-    let deltas = client.deltas_sent();
-    client.publish(&mut padded_snapshot(4)).expect("fourth");
-    assert_eq!(
-        client.deltas_sent(),
-        deltas + 1,
-        "deltas stopped after the obligation was honoured"
-    );
-    drop(driver);
 }

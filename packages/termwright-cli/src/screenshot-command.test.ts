@@ -3,15 +3,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTraceWriter } from '@termwright/trace';
-import type { SessionEventMap, SessionEvents } from '@termwright/driver';
+import type { SessionEventMap, SessionEventRecord, SessionEvents } from '@termwright/driver';
 import { captureScreenshot, checkRequest } from './screenshot-command.js';
 
 type Listener = (payload: never) => void;
+
+const FONT_SCAN_TIMEOUT_MS = 90_000;
 
 /** The smallest thing the trace writer will record: output, a step, an exit. */
 class Recorded {
   readonly sessionId = 'shot-session';
   readonly #listeners = new Map<keyof SessionEventMap, Set<Listener>>();
+  readonly #journalListeners = new Set<(record: SessionEventRecord) => void>();
+  readonly #journal: SessionEventRecord[] = [];
+  #sequence = 0;
   clock = 0;
 
   readonly now = (): number => this.clock;
@@ -28,6 +33,14 @@ class Recorded {
         set.delete(callback as Listener);
       };
     },
+    checkpoint: () => this.#sequence,
+    subscribe: (options, callback) => {
+      for (const record of this.#journal) {
+        if (record.sequence >= options.fromSequence) callback(record);
+      }
+      this.#journalListeners.add(callback);
+      return () => this.#journalListeners.delete(callback);
+    },
   };
 
   semanticTree(): null {
@@ -35,6 +48,9 @@ class Recorded {
   }
 
   emit<E extends keyof SessionEventMap>(event: E, payload: SessionEventMap[E]): void {
+    const record = { sequence: ++this.#sequence, type: event, payload } as SessionEventRecord;
+    this.#journal.push(record);
+    for (const listener of this.#journalListeners) listener(record);
     for (const listener of this.#listeners.get(event) ?? []) {
       (listener as (value: SessionEventMap[E]) => void)(payload);
     }
@@ -147,7 +163,12 @@ describe('capturing a moment of a recording', () => {
     expect(result.chosen).toBe('the last step');
   });
 
-  it('reports a character the embedded fonts do not cover', async () => {
+  // Enumerating the machine's fonts is the work under test, and a Windows CI
+  // runner has thousands of them: this is the one case here that legitimately
+  // outlasts the default 5 s. The budget is generous because it is only ever
+  // paid on a slow machine, matching the lower-level screenshot package's
+  // measured Windows Node 24 budget.
+  it('reports a character the embedded fonts do not cover', { timeout: FONT_SCAN_TIMEOUT_MS }, async () => {
     // U+F0000 is in a private-use plane, so no real font claims it: this is the
     // one way to reach the fallback branch on any machine. impl-trace measured
     // that coverage is a property of the *installed* fonts rather than of the

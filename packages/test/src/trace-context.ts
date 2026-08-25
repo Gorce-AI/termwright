@@ -3,23 +3,22 @@
  *
  * Matchers must reach the trace writers of the session the current test
  * launched without every matcher call being handed a writer. An
- * `AsyncLocalStorage` would be the natural carrier, but Vitest resolves fixture
- * `use()` from its own async context, so the store is invisible inside the test
- * body. Scopes are therefore registered in a small registry keyed by test file
- * and full test name — the same pair `expect.getState()` reports — which stays
- * correct for concurrent tests instead of guessing.
+ * The exact-certified runner installs an `AsyncLocalStorage` boundary before
+ * fixtures resolve and keeps it through cleanup. No authored title or file
+ * path participates in identity.
  */
 
 import type { GherkinStepMetadata, StepHandle, StepStatus, TraceWriter } from '@termwright/trace';
-import type { ObservationStamp } from '@termwright/protocol';
+import { createRunId, type LocatorRef, type ObservationStamp, type StepId } from '@termwright/protocol';
 import type { ResolvedTermwrightConfig } from './config.js';
+import { currentAttemptContext, currentAttemptEventRecorder, currentAttemptRuntime } from './attempt-context.js';
 
 /** A recorded assertion, mirroring `AssertEvent` without the trace bookkeeping. */
 export interface AssertRecord {
   /** Matcher name, e.g. `toBeVisible`. */
   readonly api: string;
   readonly selector?: string;
-  readonly ref?: string;
+  readonly ref?: LocatorRef;
   readonly ok: boolean;
   readonly error?: string;
   readonly observation?: ObservationStamp;
@@ -38,60 +37,46 @@ export interface TermwrightScope {
   readonly traces: string[];
 }
 
-const active: TermwrightScope[] = [];
-const byKey = new Map<string, TermwrightScope>();
 interface ActiveStep {
-  readonly id: string;
+  readonly id: StepId;
   readonly title: string;
   readonly metadata: { readonly stepId: string; readonly gherkin?: GherkinStepMetadata };
   readonly handles: StepHandle[];
 }
 const stepStacks = new WeakMap<TermwrightScope, ActiveStep[]>();
-const stepCounters = new WeakMap<TermwrightScope, number>();
-
-/** The registry key for a test: its file and its full name. */
-export function scopeKey(testFile: string, testName: string): string {
-  return `${testFile}::${testName}`;
-}
 
 /**
- * Registers a scope for the duration of a test.
+ * Binds fixture services to the current native attempt.
  *
  * @returns a disposer; calling it twice is a no-op.
  */
 export function enterScope(scope: TermwrightScope): () => void {
-  const key = scopeKey(scope.testFile, scope.testName);
-  active.push(scope);
-  byKey.set(key, scope);
+  const runtime = currentAttemptRuntime();
+  if (runtime.scope !== undefined) throw new Error('the current Termwright attempt already has a fixture scope');
+  runtime.scope = scope;
   let exited = false;
   return () => {
     if (exited) return;
     exited = true;
-    const index = active.indexOf(scope);
-    if (index !== -1) active.splice(index, 1);
-    if (byKey.get(key) === scope) byKey.delete(key);
+    if (runtime.scope === scope) runtime.scope = undefined;
   };
 }
 
 /**
  * The scope of a running test.
  *
- * @param key - {@link scopeKey} of the test asking. Without it — or when the
- * key is unknown, which happens outside these fixtures — the most recently
- * started test is used.
+ * There is deliberately no file/title lookup and no "most recently active"
+ * fallback. Parallel tests may have identical titles; ALS is the authority.
  */
-export function currentScope(key?: string): TermwrightScope | undefined {
-  if (key !== undefined) {
-    const found = byKey.get(key);
-    if (found !== undefined) return found;
-  }
-  return active[active.length - 1];
+export function currentScope(): TermwrightScope | undefined {
+  const scope = currentAttemptRuntime().scope;
+  return scope as TermwrightScope | undefined;
 }
 
 /** Records an assertion into every trace the test is recording. */
-export function recordAssert(record: AssertRecord, key?: string): void {
-  const scope = currentScope(key);
-  if (scope === undefined) return;
+export function recordAssert(record: AssertRecord): void {
+  const scope = currentScope();
+  if (scope === undefined) throw new Error('the current Termwright attempt has no fixture scope');
   for (const writer of scope.writers) {
     writer.recordAssert({
       api: record.api,
@@ -117,9 +102,11 @@ export function beginStep(
   scope = currentScope(),
 ): { readonly stepId?: string; end(status?: StepStatus, error?: string): void } {
   if (scope === undefined) return { end: () => undefined };
-  const next = (stepCounters.get(scope) ?? 0) + 1;
-  stepCounters.set(scope, next);
-  const id = `tw-step-${next}`;
+  // Read the attempt eagerly: this both fails closed outside the certified
+  // runner and binds the step to the current native try's ALS boundary.
+  currentAttemptContext();
+  const attemptEvents = currentAttemptEventRecorder();
+  const id = createRunId('step');
   const writerMetadata = { stepId: id, ...(metadata?.gherkin === undefined ? {} : { gherkin: metadata.gherkin }) };
   const frame: ActiveStep = {
     id,
@@ -130,6 +117,17 @@ export function beginStep(
   const stack = stepStacks.get(scope) ?? [];
   stack.push(frame);
   stepStacks.set(scope, stack);
+  attemptEvents.record({
+    eventClass: 'authoritative',
+    type: 'step.started',
+    stepId: id,
+    payload: {
+      title,
+      ...(metadata?.gherkin === undefined ? {} : {
+        gherkin: JSON.parse(JSON.stringify(metadata.gherkin)),
+      }),
+    },
+  });
   let ended = false;
   return {
     stepId: frame.id,
@@ -139,6 +137,16 @@ export function beginStep(
       const index = stack.indexOf(frame);
       if (index !== -1) stack.splice(index, 1);
       for (const handle of frame.handles) handle.end(status, error);
+      attemptEvents.record({
+        eventClass: 'authoritative',
+        type: 'step.finished',
+        stepId: id,
+        phase: 'cleanup',
+        payload: {
+          status,
+          ...(error === undefined ? {} : { error: error.slice(0, 16_384) }),
+        },
+      });
     },
   };
 }

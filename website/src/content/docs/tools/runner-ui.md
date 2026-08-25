@@ -42,6 +42,13 @@ Runner can show several concurrently executing tests. Select a test in the
 execution list to switch its terminal and inspector evidence. A running test is
 blue; green is reserved for a completed pass.
 
+The Native Host journal is armed before workers and PTYs start. Run, Attempt,
+Session, Step, and Action events carry collision-safe identities plus a
+producer epoch and sequence. User stdout and stderr are structured diagnostic
+events attributed to the exact Attempt; the UI never parses reporter text to
+reconstruct lifecycle. A bounded diagnostic loss is rendered as an explicit
+gap, never as an apparently complete timeline.
+
 The execution list groups driver actions and assertions beneath their authored
 test or Gherkin step. Hover or select a row with a retained semantic target to
 highlight the corresponding terminal cells.
@@ -79,6 +86,19 @@ The inspector has three views:
 - **Semantic** presents readable properties for the selected node.
 - **Logs** presents application logs up to the current replay time.
 
+For a live semantic node, **Semantic** also asks the worker's production
+`ActionPlanner` four questions: **Can click?**, **Can hover?**, **Can focus?**,
+and **Can type?**. Each answer carries the exact committed contract/revision,
+strategy, requirements and evidence provider used by the corresponding
+Locator action. Runner rejects a batch spanning different checkpoints; it does
+not reconstruct actionability from node fields in the browser.
+
+The Effective Session Contract card shows the certified adapter ID,
+application providers, terminal mouse observability, authoritative capability
+provenance, and the resulting contract-level input API. Current mouse mode,
+coverage, disabled state and occlusion remain runtime actionability results,
+not capability labels.
+
 Selecting a node highlights it only when the trace contains exact geometry for
 that recorded state. Runner does not infer a rectangle from rendered text or
 paint order.
@@ -91,6 +111,11 @@ Runs lists retained reports with their date and time. Open a report to inspect
 its tests, attempts, flaky result, earlier failure reasons, duration, and trace
 availability. Historical replays are contextual to each window or tab; opening
 a newer run does not replace an already pinned replay elsewhere.
+
+Only a staged, validated and atomically committed run directory is certified
+complete. Runner also lists incomplete, corrupt, and unsupported-version
+records explicitly so a persistence or host crash cannot look like an empty or
+successful run.
 
 ## Record a test
 

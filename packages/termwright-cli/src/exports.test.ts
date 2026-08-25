@@ -1,10 +1,8 @@
 /**
  * The umbrella's promise is that a project can put one package in
- * `devDependencies` and write everything from there — including its Vitest
- * config. These assertions are the cheap version of that promise: every
- * subpath resolves, and the two reporter subpaths carry the **default** export
- * a config imports (`export *` alone does not re-export a default, which is
- * exactly the mistake this catches).
+ * `devDependencies` and use every supported product surface. These assertions
+ * are the cheap version of that promise: every first-class subpath resolves,
+ * while removed reporter-based execution paths stay absent.
  */
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
@@ -24,7 +22,7 @@ describe('subpath entry points', () => {
     expect(root.TermwrightError).toBeTypeOf('function');
   });
 
-  it('exposes the Vitest preset from termwright/test', async () => {
+  it('exposes the Native Host authoring API from termwright/test', async () => {
     const preset = await import('./test.js');
     expect(preset.test).toBeTypeOf('function');
     expect(preset.expect).toBeTypeOf('function');
@@ -77,6 +75,14 @@ describe('subpath entry points', () => {
         if (!import.meta.resolve('termwright/gherkin/runtime').endsWith('/dist/gherkin-runtime.js')) {
           throw new Error('termwright/gherkin/runtime did not resolve through the umbrella');
         }
+        for (const removed of ['termwright/reporter', 'termwright/ui-reporter']) {
+          try {
+            import.meta.resolve(removed);
+            throw new Error(removed + ' unexpectedly resolved');
+          } catch (error) {
+            if (error?.code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED') throw error;
+          }
+        }
         try {
           import.meta.resolve('@termwright/test');
           throw new Error('strict consumer unexpectedly resolved a transitive package');
@@ -92,17 +98,9 @@ describe('subpath entry points', () => {
     }
   });
 
-  it('exposes the trace reporter, default export included', async () => {
-    const reporter = await import('./reporter.js');
-    expect(reporter.default).toBeTypeOf('function');
-    expect(new reporter.default()).toBeInstanceOf(reporter.TermwrightReporter);
+  it('loads the native host outside a Vitest worker', async () => {
+    const host = await import('./host.js');
+    expect(host.TermwrightTestHost).toBeTypeOf('function');
   });
 
-  it('exposes the runner reporter, default export included', async () => {
-    const reporter = await import('./ui-reporter.js');
-    expect(reporter.default).toBeTypeOf('function');
-    expect(new reporter.default()).toBeInstanceOf(reporter.TermwrightUiReporter);
-    // The variable `termwright ui` sets, on both sides of the handoff.
-    expect(reporter.UI_URL_ENV).toBe('TERMWRIGHT_UI_URL');
-  });
 });

@@ -5,18 +5,14 @@
  * that survives coordinates beyond column/row 223.
  *
  * If the child never enabled mouse tracking there is nothing to send: the
- * driver reports a typed `unsupported-action` instead of inventing input.
+ * driver reports a typed `input-mode-disabled` instead of inventing input.
  *
- * That refusal needs the mode to be *known* off. Where the platform hides it
- * (`'unknown'`, ConPTY) the mode is sent anyway, in SGR: the probe in
- * `escapes.pty.test.ts` measured a child decoding a report whose own DECSET
- * had been swallowed on the way out, so refusing there would deny an input
- * that works. Level-dependent refusals (x10 has no release, vt200 has no
- * motion) are skipped for the same reason — the level is exactly what is not
- * known — and the caller records `mouse-mode-unverifiable`.
+ * When the backend cannot observe the mode (`'unknown'`, for example on some
+ * ConPTY configurations), Termwright fails closed. It never guesses SGR or a
+ * tracking level merely because those bytes might happen to work.
  */
 import type { TerminalModes } from './api.js';
-import { UnsupportedActionError } from './errors.js';
+import { CapabilityUnavailableError, InputModeDisabledError } from './errors.js';
 
 const ESC = '\x1b';
 const CSI = `${ESC}[`;
@@ -30,8 +26,10 @@ export interface MouseEvent {
   readonly row: number;
   readonly column: number;
   readonly button?: MouseButton;
+  readonly modifiers?: readonly ('shift' | 'alt' | 'control')[];
   /** Wheel direction; positive scrolls down, negative scrolls up. */
   readonly wheelDelta?: number;
+  readonly wheelAxis?: 'vertical' | 'horizontal';
   /** True while a button is held (motion events use the drag bit). */
   readonly dragging?: boolean;
 }
@@ -42,19 +40,39 @@ const BUTTON_CODES: Readonly<Record<MouseButton, number>> = Object.freeze({
   right: 2,
 });
 
+const MODIFIER_ORDER = Object.freeze(['shift', 'alt', 'control'] as const);
+
+/** Validates and canonicalises mouse modifier bits for plans and receipts. */
+export function normalizeMouseModifiers(
+  values: readonly string[] | undefined,
+): readonly ('shift' | 'alt' | 'control')[] {
+  const provided = new Set(values ?? []);
+  for (const value of provided) {
+    if (!(MODIFIER_ORDER as readonly string[]).includes(value)) {
+      throw new TypeError(`unknown mouse modifier ${JSON.stringify(value)}`);
+    }
+  }
+  return Object.freeze(MODIFIER_ORDER.filter((value) => provided.has(value)));
+}
+
 /** Largest coordinate the legacy X10 encoding can express (32 + 223 = 255). */
 const X10_MAX_COORDINATE = 223;
 
 function buttonCode(event: MouseEvent): number {
+  const modifiers = new Set(normalizeMouseModifiers(event.modifiers));
+  const modifierBits = (modifiers.has('shift') ? 4 : 0) +
+    (modifiers.has('alt') ? 8 : 0) +
+    (modifiers.has('control') ? 16 : 0);
   switch (event.kind) {
     case 'wheel': {
       const delta = event.wheelDelta ?? 0;
-      return delta < 0 ? 64 : 65;
+      if (event.wheelAxis === 'horizontal') return (delta < 0 ? 66 : 67) + modifierBits;
+      return (delta < 0 ? 64 : 65) + modifierBits;
     }
     case 'move':
-      return (event.button === undefined ? 3 : BUTTON_CODES[event.button]) + 32;
+      return (event.button === undefined ? 3 : BUTTON_CODES[event.button]) + 32 + modifierBits;
     default:
-      return BUTTON_CODES[event.button ?? 'left'];
+      return BUTTON_CODES[event.button ?? 'left'] + modifierBits;
   }
 }
 
@@ -67,7 +85,7 @@ export function mouseModeUnverifiable(modes: TerminalModes): boolean {
 }
 
 function unsupported(message: string, suggestion: string): never {
-  throw new UnsupportedActionError(message, { semanticTree: false, suggestion });
+  throw new InputModeDisabledError(message, { semanticTree: false, suggestion });
 }
 
 /**
@@ -75,14 +93,15 @@ function unsupported(message: string, suggestion: string): never {
  *
  * @param event - the event in zero-based viewport coordinates
  * @param modes - current tracking/encoding modes as observed on the wire
- * @throws UnsupportedActionError when the child has no mouse tracking enabled,
+ * @throws InputModeDisabledError when the child has no mouse tracking enabled,
  * or when the coordinates cannot be expressed in the negotiated encoding.
  */
 export function encodeMouse(event: MouseEvent, modes: TerminalModes): Uint8Array {
   if (mouseModeUnverifiable(modes)) {
-    const code = buttonCode(event);
-    const final = event.kind === 'release' ? 'm' : 'M';
-    return encode(`${CSI}<${code};${event.column + 1};${event.row + 1}${final}`);
+    unsupported(
+      'the terminal mouse mode is not observable, so Termwright cannot choose a protocol authoritatively',
+      'use a PTY backend that exposes DEC mouse modes; Termwright does not guess SGR input',
+    );
   }
   if (modes.mouseTracking === 'none') {
     unsupported(
@@ -139,9 +158,9 @@ export function encodeMouse(event: MouseEvent, modes: TerminalModes): Uint8Array
       ]);
     }
     default:
-      return unsupported(
+      throw new CapabilityUnavailableError(
         `unknown mouse encoding ${JSON.stringify(modes.mouseEncoding)}`,
-        'file a bug: the driver observed a mouse encoding it does not implement',
+        { semanticTree: false, suggestion: 'file a bug: the driver observed a mouse encoding it does not implement' },
       );
   }
 }

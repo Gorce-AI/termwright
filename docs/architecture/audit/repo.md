@@ -140,7 +140,7 @@ Against the spec's "no metadata inside terminal escape sequences", the honest
 reading is that this is **PTY output sequencing** and falls under §35's
 allowance, not under the prohibition. If the prohibition is read literally
 enough to cover a revision counter, it also forbids OSC 133 shell integration,
-which the driver already depends on for `waitForReady`.
+which the driver already depends on for `waitForQuiet`.
 
 ### 2.2 Can FRAME_BEGIN/END plus the drain/quiet barrier replace it?
 

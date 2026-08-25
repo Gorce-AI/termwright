@@ -59,11 +59,21 @@ const DRIVER_ERROR_KINDS = [
   'timeout',
   'stale-snapshot',
   'ambiguous-locator',
-  'unsupported-action',
+  'semantic-capability-unavailable',
+  'probe-attach-failed',
+  'capability-unavailable',
+  'not-actionable',
+  'input-mode-disabled',
+  'capability-provider-lost',
+  'capability-provider-violation',
+  'evidence-conflict',
+  'adapter-guarantee-violation',
+  'duplicate-semantic-key',
   'history-truncated',
   'protocol-violation',
   'capacity',
   'process-exited',
+  'pty-backend-failed',
   'session-closed',
   'not-found',
 ] as const satisfies readonly TermwrightErrorCode[];
@@ -79,17 +89,24 @@ export const ERROR_KINDS_ARE_COMPLETE: [MissingKind] extends [never]
 
 const ERROR_KINDS: readonly ErrorKind[] = [...DRIVER_ERROR_KINDS, ...MCP_ERROR_KINDS];
 
+/** Shared targeting guidance for every agent-facing surface. */
+export const TARGETING_GUIDANCE = {
+  precedence: 'Targeting precedence is `ref`, `selector`, `testId`, `role` (+`name`), `label`, `text`, `screenText`.',
+  semanticUnavailable:
+    '`semanticTree: unavailable` means the program ships no integration — target physical output with `screenText`, never semantic `text` or `role`.',
+} as const;
+
 const CONVENTIONS = [
-  'A ref looks like n8@42: node id minted at semantic revision 42. A stable semantic identity may ' +
+  'A semantic ref looks like semantic:n8@42: node id minted at semantic revision 42. A stable semantic identity may ' +
     'be re-resolved in later revisions; frame-local identities and grid refs must be refreshed.',
   'terminal.snapshot returns a screen revision; pass it to terminal.capture_since as cursor to get ' +
     'only the rows and semantic subtrees that changed.',
   'Any name or text argument may be written as "/pattern/flags" to match as a regular expression.',
-  'Targeting precedence is ref, selector, testId, role (+name), label, text.',
+  TARGETING_GUIDANCE.precedence,
   'Locators are strict: more than one match fails with kind "ambiguous-locator" unless nth is given.',
-  'semanticTree "unavailable" means the program ships no adapter — target by text, never by role.',
-  'Errors are returned as tool results with isError set; structuredContent.error.kind is the value to ' +
-    'branch on, and structuredContent.error.suggestion says what to try next.',
+  TARGETING_GUIDANCE.semanticUnavailable,
+  'Errors are returned as tool results with isError set; _meta["io.termwright/error"].kind is the value to ' +
+    'branch on, and that payload\'s suggestion says what to try next. Error results intentionally omit structuredContent because it is success-schema validated.',
 ] as const;
 
 function toJsonSchema(shape: Record<string, z.ZodType>): JsonSchema {
@@ -136,13 +153,13 @@ export function buildUsage(): string {
     '',
     'typical loop',
     '  terminal.launch {command:["node","app.js"]}   -> terminal "t1" + first snapshot',
-    '  terminal.snapshot {terminal:"t1"}             -> refs n8@42 + visible text + revision',
-    '  terminal.click {terminal:"t1", ref:"n8@42"}   -> real mouse report through the PTY',
+    '  terminal.snapshot {terminal:"t1"}             -> refs semantic:n8@42 + visible text + revision',
+    '  terminal.click {terminal:"t1", ref:"semantic:n8@42"} -> real mouse report through the PTY',
     '  terminal.wait_for {terminal:"t1", wait:"text", text:"Approved"}',
     '  terminal.capture_since {terminal:"t1", cursor:42} -> only what changed',
     '  terminal.close {terminal:"t1"}',
     '',
-    'targeting  ref | selector | testId | role(+name) | label | text   (+ exact, state, nth)',
+    'targeting  ref | selector | testId | role(+name) | label | text | screenText   (+ exact, state, nth)',
     `roles      ${SEMANTIC_ROLES.join(' ')}`,
     `states     ${STATE_NAMES.join(' ')}`,
     '',

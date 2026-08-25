@@ -44,9 +44,14 @@ describe('tree shaping', () => {
 });
 
 describe('nodeAt', () => {
+  const visible = (rect: { row: number; column: number; width: number; height: number }) => ({
+    displayed: { status: 'known' as const, value: true, evidence: { source: 'framework' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'ui-test' } },
+    intendedRect: { status: 'known' as const, value: { ...rect }, evidence: { source: 'framework' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'ui-test' } },
+    visibleRect: { status: 'known' as const, value: { ...rect }, evidence: { source: 'framework' as const, method: 'native' as const, strength: 'authoritative' as const, providerId: 'ui-test' } },
+  });
   const nodes = [
-    node({ id: 'd1', role: 'dialog', name: 'Permission', bounds: { row: 0, column: 0, width: 40, height: 5 } }),
-    node({ id: 'b1', role: 'button', name: 'Approve', parentId: 'd1', bounds: { row: 2, column: 2, width: 11, height: 1 } }),
+    node({ id: 'd1', role: 'dialog', name: 'Permission', geometry: visible({ row: 0, column: 0, width: 40, height: 5 }) }),
+    node({ id: 'b1', role: 'button', name: 'Approve', parentId: 'd1', geometry: visible({ row: 2, column: 2, width: 11, height: 1 }) }),
     node({ id: 'x1', role: 'text', name: 'no bounds' }),
   ];
 
@@ -62,11 +67,11 @@ describe('nodeAt', () => {
     expect(nodeAt(nodes, { row: 20, column: 70 })).toBeUndefined();
   });
 
-  it('never picks a node without bounds', () => {
+  it('never picks a node without known visible geometry', () => {
     expect(nodeAt([nodes[2] as never], { row: 0, column: 0 })).toBeUndefined();
   });
 
-  it('treats bounds as half-open on both axes', () => {
+  it('treats visible regions as half-open on both axes', () => {
     expect(nodeAt(nodes, { row: 2, column: 13 })?.id).toBe('d1');
     expect(nodeAt(nodes, { row: 5, column: 0 })).toBeUndefined();
   });

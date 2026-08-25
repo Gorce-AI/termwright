@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -6,7 +6,8 @@ import { FakeSession, node, snapshot } from './__fixtures__/fake-session.js';
 import { parseCast } from './cast.js';
 import { openTrace } from './reader.js';
 import { TRACE_FILES, type TraceEvent } from './types.js';
-import { createTraceWriter } from './writer.js';
+import { createTraceWriter, traceStagingPrefix } from './writer.js';
+import { createRunId } from '@termwright/protocol';
 
 const temporaries: string[] = [];
 
@@ -32,7 +33,89 @@ async function readEvents(dir: string): Promise<TraceEvent[]> {
     .map((line) => JSON.parse(line) as TraceEvent);
 }
 
+describe('trace targets', () => {
+  it('delivers into a directory the caller already created', async () => {
+    // Preparing the output directory first is ordinary, and POSIX renames the
+    // staged directory straight onto an existing empty one. Windows refuses as
+    // soon as the target exists, so without handling this the writer could not
+    // deliver a trace there at all.
+    const dir = await workspace();
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.output('ready');
+    await writer.finalize();
+    expect(await readFile(join(dir, TRACE_FILES.cast), 'utf8')).toContain('ready');
+  });
+
+  it('refuses a target that already holds something instead of replacing it', async () => {
+    const dir = await workspace();
+    await writeFile(join(dir, 'keep.txt'), 'not mine to delete', 'utf8');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.output('ready');
+    await expect(writer.finalize()).rejects.toThrow(/already holds content/u);
+    expect(await readFile(join(dir, 'keep.txt'), 'utf8')).toBe('not mine to delete');
+  });
+});
+
+describe('trace staging names', () => {
+  it('cannot be mistaken for a half-written run', () => {
+    // run-history names its own incomplete runs `.staging-<run>` and decodes
+    // every directory with that prefix as one. A trace staged in the same
+    // place must not answer to it, or a half-written trace is read back as a
+    // half-written run.
+    const prefix = traceStagingPrefix('/runs/twtrace-abc');
+    expect(prefix.startsWith('.staging-')).toBe(false);
+    expect(prefix).toBe('.twtrace-abc.staging-');
+    expect(prefix).toContain('.staging-');
+  });
+});
+
 describe('createTraceWriter', () => {
+  it('replays output, semantic state and exit emitted before the writer attaches', async () => {
+    const root = await workspace();
+    const dir = join(root, 'startup-replay.twtrace');
+    const session = new FakeSession('startup-session');
+    session.output('startup byte');
+    session.semantic(snapshot(1, [node({ id: 'boot', role: 'text', name: 'Booted' })], 'startup-session'));
+    session.exit(0);
+
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    await writer.finalize();
+
+    expect((await readCast(dir)).events.map((event) => event.data).join('')).toContain('startup byte');
+    const trace = await openTrace(dir);
+    try {
+      const semantics = [];
+      for await (const record of trace.semantics()) semantics.push(record);
+      expect(semantics).toHaveLength(1);
+      expect(semantics[0]?.snapshot.nodes[0]?.name).toBe('Booted');
+      expect(trace.meta.exit).toEqual({ code: 0, signal: null });
+    } finally {
+      await trace.close();
+    }
+  });
+
+  it('does not persist a sensitive semantic sentinel under the secure default', async () => {
+    const secret = 'TW_SENTINEL_semantic_61b987';
+    const dir = await workspace();
+    const session = new FakeSession('secret-session');
+    const writer = createTraceWriter(session, { dir, now: session.now });
+    session.input(secret, 'key');
+    session.semantic(snapshot(1, [node({
+      id: 'password', role: 'textbox', name: 'Password',
+      value: { status: 'known', value: secret, sensitivity: 'sensitive', evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app' } },
+    })], 'secret-session'));
+    await writer.finalize();
+    const semanticArtifact = await readFile(join(dir, TRACE_FILES.semantics), 'utf8');
+    const eventArtifact = await readFile(join(dir, TRACE_FILES.events), 'utf8');
+    const castArtifact = await readFile(join(dir, TRACE_FILES.cast), 'utf8');
+    expect(semanticArtifact).not.toContain(secret);
+    expect(eventArtifact).not.toContain(secret);
+    expect(castArtifact).not.toContain(secret);
+    expect(eventArtifact).toContain('"recording":"withheld"');
+    expect(semanticArtifact).toContain('"status":"withheld"');
+  });
   it('writes a real Unix start timestamp while elapsed time uses a monotonic clock', async () => {
     const root = await workspace();
     const dir = join(root, 'wall-time.twtrace');
@@ -55,8 +138,19 @@ describe('createTraceWriter', () => {
     const root = await workspace();
     const dir = join(root, 'login.twtrace');
     const session = new FakeSession('sess-1');
+    const runIdentity = {
+      invocationId: createRunId('invocation'),
+      runId: createRunId('run'),
+      projectId: createRunId('project'),
+      specId: createRunId('spec'),
+      runnerTaskId: createRunId('runner-task'),
+      executionId: createRunId('execution'),
+      attemptId: createRunId('attempt'),
+      sessionId: createRunId('session'),
+    } as const;
     const writer = createTraceWriter(session, {
       dir,
+      runIdentity,
       command: ['node', 'app.js'],
       columns: 80,
       rows: 24,
@@ -70,7 +164,7 @@ describe('createTraceWriter', () => {
     session.tick(50);
     session.input('ab', 'key');
     session.semantic(snapshot(7, [node({ id: 'n1', role: 'button', name: 'Submit' })], 'sess-1'));
-    writer.recordAction({ api: 'locator.click', selector: 'button', ref: 'n1@7', ok: true });
+    writer.recordAction({ api: 'locator.click', selector: 'button', ref: 'semantic:n1@7', ok: true });
     session.tick(50);
     session.output('world');
     step.end('passed');
@@ -83,6 +177,7 @@ describe('createTraceWriter', () => {
     expect(archive.meta.exit).toEqual({ code: 0, signal: null });
     expect(archive.meta.semanticTree).toBe(true);
     expect(archive.meta.platform).toBe('linux');
+    expect(archive.meta.runIdentity).toEqual(runIdentity);
 
     const trace = await openTrace(dir);
     try {
@@ -273,17 +368,17 @@ describe('createTraceWriter', () => {
     expect(events.map((event) => event.data).join('')).toBe('✓ ok');
   });
 
-  it('records input losslessly as base64 and keeps it out of the cast by default', async () => {
+  it('records input losslessly only with explicit raw policy and keeps it out of the cast by default', async () => {
     const root = await workspace();
     const dir = join(root, 'input.twtrace');
     const session = new FakeSession();
-    const writer = createTraceWriter(session, { dir, now: session.now });
+    const writer = createTraceWriter(session, { dir, now: session.now, artifactValuePolicy: 'raw' });
 
     session.input('\u0003', 'raw');
     await writer.finalize();
 
     const events = await readEvents(dir);
-    expect(events[0]).toMatchObject({ kind: 'input', inputKind: 'raw', dataB64: 'Aw==' });
+    expect(events[0]).toMatchObject({ kind: 'input', inputKind: 'raw', dataB64: 'Aw==', recording: 'raw' });
     const { events: castEvents } = await readCast(dir);
     expect(castEvents.some((event) => event.code === 'i')).toBe(false);
   });
@@ -336,13 +431,29 @@ describe('createTraceWriter', () => {
     expect(events.map((event) => event.data)).toEqual(['0123456789']);
   });
 
-  it('refuses to finalize twice', async () => {
+  it('shares the committed result across repeated finalize calls', async () => {
     const root = await workspace();
     const dir = join(root, 'twice.twtrace');
     const session = new FakeSession();
     const writer = createTraceWriter(session, { dir, now: session.now });
-    await writer.finalize();
-    await expect(writer.finalize()).rejects.toThrow(/already/);
+    const first = await writer.finalize();
+    await expect(writer.finalize()).resolves.toEqual(first);
+  });
+
+  it('can retry atomic publication after a persistence failure', async () => {
+    const root = await workspace();
+    const dir = join(root, 'retry.twtrace');
+    await mkdir(dir);
+    await writeFile(join(dir, 'occupied'), 'do not overwrite');
+    const session = new FakeSession();
+    const writer = createTraceWriter(session, { dir, now: session.now });
+
+    await expect(writer.finalize()).rejects.toBeDefined();
+    expect(await stat(join(dir, TRACE_FILES.commit)).catch(() => null)).toBeNull();
+    await rm(dir, { recursive: true });
+    const archive = await writer.finalize();
+    expect(archive.dir).toBe(dir);
+    expect(await stat(join(dir, TRACE_FILES.commit))).not.toBeNull();
   });
 
   it('stops observing the session after dispose', async () => {

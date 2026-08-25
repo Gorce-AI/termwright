@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A v1 semantic role. ARIA-aligned and closed: unknown roles fail validation.
+/// A semantic role. ARIA-aligned and closed: unknown roles fail validation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
@@ -57,7 +57,7 @@ pub enum Role {
     Generic,
 }
 
-/// Every v1 role, in the order the reference implementation declares them.
+/// Every role, in the order the reference implementation declares them.
 pub const SEMANTIC_ROLES: [&str; 23] = [
     "application",
     "region",
@@ -104,7 +104,7 @@ pub enum Action {
     Expand,
 }
 
-/// Every v1 action.
+/// Every action.
 pub const SEMANTIC_ACTIONS: [&str; 7] = [
     "focus", "activate", "toggle", "setValue", "scroll", "select", "expand",
 ];
@@ -115,54 +115,54 @@ pub const SEMANTIC_ACTIONS: [&str; 7] = [
 pub enum Capability {
     /// Publishes a node tree.
     Tree,
-    /// Publishes bounds for its nodes.
-    Bounds,
-    /// The published bounds are absolute viewport cells.
-    AbsoluteBounds,
+    /// Publishes authoritative intended layout geometry for every applicable node.
+    IntendedGeometry,
+    /// Publishes authoritative clipped geometry for every applicable node.
+    ClippedGeometry,
     /// Publishes state flags.
     States,
+    /// Publishes authoritative focus state.
+    FocusState,
     /// Publishes action hints.
     Actions,
+    /// Publishes physical input recipes.
+    ActionRecipes,
     /// Publishes offset-to-cell mappings.
     TextRanges,
     /// Emits a render-commit marker per revision.
     RenderRevisions,
-    /// Can publish subtree diffs instead of full trees.
-    TreeDiffs,
     /// Can forward application log records over the channel.
     Logs,
-    /// Publishes protocol v2 evidence-qualified observations.
-    QualifiedObservations,
     /// Publishes a complete exact fresh-pointer ownership grid.
     PointerHitGrid,
 }
 
-/// Every v1 capability.
+/// Every adapter capability.
 pub const ADAPTER_CAPABILITIES: [&str; 11] = [
     "tree",
-    "bounds",
-    "absolute-bounds",
+    "intended-geometry",
+    "clipped-geometry",
     "states",
+    "focus-state",
     "actions",
+    "action-recipes",
     "text-ranges",
     "render-revisions",
-    "tree-diffs",
     "logs",
-    "qualified-observations",
     "pointer-hit-grid",
 ];
 
-/// Whether `role` is one of the v1 roles.
+/// Whether `role` is one of the roles.
 pub fn valid_role(role: &str) -> bool {
     SEMANTIC_ROLES.contains(&role)
 }
 
-/// Whether `action` is one of the v1 actions.
+/// Whether `action` is one of the actions.
 pub fn valid_action(action: &str) -> bool {
     SEMANTIC_ACTIONS.contains(&action)
 }
 
-/// Whether `capability` is one of the v1 capabilities.
+/// Whether `capability` is one of the capabilities.
 pub fn valid_capability(capability: &str) -> bool {
     ADAPTER_CAPABILITIES.contains(&capability)
 }

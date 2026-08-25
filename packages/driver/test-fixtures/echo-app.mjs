@@ -13,7 +13,7 @@ process.stdin.setRawMode?.(true);
 process.stdin.resume();
 process.stdin.on('data', (chunk) => {
   const text = chunk.toString('utf8');
-  if (text === '\x03' || text === 'q') {
+  if (text.includes('\x03') || text.includes('q')) {
     process.stdout.write('BYE\r\n');
     process.exit(0);
   }

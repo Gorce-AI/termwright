@@ -57,10 +57,10 @@ await expect(app).toMatchSemanticSnapshot(
 
 ## Update snapshots
 
-Vitest's update flag is the normal one-off workflow:
+The embedded Vitest engine's update flag is forwarded by the Termwright host:
 
 ```sh
-vitest run --update
+termwright test -- --update
 ```
 
 For CI or a scripted workflow, set `TERMWRIGHT_UPDATE_SNAPSHOTS` to one of:

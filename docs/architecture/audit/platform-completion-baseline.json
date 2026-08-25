@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 2,
+  "capturedAt": "2026-08-22",
+  "baselineHead": "a77bafeca83039d9f58ff0d5054da32f71535257",
+  "policy": {
+    "backwardsCompatibility": false,
+    "certifiedExecutionMode": "termwright-native-host-only",
+    "vitestRole": "exactly-certified-embedded-engine-3.2.7",
+    "plainVitestMode": "not-a-product-mode",
+    "compatibilityFallbacks": "forbidden",
+    "degradedBackendEvidence": "allowed only when explicitly surfaced and excluded from stronger certification claims"
+  },
+  "statusVocabulary": [
+    "already-fixed",
+    "partially-fixed",
+    "still-open",
+    "obsolete because architecture changed",
+    "incorrect after deeper evidence"
+  ],
+  "targetClassifications": [
+    {
+      "target": 1,
+      "status": "already-fixed",
+      "evidence": "Capability Graph plus pointer, focus-state, scroll-state, painted-region, terminal-input-mode, and action-recipe provider families exist across TypeScript/Go/Rust/Python with closed schemas, vectors, lifecycle and conflict tests."
+    },
+    {
+      "target": 2,
+      "status": "already-fixed",
+      "evidence": "Registry schema v5 capabilityGraph is normative; loose public capabilities() was removed."
+    },
+    {
+      "target": 3,
+      "status": "already-fixed",
+      "evidence": "Driver exports SemanticLocator and ScreenLocator with domain-preserving algebra and refs."
+    },
+    {
+      "target": 4,
+      "status": "already-fixed",
+      "evidence": "A revision-bound focus-state provider observes the production focus manager while an authoritative target recipe supplies a bounded sequence of real PTY keys. Every step is receipt-visible, one operation deadline bounds the sequence, and the committed focus postcondition is mandatory. This exact-target recipe model avoids an internal traversal loop, so cycle detection is unnecessary."
+    },
+    {
+      "target": 5,
+      "status": "already-fixed",
+      "evidence": "Planner consumes negotiated fill/clear recipes; Ctrl+A is not a universal fallback."
+    },
+    {
+      "target": 6,
+      "status": "already-fixed",
+      "evidence": "Activation keys are certified/provider recipes, not universal role guesses."
+    },
+    {
+      "target": 7,
+      "status": "already-fixed",
+      "evidence": "Semantic intents and physical recipes are distinct graph nodes and planner inputs."
+    },
+    {
+      "target": 8,
+      "status": "already-fixed",
+      "evidence": "painted-region is a complete authoritative application-painter slice: typed producer, revision-bound wire fact, frozen capability, strict validation/conflict handling, Locator/Runner/MCP/trace consumers, four-language SDK parity, graph claims and real-process Ink conformance."
+    },
+    {
+      "target": 9,
+      "status": "already-fixed",
+      "evidence": "Render order is supported only where every frame proves it; OpenTUI no longer overclaims it."
+    },
+    {
+      "target": 10,
+      "status": "already-fixed",
+      "evidence": "SemanticValueObservation distinguishes known/absent/unknown/unsupported/withheld and sensitivity."
+    },
+    {
+      "target": 11,
+      "status": "already-fixed",
+      "evidence": "Portable observations preserve absence/support and the closed vocabulary now carries every shared exact-framework fact, including Ink 7.1.1 required/multiselectable, through Probe IR, validation, recognizer, TypeScript/Go/Rust/Python SDKs and AccessKit projection. Exhaustive state-key tests prevent silent field loss."
+    },
+    {
+      "target": 12,
+      "status": "already-fixed",
+      "evidence": "Ratatui Annotated boundaries cover direct/nested Widget and StatefulWidget paths without duplicates."
+    },
+    {
+      "target": 13,
+      "status": "already-fixed",
+      "evidence": "Rust client has Windows named-pipe transport and platform tests."
+    },
+    {
+      "target": 14,
+      "status": "already-fixed",
+      "evidence": "Textual bootstrap is process-owned and children cannot claim the parent endpoint."
+    },
+    {
+      "target": 15,
+      "status": "already-fixed",
+      "evidence": "Charm certification closes over exact Bubble Tea plus Bubbles combinations without degradation fallback."
+    },
+    {
+      "target": 16,
+      "status": "already-fixed",
+      "evidence": "ConPTY observability remains fail-closed, while a revision-bound production-parser provider can authoritatively prove mouse/focus modes. Non-skipped Ink E2E sends real SGR mouse and focus-report bytes through the PTY/ConPTY path, validates the application parser result, rejects VT/provider disagreement, and stops on provider loss."
+    },
+    {
+      "target": 17,
+      "status": "already-fixed",
+      "evidence": "TerminalSession startup uses transactional ResourceScope rollback."
+    },
+    {
+      "target": 18,
+      "status": "already-fixed",
+      "evidence": "SemanticChannel listen failure cleans socket and temp directory."
+    },
+    {
+      "target": 19,
+      "status": "already-fixed",
+      "evidence": "Fixture resources and journals are owned before launch and roll back on partial startup."
+    },
+    {
+      "target": 20,
+      "status": "already-fixed",
+      "evidence": "UI binds transactionally and rolls back prior resources on bind failure."
+    },
+    {
+      "target": 21,
+      "status": "already-fixed",
+      "evidence": "MCP/UI cleanup attempts every disposer and aggregates failures."
+    },
+    {
+      "target": 22,
+      "status": "already-fixed",
+      "evidence": "Close operations share one close promise and expose cleanup failure."
+    },
+    {
+      "target": 23,
+      "status": "already-fixed",
+      "evidence": "No synthetic ExitStatus; missing exit is typed cleanup failure."
+    },
+    {
+      "target": 24,
+      "status": "partially-fixed",
+      "evidence": "POSIX process groups are escalated and verified dead, including a root that exits before its grandchild. The exact ConPTY adapter captures the console process list before hard kill and verifies every captured PID disappeared. A new Windows-native adversarial test makes the root exit 900 ms before its grandchild and rejects an early terminal exit; Node 22/24 CI is the required execution proof because node-pty exposes neither a Job Object nor a cross-platform descendant primitive."
+    },
+    {
+      "target": 25,
+      "status": "partially-fixed",
+      "evidence": "The exact-version adapter now owns the Unix EOF boundary: stream end/EIO is observed before node-pty's exit callback, then TerminalSession drains the VT exactly before publishing exit; source-shape certification and a real 1 MiB sentinel prove it. Deeper ConPTY inspection shows beta.15 destroys its output socket after a private 100-ms flush timer, so Windows remains honestly bounded-fallback rather than falsely treating close as EOF."
+    },
+    {
+      "target": 26,
+      "status": "already-fixed",
+      "evidence": "Windows rejects unsupported POSIX signals; Ctrl+C, terminate and hard kill are separate."
+    },
+    {
+      "target": 27,
+      "status": "already-fixed",
+      "evidence": "Teardown intent is recorded only after an accepted lifecycle operation."
+    },
+    {
+      "target": 28,
+      "status": "already-fixed",
+      "evidence": "driver/pty.ts bounds pre-subscriber output at 4 MiB and fails rather than silently drops."
+    },
+    {
+      "target": 29,
+      "status": "already-fixed",
+      "evidence": "PtyProcess.write explicitly means ordered backend-queue admission, never child consumption; high-level actions require committed postconditions. Without patching dependencies, the exact-version adapter owns a bounded ordered write queue over the certified private Unix fd and ConPTY input socket, exposes drain, and converts fatal asynchronous delivery failure into typed pty-backend-failed followed by verified cleanup. Exact private-shape certification fails installation when that boundary drifts."
+    },
+    {
+      "target": 30,
+      "status": "incorrect after deeper evidence",
+      "evidence": "The original diagnosis that Termwright could reliably consume this through node-pty's public stream was incorrect: exact upstream CustomWriteStream logs asynchronous EBADF/EIO directly and exposes no callback or error channel. Termwright removed dependency patches and owns the write boundary in its exact-version adapter instead; certification validates all six unpatched artifacts and deterministic teardown tests prove queued writes are cancelled without hidden stderr. An upstream public async-write error/drain API would still be preferable."
+    },
+    {
+      "target": 31,
+      "status": "already-fixed",
+      "evidence": "SemanticChannel atomically claims one adapter and rejects simultaneous second hellos."
+    },
+    {
+      "target": 32,
+      "status": "already-fixed",
+      "evidence": "Every accepted socket is owned and unauthenticated handshakes have an absolute deadline."
+    },
+    {
+      "target": 33,
+      "status": "already-fixed",
+      "evidence": "Correctness deadlines and TTLs are monotonic. quality/determinism-constructs.json now classifies every timer, polling loop, skip, fixed port, process-global mutation and fire-and-forget site; CI rejects inventory drift, fixed listen ports and browser waitForTimeout. Remaining wall clocks are display/persistence facts and external-source polling is explicit."
+    },
+    {
+      "target": 34,
+      "status": "already-fixed",
+      "evidence": "Locator/action/attach, shell phases, desktop-host connect/ready, and launch endpoint/log/PTY/required-negotiation phases use one original monotonic deadline. Expiry before spawn proves zero process allocation and every post-allocation expiry rolls back through ResourceScope. Native attempt budgets reserve diagnostics/trace/teardown time."
+    },
+    {
+      "target": 35,
+      "status": "already-fixed",
+      "evidence": "Matchers/snapshots/log assertions use arm-before-check events, not 25 ms polling."
+    },
+    {
+      "target": 36,
+      "status": "already-fixed",
+      "evidence": "waitForReady was removed; heuristic quiet waits are explicitly named."
+    },
+    {
+      "target": 37,
+      "status": "already-fixed",
+      "evidence": "Misleading waitForStable was removed for causal checkpoint and explicit quiet APIs."
+    },
+    {
+      "target": 38,
+      "status": "already-fixed",
+      "evidence": "Semantics policy is explicit and required negotiation consumes the original deadline."
+    },
+    {
+      "target": 39,
+      "status": "already-fixed",
+      "evidence": "Resize requires a child/framework consequence, not local VT resize revision."
+    },
+    {
+      "target": 40,
+      "status": "already-fixed",
+      "evidence": "Log tailer final-drains before failOnLogLevel and reports loss."
+    },
+    {
+      "target": 41,
+      "status": "already-fixed",
+      "evidence": "Snapshot scopes/counters are keyed by AttemptId in ALS."
+    },
+    {
+      "target": 42,
+      "status": "already-fixed",
+      "evidence": "Trace context uses RunnerTaskId plus AttemptId; no last-active fallback."
+    },
+    {
+      "target": 43,
+      "status": "already-fixed",
+      "evidence": "Free-standing test.step requires unambiguous AttemptContext."
+    },
+    {
+      "target": 44,
+      "status": "already-fixed",
+      "evidence": "A bounded authoritative Session Event Journal is armed at session construction before endpoint/PTY spawn, assigns one global sequence, replays from sequence with explicit gaps, and carries the exact semantic snapshot for each revision. Trace, Runner live view, MCP logs and test log/failOnLogLevel consumers subscribe from sequence 1, so startup output/tree/log/exit cannot be missed or paired to a later tree."
+    },
+    {
+      "target": 45,
+      "status": "already-fixed",
+      "evidence": "Flaky is non-certifying under native host; retries have unique AttemptIds."
+    },
+    {
+      "target": 46,
+      "status": "already-fixed",
+      "evidence": "Seeded workspaces enforce a realpath-aware symlink boundary."
+    },
+    {
+      "target": 47,
+      "status": "already-fixed",
+      "evidence": "MCP idle sweep is managed, monotonic, non-overlapping and reports failure."
+    },
+    {
+      "target": 48,
+      "status": "already-fixed",
+      "evidence": "HTTP bind errors are typed and rollback prior ownership."
+    },
+    {
+      "target": 49,
+      "status": "already-fixed",
+      "evidence": "Trace persistence stages, validates and atomically commits with explicit incomplete/corrupt states."
+    },
+    {
+      "target": 50,
+      "status": "already-fixed",
+      "evidence": "Run history uses collision-safe IDs and one fsynced atomic manifest plus journal commit."
+    },
+    {
+      "target": 51,
+      "status": "already-fixed",
+      "evidence": "Host collects through Vitest Node API and native IDs."
+    },
+    {
+      "target": 52,
+      "status": "already-fixed",
+      "evidence": "Duplicate titles and parameterized cases retain distinct native and RunnerTask IDs."
+    },
+    {
+      "target": 53,
+      "status": "already-fixed",
+      "evidence": "UI targets RunnerTaskIds; file/title reconstruction was deleted."
+    },
+    {
+      "target": 54,
+      "status": "obsolete because architecture changed",
+      "evidence": "Reporter execution identity plane was deleted; host journal and exact runner are sole lifecycle plane."
+    },
+    {
+      "target": 55,
+      "status": "already-fixed",
+      "evidence": "Invocation/Run/Execution/Attempt IDs are collision-safe branded identities."
+    },
+    {
+      "target": 56,
+      "status": "already-fixed",
+      "evidence": "RunEvent carries hierarchy, producer epoch/sequence and causal identity."
+    },
+    {
+      "target": 57,
+      "status": "already-fixed",
+      "evidence": "UI/live queues are bounded; every eviction emits visible diagnostic-gap."
+    },
+    {
+      "target": 58,
+      "status": "obsolete because architecture changed",
+      "evidence": "Legacy reporter socket queue was deleted; live-session bridge is bounded with diagnostic gaps."
+    },
+    {
+      "target": 59,
+      "status": "already-fixed",
+      "evidence": "Authenticated run binding and producer epoch/sequence reject stale events."
+    },
+    {
+      "target": 60,
+      "status": "already-fixed",
+      "evidence": "test/watch/ui share one persistent host; sibling one-shot Vitest processes were removed."
+    },
+    {
+      "target": 61,
+      "status": "already-fixed",
+      "evidence": "Host composes user reporters; Termwright reporters are deleted as correctness transports."
+    },
+    {
+      "target": 62,
+      "status": "already-fixed",
+      "evidence": "Discovery is in-process and never parses human stdout."
+    },
+    {
+      "target": 63,
+      "status": "already-fixed",
+      "evidence": "Empty, collection/config failure and filtered-zero outcomes are distinct; native test exits nonzero for skipped/zero-test certification."
+    },
+    {
+      "target": 64,
+      "status": "already-fixed",
+      "evidence": "Git/CI/runtime provenance is frozen at run start."
+    },
+    {
+      "target": 65,
+      "status": "already-fixed",
+      "evidence": "Run state separates assertion, flaky, cancelled, incomplete and infrastructure failure."
+    },
+    {
+      "target": 66,
+      "status": "already-fixed",
+      "evidence": "One host owns Vitest and global ResourceBroker; CI no longer launches independent package pools."
+    },
+    {
+      "target": 67,
+      "status": "already-fixed",
+      "evidence": "Profiles and a cross-worker fair atomic ResourceBroker bound real PTY/process cost and count every live lease. test.resources() is collected into a closed ResourceVector; exact Vitest 3.2.7 onBeforeTryTask atomically admits the whole vector before fixtures and starts the Attempt budget only after admission. The 16-terminal real-PTY stress case proves group admission and verified release without package serialization."
+    }
+  ],
+  "knownOpenProgramItems": [
+    {
+      "id": "conpty-authoritative-output-eof",
+      "relatedTargets": [25],
+      "status": "still-open",
+      "exitCondition": "The certified Windows backend exposes a real output-pipe EOF/drain boundary or Termwright replaces the beta.15 timer-driven ConPTY flush path with an exact owned boundary and proves a large final-output sentinel on Node 22/24."
+    },
+    {
+      "id": "windows-natural-exit-descendant-proof",
+      "relatedTargets": [24],
+      "status": "still-open",
+      "exitCondition": "A real Windows Node 22/24 test proves that descendants cannot survive a natural root exit, or the backend adopts an owned Job Object/equivalent primitive and verifies it."
+    },
+    {
+      "id": "windows-reliability-matrix-current-run",
+      "relatedTargets": [16, 24, 26, 66, 67],
+      "status": "still-open",
+      "exitCondition": "The checked-in Node 22/24, Vitest 3.1/3.2/4, pool/worker/PTY matrix completes on current Windows CI and its artifact is reviewed before certification claims are promoted."
+    }
+  ]
+}

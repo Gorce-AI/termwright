@@ -9,19 +9,43 @@
     "directory": "packages/protocol"
   },
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "^22.0.0 || ^24.0.0" },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./contract": {
+      "types": "./dist/contract.d.ts",
+      "import": "./dist/contract.js"
+    },
+    "./capability-graph": {
+      "types": "./dist/capability-graph.d.ts",
+      "import": "./dist/capability-graph.js"
+    },
+    "./action-model": {
+      "types": "./dist/action-model.d.ts",
+      "import": "./dist/action-model.js"
+    },
+    "./run-events": {
+      "types": "./dist/run-events.d.ts",
+      "import": "./dist/run-events.js"
+    },
+    "./run-journal": {
+      "types": "./dist/run-journal.d.ts",
+      "import": "./dist/run-journal.js"
+    },
+    "./run-state": {
+      "types": "./dist/run-state.d.ts",
+      "import": "./dist/run-state.js"
     }
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/contract.ts src/capability-graph.ts src/action-model.ts src/run-events.ts src/run-journal.ts src/run-state.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:hostile": "vitest run --config vitest.hostile.config.ts"
+    "test": "pnpm --dir ../.. test -- -- --run packages/protocol",
+    "test:hostile": "pnpm --dir ../.. test -- -- --run packages/protocol"
   },
   "dependencies": {
     "zod": "^4.0.0"

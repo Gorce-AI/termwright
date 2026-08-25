@@ -7,14 +7,17 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTraceWriter } from '@termwright/trace';
-import type { SemanticSnapshot } from '@termwright/protocol';
-import type { SessionEventMap, SessionEvents } from '@termwright/driver';
+import type { NodeGeometryObservations, Rect, SemanticSnapshot } from '@termwright/protocol';
+import type { SessionEventMap, SessionEventRecord, SessionEvents } from '@termwright/driver';
 
 type Listener = (payload: never) => void;
 
 class Recorded {
   readonly sessionId = 'trace-session';
   readonly #listeners = new Map<keyof SessionEventMap, Set<Listener>>();
+  readonly #journalListeners = new Set<(record: SessionEventRecord) => void>();
+  readonly #journal: SessionEventRecord[] = [];
+  #sequence = 0;
   #tree: SemanticSnapshot | null = null;
   clock = 0;
 
@@ -32,6 +35,14 @@ class Recorded {
         set.delete(callback as Listener);
       };
     },
+    checkpoint: () => this.#sequence,
+    subscribe: (options, callback) => {
+      for (const record of this.#journal) {
+        if (record.sequence >= options.fromSequence) callback(record);
+      }
+      this.#journalListeners.add(callback);
+      return () => this.#journalListeners.delete(callback);
+    },
   };
 
   semanticTree(): SemanticSnapshot | null {
@@ -39,6 +50,9 @@ class Recorded {
   }
 
   emit<E extends keyof SessionEventMap>(event: E, payload: SessionEventMap[E]): void {
+    const record = { sequence: ++this.#sequence, type: event, payload } as SessionEventRecord;
+    this.#journal.push(record);
+    for (const listener of this.#journalListeners) listener(record);
     for (const listener of this.#listeners.get(event) ?? []) {
       (listener as (value: SessionEventMap[E]) => void)(payload);
     }
@@ -46,32 +60,67 @@ class Recorded {
 
   publish(tree: SemanticSnapshot): void {
     this.#tree = tree;
-    this.emit('semantic-revision', { revision: tree.revision, timeMs: this.clock });
+    this.emit('semantic-revision', { revision: tree.revision, timeMs: this.clock, snapshot: tree });
   }
 }
+
+const unknownGeometry = (): NodeGeometryObservations => ({
+  displayed: { status: 'unknown', reason: 'awaiting-revision-pair' },
+  intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+  visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' },
+});
+
+const visibleGeometry = (rect: Rect): NodeGeometryObservations => ({
+  displayed: {
+    status: 'known',
+    value: true,
+    evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-fixture' },
+  },
+  intendedRect: {
+    status: 'known',
+    value: { ...rect },
+    evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-fixture' },
+  },
+  visibleRect: {
+    status: 'known',
+    value: { ...rect },
+    evidence: { source: 'framework', method: 'native', strength: 'authoritative', providerId: 'ui-fixture' },
+  },
+});
+
+const snapshotFacts = {
+  coordinateSpace: { status: 'unknown' as const, reason: 'awaiting-revision-pair' as const },
+  hitGrid: {
+    status: 'unsupported' as const,
+    capability: 'pointer-hit-grid',
+    reason: 'framework-unobservable' as const,
+  },
+};
 
 /** The tree published at each of the fixture's two revisions. */
 export const FIXTURE_TREES: readonly SemanticSnapshot[] = [
   {
-    v: 1,
+    v: 2,
     sessionId: 'trace-session',
     revision: 1,
     columns: 80,
     rows: 24,
     rootIds: ['d1'],
     nodes: [
-      { id: 'd1', role: 'dialog', name: 'Permission', state: { modal: true } },
-      { id: 'b1', role: 'button', name: 'Approve', parentId: 'd1', bounds: { row: 3, column: 4, width: 9, height: 1 } },
+      { id: 'd1', role: 'dialog', name: 'Permission', state: { modal: true }, geometry: unknownGeometry() },
+      { id: 'b1', role: 'button', name: 'Approve', parentId: 'd1', geometry: visibleGeometry({ row: 3, column: 4, width: 9, height: 1 }) },
     ],
+    ...snapshotFacts,
   },
   {
-    v: 1,
+    v: 2,
     sessionId: 'trace-session',
     revision: 2,
     columns: 80,
     rows: 24,
     rootIds: ['s1'],
-    nodes: [{ id: 's1', role: 'status', name: 'running: ls -la' }],
+    nodes: [{ id: 's1', role: 'status', name: 'running: ls -la', geometry: unknownGeometry() }],
+    ...snapshotFacts,
   },
 ];
 
@@ -97,7 +146,7 @@ export async function buildFixtureTrace(options: { readonly columns?: number; re
   session.emit('output', { data: new TextEncoder().encode('Permission required\r\n'), timeMs: 0 });
   session.publish({ ...(FIXTURE_TREES[0] as SemanticSnapshot), columns, rows });
   session.clock = 100;
-  writer.recordAction({ api: 'locator.click', selector: 'button', ref: 'b1@1', ok: true });
+  writer.recordAction({ api: 'locator.click', selector: 'button', ref: 'semantic:b1@1', ok: true });
 
   session.emit('app-log', {
     source: 'file',

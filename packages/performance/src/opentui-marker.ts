@@ -117,7 +117,6 @@ export async function runOpenTuiMarkerBenchmark(
         probeEventsPerFrame: unavailable('events/frame', 'The marker-route benchmark isolates renderer routing, not Probe IR observation.'),
         bytesPerFrame: unavailable('bytes/frame', 'bytesSeenInJs contains terminal render bytes and markers, not semantic-channel bytes.'),
         fullSnapshots: unavailable('count', 'The marker-route benchmark deliberately has no semantic driver.'),
-        deltas: unavailable('count', 'The marker-route benchmark deliberately has no semantic driver.'),
         droppedEvents: unavailable('count', 'No semantic producer queue is active in this route-isolation benchmark.'),
         coalescedEvents: unavailable('count', 'OpenTUI does not expose skipped native renders as a counter here.'),
         semanticNodesPerFrame: unavailable('nodes/frame', 'No semantic snapshot is built in this route-isolation benchmark.'),
@@ -143,7 +142,7 @@ export async function runOpenTuiMarkerBenchmark(
 
     return {
       kind: 'termwright-performance-report',
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: new Date().toISOString(),
       environment: {
         runtime: `bun ${(await run('bun', ['--version'])).stdout.trim()}; @opentui/core 0.5.3`,

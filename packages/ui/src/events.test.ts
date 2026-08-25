@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { EffectiveSessionContract } from '@termwright/protocol';
+import { SESSION_CAPABILITIES } from '@termwright/protocol/contract';
+import { CONDITION_KINDS } from '@termwright/protocol/action-model';
 import {
   encodeMessage,
   fromBase64,
@@ -10,7 +13,29 @@ import {
 } from './events.js';
 
 describe('server messages', () => {
+  it('rejects action refs without an explicit locator domain', () => {
+    expect(() => parseServerMessage(JSON.stringify({
+      v: 1, type: 'action', kind: 'action', api: 'click', t: 1, ok: true, ref: 'n1@7',
+    }))).toThrow(/explicitly semantic or screen locator ref/u);
+  });
   it('round-trips every message the contract lists', () => {
+    const contract: EffectiveSessionContract = {
+      contractId: 's1:0', sessionId: 's1', epoch: 0, protocol: 'termwright/2', framework: null,
+      providers: [
+        { id: 'terminal', kind: 'terminal', version: '1' },
+        {
+          id: 'app-strategies',
+          kind: 'application',
+          version: '1',
+          method: 'native',
+          capabilities: ['action-recipes'],
+        },
+      ],
+      capabilities: Object.fromEntries(SESSION_CAPABILITIES.map((id) => [id, id === 'keyboard-input'
+        ? { status: 'supported', evidence: { source: 'terminal', method: 'native', strength: 'authoritative', providerId: 'terminal' } }
+        : { status: 'unsupported', reason: 'not-negotiated' }])) as EffectiveSessionContract['capabilities'],
+      terminal: { profile: 'default', platform: 'darwin', mouseModesObservable: true },
+    };
     const messages: ServerMessage[] = [
       {
         v: 1,
@@ -32,20 +57,11 @@ describe('server messages', () => {
         sessionId: 's1',
         testId: 't1',
         terminalProfile: 'default',
-        adapter: { name: 'probe-fixture', version: '0.1.0' },
-        probe: {
-          framework: 'fixture',
-          frameworkVersion: '1.2.3',
-          probeVersion: '0.1.0',
-          identityKind: 'stable',
-          capabilities: ['stable-identity'],
-        },
-        capabilities: ['tree', 'states'],
-        adapterStatus: 'attached',
+        contract,
         columns: 80,
         rows: 24,
       },
-      { v: 1, type: 'run-start', mode: 'live', startedAt: 1_700_000_000_000 },
+      { v: 1, type: 'run-start', runId: 'run:test', mode: 'live', startedAt: 1_700_000_000_000 },
       {
         v: 1,
         type: 'test-start',
@@ -72,7 +88,34 @@ describe('server messages', () => {
         type: 'semantic',
         sessionId: 's1',
         revision: 7,
-        snapshot: { v: 1, sessionId: 's1', revision: 7, columns: 80, rows: 24, rootIds: [], nodes: [] },
+        snapshot: {
+          v: 2,
+          sessionId: 's1',
+          revision: 7,
+          columns: 80,
+          rows: 24,
+          rootIds: [],
+          nodes: [],
+          coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+          hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
+        },
+      },
+      {
+        v: 1,
+        type: 'action',
+        kind: 'action',
+        actionId: 'a1',
+        api: 'click',
+        t: 122,
+        ok: true,
+        sessionId: 's1',
+        ref: 'semantic:n1@7',
+        actionPlan: {
+          actionId: 'a1', kind: 'click', strategy: 'authoritative-pointer-region', contractId: 's1:0',
+          beforeSequence: 7, afterSequence: 8,
+          operations: [{ device: 'mouse', kind: 'down' }, { device: 'mouse', kind: 'up' }],
+          requirements: [],
+        },
       },
       {
         v: 1,
@@ -92,6 +135,7 @@ describe('server messages', () => {
       { v: 1, type: 'run-end', summary: { total: 1, passed: 0, failed: 1, skipped: 0, flaky: 1, durationMs: 900 } },
       { v: 1, type: 'run-cancelled', stoppedAt: 1_700_000_001_000 },
       { v: 1, type: 'run-cancel-failed', error: 'process did not exit' },
+      { v: 1, type: 'diagnostic-gap', source: 'ui-hub', droppedMessages: 3, droppedBytes: 512 },
     ];
     for (const message of messages) {
       expect(parseServerMessage(encodeMessage(message))).toEqual(message);
@@ -121,6 +165,9 @@ describe('server messages', () => {
     expect(() => parseServerMessage(
       '{"v":1,"type":"tests-discovered","tests":[{"id":"x","title":"x","file":"x.feature","source":{"file":"x.feature","line":0,"column":1}}]}',
     )).toThrow(/line and column must be positive integers/);
+    expect(() => parseServerMessage(
+      '{"v":1,"type":"diagnostic-gap","source":"ui-hub","droppedMessages":-1,"droppedBytes":0}',
+    )).toThrow(/non-negative integer/);
   });
 
   it('rejects malformed test timings', () => {
@@ -172,7 +219,7 @@ describe('server messages', () => {
     ).toThrow(/rows must be a finite number/);
   });
 
-  it('rejects incoherent probe health instead of displaying it', () => {
+  it('rejects removed parallel adapter metadata instead of accepting a fallback', () => {
     expect(() =>
       parseServerMessage(JSON.stringify({
         v: 1,
@@ -182,17 +229,11 @@ describe('server messages', () => {
         columns: 80,
         rows: 24,
         adapter: { name: 'probe-fixture', version: '0.1.0' },
-        probe: {
-          framework: 'fixture',
-          probeVersion: '0.1.0',
-          identityKind: 'frame-local',
-          capabilities: ['stable-identity'],
-        },
       })),
-    ).toThrow(/frame-local/);
+    ).toThrow(/use the frozen contract/);
   });
 
-  it('rejects probe identity without the adapter that supplied it', () => {
+  it('rejects removed probe and capability metadata', () => {
     expect(() =>
       parseServerMessage(JSON.stringify({
         v: 1,
@@ -208,10 +249,14 @@ describe('server messages', () => {
           capabilities: [],
         },
       })),
-    ).toThrow(/probe requires an adapter/);
+    ).toThrow(/use the frozen contract/);
+    expect(() => parseServerMessage(JSON.stringify({
+      v: 1, type: 'session', sessionId: 's1', terminalProfile: 'default',
+      columns: 80, rows: 24, capabilities: ['semantic-tree'],
+    }))).toThrow(/use the frozen contract/);
   });
 
-  it('rejects invented, duplicate or unbounded session metadata', () => {
+  it('rejects invalid adapter status and status without a framework contract', () => {
     const base = {
       v: 1,
       type: 'session',
@@ -219,23 +264,13 @@ describe('server messages', () => {
       terminalProfile: 'default',
       columns: 80,
       rows: 24,
-      adapter: { name: 'probe-fixture', version: '0.1.0' },
     };
-    expect(() =>
-      parseServerMessage(JSON.stringify({ ...base, capabilities: ['tree', 'telepathy'] })),
-    ).toThrow(/unsupported or duplicate/);
-    expect(() =>
-      parseServerMessage(JSON.stringify({ ...base, capabilities: ['tree', 'tree'] })),
-    ).toThrow(/unsupported or duplicate/);
-    expect(() =>
-      parseServerMessage(JSON.stringify({
-        ...base,
-        adapter: { name: 'x'.repeat(257), version: '1' },
-      })),
-    ).toThrow(/bounded string/);
     expect(() =>
       parseServerMessage(JSON.stringify({ ...base, adapterStatus: 'healing' })),
     ).toThrow(/adapterStatus is invalid/);
+    expect(() =>
+      parseServerMessage(JSON.stringify({ ...base, adapterStatus: 'attached' })),
+    ).toThrow(/requires a framework contract/);
   });
 
   it('rejects a message missing a required field instead of filling it in', () => {
@@ -274,20 +309,80 @@ describe('server messages', () => {
     expect(() => parseServerMessage('[1,2]')).toThrow(/not an object/);
   });
 
+  it('rejects action diagnostics with forged evidence provenance', () => {
+    expect(() => parseServerMessage(JSON.stringify({
+      v: 1, type: 'action', kind: 'action', api: 'click', t: 1, ok: true,
+      actionPlan: {
+        actionId: 'a1', kind: 'click', strategy: 'pointer', contractId: 's:0',
+        beforeSequence: 1, afterSequence: 2, operations: [], requirements: [],
+        physicalEvidence: { source: 'guess', method: 'heuristic', strength: 'authoritative', providerId: 'fake' },
+      },
+    }))).toThrow(/evidence/);
+  });
+
+  it('round-trips the exact failed actionability explanation', () => {
+    const message = {
+      v: 1, type: 'action', kind: 'action', api: 'click', t: 1, ok: false, error: 'not-actionable',
+      actionability: {
+        actionable: false, kind: 'click', contractId: 's:0', sequence: 9,
+        requirements: [{
+          kind: 'receives-pointer', target: 'save@9', verdict: 'unsatisfied', observation: 'known',
+          evidence: { source: 'application', method: 'native', strength: 'authoritative', providerId: 'app.router' },
+        }],
+        reason: { code: 'covered-by', message: 'Target is covered', targetRef: 'semantic:overlay@9' },
+      },
+    } as const;
+    expect(parseServerMessage(JSON.stringify(message))).toEqual(message);
+  });
+
+  it('rejects forged actionability attached to a successful action', () => {
+    expect(() => parseServerMessage(JSON.stringify({
+      v: 1, type: 'action', kind: 'action', api: 'click', t: 1, ok: true,
+      actionability: {
+        actionable: false, kind: 'click', contractId: 's:0', sequence: 9, requirements: [],
+        reason: { code: 'covered-by', message: 'forged' },
+      },
+    }))).toThrow(/only valid for a rejected/);
+  });
+
+  it('accepts every canonical Condition from the browser-safe protocol export', () => {
+    const action = parseServerMessage(JSON.stringify({
+      v: 1, type: 'action', kind: 'action', api: 'drag', t: 1, ok: false,
+      actionability: {
+        actionable: false, kind: 'drag', contractId: 's:0', sequence: 9,
+        requirements: CONDITION_KINDS.map((kind) => ({ kind, verdict: 'inconclusive', observation: 'unknown' })),
+        reason: { code: 'input-mode-disabled', message: 'disabled' },
+      },
+    }));
+    expect(action.type === 'action' ? action.actionability?.requirements.map(({ kind }) => kind) : []).toEqual(CONDITION_KINDS);
+  });
+
   it('does not accept a client message in the server direction', () => {
     expect(() => parseServerMessage('{"v":1,"type":"stop"}')).toThrow(UiProtocolError);
+  });
+
+  it('parses request-scoped control outcomes', () => {
+    expect(parseServerMessage('{"v":1,"type":"control-result","requestId":"pick-1","control":"pick","ok":true}')).toEqual({
+      v: 1,
+      type: 'control-result',
+      requestId: 'pick-1',
+      control: 'pick',
+      ok: true,
+    });
+    expect(parseServerMessage('{"v":1,"type":"control-result","requestId":"input-1","control":"input","ok":false,"error":"closed"}')).toEqual({
+      v: 1,
+      type: 'control-result',
+      requestId: 'input-1',
+      control: 'input',
+      ok: false,
+      error: 'closed',
+    });
+    expect(() => parseServerMessage('{"v":1,"type":"control-result","requestId":"input-1","control":"input","ok":true,"error":"closed"}')).toThrow(/error is required exactly when ok is false/u);
   });
 });
 
 describe('client messages', () => {
-  it('parses the four client types', () => {
-    expect(parseClientMessage('{"v":1,"type":"stop"}')).toEqual({ v: 1, type: 'stop' });
-    expect(parseClientMessage('{"v":1,"type":"rerun"}')).toEqual({ v: 1, type: 'rerun' });
-    expect(parseClientMessage('{"v":1,"type":"rerun","testIds":["t1"]}')).toEqual({
-      v: 1,
-      type: 'rerun',
-      testIds: ['t1'],
-    });
+  it('parses every client type', () => {
     expect(parseClientMessage('{"v":1,"type":"pick","sessionId":"s1"}')).toEqual({
       v: 1,
       type: 'pick',
@@ -299,10 +394,24 @@ describe('client messages', () => {
       sessionId: 's1',
       dataB64: 'DQ==',
     });
+    expect(parseClientMessage('{"v":1,"type":"inspect-actionability","requestId":"r1","sessionId":"s1","nodeId":"save"}')).toEqual({
+      v: 1,
+      type: 'inspect-actionability',
+      requestId: 'r1',
+      sessionId: 's1',
+      nodeId: 'save',
+    });
+    expect(parseClientMessage('{"v":1,"type":"input","sessionId":"s1","dataB64":"DQ==","requestId":"input-1"}')).toEqual({
+      v: 1,
+      type: 'input',
+      sessionId: 's1',
+      dataB64: 'DQ==',
+      requestId: 'input-1',
+    });
   });
 
   it('validates payload shapes', () => {
-    expect(() => parseClientMessage('{"v":1,"type":"rerun","testIds":[1]}')).toThrow(/array of strings/);
+    expect(() => parseClientMessage('{"v":1,"type":"rerun","testIds":[1]}')).toThrow(UiProtocolError);
     expect(() => parseClientMessage('{"v":1,"type":"pick"}')).toThrow(/sessionId must be a string/);
   });
 

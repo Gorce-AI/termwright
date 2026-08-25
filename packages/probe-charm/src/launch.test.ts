@@ -16,6 +16,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, describe, expect, it } from 'vitest';
+import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { CharmDetectionError } from './detect.js';
 import { CharmPrepareError, CLIENT_MODULE, prepareInstrumentedBuild } from './launch.js';
 
@@ -25,13 +26,10 @@ const FIXTURE = join(here, 'testing', 'fixture-v2');
 const roots: string[] = [];
 
 async function goAvailable(): Promise<boolean> {
-  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;
-  try {
+  return goTestCapability(async () => {
     await run('go', ['version']);
     return true;
-  } catch {
-    return false;
-  }
+  }, false, 'Go certification toolchain');
 }
 
 const hasGo = await goAvailable();
@@ -99,7 +97,6 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
       'charm.land/bubbles/v2',
     ]);
     expect(first.companionCopyDirs['charm.land/bubbles/v2']).toContain('v2.1.1');
-    expect(first.unpatchedCompanions).toEqual({});
     expect(first.workspaceFile.startsWith(app)).toBe(false);
     expect(first.env['GOWORK']).toBe(first.workspaceFile);
     expect(env['GOWORK']).toBeUndefined();
@@ -112,10 +109,10 @@ describe.skipIf(!hasGo)('prepareInstrumentedBuild', () => {
     const client = await realpath(join(here, '..', '..', '..', 'clients', 'go'));
     expect(workspace).toContain(`use ${client}`);
     expect(workspace).toContain(`replace ${CLIENT_MODULE} v0.0.0 => ${client}`);
-    // The launcher must consume the current v10 manifest, not resurrect the
+    // The launcher must consume the current manifest, not resurrect an
     // older handshake/capability patch through a parallel launcher patch set.
     await expect(readFile(join(first.copyDir, 'TERMWRIGHT.md'), 'utf8')).resolves.toContain(
-      "patch set v10 applied",
+      "patch set v15 applied",
     );
 
     await run('go', ['build', '-o', join(dir, 'app-bin'), '.'], {
@@ -201,7 +198,7 @@ func main() { _, _ = tea.NewProgram(model{}).Run() }
     await expect(failure).rejects.toMatchObject({ code: 'both-majors' });
   }, 300_000);
 
-  it('keeps Bubble Tea semantics when an optional Bubbles version is not pinned', async () => {
+  it('refuses an unpinned Bubbles companion instead of changing semantic breadth', async () => {
     const dir = await scratch('tw-charm-launch-companion-');
     const app = join(dir, 'app');
     await writeModule(app, [
@@ -210,14 +207,11 @@ func main() { _, _ = tea.NewProgram(model{}).Run() }
     ]);
     const env = { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') };
 
-    const prepared = await prepareInstrumentedBuild({ moduleDir: app, env });
-    expect(prepared.companionCopyDirs).toEqual({});
-    expect(prepared.unpatchedCompanions).toEqual({
-      'github.com/charmbracelet/bubbles': 'v0.21.0',
+    await expect(prepareInstrumentedBuild({ moduleDir: app, env })).rejects.toMatchObject({
+      code: 'unsupported-version',
+      module: 'github.com/charmbracelet/bubbles',
+      version: 'v0.21.0',
     });
-    expect(await readFile(prepared.workspaceFile, 'utf8')).not.toContain(
-      'replace github.com/charmbracelet/bubbles',
-    );
   }, 600_000);
 
   it('refuses vendor mode instead of silently changing the dependency graph', async () => {

@@ -39,7 +39,7 @@ Replaced wholly, never concatenated: an argv is not a merge.
 
 > `readonly` `optional` **env?**: `Readonly`\<`Record`\<`string`, `string`\>\>
 
-Defined in: [test/src/options.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L26)
+Defined in: [test/src/options.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L28)
 
 Merged key by key over the project's `env` — scoping one variable keeps
 the rest, which is the only behaviour that makes scoping usable here.
@@ -50,9 +50,19 @@ the rest, which is the only behaviour that makes scoping usable here.
 
 > `readonly` `optional` **failOnLogLevel?**: `false` \| `"trace"` \| `"debug"` \| `"info"` \| `"warn"` \| `"error"` \| `"fatal"`
 
-Defined in: [test/src/options.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L32)
+Defined in: [test/src/options.ts:34](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L34)
 
 Initial threshold for this test; `terminal.failOnLogLevel()` still wins.
+
+***
+
+### requiredCapabilities?
+
+> `readonly` `optional` **requiredCapabilities?**: readonly (`"focus"` \| `"pointer-input"` \| `"semantic-tree"` \| `"stable-identity"` \| `"intended-geometry"` \| `"clipped-geometry"` \| `"painted-region"` \| `"pointer-geometry"` \| `"pointer-hit-testing"` \| `"scroll"` \| `"render-order"` \| `"action-strategies"` \| `"keyboard-input"` \| `"focus-input"` \| `"paired-revisions"`)[]
+
+Defined in: [test/src/options.ts:23](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L23)
+
+Replaces the project capability requirements for this scope.
 
 ***
 
@@ -76,7 +86,7 @@ Defined in: [test/src/options.ts:21](https://github.com/Gorce-AI/termwright/blob
 
 > `readonly` `optional` **timeouts?**: [`TestTimeoutClasses`](../testtimeoutclasses/)
 
-Defined in: [test/src/options.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L28)
+Defined in: [test/src/options.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L30)
 
 Merged key by key over the project's timeout classes.
 
@@ -86,6 +96,6 @@ Merged key by key over the project's timeout classes.
 
 > `readonly` `optional` **trace?**: [`TraceMode`](../../type-aliases/tracemode/)
 
-Defined in: [test/src/options.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L30)
+Defined in: [test/src/options.ts:32](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L32)
 
 Trace policy for the sessions this file or suite launches.

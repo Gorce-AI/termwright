@@ -7,7 +7,7 @@
 import { useRef, useState } from 'react';
 import { Box, Text, useInput, type DOMElement } from 'ink';
 import { useSemantic } from '@termwright/ink';
-import { hits, isMouseReport, parseMousePress, useMouseReporting } from './mouse.js';
+import { isMouseReport, parseMousePress, routePointer, useMouseReporting, usePointerTarget } from './mouse.js';
 
 export interface ConfirmDialogProps {
   /** The question, rendered inside the dialog and used as its description. */
@@ -33,6 +33,8 @@ export function ConfirmDialog({
   const [focus, setFocus] = useState<Focus>('cancel');
 
   useMouseReporting();
+  usePointerTarget('confirm', confirmRef);
+  usePointerTarget('cancel', cancelRef);
 
   useSemantic(dialogRef, {
     role: 'dialog',
@@ -57,10 +59,11 @@ export function ConfirmDialog({
     if (isMouseReport(input)) {
       const point = parseMousePress(input);
       if (point === null) return;
-      if (hits(confirmRef.current, point)) {
+      const target = routePointer(point);
+      if (target === 'confirm') {
         setFocus('confirm');
         onConfirm();
-      } else if (hits(cancelRef.current, point)) {
+      } else if (target === 'cancel') {
         setFocus('cancel');
         onCancel();
       }

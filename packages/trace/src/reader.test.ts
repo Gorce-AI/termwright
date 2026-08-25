@@ -1,13 +1,14 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { packTrace, unpackTrace } from './archive.js';
 import { FakeSession, node, snapshot } from './__fixtures__/fake-session.js';
 import { TraceError } from './errors.js';
-import { openTrace } from './reader.js';
+import { inspectTrace, openTrace } from './reader.js';
 import { TRACE_FILES } from './types.js';
 import { createTraceWriter } from './writer.js';
+import { rewriteCommittedMember } from './__fixtures__/committed.js';
 
 const temporaries: string[] = [];
 
@@ -60,6 +61,31 @@ async function recordSample(dir: string): Promise<void> {
 }
 
 describe('openTrace', () => {
+  it('classifies complete, incomplete, corrupt, and unsupported artifacts', async () => {
+    const root = await workspace();
+    const completeDir = join(root, 'complete.twtrace');
+    await recordSample(completeDir);
+    const complete = await inspectTrace(completeDir);
+    expect(complete.status).toBe('complete');
+    if (complete.status === 'complete') await complete.reader.close();
+
+    const incompleteDir = join(root, 'incomplete.twtrace');
+    await recordSample(incompleteDir);
+    await unlink(join(incompleteDir, TRACE_FILES.commit));
+    expect((await inspectTrace(incompleteDir)).status).toBe('incomplete');
+
+    const corruptDir = join(root, 'corrupt.twtrace');
+    await recordSample(corruptDir);
+    await writeFile(join(corruptDir, TRACE_FILES.events), 'tampered\n');
+    expect((await inspectTrace(corruptDir)).status).toBe('corrupt');
+
+    const futureDir = join(root, 'future-status.twtrace');
+    await recordSample(futureDir);
+    const meta = JSON.parse(await readFile(join(futureDir, TRACE_FILES.meta), 'utf8')) as Record<string, unknown>;
+    await rewriteCommittedMember(futureDir, TRACE_FILES.meta, JSON.stringify({ ...meta, v: 99 }));
+    expect((await inspectTrace(futureDir)).status).toBe('unsupported-version');
+  });
+
   it('separates "you named the wrong thing" from "this archive is broken"', async () => {
     const root = await workspace();
 
@@ -88,7 +114,7 @@ describe('openTrace', () => {
     const meta = JSON.parse(await readFile(join(dir, TRACE_FILES.meta), 'utf8')) as {
       v: number;
     };
-    await writeFile(join(dir, TRACE_FILES.meta), JSON.stringify({ ...meta, v: 99 }));
+    await rewriteCommittedMember(dir, TRACE_FILES.meta, JSON.stringify({ ...meta, v: 99 }));
     // A real archive that lies about itself is a protocol violation, not a
     // missing one.
     await expect(openTrace(dir)).rejects.toMatchObject({ code: 'protocol-violation' });
@@ -222,7 +248,7 @@ describe('zip container', () => {
     const destination = join(root, 'restored.twtrace');
     const members = await unpackTrace(zipPath, destination);
     expect([...members].sort()).toEqual(
-      [TRACE_FILES.meta, TRACE_FILES.cast, TRACE_FILES.events, TRACE_FILES.semantics].sort(),
+      [TRACE_FILES.meta, TRACE_FILES.cast, TRACE_FILES.events, TRACE_FILES.semantics, TRACE_FILES.commit].sort(),
     );
     const restored = await openTrace(destination);
     expect(restored.meta.sessionId).toBe('sess-r');
@@ -236,6 +262,14 @@ describe('zip container', () => {
     });
     await expect(packTrace(root, join(root, 'x.zip'))).rejects.toThrow(/not a .twtrace/);
   });
+
+  it('refuses to package an incomplete trace', async () => {
+    const root = await workspace();
+    await writeFile(join(root, TRACE_FILES.meta), JSON.stringify({ v: 1 }));
+    await expect(packTrace(root, join(root, 'x.zip'))).rejects.toMatchObject({
+      code: 'protocol-violation',
+    });
+  });
 });
 
 describe('castOffset is required', () => {
@@ -245,10 +279,10 @@ describe('castOffset is required', () => {
     await recordSample(dir);
 
     // An archive from before castOffset was required: `t` alone.
-    await writeFile(
-      join(dir, TRACE_FILES.events),
+    await rewriteCommittedMember(
+      dir,
+      TRACE_FILES.events,
       `${JSON.stringify({ t: 120, kind: 'step-start', stepId: 's1', title: 'old' })}\n`,
-      'utf8',
     );
 
     const trace = await openTrace(dir);
@@ -269,10 +303,10 @@ describe('castOffset is required', () => {
     const root = await workspace();
     const dir = join(root, 'nonfinite.twtrace');
     await recordSample(dir);
-    await writeFile(
-      join(dir, TRACE_FILES.events),
+    await rewriteCommittedMember(
+      dir,
+      TRACE_FILES.events,
       `${JSON.stringify({ t: 1, castOffset: null, kind: 'action', api: 'x', ok: true })}\n`,
-      'utf8',
     );
 
     const trace = await openTrace(dir);
@@ -287,14 +321,14 @@ describe('castOffset is required', () => {
     const root = await workspace();
     const dir = join(root, 'secondline.twtrace');
     await recordSample(dir);
-    await writeFile(
-      join(dir, TRACE_FILES.events),
+    await rewriteCommittedMember(
+      dir,
+      TRACE_FILES.events,
       [
         JSON.stringify({ t: 0, castOffset: 0, kind: 'step-start', stepId: 's1', title: 'ok' }),
         JSON.stringify({ t: 5, kind: 'step-end', stepId: 's1', title: 'ok', status: 'passed' }),
         '',
       ].join('\n'),
-      'utf8',
     );
 
     const trace = await openTrace(dir);

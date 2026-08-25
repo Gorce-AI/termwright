@@ -19,9 +19,20 @@ import {
   writeWorkspace,
 } from '@termwright/probe-go';
 import { afterAll, describe, expect, it } from 'vitest';
+import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { BUBBLETEA_MODULES, type CharmMajor } from './detect.js';
 
 const run = promisify(execFile);
+
+async function runGo(args: readonly string[], options: Parameters<typeof run>[2]): Promise<{ stdout: string }> {
+  try {
+    const result = await run('go', [...args], options);
+    return { stdout: String(result.stdout) };
+  } catch (error) {
+    const failure = error as Error & { readonly stdout?: string; readonly stderr?: string };
+    throw new Error(`${failure.message}\n${failure.stdout ?? ''}\n${failure.stderr ?? ''}`);
+  }
+}
 const here = dirname(fileURLToPath(import.meta.url));
 const CLIENT = join(here, '..', '..', '..', 'clients', 'go');
 
@@ -32,13 +43,10 @@ const UPSTREAM: Readonly<Record<CharmMajor, { version: string; path: readonly st
 };
 
 async function goAvailable(): Promise<boolean> {
-  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;
-  try {
+  return goTestCapability(async () => {
     await run('go', ['version']);
     return true;
-  } catch {
-    return false;
-  }
+  }, false, 'Go certification toolchain');
 }
 
 const hasGo = await goAvailable();
@@ -91,7 +99,9 @@ describe('the runtime capability declarations', () => {
       const capabilities = [
         ...(literal?.matchAll(/protocol\.(Cap[A-Za-z]+)/gu) ?? []),
       ].map((match) => match[1]);
-      expect(capabilities).toEqual(['CapTree', 'CapStates', 'CapActions', 'CapRenderRevisions']);
+      expect(capabilities).toEqual([
+        'CapTree', 'CapStates', 'CapFocusState', 'CapActions', 'CapRenderRevisions',
+      ]);
 
       // This is a different capability vocabulary: it describes facts the
       // framework exposes, not message kinds the adapter can send.
@@ -123,7 +133,7 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     await expect(
       run('go', ['build', './...'], { cwd: copy, env: { ...process.env, GOWORK: workspace } }),
     ).resolves.toBeDefined();
-    const { stdout } = await run('go', ['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
+    const { stdout } = await runGo(['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
       cwd: copy,
       env: { ...process.env, GOWORK: workspace },
     });
@@ -144,7 +154,7 @@ describe.skipIf(!hasGo)('the patch sets', () => {
     await expect(
       run('go', ['build', './...'], { cwd: copy, env: { ...process.env, GOWORK: workspace } }),
     ).resolves.toBeDefined();
-    const { stdout } = await run('go', ['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
+    const { stdout } = await runGo(['test', '-run', 'Termwright', '-count=1', '-v', '.'], {
       cwd: copy,
       env: { ...process.env, GOWORK: workspace },
     });

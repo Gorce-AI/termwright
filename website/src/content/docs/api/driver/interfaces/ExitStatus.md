@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ExitStatus
 
-Defined in: [api.ts:254](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L254)
+Defined in: [driver/src/api.ts:374](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L374)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **code**: `number` \| `null`
 
-Defined in: [api.ts:255](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L255)
+Defined in: [driver/src/api.ts:375](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L375)
 
 ***
 
@@ -44,4 +44,4 @@ Defined in: [api.ts:255](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **signal**: `string` \| `null`
 
-Defined in: [api.ts:256](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L256)
+Defined in: [driver/src/api.ts:376](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L376)

@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, type DOMElement } from 'ink';
 import { useSemantic } from '@termwright/ink';
 import { ConfirmDialog } from './confirm-dialog.js';
-import { hits, isMouseReport, parseMousePress, useMouseReporting } from './mouse.js';
+import { isMouseReport, parseMousePress, routePointer, useMouseReporting, usePointerTarget } from './mouse.js';
 import { SEED_TODOS, type Todo } from './store.js';
 
 export interface TodoAppProps {
@@ -47,6 +47,10 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
   const current = visible[Math.min(selected, visible.length - 1)];
 
   useMouseReporting();
+  usePointerTarget('filter', filterRef);
+  usePointerTarget('todos', listRef);
+  usePointerTarget('add', addRef);
+  usePointerTarget('remove', removeRef);
 
   // Persist on change, not on mount: a run that only looks at the list must
   // leave the file exactly as it found it.
@@ -110,12 +114,13 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
       if (isMouseReport(input)) {
         const point = parseMousePress(input);
         if (point === null) return;
-        if (hits(filterRef.current, point)) setFocus('filter');
-        else if (hits(listRef.current, point)) setFocus('list');
-        else if (hits(addRef.current, point)) {
+        const target = routePointer(point);
+        if (target === 'filter') setFocus('filter');
+        else if (target === 'todos') setFocus('list');
+        else if (target === 'add') {
           setFocus('add');
           activate('add');
-        } else if (hits(removeRef.current, point)) {
+        } else if (target === 'remove') {
           setFocus('remove');
           activate('remove');
         }
@@ -123,7 +128,9 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
       }
 
       if (key.tab) {
-        setFocus((from) => NEXT_FOCUS[from]);
+        const next = NEXT_FOCUS[focus];
+        setFocus(next);
+        setStatus(`focused ${next}`);
         return;
       }
       if (key.return) {
@@ -157,12 +164,10 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
       </Box>
 
       <Box ref={listRef} flexDirection="column">
-        {visible.map((todo, index) => (
+        {visible.map((todo) => (
           <TodoRow
             key={todo.id}
             todo={todo}
-            index={index}
-            total={visible.length}
             selected={current?.id === todo.id}
           />
         ))}
@@ -202,13 +207,9 @@ export function TodoApp({ todos: initial = SEED_TODOS, onTodosChange }: TodoAppP
 
 function TodoRow({
   todo,
-  index,
-  total,
   selected,
 }: {
   readonly todo: Todo;
-  readonly index: number;
-  readonly total: number;
   readonly selected: boolean;
 }) {
   const ref = useRef<DOMElement>(null);

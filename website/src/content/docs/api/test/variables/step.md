@@ -13,11 +13,11 @@ editUrl: false
 
 > `const` **step**: [`StepRunner`](../../type-aliases/steprunner/)
 
-Defined in: [test/src/fixtures.ts:440](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L440)
+Defined in: [test/src/fixtures.ts:696](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/fixtures.ts#L696)
 
 Runs `body` as a named step: a marker in the recording, a step event in the
 trace, and a labelled section in the HTML report.
 
 This is the free-standing form, used by `test.step()`; it attaches to the
-most recently started test. Prefer the `step` fixture, which is bound to its
-own test and therefore stays correct under `test.concurrent`.
+the current AttemptId installed by the exact runner, so it remains correct
+under `test.concurrent`, including duplicate authored titles.

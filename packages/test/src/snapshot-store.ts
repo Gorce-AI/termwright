@@ -20,6 +20,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { UpdateSnapshotsMode } from './config.js';
+import { currentAttemptRuntime } from './attempt-context.js';
 
 /** Which oracle a snapshot belongs to; each kind gets its own file. */
 export type SnapshotKind = 'semantic' | 'cells';
@@ -156,31 +157,16 @@ export function resetSnapshotCache(): void {
   files.clear();
 }
 
-let scope: string | undefined;
-const counters = new Map<string, number>();
-
-/**
- * Starts a fresh numbering scope for a test attempt.
- *
- * Retries reuse the test id, so the fixture calls this on every attempt: a
- * retried test must reuse the same snapshot keys, not append new ones.
- */
+/** Resets counters inside the current AttemptId; primarily useful to test retry semantics. */
 export function beginSnapshotScope(): void {
-  scope = undefined;
-  counters.clear();
+  currentAttemptRuntime().snapshotCounters.clear();
 }
 
 /**
  * Allocates the next key for a test, e.g. `login > shows the dialog 2`.
- *
- * Falls back to resetting the counters when the test identity changes, so
- * matchers used without the fixtures still get stable keys.
  */
-export function nextSnapshotKey(testId: string, testName: string, kind: SnapshotKind): string {
-  if (scope !== testId) {
-    scope = testId;
-    counters.clear();
-  }
+export function nextSnapshotKey(testName: string, kind: SnapshotKind): string {
+  const counters = currentAttemptRuntime().snapshotCounters;
   const counterKey = `${testName}::${kind}`;
   const next = (counters.get(counterKey) ?? 0) + 1;
   counters.set(counterKey, next);

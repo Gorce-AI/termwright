@@ -13,7 +13,7 @@ editUrl: false
 
 > **serializeSemanticSnapshot**(`snapshot`, `options?`): `string`
 
-Defined in: [test/src/yaml-serialize.ts:82](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/yaml-serialize.ts#L82)
+Defined in: [test/src/yaml-serialize.ts:80](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/yaml-serialize.ts#L80)
 
 Renders the snapshot as YAML.
 

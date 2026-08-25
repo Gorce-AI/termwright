@@ -9,8 +9,10 @@
  */
 
 import { expect } from 'vitest';
-import { parseRef, type BoundsExpectation, type Locator, type ScreenSnapshot, type SpatialRelationExpectation, type TerminalHarness } from '@termwright/driver';
+import { parseRef, TimeoutError, type AnyLocator, type BoundsExpectation, type ScreenSnapshot, type SemanticLocator, type SpatialRelationExpectation, type TerminalHarness } from '@termwright/driver';
 import type {
+  Condition,
+  LocatorRef,
   Observation,
   Rect,
   SemanticExtendedState,
@@ -36,8 +38,9 @@ import {
   writeSnapshot,
   type SnapshotKind,
 } from './snapshot-store.js';
-import { recordAssert, scopeKey } from './trace-context.js';
+import { recordAssert } from './trace-context.js';
 import { formatLogEntry, logsOf, type LogCollection, type LogQuery } from './logs.js';
+import { attemptOperationTimeout, currentAttemptContext } from './attempt-context.js';
 
 /** Every matcher accepts a per-assertion timeout override. */
 export interface PollOptions {
@@ -69,7 +72,7 @@ export interface SemanticSnapshotMatcherOptions extends PollOptions {
    * `application`. Re-resolved on every attempt, so a re-render that mints new
    * node ids does not invalidate the scope.
    */
-  readonly within?: Locator;
+  readonly within?: AnyLocator;
   /** Snapshot this node's subtree, the node included. Mutually exclusive with `within`. */
   readonly rootId?: string;
   /** Which state flags a written snapshot records. Default `stable`. */
@@ -91,6 +94,12 @@ export interface TermwrightMatchers<R = unknown> {
   toHaveSpatialRelation(expected: SpatialRelationExpectation, options?: PollOptions & { readonly box?: 'visible' | 'intended' }): R;
   /** The locator resolves to the node carrying `state.focused`. */
   toBeFocused(options?: PollOptions): R;
+  toBeEnabled(options?: PollOptions): R;
+  toBeDisabled(options?: PollOptions): R;
+  toBeChecked(options?: PollOptions): R;
+  toBeSelected(options?: PollOptions): R;
+  toBeExpanded(options?: PollOptions): R;
+  toHaveValue(expected: string | RegExp, options?: TextMatcherOptions): R;
   /** Every listed state key holds; unlisted keys are not constrained. */
   toHaveState(expected: Partial<SemanticState>, options?: PollOptions): R;
   /** Every listed application-domain key deep-equals the expected JSON value. */
@@ -131,14 +140,36 @@ interface MatcherResult {
   readonly expected?: unknown;
 }
 
-const POLL_INTERVAL_MS = 25;
-
 /** Driver failures that will never become true by waiting longer. */
 const FATAL_CODES: ReadonlySet<string> = new Set([
   'session-closed',
-  'unsupported-action',
+  'semantic-capability-unavailable',
+  'probe-attach-failed',
+  'capability-unavailable',
+  'capability-provider-lost',
+  'capability-provider-violation',
+  'adapter-guarantee-violation',
+  'duplicate-semantic-key',
   'protocol-violation',
 ]);
+
+async function conditionProbe(
+  locator: AnyLocator,
+  condition: Condition,
+  positive: string,
+  negative: string,
+  timeout?: number,
+): Promise<Probe> {
+  // The public screen domain exposes only physical conditions. This shared
+  // matcher adapter receives a canonical condition chosen by the matcher and
+  // calls the common internal evaluator after that choice has been made.
+  const result = await (locator as unknown as { evaluateCondition(value: Condition, options: PollOptions): Promise<import('@termwright/protocol').ConditionResult> })
+    .evaluateCondition(condition, timeout === undefined ? {} : { timeout });
+  if (result.observation.status === 'known') {
+    return { pass: result.observation.value, actual: result.observation.value ? positive : negative };
+  }
+  return inconclusive(result.observation, condition.kind);
+}
 
 // ---------------------------------------------------------------------------
 // Locator matchers
@@ -154,70 +185,38 @@ async function toBeVisible(
     locator,
     options,
     expected: 'visible',
-    probe: async () => {
-      const observation = await locator.visibility();
-      if (
-        observation.attached.status === 'absent' ||
-        (observation.attached.status === 'known' && observation.attached.value === false)
-      ) return { pass: false, actual: 'detached' };
-      if (observation.displayed.status === 'known' && !observation.displayed.value) return { pass: false, actual: 'hidden' };
-      if (observation.viewport.status === 'known') {
-        const visible = observation.viewport.value.ratio > 0;
-        return { pass: visible, actual: visible ? 'visible' : 'offscreen' };
-      }
-      return inconclusive(observation.viewport, 'visibility');
-    },
+    probe: (timeout) => conditionProbe(locator, { kind: 'visible', target: locator.description }, 'visible', 'hidden', timeout),
   });
 }
 
 async function toBeAttached(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
   const locator = asLocator(received, 'toBeAttached');
-  return locatorAssertion(this, { matcher: 'toBeAttached', locator, options, expected: 'attached', probe: async () => {
-    const value = await locator.visibility();
-    return observedBoolean(value.attached, 'attached', 'detached');
-  }});
+  return locatorAssertion(this, { matcher: 'toBeAttached', locator, options, expected: 'attached', probe: (timeout) =>
+    conditionProbe(locator, { kind: 'attached', target: locator.description }, 'attached', 'detached', timeout) });
 }
 
 async function toBeDetached(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
   const locator = asLocator(received, 'toBeDetached');
-  return locatorAssertion(this, { matcher: 'toBeDetached', locator, options, expected: 'detached', probe: async () => {
-    const value = (await locator.visibility()).attached;
-    if (value.status === 'known') return { pass: !value.value, actual: value.value ? 'attached' : 'detached' };
-    if (value.status === 'absent') return { pass: true, actual: 'detached' };
-    return inconclusive(value, 'attachment');
-  }});
+  return locatorAssertion(this, { matcher: 'toBeDetached', locator, options, expected: 'detached', probe: (timeout) =>
+    conditionProbe(locator, { kind: 'detached', target: locator.description }, 'detached', 'attached', timeout) });
 }
 
 async function toBeDisplayed(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
   const locator = asLocator(received, 'toBeDisplayed');
-  return locatorAssertion(this, { matcher: 'toBeDisplayed', locator, options, expected: 'displayed', probe: async () => {
-    const value = await locator.visibility();
-    return observedBoolean(value.displayed, 'displayed', 'not displayed');
-  }});
+  return locatorAssertion(this, { matcher: 'toBeDisplayed', locator, options, expected: 'displayed', probe: (timeout) =>
+    conditionProbe(locator, { kind: 'displayed', target: locator.description }, 'displayed', 'not displayed', timeout) });
 }
 
 async function toBeHidden(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
   const locator = asLocator(received, 'toBeHidden');
-  return locatorAssertion(this, { matcher: 'toBeHidden', locator, options, expected: 'hidden or detached', probe: async () => {
-    const value = await locator.visibility();
-    if (value.attached.status === 'absent' || (value.attached.status === 'known' && !value.attached.value)) {
-      return { pass: true, actual: 'detached' };
-    }
-    if (value.attached.status !== 'known') return inconclusive(value.attached, 'attachment');
-    if (value.displayed.status === 'known') {
-      return { pass: !value.displayed.value, actual: value.displayed.value ? 'displayed' : 'hidden' };
-    }
-    if (value.displayed.status === 'absent') return { pass: true, actual: value.displayed.reason };
-    return inconclusive(value.displayed, 'display state');
-  }});
+  return locatorAssertion(this, { matcher: 'toBeHidden', locator, options, expected: 'hidden or detached', probe: (timeout) =>
+    conditionProbe(locator, { kind: 'hidden', target: locator.description }, 'hidden or detached', 'displayed', timeout) });
 }
 
 async function toBeOffscreen(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
   const locator = asLocator(received, 'toBeOffscreen');
-  return locatorAssertion(this, { matcher: 'toBeOffscreen', locator, options, expected: 'offscreen', probe: async () => {
-    const value = await locator.visibility();
-    return observedBoolean(value.offscreen, 'offscreen', 'on screen');
-  }});
+  return locatorAssertion(this, { matcher: 'toBeOffscreen', locator, options, expected: 'offscreen', probe: (timeout) =>
+    conditionProbe(locator, { kind: 'offscreen', target: locator.description }, 'offscreen', 'on screen', timeout) });
 }
 
 async function toBeInViewport(this: MatcherState, received: unknown, options: PollOptions & { readonly ratio?: number; readonly fully?: boolean } = {}): Promise<MatcherResult> {
@@ -226,24 +225,15 @@ async function toBeInViewport(this: MatcherState, received: unknown, options: Po
     throw new TypeError('toBeInViewport ratio must be a finite number from 0 through 1');
   }
   const threshold = options.ratio;
-  return locatorAssertion(this, { matcher: 'toBeInViewport', locator, options, expected: options.fully === true ? 'fully inside viewport' : threshold === undefined ? 'any viewport intersection' : `viewport ratio >= ${threshold}`, probe: async () => {
-    const value = (await locator.visibility()).viewport;
-    if (value.status !== 'known') return inconclusive(value, 'viewport intersection');
-    const pass = options.fully === true
-      ? value.value.fullyInside
-      : threshold === undefined
-        ? value.value.ratio > 0
-        : value.value.ratio >= threshold;
-    return { pass, actual: `ratio ${value.value.ratio}` };
-  }});
+  const ratio = options.fully === true ? 1 : threshold ?? Number.MIN_VALUE;
+  return locatorAssertion(this, { matcher: 'toBeInViewport', locator, options, expected: options.fully === true ? 'fully inside viewport' : threshold === undefined ? 'any viewport intersection' : `viewport ratio >= ${threshold}`, probe: (timeout) =>
+    conditionProbe(locator, { kind: 'in-viewport', target: locator.description, minRatio: ratio }, 'in viewport', 'outside viewport', timeout) });
 }
 
 async function toReceivePointerEvents(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
   const locator = asLocator(received, 'toReceivePointerEvents');
-  return locatorAssertion(this, { matcher: 'toReceivePointerEvents', locator, options, expected: 'receives pointer events', probe: async () => {
-    const value = (await locator.hitTest()).receivesEvents;
-    return observedBoolean(value, 'receives pointer events', 'does not receive pointer events');
-  }});
+  return locatorAssertion(this, { matcher: 'toReceivePointerEvents', locator, options, expected: 'receives pointer events', probe: (timeout) =>
+    conditionProbe(locator, { kind: 'receives-pointer', target: locator.description }, 'receives pointer events', 'does not receive pointer events', timeout) });
 }
 
 async function toHaveBounds(this: MatcherState, received: unknown, expected: BoundsExpectation, options: PollOptions & { readonly box?: 'visible' | 'intended' } = {}): Promise<MatcherResult> {
@@ -294,11 +284,72 @@ async function toBeFocused(
     locator,
     options,
     expected: 'focused',
-    probe: async () => {
-      const state = await locator.semanticState();
-      if (state === null) return { pass: false, actual: 'not a semantic node (no focus state)' };
-      return { pass: state.focused === true, actual: state.focused === true ? 'focused' : 'not focused' };
-    },
+    probe: (timeout) => conditionProbe(locator, { kind: 'focused', target: locator.description }, 'focused', 'not focused', timeout),
+  });
+}
+
+async function semanticFlag(
+  state: MatcherState,
+  received: unknown,
+  matcher: string,
+  key: 'disabled' | 'checked' | 'selected' | 'expanded',
+  expectedValue: boolean,
+  options: PollOptions,
+): Promise<MatcherResult> {
+  const locator = asLocator(received, matcher);
+  return locatorAssertion(state, {
+    matcher,
+    locator,
+    options,
+    expected: expectedValue ? key : `not ${key}`,
+    probe: (timeout) => conditionProbe(locator,
+      key === 'disabled'
+        ? { kind: expectedValue ? 'disabled' : 'enabled', target: locator.description }
+        : { kind: key, target: locator.description, value: expectedValue },
+      expectedValue ? key : `not ${key}`,
+      expectedValue ? `not ${key}` : key, timeout),
+  });
+}
+
+async function toBeEnabled(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  return semanticFlag(this, received, 'toBeEnabled', 'disabled', false, options);
+}
+
+async function toBeDisabled(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  return semanticFlag(this, received, 'toBeDisabled', 'disabled', true, options);
+}
+
+async function toBeChecked(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  return semanticFlag(this, received, 'toBeChecked', 'checked', true, options);
+}
+
+async function toBeSelected(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  return semanticFlag(this, received, 'toBeSelected', 'selected', true, options);
+}
+
+async function toBeExpanded(this: MatcherState, received: unknown, options: PollOptions = {}): Promise<MatcherResult> {
+  return semanticFlag(this, received, 'toBeExpanded', 'expanded', true, options);
+}
+
+async function toHaveValue(
+  this: MatcherState,
+  received: unknown,
+  expected: string | RegExp,
+  options: TextMatcherOptions = {},
+): Promise<MatcherResult> {
+  const locator = asLocator(received, 'toHaveValue');
+  const exact = options.exact ?? true;
+  return locatorAssertion(this, {
+    matcher: 'toHaveValue',
+    locator,
+    options,
+    expected: describeExpectedText(expected, exact),
+    probe: (timeout) => conditionProbe(locator, {
+      kind: 'value', target: locator.description,
+      matcher: expected instanceof RegExp
+        ? { kind: 'regex', source: expected.source, flags: expected.flags }
+        : { kind: exact ? 'exact' : 'substring', text: expected },
+    }, 'value matched', 'value did not match', timeout),
   });
 }
 
@@ -308,7 +359,7 @@ async function toHaveState(
   expected: Partial<SemanticState>,
   options: PollOptions = {},
 ): Promise<MatcherResult> {
-  const locator = asLocator(received, 'toHaveState');
+  const locator = asSemanticLocator(received, 'toHaveState');
   return locatorAssertion(this, {
     matcher: 'toHaveState',
     locator,
@@ -334,7 +385,7 @@ async function toHaveExtendedState(
   expected: SemanticExtendedState,
   options: PollOptions = {},
 ): Promise<MatcherResult> {
-  const locator = asLocator(received, 'toHaveExtendedState');
+  const locator = asSemanticLocator(received, 'toHaveExtendedState');
   return locatorAssertion(this, {
     matcher: 'toHaveExtendedState',
     locator,
@@ -392,6 +443,15 @@ async function toHaveText(
     return locatorAssertion(this, {
       matcher: 'toHaveText',
       options,
+      eventSource: {
+        revision: () => harness.checkpoint(),
+        waitForChange: async (after, timeout) => {
+          await harness.waitForCheckpointChange({
+            after: after as import('@termwright/protocol').ObservationStamp,
+            timeout,
+          });
+        },
+      },
       expected: describeExpectedText(expected, exact),
       probe: async () => {
         const text = harness.screen().text();
@@ -424,6 +484,8 @@ async function toMatchCellSnapshot(
   options: CellSnapshotMatcherOptions = {},
 ): Promise<MatcherResult> {
   const locator = isLocator(received) ? received : undefined;
+  const harness = isHarness(received) ? received : undefined;
+  const source = locator ?? harness;
   const screen = locator === undefined ? asScreenSource(received, 'toMatchCellSnapshot') : undefined;
   const config = getTermwrightConfig();
   const serialize = async (): Promise<string> =>
@@ -444,6 +506,7 @@ async function toMatchCellSnapshot(
         : { ok: false, actual, reason: 'the visible grid differs from the stored snapshot' };
     },
     ...(locator === undefined ? {} : { target: locator.description }),
+    ...(source === undefined ? {} : { source }),
   });
 }
 
@@ -454,11 +517,13 @@ async function toMatchSemanticSnapshot(
   options: SemanticSnapshotMatcherOptions = {},
 ): Promise<MatcherResult> {
   const tree = asTreeSource(received, 'toMatchSemanticSnapshot');
+  const harness = isHarness(received) ? received : undefined;
+  const source = options.within ?? harness;
   if (options.within !== undefined && options.rootId !== undefined) {
     throw new TypeError('toMatchSemanticSnapshot takes either { within } or { rootId }, not both');
   }
   const timeout = options.timeout ?? getTermwrightConfig().timeouts.expect;
-  let scopeRef: string | undefined;
+  let scopeRef: LocatorRef | undefined;
 
   /** Resolves the scope afresh, so a re-render between attempts is harmless. */
   const scope = async (): Promise<{ rootId?: string; includeRoot?: boolean }> => {
@@ -504,7 +569,8 @@ async function toMatchSemanticSnapshot(
         ? 'semantic tree'
         : `semantic tree within ${options.within.description}`,
     ref: () => scopeRef,
-    // `capabilities().semanticTree` is true from the handshake, but the tree
+    ...(source === undefined ? {} : { source }),
+    // the frozen contract supports semantic-tree, but the first paired tree
     // itself only becomes observable once a snapshot and its render-commit
     // marker have been paired — a screen wait can land in that gap.
     ready: () => tree() !== null,
@@ -555,6 +621,10 @@ async function toHaveLogged(
   return locatorAssertion(this, {
     matcher: 'toHaveLogged',
     options,
+    eventSource: {
+      revision: () => logs.revision(),
+      waitForChange: (after, timeout) => logs.waitForChange(after as number, timeout),
+    },
     expected: `a log entry matching ${JSON.stringify(query, replaceRegExp)}`,
     probe: async () => {
       const found = logs.filter(query);
@@ -609,29 +679,20 @@ function inconclusive(observation: Observation<unknown>, label: string): Probe {
   return { pass: false, conclusive: false, actual: `${label} ${observation.status}: ${observation.reason}` };
 }
 
-function observedBoolean(observation: Observation<boolean>, yes: string, no: string): Probe {
-  if (observation.status === 'known') return { pass: observation.value, actual: observation.value ? yes : no };
-  if (observation.status === 'absent') return { pass: false, actual: observation.reason };
-  return inconclusive(observation, yes);
-}
-
 interface LocatorAssertion {
   readonly matcher: string;
-  readonly locator?: Locator;
+  readonly locator?: AnyLocator;
   readonly options: PollOptions;
   readonly expected: string;
-  probe(): Promise<Probe>;
+  probe(timeout?: number): Promise<Probe>;
   diagnostics?(): string;
+  readonly eventSource?: {
+    revision(): unknown;
+    waitForChange(after: unknown, timeout: number): Promise<void>;
+  };
 }
 
 /** The trace scope this assertion belongs to, when Vitest tells us which test it is. */
-function testKey(state: MatcherState): string | undefined {
-  const { testPath, currentTestName } = state;
-  return testPath === undefined || currentTestName === undefined
-    ? undefined
-    : scopeKey(testPath, currentTestName);
-}
-
 /** Whether this assertion was written as `.not`. */
 function negated(state: MatcherState): boolean {
   return state.isNot === true;
@@ -639,23 +700,45 @@ function negated(state: MatcherState): boolean {
 
 async function locatorAssertion(state: MatcherState, spec: LocatorAssertion): Promise<MatcherResult> {
   const isNot = negated(state);
-  const timeout = spec.options.timeout ?? getTermwrightConfig().timeouts.expect;
-  const deadline = Date.now() + timeout;
+  const requestedTimeout = spec.options.timeout ?? getTermwrightConfig().timeouts.expect;
+  const timeout = attemptOperationTimeout(requestedTimeout, 'assertion');
+  const deadline = performance.now() + timeout;
   const target = spec.locator === undefined ? 'terminal' : describeLocator(spec.locator);
   let last: Probe = { pass: false, actual: 'not probed' };
   let failure: unknown;
 
   for (;;) {
+    const locatorSource = spec.locator === undefined ? undefined : {
+      revision: () => spec.locator?.checkpoint(),
+      waitForChange: async (after: unknown, wait: number) => {
+        await spec.locator?.waitForCheckpointChange({
+          after: after as import('@termwright/protocol').ObservationStamp,
+          timeout: wait,
+        });
+      },
+    };
+    const source = spec.eventSource ?? locatorSource;
+    const checkpoint = source?.revision();
+    const remaining = Math.max(0, deadline - performance.now());
     try {
-      last = await spec.probe();
+      last = await spec.probe(remaining);
       failure = undefined;
     } catch (error) {
       if (isFatal(error)) throw error;
       failure = error;
       last = { pass: false, actual: errorSummary(error) };
     }
-    if (last.fatal === true || (last.conclusive !== false && last.pass !== isNot) || Date.now() >= deadline) break;
-    await delay(POLL_INTERVAL_MS);
+    if (last.fatal === true || (last.conclusive !== false && last.pass !== isNot) || performance.now() >= deadline) break;
+    if (source === undefined || checkpoint === undefined) {
+      throw new TypeError(`${spec.matcher} has no event source; polling matchers are not supported`);
+    }
+    try {
+      await source.waitForChange(checkpoint, Math.max(0, deadline - performance.now()));
+    } catch (error) {
+      if (isFatal(error)) throw error;
+      failure = error;
+      break;
+    }
   }
 
   // An unknown observation must fail both a positive assertion and `.not`.
@@ -674,7 +757,6 @@ async function locatorAssertion(state: MatcherState, spec: LocatorAssertion): Pr
       ...(resolution.observation === undefined ? {} : { observation: resolution.observation }),
       ...(pass === isNot ? { error: `expected ${spec.expected}, received ${last.actual}` } : {}),
     },
-    testKey(state),
   );
 
   const diagnostics = pass === isNot ? failureDiagnostics(spec, failure, resolution.error) : '';
@@ -708,18 +790,19 @@ interface SnapshotAssertion {
   /** Subject shown in the failure header. Defaults to the snapshot kind. */
   readonly target?: string;
   /** Ref of the scope the snapshot was taken from, when it was scoped. */
-  ref?(): string | undefined;
+  ref?(): LocatorRef | undefined;
   /** Whether the subject can be serialized yet. Absent means always. */
   ready?(): boolean;
   /** Async because a scoped snapshot resolves its locator per attempt. */
   serialize(): string | Promise<string>;
   compare(stored: string): Comparison | Promise<Comparison>;
+  readonly source?: Pick<TerminalHarness | AnyLocator, 'checkpoint' | 'waitForCheckpointChange'>;
 }
 
 async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): Promise<MatcherResult> {
   const isNot = negated(state);
   const config = getTermwrightConfig();
-  const timeout = spec.options.timeout ?? config.timeouts.expect;
+  const timeout = attemptOperationTimeout(spec.options.timeout ?? config.timeouts.expect, 'assertion');
   // Allocated once per assertion: asking twice would consume two snapshot keys.
   const location =
     spec.inline === undefined ? snapshotLocation(state, spec.kind, config.snapshotDir) : undefined;
@@ -730,7 +813,7 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
     if (isNot) {
       throw new TypeError(`${spec.matcher} cannot be negated without an inline expected snapshot`);
     }
-    await settle(spec, Date.now() + timeout);
+    await settle(spec, performance.now() + timeout);
     const mode = updateMode(state);
     const place = location ?? snapshotLocation(state, spec.kind, config.snapshotDir);
     const produced = await spec.serialize();
@@ -744,14 +827,28 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
       };
     }
     writeSnapshot(place.file, place.key, produced);
-    recordAssert({ api: spec.matcher, ok: true, selector: place.key }, testKey(state));
+    recordAssert({ api: spec.matcher, ok: true, selector: place.key });
     return { pass: true, message: () => `${spec.matcher}: snapshot written` };
   }
 
-  const deadline = Date.now() + timeout;
+  const deadline = performance.now() + timeout;
+  let checkpoint = spec.source?.checkpoint();
   let comparison = await spec.compare(stored);
-  while (comparison.ok === isNot && Date.now() < deadline) {
-    await delay(POLL_INTERVAL_MS);
+  while (comparison.ok === isNot && performance.now() < deadline) {
+    if (spec.source === undefined || checkpoint === undefined) {
+      throw new TypeError(`${spec.matcher} has no event source; polling snapshots are not supported`);
+    }
+    try {
+      await spec.source.waitForCheckpointChange({ after: checkpoint, timeout: Math.max(0, deadline - performance.now()) });
+    } catch (error) {
+      // No relevant revision before this assertion's own deadline means the
+      // last authoritative comparison is the result. Session loss, protocol
+      // failure and every other error still fail closed instead of being
+      // disguised as a snapshot mismatch.
+      if (!(error instanceof TimeoutError)) throw error;
+      break;
+    }
+    checkpoint = spec.source.checkpoint();
     comparison = await spec.compare(stored);
   }
 
@@ -759,7 +856,7 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
   if (location !== undefined && !isNot) {
     if (mode === 'all' || (mode === 'changed' && !comparison.ok)) {
       writeSnapshot(location.file, location.key, comparison.actual);
-      recordAssert({ api: spec.matcher, ok: true, selector: location.key }, testKey(state));
+      recordAssert({ api: spec.matcher, ok: true, selector: location.key });
       return { pass: true, message: () => `${spec.matcher}: snapshot updated` };
     }
   }
@@ -773,7 +870,6 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
       ...(scopeRef === undefined ? {} : { ref: scopeRef }),
       ...(comparison.reason === undefined ? {} : { error: comparison.reason }),
     },
-    testKey(state),
   );
   return {
     pass,
@@ -802,8 +898,13 @@ async function snapshotAssertion(state: MatcherState, spec: SnapshotAssertion): 
  */
 async function settle(spec: SnapshotAssertion, deadline: number): Promise<void> {
   if (spec.ready === undefined) return;
-  while (!spec.ready() && Date.now() < deadline) {
-    await delay(POLL_INTERVAL_MS);
+  let checkpoint = spec.source?.checkpoint();
+  while (!spec.ready() && performance.now() < deadline) {
+    if (spec.source === undefined || checkpoint === undefined) {
+      throw new TypeError(`${spec.matcher} has no event source; polling snapshots are not supported`);
+    }
+    await spec.source.waitForCheckpointChange({ after: checkpoint, timeout: Math.max(0, deadline - performance.now()) });
+    checkpoint = spec.source.checkpoint();
   }
 }
 
@@ -816,17 +917,11 @@ interface SnapshotLocation {
  * Which file and key back this snapshot. Every call allocates the next key for
  * the test, so callers resolve it once per assertion.
  */
-function snapshotLocation(state: MatcherState, kind: SnapshotKind, dir: string): SnapshotLocation {
-  const testPath = state.testPath;
-  const testName = state.currentTestName;
-  if (testPath === undefined || testName === undefined) {
-    throw new TypeError(
-      'external snapshots need Vitest test context; pass the expected snapshot inline when asserting outside a test',
-    );
-  }
+function snapshotLocation(_state: MatcherState, kind: SnapshotKind, dir: string): SnapshotLocation {
+  const attempt = currentAttemptContext();
   return {
-    file: snapshotFilePath(testPath, kind, dir),
-    key: nextSnapshotKey(`${testPath}::${testName}`, testName, kind),
+    file: snapshotFilePath(attempt.file, kind, dir),
+    key: nextSnapshotKey(attempt.fullName, kind),
   };
 }
 
@@ -880,7 +975,7 @@ function failureDiagnostics(spec: LocatorAssertion, probeError: unknown, resolve
  * A matcher that just passed resolves immediately; one that failed yields the
  * driver's error, whose diagnostics are what the failure message prints.
  */
-async function resolveTarget(locator: Locator | undefined): Promise<{ ref?: string; observation?: import('@termwright/protocol').ObservationStamp; error?: unknown }> {
+async function resolveTarget(locator: AnyLocator | undefined): Promise<{ ref?: LocatorRef; observation?: import('@termwright/protocol').ObservationStamp; error?: unknown }> {
   if (locator === undefined) return {};
   try {
     const ref = (await locator.resolve({ timeout: 1 })).ref;
@@ -963,20 +1058,14 @@ function pick<T extends object>(value: T, keys: readonly (keyof T)[]): Partial<T
   return picked;
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms).unref?.();
-  });
-}
-
-function describeLocator(locator: Locator): string {
+function describeLocator(locator: AnyLocator): string {
   const described = (locator as { description?: unknown }).description;
   return typeof described === 'string' ? described : 'locator';
 }
 
-function isLocator(value: unknown): value is Locator {
+function isLocator(value: unknown): value is AnyLocator {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Partial<Locator>;
+  const candidate = value as Partial<AnyLocator>;
   return typeof candidate.resolve === 'function' && typeof candidate.visibility === 'function';
 }
 
@@ -998,9 +1087,15 @@ function isSnapshot(value: unknown): value is SemanticSnapshot {
   return Array.isArray(candidate.nodes) && Array.isArray(candidate.rootIds);
 }
 
-function asLocator(value: unknown, matcher: string): Locator {
+function asLocator(value: unknown, matcher: string): AnyLocator {
   if (isLocator(value)) return value;
   throw new TypeError(`${matcher} expects a locator, received ${describeValue(value)}`);
+}
+
+function asSemanticLocator(value: unknown, matcher: string): SemanticLocator {
+  const locator = asLocator(value, matcher);
+  if (locator.domain === 'semantic') return locator;
+  throw new TypeError(`${matcher} requires a semantic locator, received a screen locator`);
 }
 
 function asScreenSource(value: unknown, matcher: string): () => ScreenSnapshot {
@@ -1057,6 +1152,12 @@ export const termwrightMatchers = {
   toHaveSpatialRelation,
   toHaveLogged,
   toBeFocused,
+  toBeEnabled,
+  toBeDisabled,
+  toBeChecked,
+  toBeSelected,
+  toBeExpanded,
+  toHaveValue,
   toHaveState,
   toHaveExtendedState,
   toHaveText,

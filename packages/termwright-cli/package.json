@@ -10,7 +10,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "exports": {
     ".": {
@@ -33,13 +33,9 @@
       "types": "./dist/gherkin-runtime.d.ts",
       "import": "./dist/gherkin-runtime.js"
     },
-    "./reporter": {
-      "types": "./dist/reporter.d.ts",
-      "import": "./dist/reporter.js"
-    },
-    "./ui-reporter": {
-      "types": "./dist/ui-reporter.d.ts",
-      "import": "./dist/ui-reporter.js"
+    "./host": {
+      "types": "./dist/host.d.ts",
+      "import": "./dist/host.js"
     },
     "./cli": {
       "types": "./dist/cli.d.ts",
@@ -53,30 +49,24 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/test.ts src/ink.ts src/gherkin.ts src/gherkin-runtime.ts src/reporter.ts src/ui-reporter.ts src/doctor.ts src/cli.ts src/bin.ts src/vitest-ui-host.ts --format esm --dts --sourcemap",
+    "build": "tsup src/index.ts src/test.ts src/ink.ts src/gherkin.ts src/gherkin-runtime.ts src/host.ts src/doctor.ts src/cli.ts src/bin.ts --format esm --dts --sourcemap --clean",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm --dir ../.. test -- -- --run packages/termwright-cli"
   },
   "dependencies": {
     "@termwright/desktop-host": "workspace:*",
     "@termwright/driver": "workspace:*",
     "@termwright/gherkin": "workspace:*",
-    "@termwright/ink-testing": "workspace:*",
+    "@termwright/ink": "workspace:*",
     "@termwright/mcp": "workspace:*",
+    "@termwright/protocol": "workspace:*",
+    "@termwright/resource-broker": "workspace:*",
+    "@termwright/run-history": "workspace:*",
+    "@termwright/run-journal-transport": "workspace:*",
     "@termwright/test": "workspace:*",
     "@termwright/ui": "workspace:*",
     "@termwright/screenshot": "workspace:*",
-    "@termwright/trace": "workspace:*"
-  },
-  "peerDependencies": {
-    "vitest": ">=3.2.0"
-  },
-  "peerDependenciesMeta": {
-    "vitest": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "vitest": "^3.2.0"
+    "@termwright/trace": "workspace:*",
+    "vitest": "4.1.11"
   }
 }

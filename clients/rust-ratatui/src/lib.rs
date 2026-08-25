@@ -43,6 +43,14 @@ use ratatui::widgets::{StatefulWidget, Widget};
 
 pub use serde_json::{json, Value};
 pub use termwright_probe_ratatui::{Action, Annotation as Semantics, Role};
+pub use termwright_protocol::evidence::{
+    register_pointer_evidence_provider, Context as EvidenceContext, HitTest as PointerHitTest,
+    PointerObservation as PointerEvidenceObservation, PointerProvider as PointerEvidenceProvider,
+    Registration as EvidenceRegistration,
+};
+pub use termwright_protocol::{
+    EvidenceMethod, ProviderPointerRegion, ProviderPointerSpan, Rect as ProviderRect,
+};
 
 /// Exact Ratatui release whose traits this SDK implements.
 ///
@@ -108,7 +116,7 @@ impl<W> Annotate for W {}
 impl<W: Widget> Widget for Annotated<W> {
     fn render(self, area: Rect, buffer: &mut Buffer) {
         let Self { widget, semantics } = self;
-        attach::<Self, W>(semantics);
+        let _render = begin::<Self, W>(semantics, area);
         Widget::render(widget, area, buffer);
     }
 }
@@ -118,7 +126,7 @@ impl<W: StatefulWidget> StatefulWidget for Annotated<W> {
 
     fn render(self, area: Rect, buffer: &mut Buffer, state: &mut Self::State) {
         let Self { widget, semantics } = self;
-        attach::<Self, W>(semantics);
+        let _render = begin::<Self, W>(semantics, area);
         StatefulWidget::render(widget, area, buffer, state);
     }
 }
@@ -128,7 +136,7 @@ where
     &'a W: Widget,
 {
     fn render(self, area: Rect, buffer: &mut Buffer) {
-        attach::<Self, &'a W>(self.semantics.clone());
+        let _render = begin::<Self, &'a W>(self.semantics.clone(), area);
         Widget::render(&self.widget, area, buffer);
     }
 }
@@ -140,17 +148,24 @@ where
     type State = <&'a W as StatefulWidget>::State;
 
     fn render(self, area: Rect, buffer: &mut Buffer, state: &mut Self::State) {
-        attach::<Self, &'a W>(self.semantics.clone());
+        let _render = begin::<Self, &'a W>(self.semantics.clone(), area);
         StatefulWidget::render(&self.widget, area, buffer, state);
     }
 }
 
-fn attach<Wrapper: ?Sized, Inner: ?Sized>(semantics: Semantics) {
-    termwright_probe_ratatui::on_annotation(
+fn begin<Wrapper: ?Sized, Inner: ?Sized>(
+    semantics: Semantics,
+    area: Rect,
+) -> termwright_probe_ratatui::AnnotatedRenderGuard {
+    termwright_probe_ratatui::begin_annotated_render(
         type_name::<Wrapper>(),
         type_name::<Inner>(),
         semantics,
-    );
+        area.x,
+        area.y,
+        area.width,
+        area.height,
+    )
 }
 
 #[cfg(test)]

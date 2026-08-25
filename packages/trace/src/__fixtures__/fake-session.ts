@@ -3,11 +3,12 @@
  * Not exported from `src/index.ts` — it never ships.
  */
 
-import type { LogRecord, ObservationStamp, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
+import type { ActionReceipt, ActionabilityExplanation, EffectiveSessionContract, LogRecord, ObservationStamp, SemanticNode, SemanticSnapshot } from '@termwright/protocol';
 import type {
   CrashReport,
   ExitStatus,
   SessionEventMap,
+  SessionEventRecord,
   SessionEvents,
 } from '@termwright/driver';
 import type { TraceSource } from '../writer.js';
@@ -18,8 +19,12 @@ type Listener = (payload: never) => void;
 export class FakeSession implements TraceSource {
   readonly sessionId: string;
   #listeners = new Map<keyof SessionEventMap, Set<Listener>>();
+  #journalListeners = new Set<(record: SessionEventRecord) => void>();
+  #journal: SessionEventRecord[] = [];
+  #sequence = 0;
   #tree: SemanticSnapshot | null = null;
   #actionCounter = 0;
+  negotiatedContract: EffectiveSessionContract | null = null;
   /** Milliseconds since session start; advance it with {@link tick}. */
   clock = 0;
 
@@ -48,13 +53,28 @@ export class FakeSession implements TraceSource {
         set.delete(callback as Listener);
       };
     },
+    checkpoint: () => this.#sequence,
+    subscribe: (options, callback) => {
+      for (const record of this.#journal) {
+        if (record.sequence >= options.fromSequence) callback(record);
+      }
+      this.#journalListeners.add(callback);
+      return () => this.#journalListeners.delete(callback);
+    },
   };
 
   semanticTree(): SemanticSnapshot | null {
     return this.#tree;
   }
 
+  contract(): EffectiveSessionContract | null {
+    return this.negotiatedContract;
+  }
+
   #emit<E extends keyof SessionEventMap>(event: E, payload: SessionEventMap[E]): void {
+    const record = { sequence: ++this.#sequence, type: event, payload } as SessionEventRecord;
+    this.#journal.push(record);
+    for (const listener of this.#journalListeners) listener(record);
     for (const listener of this.#listeners.get(event) ?? []) {
       (listener as (value: SessionEventMap[E]) => void)(payload);
     }
@@ -86,7 +106,7 @@ export class FakeSession implements TraceSource {
   /** Publishes a tree and emits the matching `semantic-revision`. */
   semantic(snapshot: SemanticSnapshot): void {
     this.#tree = snapshot;
-    this.#emit('semantic-revision', { revision: snapshot.revision, timeMs: this.clock });
+    this.#emit('semantic-revision', { revision: snapshot.revision, timeMs: this.clock, snapshot });
   }
 
   /**
@@ -95,7 +115,7 @@ export class FakeSession implements TraceSource {
    */
   action(
     api: string,
-    outcome: { ok?: boolean; selector?: string; ref?: string; error?: string; observation?: ObservationStamp } = {},
+    outcome: { ok?: boolean; selector?: string; ref?: import('@termwright/driver').LocatorRef; error?: string; observation?: ObservationStamp; receipt?: ActionReceipt; actionability?: ActionabilityExplanation } = {},
   ): void {
     this.#emit('action', {
       actionId: `a${++this.#actionCounter}`,
@@ -105,6 +125,8 @@ export class FakeSession implements TraceSource {
       ...(outcome.ref === undefined ? {} : { ref: outcome.ref }),
       ...(outcome.error === undefined ? {} : { error: outcome.error }),
       ...(outcome.observation === undefined ? {} : { observation: outcome.observation }),
+      ...(outcome.receipt === undefined ? {} : { receipt: outcome.receipt }),
+      ...(outcome.actionability === undefined ? {} : { actionability: outcome.actionability }),
       timeMs: this.clock,
     });
   }
@@ -166,17 +188,19 @@ export function snapshot(
   sessionId = 't1',
 ): SemanticSnapshot {
   return {
-    v: 1,
+    v: 2,
     sessionId,
     revision,
     columns: 80,
     rows: 24,
     rootIds: nodes.filter((node) => node.parentId === undefined).map((node) => node.id),
     nodes,
+    coordinateSpace: { status: 'unknown', reason: 'awaiting-revision-pair' },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 
 /** Builds a semantic node with sane defaults. */
 export function node(partial: Partial<SemanticNode> & Pick<SemanticNode, 'id' | 'role'>): SemanticNode {
-  return { name: '', ...partial };
+  return { name: '', geometry: { displayed: { status: 'unknown', reason: 'awaiting-revision-pair' }, intendedRect: { status: 'unknown', reason: 'awaiting-revision-pair' }, visibleRect: { status: 'unknown', reason: 'awaiting-revision-pair' } }, ...partial };
 }

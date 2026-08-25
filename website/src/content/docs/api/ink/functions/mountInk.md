@@ -3,17 +3,17 @@ title: "Function: mountInk()"
 editUrl: false
 ---
 
-[**@termwright/ink-testing**](../../)
+[**@termwright/ink**](../../)
 
 ***
 
-[@termwright/ink-testing](../../) / mountInk
+[@termwright/ink](../../) / mountInk
 
 # Function: mountInk()
 
 > **mountInk**(`element`, `options?`): `Promise`\<[`InkHarness`](../../interfaces/inkharness/)\>
 
-Defined in: [ink-testing/src/mount.tsx:148](https://github.com/Gorce-AI/termwright/blob/main/packages/ink-testing/src/mount.tsx#L148)
+Defined in: [ink/src/mount.tsx:148](https://github.com/Gorce-AI/termwright/blob/main/packages/ink/src/mount.tsx#L148)
 
 Mounts an Ink element in this process and returns a harness over it.
 
@@ -47,7 +47,7 @@ immediately.
 const onPress = vi.fn();
 const harness = await mountInk(<Approve onPress={onPress} />, { columns: 40, rows: 10 });
 await harness.press('Tab');
-await harness.waitForStable();
+await harness.waitForQuiet();
 await harness.press('Enter');
 await harness.waitForText('approved');
 await vi.waitFor(() => expect(onPress).toHaveBeenCalledOnce());

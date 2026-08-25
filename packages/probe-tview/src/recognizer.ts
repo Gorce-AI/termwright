@@ -17,7 +17,7 @@
  *    existed to prevent.
  */
 
-import type { ProbeFrame, ProbeObject } from '@termwright/protocol';
+import { evidence, type ProbeFrame, type ProbeObject } from '@termwright/protocol';
 import type { SemanticNode, SemanticRole, SemanticSnapshot } from '@termwright/protocol';
 
 /**
@@ -79,13 +79,15 @@ export function recognize(frame: ProbeFrame, options: RecognizeOptions): Semanti
   }
 
   return {
-    v: 1,
+    v: 2,
     sessionId: options.sessionId,
     revision: options.revision,
     columns: options.columns,
     rows: options.rows,
     rootIds,
     nodes,
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
 }
 
@@ -102,12 +104,21 @@ function recognizeObject(object: ProbeObject): SemanticNode {
     frameworkType: object.frameworkType,
     name: object.annotations?.name ?? object.text ?? '',
     ...(object.parent === undefined ? {} : { parentId: object.parent }),
-    // intendedRect is where the widget was drawn. visibleRect is absent for
-    // tview, which computes no clip, so nothing here fabricates one.
-    ...(object.geometry?.intendedRect === undefined
-      ? {}
-      : { bounds: object.geometry.intendedRect }),
-    ...(object.state?.value === undefined ? {} : { value: object.state.value }),
+    geometry: {
+      displayed: object.state?.displayed === undefined
+        ? { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' }
+        : { status: 'known', value: object.state.displayed, evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
+      intendedRect: object.geometry?.intendedRect === undefined
+        ? { status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' }
+        : { status: 'known', value: object.geometry.intendedRect, evidence: evidence('framework', 'instrumented', 'authoritative', 'tview') },
+      visibleRect: { status: 'unsupported', capability: 'visible-rect', reason: 'framework-unobservable' },
+    },
+    ...(object.state?.value === undefined ? {} : { value: {
+      status: 'known' as const,
+      value: object.state.value,
+      sensitivity: object.state?.valueSensitivity ?? 'sensitive',
+      evidence: evidence('framework', 'instrumented', 'authoritative', 'tview'),
+    } }),
     ...(state === undefined ? {} : { state }),
   } as SemanticNode;
 }
@@ -126,15 +137,5 @@ function recognizeState(object: ProbeObject): SemanticNode['state'] {
   // wire calls that `hidden`, and the inversion is the whole translation.
   if (observed.displayed === false) state['hidden'] = true;
   if (observed.selectedIndex !== undefined) state['positionInSet'] = observed.selectedIndex + 1;
-  // A negative scroll offset is a pre-layout artefact, not a position. The Go
-  // probe drops it at the source; this is the same rule, restated where a test
-  // can reach it in one line.
-  if (observed.scroll !== undefined && observed.scroll.row >= 0) {
-    state['scrollOffset'] = observed.scroll.row;
-  }
-  if (observed.scrollExtent !== undefined && observed.scrollExtent.rows >= 0) {
-    state['scrollExtent'] = observed.scrollExtent.rows;
-  }
-
   return Object.keys(state).length === 0 ? undefined : (state as SemanticNode['state']);
 }

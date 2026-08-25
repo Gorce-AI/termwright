@@ -9,8 +9,9 @@
  */
 
 import { WebSocket } from 'ws';
-import { encodeMessage, type ServerMessage } from './events.js';
+import { encodeMessage, parseClientMessage, UiProtocolError, type ServerMessage } from './events.js';
 import {
+  inspectNodeActionability,
   streamSession,
   type UiSessionMessageSink,
   type UiSessionSource,
@@ -71,7 +72,7 @@ export function connectLiveSession(
 
   let sink: ProducerSocketSink;
   try {
-    sink = new ProducerSocketSink(configured, options.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS);
+    sink = new ProducerSocketSink(configured, options.closeTimeoutMs ?? DEFAULT_CLOSE_TIMEOUT_MS, source);
   } catch {
     return DISABLED;
   }
@@ -115,12 +116,14 @@ class ProducerSocketSink implements UiSessionMessageSink {
   #settle: (() => void) | undefined;
   #queue: QueuedMessage[] = [];
   #queuedBytes = 0;
+  #droppedMessages = 0;
+  #droppedBytes = 0;
   #open = false;
   #failed = false;
   #accepting = true;
   #closing: Promise<void> | undefined;
 
-  constructor(url: string, closeTimeoutMs: number) {
+  constructor(url: string, closeTimeoutMs: number, source: UiSessionSource) {
     if (!Number.isFinite(closeTimeoutMs) || closeTimeoutMs < 0) {
       throw new TypeError('closeTimeoutMs must be a non-negative finite number');
     }
@@ -147,6 +150,35 @@ class ProducerSocketSink implements UiSessionMessageSink {
     });
     this.#socket.on('close', () => {
       this.#fail();
+    });
+    this.#socket.on('message', (raw: Buffer) => {
+      let message;
+      try {
+        message = parseClientMessage(raw);
+      } catch (error) {
+        if (error instanceof UiProtocolError) return;
+        throw error;
+      }
+      if (message.type !== 'inspect-actionability' || message.sessionId !== source.sessionId) return;
+      void inspectNodeActionability(source, message.nodeId).then((results) => {
+        this.publish({
+          v: 1,
+          type: 'actionability-inspection',
+          requestId: message.requestId,
+          sessionId: message.sessionId,
+          nodeId: message.nodeId,
+          results,
+        });
+      }).catch((error: unknown) => {
+        this.publish({
+          v: 1,
+          type: 'actionability-inspection',
+          requestId: message.requestId,
+          sessionId: message.sessionId,
+          nodeId: message.nodeId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     });
   }
 
@@ -222,11 +254,18 @@ class ProducerSocketSink implements UiSessionMessageSink {
   #clearQueue(): void {
     this.#queue = [];
     this.#queuedBytes = 0;
+    this.#droppedMessages = 0;
+    this.#droppedBytes = 0;
   }
 
   #boundQueue(): void {
+    const existingGap = this.#queue.findIndex((message) => message.type === 'diagnostic-gap');
+    if (existingGap >= 0) {
+      const [removed] = this.#queue.splice(existingGap, 1);
+      if (removed !== undefined) this.#queuedBytes -= removed.bytes;
+    }
     while (
-      this.#queue.length > MAX_QUEUED_MESSAGES ||
+      this.#queue.length + 1 > MAX_QUEUED_MESSAGES ||
       this.#queuedBytes > MAX_QUEUED_BYTES
     ) {
       // Preserve the session announcement whenever another event can be
@@ -236,7 +275,38 @@ class ProducerSocketSink implements UiSessionMessageSink {
       if (index < 0) index = this.#queue.findIndex((message) => message.type !== 'session');
       if (index < 0) index = 0;
       const [dropped] = this.#queue.splice(index, 1);
-      if (dropped !== undefined) this.#queuedBytes -= dropped.bytes;
+      if (dropped !== undefined) {
+        this.#queuedBytes -= dropped.bytes;
+        this.#droppedMessages += 1;
+        this.#droppedBytes += dropped.bytes;
+      }
+    }
+    if (this.#droppedMessages > 0) {
+      const encoded = encodeMessage({
+        v: 1,
+        type: 'diagnostic-gap',
+        source: 'live-session-producer',
+        droppedMessages: this.#droppedMessages,
+        droppedBytes: this.#droppedBytes,
+      });
+      const gap = { type: 'diagnostic-gap' as const, encoded, bytes: Buffer.byteLength(encoded) };
+      while (this.#queue.length + 1 > MAX_QUEUED_MESSAGES || this.#queuedBytes + gap.bytes > MAX_QUEUED_BYTES) {
+        const [dropped] = this.#queue.splice(0, 1);
+        if (dropped === undefined) break;
+        this.#queuedBytes -= dropped.bytes;
+        this.#droppedMessages += 1;
+        this.#droppedBytes += dropped.bytes;
+      }
+      const finalEncoded = encodeMessage({
+        v: 1,
+        type: 'diagnostic-gap',
+        source: 'live-session-producer',
+        droppedMessages: this.#droppedMessages,
+        droppedBytes: this.#droppedBytes,
+      });
+      const finalGap = { type: 'diagnostic-gap' as const, encoded: finalEncoded, bytes: Buffer.byteLength(finalEncoded) };
+      this.#queue.push(finalGap);
+      this.#queuedBytes += finalGap.bytes;
     }
   }
 }

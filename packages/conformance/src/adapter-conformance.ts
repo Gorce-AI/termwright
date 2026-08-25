@@ -15,7 +15,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ADAPTER_CAPABILITIES, validateSnapshot, DEFAULT_LIMITS } from '@termwright/protocol';
+import { ADAPTER_CAPABILITIES, validateSnapshot, DEFAULT_LIMITS, PROTOCOL_ID } from '@termwright/protocol';
 import type { SemanticSnapshot } from '@termwright/protocol';
 import { AdapterProbe, MARKER_TEXT_PREFIX, type AdapterCommand, type ProbeObservation } from './support/probe.js';
 import { commandAvailable, ptyAvailable } from './support/pty.js';
@@ -54,8 +54,8 @@ export interface AdapterConformanceOptions {
   readonly quit: { readonly input: string; readonly exitCode?: number };
   readonly columns?: number;
   readonly rows?: number;
-  /** Assert that published bounds are viewport-absolute (an `absolute-bounds` claim). */
-  readonly expectAbsoluteBounds?: boolean;
+  /** Assert that intended geometry is authoritative in viewport cells. */
+  readonly expectIntendedGeometry?: boolean;
   /**
    * Opt out of the "publishes a tree before any input" obligation.
    *
@@ -128,33 +128,8 @@ export interface AdapterConformanceOptions {
     readonly label: string;
     readonly cwd?: string;
     readonly timeoutMs?: number;
+    readonly env?: Readonly<Record<string, string>>;
   };
-}
-
-/**
- * Asserts that what the adapter's deltas say the tree is matches what the
- * adapter itself reports when asked. A producer that also composed would only
- * prove it agrees with itself, so the composition here is the protocol's own
- * `applyTreeDelta` and the comparison is against a `get-tree` answer.
- */
-async function assertDeltasCompose(probe: AdapterProbe, timeoutMs: number): Promise<void> {
-  const { expect } = await import('vitest');
-  const observation = probe.observe();
-
-  expect(observation.compositionError, 'the adapter produced a delta nobody could apply').toBeNull();
-  expect(observation.composed).not.toBeNull();
-  expect(observation.deltas.length).toBeGreaterThan(0);
-
-  const authoritative = await probe.requestTree(timeoutMs);
-  expect(authoritative, 'the adapter answered no get-tree').not.toBeNull();
-
-  const composed = observation.composed as SemanticSnapshot;
-  const truth = authoritative as SemanticSnapshot;
-  const byId = (nodes: SemanticSnapshot['nodes']): SemanticSnapshot['nodes'] =>
-    [...nodes].sort((left, right) => left.id.localeCompare(right.id));
-
-  expect(byId(truth.nodes)).toEqual(byId(composed.nodes));
-  expect([...truth.rootIds].sort()).toEqual([...composed.rootIds].sort());
 }
 
 /**
@@ -203,26 +178,19 @@ function writeConventionSummary(
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    timer.unref?.();
-  });
-}
-
 /**
  * Waits until the child stops writing, so two captures end at comparable
  * points. A stabilisation, not a deadline: an app that never stops writing
  * makes the comparison fail loudly rather than pass by accident.
  */
 async function settle(probe: AdapterProbe, quietMs = 250, budgetMs = 5_000): Promise<void> {
-  const deadline = Date.now() + budgetMs;
+  const deadline = performance.now() + budgetMs;
   let seen = -1;
   for (;;) {
     const length = probe.observe().stdout.length;
     if (length === seen) return;
     seen = length;
-    if (Date.now() >= deadline) return;
+    if (performance.now() >= deadline) return;
     await new Promise((resolve) => {
       setTimeout(resolve, quietMs);
     });
@@ -328,6 +296,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
     commandAvailable(options.requires.probe, {
       ...(options.requires.cwd === undefined ? {} : { cwd: options.requires.cwd }),
       ...(options.requires.timeoutMs === undefined ? {} : { timeoutMs: options.requires.timeoutMs }),
+      ...(options.requires.env === undefined ? {} : { env: options.requires.env }),
     });
   const probeOptions = {
     ...(options.columns === undefined ? {} : { columns: options.columns }),
@@ -438,7 +407,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         expect(connections).toBe(1);
         expect(first?.message.type).toBe('hello');
         const hello = first?.message as { protocol: string; adapter: { name: string; version: string }; capabilities: readonly string[] };
-        expect(hello.protocol).toBe('termwright/1');
+        expect(hello.protocol).toBe(PROTOCOL_ID);
         expect(hello.adapter.name.length).toBeGreaterThan(0);
         expect(hello.adapter.version.length).toBeGreaterThan(0);
         expect(hello.capabilities.every((entry) => (ADAPTER_CAPABILITIES as readonly string[]).includes(entry))).toBe(true);
@@ -487,7 +456,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         for (const snapshot of snapshots) {
           expect(validateSnapshot(snapshot, DEFAULT_LIMITS)).toMatchObject({ ok: true });
           expect(snapshot.sessionId).toBe(probe.sessionId);
-          expect(snapshot.v).toBe(1);
+          expect(snapshot.v).toBe(2);
           const ids = new Set(snapshot.nodes.map((node) => node.id));
           for (const node of snapshot.nodes) {
             if (node.parentId === undefined) expect(snapshot.rootIds).toContain(node.id);
@@ -499,14 +468,16 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         expect([...revisions]).toEqual([...new Set(revisions)].sort((left, right) => left - right));
       });
 
-      it.skipIf(options.expectAbsoluteBounds !== true)('publishes viewport-absolute bounds', () => {
+      it.skipIf(options.expectIntendedGeometry !== true)('publishes intended geometry in viewport cells', () => {
         const snapshots = snapshotsOf(probe.observe());
         const latest = snapshots[snapshots.length - 1];
         expect(latest).toBeDefined();
-        const bounded = latest?.nodes.filter((node) => node.bounds !== undefined) ?? [];
+        const bounded = latest?.nodes.filter((node) => node.geometry.intendedRect.status === 'known') ?? [];
         expect(bounded.length).toBeGreaterThan(0);
         for (const node of bounded) {
-          const bounds = node.bounds as { row: number; column: number; width: number; height: number };
+          const bounds = node.geometry.intendedRect.status === 'known' ? node.geometry.intendedRect.value : undefined;
+          expect(bounds).toBeDefined();
+          if (bounds === undefined) continue;
           expect(bounds.row).toBeGreaterThanOrEqual(0);
           expect(bounds.column).toBeGreaterThanOrEqual(0);
           expect(bounds.row).toBeLessThan(latest?.rows ?? 0);
@@ -676,7 +647,9 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           // `''` means the field is empty; absent means "not a value-bearing
           // widget". A wire format that drops empty strings turns the first
           // into the second and makes `toHaveValue('')` unassertable.
-          return node.value === '' ? null : `the value is ${JSON.stringify(node.value)}, not an empty string`;
+          return node.value?.status === 'known' && node.value.value === ''
+            ? null
+            : `the value is ${JSON.stringify(node.value)}, not an empty known value`;
         });
       });
 
@@ -698,7 +671,7 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
           }
           // A boolean is a state, not contents: publishing `value: "true"`
           // makes a checkbox look like a textbox containing that word.
-          const booleans = nodes.filter((node) => node.value === 'true' || node.value === 'false');
+          const booleans = nodes.filter((node) => node.value?.status === 'known' && (node.value.value === 'true' || node.value.value === 'false'));
           return booleans.length === 0
             ? null
             : `published a boolean as a value on ${booleans.map((node) => node.role).join(', ')}`;
@@ -829,31 +802,6 @@ export async function runAdapterConformance(options: AdapterConformanceOptions):
         // never the terminal. A TUI that printed it would corrupt its render.
         expect(observation.screen).not.toContain(logs.expect);
         expect(observation.text).not.toContain(logs.expect);
-      });
-
-      it('produces deltas that compose to the tree it would have sent', async () => {
-        const announced = (beforeInput.messages[0]?.message as { capabilities: readonly string[] })
-          .capabilities;
-        if (!announced.includes('tree-diffs')) return;
-
-        // Its own session: deltas are only sent to a driver that subscribed to
-        // them, and the shared session deliberately subscribes to whole trees
-        // so the other obligations exercise that path.
-        const diffs = await AdapterProbe.start(options.spawn(), { ...probeOptions, subscribe: 'diffs' });
-        try {
-          await diffs.waitForText(options.ready, timeout);
-          await diffs.waitFor((observation) => observation.composed !== null, timeout);
-
-          // Drive a few renders so there is something to diff.
-          for (let press = 0; press < 3; press += 1) {
-            await diffs.write(options.interaction.input);
-            await delay(150);
-          }
-          await diffs.waitFor((observation) => observation.deltas.length > 0, timeout);
-          await assertDeltasCompose(diffs, timeout);
-        } finally {
-          await diffs.stop();
-        }
       });
 
       it('keeps the application alive when the channel is cut', async () => {

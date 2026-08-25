@@ -26,6 +26,7 @@ export type RecordedEvent =
   | { readonly kind: 'type'; readonly text: string; readonly t: number }
   | { readonly kind: 'paste'; readonly text: string; readonly t: number }
   | { readonly kind: 'raw'; readonly dataB64: string; readonly t: number }
+  | { readonly kind: 'withheld-input'; readonly inputKind: 'type' | 'paste' | 'raw'; readonly bytes: number; readonly t: number }
   | { readonly kind: 'click'; readonly selector: GeneratedSelector; readonly t: number }
   | { readonly kind: 'assert-snapshot'; readonly t: number }
   | { readonly kind: 'assert-visible'; readonly selector: GeneratedSelector; readonly t: number }
@@ -132,6 +133,9 @@ function renderBody(events: readonly RecordedEvent[], variable: string): string[
         break;
       case 'raw':
         emit(`await ${variable}.write(Buffer.from(${quote(event.dataB64)}, 'base64'));`);
+        break;
+      case 'withheld-input':
+        emit(`// TODO: ${event.inputKind} input withheld by recorder policy (${event.bytes} bytes).`);
         break;
       case 'click':
         emit(`await ${event.selector.expression}.click();`);

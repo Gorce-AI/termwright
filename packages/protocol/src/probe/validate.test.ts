@@ -75,6 +75,7 @@ describe('validateProbeInfo', () => {
     // arrived, which is what the reader needs when this fails.
     expect([...PROBE_CAPABILITIES]).toEqual([
       'stable-identity',
+      'intended-rect',
       'visible-rect',
       'operations',
       'annotations',
@@ -312,7 +313,10 @@ describe('validateProbeFrame — hostile input', () => {
 describe('validateProbeAnnotations', () => {
   it('returns a deeply frozen annotation under the negotiated limits', () => {
     const result = validateProbeAnnotations(
-      { name: 'Deploy', actions: ['activate'], extended: { target: 'production' } },
+      {
+        name: 'Deploy', actions: ['activate'], extended: { target: 'production' },
+        inputRecipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] }],
+      },
       DEFAULT_LIMITS,
     );
     if (!result.ok) throw new Error(result.detail);
@@ -320,6 +324,7 @@ describe('validateProbeAnnotations', () => {
       name: 'Deploy',
       actions: ['activate'],
       extended: { target: 'production' },
+      inputRecipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] }],
     });
     expect(Object.isFrozen(result.annotations)).toBe(true);
     expect(Object.isFrozen(result.annotations.extended)).toBe(true);
@@ -333,6 +338,12 @@ describe('validateProbeAnnotations', () => {
       { extended: cyclic },
       { name: 'x'.repeat(DEFAULT_LIMITS.maxStringBytes + 1) },
       { focused: true },
+      { inputRecipes: [{ action: 'focus', requiresFocus: true, steps: [{ kind: 'press', key: 'Tab' }] }] },
+      { inputRecipes: [{ action: 'activate', requiresFocus: true, steps: [{ kind: 'insert-action-value' }] }] },
+      { inputRecipes: [
+        { action: 'activate', requiresFocus: true, steps: [{ kind: 'press', key: 'Enter' }] },
+        { action: 'activate', requiresFocus: false, steps: [{ kind: 'press', key: 'Space' }] },
+      ] },
     ]) {
       expect(() => validateProbeAnnotations(value, DEFAULT_LIMITS)).not.toThrow();
       expect(validateProbeAnnotations(value, DEFAULT_LIMITS).ok).toBe(false);
@@ -373,6 +384,7 @@ describe('provenance vocabulary', () => {
       'annotation',
       'recognizer',
       'framework',
+      'application',
       'correlation',
       'heuristic',
     ]);

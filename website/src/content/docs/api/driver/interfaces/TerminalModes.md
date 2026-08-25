@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TerminalModes
 
-Defined in: [api.ts:305](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L305)
+Defined in: [driver/src/api.ts:430](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L430)
 
 `@termwright/driver` — PTY + VT sessions, locators, actions and waits.
 
@@ -36,7 +36,7 @@ await terminal.close();
 
 > `readonly` **applicationCursorKeys**: `boolean`
 
-Defined in: [api.ts:324](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L324)
+Defined in: [driver/src/api.ts:455](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L455)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [api.ts:324](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **applicationKeypad**: `boolean`
 
-Defined in: [api.ts:325](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L325)
+Defined in: [driver/src/api.ts:456](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L456)
 
 ***
 
@@ -52,7 +52,7 @@ Defined in: [api.ts:325](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **bracketedPaste**: `boolean`
 
-Defined in: [api.ts:323](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L323)
+Defined in: [driver/src/api.ts:454](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L454)
 
 ***
 
@@ -60,16 +60,17 @@ Defined in: [api.ts:323](https://github.com/Gorce-AI/termwright/blob/main/packag
 
 > `readonly` **focusReporting**: `"unknown"` \| `"on"` \| `"off"`
 
-Defined in: [api.ts:336](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L336)
+Defined in: [driver/src/api.ts:468](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L468)
 
 Whether the child asked for focus in/out reports, or `'unknown'`.
 
-`'unknown'` means the reading is the host's state and says nothing about
+`'unknown'` means the transport's reading says nothing about
 the child — which covers both ways the value gets falsified: a request the
 terminal swallowed, and a state the terminal added on its own. ConPTY does
 the second: it reports focus reporting as enabled for a child that never
 asked, so a driver that believes it sends `CSI I` to a program that will
-print it.
+print it. A production-parser provider may supply the revision-bound fact;
+if VT output is also observable, both sources must agree.
 
 ***
 
@@ -77,28 +78,34 @@ print it.
 
 > `readonly` **mouseEncoding**: `"default"` \| `"unknown"` \| `"sgr"` \| `"urxvt"` \| `"utf8"`
 
-Defined in: [api.ts:322](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L322)
+Defined in: [driver/src/api.ts:453](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L453)
 
-Mouse report encoding, or `'unknown'` when the platform hides it (see
-[TerminalModes.mouseTracking](#mousetracking)). Input sent under `'unknown'` uses
-SGR, the encoding every program that enables mouse reporting understands.
+Mouse report encoding, or `'unknown'` when no authoritative source can
+prove it (see
+[TerminalModes.mouseTracking](#mousetracking)). Pointer actions fail closed under
+`'unknown'`; Termwright never guesses SGR.
 
 ***
 
 ### mouseTracking
 
-> `readonly` **mouseTracking**: `"unknown"` \| `"none"` \| `"x10"` \| `"vt200"` \| `"drag"` \| `"any"`
+> `readonly` **mouseTracking**: `"none"` \| `"any"` \| `"unknown"` \| `"x10"` \| `"vt200"` \| `"drag"`
 
-Defined in: [api.ts:316](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L316)
+Defined in: [driver/src/api.ts:446](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L446)
 
 Mouse tracking level the child asked for, or `'unknown'`.
 
 `'none'` means observed off — the child enabled nothing. `'unknown'` means
-the platform makes the mode unobservable: ConPTY is an emulator, so it
+neither the transport nor an application input-mode provider can prove
+it. ConPTY is an emulator, so it
 consumes the child's `CSI ? 1000/1002/1006 h` instead of forwarding it, and
 the driver never learns what was asked for. The distinction is load-bearing
-for pointer actions: `'none'` is a reason to refuse, `'unknown'` is not,
-because the child still has tracking on and still decodes reports.
+for pointer actions: `'none'` is authoritatively off, while `'unknown'`
+means Termwright cannot select a protocol without guessing. An
+authoritative provider backed by the application's production parser may
+supply this fact for the same committed revision. Both definite `none`
+and unresolved `unknown` fail
+before input is written, with distinct diagnostics.
 
 ***
 
@@ -106,4 +113,4 @@ because the child still has tracking on and still decodes reports.
 
 > `readonly` **synchronizedOutput**: `boolean`
 
-Defined in: [api.ts:337](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L337)
+Defined in: [driver/src/api.ts:469](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/api.ts#L469)

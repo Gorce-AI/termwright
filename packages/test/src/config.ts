@@ -1,5 +1,5 @@
 /**
- * Configuration for the Vitest preset: viewport, timeout classes, trace mode,
+ * Configuration for the Termwright Native Host: viewport, timeout classes, trace mode,
  * snapshot directories and profiles.
  *
  * A project declares its configuration once with {@link defineTermwrightConfig}
@@ -9,7 +9,12 @@
  */
 
 import type { TimeoutClasses } from '@termwright/driver';
-import { LOG_LEVEL_SEVERITY, type LogLevel } from '@termwright/protocol';
+import {
+  LOG_LEVEL_SEVERITY,
+  SESSION_CAPABILITIES,
+  type LogLevel,
+  type SessionCapabilityId,
+} from '@termwright/protocol';
 
 /** How much of a session ends up in a `.twtrace` archive. */
 export type TraceMode = 'on' | 'retain-on-failure' | 'on-first-retry' | 'off';
@@ -61,6 +66,8 @@ export interface TermwrightConfig {
   readonly snapshotDir?: string;
   /** Default command for `terminal.launch()` when the test passes none. */
   readonly command?: readonly string[];
+  /** Capabilities every launched session must negotiate before it is returned. */
+  readonly requiredCapabilities?: readonly SessionCapabilityId[];
   /** Extra environment for launched programs. Merged after the palette's. */
   readonly env?: Readonly<Record<string, string>>;
   /** Character-width and terminal behavior profile used by the emulator. */
@@ -94,6 +101,7 @@ export interface ResolvedTermwrightConfig {
   readonly outputDir: string;
   readonly snapshotDir: string;
   readonly command: readonly string[] | undefined;
+  readonly requiredCapabilities: readonly SessionCapabilityId[];
   readonly env: Readonly<Record<string, string>>;
   readonly palette: ColorPalette | undefined;
   readonly terminalProfile: string | undefined;
@@ -172,7 +180,7 @@ const UPDATE_MODES: readonly UpdateSnapshotsMode[] = ['all', 'changed', 'missing
 const MAX_RETRIES = 100;
 
 export interface TermwrightRetryOptions {
-  /** Additional attempts on CI. Default 2. */
+  /** Additional attempts on CI. Default 0; diagnostics must opt in explicitly. */
   readonly ci?: number;
   /** Additional attempts outside CI. Default 0. */
   readonly local?: number;
@@ -196,7 +204,7 @@ export function termwrightRetry(options: TermwrightRetryOptions = {}): number {
   const ci = env['CI'];
   return retryCount(
     ci !== undefined && ci !== '' && ci !== '0' && ci.toLowerCase() !== 'false'
-      ? (options.ci ?? 2)
+      ? (options.ci ?? 0)
       : (options.local ?? 0),
     ci !== undefined ? 'ci' : 'local',
   );
@@ -259,6 +267,18 @@ function validate(config: TermwrightConfig, path: string): void {
   if (config.command !== undefined && config.command.length === 0) {
     throw new TypeError(`${path}.command must not be empty`);
   }
+  const required = config.requiredCapabilities ?? [];
+  const supported = new Set<string>(SESSION_CAPABILITIES);
+  const seen = new Set<SessionCapabilityId>();
+  for (const capability of required) {
+    if (!supported.has(capability)) {
+      throw new TypeError(`${path}.requiredCapabilities contains unknown capability ${JSON.stringify(capability)}`);
+    }
+    if (seen.has(capability)) {
+      throw new TypeError(`${path}.requiredCapabilities contains duplicate capability ${JSON.stringify(capability)}`);
+    }
+    seen.add(capability);
+  }
   const palette = config.palette;
   if (palette !== undefined && palette.colors.length !== 16) {
     throw new TypeError(`${path}.palette.colors must hold exactly 16 entries`);
@@ -300,6 +320,7 @@ export function resolveTermwrightConfig(
     outputDir: merged.outputDir ?? 'termwright-report',
     snapshotDir: merged.snapshotDir ?? (profile === undefined ? '__snapshots__' : `__snapshots__/${name}`),
     command: merged.command,
+    requiredCapabilities: Object.freeze([...(merged.requiredCapabilities ?? [])]),
     env: Object.freeze({ ...(palette?.env ?? {}), ...(merged.env ?? {}) }),
     palette,
     terminalProfile: merged.terminalProfile,

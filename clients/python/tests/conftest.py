@@ -10,6 +10,15 @@ from typing import Any, Dict, Iterator
 
 import pytest
 
+from termwright.tree import (
+    NodeGeometryObservations,
+    Observation,
+    Rect,
+    SemanticNode,
+    SemanticSnapshot,
+    framework_evidence,
+)
+
 VECTOR_DIR = Path(__file__).resolve().parents[2] / "test-vectors"
 
 
@@ -17,6 +26,34 @@ def load_vectors(name: str) -> Dict[str, Any]:
     """Load one vector file, e.g. ``load_vectors("marker")``."""
     with (VECTOR_DIR / f"{name}.json").open(encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def geometry(rect: Rect = Rect(0, 0, 1, 1)) -> NodeGeometryObservations:
+    """Known viewport geometry for protocol-v2 unit fixtures."""
+    return NodeGeometryObservations(
+        displayed=Observation("known", True, evidence=framework_evidence("python-test")),
+        intendedRect=Observation("known", rect, evidence=framework_evidence("python-test")),
+        visibleRect=Observation("known", rect, evidence=framework_evidence("python-test")),
+    )
+
+
+def node(*, rect: Rect = Rect(0, 0, 1, 1), **fields: Any) -> SemanticNode:
+    return SemanticNode(geometry=geometry(rect), **fields)
+
+
+def snapshot(*, nodes, root_ids, columns: int = 80, rows: int = 24) -> SemanticSnapshot:
+    return SemanticSnapshot(
+        sessionId="ignored",
+        revision=1,
+        columns=columns,
+        rows=rows,
+        rootIds=root_ids,
+        nodes=nodes,
+        coordinateSpace=Observation("known", "viewport-cells", evidence=framework_evidence("python-test")),
+        hitGrid=Observation(
+            "unsupported", capability="pointer-hit-grid", reason="framework-unobservable"
+        ),
+    )
 
 
 @pytest.fixture

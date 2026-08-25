@@ -57,7 +57,7 @@ Round 3 (driver 23c61e5 and aa06a8a):
 
 Round 2 (driver 0e1b0fe, contract note 2d09049):
 
-4. **`waitForReady` called a dead program ready** — fixed; see the liveness
+4. **`waitForQuiet` called a dead program ready** — fixed; see the liveness
    split below, which is a deliberate distinction and must not be "harmonised"
    away later.
 5. **`SessionDiagnostic` carried no machine-readable wire code** — `wireCode?`
@@ -110,7 +110,7 @@ Round 6 (driver f17b251, e404026, cf1229d):
 ## The liveness split (do not "fix" this)
 
 `waitForText`, `waitForTitle` and `waitForRender` keep succeeding after the
-child has exited. `waitForReady` does not. That is not an inconsistency waiting
+child has exited. `waitForQuiet` does not. That is not an inconsistency waiting
 to be levelled — the two kinds of wait claim different things:
 
 - an **observation** wait asserts something about the past: text that was
@@ -206,16 +206,6 @@ has to delete an assertion that explains itself.
   judged from outside a subprocess, so a missing heading is a documentation gap,
   and failing a conformance run over something no user can observe would train
   people to ignore the run.
-- **Delta composition is checked against an oracle, not a self-check.** The
-  probe composes with the protocol's own `applyTreeDelta` and compares the
-  result against a tree the adapter builds itself in answer to `get-tree`. An
-  adapter that composed its own deltas to validate them would only prove it
-  agrees with itself; the disagreement worth catching is between producer and
-  receiver.
-- **Deltas need their own session.** An adapter only sends them to a driver that
-  asked (`subscribe: 'diffs'`), so the delta obligation opens a second probe.
-  The shared session keeps subscribing to whole trees, which is the path most
-  adapters use and which the other obligations exercise.
 - **The adversarial peer imports nothing from termwright.** It re-derives the
   4-byte length prefix and the marker MAC from the spec text. Using
   `encodeFrame`/`encodeMarker` would only prove the implementation agrees with
@@ -392,9 +382,9 @@ has to delete an assertion that explains itself.
   wait here targets either the newest line or a full-frame repaint; the
   scrollback test waits on `SCROLL DONE`, which the fixture prints last on
   purpose.
-- **`waitForReady` can return before the command it should wait for starts.**
+- **`waitForQuiet` can return before the command it should wait for starts.**
   Between `press('Enter')` and the shell's `OSC 133 C`, the last mark still says
-  "prompt waiting", so a `waitForReady` issued immediately after a keystroke
+  "prompt waiting", so a `waitForQuiet` issued immediately after a keystroke
   resolves against the *previous* prompt. The prompt fixture prints
   `RUNNING <command>` at command start so the suite can wait for the command to
   be observably running first; a user hits the same race and needs the same
@@ -417,6 +407,6 @@ has to delete an assertion that explains itself.
   ownership, the ceiling and cursor independence, but not resuming a session
   from a new transport (the SDK supports it; nothing in this project relies on
   it yet).
-- The in-process half of §20.2a lives in `@termwright/ink-testing`; this package
+- The in-process half of §20.2a lives in `@termwright/ink`; this package
   ships the shared component and the process-mode expectations it is compared
   against.

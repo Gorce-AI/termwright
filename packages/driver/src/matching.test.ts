@@ -5,13 +5,15 @@ import { parseSelector, roleQuery, textMatcher } from './selectors.js';
 
 function tree(nodes: readonly Partial<SemanticNode>[]): SemanticIndex {
   const snapshot: SemanticSnapshot = {
-    v: 1,
+    v: 2,
     sessionId: 's',
     revision: 3,
     columns: 80,
     rows: 24,
     rootIds: ['root'],
     nodes: nodes.map((node) => ({ role: 'generic', name: '', ...node }) as SemanticNode),
+    coordinateSpace: { status: 'known', value: 'viewport-cells', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } },
+    hitGrid: { status: 'unsupported', capability: 'pointer-hit-grid', reason: 'framework-unobservable' },
   };
   return new SemanticIndex(snapshot);
 }
@@ -29,7 +31,7 @@ const dialog = tree([
   },
   { id: 'b2', parentId: 'd1', role: 'button', name: 'Reject', testId: 'reject', state: { disabled: true } },
   { id: 'l1', parentId: 'root', role: 'text', name: 'Your name' },
-  { id: 'i1', parentId: 'root', role: 'textbox', name: '', value: 'Ada', labelledBy: ['l1'] },
+  { id: 'i1', parentId: 'root', role: 'textbox', name: '', value: { status: 'known', value: 'Ada', sensitivity: 'public', evidence: { source: 'driver', method: 'native', strength: 'authoritative', providerId: 'test' } }, labelledBy: ['l1'] },
   { id: 'b3', parentId: 'root', role: 'button', name: 'Approve' },
 ]);
 

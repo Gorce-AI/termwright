@@ -6,6 +6,12 @@ description: The load-bearing technical decisions, why each was made, and what w
 Short records of the choices that shaped termwright. Each says what was decided,
 why the alternatives lost, and what would reopen the question.
 
+The core testing-model decisions (effective session contract, evidence
+providers, ActionPlanner, real input devices, observation semantics, identity,
+geometry, revisions, query domains, and certified framework injection) are
+maintained in the repository's
+[`core-testing-model-decisions.md`](https://github.com/Gorce-AI/termwright/blob/main/docs/architecture/core-testing-model-decisions.md).
+
 ## ADR-1 — A real pseudo-terminal, and a pinned PTY binding
 
 **Decision.** Every session owns a real pty, spawned through a `PtyBackend`
@@ -96,33 +102,38 @@ documented parameter cannot drift from a real one.
 registry, not inside transport objects, which is what makes stdio and Streamable
 HTTP interchangeable and keeps the ceilings in one place.
 
-## ADR-5 — `bounds` optional from day one
+## ADR-5 — Geometry is evidence-qualified
 
-**Decision.** A semantic node may omit `bounds`, and a snapshot carrying no
-bounds at all is valid.
+**Decision.** Every semantic node publishes separate `displayed`,
+`intendedRect`, and `visibleRect` observations. Each observation states whether
+the fact is known, absent, unknown, or unsupported.
 
-**Why.** The alternative was to require coordinates and thereby exclude every
-framework that composes strings or draws in immediate mode — most of the Go and
-Rust ecosystems. Role-and-name locators are useful *without* geometry; only
-hit-testing genuinely needs it.
+**Why.** Frameworks expose different physical facts. A render rectangle does
+not prove clipping or pointer ownership, and omitting that distinction creates
+false visibility and action results.
 
-**Consequence.** Adapters advertise an `absolute-bounds` capability only when
-they can honour it, and consumers must treat a bounds-free snapshot as a normal
-state rather than a fault. Ink drops bounds wholesale when `<Static>` shifts its
-layout region — the mechanism working as intended.
+**Consequence.** Adapters claim `intended-geometry`, `clipped-geometry`, and
+`pointer-hit-grid` independently and only from authoritative framework facts.
+Consumers branch on the observation status rather than treating missing
+evidence as a rectangle or boolean.
 
-## ADR-6 — Vitest as the first-class preset, driver runner-agnostic
+## ADR-6 — Termwright owns the test host; Vitest is the embedded engine
 
-**Decision.** `@termwright/test` targets Vitest specifically. The driver depends
-on no runner.
+**Decision.** `termwright test`, `termwright watch`, and `termwright ui` are the
+only product execution modes. They share one Termwright-owned host and its
+exact-certified Vitest engine. `@termwright/test` supplies the authored DSL,
+fixtures and matchers; the driver remains independently reusable as a library.
 
-**Why.** A preset that feels native beats a lowest-common-denominator API that
-feels foreign everywhere: `test.extend` fixtures, `expect.extend` matchers with
-real typing, reporters, sharding, `--last-failed` and retries all exist already,
-and reimplementing them would be a worse scheduler than the one Vitest has.
+**Why.** Vitest already provides collection, Vite transforms, mocks, assertions
+and the familiar test DSL. It does not understand PTY cost, process trees,
+paired semantic revisions, Attempt identity or terminal artifact durability.
+Termwright therefore embeds Vitest instead of replacing it, while owning every
+terminal-specific execution and certification boundary around it.
 
-Keeping that layer thin — roughly 5% of the code — is what keeps `node:test`,
-Jest and plain scripts first-class rather than theoretical.
+**Consequence.** There is no direct-Vitest compatibility runner, reporter-only
+fallback, file/title execution identity, or migration layer to maintain. The
+exact runner fails closed without its host context. Plain scripts may still use
+the low-level driver, but they are not certified Termwright test runs.
 
 ## ADR-7 — Recording on by default
 
@@ -141,10 +152,11 @@ exist so the default stays cheap enough to leave on.
 rendered text.
 
 **Why.** A locator that silently matches the wrong cell is worse than one that
-refuses: it turns a test suite into a source of false confidence. The same rule
-drives `unsupported-action` when mouse tracking is off, `stale-snapshot` when a
-ref outlives its revision, and the [Bubble Tea page](../../adapters/bubbletea/)
-saying plainly what it cannot do.
+refuses: it turns a test suite into a source of false confidence. A missing
+negotiated capability, a disabled runtime input mode, and a currently
+non-actionable target are distinct typed errors. A stale ref remains a
+`stale-snapshot`, and the [Bubble Tea page](../../adapters/bubbletea/) says
+plainly what its certified contract can and cannot do.
 
 ## ADR-9 — Electron is a thin host, not another runner
 

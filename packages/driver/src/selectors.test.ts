@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { TermwrightError } from './errors.js';
-import { matchesText, parseSelector, textMatcher } from './selectors.js';
+import { matchesText, parseRef, parseSelector, textMatcher } from './selectors.js';
+
+describe('locator refs', () => {
+  it('requires and preserves an explicit locator domain', () => {
+    expect(parseRef('semantic:save@7')).toEqual({ kind: 'node', nodeId: 'save', revision: 7 });
+    expect(parseRef('screen:2,4,6,1@9')).toEqual({
+      kind: 'rect', rect: { row: 2, column: 4, width: 6, height: 1 }, revision: 9,
+    });
+    expect(parseRef('save@7')).toBeNull();
+    expect(parseRef('grid:2,4,6,1@9')).toBeNull();
+  });
+});
 
 describe('parseSelector', () => {
   it('parses a role', () => {
@@ -32,12 +42,12 @@ describe('parseSelector', () => {
 
   it('rejects unknown roles, unknown pseudo-classes and stray characters', () => {
     for (const selector of ['widget', 'button:glowing', 'button[name=x]', '']) {
-      expect(() => parseSelector(selector), selector).toThrow(TermwrightError);
+      expect(() => parseSelector(selector), selector).toThrow(TypeError);
     }
   });
 
   it('rejects two roles or two ids in one compound selector', () => {
-    expect(() => parseSelector('#a#b')).toThrow(TermwrightError);
+    expect(() => parseSelector('#a#b')).toThrow(TypeError);
   });
 });
 

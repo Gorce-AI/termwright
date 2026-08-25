@@ -19,16 +19,18 @@ without it. The generated module therefore removes its own directory from
 `sys.path` and re-imports, running the module it displaced before doing
 anything of its own.
 
-**Nothing is written into the project.** The directory is temporary and is
-named only in the child's environment. The one caveat, which the README
-repeats: `PYTHONPATH` is visible to the application and inherited by anything
-it spawns, so grandchildren are instrumented too unless the variable is
-scrubbed.
+**Nothing is written into the project, and ownership is one-shot.** The
+directory is temporary and is named only in the launched environment. The
+first application interpreter atomically claims it, captures the semantic
+credentials process-locally, and scrubs both credentials and our path before
+the application's first line. Python children therefore cannot attach to the
+parent's semantic endpoint even when they inherit the parent's environment.
 
 Where it does not reach, measured: `python -S` (no `site`, so no
 `sitecustomize` at all) and `python -E` (ignores `PYTHONPATH`). Both are
-deliberate opt-outs by the person running the interpreter. `poetry` is
-**unverified** — see the README's Deviations.
+deliberate opt-outs by the person running the interpreter. `poetry run` is a
+special two-interpreter path: a one-hop marker makes the Poetry console process
+pass ownership to the application interpreter it launches.
 """
 
 from __future__ import annotations
@@ -44,6 +46,8 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 #: being on the path yet.
 ENV_ENDPOINT = "TERMWRIGHT_ENDPOINT"
 ENV_TOKEN = "TERMWRIGHT_TOKEN"
+ENV_OWNER = "TERMWRIGHT_PYTHON_OWNER"
+ENV_PASSTHROUGH = "TERMWRIGHT_PYTHON_PASSTHROUGH"
 
 #: Name of the file CPython looks for. Not ours to choose.
 SITECUSTOMIZE = "sitecustomize.py"
@@ -80,6 +84,55 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+def _path_key(path: str) -> str:
+    """Compare inherited paths with Windows case semantics."""
+    return os.path.normcase(os.path.abspath(path or "."))
+
+
+def _is_poetry_launcher() -> bool:
+    """Let Poetry pass the bootstrap to the interpreter it launches."""
+    name = os.path.basename(sys.argv[0]).lower()
+    marked = os.environ.pop({ENV_PASSTHROUGH!r}, None) == "poetry"
+    return marked and (name == "poetry" or name == "poetry.exe")
+
+
+def _claim() -> bool:
+    """Atomically make this interpreter the sole owner of this bootstrap."""
+    owner = os.environ.get({ENV_OWNER!r})
+    if not owner:
+        return False
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(owner, flags, 0o600)
+    except FileExistsError:
+        return False
+    except OSError:
+        return False
+    try:
+        os.write(descriptor, str(os.getpid()).encode("ascii"))
+    finally:
+        os.close(descriptor)
+    return True
+
+
+def _scrub() -> None:
+    """Keep secrets and bootstrap code out of descendant environments."""
+    os.environ.pop({ENV_ENDPOINT!r}, None)
+    os.environ.pop({ENV_TOKEN!r}, None)
+    os.environ.pop({ENV_OWNER!r}, None)
+    entries = os.environ.get("PYTHONPATH", "").split(os.pathsep)
+    remaining = [
+        entry for entry in entries
+        if entry and _path_key(entry) != _path_key(_HERE)
+    ]
+    if remaining:
+        os.environ["PYTHONPATH"] = os.pathsep.join(remaining)
+    else:
+        os.environ.pop("PYTHONPATH", None)
+
+
 def _chain() -> None:
     """Run the sitecustomize this one displaced, if there is one.
 
@@ -88,7 +141,7 @@ def _chain() -> None:
     the displaced module runs first and its effects are in place before the
     probe installs anything.
     """
-    remaining = [entry for entry in sys.path if os.path.abspath(entry or ".") != _HERE]
+    remaining = [entry for entry in sys.path if _path_key(entry) != _path_key(_HERE)]
     if len(remaining) == len(sys.path):
         return
     ours = sys.modules.pop("sitecustomize", None)
@@ -110,16 +163,29 @@ def _install() -> None:
     if not (os.environ.get({ENV_ENDPOINT!r}) and os.environ.get({ENV_TOKEN!r})):
         # Dormant: a PYTHONPATH that outlived its run installs nothing.
         return
-    root = {package_root!r}
-    if root not in sys.path:
-        sys.path.insert(0, root)
-    try:
-        from termwright_probe import install
-    except Exception:
-        # The probe is unreachable or broken. The application is not ours to
-        # take down over it, and there is no terminal to complain to.
+    # Poetry is a Python console script but not the application process. It
+    # must hand the still-unclaimed bootstrap to `poetry run`'s interpreter.
+    if _is_poetry_launcher():
         return
-    install()
+    claimed = _claim()
+    captured = dict(os.environ) if claimed else None
+    root = {package_root!r}
+    try:
+        if not claimed:
+            return
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        try:
+            from termwright_probe import install
+        except Exception:
+            # The probe is unreachable or broken. The application is not ours
+            # to take down over it, and there is no terminal to complain to.
+            return
+        install(env=captured)
+    finally:
+        # This interpreter keeps a private copy; every subprocess sees a
+        # dormant environment and cannot race or reuse the parent's channel.
+        _scrub()
 
 
 _chain()
@@ -143,6 +209,11 @@ class Bootstrap:
         """Full path of the generated file."""
         return os.path.join(self.directory, SITECUSTOMIZE)
 
+    @property
+    def owner(self) -> str:
+        """Path atomically claimed by the one application interpreter."""
+        return os.path.join(self.directory, "owner")
+
     def env(self, base: Optional[Mapping[str, str]] = None) -> Dict[str, str]:
         """`base` with our directory prepended to `PYTHONPATH`.
 
@@ -156,6 +227,7 @@ class Bootstrap:
         env["PYTHONPATH"] = (
             self.directory if not existing else self.directory + os.pathsep + existing
         )
+        env[ENV_OWNER] = self.owner
         return env
 
     def cleanup(self) -> None:
@@ -204,4 +276,14 @@ def with_probe(
     if not is_instrumented(source):
         return list(argv), dict(source), None
     bootstrap = write_bootstrap()
-    return list(argv), bootstrap.env(source), bootstrap
+    composed = bootstrap.env(source)
+    executable = os.path.basename(argv[0]).lower() if argv else ""
+    if (
+        executable in ("poetry", "poetry.exe")
+        and "run" in argv[1:]
+    ):
+        # Poetry is itself a Python console script. Its sitecustomize consumes
+        # this one-hop marker, leaving the actual `poetry run` interpreter to
+        # atomically claim the bootstrap.
+        composed[ENV_PASSTHROUGH] = "poetry"
+    return list(argv), composed, bootstrap

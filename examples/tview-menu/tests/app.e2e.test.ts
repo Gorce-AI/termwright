@@ -25,7 +25,7 @@ describe.skipIf(!runnable)('the tview menu', () => {
     // The matcher polls, so it is what waits for the probe's handshake — a
     // plain read of the capability is only meaningful once a tree arrived.
     await expect(app).toMatchSemanticSnapshot();
-    expect(app.capabilities().semanticTree).toBe(true);
+    expect(app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
     await expect(app).toMatchCellSnapshot();
   });
 
@@ -44,7 +44,8 @@ describe.skipIf(!runnable)('the tview menu', () => {
     await app.waitForText('New file');
 
     // The form's widgets are in the tree from the start, on a page tview has
-    // not shown yet — and they carry `hidden`, so visibility means what it says.
+    // not shown yet. The probe can prove that hidden state, but it deliberately
+    // does not claim clipped geometry for displayed primitives.
     await expect(app.getByRole('button', { name: 'Save' })).not.toBeVisible();
 
     await step('open Settings from the menu', async () => {
@@ -56,7 +57,9 @@ describe.skipIf(!runnable)('the tview menu', () => {
       await expect(app.getByRole('listitem', { name: 'Settings' })).toHaveState({ selected: true });
 
       await app.press('Enter');
-      await expect(app.getByRole('textbox', { name: 'Name' })).toBeVisible();
+      const name = app.getByRole('textbox', { name: 'Name' });
+      await expect(name).toBeAttached();
+      await expect(name).toBeFocused();
     });
 
     await app.type('release');
@@ -75,7 +78,7 @@ describe.skipIf(!runnable)('the tview menu', () => {
       // selects the physical keyboard strategy instead.
       await expect(save).toBeFocused();
       const receipt = await save.activate();
-      expect(['click', 'focus-enter', 'focus-space']).toContain(receipt.strategy);
+      expect(receipt.plan.strategy).toBe('authoritative-activate');
     });
 
     await expect(app).toHaveText('status: saved release');

@@ -13,6 +13,7 @@ An archive is a directory (zippable for transport):
 | `events.jsonl` | inputs, resizes, steps, driver actions, assertions, crash |
 | `semantics.jsonl` | one semantic tree per revision, with its cast offset |
 | `logs.jsonl` | application log entries; absent when the session logged nothing |
+| `COMMITTED` | versioned SHA-256 manifest written last before atomic publication |
 
 The layout is normative in [`/CONTRACTS.md`](../../CONTRACTS.md) §Trace. Nothing
 outside this package reads or writes those files directly.
@@ -54,8 +55,10 @@ crashes arrive on their own through those events; nothing above reports them by
 hand. `recordAction` exists only for work the driver cannot see, and calling it
 for a harness action would record that action twice.
 
-Nothing is written until `finalize()`, because that is the first moment the
-timeline is known.
+Nothing is published until `finalize()`, because that is the first moment the
+timeline is known. Finalization writes and fsyncs a sibling staging directory,
+then atomically renames it into place. A crash or ENOSPC leaves an explicitly
+incomplete staging artifact; readers require and verify `COMMITTED`.
 
 ## The two timelines
 
@@ -115,7 +118,7 @@ driver's `ScreenSnapshot`, so a recorded moment can be inspected cell by cell or
 handed to [`@termwright/screenshot`](../screenshot).
 
 It measures characters with the profile the session used
-(`meta.terminalProfile`, captured from `capabilities().terminalProfile`) through
+(`meta.terminalProfile`, captured from `TerminalHarness.terminalProfile`) through
 the shared emulator in `@termwright/vt`. That matters more than it sounds: when
 the session and its replay used different width tables, an emoji was two columns
 live and one on replay, and the screenshot quietly disagreed with the assertion.
@@ -159,6 +162,11 @@ Redaction happens at the source, in `@termwright/logs`. **Lines tailed from a
 log file are not redacted**: they arrive as raw text, so treat them the way you
 treat a crash's screen tail.
 
+Semantic values and input/action payloads use `artifactValuePolicy`:
+`redacted` (the secure default), `none`, or explicit `raw`. Sensitive semantic
+values are stored as typed `withheld` observations. Executable keyboard values
+never enter an `ActionReceipt`; receipts contain recorded projections only.
+
 ## When the program dies on its own
 
 A signal, or a non-zero exit nobody asked for, lands in `meta.crash` and is
@@ -174,8 +182,9 @@ if (trace.meta.crash !== undefined) {
 **`meta.crash.screenTail` is not redacted.** It is what the terminal showed,
 verbatim — whatever the program or the tty's echo displayed is in there, secrets
 included. Treat an archive carrying a crash like a screenshot when you store it,
-upload it as a CI artifact or forward it. Pasted input is the one exception: its
-size is recorded, never its contents.
+upload it as a CI artifact or forward it. Input previews are omitted unless the
+session explicitly selected raw artifact values. This does not protect text the
+application echoed to the terminal.
 
 ## The report
 

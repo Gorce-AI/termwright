@@ -14,7 +14,6 @@ import (
 type ClientPerformanceMetrics struct {
 	Enabled                      bool     `json:"enabled"`
 	FullSnapshots                int64    `json:"fullSnapshots"`
-	Deltas                       int64    `json:"deltas"`
 	SemanticBytes                int64    `json:"semanticBytes"`
 	SemanticNodes                int64    `json:"semanticNodes"`
 	UnknownFrameworkNodes        int64    `json:"unknownFrameworkNodes"`
@@ -50,7 +49,6 @@ func (c *Client) PerformanceMetrics() ClientPerformanceMetrics {
 	result := ClientPerformanceMetrics{
 		Enabled:                   enabled,
 		FullSnapshots:             c.snapsSent,
-		Deltas:                    c.deltasSent,
 		SemanticBytes:             c.performance.semanticBytes,
 		SemanticNodes:             c.performance.semanticNodes,
 		UnknownFrameworkNodes:     c.performance.unknownFrameworkNodes,
@@ -64,7 +62,7 @@ func (c *Client) PerformanceMetrics() ClientPerformanceMetrics {
 	if !enabled {
 		return result
 	}
-	frames := c.snapsSent + c.deltasSent
+	frames := c.snapsSent
 	if frames > 0 {
 		result.AverageBytesPerFrame = floatPointer(float64(result.SemanticBytes) / float64(frames))
 		result.AverageSemanticNodesPerFrame = floatPointer(float64(result.SemanticNodes) / float64(frames))

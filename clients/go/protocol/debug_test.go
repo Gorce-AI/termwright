@@ -132,7 +132,7 @@ func TestDescribeEndpointNamesTheTransport(t *testing.T) {
 func TestDormancyReasonIsRecorded(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "adapter.log")
 	log := OpenDebugLog(path, "test")
-	if client := fromEnvValues("", "", "", Options{Debug: log}); client != nil {
+	if client := fromEnvValues("", "", Options{Debug: log}); client != nil {
 		t.Fatal("expected no client")
 	}
 	log.Close()
@@ -145,24 +145,12 @@ func TestDormancyReasonIsRecorded(t *testing.T) {
 func TestDormancyReasonNamesOnlyTheMissingVariable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "adapter.log")
 	log := OpenDebugLog(path, "test")
-	if client := fromEnvValues("/tmp/x.sock", "", "", Options{Debug: log}); client != nil {
+	if client := fromEnvValues("/tmp/x.sock", "", Options{Debug: log}); client != nil {
 		t.Fatal("expected no client")
 	}
 	log.Close()
 	text := readFile(t, path)
 	if !strings.Contains(text, "dormant: TERMWRIGHT_TOKEN not set") {
-		t.Fatalf("got:\n%s", text)
-	}
-}
-
-func TestAProtocolMismatchSaysSo(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "adapter.log")
-	log := OpenDebugLog(path, "test")
-	if client := fromEnvValues("/tmp/x.sock", "token", "termwright/99", Options{Debug: log}); client != nil {
-		t.Fatal("expected no client")
-	}
-	log.Close()
-	if text := readFile(t, path); !strings.Contains(text, `dormant: TERMWRIGHT_PROTOCOL="termwright/99"`) {
 		t.Fatalf("got:\n%s", text)
 	}
 }

@@ -1,178 +1,129 @@
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { createRunId, RunEventProducer, type RunEvent } from '@termwright/protocol/run-events';
 import {
   RUN_MANIFEST_VERSION,
-  parseRunManifest,
-  readRunHistory,
-  readRunManifest,
-  runId,
-  writeRunManifest,
-  type RunManifest,
-} from './runs.js';
+  beginRunManifest,
+  runDirectoryName,
+  type RunManifest as NativeRunManifest,
+  type RunStartProvenance,
+} from '@termwright/run-history';
+import { readRunHistory, readRunManifest } from './runs.js';
 
-const manifest = (partial: Partial<RunManifest> = {}): RunManifest => ({
-  v: RUN_MANIFEST_VERSION,
-  id: '2026-08-16T10-00-00-000Z',
-  startedAt: 1_760_000_000_000,
-  finishedAt: 1_760_000_002_000,
-  summary: { total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, durationMs: 2_000 },
-  tests: [
-    {
-      id: 't1',
-      title: 'logs in',
-      file: '/repo/a.test.ts',
-      status: 'passed',
-      durationMs: 300,
-      flaky: false,
-      lostLogRecords: 0,
-    },
-    {
-      id: 't2',
-      title: 'rejects a bad password',
-      file: '/repo/a.test.ts',
-      status: 'failed',
-      durationMs: 500,
-      flaky: false,
-      lostLogRecords: 0,
-      traceRef: '/repo/out/t2.twtrace',
-      error: 'button stayed disabled',
-    },
-  ],
-  ...partial,
-});
-
-const emptyDir = async (): Promise<string> => mkdtemp(join(tmpdir(), 'tw-runs-'));
-
-describe('writeRunManifest / readRunManifest', () => {
-  it('round-trips a run', async () => {
+describe('native run history UI projection', () => {
+  it('projects exact specs, attempts, flaky state and captured provenance', async () => {
     const dir = await emptyDir();
-    await writeRunManifest(dir, manifest());
-    expect(await readRunManifest(dir, manifest().id)).toEqual(manifest());
+    const start = provenance(100);
+    const native = manifest(start);
+    await (await beginRunManifest(dir, start)).commit(native);
+
+    const [summary] = await readRunHistory(dir);
+    expect(summary).toMatchObject({
+      state: 'complete', id: start.runId, testCount: 1,
+      summary: { status: 'flaky', total: 1, passed: 1, failed: 0, flaky: 1 },
+      engine: start.engine, runtime: start.runtime, resources: start.resources,
+    });
+    const detail = await readRunManifest(dir, start.runId);
+    expect(detail).toMatchObject({
+      state: 'complete', id: start.runId,
+      tests: [{
+        id: native.specs[0]?.runnerTaskId,
+        specId: native.specs[0]?.specId,
+        title: 'suite > works', file: '/repo/example.test.ts', status: 'passed', durationMs: 7, flaky: true,
+        attempts: [
+          { attemptId: native.attempts[0]?.attemptId, repeat: 0, retry: 0, status: 'failed', durationMs: 3 },
+          { attemptId: native.attempts[1]?.attemptId, repeat: 0, retry: 1, status: 'passed', durationMs: 4 },
+        ],
+      }],
+    });
   });
 
-  it('keeps the path of each test’s archive, not a copy of it', async () => {
+  it('surfaces incomplete, corrupt and unsupported entries instead of skipping them', async () => {
     const dir = await emptyDir();
-    await writeRunManifest(dir, manifest());
-    const read = await readRunManifest(dir, manifest().id);
-    expect(read?.tests[1]?.traceRef).toBe('/repo/out/t2.twtrace');
-  });
+    const partial = provenance(300);
+    await beginRunManifest(dir, partial);
 
-  it('refuses to write a manifest the reader would reject', async () => {
-    const dir = await emptyDir();
-    // `summary.durationMs` missing: the writer used to accept this happily and
-    // the reader then returned null, so the run vanished from the history with
-    // nothing said. The two now agree on what a manifest is.
-    const broken = manifest({
-      summary: { total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0 },
-    } as unknown as Partial<RunManifest>);
+    const corrupt = createRunId('run');
+    const corruptDir = join(dir, runDirectoryName(corrupt));
+    await mkdir(corruptDir);
+    await writeFile(join(corruptDir, 'manifest.json'), '{', 'utf8');
+    await writeFile(join(corruptDir, 'COMMITTED'), 'bad\n', 'utf8');
 
-    await expect(writeRunManifest(dir, broken)).rejects.toThrow(/would not read back/);
-    expect(await readRunManifest(dir, broken.id)).toBeNull();
-  });
-});
+    const unsupported = provenance(200);
+    const unsupportedDir = join(dir, runDirectoryName(unsupported.runId));
+    await mkdir(unsupportedDir);
+    const body = `${JSON.stringify({ ...manifest(unsupported), v: 99 })}\n`;
+    const digest = createHash('sha256').update(body).digest('hex');
+    await writeFile(join(unsupportedDir, 'manifest.json'), body, 'utf8');
+    await writeFile(join(unsupportedDir, 'COMMITTED'), `termwright-run-history-v1 sha256:${digest}\n`, 'utf8');
 
-describe('readRunHistory', () => {
-  it('lists runs newest first', async () => {
-    const dir = await emptyDir();
-    for (const id of ['2026-08-14T10-00-00-000Z', '2026-08-16T10-00-00-000Z', '2026-08-15T10-00-00-000Z']) {
-      await writeRunManifest(dir, manifest({ id }));
-    }
-    expect((await readRunHistory(dir)).map((run) => run.id)).toEqual([
-      '2026-08-16T10-00-00-000Z',
-      '2026-08-15T10-00-00-000Z',
-      '2026-08-14T10-00-00-000Z',
+    expect((await readRunHistory(dir)).map((run) => run.state).sort()).toEqual([
+      'corrupt', 'incomplete', 'unsupported-version',
     ]);
   });
 
-  it('reports no runs rather than failing when nothing was ever recorded', async () => {
-    expect(await readRunHistory(join(await emptyDir(), 'never-written'))).toEqual([]);
-  });
-
-  it('skips a half-written run and keeps the ones around it', async () => {
+  it('rejects legacy timestamps and path-shaped ids at the projection boundary', async () => {
     const dir = await emptyDir();
-    await writeRunManifest(dir, manifest({ id: '2026-08-16T10-00-00-000Z' }));
-    await mkdir(join(dir, '2026-08-16T11-00-00-000Z'), { recursive: true });
-    await writeFile(join(dir, '2026-08-16T11-00-00-000Z', 'manifest.json'), '{"v":1,', 'utf8');
-    expect((await readRunHistory(dir)).map((run) => run.id)).toEqual(['2026-08-16T10-00-00-000Z']);
-  });
-
-  it('summarises without carrying every test', async () => {
-    const dir = await emptyDir();
-    await writeRunManifest(dir, manifest());
-    const [run] = await readRunHistory(dir);
-    expect(run?.testCount).toBe(2);
-    expect(run?.summary.failed).toBe(1);
+    await expect(readRunManifest(dir, '2026-08-16T10-00-00-000Z')).resolves.toMatchObject({
+      state: 'corrupt', reason: 'invalid canonical RunId',
+    });
+    await expect(readRunManifest(dir, '../../etc')).resolves.toMatchObject({
+      state: 'corrupt', reason: 'invalid canonical RunId',
+    });
   });
 });
 
-describe('parseRunManifest', () => {
-  it('rejects a manifest from a version this build does not know', () => {
-    expect(parseRunManifest(JSON.stringify({ ...manifest(), v: 99 }))).toBeNull();
-    // v1 is this project's own previous format, and is rejected on the same
-    // grounds: its tests carry no `lostLogRecords`, so reading one would mean
-    // inventing the number.
-    expect(parseRunManifest(JSON.stringify({ ...manifest(), v: 1 }))).toBeNull();
-  });
+async function emptyDir(): Promise<string> { return mkdtemp(join(tmpdir(), 'tw-ui-native-runs-')); }
 
-  it('rejects one missing what the list needs', () => {
-    expect(parseRunManifest(JSON.stringify({ ...manifest(), summary: { total: 1 } }))).toBeNull();
-    expect(parseRunManifest(JSON.stringify({ ...manifest(), startedAt: 'today' }))).toBeNull();
-    expect(parseRunManifest('not json')).toBeNull();
-    expect(parseRunManifest('[]')).toBeNull();
-  });
+function provenance(startedAt: number): RunStartProvenance {
+  return {
+    invocationId: createRunId('invocation'), runId: createRunId('run'), startedAt,
+    engine: { name: 'vitest', version: '4.1.11', certification: 'termwright-vitest-4.1.11' },
+    runtime: { node: process.version, platform: process.platform, arch: process.arch },
+    resources: {
+      profile: 'default', scheduler: { pool: 'forks', maxWorkers: 2, fileParallelism: true },
+      capacities: { ptySession: 2 }, perTerminal: { ptySession: 1 },
+    },
+    timeouts: { totalRunMs: 60_000, finalizationReserveMs: 5_000 },
+    ci: { CI: 'true' },
+    git: { commit: 'abcdef1', message: 'native host', author: 'Ada', branch: 'main' },
+  };
+}
 
-  it('drops unusable tests but keeps the run', () => {
-    const parsed = parseRunManifest(
-      JSON.stringify({
-        ...manifest(),
-        tests: [
-          { id: 't1', title: 'ok', status: 'passed', lostLogRecords: 0 },
-          // No `lostLogRecords`: usable in v1, not in v2.
-          { id: 't-old', title: 'ok', status: 'passed' },
-          { id: 't2' },
-          'nope',
-          { status: 'exploded' },
-        ],
-      }),
-    );
-    expect(parsed?.tests.map((test) => test.id)).toEqual(['t1']);
-    expect(parsed?.tests[0]?.durationMs).toBe(0);
+function manifest(start: RunStartProvenance): NativeRunManifest {
+  const projectId = createRunId('project');
+  const specId = createRunId('spec');
+  const runnerTaskId = createRunId('runner-task');
+  const attempts = [
+      { attemptId: createRunId('attempt'), executionId: createRunId('execution'), runnerTaskId, projectId, specId,
+        nativeTaskId: 'vitest-task', repeat: 0, retry: 0, status: 'failed', durationMs: 3 },
+      { attemptId: createRunId('attempt'), executionId: createRunId('execution'), runnerTaskId, projectId, specId,
+        nativeTaskId: 'vitest-task', repeat: 0, retry: 1, status: 'passed', durationMs: 4 },
+    ] as const;
+  let monotonicTime = 1;
+  const producer = new RunEventProducer({ producerId: createRunId('producer'), epoch: 0, monotonicNow: () => monotonicTime });
+  const events: RunEvent[] = attempts.flatMap((attempt) => {
+    const identity = { invocationId: start.invocationId, runId: start.runId, projectId, specId, runnerTaskId,
+      executionId: attempt.executionId, attemptId: attempt.attemptId };
+    const payload = { nativeTaskId: attempt.nativeTaskId, repeat: attempt.repeat, retry: attempt.retry };
+    const started = producer.emit({ eventClass: 'authoritative', type: 'attempt.started', identity, payload });
+    monotonicTime += attempt.durationMs;
+    const finished = producer.emit({ eventClass: 'authoritative', type: 'attempt.finished', identity,
+      payload: { ...payload, state: attempt.status } });
+    monotonicTime += 1;
+    return [started, finished];
   });
-
-  it('keeps ordered retry attempts and remains compatible when they are absent', () => {
-    const current = manifest();
-    const withAttempts = {
-      ...current,
-      tests: current.tests.map((test, index) => index === 0 ? {
-        ...test,
-        flaky: true,
-        attempts: [
-          { attempt: 1, status: 'failed', errors: ['first failure'], traceRefs: ['retry-1.twtrace'] },
-          { attempt: 2, status: 'passed', durationMs: 12, errors: [] },
-        ],
-      } : test),
-    };
-    expect(parseRunManifest(JSON.stringify(withAttempts))?.tests[0]?.attempts).toEqual(withAttempts.tests[0]?.attempts);
-    expect(parseRunManifest(JSON.stringify(current))?.tests[0]).not.toHaveProperty('attempts');
-  });
-});
-
-describe('readRunManifest', () => {
-  it('refuses an id that would walk out of the runs directory', async () => {
-    const dir = await emptyDir();
-    expect(await readRunManifest(dir, '../../etc')).toBeNull();
-    expect(await readRunManifest(dir, 'a/b')).toBeNull();
-    expect(await readRunManifest(dir, '')).toBeNull();
-  });
-});
-
-describe('runId', () => {
-  it('is a sortable timestamp usable as a directory name', () => {
-    const id = runId(Date.parse('2026-08-16T10:00:00.000Z'));
-    expect(id).toBe('2026-08-16T10-00-00-000Z');
-    expect(id).not.toMatch(/[:/\\]/);
-    expect(runId(Date.parse('2026-08-15T10:00:00.000Z')) < id).toBe(true);
-  });
-});
+  events.push(producer.emit({
+      eventClass: 'authoritative', type: 'run.state',
+      identity: { invocationId: start.invocationId, runId: start.runId }, payload: { state: 'flaky' },
+    }));
+  return {
+    ...start, v: RUN_MANIFEST_VERSION, finishedAt: start.startedAt + 10, status: 'flaky',
+    specs: [{ runnerTaskId, projectId, specId, nativeTaskId: 'vitest-task', file: '/repo/example.test.ts', fullName: 'suite > works' }],
+    attempts,
+    events,
+  };
+}

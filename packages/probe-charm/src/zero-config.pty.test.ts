@@ -14,24 +14,23 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { createNodePtyBackend, launchTerminal, type TerminalHarness } from '@termwright/driver';
-import { afterAll, describe, expect, it } from 'vitest';
+import { createNodePtyBackend, inheritedSpawnEnv, launchTerminal, type TerminalHarness } from '@termwright/driver';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
+import { goTestCapability } from '../../../scripts/test-support/go-toolchain.mjs';
 import { prepareInstrumentedBuild, PROBE_VERSION } from './launch.js';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, 'testing', 'fixture-v2');
+const FIXTURE_V1 = join(here, 'testing', 'fixture-v1');
 const FIXTURE_BUBBLES = join(here, 'testing', 'fixture-bubbles');
 const FIXTURE_ANNOTATED = join(here, 'testing', 'fixture-annotated');
 
 async function goAvailable(): Promise<boolean> {
-  if (process.env['TERMWRIGHT_SKIP_GO'] === '1') return false;
-  try {
+  return goTestCapability(async () => {
     await run('go', ['version']);
     return true;
-  } catch {
-    return false;
-  }
+  }, false, 'Go certification toolchain');
 }
 
 function ptyAvailable(): boolean {
@@ -39,7 +38,7 @@ function ptyAvailable(): boolean {
   try {
     const pty = createNodePtyBackend().spawn({
       command: [process.execPath, '-e', 'process.exit(0)'],
-      env: { PATH: process.env['PATH'] ?? '' },
+      env: inheritedSpawnEnv(),
       columns: 20,
       rows: 4,
     });
@@ -54,8 +53,14 @@ const runnable = (await goAvailable()) && ptyAvailable();
 const roots: string[] = [];
 const sessions: TerminalHarness[] = [];
 
+afterEach(async () => {
+  const owned = sessions.splice(0);
+  const results = await Promise.allSettled(owned.map((session) => session.close()));
+  const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+  if (failures.length > 0) throw new AggregateError(failures, 'failed to close test-owned terminal sessions');
+});
+
 afterAll(async () => {
-  await Promise.all(sessions.map((session) => session.close()));
   await Promise.all(roots.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -108,8 +113,47 @@ async function buildFixture(): Promise<string> {
   return binary;
 }
 
+async function buildV1Fixture(): Promise<string> {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'tw-charm-v1-')));
+  roots.push(dir);
+  const app = join(dir, 'app');
+  await mkdir(app, { recursive: true });
+  await cp(FIXTURE_V1, app, { recursive: true });
+  const prepared = await prepareInstrumentedBuild({
+    moduleDir: app,
+    env: { ...process.env, TERMWRIGHT_CACHE_DIR: join(dir, 'cache') },
+  });
+  const binary = join(dir, 'app-binary');
+  await run('go', ['build', '-o', binary, '.'], { cwd: app, env: prepared.env });
+  return binary;
+}
+
+describe.skipIf(!runnable)('an exact Bubble Tea v1 application under the probe', () => {
+  it('publishes semantics through real PTY input and answers observable startup queries', async () => {
+    const binary = await buildV1Fixture();
+    const app = await launchTerminal({ command: [binary], columns: 80, rows: 12 });
+    sessions.push(app);
+
+    await app.waitForText('ready');
+    await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
+    expect(app.contract()?.framework).toMatchObject({
+      name: 'charm', version: 'v1.3.10', adapterVersion: PROBE_VERSION,
+    });
+    // ConPTY consumes startup terminal queries before Termwright's emulator
+    // can observe and answer them. Semantics and ordinary PTY input remain
+    // authoritative there; the terminal-response path is covered by direct VT
+    // tests and real PTYs whose query bytes are actually observable.
+    if (process.platform !== 'win32') {
+      expect(app.diagnostics().some((entry) => entry.code === 'terminal-response')).toBe(true);
+    }
+
+    await app.press('x');
+    await app.waitForText('changed');
+  }, 900_000);
+});
+
 describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () => {
-	it('qualifies unobservable component layout instead of inventing it', async () => {
+	it('reports unobservable component geometry instead of inventing it', async () => {
 		const binary = await buildFixture();
 		const app = await launchTerminal({
 			command: [binary],
@@ -118,7 +162,7 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
 		});
 		sessions.push(app);
 		await app.waitForText('Sign in');
-		await expect.poll(() => app.semanticTree()?.v).toBe(2);
+		await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
 
 		const tree = app.semanticTree();
 		expect(tree?.hitGrid).toEqual({
@@ -128,11 +172,10 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
 		});
 		const textbox = tree?.nodes.find((node) => node.role === 'textbox' && node.name === 'Name');
 		expect(textbox?.geometry).toEqual({
-			displayed: { status: 'unknown', reason: 'not-reported' },
-			intendedRect: { status: 'unsupported', capability: 'geometry', reason: 'framework-unobservable' },
-			visibleRect: { status: 'unsupported', capability: 'geometry', reason: 'framework-unobservable' },
+			displayed: { status: 'unsupported', capability: 'displayed', reason: 'framework-unobservable' },
+			intendedRect: { status: 'unsupported', capability: 'intended-geometry', reason: 'framework-unobservable' },
+			visibleRect: { status: 'unsupported', capability: 'clipped-geometry', reason: 'framework-unobservable' },
 		});
-		expect(textbox?.bounds).toBeUndefined();
 	}, 900_000);
 
   it('names the components the screen only shows as text', async () => {
@@ -140,26 +183,15 @@ describe.skipIf(!runnable)('a plain Bubble Tea application under the probe', () 
     const app = await launchTerminal({ command: [binary], columns: 80, rows: 12 });
     sessions.push(app);
     await app.waitForText('Sign in');
+    // Screen output and the semantic socket are independent under ConPTY.
+    // The banner proves rendering started, not that the first tree committed.
+    await expect.poll(() => app.semanticTree()?.v, { timeout: 10_000 }).toBe(2);
 
-    expect(app.capabilities().semanticTree).toBe(true);
-    expect(app.capabilities().adapter?.name).toBe('termwright-probe-charm');
-    expect(app.capabilities().capabilities).toEqual([
-      'tree',
-      'states',
-      'actions',
-      'render-revisions',
-      'qualified-observations',
-    ]);
-    // Probe capabilities describe what Bubble Tea lets the instrumentation
-    // observe; they are intentionally not the adapter traffic negotiated
-    // immediately above.
-    expect(app.capabilities().probe).toEqual({
-      framework: 'charm',
-      frameworkVersion: 'v2.0.8',
-      probeVersion: PROBE_VERSION,
-      identityKind: 'frame-local',
-      capabilities: ['annotations'],
+    expect(app.contract()?.capabilities['semantic-tree'].status).toBe('supported');
+    expect(app.contract()?.framework).toMatchObject({
+      name: 'charm', version: 'v2.0.8', adapterVersion: PROBE_VERSION,
     });
+    expect(app.contract()?.capabilities['paired-revisions'].status).toBe('supported');
 
     // The claim: a grid scrape sees two rows of similar-looking text. The tree
     // says which component each is, and which one is focused — neither of
@@ -293,7 +325,12 @@ describe.skipIf(!runnable)('developer annotations', () => {
 describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {
   it('reports state the library keeps entirely private', async () => {
     const binary = await buildBubblesFixture();
-    const app = await launchTerminal({ command: [binary], columns: 60, rows: 10 });
+    const app = await launchTerminal({
+      command: [binary],
+      columns: 60,
+      rows: 10,
+      semanticNegotiationMs: 2_000,
+    });
     sessions.push(app);
     await app.waitForText('Loading');
 
@@ -301,7 +338,7 @@ describe.skipIf(!runnable)('the Bubbles patch set, end to end', () => {
     // is a glyph, and "animating" is indistinguishable from "stuck". The
     // accessor makes the frame observable, so the tree can show it advancing.
     // Polled rather than settled: this application animates forever, so
-    // waitForStable() waits for a quiet screen that never comes. An
+    // waitForQuiet() waits for a quiet screen that never comes. An
     // always-animating UI is exactly the case where "wait for stability" is
     // the wrong instrument, and reaching for it here cost a red test.
     const frames = new Set<number | undefined>();

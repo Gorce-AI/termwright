@@ -9,8 +9,11 @@ Framework-specific operation support is maintained in
 
 ## Runtime requirements
 
-- Node.js 22 or newer is required for the JavaScript toolchain.
-- Vitest 3.2 or newer is the supported test runner line.
+<!-- BEGIN GENERATED RUNTIME REQUIREMENTS -->
+<!-- Generated from package.json; do not edit this block by hand. -->
+- Node.js must match `^22.0.0 || ^24.0.0`: supported major lines are 22 and 24; unlisted lines such as 23 and 25 are excluded.
+- Termwright embeds and certifies exactly Vitest 4.1.11.
+<!-- END GENERATED RUNTIME REQUIREMENTS -->
 - PTY tests require an operating system and environment that can allocate a PTY.
 - The Ratatui semantic transport is supported on macOS and Linux, not Windows.
 
@@ -37,7 +40,7 @@ Use `toBeAttached()` or `toBeDisplayed()` when that is the behavior you need.
 ## Gherkin
 
 Termwright provides scenario-scoped hooks and Cucumber tag-expression
-filtering, but not a dedicated Gherkin language server. Use an editor Cucumber
+filtering, but not a Termwright-specific Gherkin language server. Use the official Cucumber
 extension for syntax and definition navigation. `.feature` files run through
 the same Vitest scheduler and Runner catalog as provider-owned TypeScript tests.
 

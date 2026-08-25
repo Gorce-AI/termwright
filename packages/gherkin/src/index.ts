@@ -35,6 +35,8 @@ export {
 } from './definitions.js';
 
 export {
+  GHERKIN_TAGS_ENV,
+  composeTagExpressions,
   gherkinPlugin,
   type GeneratedGherkinImports,
   type GherkinPluginOptions,
