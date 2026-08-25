@@ -11,9 +11,9 @@ editUrl: false
 
 # Interface: LaunchTerminalOptions
 
-Defined in: [driver/src/session.ts:236](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L236)
+Defined in: [driver/src/session.ts:230](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L230)
 
-Options accepted by [launchTerminal](../../functions/launchterminal/), plus the injectable backend.
+Stable application-facing options accepted by [launchTerminal](../../functions/launchterminal/).
 
 ## Extends
 
@@ -32,16 +32,6 @@ Values copied into receipts/traces. Defaults to `redacted`; `raw` is explicit op
 #### Inherited from
 
 [`LaunchOptions`](../launchoptions/).[`artifactValuePolicy`](../launchoptions/#artifactvaluepolicy)
-
-***
-
-### backend?
-
-> `readonly` `optional` **backend?**: [`PtyBackend`](../ptybackend/)
-
-Defined in: [driver/src/session.ts:238](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L238)
-
-Defaults to `@lydell/node-pty`; swapped by component-testing harnesses.
 
 ***
 
@@ -142,12 +132,11 @@ current end, so a session never replays a previous run.
 
 > `readonly` `optional` **modesObservable?**: `boolean`
 
-Defined in: [driver/src/session.ts:245](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L245)
+Defined in: [driver/src/session.ts:236](https://github.com/Gorce-AI/termwright/blob/main/packages/driver/src/session.ts#L236)
 
 Whether the child's mouse mode requests are observable. Defaults to the
-platform's answer (false under ConPTY). Overridable so the unobservable
-path can be exercised on a machine where modes do arrive — a behaviour
-only one OS reaches is a behaviour only one OS tests.
+platform's answer (false under ConPTY). Framework integrations may pin the
+value when their transport has stronger knowledge than the host platform.
 
 ***
 

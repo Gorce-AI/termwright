@@ -38,24 +38,24 @@ available while the custom fixture finishes its cleanup.
 
 ## Apply options to a file or suite
 
-Use `test.scoped()` to change launch defaults for a file or nested `describe`:
+Use `test.override()` to change launch defaults for a file or nested `describe`:
 
 ```ts
 import {describe} from 'vitest';
 import {test} from 'termwright/test';
 
-test.scoped({termwrightOptions: {columns: 120, trace: 'on'}});
+test.override({termwrightOptions: {columns: 120, trace: 'on'}});
 
 describe('wide layout', () => {
-  test.scoped({termwrightOptions: {columns: 200}});
+  test.override({termwrightOptions: {columns: 200}});
   // Tests here use 200 columns. Other tests in the file use 120.
 });
 ```
 
-Scoped options merge between project configuration and an individual launch:
+Suite overrides merge between project configuration and an individual launch:
 
 ```text
-configureTermwright() < test.scoped() < terminal.launch()
+configureTermwright() < test.override() < terminal.launch()
 ```
 
 `env` and `timeouts` merge by key. `command` replaces the complete argv rather
@@ -69,7 +69,7 @@ for the exact option surface.
 | Files needed by one case | `terminal.launch({files})` in that case |
 | Shared project tree | `terminal.launch({template})` |
 | Reusable launch and login flow | `test.extend()` fixture |
-| Viewport or trace default for a suite | `test.scoped()` |
+| Viewport or trace default for a suite | `test.override()` |
 | Project-wide default | `configureTermwright()` |
 
 See [Test files and isolation](../test-files/) for working-directory behavior.

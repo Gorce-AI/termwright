@@ -8,7 +8,7 @@
  * probe again, the preset ships it.
  */
 
-import { createNodePtyBackend, inheritedSpawnEnv } from '@termwright/driver';
+import { createNodePtyBackend, inheritedSpawnEnv } from '@termwright/driver/experimental';
 
 let probe: Promise<boolean> | undefined;
 let unavailable: PtyUnavailableReason | undefined;

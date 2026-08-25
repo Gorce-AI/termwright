@@ -17,5 +17,10 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm --dir ../.. test -- -- --run packages/run-journal-transport"
   },
-  "dependencies": { "@termwright/protocol": "workspace:*" }
+  "dependencies": {
+    "@termwright/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@termwright/local-transport": "workspace:*"
+  }
 }

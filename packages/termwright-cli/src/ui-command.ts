@@ -11,6 +11,8 @@ export interface NativeHostRun {
   readonly cwd: string;
   readonly tags?: string;
   readonly resourceProfile: TermwrightResourceProfileName;
+  /** Worker-only projection endpoint, installed through Vitest's explicit env. */
+  readonly uiProducerUrl?: string;
 }
 
 export interface NativeHostHandle {
@@ -29,6 +31,7 @@ export async function startNativeHost(run: NativeHostRun): Promise<NativeHostHan
     cwd: run.cwd,
     runsDir: join(run.cwd, '.termwright', 'runs'),
     vitestArgs: run.args,
+    ...(run.uiProducerUrl === undefined ? {} : { workerEnv: { TERMWRIGHT_UI_URL: run.uiProducerUrl } }),
     resourceProfile: TERMWRIGHT_RESOURCE_PROFILES[run.resourceProfile],
     eventObserver: (event) => {
       const taskId = event.identity.runnerTaskId;
@@ -127,15 +130,17 @@ export async function runUi(
   onReady: (result: Omit<UiResult, 'runnerExitCode'>) => void | UiSurfaceHandle | Promise<void | UiSurfaceHandle>,
 ): Promise<UiResult> {
   let host: NativeHostHandle | undefined;
-  if (request.trace === undefined && request.record === undefined) {
-    host = await runtime.startHost({
-      args: request.rest,
-      cwd: request.cwd,
-      resourceProfile: request.resourceProfile,
-      ...(request.tags === undefined ? {} : { tags: request.tags }),
-    });
-  }
-
+  const live = request.trace === undefined && request.record === undefined;
+  let resolveHost!: (value: NativeHostHandle) => void;
+  let rejectHost!: (reason: unknown) => void;
+  const hostReady = new Promise<NativeHostHandle>((resolve, reject) => {
+    resolveHost = resolve;
+    rejectHost = reject;
+  });
+  let hostReadySettled = false;
+  // A custom embedding may not invoke discovery immediately. Keep the deferred
+  // failure observed while preserving rejection for callbacks which do await it.
+  void hostReady.catch(() => undefined);
   let server: UiServer | undefined;
   let surface: UiSurfaceHandle | undefined;
   let detachHostEvents: (() => void) | undefined;
@@ -151,22 +156,42 @@ export async function runUi(
           ...(request.outFile === undefined ? {} : { outFile: request.outFile }),
         },
       }),
-      ...(host === undefined ? {} : {
-        discovery: { cwd: request.cwd, watch: request.watch, load: host.discover },
-        onRun: (ids) => host.run(ids ?? []),
-        onStop: (runId) => host.stop(runId),
+      ...(!live ? {} : {
+        discovery: { cwd: request.cwd, watch: request.watch, load: async () => (await hostReady).discover() },
+        onRun: async (ids) => (await hostReady).run(ids ?? []),
+        onStop: async (runId) => (await hostReady).stop(runId),
       }),
     });
-    if (host !== undefined) {
+    if (live) {
+      try {
+        host = await runtime.startHost({
+          args: request.rest,
+          cwd: request.cwd,
+          resourceProfile: request.resourceProfile,
+          uiProducerUrl: server.producerUrl,
+          ...(request.tags === undefined ? {} : { tags: request.tags }),
+        });
+      } catch (error) {
+        hostReadySettled = true;
+        rejectHost(error);
+        throw error;
+      }
       const projection = new NativeRunProjection(server.hub);
       detachHostEvents = host.subscribe((event, test) => projection.publish(event, test));
+      hostReadySettled = true;
+      resolveHost(host);
     }
     surface = (await onReady({ url: server.url, port: server.port, mode: server.mode })) ?? undefined;
     if (surface === undefined) await runtime.waitForInterrupt();
     else await Promise.race([runtime.waitForInterrupt(), surface.closed]);
     return { url: server.url, port: server.port, mode: server.mode, runnerExitCode: undefined };
   } finally {
+    if (live && !hostReadySettled) {
+      hostReadySettled = true;
+      rejectHost(new Error('UI server stopped before the native host became available'));
+    }
     const failures: unknown[] = [];
+    // Stop discovery/network activity before closing the host it calls into.
     for (const cleanup of [() => detachHostEvents?.(), () => surface?.close(), () => server?.close(), () => host?.shutdown()]) {
       try { await cleanup(); } catch (error) { failures.push(error); }
     }

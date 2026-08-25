@@ -6,5 +6,10 @@ test('ordinary tests remain ordinary and the transform writes no generated modul
   const featureDirectory = resolve(import.meta.dirname, 'features');
   const files = await readdir(featureDirectory);
 
-  expect(files.sort()).toEqual(['arithmetic.feature', 'arithmetic.steps.ts']);
+  expect(files.sort()).toEqual([
+    'arithmetic.feature',
+    'arithmetic.steps.ts',
+    'custom-fixtures.feature',
+    'custom-fixtures.steps.ts',
+  ]);
 });

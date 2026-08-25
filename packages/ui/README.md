@@ -36,9 +36,10 @@ pnpm exec termwright ui                                  # watch a run
 pnpm exec termwright ui --trace out/login.twtrace        # open a recording
 ```
 
-It opens the page in your browser and waits. The token in that URL is what
-authenticates the session, so if nothing opens — a machine with no browser, or
-`--no-open` — copy the whole line, token included:
+It opens the page in your browser and waits. The one-shot token in the initial
+URL authenticates the tab. Before React starts, the app moves it to tab-scoped
+storage and removes it from the address and browser history. If nothing opens —
+a machine with no browser, or `--no-open` — open the whole printed line once:
 
 ```
 termwright ui (live) — http://127.0.0.1:53219/?token=k3n…
@@ -75,9 +76,10 @@ in both cases, and `cut` tells the caller how much went.
 ```ts
 import { startUiServer } from '@termwright/ui';
 
-// Watch a run. Point a producer at the tokenised URL printed below.
+// Watch a run. Give only the worker bridge its producer-scoped URL.
 const server = await startUiServer();
 console.log(server.url); // http://127.0.0.1:53219/?token=…
+const workerEnv = { TERMWRIGHT_UI_URL: server.producerUrl };
 
 // Open an archive from CI and scrub through it.
 const viewer = await startUiServer({ trace: 'out/login.twtrace' });
@@ -88,10 +90,15 @@ const recorder = await startUiServer({
 });
 ```
 
-Every server launch generates its own 192-bit token with `node:crypto`; callers
-cannot replace it with a predictable secret. Use the tokenized `server.url` or
-the returned `server.token` when connecting an embedded client, especially
-when `host` exposes the server beyond loopback.
+Every server launch generates independent 192-bit viewer and producer tokens
+with `node:crypto`; callers cannot replace them with predictable secrets. The
+viewer URL/API credential cannot open a producer socket, and the producer
+credential cannot open a viewer socket or call an HTTP control endpoint. Never
+print or expose `server.producerUrl` to the browser.
+
+Pass `workerEnv` to the native test host (or directly to the worker launcher)
+rather than mutating the coordinator's `process.env`; parallel Runner hosts
+must never race over a process-global producer endpoint.
 
 `termwright ui` uses the same persistent native host, Run Coordinator, journal
 and Resource Broker as `termwright test` and `termwright watch`; it does not
@@ -121,12 +128,15 @@ try {
 
 No URL means no socket and no listeners. Invalid URLs, connection failure and
 teardown failure are fail-open: losing an observer never changes the test
-result. Events held during the handshake use a bounded queue.
+result. Events held during the handshake and bytes buffered by an open producer
+socket are bounded.
 
-The protocol has exactly one producer generation: every field `§UI events`
-lists is required unless the contract marks it optional, and a message missing
-one is rejected rather than patched up. Anything speaking this protocol has to
-send complete messages.
+Worker producers may publish only session-scoped output, semantic, action and
+log projections. They must claim a session before dependent events; snapshot
+shape, session identity and strictly increasing revision are validated at the
+server boundary. Run and test lifecycle is accepted only from the in-process
+Native Host journal. A message missing a required field is rejected rather than
+patched up.
 
 ## The protocol
 
@@ -344,10 +354,20 @@ colours the recorded program used, because those are the program's, not the
 panel's. Status is never carried by colour alone: every result has a glyph
 (`✓ ✕ ◍ ○`) beside it.
 
+The address records the active view, run, execution, trace and replay position.
+Refresh and browser Back/Forward restore that context; continuous replay
+movement replaces the current history entry instead of flooding the Back
+stack. The route is shared by the browser and desktop renderer. It deliberately
+contains no credential: a live link resolves only against the same active
+Runner/backlog, and another tab or user must receive a separate authenticated
+bootstrap URL. Export an inline report when the evidence itself must be
+portable.
+
 ## Security
 
-The server binds to loopback and mints an unguessable token per launch; the URL
-it prints carries it. A live terminal is a shell, so the token is required on
+The server binds to loopback and mints an unguessable token per launch; the
+initial URL carries it once, then the browser removes it from the address. A
+live terminal is a shell, so the token is required on
 every request, on the WebSocket upgrade, and (as a `SameSite=Strict`, `HttpOnly`
 cookie set on the app page) on the bundle the page loads for itself. Frames,
 request bodies, the replay backlog and the input decoder's buffer are all

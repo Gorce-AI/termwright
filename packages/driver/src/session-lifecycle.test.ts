@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ENV_ENDPOINT } from '@termwright/protocol';
 import type { ExitStatus } from './api.js';
 import type { PtyBackend, PtyProcess, PtySignal, PtySpawnOptions, PtyUnsubscribe } from './pty.js';
-import { CLOSE_GRACE_MS, launchTerminal } from './session.js';
+import { CLOSE_GRACE_MS, launchTerminalWithBackend } from './session.js';
 
 class ControlledPty implements PtyProcess {
   readonly pid = 42;
@@ -96,7 +96,7 @@ describe('terminal session resource lifecycle', () => {
   it('surfaces an asynchronous backend write failure and still tears down', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty();
-    const terminal = await launchTerminal({
+    const terminal = await launchTerminalWithBackend({
       command: ['controlled-app'],
       backend: backendFor(pty, endpoint),
     });
@@ -118,7 +118,7 @@ describe('terminal session resource lifecycle', () => {
     try {
       const endpoint: { value: string | undefined } = { value: undefined };
       const pty = new ControlledPty();
-      const launched = launchTerminal({
+      const launched = launchTerminalWithBackend({
         command: ['controlled-app'],
         backend: backendFor(pty, endpoint),
         requiredCapabilities: ['semantic-tree'],
@@ -149,7 +149,7 @@ describe('terminal session resource lifecycle', () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ failExitRegistration: true });
 
-    await expect(launchTerminal({
+    await expect(launchTerminalWithBackend({
       command: ['controlled-app'],
       backend: backendFor(pty, endpoint),
     })).rejects.toThrow('terminal startup and rollback failed');
@@ -162,7 +162,7 @@ describe('terminal session resource lifecycle', () => {
   it('shares concurrent close and preserves only the backend exit status', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ status: { code: 17, signal: null } });
-    const terminal = await launchTerminal({
+    const terminal = await launchTerminalWithBackend({
       command: ['controlled-app'],
       backend: backendFor(pty, endpoint),
     });
@@ -180,7 +180,7 @@ describe('terminal session resource lifecycle', () => {
   it('attempts later cleanup after a PTY disposer fails', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ failDispose: true });
-    const terminal = await launchTerminal({
+    const terminal = await launchTerminalWithBackend({
       command: ['controlled-app'],
       backend: backendFor(pty, endpoint),
     });
@@ -199,7 +199,7 @@ describe('terminal session resource lifecycle', () => {
     try {
       const endpoint: { value: string | undefined } = { value: undefined };
       const pty = new ControlledPty({ emitExitOnDispose: false });
-      const terminal = await launchTerminal({
+      const terminal = await launchTerminalWithBackend({
         command: ['controlled-app'],
         backend: backendFor(pty, endpoint),
       });
@@ -236,7 +236,7 @@ describe('terminal session resource lifecycle', () => {
   it('does not mark teardown requested when a signal was rejected', async () => {
     const endpoint: { value: string | undefined } = { value: undefined };
     const pty = new ControlledPty({ failSignal: 'TERM', status: { code: 17, signal: null } });
-    const terminal = await launchTerminal({ command: ['controlled-app'], backend: backendFor(pty, endpoint) });
+    const terminal = await launchTerminalWithBackend({ command: ['controlled-app'], backend: backendFor(pty, endpoint) });
 
     await expect(terminal.signal('TERM')).rejects.toThrow('TERM is unsupported');
     pty.emitExit();

@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: TextMatcherOptions
 
-Defined in: [test/src/matchers.ts:52](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L52)
+Defined in: [test/src/matchers.ts:53](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L53)
 
 Options for [TermwrightMatchers.toHaveText](../termwrightmatchers/#tohavetext).
 
@@ -25,7 +25,7 @@ Options for [TermwrightMatchers.toHaveText](../termwrightmatchers/#tohavetext).
 
 > `readonly` `optional` **exact?**: `boolean`
 
-Defined in: [test/src/matchers.ts:58](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L58)
+Defined in: [test/src/matchers.ts:59](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L59)
 
 `true` (default for locators) compares the whole accessible text after
 whitespace normalization; `false` asserts a substring. A terminal as the
@@ -37,7 +37,7 @@ subject always uses substring matching against the visible grid.
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [test/src/matchers.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L48)
+Defined in: [test/src/matchers.ts:49](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L49)
 
 Milliseconds to keep re-probing. Defaults to the `expect` timeout class.
 

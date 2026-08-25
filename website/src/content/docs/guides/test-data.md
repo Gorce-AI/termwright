@@ -7,6 +7,6 @@ This topic is now split by task:
 
 - [Test files and isolation](../test-files/) covers `files`, `template`, the
   private working directory, environment isolation, and cleanup.
-- [Extend test fixtures](../fixtures/) covers `test.extend()`, `test.scoped()`,
+- [Extend test fixtures](../fixtures/) covers `test.extend()`, `test.override()`,
   and configuration precedence.
 - [Migration](../migrating/) covers existing terminal-test harnesses.

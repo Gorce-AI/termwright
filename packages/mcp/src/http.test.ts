@@ -6,7 +6,7 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Client, StreamableHTTPClientTransport, connectClient } from './sdk-facade.js';
 import { ERROR_META_KEY, serveHttp } from './server.js';
@@ -24,10 +24,20 @@ async function connect(
   handle: HttpServerHandle,
 ): Promise<{ client: Client; sessionId: string | undefined }> {
   const client = new Client({ name: 'termwright-tests', version: '0.0.0' });
-  const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${handle.port}/mcp`));
+  const transport = new StreamableHTTPClientTransport(
+    new URL(`http://127.0.0.1:${handle.port}/mcp`),
+    { requestInit: { headers: authorization(handle) } },
+  );
   await connectClient(client, transport);
   clients.push(client);
   return { client, sessionId: transport.sessionId };
+}
+
+function authorization(
+  handle: HttpServerHandle,
+  headers: Readonly<Record<string, string>> = {},
+): Record<string, string> {
+  return { authorization: `Bearer ${handle.authToken}`, ...headers };
 }
 
 describe('the Streamable HTTP transport', () => {
@@ -93,7 +103,7 @@ describe('the Streamable HTTP transport', () => {
 
     const response = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
       method: 'DELETE',
-      headers: { 'mcp-session-id': sessionId ?? '' },
+      headers: authorization(handle, { 'mcp-session-id': sessionId ?? '' }),
     });
     expect(response.status).toBe(204);
     expect(handle.registry.size).toBe(0);
@@ -105,7 +115,10 @@ describe('the Streamable HTTP transport', () => {
     servers.push(handle);
     const response = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      headers: authorization(handle, {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      }),
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
     });
     expect(response.status).toBe(400);
@@ -115,8 +128,200 @@ describe('the Streamable HTTP transport', () => {
   it('404s anything that is not the MCP endpoint', async () => {
     const handle = await serveHttp();
     servers.push(handle);
-    const response = await fetch(`http://127.0.0.1:${handle.port}/nope`);
+    const response = await fetch(`http://127.0.0.1:${handle.port}/nope`, {
+      headers: authorization(handle),
+    });
     expect(response.status).toBe(404);
+  });
+});
+
+describe('the Streamable HTTP trust boundary', () => {
+  it('mints a fresh 256-bit bearer for every server', async () => {
+    const first = await serveHttp();
+    const second = await serveHttp();
+    servers.push(first, second);
+
+    expect(Buffer.from(first.authToken, 'base64url')).toHaveLength(32);
+    expect(first.authToken).not.toBe(second.authToken);
+  });
+
+  it('authenticates before endpoint routing or session lookup', async () => {
+    const handle = await serveHttp();
+    servers.push(handle);
+
+    const hiddenPath = await fetch(`http://127.0.0.1:${handle.port}/not-the-endpoint`);
+    expect(hiddenPath.status).toBe(401);
+
+    const guessedSession = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
+      method: 'DELETE',
+      headers: { 'mcp-session-id': 'guessed-session' },
+    });
+    expect(guessedSession.status).toBe(401);
+    expect(handle.registry.size).toBe(0);
+  });
+
+  it('rejects from headers alone without waiting for or buffering the body', async () => {
+    const handle = await serveHttp();
+    servers.push(handle);
+
+    const status = await new Promise<number>((resolve, reject) => {
+      const request = httpRequest({
+        host: '127.0.0.1',
+        port: handle.port,
+        path: '/mcp',
+        method: 'POST',
+        headers: { 'content-length': String(4 * 1024 * 1024) },
+      });
+      request.once('response', (response) => {
+        response.resume();
+        resolve(response.statusCode ?? 0);
+        request.destroy();
+      });
+      request.once('error', reject);
+      // Deliberately do not call end(): the server must decide from headers.
+      request.flushHeaders();
+    });
+
+    expect(status).toBe(401);
+    expect(handle.registry.size).toBe(0);
+  });
+
+  it('does not let a wrong bearer delete an authenticated session', async () => {
+    const handle = await serveHttp();
+    servers.push(handle);
+    const { sessionId } = await connect(handle);
+
+    const response = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
+      method: 'DELETE',
+      headers: {
+        authorization: `Bearer ${'x'.repeat(handle.authToken.length)}`,
+        'mcp-session-id': sessionId ?? '',
+      },
+    });
+    expect(response.status).toBe(401);
+    expect(handle.registry.get(sessionId ?? '')).toBeDefined();
+  });
+
+  it('rejects browser origins by default and admits only exact allowlisted origins', async () => {
+    const denied = await serveHttp();
+    servers.push(denied);
+    const deniedResponse = await fetch(`http://127.0.0.1:${denied.port}/nope`, {
+      headers: authorization(denied, { origin: 'https://agent.example' }),
+    });
+    expect(deniedResponse.status).toBe(403);
+
+    const allowed = await serveHttp({ allowedOrigins: ['https://agent.example'] });
+    servers.push(allowed);
+    const allowedResponse = await fetch(`http://127.0.0.1:${allowed.port}/nope`, {
+      headers: authorization(allowed, { origin: 'https://agent.example' }),
+    });
+    expect(allowedResponse.status).toBe(404);
+    const siblingOrigin = await fetch(`http://127.0.0.1:${allowed.port}/nope`, {
+      headers: authorization(allowed, { origin: 'https://other.agent.example' }),
+    });
+    expect(siblingOrigin.status).toBe(403);
+  });
+
+  it('answers only a narrow allowlisted CORS preflight without requiring a bearer', async () => {
+    const handle = await serveHttp({ allowedOrigins: ['https://agent.example'] });
+    servers.push(handle);
+
+    const allowed = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'https://agent.example',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization, content-type, mcp-session-id',
+      },
+    });
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get('access-control-allow-origin')).toBe('https://agent.example');
+    expect(handle.registry.size).toBe(0);
+
+    const foreignHeader = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'https://agent.example',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization, x-forwarded-for',
+      },
+    });
+    expect(foreignHeader.status).toBe(403);
+    expect(handle.registry.size).toBe(0);
+  });
+
+  it('keeps preflight and authenticated rate-limit capacity independent', async () => {
+    const handle = await serveHttp({
+      allowedOrigins: ['https://agent.example'],
+      rateLimit: { maxRequests: 1, windowMs: 60_000, maxClients: 1 },
+    });
+    servers.push(handle);
+
+    const preflight = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'https://agent.example',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization, content-type',
+      },
+    });
+    expect(preflight.status).toBe(204);
+
+    // maxClients=1 would reject this if preflight shared the same bucket map.
+    const authenticated = await fetch(`http://127.0.0.1:${handle.port}/nope`, {
+      headers: authorization(handle),
+    });
+    expect(authenticated.status).toBe(404);
+
+    const exhaustedPreflight = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'https://agent.example',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization, content-type',
+      },
+    });
+    expect(exhaustedPreflight.status).toBe(429);
+    const exhaustedAuthenticated = await fetch(`http://127.0.0.1:${handle.port}/nope`, {
+      headers: authorization(handle),
+    });
+    expect(exhaustedAuthenticated.status).toBe(429);
+  });
+
+  it('rate-limits authenticated work without letting invalid peers exhaust that budget', async () => {
+    let clock = 10_000;
+    const handle = await serveHttp({
+      now: () => clock,
+      rateLimit: { maxRequests: 1, windowMs: 1_000, maxClients: 1 },
+    });
+    servers.push(handle);
+
+    const first = await fetch(`http://127.0.0.1:${handle.port}/mcp`);
+    expect(first.status).toBe(401);
+    const allowed = await fetch(`http://127.0.0.1:${handle.port}/nope`, {
+      headers: authorization(handle),
+    });
+    expect(allowed.status).toBe(404);
+    const limited = await fetch(`http://127.0.0.1:${handle.port}/mcp`, {
+      headers: authorization(handle),
+    });
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('retry-after')).toBe('1');
+    expect(handle.registry.size).toBe(0);
+
+    clock += 1_000;
+    const reset = await fetch(`http://127.0.0.1:${handle.port}/nope`, {
+      headers: authorization(handle),
+    });
+    expect(reset.status).toBe(404);
+  });
+
+  it('requires explicit acknowledgement before binding beyond loopback', async () => {
+    await expect(serveHttp({ host: '0.0.0.0' })).rejects.toThrow(/allowNonLoopback/u);
+
+    const exposed = await serveHttp({ host: '0.0.0.0', allowNonLoopback: true });
+    servers.push(exposed);
+    expect(exposed.port).toBeGreaterThan(0);
   });
 });
 

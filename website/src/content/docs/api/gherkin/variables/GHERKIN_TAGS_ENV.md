@@ -13,6 +13,6 @@ editUrl: false
 
 > `const` **GHERKIN\_TAGS\_ENV**: `"TERMWRIGHT_GHERKIN_TAGS"` = `'TERMWRIGHT_GHERKIN_TAGS'`
 
-Defined in: [gherkin/src/plugin.ts:296](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L296)
+Defined in: [plugin.ts:330](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/plugin.ts#L330)
 
 The environment variable a CLI uses to add a tag filter to a run.

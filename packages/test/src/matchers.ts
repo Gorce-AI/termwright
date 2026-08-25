@@ -9,7 +9,8 @@
  */
 
 import { expect } from 'vitest';
-import { parseRef, TimeoutError, type AnyLocator, type BoundsExpectation, type ScreenSnapshot, type SemanticLocator, type SpatialRelationExpectation, type TerminalHarness } from '@termwright/driver';
+import { TimeoutError, type AnyLocator, type BoundsExpectation, type ScreenSnapshot, type SemanticLocator, type SpatialRelationExpectation, type TerminalHarness } from '@termwright/driver';
+import { parseRef } from '@termwright/driver/experimental';
 import type {
   Condition,
   LocatorRef,

@@ -62,6 +62,29 @@ describe('subpath entry points', () => {
     expect(result.code).not.toContain('from "@termwright/test"');
   });
 
+  it('preserves an explicit extended-test module for generated Gherkin fixtures', async () => {
+    const { gherkinPlugin } = await import('./gherkin.js');
+    const plugin = gherkinPlugin({
+      fixtureNames: ['app'],
+      generatedImports: { test: './fixtures.js', runtime: 'termwright/gherkin/runtime' },
+    });
+    const resolveConfig = typeof plugin.configResolved === 'function'
+      ? plugin.configResolved
+      : plugin.configResolved?.handler;
+    (resolveConfig as undefined | ((config: { root: string }) => void))?.({ root: '/tmp' });
+    const transform = typeof plugin.transform === 'function'
+      ? plugin.transform
+      : plugin.transform?.handler;
+    const result = await (transform as unknown as (this: { addWatchFile(): void }, source: string, id: string) => Promise<{ code: string }>).call(
+      { addWatchFile() {} },
+      'Feature: fixtures\n\n  Scenario: custom\n    Given an app\n',
+      '/tmp/fixtures.feature',
+    );
+
+    expect(result.code).toContain('from "./fixtures.js"');
+    expect(result.code).toContain('async ({ termwrightOptions, termwright, terminal, step, app }) =>');
+  });
+
   it('resolves generated subpaths from a strict consumer with only termwright installed', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'termwright-strict-consumer-'));
     try {

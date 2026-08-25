@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { buildAgentContext, buildUsage, TARGETING_GUIDANCE } from './agent-context.js';
 import { buildAgentSkill, renderMcpToolSurfaceMarkdown } from './agent-skill.js';
 import { EXIT_CODES, exitCodeFor } from './errors.js';
-import { runCli } from './cli.js';
+import { httpStartupMessages, parseArgs, runCli } from './cli.js';
 import { TOOLS } from './registry.js';
 import { TERMINAL_TOOLS } from './tools.js';
 import { TRACE_TOOLS } from './trace-tools.js';
@@ -136,6 +136,27 @@ describe('the CLI', () => {
   it('validates --port', async () => {
     const sink = collect();
     expect(await runCli(['--http', '--port', 'nope'], sink.io)).toBe(EXIT_CODES.usage);
+  });
+
+  it('hides the HTTP bearer unless disclosure is explicitly requested', () => {
+    const secret = 'sensitive-per-launch-bearer';
+    const hiddenArgs = parseArgs(['--http', '--port', '7333']);
+    const hidden = httpStartupMessages(hiddenArgs, { port: 7333, authToken: secret }).join('\n');
+    expect(hiddenArgs.showAuthToken).toBe(false);
+    expect(hidden).not.toContain(secret);
+    expect(hidden).toContain('--show-auth-token');
+
+    const shownArgs = parseArgs(['--http', '--port', '7333', '--show-auth-token']);
+    const shown = httpStartupMessages(shownArgs, { port: 7333, authToken: secret }).join('\n');
+    expect(shownArgs.showAuthToken).toBe(true);
+    expect(shown).toContain(secret);
+  });
+
+  it('requires an explicit non-loopback acknowledgement flag in parsed HTTP options', () => {
+    const implicit = parseArgs(['--http', '--host', '0.0.0.0']);
+    const explicit = parseArgs(['--http', '--host', '0.0.0.0', '--allow-non-loopback']);
+    expect(implicit.allowNonLoopback).toBe(false);
+    expect(explicit.allowNonLoopback).toBe(true);
   });
 
   it('never prints a stack trace', async () => {

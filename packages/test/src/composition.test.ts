@@ -54,18 +54,18 @@ afterAll(() => {
   expect(order).toEqual(['app:setup', 'body', 'app:teardown']);
 });
 
-describe.skipIf(!pty)('options scoped to a suite', () => {
+describe.skipIf(!pty)('options overridden for a suite', () => {
   // The equivalent of Playwright's test.use(), on Vitest's own mechanism.
-  test.scoped({ termwrightOptions: { columns: 120, trace: 'on' } });
+  test.override({ termwrightOptions: { columns: 120, trace: 'on' } });
 
   test('reach the session, and keep what they did not mention', { timeout: 30_000 }, async ({
     terminal,
   }) => {
     const app = await terminal.launch();
     await app.waitForText('Permission required');
-    // Scoped.
+    // Overridden for this suite.
     expect(app.screen().columns).toBe(120);
-    // From the project configuration, which scoping `columns` and `trace` must
+    // From the project configuration, which overriding `columns` and `trace` must
     // not have dropped: the command is why the program started at all.
     expect(app.screen().rows).toBe(10);
   });
@@ -74,6 +74,23 @@ describe.skipIf(!pty)('options scoped to a suite', () => {
     const app = await terminal.launch({ columns: 90 });
     await app.waitForText('Permission required');
     expect(app.screen().columns).toBe(90);
+  });
+
+  describe('with a nested override', () => {
+    test.override({ termwrightOptions: { columns: 140 } });
+
+    test('uses the nested value and keeps project defaults', { timeout: 30_000 }, async ({ terminal }) => {
+      const app = await terminal.launch();
+      await app.waitForText('Permission required');
+      expect(app.screen().columns).toBe(140);
+      expect(app.screen().rows).toBe(10);
+    });
+  });
+
+  test('does not leak the nested override into its parent suite', { timeout: 30_000 }, async ({ terminal }) => {
+    const app = await terminal.launch();
+    await app.waitForText('Permission required');
+    expect(app.screen().columns).toBe(120);
   });
 });
 

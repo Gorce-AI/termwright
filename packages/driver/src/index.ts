@@ -113,12 +113,7 @@ export type {
   ScreenCondition,
 } from '@termwright/protocol';
 
-export { inheritedSpawnEnv, launchTerminal, type LaunchTerminalOptions } from './session.js';
-export { installTerminalLaunchResourceProvider } from './launch-resources.js';
-export type {
-  TerminalLaunchResourceLease,
-  TerminalLaunchResourceProvider,
-} from './launch-resources.js';
+export { launchTerminal, type LaunchTerminalOptions } from './session.js';
 export { publicValue, sensitive } from '@termwright/protocol';
 export { debugMode, type DebugCategory } from './debug.js';
 
@@ -145,47 +140,3 @@ export {
   TermwrightError,
   TimeoutError,
 } from './errors.js';
-
-export {
-  resolveDefaultPtyBackend,
-  resetPtyBackendChoice,
-  type PtyBackendChoice,
-} from './backend-selection.js';
-
-export {
-  createConPtyBackend,
-  CONPTY_BACKEND_NAME,
-  type ConPtySessionHandle,
-  type ConPtySpawn,
-} from './conpty-backend.js';
-
-export {
-  createNodePtyBackend,
-  type PtyBackend,
-  type PtyProcess,
-  type PtySignal,
-  type PtySpawnOptions,
-  type PtyUnsubscribe,
-} from './pty.js';
-
-export {
-  ProcessLifecycleError,
-  type ProcessLifecycleErrorCode,
-} from './internal/process-supervisor.js';
-
-export { encodeKeys, encodePaste, encodeText, type KeyEncodingModes } from './keys.js';
-export { encodeMouse, normalizeMouseModifiers, type MouseButton, type MouseEvent } from './mouse.js';
-export {
-  parseRef,
-  semanticNodeId,
-  parseSelector,
-  textMatcher,
-  type GenericQuery,
-  type LocatorQuery,
-  type ParsedRef,
-  type RefQuery,
-  type SemanticQuery,
-  type SemanticStep,
-  type StylePredicates,
-  type TextMatcher,
-} from './selectors.js';

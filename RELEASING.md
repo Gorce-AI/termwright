@@ -124,6 +124,16 @@ The environments restrict deployment identity. For unattended operation they
 must not add a required-review prompt. The workflow needs `id-token: write`
 only in the registry job that uses it.
 
+npm trusted publishing is configured on an existing package, so a brand-new
+public package name needs a one-time interactive bootstrap before its first
+Version PR can merge. From a clean, reviewed `main` commit, build and pack that
+package, publish its current pre-release version with `--access public` and 2FA,
+then configure `release.yml` in the `npm-publish` environment as its trusted
+publisher. Run `pnpm check:npm-release-readiness` afterward. Both Version PR CI
+and the publish workflow fail closed while any public workspace package has no
+registry name; this prevents discovering a missing trust anchor only after
+tags, crates, or Python artifacts have already shipped.
+
 Retries never treat version existence as success by itself. npm integrity,
 the complete PyPI distribution file set, and crates.io checksums must match the
 sealed artifacts produced from the exact merged SHA. A collision, partial

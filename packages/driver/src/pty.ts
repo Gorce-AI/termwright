@@ -149,10 +149,8 @@ export function createNodePtyBackend(): PtyBackend {
         for (const listener of writeDrainListeners) listener();
       };
       const writable = createExactNodePtyWriteChannel(pty, onWriteError, onWriteDrain);
-      const outputBoundary = observeExactNodePtyOutputBoundary(pty);
       const disposables: { dispose(): void }[] = [
         writable,
-        outputBoundary,
         pty.onData((chunk: unknown) => {
           const data = typeof chunk === 'string'
             ? Buffer.from(chunk, 'utf8')
@@ -212,23 +210,19 @@ export function createNodePtyBackend(): PtyBackend {
         },
         lifecycle: Object.freeze({
           tree: process.platform === 'win32' ? 'conpty-console' : 'posix-process-group',
-          // A capability, not an observation. Whether this backend couples its
-          // exit to a real end of output is a property of the platform: a Unix
-          // pty master ends with EOF or EIO after its queued bytes, while
-          // beta.15's ConPTY socket close is timer-forced and never an OS end.
+          // A capability, not an observation. This node-pty release cannot
+          // certify a complete drain on either platform. On Linux, libuv may
+          // invalidate a PTY master on POLLHUP before reading its queued tail;
+          // the resulting EIO says that no more bytes can arrive, not that all
+          // bytes the child wrote were delivered. ConPTY likewise timer-closes
+          // its socket rather than exposing an OS-coupled output boundary.
           //
           // Deriving it from "has the end been seen yet" made it read
           // bounded-fallback at the one moment it is asked — exit is observed
           // before the socket finishes — so the caller took the degraded path
-          // instead of waiting for the end that was about to arrive. Whether
-          // the end actually happened is `outputEnded`, which is separate on
-          // purpose.
-          outputDrain: process.platform === 'win32'
-            ? ('bounded-fallback' as const)
-            : ('eof' as const),
+          // instead of waiting for the end that was about to arrive.
+          outputDrain: 'bounded-fallback' as const,
         }),
-        outputEnded: outputBoundary.ended,
-        sawOutputEnd: (): boolean => outputBoundary.eof,
         write(data: Uint8Array): void {
           if (disposed || exited) return;
           writable.write(data);
@@ -398,16 +392,6 @@ interface ExactUnixPty {
   readonly fd: number;
 }
 
-interface ExactOutputSocket {
-  readonly readableEnded?: boolean;
-  prependListener(event: 'end' | 'error' | 'close', listener: (...arguments_: unknown[]) => void): void;
-  removeListener(event: 'end' | 'error' | 'close', listener: (...arguments_: unknown[]) => void): void;
-}
-
-interface ExactOutputPty {
-  readonly _socket?: ExactOutputSocket;
-}
-
 interface ExactWindowsSocket {
   write(data: Buffer): boolean;
   on(event: 'error', listener: (error: Error) => void): void;
@@ -443,45 +427,6 @@ function exactWindowsAgent(value: unknown): ExactWindowsAgent {
     throw new Error('certified @lydell/node-pty ConPTY process-list boundary changed');
   }
   return agent;
-}
-
-/** Exact-version EOF evidence, installed ahead of node-pty's exit handler. */
-function observeExactNodePtyOutputBoundary(
-  value: unknown,
-): { readonly eof: boolean; readonly ended: Promise<void>; dispose(): void } {
-  const socket = (value as ExactOutputPty)._socket;
-  if (socket === undefined || typeof socket.prependListener !== 'function') {
-    throw new Error('certified @lydell/node-pty output socket boundary changed');
-  }
-  let eof = socket.readableEnded === true;
-  // A flag read at exit answers "has the producer ended yet", which is a
-  // different question from "wait until it has". node-pty reports the exit as
-  // soon as the process is gone, and on a loaded machine the last chunk it
-  // wrote can still be in flight — so a reader that only checks the flag
-  // publishes an exit that is missing the final bytes.
-  let settle = (): void => undefined;
-  const ended = eof ? Promise.resolve() : new Promise<void>((resolve) => { settle = resolve; });
-  const finish = (): void => { eof = true; settle(); };
-  const onEnd = (): void => finish();
-  const onError = (error: unknown): void => {
-    if (process.platform !== 'win32' && (isErrno(error, 'EIO') || errnoMessage(error, 'errno 5'))) finish();
-  };
-  // Not an EOF, so it never sets the flag — but a destroyed socket produces no
-  // further bytes, and a waiter must not outlive the thing it waits for.
-  const onClose = (): void => settle();
-  socket.prependListener('end', onEnd);
-  socket.prependListener('error', onError);
-  socket.prependListener('close', onClose);
-  return {
-    get eof(): boolean { return eof; },
-    ended,
-    dispose(): void {
-      settle();
-      socket.removeListener('end', onEnd);
-      socket.removeListener('error', onError);
-      socket.removeListener('close', onClose);
-    },
-  };
 }
 
 /**
@@ -706,10 +651,6 @@ function processAlive(pid: number): boolean {
 
 function isErrno(error: unknown, code: string): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === code;
-}
-
-function errnoMessage(error: unknown, fragment: string): boolean {
-  return error instanceof Error && error.message.includes(fragment);
 }
 
 const SIGNAL_NUMBERS: Readonly<Record<number, string>> = Object.freeze({

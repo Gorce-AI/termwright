@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: SemanticSnapshotMatcherOptions
 
-Defined in: [test/src/matchers.ts:65](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L65)
+Defined in: [test/src/matchers.ts:66](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L66)
 
 Options for [TermwrightMatchers.toMatchSemanticSnapshot](../termwrightmatchers/#tomatchsemanticsnapshot).
 
@@ -25,7 +25,7 @@ Options for [TermwrightMatchers.toMatchSemanticSnapshot](../termwrightmatchers/#
 
 > `readonly` `optional` **rootId?**: `string`
 
-Defined in: [test/src/matchers.ts:77](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L77)
+Defined in: [test/src/matchers.ts:78](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L78)
 
 Snapshot this node's subtree, the node included. Mutually exclusive with `within`.
 
@@ -35,7 +35,7 @@ Snapshot this node's subtree, the node included. Mutually exclusive with `within
 
 > `readonly` `optional` **states?**: [`StateSelection`](../../type-aliases/stateselection/)
 
-Defined in: [test/src/matchers.ts:79](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L79)
+Defined in: [test/src/matchers.ts:80](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L80)
 
 Which state flags a written snapshot records. Default `stable`.
 
@@ -45,7 +45,7 @@ Which state flags a written snapshot records. Default `stable`.
 
 > `readonly` `optional` **timeout?**: `number`
 
-Defined in: [test/src/matchers.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L48)
+Defined in: [test/src/matchers.ts:49](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L49)
 
 Milliseconds to keep re-probing. Defaults to the `expect` timeout class.
 
@@ -59,7 +59,7 @@ Milliseconds to keep re-probing. Defaults to the `expect` timeout class.
 
 > `readonly` `optional` **within?**: [`AnyLocator`](../../type-aliases/anylocator/)
 
-Defined in: [test/src/matchers.ts:75](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L75)
+Defined in: [test/src/matchers.ts:76](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/matchers.ts#L76)
 
 Match the pattern against what is *inside* this locator.
 

@@ -13,7 +13,7 @@ editUrl: false
 
 Defined in: [test/src/options.ts:16](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L16)
 
-Options a file or suite may override with `test.scoped`.
+Options a file or suite may override with `test.override`.
 
 ## Properties
 
@@ -41,8 +41,8 @@ Replaced wholly, never concatenated: an argv is not a merge.
 
 Defined in: [test/src/options.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/test/src/options.ts#L28)
 
-Merged key by key over the project's `env` — scoping one variable keeps
-the rest, which is the only behaviour that makes scoping usable here.
+Merged key by key over the project's `env` — overriding one variable keeps
+the rest, which is the only behaviour that makes suite overrides usable.
 
 ***
 

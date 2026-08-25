@@ -14,7 +14,7 @@ const available = await ptyAvailable();
 const previousUiUrl = process.env['TERMWRIGHT_UI_URL'];
 const server = available ? await startUiServer() : undefined;
 
-if (server !== undefined) process.env['TERMWRIGHT_UI_URL'] = server.url;
+if (server !== undefined) process.env['TERMWRIGHT_UI_URL'] = server.producerUrl;
 
 configureTermwright({
   columns: 80,

@@ -11,11 +11,17 @@ editUrl: false
 
 # Function: Then()
 
-> **Then**(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)
+> **Then**\<`Fixtures`\>(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:102](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L102)
+Defined in: [definitions.ts:117](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L117)
 
 Declares a Then definition without registering process-global state.
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ## Parameters
 
@@ -25,8 +31,8 @@ Declares a Then definition without registering process-global state.
 
 ### body
 
-[`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)
+[`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)\<`Fixtures`\>
 
 ## Returns
 
-[`StepDefinition`](../../interfaces/stepdefinition/)
+[`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>

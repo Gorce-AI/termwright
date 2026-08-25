@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createNodePtyBackend, inheritedSpawnEnv } from '@termwright/driver';
+import { createNodePtyBackend, inheritedSpawnEnv } from '@termwright/driver/experimental';
 import { CERTIFIED_VITEST_VERSION } from '@termwright/test/vitest-engine';
 import { TERMWRIGHT_RESOURCE_PROFILES } from './resource-profiles.js';
 import { DEFAULT_TERMWRIGHT_HOST_TIMEOUTS } from './test-host.js';

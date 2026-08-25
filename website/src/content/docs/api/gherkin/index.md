@@ -18,7 +18,6 @@ ordinary `.test.ts` files are discovered.
 ## Interfaces
 
 - [GeneratedGherkinImports](interfaces/generatedgherkinimports/)
-- [GherkinContext](interfaces/gherkincontext/)
 - [GherkinPluginOptions](interfaces/gherkinpluginoptions/)
 - [GherkinResource](interfaces/gherkinresource/)
 - [GherkinScenario](interfaces/gherkinscenario/)
@@ -30,6 +29,7 @@ ordinary `.test.ts` files are discovered.
 
 ## Type Aliases
 
+- [GherkinContext](type-aliases/gherkincontext/)
 - [GherkinDefinition](type-aliases/gherkindefinition/)
 - [GherkinDefinitions](type-aliases/gherkindefinitions/)
 - [GherkinStepArgument](type-aliases/gherkinstepargument/)

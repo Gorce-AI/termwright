@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRunId, RunEventProducer, type RunEvent, type RunId, type RunnerTaskId } from '@termwright/protocol';
-import { UiHub } from '@termwright/ui';
+import { UiHub, type DiscoveredTest } from '@termwright/ui';
 import { runUi, type NativeHostHandle, type UiRuntime } from './ui-command.js';
 
 function nativeHost(): NativeHostHandle & {
@@ -34,14 +34,19 @@ function nativeHost(): NativeHostHandle & {
 describe('native UI host', () => {
   it('uses one host for structured discovery, reruns and exact RunId cancellation', async () => {
     const host = nativeHost();
+    let workerUiUrl: string | undefined;
     let options: Parameters<UiRuntime['startUi']>[0] | undefined;
     let interrupt!: () => void;
     const runtime: UiRuntime = {
-      startHost: async () => host,
+      startHost: async (run) => {
+        workerUiUrl = run.uiProducerUrl;
+        return host;
+      },
       startUi: async (value) => {
         options = value;
         return {
-          url: 'http://127.0.0.1:1/?token=x', port: 1, token: 'x', mode: 'live',
+          url: 'http://127.0.0.1:1/?token=x', producerUrl: 'http://127.0.0.1:1/?token=p',
+          port: 1, token: 'x', producerToken: 'p', mode: 'live',
           hub: {} as never, recorder: undefined, trace: undefined,
           attach: () => () => undefined, close: vi.fn(async () => undefined),
         };
@@ -53,6 +58,7 @@ describe('native UI host', () => {
       host: undefined, tags: undefined, watch: true, rest: [], cwd: '/repo', resourceProfile: 'local',
     }, runtime, () => undefined);
     await vi.waitFor(() => expect(options).toBeDefined());
+    expect(workerUiUrl).toBe('http://127.0.0.1:1/?token=p');
     const tests = await options!.discovery!.load();
     expect(tests[0]?.id).toMatch(/^runner-task:/u);
     const handle = await options!.onRun!([tests[0]!.id]);
@@ -63,18 +69,23 @@ describe('native UI host', () => {
     expect(host.closed).toBe(1);
   });
 
-  it('rolls the host back when the UI server cannot bind', async () => {
+  it('does not start the native host when the UI server cannot bind', async () => {
     const host = nativeHost();
+    let pendingDiscovery!: Promise<readonly DiscoveredTest[]>;
     const runtime: UiRuntime = {
       startHost: async () => host,
-      startUi: async () => { throw new Error('EADDRINUSE'); },
+      startUi: async (options) => {
+        pendingDiscovery = options.discovery!.load();
+        throw new Error('EADDRINUSE');
+      },
       waitForInterrupt: async () => undefined,
     };
     await expect(runUi({
       trace: undefined, record: undefined, outFile: undefined, port: 7,
       host: undefined, tags: undefined, watch: true, rest: [], cwd: '/repo', resourceProfile: 'local',
     }, runtime, () => undefined)).rejects.toThrow('EADDRINUSE');
-    expect(host.closed).toBe(1);
+    await expect(pendingDiscovery).rejects.toThrow(/before the native host became available/u);
+    expect(host.closed).toBe(0);
   });
 
   it('projects exact Run, Task, Execution and Attempt identity from the live host journal', async () => {
@@ -83,7 +94,8 @@ describe('native UI host', () => {
     const runtime: UiRuntime = {
       startHost: async () => host,
       startUi: async () => ({
-        url: 'http://127.0.0.1:1/?token=x', port: 1, token: 'x', mode: 'live', hub,
+        url: 'http://127.0.0.1:1/?token=x', producerUrl: 'http://127.0.0.1:1/?token=p',
+        port: 1, token: 'x', producerToken: 'p', mode: 'live', hub,
         recorder: undefined, trace: undefined, attach: () => () => undefined,
         close: async () => undefined,
       }),

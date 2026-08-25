@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { createNodePtyBackend, inheritedSpawnEnv } from '../packages/driver/dist/index.js';
+import { createNodePtyBackend, inheritedSpawnEnv } from '../packages/driver/dist/experimental.js';
 
 const requireFromDriver = createRequire(new URL('../packages/driver/src/pty.ts', import.meta.url));
 const platformName = `@lydell/node-pty-${process.platform}-${process.arch}`;
@@ -50,7 +50,7 @@ if (process.platform === 'win32') {
            !implementation.includes('Object.defineProperty(UnixTerminal.prototype, "fd"') ||
            !implementation.includes("_this.once('close', function ()") ||
            !implementation.includes("~err.code.indexOf('EIO')")) {
-  throw new Error(`${platformName}: certified Unix fd/output-EOF boundary changed`);
+  throw new Error(`${platformName}: certified Unix fd/EIO boundary changed`);
 }
 
 const lock = await readFile('pnpm-lock.yaml', 'utf8');
@@ -146,7 +146,10 @@ if (writeFailure !== undefined) throw writeFailure;
 if (status.code !== 0 || !output.includes('tw-write-ok')) {
   throw new Error(`Termwright-owned PTY write boundary failed: ${JSON.stringify({ status, output })}`);
 }
-const expectedDrain = process.platform === 'win32' ? 'bounded-fallback' : 'eof';
+// node-pty cannot certify a complete output tail on either implementation:
+// ConPTY closes on a timer, while Unix maps POLLHUP/EIO to stream completion
+// even when libuv has not delivered every byte queued on the PTY master.
+const expectedDrain = 'bounded-fallback';
 if (proc.lifecycle?.outputDrain !== expectedDrain) {
   throw new Error(`Termwright-owned PTY output boundary mismatch: expected ${expectedDrain}, found ${String(proc.lifecycle?.outputDrain)}`);
 }

@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, Circle, ExternalLink, FileCode2, FilePlus2, 
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { ExecutionCase, ExecutionStatus } from '../domain/model.js';
 import { usePreferences } from '../preferences.js';
+import { useTreeNavigation } from '../use-tree-navigation.js';
 import { StatusBadge } from './StatusBadge.js';
 import { Tooltip } from './Tooltip.js';
 
@@ -44,6 +45,18 @@ export function SpecsPage({ cases, projectRoot, canRun, connected, runBusy, onRu
   const canonicalTree = useMemo(() => buildTree(cases, projectRoot), [cases, projectRoot]);
   const filteredTree = useMemo(() => filterTree(canonicalTree, query), [canonicalTree, query]);
   const expanded = useMemo(() => new Set(preferences.specExpansion ?? defaultExpansion(canonicalTree)), [canonicalTree, preferences.specExpansion]);
+  const forceOpen = query.trim() !== '';
+  const rows = useMemo(() => specTreeRows(filteredTree, expanded, forceOpen), [expanded, filteredTree, forceOpen]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const collapsed = useMemo(() => new Set(rows.filter((row) => row.hasChildren && !expanded.has(row.id) && !forceOpen).map((row) => row.id)), [expanded, forceOpen, rows]);
+  const parentKeys = useMemo(() => specParentKeys(filteredTree), [filteredTree]);
+  const navigation = useTreeNavigation({
+    rows,
+    selectedId,
+    collapsed,
+    onSelect: setSelectedId,
+    onCollapsed: (next) => updatePreferences({ specExpansion: parentKeys.filter((key) => !next.has(key)) }),
+  });
   const runnable = useMemo(() => cases.filter(runnableCase), [cases]);
   const canStart = canRun && connected && !runBusy;
   const toggle = (key: string) => {
@@ -80,9 +93,9 @@ export function SpecsPage({ cases, projectRoot, canRun, connected, runBusy, onRu
         <span className="sr-only">Search specs</span>
         <input value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search cases, features, tags or files" />
       </label>
-      <div className="tw-spec-files" role="tree" aria-label="Test catalog hierarchy">
-        {filteredTree.directories.map((directory) => <DirectoryRow key={directory.key} directory={directory} depth={0} expanded={expanded} forceOpen={query.trim() !== ''} canStart={canStart} disabledReason={runDisabledReason(canRun, connected, runBusy)} onToggle={toggle} onRun={onRun} onOpenSource={onOpenSource} />)}
-        {filteredTree.files.map((file) => <FileRow key={file.key} file={file} depth={0} expanded={expanded} forceOpen={query.trim() !== ''} canStart={canStart} disabledReason={runDisabledReason(canRun, connected, runBusy)} onToggle={toggle} onRun={onRun} onOpenSource={onOpenSource} />)}
+      <div className="tw-spec-files" role="tree" aria-label="Test catalog hierarchy" onKeyDown={navigation.onKeyDown}>
+        {filteredTree.directories.map((directory) => <DirectoryRow key={directory.key} directory={directory} depth={0} expanded={expanded} forceOpen={forceOpen} selectedId={navigation.activeId} item={navigation.item} canStart={canStart} disabledReason={runDisabledReason(canRun, connected, runBusy)} onToggle={toggle} onRun={onRun} onOpenSource={onOpenSource} />)}
+        {filteredTree.files.map((file) => <FileRow key={file.key} file={file} depth={0} expanded={expanded} forceOpen={forceOpen} selectedId={navigation.activeId} item={navigation.item} canStart={canStart} disabledReason={runDisabledReason(canRun, connected, runBusy)} onToggle={toggle} onRun={onRun} onOpenSource={onOpenSource} />)}
         {filteredTree.directories.length === 0 && filteredTree.files.length === 0 ? <div className="tw-page-empty"><Search aria-hidden="true" /><strong>No matching owned tests</strong></div> : null}
       </div>
       {runBusy ? <p className="tw-run-busy-note" role="status">A run is active. Start controls are locked until it ends; use Stop in Runner.</p> : null}
@@ -90,11 +103,13 @@ export function SpecsPage({ cases, projectRoot, canRun, connected, runBusy, onRu
   );
 }
 
-function DirectoryRow({ directory, depth, expanded, forceOpen, canStart, disabledReason, onToggle, onRun, onOpenSource }: {
+function DirectoryRow({ directory, depth, expanded, forceOpen, selectedId, item, canStart, disabledReason, onToggle, onRun, onOpenSource }: {
   readonly directory: SpecDirectory;
   readonly depth: number;
   readonly expanded: ReadonlySet<string>;
   readonly forceOpen: boolean;
+  readonly selectedId: string | null;
+  readonly item: ReturnType<typeof useTreeNavigation>['item'];
   readonly canStart: boolean;
   readonly disabledReason: string;
   readonly onToggle: (key: string) => void;
@@ -103,30 +118,37 @@ function DirectoryRow({ directory, depth, expanded, forceOpen, canStart, disable
 }) {
   const open = forceOpen || expanded.has(directory.key);
   const targets = exactTargets(directory.cases);
-  return <section className="tw-spec-directory" data-depth={depth} style={depthStyle(depth)} role="treeitem" aria-expanded={open} aria-label={`Directory ${directory.name}`}>
+  const roving = item(directory.key);
+  return <section ref={roving.ref} tabIndex={roving.tabIndex} className="tw-spec-directory" data-depth={depth} style={depthStyle(depth)} role="treeitem" aria-selected={selectedId === directory.key} aria-expanded={open} aria-label={`Directory ${directory.name}`} onFocus={(event) => { if (event.currentTarget === event.target) roving.onFocus(); }} onKeyDown={(event) => {
+    if (event.currentTarget !== event.target) return;
+    if ((event.key === 'Enter' || event.key === ' ') && !forceOpen) { event.preventDefault(); onToggle(directory.key); }
+    else if (event.key.toLowerCase() === 'r' && canStart) { event.preventDefault(); onRun(targets); }
+  }}>
     <header className="tw-spec-group-row">
-      <Tooltip label={`${open ? 'Collapse' : 'Expand'} directory ${directory.name}`} disabledReason="Clear search to restore directory expansion controls."><button type="button" className="tw-spec-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} directory ${directory.name}`} disabled={forceOpen} onClick={() => onToggle(directory.key)}>
+      <Tooltip label={`${open ? 'Collapse' : 'Expand'} directory ${directory.name}`} disabledReason="Clear search to restore directory expansion controls."><button tabIndex={-1} type="button" className="tw-spec-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} directory ${directory.name}`} disabled={forceOpen} onClick={() => onToggle(directory.key)}>
         {open ? <ChevronDown aria-hidden="true" size={14} /> : <ChevronRight aria-hidden="true" size={14} />}
         {open ? <FolderOpen aria-hidden="true" size={16} /> : <Folder aria-hidden="true" size={16} />}
         <span><strong>{directory.name}</strong><small>{directory.path}</small></span>
       </button></Tooltip>
       <SpecCounters cases={directory.cases} compact />
       <Tooltip label={`Run directory ${directory.name} (${targets.length} cases)`} disabledReason={disabledReason}>
-        <button type="button" className="tw-spec-group-run" disabled={!canStart || targets.length === 0} onClick={() => onRun(targets)}><Play aria-hidden="true" size={12} /> Run</button>
+        <button tabIndex={-1} type="button" className="tw-spec-group-run" disabled={!canStart || targets.length === 0} onClick={() => onRun(targets)}><Play aria-hidden="true" size={12} /> Run</button>
       </Tooltip>
     </header>
     {open ? <div className="tw-spec-children" role="group">
-      {directory.directories.map((child) => <DirectoryRow key={child.key} directory={child} depth={depth + 1} expanded={expanded} forceOpen={forceOpen} canStart={canStart} disabledReason={disabledReason} onToggle={onToggle} onRun={onRun} onOpenSource={onOpenSource} />)}
-      {directory.files.map((file) => <FileRow key={file.key} file={file} depth={depth + 1} expanded={expanded} forceOpen={forceOpen} canStart={canStart} disabledReason={disabledReason} onToggle={onToggle} onRun={onRun} onOpenSource={onOpenSource} />)}
+      {directory.directories.map((child) => <DirectoryRow key={child.key} directory={child} depth={depth + 1} expanded={expanded} forceOpen={forceOpen} selectedId={selectedId} item={item} canStart={canStart} disabledReason={disabledReason} onToggle={onToggle} onRun={onRun} onOpenSource={onOpenSource} />)}
+      {directory.files.map((file) => <FileRow key={file.key} file={file} depth={depth + 1} expanded={expanded} forceOpen={forceOpen} selectedId={selectedId} item={item} canStart={canStart} disabledReason={disabledReason} onToggle={onToggle} onRun={onRun} onOpenSource={onOpenSource} />)}
     </div> : null}
   </section>;
 }
 
-function FileRow({ file, depth, expanded, forceOpen, canStart, disabledReason, onToggle, onRun, onOpenSource }: {
+function FileRow({ file, depth, expanded, forceOpen, selectedId, item, canStart, disabledReason, onToggle, onRun, onOpenSource }: {
   readonly file: SpecFile;
   readonly depth: number;
   readonly expanded: ReadonlySet<string>;
   readonly forceOpen: boolean;
+  readonly selectedId: string | null;
+  readonly item: ReturnType<typeof useTreeNavigation>['item'];
   readonly canStart: boolean;
   readonly disabledReason: string;
   readonly onToggle: (key: string) => void;
@@ -135,26 +157,37 @@ function FileRow({ file, depth, expanded, forceOpen, canStart, disabledReason, o
 }) {
   const open = forceOpen || expanded.has(file.key);
   const targets = exactTargets(file.cases);
-  return <section className="tw-spec-file" data-depth={depth} style={depthStyle(depth)} role="treeitem" aria-expanded={open} aria-label={`File ${file.name}`}>
+  const roving = item(file.key);
+  return <section ref={roving.ref} tabIndex={roving.tabIndex} className="tw-spec-file" data-depth={depth} style={depthStyle(depth)} role="treeitem" aria-selected={selectedId === file.key} aria-expanded={open} aria-label={`File ${file.name}`} onFocus={(event) => { if (event.currentTarget === event.target) roving.onFocus(); }} onKeyDown={(event) => {
+    if (event.currentTarget !== event.target) return;
+    if ((event.key === 'Enter' || event.key === ' ') && !forceOpen) { event.preventDefault(); onToggle(file.key); }
+    else if (event.key.toLowerCase() === 'r' && canStart) { event.preventDefault(); onRun(targets); }
+  }}>
     <header className="tw-spec-group-row">
-      <Tooltip label={`${open ? 'Collapse' : 'Expand'} file ${file.name}`} disabledReason="Clear search to restore file expansion controls."><button type="button" className="tw-spec-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} file ${file.name}`} disabled={forceOpen} onClick={() => onToggle(file.key)}>
+      <Tooltip label={`${open ? 'Collapse' : 'Expand'} file ${file.name}`} disabledReason="Clear search to restore file expansion controls."><button tabIndex={-1} type="button" className="tw-spec-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} file ${file.name}`} disabled={forceOpen} onClick={() => onToggle(file.key)}>
         {open ? <ChevronDown aria-hidden="true" size={14} /> : <ChevronRight aria-hidden="true" size={14} />}
         <FileCode2 aria-hidden="true" size={16} />
         <span><strong>{file.name}</strong><small>{file.path}</small></span>
       </button></Tooltip>
       <SpecCounters cases={file.cases} compact />
       <Tooltip label={`Run file ${file.name} (${targets.length} cases)`} disabledReason={disabledReason}>
-        <button type="button" className="tw-spec-group-run" disabled={!canStart || targets.length === 0} onClick={() => onRun(targets)}><Play aria-hidden="true" size={12} /> Run</button>
+        <button tabIndex={-1} type="button" className="tw-spec-group-run" disabled={!canStart || targets.length === 0} onClick={() => onRun(targets)}><Play aria-hidden="true" size={12} /> Run</button>
       </Tooltip>
     </header>
     {open ? <div className="tw-spec-cases" role="group">
-      {file.visibleCases.map((test) => <CaseRow key={test.caseKey} test={test} depth={depth + 1} canStart={canStart && runnableCase(test)} disabledReason={disabledReason} onRun={onRun} onOpenSource={onOpenSource} />)}
+      {file.visibleCases.map((test) => <CaseRow key={test.caseKey} test={test} depth={depth + 1} selectedId={selectedId} item={item} canStart={canStart && runnableCase(test)} disabledReason={disabledReason} onRun={onRun} onOpenSource={onOpenSource} />)}
     </div> : null}
   </section>;
 }
 
-function CaseRow({ test, depth, canStart, disabledReason, onRun, onOpenSource }: { readonly test: ExecutionCase; readonly depth: number; readonly canStart: boolean; readonly disabledReason: string; readonly onRun: (targets: readonly string[]) => void; readonly onOpenSource: (test: ExecutionCase) => void }) {
-  return <article className="tw-spec-case" data-kind={test.kind} data-depth={depth} style={depthStyle(depth)} role="treeitem">
+function CaseRow({ test, depth, selectedId, item, canStart, disabledReason, onRun, onOpenSource }: { readonly test: ExecutionCase; readonly depth: number; readonly selectedId: string | null; readonly item: ReturnType<typeof useTreeNavigation>['item']; readonly canStart: boolean; readonly disabledReason: string; readonly onRun: (targets: readonly string[]) => void; readonly onOpenSource: (test: ExecutionCase) => void }) {
+  const id = `case:${test.caseKey}`;
+  const roving = item(id);
+  return <article ref={roving.ref} tabIndex={roving.tabIndex} className="tw-spec-case" data-kind={test.kind} data-depth={depth} style={depthStyle(depth)} role="treeitem" aria-selected={selectedId === id} onFocus={(event) => { if (event.currentTarget === event.target) roving.onFocus(); }} onKeyDown={(event) => {
+    if (event.currentTarget !== event.target) return;
+    if ((event.key === 'Enter' || event.key === ' ') && canStart) { event.preventDefault(); onRun([test.caseKey]); }
+    else if (event.key.toLowerCase() === 'o') { event.preventDefault(); onOpenSource(test); }
+  }}>
     <StatusBadge status={test.status} compact />
     <div>
       <strong>{test.title}</strong>
@@ -162,9 +195,9 @@ function CaseRow({ test, depth, canStart, disabledReason, onRun, onOpenSource }:
       {test.tags.length === 0 ? null : <small><Tags aria-hidden="true" size={11} /> {test.tags.join(' ')}</small>}
     </div>
     <span className="tw-spec-case-actions">
-      <Tooltip label={`Open ${test.title} source`}><button type="button" className="tw-spec-source" aria-label={`Open ${test.title} source`} onClick={() => onOpenSource(test)}><ExternalLink aria-hidden="true" size={13} /></button></Tooltip>
+      <Tooltip label={`Open ${test.title} source`}><button tabIndex={-1} type="button" className="tw-spec-source" aria-label={`Open ${test.title} source`} onClick={() => onOpenSource(test)}><ExternalLink aria-hidden="true" size={13} /></button></Tooltip>
       <Tooltip label={`Run ${test.title}`} disabledReason={test.provider === null ? 'This provider did not opt into Termwright execution.' : disabledReason}>
-        <button type="button" disabled={!canStart} onClick={() => onRun([test.caseKey])}><Play aria-hidden="true" size={13} /> Run</button>
+        <button tabIndex={-1} type="button" disabled={!canStart} onClick={() => onRun([test.caseKey])}><Play aria-hidden="true" size={13} /> Run</button>
       </Tooltip>
     </span>
   </article>;
@@ -238,6 +271,34 @@ function filterDirectory(node: SpecDirectory, needle: string, root = false): Spe
 }
 
 function defaultExpansion(root: SpecDirectory): readonly string[] { return root.directories.map((node) => node.key); }
+function specTreeRows(root: SpecDirectory, expanded: ReadonlySet<string>, forceOpen: boolean): readonly { readonly id: string; readonly parentId?: string; readonly hasChildren: boolean }[] {
+  const rows: { id: string; parentId?: string; hasChildren: boolean }[] = [];
+  const appendDirectory = (node: SpecDirectory, parentId?: string) => {
+    rows.push({ id: node.key, ...(parentId === undefined ? {} : { parentId }), hasChildren: node.directories.length + node.files.length > 0 });
+    if (!forceOpen && !expanded.has(node.key)) return;
+    node.directories.forEach((child) => appendDirectory(child, node.key));
+    node.files.forEach((file) => appendFile(file, node.key));
+  };
+  const appendFile = (file: SpecFile, parentId?: string) => {
+    rows.push({ id: file.key, ...(parentId === undefined ? {} : { parentId }), hasChildren: file.visibleCases.length > 0 });
+    if (!forceOpen && !expanded.has(file.key)) return;
+    file.visibleCases.forEach((test) => rows.push({ id: `case:${test.caseKey}`, parentId: file.key, hasChildren: false }));
+  };
+  root.directories.forEach((node) => appendDirectory(node));
+  root.files.forEach((file) => appendFile(file));
+  return rows;
+}
+function specParentKeys(root: SpecDirectory): readonly string[] {
+  const keys: string[] = [];
+  const append = (node: SpecDirectory) => {
+    keys.push(node.key);
+    node.directories.forEach(append);
+    node.files.forEach((file) => keys.push(file.key));
+  };
+  root.directories.forEach(append);
+  root.files.forEach((file) => keys.push(file.key));
+  return keys;
+}
 function exactTargets(cases: readonly ExecutionCase[]): readonly string[] { return [...new Set(cases.filter(runnableCase).map((test) => test.caseKey))]; }
 function runnableCase(test: ExecutionCase): boolean { return test.provider !== null; }
 function relativePath(file: string, projectRoot: string): string {

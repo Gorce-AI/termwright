@@ -45,7 +45,7 @@ import {
 // in both, and is what the driver does.
 import xh from '@xterm/headless';
 import type { Terminal } from '@xterm/headless';
-import { createNodePtyBackend, type PtyProcess } from '@termwright/driver';
+import { createNodePtyBackend, type PtyProcess } from '@termwright/driver/experimental';
 import { environment } from './pty.js';
 
 /** How a fixture is started. Everything else about it is opaque to the probe. */

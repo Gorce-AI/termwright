@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodeKeys } from '@termwright/driver';
+import { encodeKeys } from '@termwright/driver/experimental';
 import { coalesceInput, decodeInput, InputDecoder } from './input-decode.js';
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);

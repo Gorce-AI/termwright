@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
 
 const installRoot = resolve(process.argv[2] ?? process.cwd());
-const entry = join(installRoot, 'node_modules', '@termwright', 'driver', 'dist', 'index.js');
+const entry = join(installRoot, 'node_modules', '@termwright', 'driver', 'dist', 'experimental.js');
 // Ask the installed package for the platform's environment floor rather than
 // passing a bare PATH: a Node child started on Windows without SystemRoot
 // aborts inside CSPRNG initialization with exit code 134 before running any

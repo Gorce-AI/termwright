@@ -1,5 +1,5 @@
 ---
-title: "Interface: StepDefinition"
+title: "Interface: StepDefinition\\<Fixtures\\>"
 editUrl: false
 ---
 
@@ -9,19 +9,25 @@ editUrl: false
 
 [@termwright/gherkin](../../) / StepDefinition
 
-# Interface: StepDefinition
+# Interface: StepDefinition\<Fixtures\>
 
-Defined in: [gherkin/src/definitions.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L45)
+Defined in: [definitions.ts:45](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L45)
 
 Public, inert definition value exported by a paired glue module.
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ## Properties
 
 ### body
 
-> `readonly` **body**: [`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)
+> `readonly` **body**: [`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:49](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L49)
+Defined in: [definitions.ts:49](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L49)
 
 ***
 
@@ -29,7 +35,7 @@ Defined in: [gherkin/src/definitions.ts:49](https://github.com/Gorce-AI/termwrig
 
 > `readonly` **expression**: `string` \| `RegExp`
 
-Defined in: [gherkin/src/definitions.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L48)
+Defined in: [definitions.ts:48](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L48)
 
 ***
 
@@ -37,7 +43,7 @@ Defined in: [gherkin/src/definitions.ts:48](https://github.com/Gorce-AI/termwrig
 
 > `readonly` **keyword**: [`StepKeyword`](../../type-aliases/stepkeyword/)
 
-Defined in: [gherkin/src/definitions.ts:47](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L47)
+Defined in: [definitions.ts:47](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L47)
 
 ***
 
@@ -45,4 +51,4 @@ Defined in: [gherkin/src/definitions.ts:47](https://github.com/Gorce-AI/termwrig
 
 > `readonly` **type**: `"step"`
 
-Defined in: [gherkin/src/definitions.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L46)
+Defined in: [definitions.ts:46](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L46)

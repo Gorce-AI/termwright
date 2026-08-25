@@ -26,7 +26,7 @@ The Termwright Vitest test function. The callback receives:
 | `terminal` | Launch an isolated terminal process. |
 | `step` | Group actions and assertions under a named execution step. |
 | `termwright` | Read resolved config, the private test directory, retained traces, and the step runner. |
-| `termwrightOptions` | Apply file- or suite-scoped launch defaults with `test.scoped()`. |
+| `termwrightOptions` | Apply file- or suite-scoped launch defaults with `test.override()`. |
 
 `it` is an alias of `test`.
 

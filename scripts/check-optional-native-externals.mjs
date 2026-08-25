@@ -12,10 +12,13 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 
 const CASES = [
   {
-    bundle: 'packages/driver/dist/index.js',
+    // Explicit backend selection is intentionally absent from the stable root;
+    // the experimental integration entry point owns the optional native load.
+    entry: 'packages/driver/dist/experimental.js',
     specifier: '@termwright/conpty',
     // What inlining looks like: the addon's own require, sitting in a bundle
     // that is not the addon's package.
@@ -24,18 +27,18 @@ const CASES = [
 ];
 
 let failed = false;
-for (const { bundle, specifier, inlined } of CASES) {
+for (const { entry, specifier, inlined } of CASES) {
   let source;
   try {
-    source = await readFile(bundle, 'utf8');
+    source = await reachableBundleSource(entry);
   } catch {
-    console.error(`${bundle} is missing; build the workspace before checking its externals`);
+    console.error(`${entry} or one of its chunks is missing; build the workspace before checking its externals`);
     failed = true;
     continue;
   }
   if (source.includes(inlined)) {
     console.error(
-      `${bundle} inlined ${specifier}: the addon would be looked for beside this bundle ` +
+      `${entry} inlined ${specifier}: the addon would be looked for beside this bundle ` +
         'rather than beside its own package. Keep it external.',
     );
     failed = true;
@@ -43,13 +46,30 @@ for (const { bundle, specifier, inlined } of CASES) {
   }
   if (!source.includes(specifier)) {
     console.error(
-      `${bundle} no longer references ${specifier} at all; the optional native backend ` +
-        'cannot be selected from it.',
+      `${entry} no longer references ${specifier} at all; the experimental native-backend ` +
+        'integration cannot select it.',
     );
     failed = true;
     continue;
   }
-  console.log(`${bundle} keeps ${specifier} external`);
+  console.log(`${entry} and its reachable chunks keep ${specifier} external`);
 }
 
 process.exit(failed ? 1 : 0);
+
+async function reachableBundleSource(entry) {
+  const pending = [resolve(entry)];
+  const visited = new Set();
+  const sources = [];
+  while (pending.length > 0) {
+    const file = pending.pop();
+    if (file === undefined || visited.has(file)) continue;
+    visited.add(file);
+    const source = await readFile(file, 'utf8');
+    sources.push(source);
+    for (const match of source.matchAll(/(?:from\s+|import\()\s*["'](\.\/[^"']+\.js)["']/gu)) {
+      pending.push(resolve(dirname(file), match[1]));
+    }
+  }
+  return sources.join('\n');
+}

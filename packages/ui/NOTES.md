@@ -40,8 +40,12 @@ readers and exposes complete/incomplete/corrupt/unsupported artifact states.
 
 ## Bounded diagnostics
 
-The hub and live-session producer are bounded projections; authoritative run
-events and correctness log decisions live in the host journal/trace sinks.
+The hub and live-session producer are bounded projections: total replay bytes,
+output bytes, pre-connect producer bytes and each viewer transport buffer have
+independent ceilings. A slow viewer is disconnected without affecting another
+viewer or the run. Semantic state coalesces to its latest validated revision;
+lossy eviction is represented by a diagnostic gap. Authoritative run events and
+correctness log decisions live in the host journal/trace sinks.
 Projection loss must be represented as an explicit diagnostic gap before the
 Runner may claim its diagnostics are complete. Recoverable session/tree state
 may coalesce, while lifecycle identities are never inferred from remaining
@@ -56,8 +60,11 @@ outcomes rather than fire-and-forget promises.
 
 ## Security
 
-The server binds loopback by default and requires a random token for HTTP and
-WebSocket access. Paths and RunIds are validated before filesystem use. Raw
+The server binds loopback by default and generates separate random viewer and
+producer capabilities. A viewer credential cannot publish and a worker
+credential cannot read/control. Producer sockets claim session ownership and
+cannot publish lifecycle; semantic snapshots are fully validated before they
+enter the hub. Paths and RunIds are validated before filesystem use. Raw
 input recording is opt-in; redacted is the default. The diagnostics copy action
 excludes tokens, URLs, paths, commands, output, logs, semantic content and
 errors.

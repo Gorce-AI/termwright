@@ -52,8 +52,10 @@ function harness(
         uiOptions.push(options);
         return {
           url: 'http://127.0.0.1:5000/?token=abc',
+          producerUrl: 'http://127.0.0.1:5000/?token=producer',
           port: 5000,
           token: 'abc',
+          producerToken: 'producer',
           mode: overrides.mode ?? 'live',
           hub: undefined as never,
           recorder: undefined,
@@ -561,7 +563,7 @@ shutdown: async () => undefined,
     expect(await running).toBe(EXIT_CODES.ok);
   });
 
-  it('does not allocate the UI server when native host startup fails', async () => {
+  it('closes the UI server when native host startup fails', async () => {
     const h = harness();
     const ui = h.deps.ui as { startHost: CliDeps['ui']['startHost'] };
     ui.startHost = async () => {
@@ -570,8 +572,8 @@ shutdown: async () => undefined,
 
     expect(await runCli(['ui'], h.deps)).toBe(EXIT_CODES.internal);
     expect(h.err.join('\n')).toContain('vitest is not installed');
-    expect(h.uiOptions).toHaveLength(0);
-    expect(h.closed()).toBe(0);
+    expect(h.uiOptions).toHaveLength(1);
+    expect(h.closed()).toBe(1);
   });
 });
 

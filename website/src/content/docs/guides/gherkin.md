@@ -109,6 +109,49 @@ Before({tags: '@component and not @slow'}, async (context) => {
 });
 ```
 
+## Pass project fixtures into steps
+
+For an explicit plugin configuration, export a project-owned extended test
+alongside `describe` and `expect`:
+
+```ts title="tests/fixtures.ts"
+import {describe, expect, test as base} from 'termwright/test';
+
+export {describe, expect};
+export interface ProjectFixtures { account: {name: string} }
+export const test = base.extend<ProjectFixtures>({
+  account: async ({}, use) => { await use({name: 'Ada'}); },
+});
+```
+
+Point `generatedImports.test` at that module and list the custom fixtures. The
+list makes Vitest request them statically, preserving its native setup and
+teardown lifecycle.
+
+```ts title="vitest.config.ts"
+import {fileURLToPath} from 'node:url';
+
+gherkinPlugin({
+  fixtureNames: ['account'],
+  generatedImports: {
+    test: fileURLToPath(new URL('./tests/fixtures.ts', import.meta.url)),
+    runtime: 'termwright/gherkin/runtime',
+  },
+});
+```
+
+Use the project fixture type on authored definitions:
+
+```ts
+Given<ProjectFixtures>('an account exists', ({account, world}) => {
+  world.name = account.name;
+});
+```
+
+Gherkin `After` hooks and `defer`/`use` cleanup complete before the custom
+fixture tears down. Fixtures on which it depends, including `terminal`, remain
+alive through that teardown.
+
 ## Run Gherkin in the Runner
 
 ```sh

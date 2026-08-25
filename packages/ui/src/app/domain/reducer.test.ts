@@ -59,6 +59,29 @@ describe('greenfield application reducer identities', () => {
     expect(after.executions).toEqual([history]);
   });
 
+  it('hydrates replay at the requested bounded deep-link position', () => {
+    const history = execution('history-run', 'history-runtime', 'history-session');
+    let state: AppState = {
+      ...initialAppState,
+      executions: [history],
+      selectedExecutionId: history.executionId,
+    };
+    state = appReducer(state, { type: 'replay-loading', executionId: history.executionId, traceRef: history.traceRef as string });
+    state = appReducer(state, {
+      type: 'replay-loaded',
+      executionId: history.executionId,
+      traceRef: history.traceRef as string,
+      overview: overview(history.traceRef as string, 'history-session'),
+      frames: emptyFrames,
+      commands: { commands: [], incomplete: false },
+      traceState: emptyTraceState,
+      logs: emptyLogs,
+      timeMs: 150,
+    });
+    expect(state.evidence.kind).toBe('replay');
+    if (state.evidence.kind === 'replay') expect(state.evidence.replay.timeMs).toBe(100);
+  });
+
   it('hands an explicitly rerun historical case to its new live attempt', () => {
     const history = execution('history-run', 'history-runtime', 'history-session');
     let state: AppState = {

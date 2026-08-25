@@ -13,29 +13,41 @@ editUrl: false
 
 ## Call Signature
 
-> **Before**(`body`): [`HookDefinition`](../../interfaces/hookdefinition/)
+> **Before**\<`Fixtures`\>(`body`): [`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:112](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L112)
+Defined in: [definitions.ts:133](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L133)
 
 Runs before each matching Scenario or Outline row selected by this glue scope.
+
+### Type Parameters
+
+#### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ### Parameters
 
 #### body
 
-[`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)
+[`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)\<`Fixtures`\>
 
 ### Returns
 
-[`HookDefinition`](../../interfaces/hookdefinition/)
+[`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
 ## Call Signature
 
-> **Before**(`options`, `body`): [`HookDefinition`](../../interfaces/hookdefinition/)
+> **Before**\<`Fixtures`\>(`options`, `body`): [`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:113](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L113)
+Defined in: [definitions.ts:134](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L134)
 
 Runs before each matching Scenario or Outline row selected by this glue scope.
+
+### Type Parameters
+
+#### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ### Parameters
 
@@ -45,8 +57,8 @@ Runs before each matching Scenario or Outline row selected by this glue scope.
 
 #### body
 
-[`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)
+[`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)\<`Fixtures`\>
 
 ### Returns
 
-[`HookDefinition`](../../interfaces/hookdefinition/)
+[`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>

@@ -148,7 +148,7 @@ export interface TermwrightFixtures {
    * Options for this file or suite, the equivalent of Playwright's `test.use()`:
    *
    * ```ts
-   * test.scoped({ termwrightOptions: { columns: 120, trace: 'on' } });
+   * test.override({ termwrightOptions: { columns: 120, trace: 'on' } });
    * ```
    *
    * They sit between the project configuration and a `launch()` call, merged
@@ -489,7 +489,7 @@ export const test = markTermwrightTestApi(base.extend<TermwrightFixtures>({
         if (command === undefined || command.length === 0) {
           throw new TypeError(
             'terminal.launch() needs a command: pass one, set it for this file with ' +
-              'test.scoped({ termwrightOptions: { command } }), or set `command` in defineTermwrightConfig()',
+              'test.override({ termwrightOptions: { command } }), or set `command` in defineTermwrightConfig()',
           );
         }
         const { files, template, trace: _trace, ...launchOptions } = options;

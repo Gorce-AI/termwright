@@ -138,7 +138,13 @@ class ProducerSocketSink implements UiSessionMessageSink {
       if (this.#failed) return;
       this.#open = true;
       try {
-        for (const message of this.#queue) this.#socket.send(message.encoded);
+        for (const message of this.#queue) {
+          if (this.#socket.bufferedAmount + message.bytes > MAX_QUEUED_BYTES) {
+            this.#failAndTerminate();
+            break;
+          }
+          this.#socket.send(message.encoded);
+        }
       } catch {
         this.#fail();
       }
@@ -192,6 +198,10 @@ class ProducerSocketSink implements UiSessionMessageSink {
     }
     if (this.#open && this.#socket.readyState === WebSocket.OPEN) {
       try {
+        if (this.#socket.bufferedAmount + Buffer.byteLength(encoded) > MAX_QUEUED_BYTES) {
+          this.#failAndTerminate();
+          return;
+        }
         this.#socket.send(encoded);
       } catch {
         this.#fail();
@@ -240,6 +250,15 @@ class ProducerSocketSink implements UiSessionMessageSink {
     this.#open = false;
     this.#clearQueue();
     this.#settleOnce();
+  }
+
+  #failAndTerminate(): void {
+    this.#fail();
+    try {
+      this.#terminateIfOpen();
+    } catch {
+      // Transport already closed while enforcing the producer-side bound.
+    }
   }
 
   #terminateIfOpen(): void {

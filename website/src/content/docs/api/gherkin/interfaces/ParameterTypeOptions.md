@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: ParameterTypeOptions\<T\>
 
-Defined in: [gherkin/src/definitions.ts:67](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L67)
+Defined in: [definitions.ts:69](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L69)
 
 Options accepted by [defineParameterType](../../functions/defineparametertype/).
 
@@ -27,7 +27,7 @@ Options accepted by [defineParameterType](../../functions/defineparametertype/).
 
 > `readonly` **name**: `string`
 
-Defined in: [gherkin/src/definitions.ts:68](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L68)
+Defined in: [definitions.ts:70](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L70)
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: [gherkin/src/definitions.ts:68](https://github.com/Gorce-AI/termwrig
 
 > `readonly` `optional` **preferForRegexpMatch?**: `boolean`
 
-Defined in: [gherkin/src/definitions.ts:72](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L72)
+Defined in: [definitions.ts:74](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L74)
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: [gherkin/src/definitions.ts:72](https://github.com/Gorce-AI/termwrig
 
 > `readonly` **regexp**: `RegExp` \| readonly `RegExp`[]
 
-Defined in: [gherkin/src/definitions.ts:69](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L69)
+Defined in: [definitions.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L71)
 
 ***
 
@@ -51,7 +51,7 @@ Defined in: [gherkin/src/definitions.ts:69](https://github.com/Gorce-AI/termwrig
 
 > `readonly` **transformer**: (...`groups`) => `T` \| `Promise`\<`T`\>
 
-Defined in: [gherkin/src/definitions.ts:70](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L70)
+Defined in: [definitions.ts:72](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L72)
 
 #### Parameters
 
@@ -69,4 +69,4 @@ Defined in: [gherkin/src/definitions.ts:70](https://github.com/Gorce-AI/termwrig
 
 > `readonly` `optional` **useForSnippets?**: `boolean`
 
-Defined in: [gherkin/src/definitions.ts:71](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L71)
+Defined in: [definitions.ts:73](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L73)

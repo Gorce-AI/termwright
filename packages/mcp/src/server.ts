@@ -8,9 +8,16 @@
  */
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { CrashContextError, describeCrash } from './crash.js';
-import { renderErrorPayload, toErrorPayload } from './errors.js';
+import { renderErrorPayload, toErrorPayload, usageError } from './errors.js';
+import {
+  BoundedRateLimiter,
+  admitHttpRequest,
+  isLoopbackHost,
+  normalizeAllowedOrigins,
+} from './http-security.js';
+import type { HttpRateLimitOptions } from './http-security.js';
 import {
   InMemoryTransport,
   connectTransport,
@@ -182,6 +189,8 @@ export interface HttpServerHandle {
   readonly http: Server;
   readonly registry: SessionRegistry<{ transport: StreamableHTTPServerTransport; server: McpServer }>;
   readonly port: number;
+  /** Per-launch bearer required by every HTTP request. Never put it in a URL. */
+  readonly authToken: string;
   close(): Promise<void>;
 }
 
@@ -192,6 +201,18 @@ export const DEFAULT_IDLE_TTL_MS = 10 * 60_000;
 export interface HttpServeOptions extends ServeOptions {
   readonly port?: number;
   readonly host?: string;
+  /**
+   * Explicit acknowledgement that a non-loopback bind exposes process launch,
+   * terminal input and filesystem-backed trace tools to the network.
+   */
+  readonly allowNonLoopback?: boolean;
+  /**
+   * Browser origins allowed to call the endpoint. Non-browser MCP clients omit
+   * `Origin`; any presented origin is rejected unless it appears here exactly.
+   */
+  readonly allowedOrigins?: readonly string[];
+  /** Per-peer request ceiling. The limiter's identity map is bounded too. */
+  readonly rateLimit?: HttpRateLimitOptions;
   /** Path the MCP endpoint listens on. Defaults to `/mcp`. */
   readonly path?: string;
   /**
@@ -234,6 +255,18 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
  */
 export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpServerHandle> {
   const path = options.path ?? '/mcp';
+  const host = options.host ?? '127.0.0.1';
+  if (!isLoopbackHost(host) && options.allowNonLoopback !== true) {
+    throw usageError(
+      `refusing non-loopback MCP HTTP bind ${JSON.stringify(host)} without allowNonLoopback`,
+      'keep the default loopback bind, or explicitly acknowledge the remote trust boundary',
+    );
+  }
+  const authToken = randomBytes(32).toString('base64url');
+  const allowedOrigins = normalizeAllowedOrigins(options.allowedOrigins);
+  const authenticatedRateLimiter = new BoundedRateLimiter(options.rateLimit);
+  const preflightRateLimiter = new BoundedRateLimiter(options.rateLimit);
+  const now = options.now ?? Date.now;
   // stdout may be a protocol stream elsewhere; server-level notes go to stderr.
   const log = options.log ?? ((message: string): void => void process.stderr.write(`${message}\n`));
   const registry = new SessionRegistry<{
@@ -258,6 +291,16 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
   const http = createServer((request, response) => {
     void (async () => {
       try {
+        // Security admission is intentionally before URL routing, body reads,
+        // session lookup/touch and initialize. A rejected peer cannot allocate
+        // an MCP session, refresh one it guessed, or make us buffer its body.
+        if (!admitHttpRequest(request, response, {
+          token: authToken,
+          allowedOrigins,
+          authenticatedRateLimiter,
+          preflightRateLimiter,
+          now,
+        })) return;
         const url = new URL(request.url ?? '/', 'http://localhost');
         if (url.pathname !== path) {
           sendJson(response, 404, { error: 'not found' });
@@ -326,7 +369,7 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
       };
       http.once('error', onError);
       http.once('listening', onListening);
-      http.listen(options.port ?? 0, options.host ?? '127.0.0.1');
+      http.listen(options.port ?? 0, host);
     });
   } catch (error) {
     await registry.closeAll().catch((cleanup) => {
@@ -342,6 +385,7 @@ export async function serveHttp(options: HttpServeOptions = {}): Promise<HttpSer
     http,
     registry,
     port,
+    authToken,
     close: async (): Promise<void> => {
       registry.stopIdleSweeper();
       const results = await Promise.allSettled([

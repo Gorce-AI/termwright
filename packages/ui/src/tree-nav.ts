@@ -18,7 +18,7 @@ export interface TreeRow {
 }
 
 /** Which key was pressed. */
-export type TreeKey = 'up' | 'down' | 'left' | 'right';
+export type TreeKey = 'up' | 'down' | 'left' | 'right' | 'home' | 'end';
 
 /** What navigation changes. */
 export interface TreeNavState {
@@ -47,6 +47,10 @@ export function navigateTree(
   const current = rows[index] as TreeRow;
 
   switch (key) {
+    case 'home':
+      return { ...state, selectedId: rows[0]?.id ?? state.selectedId };
+    case 'end':
+      return { ...state, selectedId: rows.at(-1)?.id ?? state.selectedId };
     case 'down':
       return { ...state, selectedId: rows[Math.min(index + 1, rows.length - 1)]?.id ?? state.selectedId };
     case 'up':

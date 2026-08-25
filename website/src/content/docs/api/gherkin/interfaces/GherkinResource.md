@@ -11,7 +11,7 @@ editUrl: false
 
 # Interface: GherkinResource
 
-Defined in: [gherkin/src/definitions.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L26)
+Defined in: [definitions.ts:26](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L26)
 
 ## Properties
 
@@ -19,7 +19,7 @@ Defined in: [gherkin/src/definitions.ts:26](https://github.com/Gorce-AI/termwrig
 
 > `optional` **\[asyncDispose\]?**: () => `unknown`
 
-Defined in: [gherkin/src/definitions.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L30)
+Defined in: [definitions.ts:30](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L30)
 
 #### Returns
 
@@ -31,7 +31,7 @@ Defined in: [gherkin/src/definitions.ts:30](https://github.com/Gorce-AI/termwrig
 
 > `optional` **\[dispose\]?**: () => `unknown`
 
-Defined in: [gherkin/src/definitions.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L29)
+Defined in: [definitions.ts:29](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L29)
 
 #### Returns
 
@@ -43,7 +43,7 @@ Defined in: [gherkin/src/definitions.ts:29](https://github.com/Gorce-AI/termwrig
 
 > `optional` **close?**: () => `unknown`
 
-Defined in: [gherkin/src/definitions.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L27)
+Defined in: [definitions.ts:27](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L27)
 
 #### Returns
 
@@ -55,7 +55,7 @@ Defined in: [gherkin/src/definitions.ts:27](https://github.com/Gorce-AI/termwrig
 
 > `optional` **dispose?**: () => `unknown`
 
-Defined in: [gherkin/src/definitions.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L28)
+Defined in: [definitions.ts:28](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L28)
 
 #### Returns
 

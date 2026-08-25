@@ -11,11 +11,17 @@ editUrl: false
 
 # Function: When()
 
-> **When**(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)
+> **When**\<`Fixtures`\>(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:97](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L97)
+Defined in: [definitions.ts:109](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L109)
 
 Declares a When definition without registering process-global state.
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ## Parameters
 
@@ -25,8 +31,8 @@ Declares a When definition without registering process-global state.
 
 ### body
 
-[`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)
+[`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)\<`Fixtures`\>
 
 ## Returns
 
-[`StepDefinition`](../../interfaces/stepdefinition/)
+[`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>

@@ -70,3 +70,40 @@ For OpenTUI's separate live renderer marker-route measurement, see
 `packages/probe-opentui/bench/marker-route.ts` and its NOTES. That benchmark
 includes native renderer scheduling and answers a different question from this
 portable semantic-pipeline benchmark.
+
+## Recorded cadence and regression policy
+
+The `Performance observations` workflow runs every Monday and on manual
+dispatch on the pinned `macos-15` arm64 runner with Node 24. It runs all three
+benchmarks above, then runs the real `quality/soak` lifecycle suite repeatedly
+and the `quality/stress` concurrency suite once through the certified host. One
+artifact contains the raw reports, resource observations and comparison.
+
+`baselines/darwin-arm64-node24.json` records the initial same-platform sample.
+The quality observation defines startup as run-manifest creation to the first
+attempt. Per-test overhead is the mean post-startup run duration outside the
+recorded attempt: collection, scheduling and finalization, with the controlled
+test workload subtracted. A process-tree sampler records aggregate peak RSS and
+open descriptors. Cleanup is the number of observed descendant processes, and
+the descriptors they still own, after the certified host exits; both have an
+exact zero baseline. The host itself also fails closed if its resource broker
+or run finalization barrier finds a leak.
+
+Timing and footprint regressions beyond their recorded tolerance emit native
+GitHub warning annotations and appear in the job summary. They deliberately do
+not change the job's exit status while the baseline is young. Process or file
+descriptor cleanup above its exact zero allowance is not performance noise: it
+emits an error and fails the scheduled/manual workflow. Invalid reports, failed
+suites, retries/reruns, missing measurements and a runner-class mismatch also
+fail because there is no trustworthy observation to compare.
+
+The tolerances are data, not hidden workflow constants: startup allows 50%,
+post-startup orchestration and RSS 35%, peak descriptors 25%, the semantic p95
+50%, and the framework ratios 35% (Charm) and 25% (OpenTUI), each with the small
+absolute allowance recorded beside it. Cleanup allows no leak at all.
+
+The performance comparison may become merge-blocking only after at least 12
+successful weekly samples from the same runner class have been retained and
+reviewed, and the thresholds have been recalibrated from that history rather
+than this single seed. Changing `history.decision` requires that review and a
+separate branch-protection change; the current schema accepts only `annotate`.

@@ -11,11 +11,17 @@ editUrl: false
 
 # Function: Given()
 
-> **Given**(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)
+> **Given**\<`Fixtures`\>(`expression`, `body`): [`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:92](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L92)
+Defined in: [definitions.ts:101](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L101)
 
 Declares a Given definition without registering process-global state.
+
+## Type Parameters
+
+### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ## Parameters
 
@@ -25,8 +31,8 @@ Declares a Given definition without registering process-global state.
 
 ### body
 
-[`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)
+[`StepDefinitionBody`](../../type-aliases/stepdefinitionbody/)\<`Fixtures`\>
 
 ## Returns
 
-[`StepDefinition`](../../interfaces/stepdefinition/)
+[`StepDefinition`](../../interfaces/stepdefinition/)\<`Fixtures`\>

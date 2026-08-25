@@ -26,10 +26,10 @@ describe('mergeOptions', () => {
     expect(merged.requiredCapabilities).toEqual(['semantic-tree']);
   });
 
-  it('scoping one option keeps every other one', () => {
-    // The regression this exists for: `test.scoped` replaces the whole value,
+  it('overriding one option keeps every other one', () => {
+    // The regression this exists for: `test.override` replaces the whole value,
     // so a suite that scopes only `trace` would lose the project's viewport
-    // and environment if the scoped object were used as-is.
+    // and environment if the override object were used as-is.
     const merged = mergeOptions(config, { trace: 'on' }, {}, { PATH: '/usr/bin' });
     expect(merged.trace).toBe('on');
     expect(merged.columns).toBe(100);
@@ -54,14 +54,14 @@ describe('mergeOptions', () => {
   it('merges env key by key across all three layers', () => {
     const merged = mergeOptions(
       config,
-      { env: { PROJECT: 'scoped', SUITE: 'yes' } },
+      { env: { PROJECT: 'overridden', SUITE: 'yes' } },
       { env: { CALL: 'yes' } },
       { PATH: '/usr/bin' },
     );
     expect(merged.env).toEqual({
       PATH: '/usr/bin',
       TERM: 'xterm-256color',
-      PROJECT: 'scoped',
+      PROJECT: 'overridden',
       SUITE: 'yes',
       CALL: 'yes',
     });
@@ -91,7 +91,7 @@ describe('mergeOptions', () => {
   it('ignores an explicit undefined instead of erasing the layer below', () => {
     // Types forbid this, JavaScript does not: options built dynamically end up
     // with explicit undefineds, and spreading one would erase the layer below.
-    const scoped = { timeouts: { action: undefined } } as unknown as Parameters<typeof mergeOptions>[1];
-    expect(mergeOptions(config, scoped, {}).timeouts.action).toBe(5_000);
+    const suite = { timeouts: { action: undefined } } as unknown as Parameters<typeof mergeOptions>[1];
+    expect(mergeOptions(config, suite, {}).timeouts.action).toBe(5_000);
   });
 });

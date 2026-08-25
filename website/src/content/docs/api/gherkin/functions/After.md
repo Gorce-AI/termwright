@@ -13,29 +13,41 @@ editUrl: false
 
 ## Call Signature
 
-> **After**(`body`): [`HookDefinition`](../../interfaces/hookdefinition/)
+> **After**\<`Fixtures`\>(`body`): [`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:125](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L125)
+Defined in: [definitions.ts:149](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L149)
 
 Runs after each matching Scenario or Outline row, including failed scenarios.
+
+### Type Parameters
+
+#### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ### Parameters
 
 #### body
 
-[`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)
+[`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)\<`Fixtures`\>
 
 ### Returns
 
-[`HookDefinition`](../../interfaces/hookdefinition/)
+[`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
 ## Call Signature
 
-> **After**(`options`, `body`): [`HookDefinition`](../../interfaces/hookdefinition/)
+> **After**\<`Fixtures`\>(`options`, `body`): [`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>
 
-Defined in: [gherkin/src/definitions.ts:126](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L126)
+Defined in: [definitions.ts:150](https://github.com/Gorce-AI/termwright/blob/main/packages/gherkin/src/definitions.ts#L150)
 
 Runs after each matching Scenario or Outline row, including failed scenarios.
+
+### Type Parameters
+
+#### Fixtures
+
+`Fixtures` *extends* `object` = `object`
 
 ### Parameters
 
@@ -45,8 +57,8 @@ Runs after each matching Scenario or Outline row, including failed scenarios.
 
 #### body
 
-[`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)
+[`HookDefinitionBody`](../../type-aliases/hookdefinitionbody/)\<`Fixtures`\>
 
 ### Returns
 
-[`HookDefinition`](../../interfaces/hookdefinition/)
+[`HookDefinition`](../../interfaces/hookdefinition/)\<`Fixtures`\>

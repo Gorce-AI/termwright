@@ -15,7 +15,7 @@ import {
 // root entry exports the same concrete class as `TestRunner`; note that its
 // `VitestTestRunner` export is the interface type, not this class.
 import { TestRunner as VitestTestRunner, vi } from 'vitest';
-import { installTerminalLaunchResourceProvider } from '@termwright/driver';
+import { installTerminalLaunchResourceProvider } from '@termwright/driver/experimental';
 import type { ResourceVector } from '@termwright/resource-broker';
 import {
   connectResourceBrokerWorker,
