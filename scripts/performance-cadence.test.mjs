@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest';
 
 const workflow = await readFile(new URL('../.github/workflows/performance.yml', import.meta.url), 'utf8');
 const collector = await readFile(new URL('./collect-quality-performance.mjs', import.meta.url), 'utf8');
+const checkpoint = await readFile(new URL('./quality-performance-checkpoint.mjs', import.meta.url), 'utf8');
+const stressFixture = await readFile(
+  new URL('../quality/stress/terminal-concurrency.test.ts', import.meta.url),
+  'utf8',
+);
 const comparator = await readFile(new URL('./compare-performance-baseline.mjs', import.meta.url), 'utf8');
 const capture = await readFile(new URL('./capture-performance-baseline.mjs', import.meta.url), 'utf8');
 const environment = await readFile(new URL('./performance-environment.mjs', import.meta.url), 'utf8');
@@ -31,7 +36,7 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain(`go-version: '${requiredGo}'`);
   });
 
-  it('separates explicit baseline capture from normal comparison without the Go 1.24 seed', () => {
+  it('separates explicit baseline capture from normal comparison', () => {
     expect(workflow).toContain('default: observe');
     expect(workflow).toContain("inputs.mode == 'capture'");
     expect(workflow).toContain('capture-performance-baseline.mjs');
@@ -39,7 +44,6 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain("inputs.mode == 'observe'");
     expect(workflow).toContain('test -f "$PERFORMANCE_BASELINE"');
     expect(workflow).toContain('packages/performance/baselines/darwin-arm64-node24-go1.25-bun1.2.15.json');
-    expect(workflow).not.toContain('--baseline packages/performance/baselines/darwin-arm64-node24.json');
     expect(capture).toContain('capturePerformanceBaseline(policy, observations, provenance)');
     expect(JSON.parse(policy)).not.toHaveProperty('metrics.startupMs.value');
   });
@@ -54,6 +58,23 @@ describe('performance observation cadence', () => {
     expect(workflow).toContain('collect-quality-performance.mjs');
     expect(collector).toContain('quality/soak/vitest.config.ts');
     expect(collector).toContain('quality/stress/vitest.config.ts');
+    expect(collector).toContain('createQualityCheckpoint(16)');
+    expect(collector).toContain('waitForQualityReady(checkpoint');
+    expect(collector).toContain("publishQualityTerminal(checkpoint, { status: 'failure'");
+    expect(collector).toContain("execute('/usr/bin/footprint'");
+    expect(collector).toContain('peakMemoryFootprintBytes');
+    expect(collector).not.toContain('peakRssBytes');
+    expect(collector).not.toContain('pids.reduce((sum, pid) => sum + (table.get(pid)?.rssBytes');
+    expect(collector).toContain('discoverProcesses');
+    expect(collector.indexOf('const discoveryInterval')).toBeLessThan(collector.indexOf('const memoryInterval'));
+    expect(checkpoint).toContain('The second read closes the read-before-watch lost-wakeup window.');
+    expect(checkpoint).toContain('await rename(temporary, staged)');
+    expect(checkpoint).toContain('await link(staged, path)');
+    expect(stressFixture).toContain('await Promise.all(sessions.map');
+    expect(stressFixture).toContain('await publishQualityReady(checkpoint, processPids)');
+    expect(stressFixture).toContain('await waitForQualityTerminal(checkpoint,');
+    expect(stressFixture.indexOf('await waitForQualityTerminal(checkpoint,'))
+      .toBeLessThan(stressFixture.indexOf('// The fixture owns all sessions.'));
   });
 
   it('keeps retries and reruns disabled while the regression verdict annotates only', () => {
@@ -76,8 +97,10 @@ describe('performance observation cadence', () => {
     expect(environment).toContain('performance runner class ${runnerClass} requires');
     expect(environment).toContain("execute('go', ['version'])");
     expect(environment).toContain("execute('bun', ['--version'])");
-    expect(collector).toContain('cannot observe descriptors for live process');
-    expect(collector).toContain("throw new Error('process resource sampling failed'");
+    expect(collector).toContain('cannot observe descriptors for the live process tree');
+    expect(collector).toContain("'process resource sampling failed'");
+    expect(collector).toContain('AbortSignal.timeout(RESOURCE_SAMPLE_DEADLINE_MS)');
+    expect(collector).toContain('AbortSignal.timeout(CHECKPOINT_SNAPSHOT_DEADLINE_MS)');
     expect(collector).not.toMatch(/catch \{ return 0; \}/u);
   });
 

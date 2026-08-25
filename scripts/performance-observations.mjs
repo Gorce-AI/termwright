@@ -20,6 +20,7 @@ export async function loadPerformanceObservations(options) {
   ));
   const quality = JSON.parse(raw.quality.toString('utf8'));
   validateObservationSet(quality);
+  validateQualityResourceSnapshot(quality.resourceSnapshot, descriptor);
   if (quality.environment !== descriptor.class) {
     throw new Error(`quality environment ${quality.environment} differs from descriptor ${descriptor.class}`);
   }
@@ -61,6 +62,36 @@ export async function loadPerformanceObservations(options) {
       ])),
     },
   };
+}
+
+function validateQualityResourceSnapshot(value, descriptor) {
+  exactKeys(value, ['kind', 'schemaVersion', 'memoryMeasurement', 'stress'], 'quality resource snapshot');
+  if (value.kind !== 'termwright-quality-resource-snapshot' || value.schemaVersion !== 1) {
+    throw new Error('quality resource snapshot kind or schema is unsupported');
+  }
+  const expectedMeasurement = descriptor.runner.platform === 'darwin'
+    ? 'darwin-summary-footprint'
+    : 'linux-proportional-set-size';
+  if (value.memoryMeasurement !== expectedMeasurement) {
+    throw new Error(`quality memory measurement must be ${expectedMeasurement}`);
+  }
+  exactKeys(value.stress, ['expectedSessions', 'processCount'], 'quality stress snapshot');
+  if (value.stress.expectedSessions !== 16
+    || !Number.isSafeInteger(value.stress.processCount)
+    || value.stress.processCount < value.stress.expectedSessions + 2) {
+    throw new Error('quality stress snapshot does not prove the complete 16-session process tree');
+  }
+}
+
+function exactKeys(value, keys, label) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+    throw new Error(`${label} must contain exactly ${expected.join(', ')}`);
+  }
 }
 
 const REPORT_CONTRACTS = {

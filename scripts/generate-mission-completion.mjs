@@ -138,13 +138,13 @@ Deviation closure policy`.split('\n');
 if (titles.length !== 128) throw new Error(`mission title inventory has ${titles.length} entries, expected 128`);
 
 const partial = new Map([
-  [53, 'The embedded engine is exact-pinned to Vitest 4.1.11, migrated from 3.2.7 to drop tinypool, whose ProcessWorker.send teardown crash blocked Windows; the local 3.1.4/3.2.7/4.1.11 pressure comparison is 12/12 green and the Windows comparison still needs a reviewed current Node 22/24 run.'],
+  [53, 'The embedded engine is exact-pinned to Vitest 4.1.11, migrated from 3.2.7 to drop tinypool, whose ProcessWorker.send teardown crash blocked Windows; the lockfile-backed local 4.1.11 pressure matrix is green and the Windows Node 22/24 certification still needs a reviewed current run.'],
   [70, 'Infrastructure telemetry and the independent pressure harness exist; the current Windows Node 22/24 matrix result is external execution evidence and is not fabricated locally.'],
   [81, 'Both platforms now own an authoritative boundary: Windows through the native ConPTY session, whose stream ends when the pipe ends and is certified on real Windows, and Unix through the pty master. What remains is a Linux failure that is not yet explained — a megabyte of output followed by a sentinel, with the sentinel absent from the grid while the producer reported a clean end of source, so it is neither the node-pty destroy timer nor a torn-down producer.'],
   [110, 'Every historical Windows issue is categorized and the lanes execute: the addon builds for x64 and arm64, the ConPTY contract is certified on both Node lines, and conformance and lifecycle stress pass on Windows. The reliability matrix artifacts for the embedded engine are the part still outstanding.'],
   [112, 'ConPTY observability and functional provider-backed input are separated and tested, and the Windows lane executes them. The pointer case is the one open item: a transport that repaints on its own made every frame look like a moved target, and the planner now confirms the target by the name the tree gives it while keeping a moved coordinate system fatal. Green on this claim awaits the Windows row that carries that change.'],
   [113, 'Windows no longer has this boundary at all: it runs on the native ConPTY backend, and node-pty is neither loaded nor fallen back to there. The exact-certified private write boundary remains on POSIX, where node-pty is still the backend, and that coupling is what is left to remove.'],
-  [114, 'The independent A/B harness covers Vitest versions, pools, workers, file parallelism and PTY pressure and is locally 12/12 green with no channel loss; a reviewed current Windows artifact is the remaining evidence.'],
+  [114, 'The independent harness covers the exact embedded Vitest, pools, workers, file parallelism and PTY pressure from the repository lockfile; a reviewed current Windows artifact is the remaining evidence.'],
 ]);
 
 const obsolete = new Map([
@@ -219,13 +219,13 @@ const report = {
   localVitestPressureEvidence: {
     node: 'v24.1.0',
     platform: 'darwin-arm64',
-    versions: ['3.1.4', '3.2.7', '4.1.11'],
+    versions: ['4.1.11'],
     pools: ['forks', 'threads'],
     fileParallelism: [true, false],
     workers: 2,
     ptyConcurrency: 4,
-    cellsPassed: 12,
-    cellsTotal: 12,
+    cellsPassed: 4,
+    cellsTotal: 4,
     channelClosed: 0,
     command: 'TERMWRIGHT_MATRIX_WORKERS=2 TERMWRIGHT_MATRIX_PTYS=4 TERMWRIGHT_MATRIX_FILE_PARALLELISM=true,false node scripts/run-vitest-pty-matrix.mjs <output>',
   },

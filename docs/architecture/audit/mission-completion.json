@@ -37,8 +37,6 @@
     "node": "v24.1.0",
     "platform": "darwin-arm64",
     "versions": [
-      "3.1.4",
-      "3.2.7",
       "4.1.11"
     ],
     "pools": [
@@ -51,8 +49,8 @@
     ],
     "workers": 2,
     "ptyConcurrency": 4,
-    "cellsPassed": 12,
-    "cellsTotal": 12,
+    "cellsPassed": 4,
+    "cellsTotal": 4,
     "channelClosed": 0,
     "command": "TERMWRIGHT_MATRIX_WORKERS=2 TERMWRIGHT_MATRIX_PTYS=4 TERMWRIGHT_MATRIX_FILE_PARALLELISM=true,false node scripts/run-vitest-pty-matrix.mjs <output>"
   },
@@ -595,7 +593,7 @@
         "packages/test/src/runner.test.ts",
         "scripts/run-vitest-pty-matrix.mjs"
       ],
-      "remainingEvidence": "The embedded engine is exact-pinned to Vitest 4.1.11, migrated from 3.2.7 to drop tinypool, whose ProcessWorker.send teardown crash blocked Windows; the local 3.1.4/3.2.7/4.1.11 pressure comparison is 12/12 green and the Windows comparison still needs a reviewed current Node 22/24 run."
+      "remainingEvidence": "The embedded engine is exact-pinned to Vitest 4.1.11, migrated from 3.2.7 to drop tinypool, whose ProcessWorker.send teardown crash blocked Windows; the lockfile-backed local 4.1.11 pressure matrix is green and the Windows Node 22/24 certification still needs a reviewed current run."
     },
     {
       "section": 54,
@@ -1211,7 +1209,7 @@
         "quality/experiments/vitest-pty-pressure.test.mjs",
         ".github/workflows/vitest-reliability.yml"
       ],
-      "remainingEvidence": "The independent A/B harness covers Vitest versions, pools, workers, file parallelism and PTY pressure and is locally 12/12 green with no channel loss; a reviewed current Windows artifact is the remaining evidence."
+      "remainingEvidence": "The independent harness covers the exact embedded Vitest, pools, workers, file parallelism and PTY pressure from the repository lockfile; a reviewed current Windows artifact is the remaining evidence."
     },
     {
       "section": 115,

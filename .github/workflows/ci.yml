@@ -351,8 +351,6 @@ jobs:
           go-version: '1.25'
           cache: false
 
-      - run: pnpm build
-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: conpty-addon-x64
@@ -361,6 +359,8 @@ jobs:
           # directory is the developer's path and is already covered by the
           # certification job; this one is the users'.
           path: packages/conpty-win32-x64
+
+      - run: pnpm build
 
       # A selection step, not a smoke test. If this prints the node-pty name
       # the job below proves nothing, and a silent fallback would make it look

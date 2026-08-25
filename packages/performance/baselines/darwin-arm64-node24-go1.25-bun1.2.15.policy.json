@@ -20,7 +20,7 @@
       "relativeTolerance": 0.35,
       "absoluteTolerance": 100
     },
-    "peakRssBytes": {
+    "peakMemoryFootprintBytes": {
       "unit": "bytes",
       "direction": "lower",
       "relativeTolerance": 0.35,

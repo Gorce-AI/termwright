@@ -231,7 +231,7 @@ describe('performance baseline comparator', () => {
     expect(Object.keys((value as PerformanceBaselinePolicy).metrics)).toEqual([
       'startupMs',
       'perTestOverheadMs',
-      'peakRssBytes',
+      'peakMemoryFootprintBytes',
       'peakOpenFileDescriptors',
       'leakedFileDescriptors',
       'leakedProcesses',
