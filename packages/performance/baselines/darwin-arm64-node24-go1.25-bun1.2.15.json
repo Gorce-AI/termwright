@@ -1,0 +1,117 @@
+{
+  "kind": "termwright-performance-baseline",
+  "schemaVersion": 2,
+  "recordedAt": "2026-08-25T13:29:08.541Z",
+  "environment": "darwin-arm64-node24-go1.25-bun1.2.15",
+  "provenance": {
+    "environment": {
+      "kind": "termwright-performance-environment",
+      "schemaVersion": 1,
+      "class": "darwin-arm64-node24-go1.25-bun1.2.15",
+      "runner": {
+        "image": "macos-15",
+        "platform": "darwin",
+        "arch": "arm64"
+      },
+      "toolchains": {
+        "node": {
+          "qualified": "24",
+          "resolved": "24.18.0"
+        },
+        "go": {
+          "qualified": "1.25",
+          "resolved": "1.25.12"
+        },
+        "bun": {
+          "qualified": "1.2.15",
+          "resolved": "1.2.15"
+        }
+      }
+    },
+    "rawInputs": {
+      "quality": "b70d4cdad3cd8134ad0511506ccb633a05121e1f6bfdd2e24ba5660b51c7885d",
+      "semantic": "cb4f5b89faae35cadfb374212a001d5177e09685ea8c3bca234b95c735e4743f",
+      "charm": "4776edb7442b539c0f6689c3ed3362fb602a745ded0200af3ef55678e74c4f95",
+      "opentui": "70d90ecc101898336ae5512dd80c7263db6aceb3b07be2812206e4e1609a525f"
+    }
+  },
+  "history": {
+    "samples": 1,
+    "blockingAfterSamples": 12,
+    "decision": "annotate"
+  },
+  "metrics": {
+    "startupMs": {
+      "value": 1647,
+      "unit": "milliseconds",
+      "source": "quality/soak first run: manifest start to first attempt",
+      "direction": "lower",
+      "relativeTolerance": 0.5,
+      "absoluteTolerance": 250
+    },
+    "perTestOverheadMs": {
+      "value": 895.1047593333333,
+      "unit": "milliseconds",
+      "source": "quality/soak 9 post-startup runs: collection and finalization time outside the test attempt",
+      "direction": "lower",
+      "relativeTolerance": 0.35,
+      "absoluteTolerance": 100
+    },
+    "peakRssBytes": {
+      "value": 548274176,
+      "unit": "bytes",
+      "source": "maximum aggregate RSS of the certified host process tree across soak and stress",
+      "direction": "lower",
+      "relativeTolerance": 0.35,
+      "absoluteTolerance": 67108864
+    },
+    "peakOpenFileDescriptors": {
+      "value": 123,
+      "unit": "count",
+      "source": "maximum open descriptors in the certified host process tree across soak and stress",
+      "direction": "lower",
+      "relativeTolerance": 0.25,
+      "absoluteTolerance": 16
+    },
+    "leakedFileDescriptors": {
+      "value": 0,
+      "unit": "count",
+      "source": "descriptors owned by observed descendants still alive after certified host exit",
+      "direction": "exact",
+      "relativeTolerance": 0,
+      "absoluteTolerance": 0
+    },
+    "leakedProcesses": {
+      "value": 0,
+      "unit": "count",
+      "source": "observed descendants still alive after certified host exit",
+      "direction": "exact",
+      "relativeTolerance": 0,
+      "absoluteTolerance": 0
+    },
+    "semanticHotPathP95Us": {
+      "value": 434.99999999994543,
+      "unit": "microseconds/frame",
+      "source": "packages/performance benchmark: semantic pipeline",
+      "direction": "lower",
+      "relativeTolerance": 0.5,
+      "absoluteTolerance": 50
+    },
+    "charmOverheadRatio": {
+      "value": 1.6499163454178378,
+      "unit": "ratio",
+      "source": "packages/performance benchmark: Charm E2E",
+      "direction": "lower",
+      "relativeTolerance": 0.35,
+      "absoluteTolerance": 0.1
+    },
+    "opentuiOverheadRatio": {
+      "value": 1.0391061452513966,
+      "unit": "ratio",
+      "source": "packages/performance benchmark: OpenTUI marker route",
+      "direction": "lower",
+      "relativeTolerance": 0.25,
+      "absoluteTolerance": 0.1
+    }
+  }
+}
